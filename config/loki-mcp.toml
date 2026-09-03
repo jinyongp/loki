@@ -1,0 +1,52 @@
+root = "/workspace"
+audit_log = "/var/log/loki/mcp/audit.jsonl"
+host = "127.0.0.1"
+port = 8765
+# Public artifacts, previews, and Cloudflare Access are disabled until the
+# machine-specific /etc/loki/config.toml opts in to them.
+public_hosts = []
+# artifact_base_url = "https://mcp.example.com/artifacts"
+# preview_base_domain = "example.com"
+# cloudflare_access_team_domain = "example.cloudflareaccess.com"
+# cloudflare_access_audience = "<64-character Application Audience (AUD)>"
+# preview_access_audience = "<64-character Application Audience (AUD)>"
+max_file_bytes = 16777216
+max_write_bytes = 2097152
+max_output_bytes = 262144
+max_list_entries = 2000
+max_search_results = 500
+max_read_lines = 2000
+max_patch_bytes = 524288
+max_patch_files = 50
+max_processes = 3
+max_action_processes = 12
+max_action_processes_per_profile = 6
+process_retention_seconds = 3600
+
+# Add absolute executable paths here. Existing MCP clients keep using exec_command;
+# restart loki-mcp after changing this table.
+[executables]
+# cargo = "/home/linuxbrew/.linuxbrew/bin/cargo"
+
+# One-shot checks. The compact argv-array form remains supported:
+# lint = ["pnpm", "lint"]
+[checks]
+
+# Extended check example:
+# [checks.test]
+# command = ["pnpm", "test"]
+# cwd = "."
+# timeout_seconds = 900
+# max_output_bytes = 1048576
+#
+# [checks.test.environment]
+# CI = "1"
+
+# Long-running processes use the same root-owned fixed argv policy.
+[processes]
+
+# [processes.dev]
+# command = ["pnpm", "dev", "--host", "127.0.0.1"]
+# cwd = "."
+# timeout_seconds = 14400
+# max_output_bytes = 10485760

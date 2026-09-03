@@ -1,0 +1,76 @@
+#!/usr/bin/python3
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import tomllib
+
+CONFIG = Path("/etc/loki/config.toml")
+NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def read() -> tuple[str, dict[str, str]]:
+    text = CONFIG.read_text(encoding="utf-8")
+    with CONFIG.open("rb") as handle:
+        raw = tomllib.load(handle)
+    values = raw.get("executables", {})
+    if not isinstance(values, dict):
+        raise SystemExit("invalid [executables] table")
+    return text, {str(key): str(value) for key, value in values.items()}
+
+
+def render(text: str, values: dict[str, str]) -> str:
+    lines = text.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.strip() == "[executables]"), None)
+    if start is None:
+        prefix, suffix = lines + [""], []
+    else:
+        end = next((index for index in range(start + 1, len(lines)) if lines[index].lstrip().startswith("[")), len(lines))
+        prefix, suffix = lines[:start], lines[end:]
+    table = ["[executables]", *(f'{name} = "{path}"' for name, path in sorted(values.items())), ""]
+    return "\n".join([*prefix, *table, *suffix]).rstrip() + "\n"
+
+
+def write(text: str) -> None:
+    descriptor, temporary = tempfile.mkstemp(prefix="config.", dir=CONFIG.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o640)
+        os.chown(temporary, 0, CONFIG.stat().st_gid)
+        os.replace(temporary, CONFIG)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    subprocess.run(["systemctl", "restart", "loki-mcp.service"], check=True)
+
+
+parser = argparse.ArgumentParser(description="Manage Loki exec_command executable policy")
+subparsers = parser.add_subparsers(dest="action", required=True)
+subparsers.add_parser("list")
+allow = subparsers.add_parser("allow")
+allow.add_argument("name")
+allow.add_argument("path")
+deny = subparsers.add_parser("deny")
+deny.add_argument("name")
+args = parser.parse_args()
+source, executables = read()
+if args.action == "list":
+    for name, path in sorted(executables.items()):
+        print(f"{name}\t{path}")
+elif args.action == "allow":
+    target = Path(args.path)
+    if NAME.fullmatch(args.name) is None or not target.is_absolute() or not target.is_file() or not os.access(target, os.X_OK):
+        raise SystemExit("name and executable path are invalid")
+    executables[args.name] = str(target.resolve())
+    write(render(source, executables))
+elif args.action == "deny":
+    if args.name not in executables:
+        raise SystemExit("executable override not found")
+    del executables[args.name]
+    write(render(source, executables))

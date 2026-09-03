@@ -1,0 +1,32 @@
+#!/opt/loki-mcp/venv/bin/python
+from __future__ import annotations
+
+from pathlib import Path
+import os
+import sys
+
+from loki_mcp.runtime import LokiRuntimeError, request_runtime
+
+
+def main() -> int:
+    workspace = Path("/workspace")
+    cwd = Path.cwd().resolve()
+    if cwd != workspace and workspace not in cwd.parents:
+        raise ValueError("task cwd must stay inside /workspace")
+    relative = cwd.relative_to(workspace).as_posix() or "."
+    result = request_runtime({
+        "operation": "project_task",
+        "cwd": relative,
+        "arguments": sys.argv[1:],
+        "timeout_seconds": 900,
+    })
+    sys.stdout.write(str(result.get("output", "")))
+    return int(result.get("exit_code", 1))
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, LokiRuntimeError) as error:
+        print(f"task: {error}", file=sys.stderr)
+        raise SystemExit(2)

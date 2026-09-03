@@ -1,0 +1,32 @@
+[Unit]
+Description=Loki public-web browser proxy
+After=network.target
+Before=loki-browser.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=workspace
+ExecStart=/opt/loki-mcp/venv/bin/loki-browser-proxy
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=128
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

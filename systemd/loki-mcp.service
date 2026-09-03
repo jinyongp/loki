@@ -1,0 +1,42 @@
+[Unit]
+Description=Loki isolated MCP server
+After=network.target loki-egress-proxy.service loki-port-guard.service loki-browser.service loki-signing-agent.service loki-runtime.service
+Wants=loki-egress-proxy.service loki-port-guard.service loki-browser.service loki-signing-agent.service loki-runtime.service
+ConditionPathExists=/etc/loki/cloudflare-jwks.json
+ConditionFileIsExecutable=/home/linuxbrew/.linuxbrew/bin/fnm
+ConditionFileIsExecutable=/home/linuxbrew/.linuxbrew/bin/just
+ConditionPathExists=/run/loki/signing/agent.sock
+ConditionPathExists=/run/loki/runtime/control.sock
+
+[Service]
+Type=simple
+User=runner
+Group=workspace
+WorkingDirectory=/srv/workspace/loki
+ExecStart=/usr/local/libexec/loki-mcp-launch
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/workspace/loki /var/log/loki/mcp
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=1024
+MemoryMax=4G
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

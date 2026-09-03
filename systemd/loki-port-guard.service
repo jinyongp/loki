@@ -1,0 +1,36 @@
+[Unit]
+Description=Loki workspace port guard
+After=local-fs.target
+Before=loki-mcp.service
+
+[Service]
+Type=simple
+User=runner
+Group=workspace
+RuntimeDirectory=loki/port-guard
+RuntimeDirectoryMode=0750
+ExecStart=/opt/loki-mcp/venv/bin/python -m loki_mcp.port_guard_service
+Restart=on-failure
+RestartSec=2
+UMask=0007
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+IPAddressDeny=any
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=32
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

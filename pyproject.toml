@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loki-mcp"
+version = "0.46.0"
+description = "Workspace-scoped MCP server for the loki environment"
+requires-python = ">=3.12"
+dependencies = [
+  "cryptography>=45,<47",
+  "httpx2>=2.5.0",
+  "mcp==2.1.1",
+  "PyJWT[crypto]==2.10.1",
+  "PyYAML>=6,<7",
+  "websockets>=15,<16",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+]
+
+[project.scripts]
+loki-mcp-server = "loki_mcp.server:main"
+loki-browser-proxy = "loki_mcp.browser_proxy:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

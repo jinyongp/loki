@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+socket=/run/loki/signing/agent.sock
+private_socket=/run/loki/signing/private-agent.sock
+key=/var/lib/loki/signing/id_ed25519
+
+rm -f "$socket" "$private_socket"
+/usr/bin/ssh-agent -D -a "$private_socket" &
+agent_pid=$!
+proxy_pid=
+
+cleanup() {
+  if test -n "$proxy_pid"; then
+    kill "$proxy_pid" 2>/dev/null || true
+    wait "$proxy_pid" 2>/dev/null || true
+  fi
+  kill "$agent_pid" 2>/dev/null || true
+  wait "$agent_pid" 2>/dev/null || true
+  rm -f "$socket" "$private_socket"
+}
+trap cleanup EXIT INT TERM
+
+attempt=0
+while test ! -S "$private_socket" && test "$attempt" -lt 40; do
+  sleep 0.05
+  attempt=$((attempt + 1))
+done
+test -S "$private_socket"
+
+SSH_AUTH_SOCK="$private_socket" /usr/bin/ssh-add "$key" </dev/null
+chmod 0600 "$private_socket"
+/usr/local/libexec/loki-signing-agent-proxy "$private_socket" "$socket" &
+proxy_pid=$!
+
+attempt=0
+while test ! -S "$socket" && test "$attempt" -lt 40; do
+  sleep 0.05
+  attempt=$((attempt + 1))
+done
+test -S "$socket"
+/usr/bin/systemd-notify --ready
+wait "$proxy_pid"

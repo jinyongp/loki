@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+set -- /usr/bin/bwrap \
+  --die-with-parent \
+  --new-session \
+  --unshare-user \
+  --unshare-pid \
+  --unshare-ipc \
+  --unshare-uts \
+  --unshare-cgroup-try \
+  --clearenv \
+  --setenv HOME /home/runner \
+  --setenv GH_CONFIG_DIR /home/runner/.config/gh \
+  --setenv GIT_CONFIG_GLOBAL /etc/loki/gitconfig \
+  --setenv SSH_AUTH_SOCK /run/loki/signing/agent.sock \
+  --setenv LANG C.UTF-8 \
+  --setenv LC_ALL C.UTF-8 \
+  --setenv PATH /home/linuxbrew/.linuxbrew/bin:/opt/loki-mcp/venv/bin:/usr/bin:/bin \
+  --setenv PYTHONDONTWRITEBYTECODE 1 \
+  --setenv LOKI_MCP_CONFIG /etc/loki/config.toml \
+  --setenv LOKI_MCP_TOKEN_FILE /etc/loki/token \
+  --setenv LOKI_MCP_CLOUDFLARE_JWKS_FILE /etc/loki/cloudflare-jwks.json \
+  --ro-bind /usr /usr \
+  --symlink usr/bin /bin \
+  --symlink usr/sbin /sbin \
+  --symlink usr/lib /lib \
+  --symlink usr/lib64 /lib64 \
+  --proc /proc \
+  --dev /dev \
+  --tmpfs /tmp \
+  --dir /opt \
+  --ro-bind /opt/loki-mcp /opt/loki-mcp \
+  --dir /home \
+  --dir /home/runner \
+  --dir /home/runner/.config \
+  --ro-bind /home/runner/.config/gh /home/runner/.config/gh \
+  --dir /home/runner/.config/dotfiles \
+  --ro-bind /home/runner/.config/dotfiles/git /home/runner/.config/dotfiles/git \
+  --dir /home/runner/.dotfiles \
+  --ro-bind /home/runner/.dotfiles/git /home/runner/.dotfiles/git \
+  --dir /home/runner/.dotfiles/utils \
+  --ro-bind /home/runner/.dotfiles/utils/colors.zsh /home/runner/.dotfiles/utils/colors.zsh \
+  --dir /home/runner/.dotfiles/scripts \
+  --dir /home/runner/.dotfiles/scripts/lib \
+  --ro-bind /home/runner/.dotfiles/scripts/lib/style.sh /home/runner/.dotfiles/scripts/lib/style.sh \
+  --ro-bind /home/runner/.dotfiles/scripts/lib/ui /home/runner/.dotfiles/scripts/lib/ui \
+  --ro-bind /home/runner/.gitconfig /home/runner/.gitconfig \
+  --dir /home/runner/.ssh \
+  --ro-bind /etc/loki/signing_key.pub /home/runner/.ssh/id_ed25519.pub \
+  --dir /home/linuxbrew \
+  --ro-bind /home/linuxbrew/.linuxbrew /home/linuxbrew/.linuxbrew \
+  --dir /etc \
+  --ro-bind /etc/alternatives /etc/alternatives \
+  --ro-bind /etc/passwd /etc/passwd \
+  --ro-bind /etc/group /etc/group \
+  --dir /etc/ssl \
+  --ro-bind /etc/ssl/certs /etc/ssl/certs \
+  --dir /etc/loki \
+  --ro-bind /etc/loki/config.toml /etc/loki/config.toml \
+  --ro-bind /etc/loki/token /etc/loki/token \
+  --ro-bind /etc/loki/cloudflare-jwks.json /etc/loki/cloudflare-jwks.json \
+  --ro-bind /etc/loki/gitconfig /etc/loki/gitconfig \
+  --ro-bind /etc/loki/allowed_signers /etc/loki/allowed_signers \
+  --ro-bind /etc/loki/signing_key.pub /etc/loki/signing_key.pub \
+  --dir /srv \
+  --dir /srv/workspace \
+  --symlink /workspace /srv/workspace/loki \
+  --dir /workspace \
+  --bind /srv/workspace/loki /workspace \
+  --dir /run \
+  --ro-bind /run/loki/runtime /run/loki/runtime \
+  --ro-bind /run/loki/port-guard /run/loki/port-guard \
+  --ro-bind /run/loki/browser /run/loki/browser \
+  --ro-bind /run/loki/signing /run/loki/signing \
+  --dir /var \
+  --dir /var/log \
+  --dir /var/log/loki/mcp \
+  --bind /var/log/loki/mcp /var/log/loki/mcp \
+  --chdir /workspace
+
+exec "$@" /opt/loki-mcp/venv/bin/loki-mcp-server

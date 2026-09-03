@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically refresh Cloudflare Access keys for Loki MCP
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

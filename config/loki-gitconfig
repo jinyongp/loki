@@ -1,0 +1,18 @@
+[include]
+	path = /home/runner/.gitconfig
+
+[user]
+	signingKey = /home/runner/.ssh/id_ed25519.pub
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	allowedSignersFile = /etc/loki/allowed_signers
+
+[commit]
+	gpgSign = true
+
+[tag]
+	gpgSign = true
+	forceSignAnnotated = true

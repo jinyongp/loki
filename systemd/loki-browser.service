@@ -1,0 +1,41 @@
+[Unit]
+Description=Loki isolated browser sidecar
+After=network.target loki-browser-proxy.service
+Requires=loki-browser-proxy.service
+Before=loki-mcp.service
+ConditionFileIsExecutable=/opt/loki-browser/chromium/chrome-linux64/chrome
+
+[Service]
+Type=simple
+User=loki-browser
+Group=workspace
+RuntimeDirectory=loki/browser
+RuntimeDirectoryMode=0770
+WorkingDirectory=/var/lib/loki/browser
+ExecStart=/usr/local/libexec/loki-browser-launch
+Restart=on-failure
+RestartSec=3
+UMask=0007
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/loki/browser /run/loki/browser /srv/workspace/loki/.browser-downloads
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=512
+MemoryMax=2G
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

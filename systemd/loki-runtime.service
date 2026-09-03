@@ -1,0 +1,45 @@
+[Unit]
+Description=Loki runtime controller
+After=local-fs.target loki-signing-agent.service
+Wants=loki-signing-agent.service
+
+[Service]
+Type=simple
+User=root
+Group=workspace
+ExecStart=/opt/loki-mcp/venv/bin/python -m loki_mcp.runtime
+ExecStopPost=-/usr/bin/pkill --signal TERM --full -- /usr/local/libexec/loki-action-runner
+ExecStopPost=-/usr/bin/pkill --signal TERM --full -- /usr/local/libexec/loki-project-bootstrap
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=loki/runtime
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+StateDirectory=loki/runtime
+StateDirectoryMode=0700
+LogsDirectory=loki/runtime
+LogsDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/workspace/loki /var/lib/loki/runtime /var/lib/loki/project-state /var/lib/loki/local-deploy /var/log/loki/runtime /run/loki
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+LockPersonality=yes
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_KILL
+RestrictRealtime=yes
+TasksMax=256
+MemoryMax=2G
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

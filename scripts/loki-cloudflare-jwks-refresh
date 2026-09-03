@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+from __future__ import annotations
+
+import grp
+import json
+import os
+from pathlib import Path
+import re
+import ssl
+import tempfile
+import tomllib
+from urllib.request import Request, urlopen
+
+
+CONFIG_PATH = Path("/etc/loki/config.toml")
+TARGET_PATH = Path("/etc/loki/cloudflare-jwks.json")
+DOMAIN_PATTERN = re.compile(
+    r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+)
+
+
+def main() -> None:
+    with CONFIG_PATH.open("rb") as handle:
+        config = tomllib.load(handle)
+    team_domain = config.get("cloudflare_access_team_domain")
+    if (
+        not isinstance(team_domain, str)
+        or DOMAIN_PATTERN.fullmatch(team_domain) is None
+        or not team_domain.endswith(".cloudflareaccess.com")
+    ):
+        raise SystemExit("invalid Cloudflare Access team domain")
+
+    request = Request(
+        f"https://{team_domain}/cdn-cgi/access/certs",
+        headers={"Accept": "application/json", "User-Agent": "loki-jwks-refresh/1"},
+    )
+    with urlopen(request, timeout=15, context=ssl.create_default_context()) as response:
+        if response.status != 200:
+            raise SystemExit(f"Cloudflare JWKS returned HTTP {response.status}")
+        payload = response.read(1_048_577)
+    if len(payload) > 1_048_576:
+        raise SystemExit("Cloudflare JWKS response is too large")
+    document = json.loads(payload)
+    keys = document.get("keys")
+    if not isinstance(keys, list) or not keys:
+        raise SystemExit("Cloudflare JWKS contains no keys")
+
+    target_directory = TARGET_PATH.parent
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".cloudflare-jwks-", dir=target_directory)
+    try:
+        with os.fdopen(descriptor, "wb") as temporary:
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            os.fchmod(temporary.fileno(), 0o640)
+            os.fchown(temporary.fileno(), 0, grp.getgrnam("workspace").gr_gid)
+        os.replace(temporary_name, TARGET_PATH)
+    except BaseException:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+if __name__ == "__main__":
+    main()

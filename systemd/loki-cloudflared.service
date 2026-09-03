@@ -1,0 +1,37 @@
+[Unit]
+Description=Cloudflare Tunnel for Loki MCP
+After=network-online.target loki-mcp.service
+Wants=network-online.target
+Requires=loki-mcp.service
+ConditionPathExists=/etc/loki/cloudflared/token.env
+
+[Service]
+Type=notify
+User=loki-tunnel
+Group=loki-tunnel
+EnvironmentFile=/etc/loki/cloudflared/token.env
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ReadWritePaths=/var/log/loki/cloudflared
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=64
+MemoryMax=256M
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

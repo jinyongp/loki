@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+from __future__ import annotations
+
+import select
+import socket
+import socketserver
+
+
+ALLOWED_HOSTS = frozenset({
+    "api.github.com",
+    "codeload.github.com",
+    "github.com",
+    "nodejs.org",
+    "objects.githubusercontent.com",
+    "placehold.co",
+    "raw.githubusercontent.com",
+    "registry.npmjs.org",
+    "proxy.golang.org",
+    "storage.googleapis.com",
+    "sum.golang.org",
+    "index.crates.io",
+    "static.crates.io",
+    "static.rust-lang.org",
+})
+MAX_HEADER_BYTES = 65_536
+
+
+class AllowlistedProxyHandler(socketserver.StreamRequestHandler):
+    def handle(self) -> None:
+        self.connection.settimeout(15)
+        request_line = self.rfile.readline(8_193)
+        if len(request_line) > 8_192:
+            self._respond(431, "Request Header Fields Too Large")
+            return
+        try:
+            method, authority, _ = request_line.decode("ascii").strip().split(" ", 2)
+            host, port_text = authority.rsplit(":", 1)
+            port = int(port_text)
+        except (UnicodeDecodeError, ValueError):
+            self._respond(400, "Bad Request")
+            return
+
+        total = len(request_line)
+        while True:
+            line = self.rfile.readline(8_193)
+            total += len(line)
+            if total > MAX_HEADER_BYTES:
+                self._respond(431, "Request Header Fields Too Large")
+                return
+            if line in {b"\r\n", b"\n", b""}:
+                break
+
+        host = host.lower().rstrip(".")
+        if method != "CONNECT" or port != 443 or host not in ALLOWED_HOSTS:
+            self._respond(403, "Forbidden")
+            return
+
+        try:
+            upstream = socket.create_connection((host, port), timeout=15)
+        except OSError:
+            self._respond(502, "Bad Gateway")
+            return
+        try:
+            self.connection.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            self._relay(upstream)
+        finally:
+            upstream.close()
+
+    def _relay(self, upstream: socket.socket) -> None:
+        peers = {self.connection: upstream, upstream: self.connection}
+        while True:
+            readable, _, _ = select.select(list(peers), [], [], 300)
+            if not readable:
+                return
+            for source in readable:
+                data = source.recv(65_536)
+                if not data:
+                    return
+                peers[source].sendall(data)
+
+    def _respond(self, status: int, reason: str) -> None:
+        self.connection.sendall(
+            f"HTTP/1.1 {status} {reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".encode("ascii")
+        )
+
+
+class ThreadedServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+if __name__ == "__main__":
+    with ThreadedServer(("127.0.0.1", 8766), AllowlistedProxyHandler) as server:
+        server.serve_forever()

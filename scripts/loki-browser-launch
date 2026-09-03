@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+exec /usr/bin/bwrap \
+  --die-with-parent \
+  --new-session \
+  --unshare-user \
+  --unshare-pid \
+  --unshare-ipc \
+  --unshare-uts \
+  --unshare-cgroup-try \
+  --clearenv \
+  --setenv HOME /var/lib/loki/browser \
+  --setenv LANG C.UTF-8 \
+  --setenv LC_ALL C.UTF-8 \
+  --setenv PATH /opt/loki-browser/venv/bin:/usr/bin:/bin \
+  --setenv ANONYMIZED_TELEMETRY false \
+  --setenv DO_NOT_TRACK 1 \
+  --setenv BROWSER_USE_TELEMETRY false \
+  --ro-bind /usr /usr \
+  --symlink usr/bin /bin \
+  --symlink usr/sbin /sbin \
+  --symlink usr/lib /lib \
+  --symlink usr/lib64 /lib64 \
+  --proc /proc \
+  --dev /dev \
+  --tmpfs /dev/shm \
+  --tmpfs /tmp \
+  --dir /opt \
+  --ro-bind /opt/loki-browser /opt/loki-browser \
+  --dir /etc \
+  --dir /etc/ssl \
+  --ro-bind /etc/ssl/certs /etc/ssl/certs \
+  --ro-bind /etc/fonts /etc/fonts \
+  --ro-bind /etc/machine-id /etc/machine-id \
+  --dir /var \
+  --bind /var/lib/loki/browser /var/lib/loki/browser \
+  --dir /run \
+  --bind /run/loki/browser /run/loki/browser \
+  --dir /downloads \
+  --bind /srv/workspace/loki/.browser-downloads /downloads \
+  --chdir /var/lib/loki/browser \
+  /opt/loki-browser/venv/bin/loki-browser-sidecar
