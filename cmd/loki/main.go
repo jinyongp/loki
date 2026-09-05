@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "mcp" {
+		return runMCP(args[1:], stderr)
+	}
 	if len(args) > 0 && args[0] == "browser-proxy" {
 		return runBrowserProxy(args[1:], stderr)
 	}
