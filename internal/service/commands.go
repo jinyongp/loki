@@ -21,19 +21,22 @@ func CommandHandlers(c *commands.Controller, portClient RuntimeCaller) map[strin
 			Action  string
 			Port    *int
 			Session *string `json:"session_id"`
-		}) (*mcp.CallToolResult, error) { switch r.Action {
-		case "process":
-			id, err := mcpserver.Require(r.Session, "session_id")
-			if err != nil {
-				return nil, err
+		}) (*mcp.CallToolResult, error) {
+			switch r.Action {
+			case "process":
+				id, err := mcpserver.Require(r.Session, "session_id")
+				if err != nil {
+					return nil, err
+				}
+				return objectResult(c.Manager.Stop(id))
+			case "port":
+				port, err := mcpserver.Require(r.Port, "port")
+				if err != nil {
+					return nil, err
+				}
+				return runtimeObject(ctx, portClient, map[string]any{"operation": "stop", "port": port})
 			}
-			return objectResult(c.Manager.Stop(id))
-		case "port":
-			port, err := mcpserver.Require(r.Port, "port")
-			if err != nil {
-				return nil, err
-			}
-			return runtimeObject(ctx, portClient, map[string]any{"operation": "stop", "port": port})
-		}; return nil, fault.Error("runtime_stop action must be port or process") }),
+			return nil, fault.Error("runtime_stop action must be port or process")
+		}),
 	}
 }
