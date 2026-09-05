@@ -493,15 +493,13 @@ attempts, and recovery after intent, rename, capture, a torn journal frame, and
 unlink. These checks passed with the race detector. Full root/systemd service
 acceptance remains required before this candidate is considered complete.
 
-The current Python worktree also contains scope-result/OOM diagnostics in
-`src/loki_mcp/processes.py` and `tests/test_process_oom.py`, added independently
-of the Go sandbox work. Those changes remain intact. Their optional
-`systemd_result`, `oom_killed`, and `termination_reason` behavior must be included
-in root-service acceptance. The current Python action launcher also records
-the scope unit and a 4 GiB memory limit, retaining failed scopes for diagnostics;
-the Go scope launcher still needs that production-shaped integration. The Go
-implementation and comparisons above do not yet establish parity for those
-scope diagnostics or limits.
+Go action scopes now match the Python launcher's 4 GiB memory limit and retain
+failed scopes until diagnostics have been captured. Completion records optional
+`systemd_result`, `oom_killed`, and `termination_reason` fields before publishing
+an exited snapshot. A disposable development-Ubuntu root scope constrained to
+32 MiB was intentionally OOM-killed and the actual Go process session retained
+all three diagnostics. Unit tests cover delayed settlement and reset ordering.
+Production-shaped runner/service confinement remains a separate acceptance gate.
 
 The CLI binary builds, but complete service-role entrypoints have not yet been
 assembled. This checkpoint is not a deployable Go MCP release.
@@ -569,13 +567,13 @@ candidate offline from the existing Go module cache and uses temporary fixture
 directories only. No production service, endpoint, state, or credentials are used.
 
 Remaining gates include complete role assembly and all 37 successful-tool
-fixtures; root-service action execution and scope/OOM handling, full Node-family
-package-manager execution, public preview routing/callbacks, materialization
+fixtures; production-shaped root-service action execution, full Node-family
+package-manager execution, public preview routing, materialization
 concurrent destination-guard testing and root-runner
 acceptance, Docker execution,
-audit/status, workflow execution;
+audit/status and workflow service assembly;
 service-owned process shutdown;
-Git/signing; Loki's own bundled Skill operations; artifacts/previews/browser;
+signing-agent startup/readiness; Skill YAML edge-case parity; artifacts/previews/browser;
 CLI and packaging; interrupted migration and rollback drills; and isolated
 service-level privilege, real bind-mount worktree, public preview, restart, and
 end-to-end acceptance tests. The current alias test verifies normalization of

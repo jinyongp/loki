@@ -315,12 +315,14 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 	if os.Geteuid() == 0 {
 		argv = append([]string{"/usr/sbin/runuser", "-u", layout.Runner, "--"}, argv...)
 	}
+	var scopeUnit string
 	if layout.SystemdScope {
 		var suffix [8]byte
 		if _, err = rand.Read(suffix[:]); err != nil {
 			return nil, err
 		}
-		argv = append([]string{"/usr/bin/systemd-run", "--scope", "--quiet", "--collect", "--unit=loki-action-" + hex.EncodeToString(suffix[:]), "--property=MemoryMax=2G", "--"}, argv...)
+		scopeUnit = "loki-action-" + hex.EncodeToString(suffix[:]) + ".scope"
+		argv = append([]string{"/usr/bin/systemd-run", "--scope", "--quiet", "--unit=" + scopeUnit, "--property=MemoryMax=4G", "--"}, argv...)
 	}
 	redactionValues := plan.RedactionValues()
 	if plan.Policy.MaterializeEnvFile != "" {
@@ -339,6 +341,11 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 		Name: plan.Profile + "/" + plan.Action, Group: &group, MaxGroupProcesses: &layout.MaxProfileProcesses, Redactor: filter, Stdin: input, ExtraFiles: extraFiles,
 		Metadata: map[string]any{"profile": plan.Profile, "action": plan.Action, "cwd": plan.VisibleCWD}}
 	launch.spec.InstanceKey = instanceKey(plan)
+	if scopeUnit != "" {
+		launch.spec.ScopeUnit = scopeUnit
+		launch.spec.Metadata["systemd_unit"] = scopeUnit
+		launch.spec.Metadata["memory_limit_bytes"] = int64(4 * 1024 * 1024 * 1024)
+	}
 	if launch.materialization != nil {
 		launch.spec.Cleanup = launch.materialization.close
 	}

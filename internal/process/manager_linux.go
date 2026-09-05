@@ -24,10 +24,13 @@ type ManagerOptions struct {
 	MaxProcesses, MaxOutputBytes     int
 	Retention, StopGrace, DrainGrace time.Duration
 	RequireRedactor                  bool
+	// ReadScopeResult is injectable for isolated systemd completion tests.
+	ReadScopeResult func(string) string
 }
 
 type StartSpec struct {
 	Spec
+	ScopeUnit          string
 	Name               string
 	Group, InstanceKey *string
 	MaxGroupProcesses  *int
@@ -71,6 +74,7 @@ type managedProcess struct {
 	exitCode               int
 	cleanupError           string
 	cleanupPending         bool
+	scopeResult            string
 	exitedCh, done         chan struct{}
 }
 
@@ -90,6 +94,9 @@ func NewManager(options ManagerOptions) (*Manager, error) {
 func (m *Manager) Start(spec StartSpec) (map[string]any, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if spec.ScopeUnit != "" && !actionScope.MatchString(spec.ScopeUnit) {
+		return nil, errors.New("invalid managed action scope")
+	}
 	if m.closed {
 		return nil, fault.Error("process manager is closed")
 	}
@@ -182,9 +189,13 @@ func (m *Manager) Start(spec StartSpec) (map[string]any, error) {
 	}
 	p := &managedProcess{cmd: cmd, id: base64.RawURLEncoding.EncodeToString(id[:]), name: spec.Name,
 		group: copyString(spec.Group), instanceKey: copyString(spec.InstanceKey), metadata: metadata,
-		startedAt: time.Now().UTC(), maximum: spec.MaxOutput, redactor: spec.Redactor, cleanupPending: spec.Cleanup != nil, exitedCh: make(chan struct{}), done: make(chan struct{})}
+		startedAt: time.Now().UTC(), maximum: spec.MaxOutput, redactor: spec.Redactor, cleanupPending: spec.Cleanup != nil || spec.ScopeUnit != "", exitedCh: make(chan struct{}), done: make(chan struct{})}
 	m.processes = append(m.processes, p)
-	go p.wait(reader, m.options.DrainGrace, spec.Cleanup)
+	inspect := m.options.ReadScopeResult
+	if inspect == nil {
+		inspect = systemdResult
+	}
+	go p.wait(reader, m.options.DrainGrace, spec.Cleanup, spec.ScopeUnit, inspect)
 	go func() {
 		timer := time.NewTimer(spec.Timeout)
 		defer timer.Stop()
@@ -224,7 +235,7 @@ func (p *managedProcess) Write(chunk []byte) (int, error) {
 	return n, nil
 }
 
-func (p *managedProcess) wait(reader *os.File, drainGrace time.Duration, cleanup func() error) {
+func (p *managedProcess) wait(reader *os.File, drainGrace time.Duration, cleanup func() error, scope string, inspect func(string) string) {
 	drained := make(chan struct{})
 	go func() { _, _ = io.Copy(p, reader); reader.Close(); close(drained) }()
 	// WNOWAIT retains the unreaped leader's PID while descendants are killed.
@@ -264,6 +275,10 @@ func (p *managedProcess) wait(reader *os.File, drainGrace time.Duration, cleanup
 		<-drained
 	}
 	var cleanupError string
+	var scopeResult string
+	if scope != "" {
+		scopeResult = inspect(scope)
+	}
 	if cleanup != nil {
 		if err := cleanup(); err != nil {
 			cleanupError = fault.Public(err)
@@ -271,6 +286,7 @@ func (p *managedProcess) wait(reader *os.File, drainGrace time.Duration, cleanup
 	}
 	p.mu.Lock()
 	p.cleanupError = cleanupError
+	p.scopeResult = scopeResult
 	p.cleanupPending = false
 	p.completedAt = time.Now()
 	close(p.done)
@@ -341,6 +357,13 @@ func (p *managedProcess) snapshot(offset *int64, limit int) map[string]any {
 	_ = decoder.Decode(&extra)
 	for key, value := range extra {
 		result[key] = value
+	}
+	if p.scopeResult != "" {
+		result["systemd_result"] = p.scopeResult
+		result["oom_killed"] = p.scopeResult == "oom-kill"
+		if p.scopeResult == "oom-kill" {
+			result["termination_reason"] = "oom"
+		}
 	}
 	return result
 }
