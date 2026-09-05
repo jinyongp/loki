@@ -360,6 +360,8 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		return nil, err
 	}
 	switch operation {
+	case "console", "network", "request", "websockets", "page_errors", "debug_diagnostics":
+		return d.observe(ctx, operation, args)
 	case "state":
 		return d.state(ctx)
 	case "click":
