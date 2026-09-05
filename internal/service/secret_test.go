@@ -19,9 +19,12 @@ import (
 	"loki/internal/state"
 )
 
-func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool) rpc.Client {
+func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, socketPaths ...string) rpc.Client {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "secret.sock")
+	if len(socketPaths) > 0 {
+		socket = socketPaths[0]
+	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)

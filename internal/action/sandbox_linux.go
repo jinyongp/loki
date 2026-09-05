@@ -31,6 +31,8 @@ type PublicMount struct{ Source, Target string }
 // Layout is administrator-owned service configuration, never an MCP request.
 // PublicMounts permits only existing public toolchain/config/signing surfaces.
 type Layout struct {
+	RuntimeSocket                    string
+	RuntimeUID                       uint32
 	Workspace, Binary, Bwrap, Runner string
 	UID, GID                         uint32
 	SystemdScope                     bool

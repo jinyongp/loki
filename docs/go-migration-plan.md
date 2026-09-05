@@ -290,8 +290,12 @@ exposing values. The internal Go bootstrap CLI executes registered actions in
 sequence over UID-verified runtime RPC, drains paged output, preserves failing
 exit codes, and requests action termination on cancellation or read/write failure.
 Regression tests cover these cases and a temporary Unix-socket CLI round trip.
-The public bootstrap tool, parent process admission/timeout, and systemd service
-assembly remain unconnected; this does not establish end-to-end workflow parity.
+The public bootstrap tool now admits the helper through the bounded process
+manager with the configured workflow timeout and an 8 MiB output history.
+Mandatory unprivileged sandbox tests exercise MCP/RPC/helper/action execution,
+missing-secret rejection, worktree binding, redaction, successful and failing
+steps, and cancellation without a surviving action. Root-run systemd scope
+confinement and complete service assembly remain separate acceptance gates.
 
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,

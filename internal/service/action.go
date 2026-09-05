@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"loki/internal/action"
+	"loki/internal/mcpserver"
+	"loki/internal/policy"
 	"loki/internal/rpc"
 )
 
@@ -16,6 +19,7 @@ type actionProcessInput struct {
 
 func ActionOperations(runtime *action.Runtime) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"bootstrap_project":            {Permission: rpc.Agent, Handle: runtimeTyped(runtime.Bootstrap)},
 		"clear_action_materialization": {Permission: rpc.Agent, Handle: runtimeTyped(runtime.ClearMaterialization)},
 		"prepare_action":               {Permission: rpc.Agent, Handle: runtimeTyped(runtime.Prepare)},
 		"run_action":                   {Permission: rpc.Agent, Handle: runtimeTyped(runtime.Run)},
@@ -31,4 +35,18 @@ func ActionOperations(runtime *action.Runtime) map[string]rpc.Operation {
 			return runtime.Stop(r.SessionID)
 		})},
 	}
+}
+
+func BootstrapHandler(client RuntimeCaller, paths *policy.Workspace) mcpserver.Handler {
+	return mcpserver.Typed(func(ctx context.Context, request action.BootstrapRequest) (*mcp.CallToolResult, error) {
+		var err error
+		request.CWD, err = relativeCWD(paths, request.CWD)
+		if err != nil {
+			return nil, err
+		}
+		return runtimeObject(ctx, client, struct {
+			Operation string `json:"operation"`
+			action.BootstrapRequest
+		}{"bootstrap_project", request})
+	})
 }

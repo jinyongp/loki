@@ -60,7 +60,8 @@ func TestActionSandboxMCP(t *testing.T) {
 	if err := os.Mkdir(recovery, 0700); err != nil {
 		t.Fatal(err)
 	}
-	actions, err := action.NewRuntime(c, action.Layout{Workspace: projects.WorkspaceRoot, Binary: binary, Bwrap: "/usr/bin/bwrap", UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), PreviewBaseDomain: "preview.example.test", MaterializationDirectory: filepath.Join(t.TempDir(), "materializations"), MaterializationRecoveryDirectory: recovery}, process.ManagerOptions{MaxProcesses: 4, MaxOutputBytes: 4096, Retention: time.Minute, StopGrace: 200 * time.Millisecond})
+	socket := filepath.Join(t.TempDir(), "runtime.sock")
+	actions, err := action.NewRuntime(c, action.Layout{RuntimeSocket: socket, RuntimeUID: uint32(os.Getuid()), Workspace: projects.WorkspaceRoot, Binary: binary, Bwrap: "/usr/bin/bwrap", UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), PreviewBaseDomain: "preview.example.test", MaterializationDirectory: filepath.Join(t.TempDir(), "materializations"), MaterializationRecoveryDirectory: recovery}, process.ManagerOptions{MaxProcesses: 4, MaxOutputBytes: 4096, Retention: time.Minute, StopGrace: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +70,8 @@ func TestActionSandboxMCP(t *testing.T) {
 	for name, operation := range ActionOperations(actions) {
 		ops[name] = operation
 	}
-	client := secretSocket(t, ops, true)
-	handlers := map[string]mcpserver.Handler{"action": ActionHandler(client, paths)}
+	client := secretSocket(t, ops, true, socket)
+	handlers := map[string]mcpserver.Handler{"action": ActionHandler(client, paths), "bootstrap_project": BootstrapHandler(client, paths)}
 	baseline, _ := contract.Baseline()
 	definitions, _ := baseline.Definitions()
 	// Other tool domains are not covered by this scoped integration test.
@@ -201,6 +202,77 @@ func TestActionSandboxMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Cleanup must work even when required runtime credentials are no longer set.
+	if _, err := c.Register(t.Context(), "repo", nil); err != nil {
+		t.Fatal(err)
+	}
+	setWorkflow := func(name string, steps [][]string) {
+		t.Helper()
+		data, _ := json.Marshal(map[string]any{"steps": steps, "required_secrets": map[string][]string{"fixture": {"TOKEN"}}, "timeout_seconds": 60})
+		if _, err := c.SetWorkflow(t.Context(), "repo", name, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setWorkflow("development", [][]string{{"fixture", "check"}, {"fixture", "fail"}})
+	bootstrap := func() map[string]any {
+		t.Helper()
+		result, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "bootstrap_project", Arguments: map[string]any{"cwd": "feature"}})
+		if err != nil || result.IsError {
+			t.Fatalf("bootstrap: %v %#v", err, result)
+		}
+		data, _ := json.Marshal(result.StructuredContent)
+		var value map[string]any
+		if err := json.Unmarshal(data, &value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	blocked := bootstrap()
+	if blocked["accepted"] != false || blocked["status"] != "blocked" || blocked["session_id"] != nil {
+		t.Fatalf("blocked bootstrap: %#v", blocked)
+	}
+	if _, err := c.ImportValues(t.Context(), "fixture", map[string]string{"TOKEN": "synthetic-mcp-private"}); err != nil {
+		t.Fatal(err)
+	}
+	started := bootstrap()
+	if started["accepted"] != true || started["configuration_ready"] != true || started["cwd"] != "feature" {
+		t.Fatal(started)
+	}
+	result := readComplete(started["session_id"])
+	if result["exit_code"] != float64(7) || !strings.Contains(result["output"].(string), "bootstrap: completed fixture/check") {
+		t.Fatalf("workflow failure: %#v", result)
+	}
+	setWorkflow("development", [][]string{{"fixture", "check"}})
+	result = readComplete(bootstrap()["session_id"])
+	if result["exit_code"] != float64(0) {
+		t.Fatalf("workflow success: %#v", result)
+	}
+	setWorkflow("development", [][]string{{"fixture", "slow"}})
+	started = bootstrap()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		active := false
+		for _, item := range actions.List()["processes"].([]map[string]any) {
+			if item["name"] == "fixture/slow" && item["status"] == "running" {
+				active = true
+			}
+		}
+		if active {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("workflow action did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	call(map[string]any{"operation": "stop", "session_id": started["session_id"]})
+	for _, item := range actions.List()["processes"].([]map[string]any) {
+		if item["status"] == "running" {
+			t.Fatalf("workflow left a running action: %#v", item)
+		}
+	}
+	if _, err := c.ImportValues(t.Context(), "fixture", map[string]string{"TOKEN": ""}); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(projects.WorkspaceRoot, "repo", "fixture.env"), []byte("synthetic stale file"), 0600); err != nil {
 		t.Fatal(err)
 	}
