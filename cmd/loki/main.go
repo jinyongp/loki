@@ -29,6 +29,8 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
+		case "checkpoint":
+			return runCheckpoint(args[1:], stdout, stderr)
 		case "config", "policy":
 			return runSettings(args, stdout, stderr)
 		case "bootstrap", "state", "project", "secret", "action":
