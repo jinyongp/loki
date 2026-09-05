@@ -301,7 +301,12 @@ The Go skills registry implements builtin/shared/project precedence, ancestor
 AGENTS.md discovery, activation, text/binary resource reads, and required-tool
 validation. Six successful read responses match the Python registry directly;
 tests reject path traversal and symlink resources. The corresponding MCP read
-handlers are available for service assembly. Skill mutation remains pending.
+handlers are available for service assembly. Skill creation, validated SKILL.md
+patches, and text/binary resource writes now preserve builtin read-only scope
+and reject stale hashes, duplicate creation, symlink writes, and unrelated
+patch targets. Four additional Python write responses match; concurrent
+resource compare-and-swap and MCP create/read/validate/resource tests pass.
+YAML emitter edge cases and the full invalid-input corpus remain parity gates.
 
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,

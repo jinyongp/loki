@@ -154,3 +154,58 @@ print(json.dumps([r.list_skills('repo/sub'),r.agent_context('repo/sub'),r.activa
 	}
 	t.Logf("%d Python skill responses match", len(operations))
 }
+
+func TestPython0471SkillWritesDifferential(t *testing.T) {
+	python := os.Getenv("LOKI_REFERENCE_PYTHON")
+	if python == "" {
+		t.Skip("Python reference not configured")
+	}
+	r := fixture(t)
+	created, err := r.Create("project", "repo", "created", "A skill", "Original.", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := r.Activate("created", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := r.WriteResource("created", "assets/data.bin", "/wAB", "repo", false, nil, "base64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -3,4 +3,4 @@\n description: A skill\n ---\n \n-Original.\n+Updated.\n"
+	edited, err := r.Edit(t.Context(), "created", "repo", patch, created["sha256"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	script := `import json,sys
+from pathlib import Path
+from loki_mcp.policy import WorkspacePolicy
+import loki_mcp.skills as skills
+root=Path(sys.argv[1]); (root/'repo/.git').mkdir(parents=True)
+skills.BUILTIN_SKILL_ROOT=root/'missing-builtin'
+r=skills.SkillRegistry(WorkspacePolicy(root))
+c=r.create('project','repo','created','A skill','Original.')
+a=r.activate_skill('created','repo')
+w=r.write_resource('created','assets/data.bin','/wAB','repo',encoding='base64')
+e=r.edit('created','repo',sys.argv[2],c['sha256'])
+print(json.dumps([c,a,w,e]))`
+	cmd := exec.CommandContext(t.Context(), python, "-c", script, root, patch)
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v %s", err, data)
+	}
+	encoded, _ := json.Marshal([]map[string]any{created, active, written, edited})
+	var want, got any
+	if err := json.Unmarshal(data, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Go: %s\nPython: %s", encoded, data)
+	}
+	t.Log("4 Python skill write responses match")
+}
