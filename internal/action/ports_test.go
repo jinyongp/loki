@@ -143,7 +143,7 @@ func runtimeFixture(t *testing.T, overrides map[string]any) (*Runtime, secret.Co
 	if _, err := c.SetAction(t.Context(), "fixture", "web", encoded); err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewRuntime(c, Layout{Workspace: workspace, Binary: filepath.Join(t.TempDir(), "not-built"), Bwrap: "/usr/bin/bwrap", UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), PreviewBaseDomain: "preview.example.test"}, process.ManagerOptions{MaxProcesses: 4, MaxOutputBytes: 4096, Retention: time.Minute, StopGrace: 200 * time.Millisecond})
+	r, err := NewRuntime(c, Layout{CallbackPort: new(int), Workspace: workspace, Binary: filepath.Join(t.TempDir(), "not-built"), Bwrap: "/usr/bin/bwrap", UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), PreviewBaseDomain: "preview.example.test"}, process.ManagerOptions{MaxProcesses: 4, MaxOutputBytes: 4096, Retention: time.Minute, StopGrace: 200 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}

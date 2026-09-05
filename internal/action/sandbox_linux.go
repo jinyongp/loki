@@ -33,6 +33,7 @@ type PublicMount struct{ Source, Target string }
 type Layout struct {
 	RuntimeSocket                    string
 	RuntimeUID                       uint32
+	CallbackPort                     *int
 	Workspace, Binary, Bwrap, Runner string
 	UID, GID                         uint32
 	SystemdScope                     bool

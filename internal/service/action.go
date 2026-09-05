@@ -19,6 +19,9 @@ type actionProcessInput struct {
 
 func ActionOperations(runtime *action.Runtime) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"local_callback_bind": {Permission: rpc.Agent, Handle: runtimeTyped(func(_ context.Context, r actionProcessInput) (map[string]any, error) {
+			return runtime.BindCallback(r.SessionID)
+		})},
 		"bootstrap_project":            {Permission: rpc.Agent, Handle: runtimeTyped(runtime.Bootstrap)},
 		"clear_action_materialization": {Permission: rpc.Agent, Handle: runtimeTyped(runtime.ClearMaterialization)},
 		"prepare_action":               {Permission: rpc.Agent, Handle: runtimeTyped(runtime.Prepare)},

@@ -217,4 +217,66 @@ http.createServer((req,res) => {res.setHeader('Content-Type','application/json')
 		t.Fatalf("completed singleton token replay: %v", err)
 	}
 	t.Log("Actual Go sandbox -> FNM -> Node server -> loopback HTTP -> explicit stop passed; public URLs were injected test values, not external routing checks")
+	encoded, _ := json.Marshal(map[string]any{"command": []string{"node", "server.cjs"}, "cwd": ".", "secrets": []string{"TOKEN"}, "all_secrets": false, "timeout_seconds": 30, "max_output_bytes": 4096, "singleton": true, "local_callback": true, "dynamic_port": map[string]any{"preferred": preferred, "environment": "PORT"}})
+	if _, err := r.controller.SetAction(t.Context(), "fixture", "api", encoded); err != nil {
+		t.Fatal(err)
+	}
+	callbackRequest := RunRequest{Profile: "fixture", Action: "api", BindLocalCallback: true}
+	api, err := r.Run(t.Context(), callbackRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := api["local_callback"].(map[string]any)
+	if binding["bound"] != true {
+		t.Fatalf("callback not bound: %#v", binding)
+	}
+	apiID := api["session_id"].(string)
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		snapshot, err := r.Read(apiID, nil, 4096)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(snapshot["output"].(string), "ready\n") {
+			break
+		}
+		if snapshot["status"] == "exited" || time.Now().After(deadline) {
+			t.Fatalf("API not ready: %#v", snapshot)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	response, err = client.Get(binding["origin"].(string) + "/callback?code=opaque")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var callbackData map[string]any
+	if err := json.Unmarshal(data, &callbackData); err != nil {
+		t.Fatal(err)
+	}
+	if callbackData["port"] != api["port"].(json.Number).String() {
+		t.Fatalf("callback reached wrong API: %#v", callbackData)
+	}
+	again, err := r.Run(t.Context(), callbackRequest)
+	if err != nil || again["session_id"] != api["session_id"] || again["local_callback"].(map[string]any)["bound"] != true {
+		t.Fatalf("callback singleton: %#v %v", again, err)
+	}
+	if _, err := r.Stop(apiID); err != nil {
+		t.Fatal(err)
+	}
+	if r.CallbackStatus()["bound"] != false || r.CallbackStatus()["session_id"] != nil {
+		t.Fatal(r.CallbackStatus())
+	}
+	response, err = client.Get(binding["origin"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != 503 {
+		t.Fatalf("stopped callback status: %d", response.StatusCode)
+	}
 }

@@ -2,12 +2,14 @@ package action
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"slices"
 	"sync"
 	"unicode/utf8"
 
+	"loki/internal/callback"
 	"loki/internal/fault"
 	"loki/internal/process"
 	"loki/internal/secret"
@@ -30,6 +32,7 @@ type Runtime struct {
 	processes  *process.Manager
 	ports      *portRegistry
 	launches   map[string]preparedAction
+	callback   *callback.Proxy
 }
 
 func NewRuntime(controller secret.Controller, layout Layout, limits process.ManagerOptions) (*Runtime, error) {
@@ -42,7 +45,29 @@ func NewRuntime(controller secret.Controller, layout Layout, limits process.Mana
 		return nil, err
 	}
 	layout.PublicMounts = slices.Clone(layout.PublicMounts)
-	return &Runtime{controller: controller, layout: layout, processes: manager, ports: &developmentPorts, launches: make(map[string]preparedAction)}, nil
+	runtime := &Runtime{controller: controller, layout: layout, processes: manager, ports: &developmentPorts, launches: make(map[string]preparedAction)}
+	port := 41800
+	if layout.CallbackPort != nil {
+		port = *layout.CallbackPort
+	}
+	runtime.callback, err = callback.New(port, func(id string) (int, bool) {
+		offset := int64(0)
+		snapshot, err := manager.Read(id, &offset, 1)
+		if err != nil {
+			return 0, false
+		}
+		value, ok := snapshot["port"].(json.Number)
+		if !ok {
+			return 0, false
+		}
+		port, err := value.Int64()
+		return int(port), err == nil && port > 0 && port <= 65535 && snapshot["status"] == "running" && snapshot["action"] == "api"
+	})
+	if err != nil {
+		manager.Close()
+		return nil, err
+	}
+	return runtime, nil
 }
 
 func (r *Runtime) Close() {
@@ -53,6 +78,7 @@ func (r *Runtime) Close() {
 		delete(r.launches, token)
 	}
 	r.mu.Unlock()
+	r.callback.Close()
 	r.processes.Close()
 }
 
@@ -152,11 +178,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (map[string]any, 
 		if !plan.Policy.LocalCallback {
 			return nil, fault.Error("action is not approved as a local callback target")
 		}
-		return nil, fault.Error("local callback binding is not yet connected")
 	}
 	if key := instanceKey(plan); key != nil {
 		if existing := r.processes.FindRunning(*key); existing != nil {
-			return outcome(existing), nil
+			return r.attachCallback(outcome(existing), request.BindLocalCallback), nil
 		}
 	}
 	var lease *portLease
@@ -195,8 +220,27 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (map[string]any, 
 		return nil, err
 	}
 	keepAllocation = result["reused"] != true
-	return outcome(result), nil
+	return r.attachCallback(outcome(result), request.BindLocalCallback), nil
 }
+
+func (r *Runtime) attachCallback(result map[string]any, requested bool) map[string]any {
+	if !requested {
+		return result
+	}
+	binding, err := r.callback.Bind(result["session_id"].(string))
+	if err != nil {
+		binding = map[string]any{"bound": false, "origin": r.callback.Status()["origin"], "error": err.Error()}
+	}
+	result["local_callback"] = binding
+	return result
+}
+func (r *Runtime) BindCallback(id string) (map[string]any, error) {
+	if err := validSession(id); err != nil {
+		return nil, err
+	}
+	return r.callback.Bind(id)
+}
+func (r *Runtime) CallbackStatus() map[string]any { return r.callback.Status() }
 
 func validSession(id string) error {
 	if length := utf8.RuneCountInString(id); length < 8 || length > 128 {
@@ -232,6 +276,7 @@ func (r *Runtime) Stop(id string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.callback.Clear(&id)
 	outcome(result)
 	if result["status"] == "exited" && result["timed_out"] != true {
 		result["outcome"] = "stopped"

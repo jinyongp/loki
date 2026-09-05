@@ -322,6 +322,13 @@ and verify a Git commit and reject identity deletion. The signing-proxy CLI
 creates a group-restricted socket; agent startup/key loading and systemd
 readiness integration remain service-assembly work.
 
+Local callback binding now selects one running managed API action behind a
+loopback-only TCP proxy. Action launch and singleton reuse attach binding
+metadata; explicit stop clears it. Tests cover target changes, unavailable
+targets, active-connection shutdown, and a real sandboxed Node API reached
+through the callback origin. Callback status and delegated bind RPC are ready
+for the complete runtime status/service assembly.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured
