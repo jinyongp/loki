@@ -21,6 +21,17 @@ type Handler func(context.Context, map[string]any) (*mcp.CallToolResult, error)
 // New refuses incomplete or misspelled registrations before accepting requests.
 // The captured catalog is the single source for public schemas and metadata.
 func New(handlers map[string]Handler) (*mcp.Server, error) {
+	return newServer(handlers, nil)
+}
+
+// NewConfigured derives widget origins from the active service configuration.
+func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
+	if err := origins.validate(); err != nil {
+		return nil, err
+	}
+	return newServer(handlers, &origins)
+}
+func newServer(handlers map[string]Handler, origins *ResourceOrigins) (*mcp.Server, error) {
 	baseline, err := contract.Baseline()
 	if err != nil {
 		return nil, err
@@ -56,6 +67,9 @@ func New(handlers map[string]Handler) (*mcp.Server, error) {
 		if err = json.Unmarshal(raw, &resource); err != nil {
 			return nil, err
 		}
+		if origins != nil {
+			resource.Meta = origins.metadata(resource.URI)
+		}
 		contents, ok := baseline.ResourceContents[resource.URI]
 		if !ok {
 			return nil, fmt.Errorf("missing resource %s", resource.URI)
@@ -63,6 +77,11 @@ func New(handlers map[string]Handler) (*mcp.Server, error) {
 		server.AddResource(&resource, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 			var result mcp.ReadResourceResult
 			err := json.Unmarshal(contents, &result)
+			if err == nil && origins != nil {
+				for _, content := range result.Contents {
+					content.Meta = origins.metadata(resource.URI)
+				}
+			}
 			return &result, err
 		})
 	}
