@@ -8,6 +8,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pmezard/go-difflib v1.0.0
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/sys v0.41.0
 	golang.org/x/text v0.41.0
 )

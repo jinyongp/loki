@@ -297,6 +297,12 @@ missing-secret rejection, worktree binding, redaction, successful and failing
 steps, and cancellation without a surviving action. Root-run systemd scope
 confinement and complete service assembly remain separate acceptance gates.
 
+The Go skills registry implements builtin/shared/project precedence, ancestor
+AGENTS.md discovery, activation, text/binary resource reads, and required-tool
+validation. Six successful read responses match the Python registry directly;
+tests reject path traversal and symlink resources. The corresponding MCP read
+handlers are available for service assembly. Skill mutation remains pending.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured

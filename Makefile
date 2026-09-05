@@ -34,5 +34,5 @@ sandbox:
 # The reference is test-only; Go packages/builds do not require Python.
 reference:
 	@test -x "$(PYTHON_REFERENCE)" || { echo 'Create the isolated Python reference environment documented in docs/go-migration-plan.md'; exit 1; }
-	LOKI_REFERENCE_PYTHON="$(abspath $(PYTHON_REFERENCE))" $(GO) test -count=1 -v ./internal/project ./internal/secret ./internal/process ./internal/action -run '^TestPython0471.*Differential$$'
+	LOKI_REFERENCE_PYTHON="$(abspath $(PYTHON_REFERENCE))" $(GO) test -count=1 -v ./internal/project ./internal/secret ./internal/process ./internal/action ./internal/skills -run '^TestPython0471.*Differential$$'
 	GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$(PYTHON_REFERENCE)" -m pytest -q tests/test_project_state.py tests/test_task_mcp.py tests/test_process_limits.py
