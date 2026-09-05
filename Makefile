@@ -3,7 +3,7 @@ GOFMT ?= gofmt
 BINARY ?= .tmp/bin/loki
 PYTHON_REFERENCE ?= .tmp/python-baseline/bin/python
 
-.PHONY: build fmt fmt-check test race vet check reference sandbox
+.PHONY: build fmt fmt-check test race vet check reference sandbox accept-systemd accept-root-action accept-docker
 
 build: fmt-check
 	mkdir -p $(dir $(BINARY))
@@ -26,6 +26,17 @@ vet:
 	$(GO) vet ./...
 
 check: fmt-check vet test race build
+
+# Run explicitly in a disposable development systemd/Docker environment.
+accept-systemd:
+	LOKI_REQUIRE_SYSTEMD_TESTS=1 $(GO) test -count=1 -v ./internal/process -run '^TestSystemdOOMScope$$'
+
+accept-root-action:
+	@test -n "$(TEST_RUNNER)" || { echo 'Set TEST_RUNNER to the non-root development account'; exit 1; }
+	LOKI_REQUIRE_ROOT_ACTION_TESTS=1 LOKI_TEST_RUNNER="$(TEST_RUNNER)" $(GO) test -count=1 -v ./internal/action -run '^TestRootRunnerActionScope$$'
+
+accept-docker:
+	LOKI_REQUIRE_DOCKER_TESTS=1 LOKI_REQUIRE_SANDBOX_TESTS=1 $(GO) test -count=1 -v ./internal/action -run '^TestDockerActionRealDaemon$$'
 
 # Required isolated namespace acceptance; unavailable confinement is a failure.
 sandbox:

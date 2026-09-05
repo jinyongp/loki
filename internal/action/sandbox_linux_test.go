@@ -59,7 +59,7 @@ func actionControllerFixture(t *testing.T, argv []string) (secret.Controller, st
 func candidateBinary(t *testing.T) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "loki")
-	cmd := exec.CommandContext(t.Context(), filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-trimpath", "-o", binary, "../../cmd/loki")
+	cmd := exec.CommandContext(t.Context(), filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-buildvcs=false", "-trimpath", "-o", binary, "../../cmd/loki")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOTOOLCHAIN=local", "GOPROXY=off")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build candidate: %v %s", err, output)

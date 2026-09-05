@@ -340,6 +340,16 @@ real Docker test imported a disposable scratch probe image, executed it through
 the Go action proxy with a read-only host bind, and removed its container/image.
 Production-shaped root service/runner and full Compose acceptance remain gates.
 
+An explicit development-root acceptance test now executes the real systemd
+scope -> runuser -> bubblewrap -> Go helper path, retaining root-owned private
+payloads while the action runs under the configured non-root UID. Fixed/session
+materialization, read-only Docker host aliases, fake Docker transport, cleanup,
+and bootstrap helper RPC round trips all pass across that boundary. Full
+installed-unit hardening, installation/restart, and migration drills remain
+separate gates. `make accept-root-action TEST_RUNNER=<development-user>` and
+`make accept-systemd` require development root; `make accept-docker` runs as the
+unprivileged development user and removes its disposable image/container.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured
