@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"loki/internal/daemon"
 	"loki/internal/signing"
 )
 
@@ -48,6 +49,31 @@ func runSigning(args []string, stderr io.Writer) int {
 	proxy := signing.Proxy{PrivateSocket: *private, RunnerUID: uint32(*runner), AgentUID: uint32(*agent)}
 	if err := proxy.Serve(ctx, listener); err != nil {
 		fmt.Fprintln(stderr, "signing proxy failed")
+		return 1
+	}
+	return 0
+}
+
+func runSigningAgent(args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("signing-agent", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	private := flags.String("private-socket", "", "private SSH agent socket")
+	public := flags.String("public-socket", "", "restricted SSH agent socket")
+	key := flags.String("key", "", "service-owned signing key")
+	runner := flags.Int64("runner-uid", -1, "authorized runner UID")
+	group := flags.Int("socket-gid", -1, "workspace group ID")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || !filepath.IsAbs(*private) || !filepath.IsAbs(*public) || !filepath.IsAbs(*key) || *runner < 0 || *runner > 4294967295 || *group < 0 {
+		fmt.Fprintln(stderr, "signing-agent requires absolute key/socket paths and explicit runner UID and socket GID")
+		return 2
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+	err := signing.RunAgent(ctx, signing.AgentOptions{PrivateSocket: *private, PublicSocket: *public, Key: *key, RunnerUID: uint32(*runner), SocketGID: *group, Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }})
+	if err != nil {
+		fmt.Fprintln(stderr, "signing agent failed:", err)
 		return 1
 	}
 	return 0
