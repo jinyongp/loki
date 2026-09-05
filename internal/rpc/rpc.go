@@ -38,9 +38,10 @@ type Operation struct {
 	Handle     Handler
 }
 type Event struct {
-	Operation string
-	UID       uint32
-	Success   bool
+	Operation                           string
+	UID                                 uint32
+	Success                             bool
+	Profile, Action, ProjectAction, CWD *string
 }
 
 type Server struct {
@@ -202,7 +203,26 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 		}
 	}
 	if s.Audit != nil {
-		s.Audit(Event{request.Operation, peer.UID, err == nil})
+		event := Event{Operation: request.Operation, UID: peer.UID, Success: err == nil}
+		var metadata map[string]json.RawMessage
+		if json.Unmarshal(raw, &metadata) == nil {
+			text := func(key string) *string {
+				var value string
+				if json.Unmarshal(metadata[key], &value) != nil || len(value) > 1024 {
+					return nil
+				}
+				return &value
+			}
+			event.Profile = text("profile")
+			event.Action = text("action_name")
+			if request.Operation == "project_state" {
+				event.ProjectAction = text("action")
+			}
+			if request.Operation == "project_state" || request.Operation == "project_task" {
+				event.CWD = text("cwd")
+			}
+		}
+		s.Audit(event)
 	}
 	r := response{OK: err == nil, Result: result}
 	if err != nil {

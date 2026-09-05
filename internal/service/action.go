@@ -19,6 +19,7 @@ type actionProcessInput struct {
 
 func ActionOperations(runtime *action.Runtime) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"status": {Permission: rpc.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return runtime.Status(), nil }},
 		"local_callback_bind": {Permission: rpc.Agent, Handle: runtimeTyped(func(_ context.Context, r actionProcessInput) (map[string]any, error) {
 			return runtime.BindCallback(r.SessionID)
 		})},

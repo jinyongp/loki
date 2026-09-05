@@ -55,7 +55,7 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	go func() { done <- s.Serve(ctx, listener) }()
 	uid := uint32(os.Getuid())
 	c := Client{Socket: socket, ExpectedUID: &uid}
-	result, err := c.Call(ctx, map[string]any{"operation": "echo", "value": "hello"})
+	result, err := c.Call(ctx, map[string]any{"operation": "echo", "value": "hello", "profile": "fixture", "action_name": "web", "secret_value": "synthetic-hidden"})
 	if err != nil || !strings.Contains(string(result), "hello") {
 		t.Fatalf("roundtrip: %s %v", result, err)
 	}
@@ -87,5 +87,9 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	defer mu.Unlock()
 	if len(events) < 5 {
 		t.Fatalf("missing audit events: %v", events)
+	}
+	encoded, _ := json.Marshal(events[0])
+	if events[0].Profile == nil || *events[0].Profile != "fixture" || events[0].Action == nil || *events[0].Action != "web" || strings.Contains(string(encoded), "synthetic-hidden") {
+		t.Fatalf("audit metadata: %s", encoded)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -33,6 +34,7 @@ type Runtime struct {
 	ports      *portRegistry
 	launches   map[string]preparedAction
 	callback   *callback.Proxy
+	maximum    int
 }
 
 func NewRuntime(controller secret.Controller, layout Layout, limits process.ManagerOptions) (*Runtime, error) {
@@ -45,7 +47,7 @@ func NewRuntime(controller secret.Controller, layout Layout, limits process.Mana
 		return nil, err
 	}
 	layout.PublicMounts = slices.Clone(layout.PublicMounts)
-	runtime := &Runtime{controller: controller, layout: layout, processes: manager, ports: &developmentPorts, launches: make(map[string]preparedAction)}
+	runtime := &Runtime{controller: controller, layout: layout, processes: manager, ports: &developmentPorts, launches: make(map[string]preparedAction), maximum: limits.MaxProcesses}
 	port := 41800
 	if layout.CallbackPort != nil {
 		port = *layout.CallbackPort
@@ -241,6 +243,22 @@ func (r *Runtime) BindCallback(id string) (map[string]any, error) {
 	return r.callback.Bind(id)
 }
 func (r *Runtime) CallbackStatus() map[string]any { return r.callback.Status() }
+
+func (r *Runtime) Status() map[string]any {
+	perProfile := r.layout.MaxProfileProcesses
+	if perProfile == 0 {
+		perProfile = 6
+	}
+	initialized := true
+	for _, name := range []string{"master.key", "store.json"} {
+		info, err := os.Lstat(filepath.Join(r.controller.StateDirectory, name))
+		if err != nil || !info.Mode().IsRegular() {
+			initialized = false
+		}
+	}
+	usage := r.processes.Usage()
+	return map[string]any{"initialized": initialized, "running_processes": usage["total"], "running_processes_by_profile": usage["groups"], "process_limits": map[string]any{"total": r.maximum, "per_profile": perProfile}, "local_callback": r.callback.Status()}
+}
 
 func validSession(id string) error {
 	if length := utf8.RuneCountInString(id); length < 8 || length > 128 {
