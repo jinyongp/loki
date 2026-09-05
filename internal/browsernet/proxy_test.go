@@ -80,3 +80,39 @@ func TestHTTPAndConnectProxy(t *testing.T) {
 		t.Fatal("revoked workspace port reused")
 	}
 }
+
+func TestTunnelIdleTimeoutTracksActivity(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer upstream.Close()
+	port := upstream.Listener.Addr().(*net.TCPAddr).Port
+	proxy := New(Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }})
+	proxy.IdleTimeout = 250 * time.Millisecond
+	defer proxy.Close()
+	server := httptest.NewServer(proxy)
+	defer server.Close()
+	conn, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	fmt.Fprintf(conn, "CONNECT 127.0.0.1:%d HTTP/1.1\r\nHost: 127.0.0.1:%d\r\n\r\n", port, port)
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil || response.StatusCode != 200 {
+		t.Fatal(response, err)
+	}
+	for range 4 {
+		time.Sleep(100 * time.Millisecond)
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: 127.0.0.1:%d\r\n\r\n", port)
+		response, err = http.ReadResponse(reader, nil)
+		if err != nil {
+			t.Fatal("active tunnel expired", err)
+		}
+		io.Copy(io.Discard, response.Body)
+		response.Body.Close()
+	}
+	if _, err = reader.ReadByte(); err != io.EOF {
+		t.Fatal("idle tunnel was not closed", err)
+	}
+}

@@ -11,11 +11,13 @@ import (
 )
 
 type Proxy struct {
-	Policy    Policy
-	ctx       context.Context
-	cancel    context.CancelFunc
-	transport *http.Transport
-	slots     chan struct{}
+	Policy            Policy
+	IdleTimeout       time.Duration
+	TunnelErrorStatus int
+	ctx               context.Context
+	cancel            context.CancelFunc
+	transport         *http.Transport
+	slots             chan struct{}
 }
 
 func New(p Policy) *Proxy {
@@ -68,7 +70,11 @@ func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 	}
 	upstream, err := p.Policy.Dial(r.Context(), "tcp", target)
 	if err != nil {
-		http.Error(w, "destination is blocked", 403)
+		status := p.TunnelErrorStatus
+		if status == 0 {
+			status = 403
+		}
+		http.Error(w, "destination is unavailable or blocked", status)
 		return
 	}
 	defer upstream.Close()
@@ -91,15 +97,33 @@ func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	done := make(chan struct{}, 1)
+	var clientReader io.Reader = buffer
+	var upstreamReader io.Reader = upstream
+	if p.IdleTimeout > 0 {
+		touch := func() {
+			deadline := time.Now().Add(p.IdleTimeout)
+			conn.SetDeadline(deadline)
+			upstream.SetDeadline(deadline)
+		}
+		clientReader = activityReader{buffer, touch}
+		upstreamReader = activityReader{upstream, touch}
+	}
 	go func() {
-		_, _ = io.Copy(upstream, buffer)
+		_, _ = io.Copy(upstream, clientReader)
 		if tcp, ok := upstream.(*net.TCPConn); ok {
 			_ = tcp.CloseWrite()
 		}
 		done <- struct{}{}
 	}()
-	_, _ = io.Copy(conn, upstream)
+	_, _ = io.Copy(conn, upstreamReader)
 	conn.Close()
 	upstream.Close()
 	<-done
 }
+
+type activityReader struct {
+	io.Reader
+	touch func()
+}
+
+func (r activityReader) Read(data []byte) (int, error) { r.touch(); return r.Reader.Read(data) }
