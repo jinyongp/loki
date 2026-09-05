@@ -1,0 +1,18 @@
+{
+  "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "envelope": {
+    "version": 1,
+    "nonce": "AAECAwQFBgcICQoL",
+    "ciphertext": "PCCmaaqDq3foMrWxysseBPui8kaVWWUHGgaG8XQGbsEjKtWBg+Nh/RfWGpn7pRJDzA0l3g6J9Ztzwm87IsGGl55Irh+nuEVMej3SGpr9a8VX5KUbW47G9BdFHu4FjcSh6Ygric4kq27tPgTJNVkDCd8VEcKMqwegfII11Tklh+mgqebhprMNrx9Y"
+  },
+  "plaintext": {
+    "version": 1,
+    "profiles": {
+      "fixture": {
+        "secrets": {"TEST_VALUE": "synthetic-fixture-only-한글"},
+        "actions": {}
+      }
+    },
+    "projects": {}
+  }
+}

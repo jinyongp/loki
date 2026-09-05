@@ -1,0 +1,293 @@
+// Package rpc implements the bounded newline-JSON runtime Unix socket protocol.
+package rpc
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/sys/unix"
+	"loki/internal/fault"
+)
+
+const MaxBytes = 2_097_152
+
+type Peer struct {
+	PID      int32
+	UID, GID uint32
+}
+type Permission uint8
+
+const (
+	Agent Permission = iota
+	Administrative
+)
+
+type Handler func(context.Context, json.RawMessage) (any, error)
+type Operation struct {
+	Permission Permission
+	Handle     Handler
+}
+type Event struct {
+	Operation string
+	UID       uint32
+	Success   bool
+}
+
+type Server struct {
+	AgentUID       uint32
+	MCPUnits       []string
+	Operations     map[string]Operation
+	Audit          func(Event)
+	MaxConnections int
+	// ReadCgroup is injected in permission tests; production reads /proc directly.
+	ReadCgroup func(int32) ([]byte, error)
+}
+
+func PeerCredentials(conn *net.UnixConn) (Peer, error) {
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return Peer{}, err
+	}
+	var cred *unix.Ucred
+	var inner error
+	err = raw.Control(func(fd uintptr) { cred, inner = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) })
+	if err != nil {
+		return Peer{}, err
+	}
+	if inner != nil {
+		return Peer{}, inner
+	}
+	return Peer{cred.Pid, cred.Uid, cred.Gid}, nil
+}
+
+func (s *Server) Authorized(peer Peer, permission Permission) bool {
+	if peer.UID == 0 {
+		return true
+	}
+	if peer.UID != s.AgentUID {
+		return false
+	}
+	if permission == Agent {
+		return true
+	}
+	if peer.PID <= 0 {
+		return false
+	}
+	read := s.ReadCgroup
+	if read == nil {
+		read = func(pid int32) ([]byte, error) { return os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid)) }
+	}
+	data, err := read(peer.PID)
+	if err != nil {
+		return false
+	}
+	units := s.MCPUnits
+	if len(units) == 0 {
+		units = []string{"loki-mcp.service"}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		_, path, ok := strings.Cut(line, "::")
+		if !ok {
+			continue
+		}
+		path = strings.TrimRight(path, "/")
+		for _, unit := range units {
+			if strings.HasSuffix(path, "/"+unit) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) Serve(ctx context.Context, listener *net.UnixListener) error {
+	limit := s.MaxConnections
+	if limit <= 0 {
+		limit = 64
+	}
+	slots := make(chan struct{}, limit)
+	var workers sync.WaitGroup
+	stop := context.AfterFunc(ctx, func() { listener.Close() })
+	defer stop()
+	defer workers.Wait()
+	for {
+		conn, err := listener.AcceptUnix()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+			conn.Close()
+			return nil
+		default:
+			conn.Close()
+			continue
+		}
+		workers.Go(func() {
+			defer func() { <-slots }()
+			defer conn.Close()
+			cancel := context.AfterFunc(ctx, func() { conn.Close() })
+			defer cancel()
+			s.handle(ctx, conn)
+		})
+	}
+}
+
+func readFrame(reader io.Reader) ([]byte, error) {
+	raw, err := bufio.NewReader(io.LimitReader(reader, MaxBytes+1)).ReadBytes('\n')
+	if len(raw) > MaxBytes {
+		return nil, fault.Error("request is too large")
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, fault.Error("Loki runtime returned no response")
+	}
+	return bytes.TrimSpace(raw), nil
+}
+
+type response struct {
+	OK     bool   `json:"ok"`
+	Result any    `json:"result,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
+	peer, err := PeerCredentials(conn)
+	if err != nil {
+		return
+	}
+	var request struct {
+		Operation string `json:"operation"`
+	}
+	raw, err := readFrame(conn)
+	if err == nil {
+		if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &request) != nil {
+			err = fault.Error("request must be an object")
+		}
+	}
+	var result any
+	if err == nil {
+		op, ok := s.Operations[request.Operation]
+		if request.Operation == "" {
+			err = fault.Error("operation is required")
+		} else if !ok || op.Handle == nil {
+			err = fault.Error("unknown operation")
+		} else if !s.Authorized(peer, op.Permission) {
+			if op.Permission == Administrative {
+				err = fault.Error("administrative operations require root or the Loki MCP service")
+			} else {
+				err = fault.Error("delegated secret operation requires the Loki agent user")
+			}
+		} else {
+			callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			result, err = invoke(callCtx, op.Handle, raw)
+			cancel()
+		}
+	}
+	if s.Audit != nil {
+		s.Audit(Event{request.Operation, peer.UID, err == nil})
+	}
+	r := response{OK: err == nil, Result: result}
+	if err != nil {
+		r.Error = fault.Public(err)
+		r.Result = nil
+	}
+	data, marshalErr := json.Marshal(r)
+	if marshalErr != nil {
+		data = []byte(`{"ok":false,"error":"runtime response encoding failed"}`)
+	}
+	if len(data)+1 > MaxBytes {
+		data = []byte(`{"ok":false,"error":"response is too large"}`)
+	}
+	conn.Write(append(data, '\n'))
+}
+
+func invoke(ctx context.Context, h Handler, raw json.RawMessage) (result any, err error) {
+	defer func() {
+		if recover() != nil {
+			result = nil
+			err = fault.Error("unexpected runtime failure; run diagnostics and retry")
+		}
+	}()
+	return h(ctx, raw)
+}
+
+// Decode extracts the operation-specific typed request before domain execution.
+func Decode[T any](raw json.RawMessage) (T, error) {
+	var value T
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return value, fault.Error("invalid runtime arguments")
+	}
+	return value, nil
+}
+
+type Client struct {
+	Socket      string
+	ExpectedUID *uint32
+}
+
+func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	if len(data)+1 > MaxBytes {
+		return nil, fault.Error("request is too large")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.Socket)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	if c.ExpectedUID != nil {
+		peer, err := PeerCredentials(conn.(*net.UnixConn))
+		if err != nil {
+			return nil, err
+		}
+		if peer.UID != *c.ExpectedUID {
+			return nil, errors.New("runtime socket owner is not trusted")
+		}
+	}
+	deadline, _ := ctx.Deadline()
+	conn.SetDeadline(deadline)
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+	if _, err = conn.Write(append(data, '\n')); err != nil {
+		return nil, err
+	}
+	encoded, err := readFrame(conn)
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		OK     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+		Error  string          `json:"error"`
+	}
+	if json.Unmarshal(encoded, &r) != nil {
+		return nil, errors.New("invalid runtime response")
+	}
+	if !r.OK {
+		return nil, fault.Error(r.Error)
+	}
+	return r.Result, nil
+}
