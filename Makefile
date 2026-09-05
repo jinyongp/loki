@@ -3,7 +3,7 @@ GOFMT ?= gofmt
 BINARY ?= .tmp/bin/loki
 PYTHON_REFERENCE ?= .tmp/python-baseline/bin/python
 
-.PHONY: build fmt fmt-check test race vet check reference sandbox accept-systemd accept-root-action accept-docker
+.PHONY: build fmt fmt-check test race vet check reference sandbox accept-systemd accept-root-action accept-docker accept-browser
 
 build: fmt-check
 	mkdir -p $(dir $(BINARY))
@@ -37,6 +37,11 @@ accept-root-action:
 
 accept-docker:
 	LOKI_REQUIRE_DOCKER_TESTS=1 LOKI_REQUIRE_SANDBOX_TESTS=1 $(GO) test -count=1 -v ./internal/action -run '^TestDockerActionRealDaemon$$'
+
+# Supply an existing disposable Chromium fixture; this target installs nothing.
+accept-browser:
+	@test -x "$(CHROME)" || { echo 'Set CHROME to the development Chromium binary'; exit 1; }
+	LOKI_REQUIRE_BROWSER_TESTS=1 LOKI_TEST_CHROME="$(CHROME)" LOKI_TEST_CHROME_LIBS="$(CHROME_LIBS)" $(GO) test -race -count=1 -v ./internal/cdp ./internal/browser ./internal/service -run '^Test(Chromium.*|BrowserRoleLifecycle)$$' -timeout=90s
 
 # Required isolated namespace acceptance; unavailable confinement is a failure.
 sandbox:
