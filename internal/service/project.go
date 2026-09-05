@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
@@ -210,6 +211,29 @@ func runtimeOptional(values ...*string) error {
 // Administrative registration/workflow operations are assembled separately.
 func ProjectStateOperations(store *project.Store, tasks project.Tasks) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"project_task": {Permission: rpc.Agent, Timeout: 1805 * time.Second, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			cwd, err := runtimeCWD(raw)
+			if err != nil {
+				return nil, err
+			}
+			r, err := rpc.Decode[project.RawTaskRequest](raw)
+			if err != nil {
+				return nil, err
+			}
+			var shape struct {
+				Arguments []*string `json:"arguments"`
+			}
+			if json.Unmarshal(raw, &shape) != nil {
+				return nil, fault.Error("invalid task arguments")
+			}
+			for _, argument := range shape.Arguments {
+				if argument == nil {
+					return nil, fault.Error("task arguments must be strings")
+				}
+			}
+			r.CWD = cwd
+			return tasks.Raw(ctx, r)
+		}},
 		"task": {Permission: rpc.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			cwd, err := runtimeCWD(raw)
 			if err != nil {

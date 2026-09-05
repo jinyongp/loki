@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) >= 2 && args[0] == "internal" && args[1] == "task" {
+		return runTask(args[2:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "jwks-refresh" {
 		return runJWKSRefresh(args[1:], stderr)
 	}

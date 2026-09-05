@@ -135,6 +135,15 @@ func TestProjectTaskMCPUnixSocket(t *testing.T) {
 	expectError("task_inspect", map[string]any{"cwd": "repo"}, "TASK_NOT_INITIALIZED")
 	initialized := call("project", map[string]any{"cwd": "/workspace/repo", "action": "init", "goal": "MCP shared task queue", "slug_base": "mcp-task-queue"})
 	slug := initialized["slug"].(string)
+	for _, arguments := range []any{nil, []any{nil}, []string{"exec", "/usr/bin/true"}, []string{"rc:/dev/null"}} {
+		if _, err := client.Call(ctx, map[string]any{"operation": "project_task", "cwd": "repo", "arguments": arguments}); err == nil {
+			t.Fatalf("invalid raw arguments accepted: %v", arguments)
+		}
+	}
+	rawResult, err := client.Call(ctx, map[string]any{"operation": "project_task", "cwd": "repo", "arguments": []string{"count"}})
+	if err != nil || !strings.Contains(string(rawResult), `"exit_code":0`) {
+		t.Fatalf("raw task socket: %s %v", rawResult, err)
+	}
 	created := call("project", map[string]any{"cwd": "repo", "action": "write", "filename": "plan.md", "content": "initial plan\n"})
 	read := call("project", map[string]any{"cwd": "repo", "action": "read", "filename": "plan.md"})
 	if read["sha256"] != created["sha256"] || read["content"] != "initial plan\n" {
