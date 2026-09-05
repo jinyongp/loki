@@ -56,6 +56,9 @@ type Handler func(context.Context, json.RawMessage) (any, error)
 type Operation struct {
 	Permission Permission
 	Handle     Handler
+	// Timeout is a trusted execution allowance applied only after a bounded
+	// request has been read and its peer authorized. Zero keeps service limits.
+	Timeout time.Duration
 }
 type Event struct {
 	Operation                           string
@@ -193,6 +196,7 @@ type response struct {
 }
 
 func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
+	parent := ctx
 	limits := s.Limits.normalized()
 	ctx, cancel := context.WithTimeout(ctx, limits.Timeout)
 	defer cancel()
@@ -225,6 +229,13 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 				err = fault.Error("delegated secret operation requires the Loki agent user")
 			}
 		} else {
+			if op.Timeout > 0 {
+				operationContext, operationCancel := context.WithTimeout(parent, op.Timeout)
+				defer operationCancel()
+				ctx = operationContext
+				deadline, _ := ctx.Deadline()
+				conn.SetDeadline(deadline)
+			}
 			result, err = invoke(ctx, op.Handle, raw)
 		}
 	}
