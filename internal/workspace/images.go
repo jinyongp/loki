@@ -58,6 +58,19 @@ func (f *Files) Image(path string) ([]byte, map[string]any, error) {
 }
 
 func (f *Files) WriteImage(path, encoded, mime string, overwrite bool, expected string) (map[string]any, error) {
+	return f.writeImage(path, encoded, mime, overwrite, expected, "write_image")
+}
+func (f *Files) SaveScreenshot(path, encoded string, overwrite bool, expected string, fullPage bool) (map[string]any, error) {
+	if strings.ToLower(filepath.Ext(path)) != ".png" {
+		return nil, fault.Error("browser screenshot path must use a .png extension")
+	}
+	result, err := f.writeImage(path, encoded, "image/png", overwrite, expected, "browser_save_screenshot")
+	if err == nil {
+		result["full_page"] = fullPage
+	}
+	return result, err
+}
+func (f *Files) writeImage(path, encoded, mime string, overwrite bool, expected, operation string) (map[string]any, error) {
 	format := strings.TrimPrefix(strings.ToLower(mime), "image/")
 	switch format {
 	case "gif", "jpeg", "png", "webp":
@@ -106,7 +119,7 @@ func (f *Files) WriteImage(path, encoded, mime string, overwrite bool, expected 
 		if Digest(current) != expected {
 			return nil, fault.Error("existing image changed or was not read before overwrite")
 		}
-		revision, err = f.capture(path, "write_image", current, info.Mode())
+		revision, err = f.capture(path, operation, current, info.Mode())
 		if err != nil {
 			return nil, err
 		}
