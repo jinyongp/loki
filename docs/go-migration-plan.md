@@ -285,6 +285,14 @@ Command-policy and shell-free hyperfine parsing follow the Python baseline.
 These scoped integration tests do not establish parity for remaining advanced
 action execution, status/audit, materialization cleanup, or other tool families.
 
+Workflow bootstrap preflight now reports sorted missing secret names without
+exposing values. The internal Go bootstrap CLI executes registered actions in
+sequence over UID-verified runtime RPC, drains paged output, preserves failing
+exit codes, and requests action termination on cancellation or read/write failure.
+Regression tests cover these cases and a temporary Unix-socket CLI round trip.
+The public bootstrap tool, parent process admission/timeout, and systemd service
+assembly remain unconnected; this does not establish end-to-end workflow parity.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured
