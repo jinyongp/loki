@@ -153,6 +153,10 @@ func (c *Controller) environment(tool bool, extra map[string]string) []string {
 	}
 	return result
 }
+
+// ToolEnvironment is also used by service-owned Git operations so signing and
+// outbound proxy configuration are identical across command entrypoints.
+func (c *Controller) ToolEnvironment() []string { return c.environment(true, nil) }
 func (c *Controller) execute(ctx context.Context, r Request, managed bool) (map[string]any, error) {
 	if r.Action == "check" || managed && r.Action == "configured" {
 		if r.Name == nil {

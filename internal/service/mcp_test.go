@@ -1,0 +1,194 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"loki/internal/config"
+)
+
+type bearerTransport struct{ token string }
+
+func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	copy := r.Clone(r.Context())
+	copy.Header.Set("Authorization", "Bearer "+b.token)
+	return http.DefaultTransport.RoundTrip(copy)
+}
+
+type accessFixture string
+
+func (v accessFixture) Verify(token string) bool { return token == string(v) }
+func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	c.Checks = map[string]config.Command{"hello": {Command: []string{"/usr/bin/printf", "hello"}, CWD: ".", TimeoutSeconds: 5, MaxOutputBytes: 1024}}
+	c.Processes = map[string]config.Command{"wait": {Command: []string{"/usr/bin/sleep", "30"}, CWD: ".", TimeoutSeconds: 60, MaxOutputBytes: 1024}}
+	server := httptest.NewUnstartedServer(nil)
+	defer server.Close()
+	_, port, _ := net.SplitHostPort(server.Listener.Addr().String())
+	c.Port, _ = strconv.Atoi(port)
+	c.PublicHosts = []string{"mcp.example.test"}
+	c.ArtifactBaseURL = "http://127.0.0.1:" + port + "/artifacts"
+	c.PreviewBaseDomain = "preview.example.test"
+	token := strings.Repeat("t", 43)
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) {
+		return json.RawMessage(`{"in_use":false,"listeners":[],"initialized":true}`), nil
+	})
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "preview fixture") }))
+	defer backend.Close()
+	_, backendPortText, _ := net.SplitHostPort(backend.Listener.Addr().String())
+	backendPort, _ := strconv.Atoi(backendPortText)
+	guard := runtimeFixture(func(_ context.Context, request any) (json.RawMessage, error) {
+		if request.(map[string]any)["port"] == backendPort {
+			return json.RawMessage(`{"in_use":true,"listeners":[{"command":"fixture"}]}`), nil
+		}
+		return runtime.Call(t.Context(), request)
+	})
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) {
+		return map[string]any{"status": "running"}, nil
+	})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	server.Config.Handler = app
+	server.Start()
+	preview, err := app.Previews.Publish(map[string]int{"/": backendPort}, ".", "fixture", 900)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewURL, _ := url.Parse(preview["url"].(string))
+	for _, assertion := range []string{"", "mcp-access", "preview-access"} {
+		r := httptest.NewRequest("GET", previewURL.String(), nil)
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("Cf-Access-Jwt-Assertion", assertion)
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, r)
+		if assertion == "preview-access" {
+			if w.Code != 200 || w.Body.String() != "preview fixture" {
+				t.Fatal(w.Code, w.Body.String())
+			}
+		} else if w.Code != 401 {
+			t.Fatal("MCP credential bypassed preview Access", w.Code)
+		}
+	}
+	for _, test := range []struct {
+		auth, host, origin, access string
+		want                       int
+	}{
+		{"", "", "", "", 401}, {"wrong", "", "", "", 401}, {token, "other.example.test", "", "", 421}, {token, "", "https://other.example.test", "", 403}, {"", "", "", "preview-access", 401},
+	} {
+		r := httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(`{}`))
+		if test.auth != "" {
+			r.Header.Set("Authorization", "Bearer "+test.auth)
+		}
+		if test.host != "" {
+			r.Host = test.host
+		}
+		if test.origin != "" {
+			r.Header.Set("Origin", test.origin)
+		}
+		if test.access != "" {
+			r.Header.Set("Cf-Access-Jwt-Assertion", test.access)
+		}
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, r)
+		if w.Code != test.want {
+			t.Fatal(test, w.Code, w.Body.String())
+		}
+	}
+	client, err := mcp.NewClient(&mcp.Implementation{Name: "assembled-test", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	tools, err := client.ListTools(t.Context(), nil)
+	if err != nil || len(tools.Tools) != 37 {
+		t.Fatal(tools, err)
+	}
+	resources, err := client.ListResources(t.Context(), nil)
+	if err != nil || len(resources.Resources) != 3 {
+		t.Fatal(resources, err)
+	}
+	call := func(name string, args map[string]any) map[string]any {
+		t.Helper()
+		r, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil || r.IsError {
+			encoded, _ := json.Marshal(r)
+			t.Fatalf("%s: %v %s", name, err, encoded)
+		}
+		raw, _ := json.Marshal(r.StructuredContent)
+		var result map[string]any
+		if json.Unmarshal(raw, &result) != nil {
+			t.Fatal(string(raw))
+		}
+		return result
+	}
+	call("workspace_edit", map[string]any{"action": "create", "path": "hello.txt", "content": "fixture"})
+	if r := call("workspace_read", map[string]any{"action": "file", "path": "hello.txt"}); r["sha256"] == nil {
+		t.Fatal(r)
+	}
+	if r := call("command_run", map[string]any{"action": "check", "name": "hello"}); r["output"] != "hello" {
+		t.Fatal(r)
+	}
+	call("command_start", map[string]any{"action": "configured", "name": "wait"})
+	call("process_inspect", map[string]any{"action": "list"})
+	call("system_inspect", map[string]any{"action": "server"})
+	call("agent_context", map[string]any{})
+	call("browser_session", map[string]any{"action": "start"})
+	call("secret_inspect", map[string]any{"action": "status"})
+	shared := call("artifact_publish", map[string]any{"action": "file", "path": "hello.txt"})
+	response, err := http.Get(shared["url"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || !bytes.Equal(data, []byte("fixture")) {
+		t.Fatal(response.StatusCode, err)
+	}
+	app.Close()
+	app.Close()
+	if len(app.Artifacts.List()) != 0 {
+		t.Fatal("shares retained on shutdown")
+	}
+	for _, process := range app.manager.List()["processes"].([]map[string]any) {
+		if process["status"] == "running" {
+			t.Fatal("managed process retained")
+		}
+	}
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, httptest.NewRequest("GET", server.URL+"/mcp", nil))
+	if w.Code != 503 {
+		t.Fatal(w.Code)
+	}
+	if data, err := os.ReadFile(filepath.Join(c.Root, "hello.txt")); err != nil || string(data) != "fixture" {
+		t.Fatal("workspace content not preserved", err)
+	}
+}
+func TestMCPConstructorFailureCleanup(t *testing.T) {
+	c, _ := config.Parse(nil)
+	c.Root = t.TempDir()
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return nil, nil })
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return nil, nil })
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Token: strings.Repeat("t", 43), BuiltinSkills: filepath.Join(t.TempDir(), "missing")}); err == nil {
+		t.Fatal("missing builtin root accepted")
+	}
+}
