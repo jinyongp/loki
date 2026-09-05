@@ -258,7 +258,7 @@ func (d *Driver) evaluate(ctx context.Context, expression string, out any) error
 		Result           struct{ Value json.RawMessage }
 		ExceptionDetails json.RawMessage
 	}
-	if err := d.client.Call(ctx, d.sessions[d.target], "Runtime.evaluate", map[string]any{"expression": expression, "contextId": world.ExecutionContextID, "returnByValue": true, "awaitPromise": true}, &result); err != nil {
+	if err := d.client.Call(ctx, d.sessions[d.target], "Runtime.evaluate", map[string]any{"expression": expression, "contextId": world.ExecutionContextID, "returnByValue": true, "awaitPromise": true, "timeout": 10000}, &result); err != nil {
 		return err
 	}
 	if len(result.ExceptionDetails) > 0 {
@@ -360,6 +360,19 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		return nil, err
 	}
 	switch operation {
+	case "state":
+		return d.state(ctx)
+	case "click":
+		return d.click(ctx, args)
+	case "type":
+		return d.typeText(ctx, args)
+	case "press":
+		key, _ := args["key"].(string)
+		return d.press(ctx, key)
+	case "scroll":
+		return d.scroll(ctx, args)
+	case "screenshot":
+		return d.screenshot(ctx, args["full_page"] == true)
 	case "navigate":
 		address, _ := args["url"].(string)
 		return d.navigate(ctx, address, args["new_tab"] == true)
