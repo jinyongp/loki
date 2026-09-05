@@ -41,8 +41,47 @@ class ManagedProcess:
                 self.base_offset += overflow
 
     def mark_complete(self) -> None:
+        diagnostics = self._systemd_result()
         with self.lock:
+            self.metadata.update(diagnostics)
             self.completed_at = time.time()
+
+    def _systemd_result(self) -> dict[str, Any]:
+        unit = self.metadata.get("systemd_unit")
+        if not isinstance(unit, str) or not unit.startswith("loki-action-") or not unit.endswith(".scope"):
+            return {}
+        # Failed scopes are retained until their result has been captured.
+        try:
+            # systemd may settle the scope after the launcher has exited.
+            reason = ""
+            for _ in range(25):
+                result = subprocess.run(
+                    ["/usr/bin/systemctl", "show", unit, "--property=Result", "--property=ActiveState"],
+                    capture_output=True, text=True, timeout=3, check=False,
+                )
+                fields = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+                if result.returncode != 0:
+                    break
+                if fields.get("ActiveState") in {"failed", "inactive"}:
+                    reason = fields.get("Result", "")
+                    break
+                time.sleep(0.2)
+            if result.returncode != 0 or not reason:
+                return {}
+            diagnostics = {"systemd_result": reason, "oom_killed": reason == "oom-kill"}
+            if reason == "oom-kill":
+                diagnostics["termination_reason"] = "oom"
+            if reason != "success":
+                try:
+                    subprocess.run(
+                        ["/usr/bin/systemctl", "reset-failed", unit],
+                        capture_output=True, timeout=3, check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            return diagnostics
+        except (OSError, subprocess.TimeoutExpired):
+            return {}
 
     def snapshot(self, offset: int | None, limit: int) -> dict[str, Any]:
         with self.lock:

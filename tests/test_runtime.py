@@ -207,9 +207,12 @@ def test_dynamic_port_action_returns_actual_endpoint_and_overrides_origin(
 
     assert "43210" in captured["command"]
     assert "{LOKI_PORT}" not in captured["command"]
-    assert captured["command"][:4] == [
-        "/usr/bin/systemd-run", "--scope", "--quiet", "--collect",
+    assert captured["command"][:3] == [
+        "/usr/bin/systemd-run", "--scope", "--quiet",
     ]
+    assert "--property=MemoryMax=4G" in captured["command"]
+    assert "--collect" not in captured["command"]
+    assert captured["metadata"]["systemd_unit"].endswith(".scope")
     assert captured["environment"]["PORT"] == "43210"
     assert captured["environment"]["PUBLIC_ORIGIN"] == (
         "http://127.0.0.1:43210"
@@ -968,8 +971,8 @@ def test_docker_action_uses_restricted_transient_proxy_wrapper(
     })
 
     command = captured["command"]
-    assert command[:4] == [
-        "/usr/bin/systemd-run", "--scope", "--quiet", "--collect",
+    assert command[:3] == [
+        "/usr/bin/systemd-run", "--scope", "--quiet",
     ]
     assert any(item.startswith("--unit=loki-action-") for item in command)
     assert "/usr/local/libexec/loki-docker-action-runner" in command

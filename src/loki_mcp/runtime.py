@@ -865,10 +865,11 @@ class RuntimeController:
         runner.extend(["--", *command])
         if action.get("docker_access", False):
             runner = ["/usr/local/libexec/loki-docker-action-runner", "--", *runner]
+        action_unit = f"loki-action-{secrets.token_hex(8)}.scope"
         runner = [
-            "/usr/bin/systemd-run", "--scope", "--quiet", "--collect",
-            f"--unit=loki-action-{secrets.token_hex(8)}",
-            "--property=MemoryMax=2G", "--", *runner,
+            "/usr/bin/systemd-run", "--scope", "--quiet",
+            f"--unit={action_unit}",
+            "--property=MemoryMax=4G", "--", *runner,
         ]
         environment = {
             **os.environ, **values, **generated_environment, **public_environment,
@@ -885,6 +886,8 @@ class RuntimeController:
                 metadata={
                     "profile": profile_name,
                     "action": action_name,
+                    "systemd_unit": action_unit,
+                    "memory_limit_bytes": 4 * 1024 ** 3,
                     "cwd": str(sandbox_cwd),
                     **(
                         {
