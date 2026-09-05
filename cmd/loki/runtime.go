@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -32,22 +31,9 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "cannot load runtime configuration")
 		return 1
 	}
-	file, err := os.Open(*layoutPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "cannot open runtime layout")
-		return 1
-	}
-	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 1024*1024+1))
-	decoder.DisallowUnknownFields()
 	var options service.RuntimeOptions
-	if err = decoder.Decode(&options); err != nil {
+	if err = daemon.ReadJSON(*layoutPath, &options); err != nil {
 		fmt.Fprintln(stderr, "invalid runtime layout")
-		return 2
-	}
-	var trailing any
-	if decoder.Decode(&trailing) != io.EOF {
-		fmt.Fprintln(stderr, "invalid trailing runtime layout")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
