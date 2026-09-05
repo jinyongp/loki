@@ -2,6 +2,8 @@ package project
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,13 +22,16 @@ import (
 )
 
 type migrationRecord struct {
-	Version    int    `json:"version"`
-	WorktreeID string `json:"worktree_id"`
-	Source     string `json:"source"`
-	UID, GID   int
-	Mode       uint32
-	Retained   []string `json:"retained"`
-	Complete   bool     `json:"complete"`
+	Version         int    `json:"version"`
+	WorktreeID      string `json:"worktree_id"`
+	Source          string `json:"source"`
+	UID, GID        int
+	Mode            uint32
+	Retained        []string `json:"retained"`
+	Complete        bool     `json:"complete"`
+	Generation      string   `json:"generation,omitempty"`
+	RollbackStarted bool     `json:"rollback_started,omitempty"`
+	RolledBack      bool     `json:"rolled_back,omitempty"`
 }
 
 func readMigration(path string, id Identity) (migrationRecord, error) {
@@ -42,6 +47,9 @@ func readMigration(path string, id Identity) (migrationRecord, error) {
 		if filepath.Base(name) != name || name == "." || name == ".." || name == "data" || name == "items" || name == "taskrc" {
 			return record, fault.Error("legacy migration retained entry is invalid")
 		}
+	}
+	if record.Generation != "" && !projectIDPattern.MatchString(record.Generation) {
+		return record, fault.Error("invalid migration generation")
 	}
 	return record, nil
 }
@@ -68,6 +76,9 @@ func (s *Store) MigrateLegacy(ctx context.Context, cwd string) (map[string]any, 
 		if err != nil {
 			return nil, fault.Error("central project state already exists")
 		}
+		if record.RollbackStarted {
+			return nil, fault.Error("legacy rollback is in progress; resume rollback")
+		}
 		return s.finishLegacyMigration(id, record)
 	} else if !os.IsNotExist(err) {
 		return nil, err
@@ -79,6 +90,9 @@ func (s *Store) MigrateLegacy(ctx context.Context, cwd string) (map[string]any, 
 		record, err = readMigration(stage, id)
 		if err != nil {
 			return nil, err
+		}
+		if record.RollbackStarted {
+			return nil, fault.Error("legacy rollback is in progress; resume rollback")
 		}
 	} else if os.IsNotExist(err) {
 		info, err := os.Lstat(source)
@@ -98,6 +112,11 @@ func (s *Store) MigrateLegacy(ctx context.Context, cwd string) (map[string]any, 
 		defer os.RemoveAll(prepared)
 		stat := info.Sys().(*syscall.Stat_t)
 		record = migrationRecord{Version: 1, WorktreeID: id.WorktreeID, Source: source, UID: int(stat.Uid), GID: int(stat.Gid), Mode: uint32(info.Mode().Perm()), Retained: []string{}}
+		var generation [16]byte
+		if _, err = rand.Read(generation[:]); err != nil {
+			return nil, err
+		}
+		record.Generation = hex.EncodeToString(generation[:])
 		entries, err := os.ReadDir(source)
 		if err != nil {
 			return nil, err

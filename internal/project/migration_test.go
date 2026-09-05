@@ -86,6 +86,13 @@ func TestRootLegacyMigrationRunnerBoundary(t *testing.T) {
 	if err = command.Run(); err == nil {
 		t.Fatal("runner can modify central taskrc")
 	}
+	if _, err = store.RollbackLegacy(t.Context(), repo); err != nil {
+		t.Fatal("root rollback", err)
+	}
+	output := run("/usr/bin/env", "TASKRC="+filepath.Join(source, "taskrc"), "TASKDATA="+filepath.Join(source, "data"), "/home/linuxbrew/.linuxbrew/bin/task", "rc.verbose=nothing", "rc.hooks=off", "count")
+	if strings.TrimSpace(output) != "1" {
+		t.Fatalf("restored runner task data: %q", output)
+	}
 }
 
 func legacyFixture(t *testing.T, repo string, extra bool) string {
