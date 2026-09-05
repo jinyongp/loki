@@ -587,17 +587,24 @@ ordinary Go test runs do not satisfy that acceptance gate. It compiles the actua
 candidate offline from the existing Go module cache and uses temporary fixture
 directories only. No production service, endpoint, state, or credentials are used.
 
+The next checkpoint adds bounded artifact storage and HTTP downloads, file/image
+and ZIP MCP publishing, temporary preview routes with HTTP/WebSocket forwarding,
+preview action preparation and failed-start cleanup, and workspace-owned port
+inspection/termination using pidfds. Focused race tests and `make check` pass.
+Root development acceptance now exercises actual systemd scope, runner switch,
+bubblewrap, fixed/session materialization, Docker aliases, and workflow bootstrap;
+separate probes cover an actual OOM scope and a disposable Docker container.
+
 Remaining gates include complete role assembly and all 37 successful-tool
-fixtures; production-shaped root-service action execution, full Node-family
-package-manager execution, public preview routing, materialization
-concurrent destination-guard testing and root-runner
-acceptance, production-shaped Docker/Compose execution,
-audit/status and workflow service assembly;
-service-owned process shutdown;
-signing-agent startup/readiness; Skill YAML edge-case parity; artifacts/previews/browser;
-CLI and packaging; interrupted migration and rollback drills; and isolated
-service-level privilege, real bind-mount worktree, public preview, restart, and
-end-to-end acceptance tests. The current alias test verifies normalization of
-Git output but does not replace a real separate-namespace bind-mount test.
+fixtures; installed-unit privilege and hardening acceptance; full Node-family
+package-manager execution; materialization concurrent destination guards;
+production-shaped Docker/Compose inspection and execution; audit/status and
+workflow service assembly; service-owned process shutdown; signing-agent
+startup/readiness; Skill YAML edge-case parity; artifact MIME/ZIP metadata and
+excluded-entry parity; preview WebSocket message limits and close-code parity;
+browser/CDP and developer widgets; CLI and packaging; interrupted migration and
+rollback drills; and isolated real bind-mount worktree, public preview, restart,
+and end-to-end acceptance tests. The current Git alias test verifies normalization
+of Git output but does not replace a real separate-namespace bind-mount test.
 
 Production deployment and production migration remain outside this task.
