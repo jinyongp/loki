@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -9,22 +10,22 @@ import (
 
 // ExecutablePath is the fixed built-in executable registry. Configuration may
 // add workspace-command entries; registered secret actions use only this list.
-func ExecutablePath(name string) (string, bool) {
-	path, ok := map[string]string{
-		"actionlint": "/home/linuxbrew/.linuxbrew/bin/actionlint", "actions-up": "/home/linuxbrew/.linuxbrew/bin/actions-up",
-		"awk": "/usr/bin/awk", "cargo": "/workspace/.loki/cargo/bin/cargo", "cp": "/usr/bin/cp", "find": "/usr/bin/find",
-		"fd": "/home/linuxbrew/.linuxbrew/bin/fd", "fnm": "/home/linuxbrew/.linuxbrew/bin/fnm", "gh": "/home/linuxbrew/.linuxbrew/bin/gh",
-		"git": "/usr/bin/git", "go": "/home/linuxbrew/.linuxbrew/bin/go", "grep": "/usr/bin/grep", "head": "/usr/bin/head",
-		"hyperfine": "/home/linuxbrew/.linuxbrew/bin/hyperfine", "just": "/home/linuxbrew/.linuxbrew/bin/just", "jq": "/usr/bin/jq",
-		"ls": "/usr/bin/ls", "mkdir": "/usr/bin/mkdir", "mv": "/usr/bin/mv", "node": "node", "npm": "npm", "pnpm": "pnpm",
-		"printenv": "/usr/bin/printenv", "pwd": "/usr/bin/pwd", "python": "/usr/bin/python3", "python3": "/usr/bin/python3",
-		"rg": "/usr/bin/rg", "rustc": "/workspace/.loki/cargo/bin/rustc", "rustdoc": "/workspace/.loki/cargo/bin/rustdoc",
-		"rustfmt": "/workspace/.loki/cargo/bin/rustfmt", "rustup": "/home/linuxbrew/.linuxbrew/bin/rustup", "sed": "/usr/bin/sed",
-		"sort": "/usr/bin/sort", "tail": "/usr/bin/tail", "task": "/usr/local/libexec/loki-task", "tar": "/usr/bin/tar",
-		"touch": "/usr/bin/touch", "uniq": "/usr/bin/uniq", "wc": "/usr/bin/wc",
-	}[name]
-	return path, ok
+var executables = map[string]string{
+	"actionlint": "/home/linuxbrew/.linuxbrew/bin/actionlint", "actions-up": "/home/linuxbrew/.linuxbrew/bin/actions-up",
+	"awk": "/usr/bin/awk", "cargo": "/workspace/.loki/cargo/bin/cargo", "cp": "/usr/bin/cp", "find": "/usr/bin/find",
+	"fd": "/home/linuxbrew/.linuxbrew/bin/fd", "fnm": "/home/linuxbrew/.linuxbrew/bin/fnm", "gh": "/home/linuxbrew/.linuxbrew/bin/gh",
+	"git": "/usr/bin/git", "go": "/home/linuxbrew/.linuxbrew/bin/go", "grep": "/usr/bin/grep", "head": "/usr/bin/head",
+	"hyperfine": "/home/linuxbrew/.linuxbrew/bin/hyperfine", "just": "/home/linuxbrew/.linuxbrew/bin/just", "jq": "/usr/bin/jq",
+	"ls": "/usr/bin/ls", "mkdir": "/usr/bin/mkdir", "mv": "/usr/bin/mv", "node": "node", "npm": "npm", "pnpm": "pnpm",
+	"printenv": "/usr/bin/printenv", "pwd": "/usr/bin/pwd", "python": "/usr/bin/python3", "python3": "/usr/bin/python3",
+	"rg": "/usr/bin/rg", "rustc": "/workspace/.loki/cargo/bin/rustc", "rustdoc": "/workspace/.loki/cargo/bin/rustdoc",
+	"rustfmt": "/workspace/.loki/cargo/bin/rustfmt", "rustup": "/home/linuxbrew/.linuxbrew/bin/rustup", "sed": "/usr/bin/sed",
+	"sort": "/usr/bin/sort", "tail": "/usr/bin/tail", "task": "/usr/local/libexec/loki-task", "tar": "/usr/bin/tar",
+	"touch": "/usr/bin/touch", "uniq": "/usr/bin/uniq", "wc": "/usr/bin/wc",
 }
+
+func ExecutablePath(name string) (string, bool) { path, ok := executables[name]; return path, ok }
+func ExecutableNames() []string                 { return slices.Sorted(maps.Keys(executables)) }
 
 func ValidateExec(name string, args []string) error {
 	lower := make([]string, len(args))
