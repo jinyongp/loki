@@ -308,6 +308,14 @@ patch targets. Four additional Python write responses match; concurrent
 resource compare-and-swap and MCP create/read/validate/resource tests pass.
 YAML emitter edge cases and the full invalid-input corpus remain parity gates.
 
+Go Git inspection and index operations now implement status, diffs, stable
+index hashes, trusted commit-template reads, complete-path staging/unstaging,
+and text-hunk staging/reversal. Nine successful Python responses match.
+Tests cover unrelated index preservation, unchanged worktree files, stale and
+concurrent index hashes, linked worktrees, literal pathspecs, and external Git
+metadata/template rejection. Git signing and developer-view rendering remain
+separate work items.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured

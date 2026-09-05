@@ -1,0 +1,63 @@
+package service
+
+import (
+	"context"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"loki/internal/fault"
+	"loki/internal/gitops"
+	"loki/internal/mcpserver"
+)
+
+type gitInspect struct {
+	Action, CWD string
+	Staged      bool
+	Path        *string
+}
+type gitStage struct {
+	Action, CWD string
+	Paths       *[]string
+	Patch       *string
+	Reverse     bool
+	Expected    *string `json:"expected_index_sha256"`
+}
+
+func GitHandlers(git *gitops.Controller) map[string]mcpserver.Handler {
+	return map[string]mcpserver.Handler{
+		"git_inspect": mcpserver.Typed(func(ctx context.Context, r gitInspect) (*mcp.CallToolResult, error) {
+			switch r.Action {
+			case "status":
+				return objectResult(git.Status(ctx, r.CWD))
+			case "diff":
+				return objectResult(git.Diff(ctx, r.CWD, r.Staged, r.Path))
+			case "index":
+				return objectResult(git.Index(ctx, r.CWD))
+			case "commit_context":
+				return objectResult(git.CommitContext(ctx, r.CWD))
+			default:
+				return nil, fault.Error("git_inspect action must be status, diff, index, or commit_context")
+			}
+		}),
+		"git_stage": mcpserver.Typed(func(ctx context.Context, r gitStage) (*mcp.CallToolResult, error) {
+			switch r.Action {
+			case "paths", "unstage":
+				paths, err := mcpserver.Require(r.Paths, "paths")
+				if err != nil {
+					return nil, err
+				}
+				op := "stage"
+				if r.Action == "unstage" {
+					op = "unstage"
+				}
+				return objectResult(git.MutatePaths(ctx, op, r.CWD, paths, r.Expected))
+			case "patch":
+				patch, err := mcpserver.Require(r.Patch, "patch")
+				if err != nil {
+					return nil, err
+				}
+				return objectResult(git.StagePatch(ctx, r.CWD, patch, r.Reverse, r.Expected))
+			default:
+				return nil, fault.Error("git_stage action must be paths, unstage, or patch")
+			}
+		}),
+	}
+}
