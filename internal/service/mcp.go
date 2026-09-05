@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,10 +14,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/artifacts"
+	"loki/internal/audit"
 	"loki/internal/auth"
 	"loki/internal/commands"
 	"loki/internal/config"
 	"loki/internal/contract"
+	"loki/internal/daemon"
 	"loki/internal/gitops"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
@@ -27,6 +30,7 @@ import (
 )
 
 type MCPOptions struct {
+	OnAuditError                                        func(error)
 	Runtime, PortGuard                                  RuntimeCaller
 	Browser                                             BrowserCaller
 	RuntimeSocket, BrowserSocket, BuiltinSkills, RGPath string
@@ -144,6 +148,19 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 			}
 			handlers[name] = handler
 		}
+	}
+	if !filepath.IsAbs(c.AuditLog) {
+		return nil, errors.New("MCP audit path must be absolute")
+	}
+	if err = daemon.PrivateDirectory(filepath.Dir(c.AuditLog)); err != nil {
+		return nil, err
+	}
+	log := &audit.Log{Path: c.AuditLog}
+	if _, err = log.Read(1); err != nil {
+		return nil, err
+	}
+	for name, handler := range handlers {
+		handlers[name] = auditHandler(log, name, handler, options.OnAuditError)
 	}
 	app.Server, err = mcpserver.NewConfigured(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
 	if err != nil {
