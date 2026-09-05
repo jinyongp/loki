@@ -8,6 +8,8 @@ import pytest
 
 from loki_mcp.policy import PolicyError
 from loki_mcp.tasks import attributes, operate, task_uuid
+from loki_mcp.runtime import _preview_bindings, LokiRuntimeError
+from loki_mcp.tools import WorkspaceTools
 
 UUID = "11111111-1111-4111-8111-111111111111"
 
@@ -80,3 +82,39 @@ def test_real_task_lifecycle(tmp_path):
     assert op("next")["count"] == 1
     assert op("delete", uuid=second["uuid"])["task"]["status"] == "deleted"
     assert op("count", status="all")["count"] == 2
+
+
+def test_preview_resolves_backend_and_origin():
+    action = {"public_environment": ["PUBLIC_API_BASE_URL"],
+              "preview_environment": {"PUBLIC_API_BASE_URL": "/api"},
+              "dynamic_port": {"origin_environment": "PUBLIC_ORIGIN"}}
+    result = _preview_bindings(action, {"PUBLIC_API_BASE_URL": "http://127.0.0.1:41280/v1"})
+    assert result["backend_routes"] == {"/api": 41280}
+    assert result["environment_routes"] == {"PUBLIC_API_BASE_URL": "/api", "PUBLIC_ORIGIN": "/"}
+    assert result["environment_suffixes"] == {"PUBLIC_API_BASE_URL": "/v1"}
+    assert set(result["required_environment"]) == {"PUBLIC_API_BASE_URL", "PUBLIC_ORIGIN"}
+
+
+def test_preview_missing_mapping_remains_required():
+    result = _preview_bindings({"public_environment": ["PUBLIC_API_URL"]},
+                               {"PUBLIC_API_URL": "http://localhost:41280"})
+    assert result["required_environment"] == ["PUBLIC_API_URL"]
+    assert result["environment_routes"] == {}
+
+
+def test_preview_rejects_unsupported_backend_scheme():
+    with pytest.raises(LokiRuntimeError):
+        _preview_bindings({"public_environment": ["PUBLIC_API"],
+                           "preview_environment": {"PUBLIC_API": "/api"}},
+                          {"PUBLIC_API": "https://localhost:443"})
+
+
+def test_sharing_loopback_public_environment_is_rejected(monkeypatch):
+    original = Path.read_bytes
+    def read(path):
+        if str(path) == "/proc/123/environ":
+            return b"PRIVATE_TOKEN=hidden\\0PUBLIC_API=http://127.0.0.1:41280\\0".replace(b"\\0", b"\x00")
+        return original(path)
+    monkeypatch.setattr(Path, "read_bytes", read)
+    with pytest.raises(PolicyError, match="PREVIEW_LOCAL_URL"):
+        WorkspaceTools._reject_public_loopbacks({"pid": 123})

@@ -515,6 +515,7 @@ class CatalogTools:
         session_id: str | None = None,
         offset: int | None = None,
         limit: int = 65_536,
+        preview_environment: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Configure, run, or inspect central actions without project-local Loki files."""
         if operation == "list":
@@ -529,7 +530,7 @@ class CatalogTools:
                 timeout_seconds, max_output_bytes,
                 materialize_env_file, materialize_env_path, docker_access,
                 preferred_port, port_environment, origin_environment,
-                singleton, lock_probe, local_callback, public_environment,
+                singleton, lock_probe, local_callback, public_environment, preview_environment,
             )
         if operation == "remove":
             return self.tools.remove_action_policy(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlsplit
 import base64
 import copy
 import fcntl
@@ -773,6 +774,7 @@ class RuntimeController:
             "port": port,
             "local_url": f"http://127.0.0.1:{port}",
             "expires_in_seconds": int(PORT_ALLOCATION_HOLD_SECONDS),
+            **_preview_bindings(action, profile["secrets"]),
         }
 
     def op_run_action(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -840,9 +842,14 @@ class RuntimeController:
         command = _resolved_command(raw_command, cwd)
         selected = _selected_secret_names(action, profile["secrets"])
         values = {name: profile["secrets"][name] for name in selected}
-        public_environment = _validated_public_environment(
-            request.get("public_environment", {}), set(action.get("public_environment", [])),
-        )
+        allowed_public = set(action.get("public_environment", []))
+        if dynamic_port and dynamic_port.get("origin_environment"):
+            allowed_public.add(dynamic_port["origin_environment"])
+        public_environment = _validated_public_environment(request.get("public_environment", {}), allowed_public)
+        if request.get("launch_token") is not None:
+            required_public = _preview_bindings(action, profile["secrets"])["required_environment"]
+            if set(required_public) - set(public_environment):
+                raise LokiRuntimeError("PREVIEW_MAPPING_REQUIRED: missing public dependency or origin mapping")
         sandbox_cwd = PurePosixPath("/workspace", *cwd.relative_to(WORKSPACE_ROOT).parts)
         runner = ["/usr/sbin/runuser", "-u", "runner", "-m", "--", "/usr/local/libexec/loki-action-runner", "--cwd", str(sandbox_cwd)]
         for name in selected:
@@ -1060,6 +1067,7 @@ class RuntimeController:
                     "lock_probe": action.get("lock_probe"),
                     "local_callback": action.get("local_callback", False),
                     "public_environment": action.get("public_environment", []),
+                    "preview_environment": action.get("preview_environment", {}),
                     "docker_access": action.get("docker_access", False),
                     "timeout_seconds": action["timeout_seconds"],
                     "max_output_bytes": action["max_output_bytes"],
@@ -1611,6 +1619,12 @@ def _validate_action(action: object, available_secrets: set[str]) -> None:
         raise LokiRuntimeError("action public environment policy is invalid")
     for name in public_environment:
         _validate_secret_name(name)
+    preview_environment = action.get("preview_environment", {})
+    if not isinstance(preview_environment, dict) or len(preview_environment) > 7:
+        raise LokiRuntimeError("invalid preview environment policy")
+    for name, prefix in preview_environment.items():
+        if name not in public_environment or not isinstance(prefix, str) or re.fullmatch(r"/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", prefix) is None:
+            raise LokiRuntimeError("invalid preview environment route")
     if not isinstance(singleton, bool):
         raise LokiRuntimeError("action singleton must be a boolean")
     if lock_probe is not None:
@@ -1709,6 +1723,35 @@ def _git_common_directory(cwd: Path) -> Path:
     if common != workspace and workspace not in common.parents:
         raise LokiRuntimeError("action Git metadata must stay inside the workspace")
     return common
+
+
+def _preview_bindings(action: dict[str, Any], values: dict[str, str]) -> dict[str, Any]:
+    routes: dict[str, int] = {}
+    mappings: dict[str, str] = {}
+    suffixes: dict[str, str] = {}
+    required = []
+    configured = action.get("preview_environment", {})
+    for name in action.get("public_environment", []):
+        parsed = urlsplit(values.get(name, ""))
+        if parsed.hostname in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+            required.append(name)
+            if name not in configured:
+                continue
+            if parsed.scheme != "http" or parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise LokiRuntimeError("invalid preview backend URL")
+            prefix = configured[name]
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            if prefix in routes and routes[prefix] != port:
+                raise LokiRuntimeError("preview route has conflicting backends")
+            routes[prefix] = port
+            mappings[name] = prefix
+            suffixes[name] = parsed.path.rstrip("/")
+    origin = (action.get("dynamic_port") or {}).get("origin_environment")
+    if origin:
+        mappings[origin] = "/"
+        required.append(origin)
+    return {"backend_routes": routes, "environment_routes": mappings,
+            "environment_suffixes": suffixes, "required_environment": required}
 
 
 def _validated_public_environment(raw: object, allowed_names: set[str]) -> dict[str, str]:

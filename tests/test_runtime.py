@@ -330,6 +330,7 @@ def test_prepared_dynamic_port_is_consumed_by_matching_action(
     result = broker.op_run_action({
         "profile": "web", "action_name": "storefront",
         "launch_token": prepared["launch_token"],
+        "public_environment": {"PUBLIC_ORIGIN": "https://loki-" + "a" * 32 + ".streamliner.im"},
     })
 
     assert prepared["port"] == 43210

@@ -21,6 +21,7 @@ import sys
 import time
 import xml.etree.ElementTree as ElementTree
 import zipfile
+from urllib.parse import urlsplit
 
 from mcp.server.mcpserver.utilities.types import Image
 from mcp.types import CallToolResult, ResourceLink, TextContent
@@ -590,6 +591,7 @@ class WorkspaceTools:
             listener = listeners[0]
             if not isinstance(listener, dict):
                 raise PolicyError("port listener metadata is invalid")
+            self._reject_public_loopbacks(listener)
             try:
                 result = self.preview_store.publish(
                     port=port,
@@ -636,6 +638,7 @@ class WorkspaceTools:
                     )
                 listeners[port] = candidates[0]
             root = listeners[routes["/"]]
+            self._reject_public_loopbacks(root)
             result = self.preview_store.publish_stack(
                 routes=routes,
                 cwd=str(root.get("cwd", "/workspace")),
@@ -666,6 +669,14 @@ class WorkspaceTools:
                 raise PolicyError("preview lifetime must be between 60 and 86400 seconds")
             if "/" in backend_routes:
                 raise PolicyError("the registered action owns the preview root route")
+            prepared = self._runtime_request(
+                "prepare_action", profile=profile, action_name=action, cwd=cwd,
+            )
+            backend_routes = {**prepared.get("backend_routes", {}), **backend_routes}
+            environment_routes = {**prepared.get("environment_routes", {}), **environment_routes}
+            missing = set(prepared.get("required_environment", [])) - set(environment_routes)
+            if missing:
+                raise PolicyError("PREVIEW_MAPPING_REQUIRED: " + ", ".join(sorted(missing)))
             backend_ports = list(backend_routes.values())
             listeners: dict[int, dict[str, Any]] = {}
             for port in backend_ports:
@@ -681,9 +692,6 @@ class WorkspaceTools:
                         f"port {port} is not a runner-owned workspace development server"
                     )
                 listeners[port] = candidates[0]
-            prepared = self._runtime_request(
-                "prepare_action", profile=profile, action_name=action, cwd=cwd,
-            )
             root_port = int(prepared["port"])
             if root_port in backend_ports:
                 raise OperationError("allocated root port conflicts with a preview backend")
@@ -697,11 +705,20 @@ class WorkspaceTools:
             public_environment = self._preview_public_environment(
                 preview, environment_routes,
             )
+            for name, suffix in prepared.get("environment_suffixes", {}).items():
+                if name in public_environment:
+                    public_environment[name] += suffix
             process = self._runtime_request(
                 "run_action", profile=profile, action_name=action,
                 launch_token=prepared["launch_token"],
                 public_environment=public_environment, cwd=cwd,
             )
+            deadline = time.monotonic() + 20
+            while not self.preview_port_allowed(root_port):
+                if time.monotonic() >= deadline:
+                    self._runtime_request("stop_process", session_id=process["session_id"])
+                    raise OperationError("PREVIEW_NOT_READY: frontend did not start listening")
+                time.sleep(0.2)
             result = {
                 **process,
                 "share_id": preview["share_id"],
@@ -740,6 +757,27 @@ class WorkspaceTools:
                 raise PolicyError("preview environment route is invalid")
             result[name] = url if route == "/" else f"{url}{route}"
         return result
+
+    @staticmethod
+    def _reject_public_loopbacks(listener: dict[str, Any]) -> None:
+        pid = listener.get("pid")
+        if not isinstance(pid, int) or pid <= 0:
+            return
+        try:
+            environment = Path(f"/proc/{pid}/environ").read_bytes()
+        except FileNotFoundError:
+            return
+        except PermissionError as error:
+            raise PolicyError("PREVIEW_ENV_UNREADABLE: use preview_publish action=action") from error
+        for entry in environment.split(b"\0"):
+            name, _, value = entry.partition(b"=")
+            if name.startswith((b"PUBLIC_", b"VITE_", b"NEXT_PUBLIC_")):
+                try:
+                    host = urlsplit(value.decode("utf-8")).hostname
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if host in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+                    raise PolicyError("PREVIEW_LOCAL_URL: use preview_publish action=action with public route mappings")
 
     def list_shared_servers(self) -> dict[str, Any]:
         """List active temporary live preview URLs without accessing their content."""
@@ -2937,6 +2975,7 @@ class WorkspaceTools:
         lock_probe: str | None = None,
         local_callback: bool = False,
         public_environment: list[str] | None = None,
+        preview_environment: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Register one validated action policy through the managed MCP identity."""
         working_directory = self._command_cwd(cwd)
@@ -2969,6 +3008,7 @@ class WorkspaceTools:
                 "lock_probe": lock_probe,
                 "local_callback": local_callback,
                 "public_environment": public_environment or [],
+                "preview_environment": preview_environment or {},
                 "timeout_seconds": timeout_seconds,
                 "max_output_bytes": max_output_bytes,
             },
