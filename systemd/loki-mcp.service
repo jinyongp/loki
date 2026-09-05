@@ -5,14 +5,16 @@ Wants=loki-egress-proxy.service loki-port-guard.service loki-browser.service lok
 ConditionPathExists=/etc/loki/cloudflare-jwks.json
 ConditionFileIsExecutable=/home/linuxbrew/.linuxbrew/bin/fnm
 ConditionFileIsExecutable=/home/linuxbrew/.linuxbrew/bin/just
-ConditionPathExists=/run/loki/signing/agent.sock
-ConditionPathExists=/run/loki/runtime/control.sock
+# Socket readiness is transient; keep retrying after a slow dependency startup.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=runner
 Group=workspace
 WorkingDirectory=/srv/workspace/loki
+ExecStartPre=/bin/sh -c 'until test -S /run/loki/signing/agent.sock && test -S /run/loki/runtime/control.sock; do sleep 0.2; done'
+TimeoutStartSec=30
 ExecStart=/usr/local/libexec/loki-mcp-launch
 Restart=on-failure
 RestartSec=3

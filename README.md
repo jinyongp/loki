@@ -45,6 +45,15 @@ Public artifact and preview hosting are disabled in the repository defaults.
 They become active only when the target machine supplies its own host and
 Cloudflare Access configuration.
 
+The MCP service waits for the signing and runtime Unix sockets before starting.
+Each startup attempt waits up to 30 seconds and retries after 3 seconds on
+failure, including a readiness timeout. Slow socket creation therefore recovers
+automatically. The installer includes this policy in `loki-mcp.service`.
+
+Run the isolated startup regression tests as root in a development distro with
+systemd: `python3 -m unittest discover -s tests -p test_mcp_startup.py -v`.
+These tests use temporary units and sockets, with shorter retry timeouts.
+
 ## Repository visibility
 
 No license is granted by this repository. Keep the GitHub repository private
