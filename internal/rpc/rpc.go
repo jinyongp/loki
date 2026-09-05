@@ -21,6 +21,26 @@ import (
 
 const MaxBytes = 2_097_152
 
+// Limits are local service configuration, never request-controlled.
+// Zero values preserve the runtime's 2 MiB / 30 second protocol.
+type Limits struct {
+	RequestBytes, ResponseBytes int
+	Timeout                     time.Duration
+}
+
+func (l Limits) normalized() Limits {
+	if l.RequestBytes <= 0 {
+		l.RequestBytes = MaxBytes
+	}
+	if l.ResponseBytes <= 0 {
+		l.ResponseBytes = MaxBytes
+	}
+	if l.Timeout <= 0 {
+		l.Timeout = 30 * time.Second
+	}
+	return l
+}
+
 type Peer struct {
 	PID      int32
 	UID, GID uint32
@@ -45,6 +65,7 @@ type Event struct {
 }
 
 type Server struct {
+	Limits         Limits
 	AgentUID       uint32
 	MCPUnits       []string
 	Operations     map[string]Operation
@@ -149,8 +170,11 @@ func (s *Server) Serve(ctx context.Context, listener *net.UnixListener) error {
 }
 
 func readFrame(reader io.Reader) ([]byte, error) {
-	raw, err := bufio.NewReader(io.LimitReader(reader, MaxBytes+1)).ReadBytes('\n')
-	if len(raw) > MaxBytes {
+	return readBoundedFrame(reader, MaxBytes)
+}
+func readBoundedFrame(reader io.Reader, maximum int) ([]byte, error) {
+	raw, err := bufio.NewReader(io.LimitReader(reader, int64(maximum)+1)).ReadBytes('\n')
+	if len(raw) > maximum {
 		return nil, fault.Error("request is too large")
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -169,7 +193,11 @@ type response struct {
 }
 
 func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
-	conn.SetDeadline(time.Now().Add(30 * time.Second))
+	limits := s.Limits.normalized()
+	ctx, cancel := context.WithTimeout(ctx, limits.Timeout)
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	conn.SetDeadline(deadline)
 	peer, err := PeerCredentials(conn)
 	if err != nil {
 		return
@@ -177,7 +205,7 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	var request struct {
 		Operation string `json:"operation"`
 	}
-	raw, err := readFrame(conn)
+	raw, err := readBoundedFrame(conn, limits.RequestBytes)
 	if err == nil {
 		if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &request) != nil {
 			err = fault.Error("request must be an object")
@@ -197,9 +225,7 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 				err = fault.Error("delegated secret operation requires the Loki agent user")
 			}
 		} else {
-			callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			result, err = invoke(callCtx, op.Handle, raw)
-			cancel()
+			result, err = invoke(ctx, op.Handle, raw)
 		}
 	}
 	if s.Audit != nil {
@@ -233,7 +259,7 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	if marshalErr != nil {
 		data = []byte(`{"ok":false,"error":"runtime response encoding failed"}`)
 	}
-	if len(data)+1 > MaxBytes {
+	if len(data)+1 > limits.ResponseBytes {
 		data = []byte(`{"ok":false,"error":"response is too large"}`)
 	}
 	conn.Write(append(data, '\n'))
@@ -259,19 +285,21 @@ func Decode[T any](raw json.RawMessage) (T, error) {
 }
 
 type Client struct {
+	Limits      Limits
 	Socket      string
 	ExpectedUID *uint32
 }
 
 func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) {
+	limits := c.Limits.normalized()
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
-	if len(data)+1 > MaxBytes {
+	if len(data)+1 > limits.RequestBytes {
 		return nil, fault.Error("request is too large")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, limits.Timeout)
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.Socket)
 	if err != nil {
@@ -294,7 +322,7 @@ func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) 
 	if _, err = conn.Write(append(data, '\n')); err != nil {
 		return nil, err
 	}
-	encoded, err := readFrame(conn)
+	encoded, err := readBoundedFrame(conn, limits.ResponseBytes)
 	if err != nil {
 		return nil, err
 	}
