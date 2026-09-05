@@ -522,8 +522,9 @@ an exited snapshot. A disposable development-Ubuntu root scope constrained to
 all three diagnostics. Unit tests cover delayed settlement and reset ordering.
 Production-shaped runner/service confinement remains a separate acceptance gate.
 
-The CLI binary builds, but complete service-role entrypoints have not yet been
-assembled. This checkpoint is not a deployable Go MCP release.
+The CLI includes runtime, MCP, port-guard, signing-agent, signing-proxy, browser,
+and browser-proxy roles. The general outbound package proxy and installation
+assembly remain open. This checkpoint is not a deployable Go MCP release.
 
 Commands passed in the Ubuntu source environment:
 
@@ -587,7 +588,7 @@ ordinary Go test runs do not satisfy that acceptance gate. It compiles the actua
 candidate offline from the existing Go module cache and uses temporary fixture
 directories only. No production service, endpoint, state, or credentials are used.
 
-The next checkpoint adds bounded artifact storage and HTTP downloads, file/image
+The current checkpoint includes bounded artifact storage and HTTP downloads, file/image
 and ZIP MCP publishing, temporary preview routes with HTTP/WebSocket forwarding,
 preview action preparation and failed-start cleanup, and workspace-owned port
 inspection/termination using pidfds. Focused race tests and `make check` pass.
@@ -595,16 +596,57 @@ Root development acceptance now exercises actual systemd scope, runner switch,
 bubblewrap, fixed/session materialization, Docker aliases, and workflow bootstrap;
 separate probes cover an actual OOM scope and a disposable Docker container.
 
-Remaining gates include complete role assembly and all 37 successful-tool
-fixtures; installed-unit privilege and hardening acceptance; full Node-family
-package-manager execution; materialization concurrent destination guards;
-production-shaped Docker/Compose inspection and execution; audit/status and
-workflow service assembly; service-owned process shutdown; signing-agent
-startup/readiness; Skill YAML edge-case parity; artifact MIME/ZIP metadata and
-excluded-entry parity; preview WebSocket message limits and close-code parity;
-browser/CDP and developer widgets; CLI and packaging; interrupted migration and
-rollback drills; and isolated real bind-mount worktree, public preview, restart,
-and end-to-end acceptance tests. The current Git alias test verifies normalization
-of Git output but does not replace a real separate-namespace bind-mount test.
+All 37 MCP tools now have concrete handlers in one authenticated stateless HTTP
+application, with three embedded viewer resources. Resource origins and CSP
+metadata come from the active configuration. HTTP integration covers catalog
+discovery, authorization and host/origin rejection, separate preview Access
+authorization, workspace mutations, configured commands, background processes,
+opaque artifact downloads, and shutdown. Runtime, port-guard and browser calls
+in this assembly fixture use test peers; it does not replace complete real-peer
+success coverage for every tool.
+
+Go now supervises a private CDP pipe, Chromium process group, tab lifecycle,
+navigation, isolated-world element tables, input/click/scroll/key operations,
+screenshots, and bounded diagnostic/body retrieval. Actual development Chromium
+152.0.7977.82 tests cover restart, tab recovery, history, managed-port proxy
+confinement, Unicode input, open Shadow DOM and same-origin iframe interaction,
+stale element rejection, PNG dimensions, console/page errors, header/query
+redaction and compressed response bounds. The browser role also returns an
+actual screenshot over its UID-checked Unix socket and cleans up on shutdown.
+`make accept-browser CHROME=/absolute/path/to/chrome CHROME_LIBS=/optional/lib/path`
+requires an existing development binary and performs no installation. Browser
+DOM coverage still requires cross-origin frames, closed Shadow DOM, popup focus,
+dynamic-element parity, downloads and installed browser namespace acceptance.
+
+Signing-agent readiness/shutdown, runtime assembly, Docker Compose listener
+inspection, developer diff/report/log views, ordinary finite/managed commands,
+and system diagnostics have focused race coverage. Actual development FNM,
+Node and npm version commands pass. Service JSON layouts reject oversized,
+writable, foreign-owned, symlinked and non-regular files. MCP audit records use
+the public catalog tool name, selected bounded metadata and success state;
+request/result bodies, typed input, command arguments, secrets and raw errors
+are excluded. Runtime audit retains its operation-oriented schema. Log write
+failures are reported through the service's error callback.
+
+`make check reference` passed after the complete HTTP application was assembled:
+format, vet, all Go unit/race tests, static build, 638 Python differential cases
+(41 project/task, 156 secret/action/workflow, 324 process, 90 action, 10 skills,
+9 Git, 8 browser debug), and 28 Python baseline tests. Later audit and service
+entrypoint changes have focused race coverage and require the next integrated
+check. Optional skips in ordinary tests do not satisfy actual-browser or
+namespace acceptance.
+
+Remaining gates include all 37 real-peer successful-tool fixtures; installed-unit
+privilege and hardening acceptance; full Node-family package-manager execution;
+materialization concurrent destination guards; production-shaped Docker/Compose
+inspection and execution; Skill YAML edge-case parity; artifact MIME/ZIP metadata
+and excluded-entry parity; preview WebSocket message limits and close-code parity;
+the browser DOM/namespace cases above; outbound package proxy, installation and
+packaging; interrupted migration and rollback drills; and isolated real bind-mount
+worktree, public preview, restart, and end-to-end acceptance tests. Go reports its
+own runtime/SDK version instead of a fabricated Python version. Browser URL and
+decoded-body bounds are conservative; these differences remain part of the
+compatibility review. The current Git alias test verifies normalization of Git
+output but does not replace a real separate-namespace bind-mount test.
 
 Production deployment and production migration remain outside this task.
