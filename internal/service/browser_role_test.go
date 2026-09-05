@@ -1,0 +1,88 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"loki/internal/browser"
+)
+
+type browserFixture func(context.Context, string, map[string]any) (map[string]any, error)
+
+func (f browserFixture) Call(ctx context.Context, op string, args map[string]any) (map[string]any, error) {
+	return f(ctx, op, args)
+}
+func TestBrowserOperationEnvelope(t *testing.T) {
+	caller := browserFixture(func(_ context.Context, op string, args map[string]any) (map[string]any, error) {
+		return map[string]any{"operation": op, "arguments": args}, nil
+	})
+	ops := BrowserOperations(caller)
+	if len(ops) != 19 {
+		t.Fatal(len(ops))
+	}
+	for name, op := range ops {
+		result, err := op.Handle(t.Context(), json.RawMessage(`{"arguments":{"index":12}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := result.(map[string]any)
+		if row["operation"] != name || row["arguments"].(map[string]any)["index"] != json.Number("12") {
+			t.Fatal(row)
+		}
+		for _, raw := range []string{`{"arguments":null}`, `{"arguments":[]}`, `{"arguments":"text"}`} {
+			if _, err := op.Handle(t.Context(), []byte(raw)); err == nil {
+				t.Fatal(raw)
+			}
+		}
+	}
+}
+func TestBrowserRoleLifecycle(t *testing.T) {
+	root := t.TempDir()
+	socket := filepath.Join(root, "socket", "browser.sock")
+	uid := uint32(os.Getuid())
+	binary := os.Getenv("LOKI_TEST_CHROME")
+	if binary == "" {
+		binary = "/unneeded-until-start"
+	}
+	options := BrowserOptions{Socket: socket, AgentUID: uid, SocketGID: os.Getgid(), Browser: browser.Options{Binary: binary, Profile: filepath.Join(root, "profile"), Downloads: filepath.Join(root, "downloads"), Proxy: "http://127.0.0.1:1", LibraryPath: os.Getenv("LOKI_TEST_CHROME_LIBS")}}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ready := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- RunBrowser(ctx, options, func() error { close(ready); return nil }) }()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("readiness timeout")
+	}
+	client := NewBrowserRPC(socket, uid)
+	if result, err := client.Call(t.Context(), "stop", nil); err != nil || result["status"] != "stopped" {
+		t.Fatal(result, err)
+	}
+	if os.Getenv("LOKI_TEST_CHROME") != "" {
+		if _, err := client.Call(t.Context(), "start", nil); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := client.Call(t.Context(), "screenshot", nil); err != nil || result["mime_type"] != "image/png" {
+			t.Fatal(err)
+		}
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown timeout")
+	}
+	if _, err := os.Lstat(socket); !os.IsNotExist(err) {
+		t.Fatal("socket retained", err)
+	}
+}
