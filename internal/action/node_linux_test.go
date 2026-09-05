@@ -279,4 +279,83 @@ http.createServer((req,res) => {res.setHeader('Content-Type','application/json')
 	if response.StatusCode != 503 {
 		t.Fatalf("stopped callback status: %d", response.StatusCode)
 	}
+	for _, mode := range []string{"plain", "fixed", "session"} {
+		t.Run("docker-"+mode, func(t *testing.T) {
+			docker, controller, _ := materializationFixture(t, r.layout.Binary, mode == "fixed", "BEGIN { exit }")
+			docker.layout.PublicMounts = r.layout.PublicMounts
+			docker.layout.DockerDirectory = t.TempDir()
+			docker.layout.DockerUID = uint32(os.Getuid())
+			docker.layout.DockerSocket = filepath.Join(t.TempDir(), "daemon.sock")
+			listener, err := net.Listen("unix", docker.layout.DockerSocket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/_ping" {
+					t.Errorf("unexpected Docker request: %s", request.URL.Path)
+				}
+				io.WriteString(w, "OK")
+			})}
+			go server.Serve(listener)
+			defer server.Close()
+			program := `const fs=require('node:fs'),http=require('node:http');
+const actual={cwd:process.cwd(),mode:process.env.DOCKER_ACCESS_MODE,materialized:false,readonly:false};
+if(process.env.ENV_FILE){const data=fs.readFileSync(process.env.ENV_FILE,'utf8'); const visible='/workspace'+process.env.ENV_FILE.slice(process.cwd().length); if(data!==fs.readFileSync(visible,'utf8')||!data.includes('TOKEN='))process.exit(4); actual.materialized=true;try{fs.openSync(process.env.ENV_FILE,'w');process.exit(5)}catch{actual.readonly=true}}
+http.get({socketPath:process.env.DOCKER_HOST.slice('unix://'.length),path:'/_ping'},res=>{let data='';res.on('data',x=>data+=x);res.on('end',()=>{actual.reply=data;console.log('docker-result:'+JSON.stringify(actual))})}).on('error',()=>process.exit(6));`
+			for name, data := range map[string]string{".node-version": version, "docker.cjs": program} {
+				if err := os.WriteFile(filepath.Join(docker.layout.Workspace, name), []byte(data), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			policy := map[string]any{"command": []string{"node", "docker.cjs"}, "cwd": ".", "secrets": []string{"TOKEN"}, "all_secrets": false, "timeout_seconds": 10, "max_output_bytes": 4096, "docker_access": true}
+			if mode != "plain" {
+				policy["materialize_env_file"] = "ENV_FILE"
+				if mode == "fixed" {
+					policy["materialize_env_path"] = "fixture.env"
+				}
+			}
+			encoded, _ := json.Marshal(policy)
+			if _, err := controller.SetAction(t.Context(), "fixture", "check", encoded); err != nil {
+				t.Fatal(err)
+			}
+			started, err := docker.Run(t.Context(), RunRequest{Profile: "fixture", Action: "check"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := started["session_id"].(string)
+			deadline := time.Now().Add(10 * time.Second)
+			var completed map[string]any
+			for {
+				completed, err = docker.Read(id, nil, 4096)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if completed["status"] == "exited" {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("Docker action timeout")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if completed["exit_code"] != 0 || completed["cleanup_error"] != nil {
+				t.Fatalf("Docker sandbox: %#v", completed)
+			}
+			var actual map[string]any
+			_, record, found := strings.Cut(completed["output"].(string), "docker-result:")
+			if !found {
+				t.Fatalf("Docker result missing: %#v", completed)
+			}
+			if err := json.Unmarshal([]byte(record), &actual); err != nil {
+				t.Fatalf("%v %#v", err, completed)
+			}
+			if actual["cwd"] != docker.layout.Workspace || actual["mode"] != "restricted-proxy" || actual["reply"] != "OK" || actual["materialized"] != (mode != "plain") || actual["readonly"] != (mode != "plain") {
+				t.Fatalf("Docker action: %#v", actual)
+			}
+			entries, err := os.ReadDir(docker.layout.DockerDirectory)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("Docker proxy survived completion: %v %v", entries, err)
+			}
+		})
+	}
 }

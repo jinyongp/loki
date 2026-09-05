@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/dockerproxy"
 	"loki/internal/fault"
 	"loki/internal/process"
 	"loki/internal/redact"
@@ -34,6 +35,8 @@ type Layout struct {
 	RuntimeSocket                    string
 	RuntimeUID                       uint32
 	CallbackPort                     *int
+	DockerDirectory, DockerSocket    string
+	DockerUID                        uint32
 	Workspace, Binary, Bwrap, Runner string
 	UID, GID                         uint32
 	SystemdScope                     bool
@@ -51,6 +54,7 @@ type Launch struct {
 	spec            process.StartSpec
 	files           []*os.File
 	materialization *materialization
+	docker          *dockerproxy.Session
 }
 
 func (l *Launch) Close() {
@@ -64,6 +68,10 @@ func (l *Launch) Close() {
 		_ = l.materialization.close()
 		l.materialization = nil
 	}
+	if l.docker != nil {
+		_ = l.docker.Close()
+		l.docker = nil
+	}
 }
 func (l *Launch) Start(manager *process.Manager) (map[string]any, error) {
 	l.mu.Lock()
@@ -75,6 +83,7 @@ func (l *Launch) Start(manager *process.Manager) (map[string]any, error) {
 	result, err := manager.Start(l.spec)
 	if err == nil && result["reused"] != true {
 		l.materialization = nil
+		l.docker = nil
 	} // Manager now owns cleanup.
 	if public, ok := err.(fault.Error); ok {
 		return nil, fault.Error(string(public) + "; stop an existing action process before retrying")
@@ -182,9 +191,6 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, "../") || filepath.ToSlash(filepath.Join("/workspace", relative)) != plan.VisibleCWD {
 		return nil, errors.New("action plan does not match sandbox workspace")
 	}
-	if plan.Policy.DockerAccess {
-		return nil, fault.Error("action requires launch features that are not yet connected")
-	}
 	if plan.Policy.DynamicPort != nil && (parameters.port < 1 || parameters.port > 65535) {
 		return nil, errors.New("dynamic action requires an allocated port")
 	}
@@ -235,6 +241,22 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 		}
 	}
 	environment := actionEnvironment(plan, parameters)
+	if plan.Policy.DockerAccess {
+		if err := validDockerHostRoot(layout.Workspace); err != nil {
+			return nil, err
+		}
+		if layout.DockerDirectory == "" || layout.DockerSocket == "" || overlaps(layout.Workspace, layout.DockerDirectory) {
+			return nil, errors.New("private Docker proxy paths are not configured")
+		}
+		launch.docker, err = dockerproxy.Start(dockerproxy.Config{Directory: layout.DockerDirectory, Upstream: layout.DockerSocket, RunnerUID: layout.UID, RunnerGID: layout.GID, UpstreamUID: layout.DockerUID})
+		if err != nil {
+			return nil, err
+		}
+		environment = slices.DeleteFunc(environment, func(value string) bool {
+			return strings.HasPrefix(value, "DOCKER_HOST=") || strings.HasPrefix(value, "DOCKER_ACCESS_MODE=")
+		})
+		environment = append(environment, "DOCKER_HOST=unix:///run/loki/docker.sock", "DOCKER_ACCESS_MODE=restricted-proxy")
+	}
 	var snapshots *os.File
 	var materialized *materializedMountPayload
 	if plan.Policy.MaterializeEnvFile != "" {
@@ -257,7 +279,11 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 			return nil, errors.New("materialization record is unavailable")
 		}
 		materialized = &materializedMountPayload{Target: "/workspace/" + launch.materialization.target, TargetDevice: record.Device, TargetInode: record.Inode, Data: encoded}
-		for _, replacement := range []string{plan.Policy.MaterializeEnvFile + "=/workspace/" + launch.materialization.target, "TMPDIR=" + sandboxSnapshots} {
+		envFile := "/workspace/" + launch.materialization.target
+		if plan.Policy.DockerAccess {
+			envFile = filepath.Join(layout.Workspace, launch.materialization.target)
+		}
+		for _, replacement := range []string{plan.Policy.MaterializeEnvFile + "=" + envFile, "TMPDIR=" + sandboxSnapshots} {
 			key, _, _ := strings.Cut(replacement, "=")
 			environment = slices.DeleteFunc(environment, func(entry string) bool { return strings.HasPrefix(entry, key+"=") })
 			environment = append(environment, replacement)
@@ -281,11 +307,23 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 	}
 	data := payload{Version: 1, Argv: command, Environment: environment, CWD: plan.VisibleCWD,
 		UID: layout.UID, GID: layout.GID, ParentMountNS: mountNS, ParentPIDNS: pidNS, ParentUserNS: userNS, WorkspaceDevice: uint64(stat.Dev), WorkspaceInode: stat.Ino, Materialized: materialized}
+	if plan.Policy.DockerAccess {
+		data.HostWorkspace = layout.Workspace
+	}
 	extraFiles := []*os.File{workspace, binary}
 	argv := []string{layout.Bwrap, "--die-with-parent", "--new-session", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup-try", "--uid", strconv.FormatUint(uint64(layout.UID), 10), "--gid", strconv.FormatUint(uint64(layout.GID), 10), "--cap-drop", "ALL",
 		"--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/sbin", "/sbin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
 		"--dir", "/home/runner/.ssh", "--dir", "/etc/loki", "--dir", "/run/loki", "--ro-bind", "/etc/passwd", "/etc/passwd", "--ro-bind", "/etc/group", "/etc/group", "--ro-bind", "/etc/hosts", "/etc/hosts", "--ro-bind", "/etc/ssl/certs", "/etc/ssl/certs", "--ro-bind", "/etc/alternatives", "/etc/alternatives",
 		"--bind-fd", "3", "/workspace", "--ro-bind-fd", "4", sandboxBinary}
+	if launch.docker != nil {
+		socket, err := launch.docker.Socket()
+		if err != nil {
+			return nil, err
+		}
+		launch.files = append(launch.files, socket)
+		extraFiles = append(extraFiles, socket)
+		argv = append(argv, "--bind-fd", "3", layout.Workspace, "--ro-bind-fd", strconv.Itoa(2+len(extraFiles)), "/run/loki/docker.sock")
+	}
 	for _, source := range layout.PublicMounts {
 		if !slices.Contains([]string{"/home/linuxbrew/.linuxbrew", "/home/runner/.local/share/fnm", "/etc/loki/gitconfig", "/home/runner/.ssh/id_ed25519.pub", "/run/loki/signing"}, source.Target) {
 			return nil, errors.New("action mount target is not allowlisted")
@@ -348,6 +386,17 @@ func prepare(layout Layout, plan secret.ActionPlan, parameters launchParameters)
 	}
 	if launch.materialization != nil {
 		launch.spec.Cleanup = launch.materialization.close
+	}
+	if launch.docker != nil {
+		previous := launch.spec.Cleanup
+		session := launch.docker
+		launch.spec.Cleanup = func() error {
+			var err error
+			if previous != nil {
+				err = previous()
+			}
+			return errors.Join(err, session.Close())
+		}
 	}
 	if plan.Policy.DynamicPort != nil {
 		launch.spec.Metadata["port"] = parameters.port

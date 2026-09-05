@@ -332,8 +332,13 @@ for the complete runtime status/service assembly.
 A disposable Go Docker socket proxy now uses pinned service directories,
 per-session sockets, peer/upstream UID checks, bounded connection admission,
 half-close forwarding, and connection teardown on close. Fake Unix-daemon tests
-cover transport and cleanup without touching Docker. Action sandbox host-path
-aliases, materialized-file aliases, and real Docker acceptance remain pending.
+cover transport and cleanup without touching Docker. Approved action sandboxes
+now receive this proxy plus the host workspace alias needed by Compose. Fixed
+and session materialized files stay read-only at both aliases. Mandatory Node
+sandbox tests cover all three modes and proxy removal. An explicitly enabled
+real Docker test imported a disposable scratch probe image, executed it through
+the Go action proxy with a read-only host bind, and removed its container/image.
+Production-shaped root service/runner and full Compose acceptance remain gates.
 
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
@@ -576,7 +581,7 @@ Remaining gates include complete role assembly and all 37 successful-tool
 fixtures; production-shaped root-service action execution, full Node-family
 package-manager execution, public preview routing, materialization
 concurrent destination-guard testing and root-runner
-acceptance, Docker execution,
+acceptance, production-shaped Docker/Compose execution,
 audit/status and workflow service assembly;
 service-owned process shutdown;
 signing-agent startup/readiness; Skill YAML edge-case parity; artifacts/previews/browser;

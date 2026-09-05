@@ -103,6 +103,9 @@ func (p payload) injectMaterializedMount() error {
 	if original.Dev != actual.Dev || original.Ino != actual.Ino || filesystem.Flags&unix.ST_RDONLY == 0 {
 		return errors.New("materialized mount changed before exec")
 	}
+	if err := p.cloneDockerWorkspace(workspace); err != nil {
+		return executionStageError{"docker-materialization-alias", err}
+	}
 	// Remove every writable alias and the temporary mount before handing
 	// control to the action. The rest of /tmp retains its ordinary behavior.
 	if err := os.Remove(file.Name()); err != nil {

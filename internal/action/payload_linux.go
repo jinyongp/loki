@@ -25,6 +25,7 @@ type payload struct {
 	Argv                            []string `json:"argv"`
 	Environment                     []string `json:"environment"`
 	CWD                             string   `json:"cwd"`
+	HostWorkspace                   string   `json:"host_workspace,omitempty"`
 	UID, GID                        uint32
 	ParentMountNS, ParentPIDNS      uint64
 	ParentUserNS                    uint64
@@ -42,6 +43,11 @@ func (p payload) MarshalJSON() ([]byte, error) {
 type payloadWire payload
 
 func (p payload) validate() error {
+	if p.HostWorkspace != "" {
+		if err := validDockerHostRoot(p.HostWorkspace); err != nil {
+			return err
+		}
+	}
 	if p.Version != 1 || p.UID == 0 || p.ParentMountNS == 0 || p.ParentPIDNS == 0 || p.WorkspaceInode == 0 || len(p.Argv) == 0 || len(p.Argv) > 160 || len(p.Environment) > 600 {
 		return errors.New("invalid action payload")
 	}
@@ -211,6 +217,15 @@ func ExecInSandbox(stdin *os.File) error {
 	if err = p.verifySandboxCaps(p.Materialized != nil); err != nil {
 		return executionStageError{"sandbox-guards", err}
 	}
+	if p.HostWorkspace != "" {
+		var stat unix.Stat_t
+		if err := unix.Stat(p.HostWorkspace, &stat); err != nil {
+			return err
+		}
+		if stat.Ino != p.WorkspaceInode || uint64(stat.Dev) != p.WorkspaceDevice {
+			return errors.New("Docker host workspace alias mismatch")
+		}
+	}
 	if err = p.injectMaterializedMount(); err != nil {
 		var stage executionStageError
 		if errors.As(err, &stage) {
@@ -234,7 +249,11 @@ func ExecInSandbox(stdin *os.File) error {
 	if err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
-	if err = os.Chdir(p.CWD); err != nil {
+	cwd := p.CWD
+	if p.HostWorkspace != "" {
+		cwd = path.Join(p.HostWorkspace, strings.TrimPrefix(p.CWD, "/workspace"))
+	}
+	if err = os.Chdir(cwd); err != nil {
 		return err
 	}
 	input, err := os.Open("/dev/null")
