@@ -329,6 +329,12 @@ targets, active-connection shutdown, and a real sandboxed Node API reached
 through the callback origin. Callback status and delegated bind RPC are ready
 for the complete runtime status/service assembly.
 
+A disposable Go Docker socket proxy now uses pinned service directories,
+per-session sockets, peer/upstream UID checks, bounded connection admission,
+half-close forwarding, and connection teardown on close. Fake Unix-daemon tests
+cover transport and cleanup without touching Docker. Action sandbox host-path
+aliases, materialized-file aliases, and real Docker acceptance remain pending.
+
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
 timeout escalation, retained histories, and concurrent shutdown. Configured
