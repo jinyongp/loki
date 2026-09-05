@@ -616,7 +616,9 @@ actual screenshot over its UID-checked Unix socket and cleans up on shutdown.
 `make accept-browser CHROME=/absolute/path/to/chrome CHROME_LIBS=/optional/lib/path`
 requires an existing development binary and performs no installation. Browser
 DOM coverage still requires cross-origin frames, closed Shadow DOM, popup focus,
-dynamic-element parity, downloads and installed browser namespace acceptance.
+dynamic-element parity and installed browser namespace acceptance. Actual Chromium
+downloads now use GUID staging and collision-free publication: existing files
+and symlinks survive, including in the shared group-writable download directory.
 
 Signing-agent readiness/shutdown, runtime assembly, Docker Compose listener
 inspection, developer diff/report/log views, ordinary finite/managed commands,
@@ -628,20 +630,46 @@ request/result bodies, typed input, command arguments, secrets and raw errors
 are excluded. Runtime audit retains its operation-oriented schema. Log write
 failures are reported through the service's error callback.
 
-`make check reference` passed after the complete HTTP application was assembled:
+`make check reference` passed again at commit `b5b0825`:
 format, vet, all Go unit/race tests, static build, 638 Python differential cases
 (41 project/task, 156 secret/action/workflow, 324 process, 90 action, 10 skills,
-9 Git, 8 browser debug), and 28 Python baseline tests. Later audit and service
-entrypoint changes have focused race coverage and require the next integrated
-check. Optional skips in ordinary tests do not satisfy actual-browser or
+9 Git, 8 browser debug), and 28 Python baseline tests. A subsequent `make check`
+passed at `dbaed5b`, including configuration, checkpoint and metadata repair.
+Optional skips in ordinary tests do not satisfy actual-browser or
 namespace acceptance.
+
+The Go administrator CLI now covers project/workflow management, approved action
+definitions and sessions, secret profiles/generation/removal, hidden terminal
+input, dotenv import/staging, process limits, executable policy and checkpoint
+inspection/restoration. Real encrypted-store and Unix-socket tests cover the CLI;
+PTY tests verify non-echoing input and terminal restoration after cancellation.
+Dotenv deletion preserves sources replaced or edited after import. Configuration
+edits retain unrelated TOML and comments, serialize writers and preserve ownership.
+Root metadata repair changes only traversal/taskrc metadata, with actual disposable
+root acceptance proving that Taskwarrior DB contents and ownership stay unchanged.
+Legacy project-state migration and installed wrappers remain installation gates.
+
+The raw Taskwarrior wrapper rejects configuration selectors/overrides and prefixes
+of commands that execute programs, edit configuration, synchronize or undo state.
+Actual Taskwarrior probes confirmed the Python exact-token check could be bypassed
+with abbreviations and `rc:`; Go intentionally strengthens that boundary. Raw
+output uses the existing Go fail-closed output bound. Authenticated long operations
+receive a trusted server execution allowance after bounded request framing.
+
+New checkpoints include repository identity in their opaque ID and a versioned
+patch digest, with metadata published after the patch. This prevents identical
+patches in different repositories from sharing restore metadata. Legacy Python
+metadata remains readable/restorable; new patches are verified before restoration.
+The CLI delegates root invocation to the workspace owner before interpreting Git
+configuration. Egress proxy and atomic Cloudflare signing-key refresh now have Go
+service/CLI roles; actual external package TLS acceptance remains open.
 
 Remaining gates include all 37 real-peer successful-tool fixtures; installed-unit
 privilege and hardening acceptance; full Node-family package-manager execution;
 materialization concurrent destination guards; production-shaped Docker/Compose
 inspection and execution; Skill YAML edge-case parity; artifact MIME/ZIP metadata
 and excluded-entry parity; preview WebSocket message limits and close-code parity;
-the browser DOM/namespace cases above; outbound package proxy, installation and
+the browser DOM/namespace cases above; outbound package TLS acceptance, installation and
 packaging; interrupted migration and rollback drills; and isolated real bind-mount
 worktree, public preview, restart, and end-to-end acceptance tests. Go reports its
 own runtime/SDK version instead of a fabricated Python version. Browser URL and
