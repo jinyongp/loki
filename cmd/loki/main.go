@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "runtime" {
+		return runRuntime(args[1:], stderr)
+	}
 	if len(args) > 0 && args[0] == "signing-agent" {
 		return runSigningAgent(args[1:], stderr)
 	}
