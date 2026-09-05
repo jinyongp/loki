@@ -25,14 +25,15 @@ type Options struct {
 	Binary, Profile, Downloads, Proxy, LibraryPath string
 }
 type Driver struct {
-	options  Options
-	gate     chan struct{}
-	client   *cdp.Client
-	command  *exec.Cmd
-	wait     chan error
-	target   string
-	sessions map[string]string
-	debug    Debug
+	options   Options
+	gate      chan struct{}
+	client    *cdp.Client
+	command   *exec.Cmd
+	wait      chan error
+	target    string
+	sessions  map[string]string
+	debug     Debug
+	downloads *downloads
 }
 
 func NewDriver(options Options) (*Driver, error) {
@@ -74,6 +75,10 @@ func (d *Driver) stop() {
 		<-d.wait
 		d.command = nil
 	}
+	if d.downloads != nil {
+		d.downloads.Close()
+		d.downloads = nil
+	}
 	d.target = ""
 	d.sessions = nil
 	d.debug.Reset()
@@ -88,7 +93,7 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	if err = daemon.PrivateDirectory(d.options.Profile); err != nil {
 		return err
 	}
-	if err = daemon.PrivateDirectory(d.options.Downloads); err != nil {
+	if err = prepareDownloads(d.options.Downloads); err != nil {
 		return err
 	}
 	inRead, inWrite, err := os.Pipe()
@@ -133,16 +138,20 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	outWrite.Close()
 	d.debug.Reset()
 	d.sessions = map[string]string{}
-	d.client = cdp.New(outRead, inWrite, d.debug.Event)
 	defer func() {
 		if err != nil {
 			d.stop()
 		}
 	}()
+	d.downloads, err = newDownloads(d.options.Downloads)
+	if err != nil {
+		return err
+	}
+	d.client = cdp.New(outRead, inWrite, func(e cdp.Event) { d.debug.Event(e); d.downloads.Event(e) })
 	if err = d.client.Call(ctx, "", "Browser.getVersion", nil, nil); err != nil {
 		return err
 	}
-	if err = d.client.Call(ctx, "", "Browser.setDownloadBehavior", map[string]any{"behavior": "allow", "downloadPath": d.options.Downloads}, nil); err != nil {
+	if err = d.client.Call(ctx, "", "Browser.setDownloadBehavior", map[string]any{"behavior": "allowAndName", "downloadPath": d.options.Downloads, "eventsEnabled": true}, nil); err != nil {
 		return err
 	}
 	return d.focus(ctx)
