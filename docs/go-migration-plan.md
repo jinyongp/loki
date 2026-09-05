@@ -248,7 +248,7 @@ a separate disposable environment with its own state and credentials.
 Required acceptance gates remain open until their recorded commands pass.
 An advertised tool catalog alone does not establish implementation parity.
 
-### Verified implementation checkpoint: 2026-09-04
+### Verified implementation checkpoint: 2026-09-05
 
 Implemented foundations include the captured catalog/resources and invalid-call
 fixtures, configuration parsing, authentication and host policy, bounded Unix
@@ -422,14 +422,17 @@ errno only, never raw paths, environment values, or payloads.
 
 The process manager owns successful launches' cleanup callbacks, preserves
 admission/singleton ownership until cleanup ends, and waits for cleanup during
-Stop/Close. Automatic cleanup checks the recorded device/inode, owner, mode,
-link count, and empty size. Changed files observed at that check are retained
-with a public `cleanup_error`; unknown error details are sanitized. Subsequent
-launches recover abandoned fixed/temporary placeholders using the private
-journal. Explicit `action clear_materialization` and `secret_delete`
-materialization routing use the registered fixed target and the Python policy
-for a private single-linked regular file, even when credentials are unset.
-Explicit clearing is distinct from conservative automatic recovery.
+Stop/Close. Cleanup records its intent in a checksummed append-only journal,
+then atomically captures the workspace entry in a separate runner-owned `0700`
+recovery directory on the same filesystem. That directory is outside action
+mounts. Automatic cleanup checks the captured device/inode, owner, mode, link
+count, and empty size, and acquires a read lease to reject existing writers.
+Unexpected files are restored without replacement. If the original name is
+occupied, the captured file and recovery intent remain available for a later
+retry. Public errors contain no private paths or values. Explicit
+`action clear_materialization` and `secret_delete` materialization routing
+retain the Python policy for a private single-linked regular file, even when
+credentials are unset. Explicit clearing preserves its own recorded intent.
 
 Required namespace tests cover fixed/temporary mounts, permissions, host-empty
 files, writable snapshots, competing claims, abandoned/start-failed launches,
@@ -440,11 +443,11 @@ are rejected before command execution while preserving the observed user files;
 a helper missing the required mount capability is also rejected. These tests
 use controlled temporary directories. Concurrent adversarial namespace tests
 remain required in addition to these deterministic late-change cases.
-Automatic and explicit cleanup still use a verify/unlink sequence; concurrent
-directory-entry replacement in that interval remains an open data-preservation
-gate. The observed-inode checks alone do not prove that cleanup boundary. Full
-root/systemd service acceptance also remains required before this candidate is
-considered complete.
+Cleanup regression tests cover replacement between intent and capture, occupied
+restore targets, an existing writable descriptor, 100 concurrent filename-swap
+attempts, and recovery after intent, rename, capture, a torn journal frame, and
+unlink. These checks passed with the race detector. Full root/systemd service
+acceptance remains required before this candidate is considered complete.
 
 The current Python worktree also contains scope-result/OOM diagnostics in
 `src/loki_mcp/processes.py` and `tests/test_process_oom.py`, added independently
@@ -524,7 +527,7 @@ directories only. No production service, endpoint, state, or credentials are use
 Remaining gates include complete role assembly and all 37 successful-tool
 fixtures; root-service action execution and scope/OOM handling, full Node-family
 package-manager execution, public preview routing/callbacks, materialization
-concurrent destination-guard testing, cleanup race hardening, and root-runner
+concurrent destination-guard testing and root-runner
 acceptance, Docker execution,
 audit/status, workflow execution;
 service-owned process shutdown;
