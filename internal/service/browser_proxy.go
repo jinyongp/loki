@@ -11,13 +11,16 @@ import (
 )
 
 func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy browsernet.Policy, ready func() error) error {
+	proxy := browsernet.New(policy)
+	return runLoopbackProxy(ctx, listener, proxy, proxy.Close, ready)
+}
+func runLoopbackProxy(ctx context.Context, listener *net.TCPListener, handler http.Handler, closeProxy func(), ready func() error) error {
+	defer closeProxy()
 	address, ok := listener.Addr().(*net.TCPAddr)
 	if !ok || !address.IP.Equal(net.ParseIP("127.0.0.1")) {
-		return errors.New("browser proxy must listen on 127.0.0.1")
+		return errors.New("proxy must listen on 127.0.0.1")
 	}
-	proxy := browsernet.New(policy)
-	defer proxy.Close()
-	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 65536, BaseContext: func(net.Listener) context.Context { return ctx }}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 65536, BaseContext: func(net.Listener) context.Context { return ctx }}
 	defer server.Close()
 	if ready != nil {
 		if err := ready(); err != nil {
@@ -27,7 +30,7 @@ func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy brow
 	done := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() {
 		defer close(done)
-		proxy.Close()
+		closeProxy()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if server.Shutdown(shutdown) != nil {
