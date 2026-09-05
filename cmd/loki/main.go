@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "jwks-refresh" {
+		return runJWKSRefresh(args[1:], stderr)
+	}
 	if len(args) > 0 && args[0] == "egress-proxy" {
 		return runEgressProxy(args[1:], stderr)
 	}
