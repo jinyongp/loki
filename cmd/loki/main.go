@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "signing-proxy" {
+		return runSigning(args[1:], stderr)
+	}
 	if len(args) >= 2 && args[0] == "internal" && args[1] == "bootstrap" {
 		return runBootstrap(args[2:], stdout, stderr)
 	}

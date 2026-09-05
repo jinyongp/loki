@@ -313,8 +313,14 @@ index hashes, trusted commit-template reads, complete-path staging/unstaging,
 and text-hunk staging/reversal. Nine successful Python responses match.
 Tests cover unrelated index preservation, unchanged worktree files, stale and
 concurrent index hashes, linked worktrees, literal pathspecs, and external Git
-metadata/template rejection. Git signing and developer-view rendering remain
-separate work items.
+metadata/template rejection. Developer-view rendering remains a separate item.
+
+The Go signing proxy exposes only SSH-agent identity lookup and signing. It
+checks both caller and upstream-agent UIDs, bounds frames and connections, and
+closes active clients on shutdown. Tests use a temporary real ssh-agent to sign
+and verify a Git commit and reject identity deletion. The signing-proxy CLI
+creates a group-restricted socket; agent startup/key loading and systemd
+readiness integration remain service-assembly work.
 
 The ordinary Go process manager now implements atomic global/profile admission,
 singleton reuse, bounded tail output with byte cursors, UTF-8 replacement,
