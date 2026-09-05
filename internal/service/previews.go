@@ -53,36 +53,12 @@ func runtimeDecode(ctx context.Context, client RuntimeCaller, request any, out a
 	return nil
 }
 func (c *PreviewController) listener(ctx context.Context, port int) (map[string]any, error) {
-	var guarded map[string]any
-	var guardErr error
-	if c.Inspect != nil {
-		guarded, guardErr = c.Inspect(ctx, port)
+	result, err := InspectWorkspacePort(ctx, c.Inspect, c.Runtime, port)
+	if err != nil {
+		return nil, err
 	}
-	first := func(result map[string]any) map[string]any {
-		if result["in_use"] != true {
-			return nil
-		}
-		data, err := json.Marshal(result["listeners"])
-		if err != nil {
-			return nil
-		}
-		var rows []map[string]any
-		if json.Unmarshal(data, &rows) != nil || len(rows) == 0 {
-			return nil
-		}
-		return rows[0]
-	}
-	if row := first(guarded); row != nil {
+	if row := portListener(result); row != nil {
 		return row, nil
-	}
-	var docker map[string]any
-	if c.Runtime != nil && runtimeDecode(ctx, c.Runtime, map[string]any{"operation": "inspect_docker_port", "port": port}, &docker) == nil {
-		if row := first(docker); row != nil {
-			return row, nil
-		}
-	}
-	if guardErr != nil {
-		return nil, guardErr
 	}
 	return nil, fault.Error(fmt.Sprintf("port %d is not a runner-owned workspace development server", port))
 }
