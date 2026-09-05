@@ -27,6 +27,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) >= 2 && args[0] == "internal" && args[1] == "repair-task-metadata" {
+		return runMetadataRepair(args[2:], stdout, stderr)
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "checkpoint":
