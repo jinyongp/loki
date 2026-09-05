@@ -163,7 +163,7 @@ MAX_FILE_REVISIONS = 1_000
 PORT_GUARD_SOCKET = "/run/loki/port-guard/control.sock"
 BROWSER_SOCKET = "/run/loki/browser/control.sock"
 BROWSER_CATALOG_REVISION = "2026-09-03.1"
-TOOL_CATALOG_REVISION = "2026-09-04.3"
+TOOL_CATALOG_REVISION = "2026-09-04.4"
 
 GIT_READABLE_CONFIG_KEYS = frozenset({
     "commit.template",
@@ -271,6 +271,11 @@ class WorkspaceTools:
             self.artifact_store.clear()
         if self.preview_store is not None:
             self.preview_store.clear()
+
+    def task_request(self, cwd: str, **request: Any) -> dict[str, Any]:
+        working = self._command_cwd(cwd)
+        relative = working.relative_to(self.policy.root).as_posix() or "."
+        return self._runtime_request("task", cwd=relative, **request)
 
     def project_state(
         self,
@@ -1951,7 +1956,7 @@ class WorkspaceTools:
     def validate_skill(self, name: str, cwd: str = ".") -> dict[str, Any]:
         """Validate one selected Agent Skill and enumerate its bounded resources."""
         try:
-            result = self.skills.validate(name, cwd)
+            result = self.skills.validate(name, cwd, available_tools=set(self._tool_catalog))
             self._audit("validate_skill", True, {"name": name, "cwd": cwd})
             return result
         except Exception as error:

@@ -74,10 +74,10 @@ persistent-data work remains High-risk.
 ### Canonical Identity and Paths
 
 Before resolving any artifact or task project, use `skill_read` with `action: resource`
-to read `references/path-contract.md` completely, then call `project_state action=status`.
+to read `references/path-contract.md` completely, then call `project action=status`.
 Unless the user supplied a full slug, choose a
 three-to-five-token semantic English slug base from the settled Goal and pass
-it to `project_state action=init`; include a concrete domain/object and outcome,
+it to `project action=init`; include a concrete domain/object and outcome,
 especially when the Goal is non-English. Use the returned slug exactly. Never
 calculate its hash, scan for repository plan conventions, choose a filesystem
 path, or add a collision suffix.
@@ -186,7 +186,7 @@ or reinterpret prior status as progress.
 3. Plan
    - When the user asks for `workstream` planning, create or update a plan doc by default.
    - Do not satisfy `workstream 계획`, `workstream plan`, or `작업흐름 계획` with conversation-only bullets unless the user says `대화로만`, `문서 쓰지 말고`, or equivalent.
-   - After Goal, depth, and intent source are settled, call `project_state action=init`.
+   - After Goal, depth, and intent source are settled, call `project action=init`.
      State its exact slug and fixed artifact names before writing the plan.
    - Accept a full-slug override only when the user explicitly provides it.
      Otherwise pass the semantic slug base required by the path contract and
@@ -250,13 +250,13 @@ or reinterpret prior status as progress.
    - Prefer one task per independently verifiable work item; do not create tasks
      for headings, open decisions, or non-buildable outcome metrics.
    - Queues are repository-wide across worktrees. Initialize them only through
-     `project_state`; never create a worktree-local queue or ledger, global tasks,
+     `project`; never create a worktree-local queue or ledger, global tasks,
      or another state root. Repository-owned `.tasks` build and validation output
      is outside the project-state contract.
 
 6. Execute
    - Work from the ready task queue using the resolver's exact project, normally
-     `task project:<slug> +READY next`.
+     `task_inspect action=next` with cwd and the exact workstream.
    - Refresh reports before using numeric IDs. Prefer UUIDs for multi-step updates.
    - Start or annotate tasks when useful. After a WI's mapped task-local
      acceptance checks pass, commit that work unit when operating in a Git

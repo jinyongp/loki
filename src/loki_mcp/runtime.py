@@ -27,6 +27,7 @@ from .processes import ProcessManager
 from .project_state import ProjectStateStore, STATE_ROOT
 from .runtime_settings import ActionProcessLimits, load_action_process_limits
 from .tools import EXECUTABLES, WorkspaceTools
+from .tasks import operate as operate_task
 
 
 SOCKET_PATH = Path(os.environ.get("LOKI_RUNTIME_SOCKET", "/run/loki/runtime/control.sock"))
@@ -223,7 +224,7 @@ class RuntimeController:
             delegated = {
                 "profile_create", "profile_remove", "import_staged_env", "secret_generate",
                 "secret_remove", "public_value_set", "clear_action_materialization", "bootstrap_project",
-                "project_state", "project_task", "project_status", "project_workflow",
+                "project_state", "project_task", "task", "project_status", "project_workflow",
                 "local_callback_bind",
             }
             if operation in root_only and uid != 0 and not _peer_is_mcp_service(uid, pid):
@@ -324,11 +325,77 @@ class RuntimeController:
                     f"TASKRC={taskrc}", f"TASKDATA={taskdata}",
                     "/home/linuxbrew/.linuxbrew/bin/task", *arguments,
                 ],
-                cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                cwd=WORKSPACE_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=timeout, check=False,
             )
         output = completed.stdout[-1_048_576:].decode("utf-8", "replace")
         return {"exit_code": completed.returncode, "output": output}
+
+    def op_task(self, request: dict[str, Any]) -> dict[str, Any]:
+        cwd = _workspace_cwd(_required_relative_cwd(request.get("cwd", ".")))
+        state = self.project_state.status(cwd)
+        identity = self.project_state.resolve(cwd)
+        action = request.get("action")
+        if action in {"status", "diagnostics"}:
+            version = subprocess.run(
+                ["/home/linuxbrew/.linuxbrew/bin/task", "--version"],
+                env={"PATH": "/usr/bin:/bin", "HOME": "/tmp", "TASKRC": "/dev/null"},
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            health = {"initialized": state["initialized"], "metadata_readable": False, "runner_access": False}
+            if state["initialized"]:
+                taskroot = identity.state_directory / "taskwarrior"
+                try:
+                    health["metadata_readable"] = (taskroot / "taskrc").is_file()
+                    probe = subprocess.run(
+                        ["/usr/sbin/runuser", "-u", "runner", "--", "/usr/bin/test", "-r", str(taskroot / "taskrc")],
+                        capture_output=True, timeout=10, check=False,
+                    )
+                    data_probe = subprocess.run(
+                        ["/usr/sbin/runuser", "-u", "runner", "--", "/usr/bin/test", "-w", str(taskroot / "data")],
+                        capture_output=True, timeout=10, check=False,
+                    )
+                    health["runner_access"] = probe.returncode == 0 and data_probe.returncode == 0
+                except PermissionError:
+                    pass
+            return {**state, "version": version.stdout.strip(), "available": version.returncode == 0,
+                    "health": health}
+        if not state["initialized"]:
+            raise LokiRuntimeError("TASK_NOT_INITIALIZED: call project action=init for this repository")
+        slug = request.get("workstream") or state["active_workstream"]
+        if not isinstance(slug, str):
+            raise LokiRuntimeError("TASK_WORKSTREAM_REQUIRED: select or bind a workstream")
+        directory = self.project_state._workstream_directory(identity, slug)
+        if not (directory / "manifest.json").is_file():
+            raise LokiRuntimeError("TASK_WORKSTREAM_UNKNOWN")
+        taskrc = identity.state_directory / "taskwarrior" / "taskrc"
+        taskdata = identity.state_directory / "taskwarrior" / "data"
+        try:
+            if not taskrc.is_file() or not taskdata.is_dir():
+                raise LokiRuntimeError("TASK_NOT_INITIALIZED")
+        except PermissionError as error:
+            raise LokiRuntimeError("TASK_PERMISSION_DENIED: central metadata requires administrator repair") from error
+
+        def run(arguments: list[str]) -> dict[str, Any]:
+            completed = subprocess.run(
+                ["/usr/sbin/runuser", "-u", "runner", "--", "/usr/bin/env", "-i",
+                 "HOME=/home/runner", "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
+                 "PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin",
+                 f"TASKRC={taskrc}", f"TASKDATA={taskdata}",
+                 "/home/linuxbrew/.linuxbrew/bin/task", *arguments],
+                # TASKRC/TASKDATA are absolute. Do not chdir into a runner-only
+                # worktree before runuser has dropped the runtime's root UID.
+                cwd=WORKSPACE_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=30, check=False,
+            )
+            if len(completed.stdout) > 1_048_576:
+                raise LokiRuntimeError("TASK_OUTPUT_LIMIT: narrow the queue before retrying")
+            return {"exit_code": completed.returncode, "output": completed.stdout.decode("utf-8", "replace")}
+
+        with (identity.state_directory / "task.lock").open("a+b") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            result = operate_task(run, request, slug)
+        return {**state, "workstream": slug, **result}
 
     def op_inspect_docker_port(self, request: dict[str, Any]) -> dict[str, Any]:
         """Return bounded metadata only for trusted loopback Compose ports."""
@@ -1631,19 +1698,13 @@ def _action_cwd(action: dict[str, Any], override: object) -> Path:
 
 def _git_common_directory(cwd: Path) -> Path:
     try:
-        completed = subprocess.run(
-            [
-                "/usr/bin/git", "-C", str(cwd), "rev-parse",
-                "--path-format=absolute", "--git-common-dir",
-            ],
-            env={"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8"},
-            check=False, capture_output=True, text=True, timeout=10,
+        common = ProjectStateStore(WORKSPACE_ROOT, STATE_ROOT)._git_path(
+            cwd, "--path-format=absolute", "--git-common-dir",
         )
+    except PolicyError as error:
+        raise LokiRuntimeError("action cwd override requires a Git worktree") from error
     except (OSError, subprocess.SubprocessError) as error:
         raise LokiRuntimeError("unable to verify action worktree") from error
-    if completed.returncode != 0:
-        raise LokiRuntimeError("action cwd override requires a Git worktree")
-    common = Path(completed.stdout.strip()).resolve()
     workspace = WORKSPACE_ROOT.resolve()
     if common != workspace and workspace not in common.parents:
         raise LokiRuntimeError("action Git metadata must stay inside the workspace")

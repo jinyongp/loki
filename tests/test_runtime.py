@@ -160,6 +160,18 @@ def test_action_cwd_accepts_only_same_repository_worktree(
     with pytest.raises(LokiRuntimeError, match="workspace-relative"):
         _action_cwd(action, str(worktree))
 
+    # Git can return the MCP sandbox's absolute common-dir path to the runtime.
+    original = subprocess.run
+    def sandbox_paths(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if "rev-parse" in args[0] and result.returncode == 0:
+            result.stdout = result.stdout.replace(str(workspace), "/workspace")
+        return result
+    monkeypatch.setattr(subprocess, "run", sandbox_paths)
+    assert _action_cwd(action, "stamp.is-web-feature") == worktree
+    with pytest.raises(LokiRuntimeError, match="worktree of the registered repository"):
+        _action_cwd(action, "other")
+
 
 def test_dynamic_port_action_returns_actual_endpoint_and_overrides_origin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

@@ -80,7 +80,7 @@ SERVER_INSTRUCTIONS = (
     "Project tasks and workstream artifacts are project-wide state shared by every Git worktree. "
     "Use project for central registration, workflows, and workstream state; use action operation=set to register "
     "repository-derived commands without adding project-specific code to Loki. "
-    "use command_run with executable task for the shared Taskwarrior queue. Never create a worktree-local .tasks directory. "
+    "Use task_inspect, task_write and task_delete for the shared Taskwarrior queue. Never create a worktree-local task database. "
     "For secrets, inspect metadata with secret_inspect. Use secret_write action=set only for non-sensitive "
     "public configuration such as booleans, ports, and local URLs because its value is visible in the MCP request. "
     "Use action=generate or opaque action=import_env for credentials, tokens, passwords, private keys, and other "
@@ -431,6 +431,9 @@ def create_app() -> tuple[RequestAuthApp, str, int]:
     register(tools.write_image, LOCAL_WRITE)
     register(catalog.workspace_edit, LOCAL_WRITE)
     register(catalog.project, LOCAL_WRITE)
+    register(catalog.task_inspect, READ_ONLY)
+    register(catalog.task_write, LOCAL_WRITE)
+    register(catalog.task_delete, DESTRUCTIVE_WRITE)
     register(catalog.restore_workspace_file, DESTRUCTIVE_WRITE)
     register(tools.remove_tracked_file, DESTRUCTIVE_WRITE)
     register(tools.agent_context, READ_ONLY)

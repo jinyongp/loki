@@ -101,7 +101,7 @@ async def verify() -> None:
                     expected = {
                         "agent_context", "skill_read", "skill_write", "git_inspect",
                         "git_stage", "workspace_read", "workspace_edit", "restore_workspace_file",
-                        "project",
+                        "project", "task_inspect", "task_write", "task_delete",
                     }
                     assert expected <= names
 
@@ -172,19 +172,55 @@ async def verify() -> None:
                         "action": "exec", "executable": "task", "arguments": ["--version"], "cwd": task_cwd,
                     })
                     assert task_version["exit_code"] == 0, task_version
-                    added_task = await call(session, "command_run", {
-                        "action": "exec", "executable": "task",
-                        "arguments": ["add", "Verify Loki Taskwarrior", "project:loki-agent-skills", "+validation"],
+                    health = await call(session, "task_inspect", {"action": "diagnostics", "cwd": task_cwd})
+                    assert health["health"]["metadata_readable"] and health["health"]["runner_access"], health
+                    added_task = await call(session, "task_write", {
+                        "action": "add", "fields": {"description": "Verify Loki Taskwarrior", "tags": ["validation"]},
                         "cwd": task_cwd,
                     })
-                    assert added_task["exit_code"] == 0, added_task
-                    listed_tasks = await call(session, "command_run", {
-                        "action": "exec", "executable": "task",
-                        "arguments": ["project:loki-agent-skills", "list"],
-                        "cwd": task_cwd,
+                    task_uuid = added_task["task"]["uuid"]
+                    # Create Git metadata inside the real MCP namespace, not on
+                    # the host: its absolute /workspace pointers caused the bug.
+                    linked_cwd = task_cwd + "/linked-worktree"
+                    linked = await call(session, "command_run", {
+                        "action": "exec", "executable": "git", "cwd": task_cwd,
+                        "arguments": ["worktree", "add", "--detach", "/workspace/" + linked_cwd, "HEAD"],
                     })
-                    assert listed_tasks["exit_code"] == 0, listed_tasks
-                    assert "Verify Loki Taskwarrior" in listed_tasks["output"]
+                    assert linked["exit_code"] == 0, linked
+                    linked_status = await call(session, "project", {"action": "status", "cwd": linked_cwd})
+                    assert linked_status["project_id"] == initialized["project_id"]
+                    assert linked_status["active_workstream"] is None
+                    shared = await call(session, "task_inspect", {
+                        "action": "get", "cwd": linked_cwd, "workstream": initialized["slug"], "uuid": task_uuid,
+                    })
+                    assert shared["task"]["uuid"] == task_uuid
+                    await call(session, "project", {"action": "bind", "cwd": linked_cwd, "workstream": initialized["slug"]})
+                    ready = await call(session, "task_inspect", {"action": "next", "cwd": linked_cwd})
+                    assert ready["count"] == 1 and ready["tasks"][0]["uuid"] == task_uuid
+                    await call(session, "task_write", {
+                        "action": "modify", "cwd": linked_cwd, "uuid": task_uuid,
+                        "fields": {"priority": "M"},
+                    })
+                    shared_readback = await call(session, "task_inspect", {"action": "get", "cwd": task_cwd, "uuid": task_uuid})
+                    assert shared_readback["task"]["priority"] == "M"
+                    for task_action in ("annotate", "modify", "start", "stop", "done"):
+                        arguments = {"action": task_action, "cwd": task_cwd, "uuid": task_uuid}
+                        if task_action == "annotate":
+                            arguments["annotation"] = "Verified through real MCP"
+                        if task_action == "modify":
+                            arguments["fields"] = {"priority": "H"}
+                        changed = await call(session, "task_write", arguments)
+                        assert changed["task"]["uuid"] == task_uuid
+                    assert changed["task"]["status"] == "completed"
+                    disposable = await call(session, "task_write", {
+                        "action": "add", "cwd": task_cwd, "fields": {"description": "Verify logical deletion"},
+                    })
+                    deleted = await call(session, "task_delete", {"cwd": task_cwd, "uuid": disposable["task"]["uuid"]})
+                    assert deleted["task"]["status"] == "deleted"
+                    listed_tasks = await call(session, "task_inspect", {"action": "list", "cwd": task_cwd, "status": "all"})
+                    assert listed_tasks["count"] == 2
+                    valid_task_skill = await call(session, "skill_read", {"action": "validate", "name": "taskwarrior", "cwd": task_cwd})
+                    assert valid_task_skill["valid"] and not valid_task_skill["missing_tools"]
 
                     cwd = ".loki/agent-skills-e2e"
                     original = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
@@ -255,6 +291,7 @@ async def verify() -> None:
             "agent_skill_tools": len(expected),
             "builtin_skills": 12,
             "partial_staging": "hunk-stage-and-reverse",
+            "shared_worktree_tasks": "sandbox-created-worktree-read-write-verified",
             "commit_template": configured,
         }, separators=(",", ":")))
     finally:

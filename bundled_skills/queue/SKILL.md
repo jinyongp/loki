@@ -16,7 +16,7 @@ Turn a settled plan into Taskwarrior tasks. This skill designs the queue;
 
 ## Inputs
 
-- Plan artifact returned by `project_state action=read` for the canonical workstream slug.
+- Plan artifact returned by `project action=read` for the canonical workstream slug.
 - Markdown checklist, usually `Work Items` and `Validation`.
 - User-provided task list.
 
@@ -49,7 +49,7 @@ Use Taskwarrior's built-in dependency model for strict order:
 - Validation tasks usually block review/close tasks.
 - Do not use dependencies for loose preference or "nice next" ordering.
 - Prefer UUIDs for dependency wiring after task creation.
-- Verify with `task project:<slug> blocked`, `task project:<slug> blocking`, and `task project:<slug> +READY next`.
+- Verify dependency UUIDs with `task_inspect action=list` and ready work with `task_inspect action=next`.
 
 Because dependency targets may not exist before add, draft dependencies by
 task number, then wire them after creation with `depends:`.
@@ -93,17 +93,17 @@ shape is unusual, or when a mutation risk needs explicit inspection.
 ## Execute
 
 1. Activate `taskwarrior`.
-2. Resolve project-wide state using `project_state action=status` for the current worktree.
+2. Resolve project-wide state using `project action=status` for the current worktree.
 3. Preflight Taskwarrior when needed.
-4. Add tasks through `exec_command` with executable `task`; keep each description as one argv item.
-5. Refresh `project:<slug> uuids`.
-6. Inspect specific created tasks with `<uuid> information` when dependency wiring needs confirmation.
-7. Apply strict dependencies with `depends:`.
-8. Verify with `task project:<slug> list`, `blocked`, `blocking`, and `+READY next`.
+4. Add tasks through `task_write action=add`, passing cwd, workstream, and fields.
+5. Preserve each returned full task UUID.
+6. Inspect created tasks with `task_inspect action=get`.
+7. Wire strict dependencies with `task_write action=modify fields.depends`.
+8. Verify with `task_inspect action=list` and `action=next`.
 
 Queue is for project/repo work. If project state is not initialized and the
 queue is part of a workstream execution, initialize the workstream through
-`project_state action=init`. For standalone queues, ask before initializing
+`project action=init`. For standalone queues, ask before initializing
 project state. Never create a worktree-local queue or ledger, global Taskwarrior
 state, or another state root. Repository-owned `.tasks` build and validation
 outputs remain separate from Loki project state.
@@ -129,5 +129,5 @@ Queue:
 - Project: <slug>
 - Added: <n>
 - Existing skipped: <n>
-- Next: task project:<slug> +READY next
+- Next: task_inspect action=next
 ```

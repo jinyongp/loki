@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from loki_mcp.policy import PolicyError
-from loki_mcp.project_state import ProjectStateStore
+from loki_mcp.project_state import ProjectStateStore, resolve_workspace_git_path
 
 
 def _repository(tmp_path: Path) -> tuple[Path, Path]:
@@ -65,6 +65,47 @@ def test_artifact_updates_require_current_revision(tmp_path: Path) -> None:
         store.write_artifact(
             repository, slug, "plan.md", "stale\n", created["sha256"],
         )
+
+
+def test_sandbox_git_paths_keep_the_same_project_identity(tmp_path: Path, monkeypatch) -> None:
+    repository, worktree = _repository(tmp_path)
+    store = ProjectStateStore(repository.parent, tmp_path / "state")
+    expected = store.resolve(repository)
+    original = subprocess.run
+
+    def sandbox_paths(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if "rev-parse" in args[0] and result.returncode == 0:
+            result.stdout = result.stdout.replace(str(repository.parent), "/workspace")
+        return result
+
+    monkeypatch.setattr(subprocess, "run", sandbox_paths)
+    (worktree / "nested").mkdir()
+    actual = store.resolve(worktree / "nested")
+    assert actual.project_id == expected.project_id
+    assert actual.logical_common_directory == expected.logical_common_directory
+    assert actual.worktree_root == worktree
+    assert actual.worktree_id != expected.worktree_id
+
+
+def test_mapped_git_paths_still_reject_symlink_escape(tmp_path: Path, monkeypatch) -> None:
+    from types import SimpleNamespace
+    root = tmp_path / "workspace"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    store = ProjectStateStore(root, tmp_path / "state")
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs:
+                        SimpleNamespace(returncode=0, stdout="/workspace/escape\n"))
+    with pytest.raises(PolicyError, match="escapes workspace"):
+        store.resolve(root)
+
+
+def test_git_path_mapping_uses_exact_prefix(tmp_path: Path) -> None:
+    assert resolve_workspace_git_path("/workspace/repo/.git", tmp_path) == tmp_path / "repo/.git"
+    assert resolve_workspace_git_path("/workspace-other/repo", tmp_path) == Path("/workspace-other/repo")
+    assert resolve_workspace_git_path(str(tmp_path / "repo"), tmp_path) == tmp_path / "repo"
 
 
 def test_legacy_migration_preserves_tasks_and_workstreams(tmp_path: Path) -> None:

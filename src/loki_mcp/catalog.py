@@ -18,6 +18,30 @@ class CatalogTools:
             raise PolicyError(f"{name} is required for this action")
         return value
 
+    def task_inspect(
+        self, cwd: str, action: Literal["status", "diagnostics", "list", "next", "get", "count"] = "list",
+        workstream: str | None = None, uuid: str | None = None,
+        status: Literal["pending", "waiting", "completed", "deleted", "all"] = "pending", limit: int = 50, offset: int = 0,
+    ) -> dict[str, Any]:
+        """Read the central repository Taskwarrior queue. Defaults to the active workstream; use full UUIDs."""
+        if action not in {"status", "diagnostics", "list", "next", "get", "count"}:
+            raise PolicyError("invalid task inspection action")
+        return self.tools.task_request(cwd, action=action, workstream=workstream, uuid=uuid, status=status, limit=limit, offset=offset)
+
+    def task_write(
+        self, cwd: str, action: Literal["add", "modify", "annotate", "start", "stop", "done"],
+        workstream: str | None = None, uuid: str | None = None,
+        fields: dict[str, Any] | None = None, annotation: str | None = None,
+    ) -> dict[str, Any]:
+        """Change one central task. fields: description, priority H/M/L, ISO due/wait/scheduled, tags, depends UUIDs."""
+        if action not in {"add", "modify", "annotate", "start", "stop", "done"}:
+            raise PolicyError("invalid task write action")
+        return self.tools.task_request(cwd, action=action, workstream=workstream, uuid=uuid, fields=fields, annotation=annotation)
+
+    def task_delete(self, cwd: str, uuid: str, workstream: str | None = None) -> dict[str, Any]:
+        """Logically delete exactly one task UUID in the selected workstream; never purge data."""
+        return self.tools.task_request(cwd, action="delete", workstream=workstream, uuid=uuid)
+
     def system_inspect(
         self, action: Literal["server", "diagnostics", "workspace", "port"] = "server",
         port: int | None = None,

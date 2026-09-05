@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loki-mcp"
-version = "0.46.0"
+version = "0.47.1"
 description = "Workspace-scoped MCP server for the loki environment"
 requires-python = ">=3.12"
 dependencies = [

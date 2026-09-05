@@ -56,6 +56,7 @@ async def verify() -> None:
                     "git_inspect", "git_stage", "developer_view", "secret_inspect",
                     "secret_write", "secret_delete", "bootstrap_project",
                     "action", "command_run", "command_start", "process_inspect",
+                    "task_inspect", "task_write", "task_delete",
                 }
                 for tool in catalog.tools:
                     metadata = tool.model_dump(by_alias=True).get("_meta", {})

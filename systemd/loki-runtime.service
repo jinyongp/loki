@@ -29,6 +29,9 @@ ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
+# Linked-worktree metadata created in the MCP sandbox uses /workspace paths.
+# Git discovery needs the same view; writes remain on the existing host path.
+BindReadOnlyPaths=/srv/workspace/loki:/workspace
 ReadWritePaths=/srv/workspace/loki /var/lib/loki/runtime /var/lib/loki/project-state /var/lib/loki/local-deploy /var/log/loki/runtime /run/loki
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any

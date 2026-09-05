@@ -28,6 +28,21 @@ ARTIFACTS = frozenset({"spec.md", "plan.md", "validation.md"})
 MAX_ARTIFACT_BYTES = 2_097_152
 
 
+def resolve_workspace_git_path(value: str, workspace_root: Path) -> Path:
+    """Map Git's sandbox-visible absolute paths into the caller's workspace view.
+
+    The runtime mounts the same tree read-only at /workspace so Git can follow
+    linked-worktree metadata written inside the MCP sandbox. Bind mounts do not
+    canonicalize through Path.resolve(), so normalize the prefix explicitly.
+    Resolve symlinks afterwards; callers still enforce workspace containment.
+    """
+    path = Path(value)
+    logical_root = Path("/workspace")
+    if path.is_relative_to(logical_root):
+        path = workspace_root / path.relative_to(logical_root)
+    return path.resolve()
+
+
 @dataclass(frozen=True)
 class ProjectIdentity:
     project_id: str
@@ -251,6 +266,10 @@ class ProjectStateStore:
                 for path in [staging / "taskwarrior", *(staging / "taskwarrior").rglob("*")]:
                     os.chown(path, uid, gid, follow_symlinks=False)
                     os.chmod(path, 0o700 if path.is_dir() else 0o600)
+                os.chown(staging / "taskwarrior", 0, gid, follow_symlinks=False)
+                os.chmod(staging / "taskwarrior", 0o710)
+                os.chown(staging / "taskwarrior" / "taskrc", 0, gid, follow_symlinks=False)
+                os.chmod(staging / "taskwarrior" / "taskrc", 0o640)
                 os.chown(staging, 0, gid, follow_symlinks=False)
                 os.chmod(staging, 0o710)
             os.replace(staging, destination)
@@ -360,6 +379,9 @@ class ProjectStateStore:
             ):
                 os.chown(path, uid, gid, follow_symlinks=False)
                 os.chmod(path, 0o700 if path.is_dir() else 0o640)
+            os.chown(taskwarrior, 0, gid, follow_symlinks=False)
+            os.chmod(taskwarrior, 0o710)
+            os.chown(taskrc, 0, gid, follow_symlinks=False)
 
     def _is_managed_runtime(self) -> bool:
         return (
@@ -444,8 +466,15 @@ class ProjectStateStore:
         return value
 
     def _git_path(self, cwd: Path, *arguments: str) -> Path:
+        # The runtime deliberately lacks DAC override. Linked-worktree metadata
+        # created with the MCP's private umask is readable only by runner.
+        prefix = (
+            ["/usr/sbin/runuser", "-u", "runner", "--"]
+            if os.geteuid() == 0 and self._is_managed_runtime() else []
+        )
         completed = subprocess.run(
             [
+                *prefix,
                 "/usr/bin/git", "-c", "safe.directory=*", "-C", str(cwd),
                 "rev-parse", *arguments,
             ],
@@ -455,7 +484,7 @@ class ProjectStateStore:
         )
         if completed.returncode != 0:
             raise PolicyError("project state requires a Git worktree")
-        return Path(completed.stdout.strip()).resolve()
+        return resolve_workspace_git_path(completed.stdout.strip(), self.workspace_root)
 
     @staticmethod
     def _atomic_write(path: Path, content: bytes) -> None:

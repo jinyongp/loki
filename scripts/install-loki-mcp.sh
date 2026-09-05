@@ -139,6 +139,7 @@ chmod 0640 /etc/loki/token
 install -d -o runner -g workspace -m 0700 /var/log/loki/mcp
 chown -R runner:workspace /var/log/loki/mcp
 install -d -o root -g workspace -m 2710 /var/lib/loki/project-state
+python3 "$SOURCE_DIR/scripts/repair-task-metadata.py"
 install -d -o root -g root -m 0700 /var/lib/loki/runtime
 install -d -o root -g root -m 0700 /var/lib/loki/runtime/inbox
 install -d -o root -g root -m 0700 /var/log/loki/runtime

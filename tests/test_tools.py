@@ -117,7 +117,7 @@ def test_server_info_and_diagnostics_are_non_sensitive(tmp_path: Path) -> None:
     tools.set_tool_catalog(["server_info", "diagnostics", "read_file"])
     info = tools.server_info()
     assert info["schema_revision"] == "2026-09-04.1"
-    assert info["tool_catalog"]["revision"] == "2026-09-04.3"
+    assert info["tool_catalog"]["revision"] == "2026-09-04.4"
     assert info["tool_catalog"]["count"] == 3
     assert info["tool_catalog"]["tools"] == ["server_info", "diagnostics", "read_file"]
     assert len(info["tool_catalog"]["sha256"]) == 64
@@ -881,6 +881,9 @@ def test_bundled_agent_skills_are_valid_and_mcp_adapted(
     assert "solidjs-development" not in selected
     assert "astro-solid-integration" not in selected
 
+    assert tools.validate_skill("taskwarrior")["valid"] is False
+    assert "task_inspect" in tools.validate_skill("taskwarrior")["missing_tools"]
+    tools.set_tool_catalog(["project", "task_inspect", "task_write", "task_delete"])
     for name in sorted(expected):
         assert tools.validate_skill(name)["valid"] is True
 

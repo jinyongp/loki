@@ -266,11 +266,16 @@ class SkillRegistry:
             "sha256": hashlib.sha256(payload).hexdigest(), "encoding": encoding,
         }
 
-    def validate(self, name: str, cwd: str = ".") -> dict[str, Any]:
+    def validate(self, name: str, cwd: str = ".", *, available_tools: set[str] | None = None) -> dict[str, Any]:
         record = self._selected(name, cwd)
         resources = self._resources(record.directory)
+        required = record.metadata.get("metadata", {}).get("required-tools", [])
+        if not isinstance(required, list) or not all(isinstance(item, str) for item in required):
+            raise PolicyError("required-tools must be a list of tool names")
+        missing = sorted(set(required) - (available_tools or set())) if required else []
         return {
-            "valid": True,
+            "valid": not missing,
+            "missing_tools": missing,
             **record.summary(self.policy.root, selected=True),
             "resource_count": len(resources),
             "resources": resources,

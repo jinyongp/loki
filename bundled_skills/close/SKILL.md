@@ -27,8 +27,8 @@ validation, or other quality workflows during closeout.
 
 2. Taskwarrior
    - Activate `taskwarrior` before reads or mutations.
-   - Use `exec_command` with executable `task` to check `project:<slug> +PENDING list`.
-   - Check `project:<slug> blocked` when dependencies were used.
+   - Use `task_inspect action=list` with cwd and the exact workstream.
+   - Inspect dependency UUIDs and `task_inspect action=next` when dependencies were used.
    - Do not mark broad task sets done without explicit scope.
 
 3. Git

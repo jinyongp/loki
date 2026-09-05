@@ -60,7 +60,7 @@ item and validation bullets define contracts; after queueing, Taskwarrior is the
 only authority for their completion state. Reconcile the ledger from Taskwarrior
 at phase transitions and closeout instead of mirroring task checkboxes.
 
-Use only the fixed filenames and slug returned by `project_state action=init`;
+Use only the fixed filenames and slug returned by `project action=init`;
 see `references/path-contract.md` for identity, reuse, and collision rules.
 
 For light work, keep `Requirements` and `Acceptance Criteria` compact. Omit

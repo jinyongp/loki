@@ -7,12 +7,12 @@ each worktree keeps an independent active-workstream binding.
 ## Resolution
 
 1. Settle the exact one-sentence Goal, artifact depth, and intent source.
-2. Call `project_state` with `action: status` and the intended worktree `cwd`.
+2. Call `project` with `action: status` and the intended worktree `cwd`.
 3. Choose exactly one intent source kind: `plan-local`, or `authoritative` with its exact source.
 4. Unless the user supplied an explicit full slug, choose a semantic `slug_base` of three to five lowercase ASCII English tokens that conveys the concrete domain/object and outcome.
-5. Call `project_state action=init` with the Goal, depth, intent source, and either `slug_base` or the user-supplied `slug`.
+5. Call `project action=init` with the Goal, depth, intent source, and either `slug_base` or the user-supplied `slug`.
 6. Use the returned slug exactly. Loki appends and validates the Goal hash.
-7. Create or update `spec.md`, `plan.md`, and `validation.md` only through `project_state action=write`. Read an existing artifact first and pass its `sha256` when updating it.
+7. Create or update `spec.md`, `plan.md`, and `validation.md` only through `project action=write`. Read an existing artifact first and pass its `sha256` when updating it.
 
 ## Canonical state
 
@@ -43,7 +43,7 @@ project-state profile
 - Reuse occurs only when the immutable manifest exactly matches slug, Goal/hash, depth, intent source, and task project.
 - A matching slug with different identity is a collision and must fail.
 - Resume from a known slug, manifest, plan, or active binding. Do not match workstreams by semantic similarity.
-- Use `project_state action=bind` when switching the current worktree to an existing workstream.
+- Use `project action=bind` when switching the current worktree to an existing workstream.
 - Project-state writes use optimistic revisions. On a stale SHA-256 error, reread and reconcile; never overwrite another worktree's changes.
 
 ## Migration
