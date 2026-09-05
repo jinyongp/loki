@@ -91,7 +91,9 @@ func (c *Controller) Checkpoint(ctx context.Context, cwd string) (*string, error
 	joined = append(joined, patch...)
 	joined = append(joined, 0)
 	joined = append(joined, untracked...)
-	digest := hash(joined)
+	// Include repository identity so identical patches in different repositories
+	// cannot reuse metadata pointing at the wrong restore destination.
+	digest := hash(append([]byte(filepath.ToSlash(rel)+"\x00"), joined...))
 	directory := filepath.Join(filepath.Dir(c.Config.AuditLog), "checkpoints")
 	if err = daemon.PrivateDirectory(directory); err != nil {
 		return nil, err
@@ -102,11 +104,19 @@ func (c *Controller) Checkpoint(ctx context.Context, cwd string) (*string, error
 			names = append(names, strings.ToValidUTF8(name, "�"))
 		}
 	}
-	metadata, err := json.Marshal(map[string]any{"created_at": time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00"), "repository": filepath.ToSlash(rel), "untracked": names})
+	metadata, err := json.Marshal(map[string]any{"schema": 2, "patch_sha256": hash(patch), "created_at": time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00"), "repository": filepath.ToSlash(rel), "untracked": names})
 	if err != nil {
 		return nil, err
 	}
-	for suffix, data := range map[string][]byte{".patch": patch, ".json": metadata} {
+	if len(metadata) > 64*1024*1024 {
+		return nil, fault.Error("checkpoint metadata exceeds limit")
+	}
+	// Metadata is published last: a listed checkpoint always has its patch.
+	for _, suffix := range []string{".patch", ".json"} {
+		data := patch
+		if suffix == ".json" {
+			data = metadata
+		}
 		if err = state.AtomicWrite(filepath.Join(directory, digest+suffix), data, false); err != nil && !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
