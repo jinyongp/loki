@@ -133,7 +133,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		names[definition.Name] = true
 	}
 	handlers := map[string]mcpserver.Handler{
-		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git, app.manager),
+		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
 		"skill_write": SkillWriteHandler(registry),
 	}
 	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), SkillReadHandlers(registry, names)} {
