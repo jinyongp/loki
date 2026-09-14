@@ -3,23 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-	"loki/internal/action"
-	"loki/internal/bootstrap"
 	"loki/internal/buildinfo"
 	"loki/internal/contract"
-	"loki/internal/rpc"
 )
 
 func main() {
@@ -27,9 +19,6 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) >= 2 && args[0] == "internal" && args[1] == "repair-task-metadata" {
-		return runMetadataRepair(args[2:], stdout, stderr)
-	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "checkpoint":
@@ -38,12 +27,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "config", "policy":
 			return runSettings(args, stdout, stderr)
-		case "bootstrap", "state", "project", "secret", "action":
+		case "state", "secret":
 			return runAdministration(args, stdout, stderr)
 		}
-	}
-	if len(args) >= 2 && args[0] == "internal" && args[1] == "task" {
-		return runTask(args[2:], stdout, stderr)
 	}
 	if len(args) > 0 && args[0] == "jwks-refresh" {
 		return runJWKSRefresh(args[1:], stderr)
@@ -72,23 +58,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "signing-proxy" {
 		return runSigning(args[1:], stderr)
 	}
-	if len(args) >= 2 && args[0] == "internal" && args[1] == "bootstrap" {
-		return runBootstrap(args[2:], stdout, stderr)
-	}
-	if len(args) == 2 && args[0] == "internal" && args[1] == "action-files" {
-		if err := action.RunFileOperation(os.Stdin, stdout); err != nil {
-			fmt.Fprintln(stderr, "action file operation failed")
-			return 125
-		}
-		return 0
-	}
-	if len(args) == 2 && args[0] == "internal" && args[1] == "action-exec" {
-		if err := action.ExecInSandbox(os.Stdin); err != nil {
-			fmt.Fprintln(stderr, action.PublicExecutionError(err))
-			return 125
-		}
-		return 0
-	}
 	if len(args) >= 2 && args[0] == "contract" && args[1] == "capture" {
 		return capture(args[2:], stdout, stderr)
 	}
@@ -99,34 +68,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintln(stderr, "usage: loki version | secret-process start|restart [OPTIONS] TARGET | contract capture --output PATH [--url URL --token-file PATH]")
 	return 2
-}
-
-func runBootstrap(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 4 || !filepath.IsAbs(args[0]) {
-		fmt.Fprintln(stderr, "bootstrap requires SOCKET EXPECTED_UID CWD WORKFLOW")
-		return 2
-	}
-	uid, err := strconv.ParseUint(args[1], 10, 32)
-	if err != nil {
-		fmt.Fprintln(stderr, "invalid runtime UID")
-		return 2
-	}
-	expectedUID := uint32(uid)
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer cancel()
-	err = bootstrap.Run(ctx, rpc.Client{Socket: args[0], ExpectedUID: &expectedUID}, args[2], args[3], stdout)
-	if err == nil {
-		return 0
-	}
-	if ctx.Err() != nil {
-		return 143
-	}
-	var failed bootstrap.ExitError
-	if errors.As(err, &failed) && failed.Code > 0 && failed.Code < 256 {
-		return failed.Code
-	}
-	fmt.Fprintln(stderr, "workflow execution failed")
-	return 1
 }
 
 func capture(args []string, stdout, stderr io.Writer) int {

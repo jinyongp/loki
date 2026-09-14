@@ -10,7 +10,7 @@ import (
 )
 
 func TestSystemInformation(t *testing.T) {
-	_, paths := serviceFixture(t)
+	paths := serviceFixture(t)
 	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)

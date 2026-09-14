@@ -116,9 +116,6 @@ func TestAdministrativeCLIEncryptedRuntime(t *testing.T) {
 		{"secret", "profile", "create", "fixture"},
 		{"secret", "generate", "fixture", "TOKEN"},
 		{"secret", "profile", "show", "fixture"},
-		{"action", "set", "fixture", "check", "--cwd", "repo", "--secret", "TOKEN", "--", "npm", "run", "check"},
-		{"action", "list", "fixture"},
-		{"action", "remove", "fixture", "check"},
 		{"secret", "remove", "fixture", "TOKEN"},
 		{"secret", "profile", "remove", "fixture"},
 	} {

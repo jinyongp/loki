@@ -7,10 +7,9 @@ import (
 	"testing"
 
 	"loki/internal/policy"
-	"loki/internal/project"
 )
 
-func serviceFixture(t *testing.T) (*project.Store, *policy.Workspace) {
+func serviceFixture(t *testing.T) *policy.Workspace {
 	t.Helper()
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
@@ -25,14 +24,10 @@ func serviceFixture(t *testing.T) (*project.Store, *policy.Workspace) {
 			t.Fatalf("git %s %v", out, err)
 		}
 	}
-	store, err := project.New(workspace, filepath.Join(root, "state"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	paths, err := policy.New(workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { paths.Close() })
-	return store, paths
+	return paths
 }

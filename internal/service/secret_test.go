@@ -49,8 +49,7 @@ func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, sock
 	return rpc.Client{Socket: socket, ExpectedUID: &uid}
 }
 func TestSecretAndWorkflowMCP(t *testing.T) {
-	projects, _ := serviceFixture(t)
-	c := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "runtime"), Projects: projects}
+	c := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "runtime")}
 	if _, err := c.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}

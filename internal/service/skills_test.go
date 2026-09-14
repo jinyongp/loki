@@ -13,7 +13,7 @@ import (
 )
 
 func TestSkillsMCP(t *testing.T) {
-	_, paths := serviceFixture(t)
+	paths := serviceFixture(t)
 	registry := &skills.Registry{Workspace: paths}
 	handlers := SkillReadHandlers(registry, map[string]bool{"workspace_read": true})
 	handlers["skill_write"] = SkillWriteHandler(registry)

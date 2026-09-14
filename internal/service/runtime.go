@@ -6,7 +6,6 @@ import (
 	"errors"
 	"path/filepath"
 
-	"loki/internal/action"
 	"loki/internal/audit"
 	"loki/internal/config"
 	"loki/internal/daemon"
@@ -19,35 +18,35 @@ import (
 
 // RuntimeOptions is administrator-owned role configuration, never tool input.
 type RuntimeOptions struct {
-	Socket, StateDirectory, InboxDirectory, ProjectStateDirectory, AuditPath string
-	AgentUID                                                                 uint32
-	SocketGID                                                                int
-	TaskBinary, TaskHome                                                     string
-	DevtoolsBinary, DevtoolsHome                                             string
-	Layout                                                                   action.Layout
+	Socket, StateDirectory, InboxDirectory, AuditPath  string
+	AgentUID                                           uint32
+	SocketGID                                          int
+	DevtoolsBinary, DevtoolsHome                       string
+	Workspace, Runner, DockerSocket, SnapshotDirectory string
+	RunnerUID, RunnerGID                               uint32
 }
 
 func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready func() error, onAuditError func(error)) error {
-	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.ProjectStateDirectory, o.AuditPath, o.TaskHome, o.DevtoolsBinary, o.DevtoolsHome, o.Layout.Workspace, o.Layout.Binary} {
+	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.DevtoolsHome, o.Workspace, o.Runner, o.DockerSocket, o.SnapshotDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
 		}
 	}
-	if o.Layout.RuntimeSocket != o.Socket || o.Layout.UID != o.AgentUID {
-		return errors.New("runtime role socket or runner identity does not match action layout")
+	if o.RunnerUID != o.AgentUID {
+		return errors.New("runtime runner identity does not match authorized agent")
 	}
-	for _, path := range []string{o.StateDirectory, o.InboxDirectory, o.ProjectStateDirectory, filepath.Dir(o.AuditPath)} {
+	for _, path := range []string{o.StateDirectory, o.InboxDirectory, filepath.Dir(o.AuditPath)} {
 		if err := daemon.PrivateDirectory(path); err != nil {
 			return err
 		}
 	}
 	controller := secret.Controller{StateDirectory: o.StateDirectory, InboxDirectory: o.InboxDirectory}
-	devtoolsClient, err := devtools.NewClient(o.DevtoolsBinary, o.Layout.Workspace, devtoolsEnvironment(o.DevtoolsBinary, o.DevtoolsHome))
+	devtoolsClient, err := devtools.NewClient(o.DevtoolsBinary, o.Workspace, devtoolsEnvironment(o.DevtoolsBinary, o.DevtoolsHome))
 	if err != nil {
 		return err
 	}
 	defer devtoolsClient.Close()
-	devtoolsClient.Identity = &process.Identity{UID: o.Layout.UID, GID: o.Layout.GID, Groups: []uint32{o.Layout.GID}}
+	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: []uint32{o.RunnerGID}}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
@@ -61,7 +60,7 @@ func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready fu
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
 		AuditOperations(log),
-		DockerOperations(dockerproxy.Inspector{Workspace: o.Layout.Workspace, SnapshotRoot: o.Layout.SnapshotDirectory, Socket: "unix://" + o.Layout.DockerSocket}),
+		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),
 	} {
 		for name, op := range group {
 			if _, exists := ops[name]; exists {

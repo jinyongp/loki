@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/action"
 	"loki/internal/config"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -43,7 +42,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), ProjectStateDirectory: filepath.Join(root, "projects"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), TaskHome: filepath.Join(root, "task-home"), TaskBinary: "/home/linuxbrew/.linuxbrew/bin/task", DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Layout: action.Layout{Workspace: workspace, Binary: "/unneeded-for-read-only-fixture", RuntimeSocket: socket, RuntimeUID: uid, UID: uid, GID: uint32(os.Getgid()), CallbackPort: new(int)}}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Workspace: workspace, Runner: "/usr/bin/false", DockerSocket: "/run/docker.sock", SnapshotDirectory: filepath.Join(root, "snapshots"), RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
 	controller := secret.Controller{StateDirectory: o.StateDirectory}
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
