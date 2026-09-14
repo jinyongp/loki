@@ -2,8 +2,9 @@
 
 Loki is a Go MCP server for workspace access, Git, browser control, previews,
 artifacts, encrypted secret metadata, and runtime inspection. General developer
-workflows run through the `devtools` CLI. The agent skill surface contains one
-bundled skill, `devtools`, which teaches agents how to use that CLI directly.
+workflows run through the `devtools` CLI. The bundled agent skills include
+`devtools` guidance and the general planning, Git, review, verification,
+documentation, and communication workflows used by agents.
 
 Secrets remain encrypted in Loki's AES-GCM vault. Commands that need secrets run
 through `loki secret-process start` or `loki secret-process restart`, which
@@ -44,8 +45,8 @@ path to a `devtools 0.8.2` executable:
   /absolute/path/to/devtools
 ```
 
-The result contains static Loki and devtools executables, the single bundled
-skill, configuration templates, systemd units, checksums, and a staging script.
+The result contains static Loki and devtools executables, all bundled Agent
+Skills, configuration templates, systemd units, checksums, and a staging script.
 It contains no Python environment.
 
 Stage the candidate into a new root with the target service identities:

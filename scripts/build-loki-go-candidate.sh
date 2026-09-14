@@ -30,17 +30,17 @@ case "$VERSION" in
 esac
 
 ROOT="$OUTPUT/rootfs"
-install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills/devtools"
+install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills"
 install -d "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/doc/loki"
-install -d "$ROOT/usr/local/bin" "$ROOT/srv/workspace/loki/.agents/skills/devtools"
+install -d "$ROOT/usr/local/bin" "$ROOT/srv/workspace/loki/.agents/skills"
 install -d "$ROOT/etc/loki-go"
 
 CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/loki"
 install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"
 install -m 0755 "$SOURCE_DIR/scripts/wait-for-loki-sockets.sh" "$ROOT/opt/loki/libexec/wait-for-loki-sockets"
 install -m 0755 "$SOURCE_DIR/scripts/render-loki-go-layouts.sh" "$ROOT/opt/loki/libexec/render-layouts"
-install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/opt/loki/share/skills/devtools/SKILL.md"
-install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/srv/workspace/loki/.agents/skills/devtools/SKILL.md"
+cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/opt/loki/share/skills/"
+cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/srv/workspace/loki/.agents/skills/"
 install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/config.toml"
 install -m 0644 "$SOURCE_DIR/config/loki-gitconfig" "$ROOT/usr/share/doc/loki/gitconfig"
 install -m 0644 "$SOURCE_DIR/packaging/go/runtime.json.in" "$ROOT/usr/share/doc/loki/runtime.json.in"

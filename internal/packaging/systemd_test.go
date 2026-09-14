@@ -8,13 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"loki/internal/service"
 )
 
-func TestBundledSkillIsPinnedDevtoolsOnly(t *testing.T) {
+func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", "..", "bundled_skills"))
 	if err != nil {
 		t.Fatal(err)
@@ -23,8 +24,16 @@ func TestBundledSkillIsPinnedDevtoolsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].Name() != "devtools" || !entries[0].IsDir() {
-		t.Fatalf("bundled skills = %#v", entries)
+	got := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			t.Fatalf("bundled skill entry %q is not a directory", entry.Name())
+		}
+		got = append(got, entry.Name())
+	}
+	want := []string{"close", "dev-docs", "devtools", "git-commit", "humanize-korean", "minify", "planning", "queue", "review-loop", "survey", "taskwarrior", "verify", "workstream"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("bundled skills = %#v, want %#v", got, want)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "devtools", "SKILL.md"))
 	if err != nil {
