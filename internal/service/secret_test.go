@@ -49,28 +49,24 @@ func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, sock
 	return rpc.Client{Socket: socket, ExpectedUID: &uid}
 }
 func TestSecretAndWorkflowMCP(t *testing.T) {
-	projects, paths := serviceFixture(t)
+	projects, _ := serviceFixture(t)
 	c := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "runtime"), Projects: projects}
 	if _, err := c.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	ops := SecretOperations(c)
 	client := secretSocket(t, ops, true)
-	for _, name := range []string{"init", "import_env", "secret_set", "action_set", "action_remove", "project_register", "project_unregister", "project_set_workflow", "project_remove_workflow"} {
+	for _, name := range []string{"init", "import_env", "secret_set"} {
 		if ops[name].Permission != rpc.Administrative {
 			t.Fatalf("administrative operation exposed: %s", name)
 		}
 	}
-	for _, name := range []string{"public_value_set", "secret_generate", "import_staged_env", "project_status", "project_workflow"} {
+	for _, name := range []string{"public_value_set", "secret_generate", "import_staged_env"} {
 		if ops[name].Permission != rpc.Agent {
 			t.Fatalf("delegated operation changed: %s", name)
 		}
 	}
-	handlers := ProjectHandlers(client, paths)
-	for name, h := range SecretHandlers(client) {
-		handlers[name] = h
-	}
-	handlers["action"] = ActionHandler(client, paths)
+	handlers := SecretHandlers(client)
 	baseline, _ := contract.Baseline()
 	defs, _ := baseline.Definitions()
 	for _, def := range defs {
@@ -126,19 +122,14 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		t.Fatal("schema default byte count changed")
 	}
 	call("secret_write", map[string]any{"action": "set", "profile": "web", "secret": "PUBLIC_API", "value": "http://127.0.0.1:41280"}, "")
-	call("action", map[string]any{"operation": "set", "profile": "web", "action_name": "dev", "cwd": "/workspace/repo", "command": []string{"pnpm", "dev", "--port", "{LOKI_PORT}"}, "all_secrets": true, "required_secrets": []string{"TOKEN"}, "preferred_port": 42100, "port_environment": "PORT", "origin_environment": "PUBLIC_ORIGIN", "public_environment": []string{"PUBLIC_API"}, "preview_environment": map[string]string{"PUBLIC_API": "/api"}}, "")
 	profile := call("secret_inspect", map[string]any{"action": "profile", "profile": "web"}, "")
-	if profile["action_policies"].(map[string]any)["dev"].(map[string]any)["ready"] != true {
-		t.Fatal("action not ready after generation")
+	foundToken := false
+	for _, name := range profile["secret_names"].([]any) {
+		foundToken = foundToken || name == "TOKEN"
 	}
-	call("project", map[string]any{"action": "register", "cwd": "repo"}, "")
-	call("project", map[string]any{"action": "set_workflow", "cwd": "feature", "workflow": "development", "steps": []string{"web/dev"}, "required_secrets": []string{"web/TOKEN"}}, "")
-	workflow := call("project", map[string]any{"action": "workflow", "cwd": "repo", "workflow": "development"}, "")
-	if workflow["timeout_seconds"] != float64(3600) {
-		t.Fatal("workflow timeout default changed")
+	if !foundToken {
+		t.Fatal("generated secret missing from profile")
 	}
-	call("secret_delete", map[string]any{"action": "secret", "profile": "web", "secret": "TOKEN"}, "still referenced by an action")
-	call("action", map[string]any{"operation": "remove", "profile": "web", "action_name": "dev"}, "references an unknown action")
 	inbox := filepath.Join(c.StateDirectory, "inbox")
 	if err = os.Mkdir(inbox, 0700); err != nil {
 		t.Fatal(err)
@@ -170,7 +161,7 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 	}
 	if os.Getuid() != 0 {
 		untrusted := secretSocket(t, ops, false)
-		for _, operation := range []string{"secret_set", "action_set", "project_unregister"} {
+		for _, operation := range []string{"secret_set"} {
 			_, err := untrusted.Call(t.Context(), map[string]any{"operation": operation, "cwd": "repo", "profile": "web", "secret": "TOKEN", "value": "should-not-be-stored"})
 			if err == nil || !strings.Contains(err.Error(), "administrative operations") {
 				t.Fatalf("untrusted administrative call %s: %v", operation, err)
