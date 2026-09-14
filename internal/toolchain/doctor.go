@@ -56,7 +56,12 @@ func Doctor(ctx context.Context, manifest Manifest, root string, checkApt bool) 
 			err = json.Unmarshal(raw, &installed)
 		}
 		actualDigest, digestErr := installedDigest(target, artifact.Format)
-		ok := err == nil && digestErr == nil && installed.Name == artifact.Name && installed.Version == artifact.Version && installed.SHA256 == artifact.SHA256 && installed.TreeSHA256 == actualDigest
+		accessible := true
+		if artifact.Format != "file" {
+			info, statErr := os.Stat(target)
+			accessible = statErr == nil && info.Mode().Perm()&0555 == 0555
+		}
+		ok := err == nil && digestErr == nil && accessible && installed.Name == artifact.Name && installed.Version == artifact.Version && installed.SHA256 == artifact.SHA256 && installed.TreeSHA256 == actualDigest
 		add(Check{Name: "artifact:" + artifact.Name, OK: ok, Expected: artifact.Version + ":" + artifact.SHA256, Actual: installed.Version + ":" + installed.SHA256})
 		for name, relative := range artifact.Links {
 			expected := artifact.InstallPath

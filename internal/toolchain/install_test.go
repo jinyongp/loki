@@ -119,6 +119,18 @@ func TestInstallZipArtifactPreservesExecutables(t *testing.T) {
 	if info, statErr := os.Stat(target); statErr != nil || info.Mode().Perm() != 0755 {
 		t.Fatalf("installed executable = %v, %v", info, statErr)
 	}
+	if info, statErr := os.Stat(filepath.Dir(target)); statErr != nil || info.Mode().Perm() != 0755 {
+		t.Fatalf("installed artifact root = %v, %v", info, statErr)
+	}
+	if err = os.Chmod(filepath.Dir(target), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = InstallArtifacts(context.Background(), manifest, bundle, root); err != nil {
+		t.Fatal(err)
+	}
+	if info, statErr := os.Stat(filepath.Dir(target)); statErr != nil || info.Mode().Perm() != 0755 {
+		t.Fatalf("repaired artifact root = %v, %v", info, statErr)
+	}
 }
 
 func TestInstallZipRejectsPathEscape(t *testing.T) {

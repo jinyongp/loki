@@ -127,6 +127,9 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		if readErr == nil && got.Name == want.Name && got.Version == want.Version && got.SHA256 == want.SHA256 {
 			current, digestErr := installedDigest(target, artifact.Format)
 			if digestErr == nil && current == got.TreeSHA256 {
+				if artifact.Format != "file" {
+					return os.Chmod(target, 0755)
+				}
 				return nil
 			}
 		}
@@ -151,7 +154,11 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 			_ = input.Close()
 		}
 		if err == nil {
-			err = temporary.Chmod(0755)
+			permissions := os.FileMode(0644)
+			if len(artifact.Links) > 0 {
+				permissions = 0755
+			}
+			err = temporary.Chmod(permissions)
 		}
 		if closeErr := temporary.Close(); err == nil {
 			err = closeErr
@@ -179,6 +186,9 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 	}
 	if err != nil {
 		return fmt.Errorf("extract %s: %w", artifact.Name, err)
+	}
+	if err = os.Chmod(temporary, 0755); err != nil {
+		return err
 	}
 	want.TreeSHA256, err = treeDigest(temporary)
 	if err != nil {
