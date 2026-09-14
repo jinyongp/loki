@@ -39,14 +39,15 @@ type AptPackage struct {
 }
 
 type Artifact struct {
-	Name            string `json:"name"`
-	Version         string `json:"version"`
-	Filename        string `json:"filename"`
-	URL             string `json:"url"`
-	SHA256          string `json:"sha256"`
-	Format          string `json:"format"`
-	InstallPath     string `json:"install_path"`
-	StripComponents int    `json:"strip_components"`
+	Name            string            `json:"name"`
+	Version         string            `json:"version"`
+	Filename        string            `json:"filename"`
+	URL             string            `json:"url"`
+	SHA256          string            `json:"sha256"`
+	Format          string            `json:"format"`
+	InstallPath     string            `json:"install_path"`
+	StripComponents int               `json:"strip_components"`
+	Links           map[string]string `json:"links"`
 }
 
 func LoadManifest(raw []byte) (Manifest, error) {
@@ -94,6 +95,14 @@ func (m Manifest) Validate() error {
 		}
 		if item.Format == "file" && item.StripComponents != 0 {
 			return fmt.Errorf("file artifact %q cannot strip components", item.Name)
+		}
+		if len(item.Links) == 0 {
+			return fmt.Errorf("toolchain artifact %q has no executable links", item.Name)
+		}
+		for name, target := range item.Links {
+			if !packageName.MatchString(name) || target == "" || filepath.IsAbs(target) || filepath.Clean(target) != target || target == ".." || strings.HasPrefix(target, "../") {
+				return fmt.Errorf("invalid executable link %q for toolchain artifact %q", name, item.Name)
+			}
 		}
 		previous = item.Name
 	}
