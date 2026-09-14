@@ -6,10 +6,50 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"loki/internal/policy"
 )
+
+func TestBundledCatalogContainsPinnedDevtoolsSkill(t *testing.T) {
+	_, source, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate bundled skills")
+	}
+	bundled := filepath.Join(filepath.Dir(source), "..", "..", "bundled_skills")
+	raw, err := os.ReadFile(filepath.Join(bundled, "devtools", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := digest(raw), "760deed865c993b7ead57d76eb7891216317b33f2e12c37ce6949e46e0e31ed8"; got != want {
+		t.Fatalf("devtools 0.8.2 skill digest = %s, want %s", got, want)
+	}
+	workspace, err := policy.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { workspace.Close() })
+	builtin, err := policy.New(bundled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { builtin.Close() })
+	registry := &Registry{Workspace: workspace, Builtin: builtin}
+	list, err := registry.List(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := list["skills"].([]map[string]any)
+	if len(items) != 1 || items[0]["name"] != "devtools" || items[0]["selected"] != true {
+		t.Fatalf("bundled skills = %#v", list)
+	}
+	active, err := registry.Activate("devtools", ".")
+	if err != nil || !strings.Contains(active["instructions"].(string), "devtools schema task claim") {
+		t.Fatalf("activated devtools skill = %#v, error = %v", active, err)
+	}
+}
 
 func fixture(t *testing.T) *Registry {
 	t.Helper()

@@ -36,11 +36,11 @@ if id runner >/dev/null 2>&1; then
     chmod -R g+rwX "$cache_dir"
     find "$cache_dir" -type d -exec chmod g+s {} +
   done
-  if test ! -e /srv/workspace/loki/.agents/skills/git-commit; then
-    install -d -o runner -g workspace -m 2770 /srv/workspace/loki/.agents/skills/git-commit
+  if test ! -e /srv/workspace/loki/.agents/skills/devtools; then
+    install -d -o runner -g workspace -m 2770 /srv/workspace/loki/.agents/skills/devtools
     install -o runner -g workspace -m 0660 \
-      "$SOURCE_DIR/bundled_skills/git-commit/SKILL.md" \
-      /srv/workspace/loki/.agents/skills/git-commit/SKILL.md
+      "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" \
+      /srv/workspace/loki/.agents/skills/devtools/SKILL.md
   fi
   if test -x /home/linuxbrew/.linuxbrew/bin/rustup; then
     for proxy in cargo rustc rustdoc rustfmt; do

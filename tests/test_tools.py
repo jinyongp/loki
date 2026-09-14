@@ -868,11 +868,7 @@ def test_bundled_agent_skills_are_valid_and_mcp_adapted(
     builtin_root = Path(__file__).resolve().parents[1] / "bundled_skills"
     monkeypatch.setattr(skills_module, "BUILTIN_SKILL_ROOT", builtin_root)
     tools = make_tools(tmp_path)
-    expected = {
-        "close", "dev-docs", "git-commit", "humanize-korean", "minify",
-        "planning", "queue", "review-loop", "survey", "taskwarrior",
-        "verify", "workstream",
-    }
+    expected = {"devtools"}
 
     catalog = tools.list_skills()
     selected = {item["name"] for item in catalog["skills"] if item["selected"]}
@@ -881,18 +877,10 @@ def test_bundled_agent_skills_are_valid_and_mcp_adapted(
     assert "solidjs-development" not in selected
     assert "astro-solid-integration" not in selected
 
-    assert tools.validate_skill("taskwarrior")["valid"] is False
-    assert "task_inspect" in tools.validate_skill("taskwarrior")["missing_tools"]
-    tools.set_tool_catalog(["project", "task_inspect", "task_write", "task_delete"])
-    for name in sorted(expected):
-        assert tools.validate_skill(name)["valid"] is True
-
-    adapted = "\n".join(
-        tools.activate_skill(name)["instructions"]
-        for name in ("review-loop", "workstream")
-    ).lower()
-    for forbidden in ("create_goal", "get_goal", "update_goal", "subagent"):
-        assert forbidden not in adapted
+    assert tools.validate_skill("devtools")["valid"] is True
+    activated = tools.activate_skill("devtools")
+    assert activated["scope"] == "builtin"
+    assert "devtools schema task claim" in activated["instructions"]
 
 
 def test_agent_skill_edit_resources_validation_and_revision_guard(tmp_path: Path) -> None:
