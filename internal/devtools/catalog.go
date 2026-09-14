@@ -31,6 +31,7 @@ type Command struct {
 	Name             string          `json:"name"`
 	Description      string          `json:"description"`
 	AcceptsChildArgs bool            `json:"accepts_child_args"`
+	Options          []Option        `json:"options"`
 	InputSchema      json.RawMessage `json:"input_schema"`
 	OutputSchema     json.RawMessage `json:"output_schema"`
 }
