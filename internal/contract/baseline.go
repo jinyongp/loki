@@ -8,13 +8,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//go:embed testdata/mcp-v0471.json
-var baselineJSON []byte
-
 //go:embed testdata/mcp-go-v048.json
 var currentJSON []byte
 
-const BaselineVersion = "0.47.1"
 const CatalogRevision = "2026-09-14.2"
 
 const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
@@ -29,18 +25,7 @@ var currentToolNames = []string{
 	"secret_inspect", "secret_write", "secret_delete",
 }
 
-// Baseline returns an independent copy; callers cannot mutate the canonical data.
-func Baseline() (*Snapshot, error) {
-	var s Snapshot
-	if err := json.Unmarshal(baselineJSON, &s); err != nil {
-		return nil, err
-	}
-	if s.Baseline != "python-"+BaselineVersion || len(s.Tools) != 37 {
-		return nil, fmt.Errorf("invalid embedded baseline")
-	}
-	return &s, nil
-}
-
+// Current returns an independent copy; callers cannot mutate canonical data.
 func Current() (*Snapshot, error) {
 	var snapshot Snapshot
 	if err := json.Unmarshal(currentJSON, &snapshot); err != nil {
@@ -50,6 +35,16 @@ func Current() (*Snapshot, error) {
 		return nil, fmt.Errorf("invalid embedded Go contract")
 	}
 	return &snapshot, nil
+}
+
+// Snapshot retains raw JSON so SDK defaults cannot silently change the fixture.
+type Snapshot struct {
+	Baseline          string                     `json:"baseline"`
+	Initialize        json.RawMessage            `json:"initialize"`
+	Tools             []json.RawMessage          `json:"tools"`
+	Resources         []json.RawMessage          `json:"resources"`
+	ResourceTemplates []json.RawMessage          `json:"resourceTemplates"`
+	ResourceContents  map[string]json.RawMessage `json:"resourceContents"`
 }
 
 func (s *Snapshot) Definitions() ([]*mcp.Tool, error) {
