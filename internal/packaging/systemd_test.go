@@ -218,6 +218,9 @@ func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
 		if !strings.Contains(string(unit), "PartOf=loki-go.target\n") {
 			t.Fatalf("%s does not follow suite lifecycle", filepath.Base(path))
 		}
+		if !strings.Contains(string(unit), "Restart=on-failure\n") {
+			t.Fatalf("%s does not recover after a forced failure", filepath.Base(path))
+		}
 		if strings.Contains(string(unit), "WantedBy=multi-user.target") {
 			t.Fatalf("%s is independently enabled at boot", filepath.Base(path))
 		}
