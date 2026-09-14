@@ -42,11 +42,12 @@ install -m 0755 "$SOURCE_DIR/scripts/render-loki-go-layouts.sh" "$ROOT/opt/loki/
 install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/opt/loki/share/skills/devtools/SKILL.md"
 install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/srv/workspace/loki/.agents/skills/devtools/SKILL.md"
 install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/config.toml"
+install -m 0644 "$SOURCE_DIR/config/loki-gitconfig" "$ROOT/usr/share/doc/loki/gitconfig"
 install -m 0644 "$SOURCE_DIR/packaging/go/runtime.json.in" "$ROOT/usr/share/doc/loki/runtime.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/go/mcp.json.in" "$ROOT/usr/share/doc/loki/mcp.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
-ln -s ../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
-ln -s ../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
+ln -s ../../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
+ln -s ../../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
 
 (
   cd "$ROOT"
@@ -55,3 +56,4 @@ ln -s ../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
 
 printf '%s\n' "loki=$("$ROOT/opt/loki/bin/loki" version)" > "$OUTPUT/VERSIONS"
 printf '%s\n' "devtools=$VERSION" >> "$OUTPUT/VERSIONS"
+install -m 0755 "$SOURCE_DIR/scripts/stage-loki-go-candidate.sh" "$OUTPUT/stage.sh"
