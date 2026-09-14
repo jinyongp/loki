@@ -132,9 +132,10 @@ prepare_state() {
   runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4
   ensure_identities "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid"
   config=$(rooted /etc/loki-go)
-  install -d -m 0750 "$config"
+  install -d -g "$workspace_gid" -m 0750 "$config"
   test -f "$config/config.toml" || install -m 0640 "$release/usr/share/doc/loki/config.toml" "$config/config.toml"
   test -f "$config/gitconfig" || install -m 0644 "$release/usr/share/doc/loki/gitconfig" "$config/gitconfig"
+  chgrp "$workspace_gid" "$config/config.toml"
   "$release/opt/loki/libexec/render-layouts" "$release/usr/share/doc/loki" "$config" "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid"
   install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" "$(rooted /var/lib/loki-go/browser)"
   install -d -o "$runner_uid" -g "$runner_gid" -m 0700 \
@@ -144,12 +145,16 @@ prepare_state() {
     "$(rooted /var/cache/loki-go/runner/playwright)" "$(rooted /var/cache/loki-go/runner/go-build)" "$(rooted /var/cache/loki-go/runner/go-mod)" \
     "$(rooted /var/cache/loki-go/runner/pip)" "$(rooted /var/tmp/loki-go/runner)"
   install -d -m 0700 "$(rooted /var/log/loki-go/runtime)" "$(rooted /var/log/loki-go/mcp)"
-  install -d -m 0770 "$(rooted /srv/workspace/loki/.loki-go/browser-downloads)" "$(rooted /srv/workspace/loki/.agents/skills)"
+  install -d -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki)"
+  install -d -o "$browser_uid" -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki/.loki-go/browser-downloads)"
+  install -d -g "$workspace_gid" -m 0755 "$(rooted /srv/workspace/loki/.agents/skills)"
   cp -a "$release/srv/workspace/loki/.agents/skills/." "$(rooted /srv/workspace/loki/.agents/skills/)"
   if test ! -f "$config/token"; then
     umask 0077
     dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 > "$config/token"
   fi
+  chgrp "$workspace_gid" "$config/token"
+  chmod 0640 "$config/token"
   key=$(rooted /var/lib/loki-go/signing/id_ed25519)
   test -f "$key" || ssh-keygen -q -t ed25519 -N "" -C "loki-go signing" -f "$key"
 }

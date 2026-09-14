@@ -35,13 +35,14 @@ cp -a --no-preserve=ownership "$ARTIFACT/rootfs/." "$TARGET/"
   --bundle "$TARGET/usr/share/loki/toolchain" \
   --root "$TARGET" \
   --skip-apt
-install -d -m 0750 "$TARGET/etc/loki-go"
+install -d -g "$4" -m 0750 "$TARGET/etc/loki-go"
 install -d -m 0700 "$TARGET/var/lib/loki-go/runtime/inbox"
 install -d -m 0700 "$TARGET/var/lib/loki-go/signing"
 install -d -m 0700 "$TARGET/var/lib/loki-go/browser"
 install -d -m 0700 "$TARGET/var/log/loki-go/runtime"
 install -d -m 0700 "$TARGET/var/log/loki-go/mcp"
-install -d -m 0770 "$TARGET/srv/workspace/loki/.loki-go/browser-downloads"
+install -d -g "$4" -m 0770 "$TARGET/srv/workspace/loki"
+install -d -o "$5" -g "$4" -m 0770 "$TARGET/srv/workspace/loki/.loki-go/browser-downloads"
 install -d -o "$2" -g "$3" -m 0700 \
   "$TARGET/var/lib/loki-go/runner" \
   "$TARGET/var/lib/loki-go/runner/config" \
@@ -60,8 +61,11 @@ install -d -o "$2" -g "$3" -m 0700 \
 
 install -m 0640 "$TARGET/usr/share/doc/loki/config.toml" "$TARGET/etc/loki-go/config.toml"
 install -m 0644 "$TARGET/usr/share/doc/loki/gitconfig" "$TARGET/etc/loki-go/gitconfig"
+chgrp "$4" "$TARGET/etc/loki-go/config.toml"
 "$TARGET/opt/loki/libexec/render-layouts" "$TARGET/usr/share/doc/loki" "$TARGET/etc/loki-go" "$2" "$3" "$4" "$5"
 
 umask 0077
 dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 > "$TARGET/etc/loki-go/token"
+chgrp "$4" "$TARGET/etc/loki-go/token"
+chmod 0640 "$TARGET/etc/loki-go/token"
 ssh-keygen -q -t ed25519 -N "" -C "loki-go candidate signing" -f "$TARGET/var/lib/loki-go/signing/id_ed25519"

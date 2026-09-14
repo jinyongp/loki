@@ -25,13 +25,16 @@ done
 test -f "$TEMPLATES/runtime.json.in"
 test -f "$TEMPLATES/mcp.json.in"
 install -d -m 0750 "$OUTPUT"
+if test "$(id -u)" -eq 0; then chgrp "$WORKSPACE_GID" "$OUTPUT"; fi
 
 render() {
   sed -e "s/@RUNNER_UID@/$RUNNER_UID/g" -e "s/@RUNNER_GID@/$RUNNER_GID/g" -e "s/@WORKSPACE_GID@/$WORKSPACE_GID/g" -e "s/@BROWSER_UID@/$BROWSER_UID/g" "$1" > "$2"
   chmod 0640 "$2"
+  if test "$(id -u)" -eq 0; then chgrp "$WORKSPACE_GID" "$2"; fi
 }
 
 render "$TEMPLATES/runtime.json.in" "$OUTPUT/runtime.json"
 render "$TEMPLATES/mcp.json.in" "$OUTPUT/mcp.json"
 printf 'RUNNER_UID=%s\nRUNNER_GID=%s\nWORKSPACE_GID=%s\nBROWSER_UID=%s\n' "$RUNNER_UID" "$RUNNER_GID" "$WORKSPACE_GID" "$BROWSER_UID" > "$OUTPUT/identity.env"
 chmod 0640 "$OUTPUT/identity.env"
+if test "$(id -u)" -eq 0; then chgrp "$WORKSPACE_GID" "$OUTPUT/identity.env"; fi

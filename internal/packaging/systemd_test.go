@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -146,6 +147,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 		}
 		if info.Mode().Perm() != 0640 {
 			t.Fatalf("%s mode = %v", name, info.Mode().Perm())
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Gid != uint32(os.Getgid()) {
+			t.Fatalf("%s group does not match workspace group", name)
 		}
 	}
 }
