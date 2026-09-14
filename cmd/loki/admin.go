@@ -18,7 +18,7 @@ import (
 
 func runAdministration(args []string, stdout, stderr io.Writer) int {
 	uid := uint32(0)
-	return executeAdministration(args, rpc.Client{Socket: "/run/loki/runtime/control.sock", ExpectedUID: &uid}, stdout, stderr)
+	return executeAdministration(args, rpc.Client{Socket: "/run/loki-go/runtime/control.sock", ExpectedUID: &uid}, stdout, stderr)
 }
 
 func executeAdministration(args []string, client service.RuntimeCaller, stdout, stderr io.Writer) int {
@@ -60,7 +60,7 @@ func executeAdministrationInput(args []string, client service.RuntimeCaller, rea
 	var result json.RawMessage
 	if request["operation"] == "stage_env" {
 		var staged map[string]any
-		staged, err = source.Stage("/var/lib/loki/runtime/inbox")
+		staged, err = source.Stage("/var/lib/loki-go/runtime/inbox")
 		if err == nil {
 			result, err = json.Marshal(staged)
 		}

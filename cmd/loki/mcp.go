@@ -45,10 +45,10 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 func runMCP(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "/etc/loki/config.toml", "Loki TOML configuration")
+	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
 	layoutPath := flags.String("layout", "", "administrator-owned MCP JSON layout")
-	tokenPath := flags.String("token-file", "/etc/loki/token", "MCP bearer token file")
-	jwksPath := flags.String("jwks-file", "/etc/loki/cloudflare-jwks.json", "Cloudflare verification keys")
+	tokenPath := flags.String("token-file", "/etc/loki-go/token", "MCP bearer token file")
+	jwksPath := flags.String("jwks-file", "/etc/loki-go/cloudflare-jwks.json", "Cloudflare verification keys")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

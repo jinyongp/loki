@@ -105,7 +105,7 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	format := configValue("gpg.format")
 	required := strings.ToLower(configValue("commit.gpgsign")) == "true"
 	publicKey := exists("/home/runner/.ssh/id_ed25519.pub")
-	agent := socketExists("/run/loki/signing/agent.sock")
+	agent := socketExists("/run/loki-go/signing/agent.sock")
 	var signingFormat any
 	if format != "" {
 		signingFormat = format

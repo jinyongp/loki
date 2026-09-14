@@ -15,8 +15,8 @@ import (
 func runJWKSRefresh(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("jwks-refresh", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "/etc/loki/config.toml", "Loki TOML configuration")
-	output := flags.String("output", "/etc/loki/cloudflare-jwks.json", "JWKS output file")
+	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
+	output := flags.String("output", "/etc/loki-go/cloudflare-jwks.json", "JWKS output file")
 	gid := flags.Int("gid", -1, "workspace group ID")
 	if err := flags.Parse(args); err != nil {
 		return 2
