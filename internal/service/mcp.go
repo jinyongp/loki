@@ -109,7 +109,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		err := runtimeDecode(ctx, options.PortGuard, map[string]any{"operation": "inspect", "port": port}, &result)
 		return result, err
 	}
-	preview := &PreviewController{Store: app.Previews, Runtime: options.Runtime, Paths: app.files.Policy, Inspect: inspect}
+	preview := &PreviewController{Store: app.Previews, Runtime: options.Runtime, Inspect: inspect}
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.PortAllowed)
 	}

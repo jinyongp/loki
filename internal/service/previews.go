@@ -8,25 +8,20 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/artifacts"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/policy"
 	"loki/internal/previews"
 )
 
 type PreviewController struct {
-	Store        *previews.Store
-	Runtime      RuntimeCaller
-	Paths        *policy.Workspace
-	Inspect      func(context.Context, int) (map[string]any, error)
-	ReadyTimeout time.Duration
+	Store   *previews.Store
+	Runtime RuntimeCaller
+	Inspect func(context.Context, int) (map[string]any, error)
 }
 type previewRequest struct {
 	Action      string
@@ -34,9 +29,6 @@ type previewRequest struct {
 	Routes      *map[string]int
 	Environment map[string]string `json:"environment_routes"`
 	TTL         int               `json:"ttl_seconds"`
-	Profile     *string
-	ActionName  *string `json:"action_name"`
-	CWD         *string
 }
 
 func runtimeDecode(ctx context.Context, client RuntimeCaller, request any, out any) error {
@@ -76,7 +68,7 @@ func rejectLoopbacks(listener map[string]any) error {
 		return nil
 	}
 	if err != nil {
-		return fault.Error("PREVIEW_ENV_UNREADABLE: use preview_publish action=action")
+		return fault.Error("PREVIEW_ENV_UNREADABLE: publish explicit public routes with action=stack")
 	}
 	for _, entry := range strings.Split(string(data), "\x00") {
 		name, value, _ := strings.Cut(entry, "=")
@@ -89,7 +81,7 @@ func rejectLoopbacks(listener map[string]any) error {
 		}
 		switch u.Hostname() {
 		case "127.0.0.1", "localhost", "::1", "0.0.0.0":
-			return fault.Error("PREVIEW_LOCAL_URL: use preview_publish action=action with public route mappings")
+			return fault.Error("PREVIEW_LOCAL_URL: publish explicit public routes with action=stack")
 		}
 	}
 	return nil
@@ -100,9 +92,6 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 	}
 	if r.TTL < 60 || r.TTL > 86400 {
 		return nil, fault.Error("preview lifetime must be between 60 and 86400 seconds")
-	}
-	if r.Action == "action" {
-		return c.run(ctx, r)
 	}
 	var routes map[string]int
 	switch r.Action {
@@ -119,7 +108,7 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 			return nil, err
 		}
 	default:
-		return nil, fault.Error("preview_publish action must be server, stack, or action")
+		return nil, fault.Error("preview_publish action must be server or stack")
 	}
 	if _, err := previews.Normalize(routes); err != nil {
 		return nil, err
@@ -146,141 +135,6 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 		command = "unknown"
 	}
 	return c.Store.Publish(routes, cwd, command, r.TTL)
-}
-func (c *PreviewController) run(ctx context.Context, r previewRequest) (result map[string]any, err error) {
-	profile, err := mcpserver.Require(r.Profile, "profile")
-	if err != nil {
-		return nil, err
-	}
-	action, err := mcpserver.Require(r.ActionName, "action_name")
-	if err != nil {
-		return nil, err
-	}
-	if r.Routes != nil {
-		if _, ok := (*r.Routes)["/"]; ok {
-			return nil, fault.Error("the registered action owns the preview root route")
-		}
-	}
-	cwd := "."
-	if r.CWD != nil {
-		cwd = *r.CWD
-	}
-	if c.Paths != nil {
-		cwd, err = relativeCWD(c.Paths, cwd)
-		if err != nil {
-			return nil, err
-		}
-	}
-	var prepared struct {
-		Token       string `json:"launch_token"`
-		Port        int
-		Backend     map[string]int    `json:"backend_routes"`
-		Environment map[string]string `json:"environment_routes"`
-		Suffixes    map[string]string `json:"environment_suffixes"`
-		Required    []string          `json:"required_environment"`
-	}
-	base := map[string]any{"operation": "prepare_action", "profile": profile, "action_name": action, "cwd": cwd}
-	if err = runtimeDecode(ctx, c.Runtime, base, &prepared); err != nil {
-		return nil, err
-	}
-	if prepared.Token == "" || prepared.Port < 1024 || prepared.Port > 65535 {
-		return nil, fault.Error("invalid prepared action")
-	}
-	routes := map[string]int{}
-	for k, v := range prepared.Backend {
-		routes[k] = v
-	}
-	if r.Routes != nil {
-		for k, v := range *r.Routes {
-			routes[k] = v
-		}
-	}
-	environment := map[string]string{}
-	for k, v := range prepared.Environment {
-		environment[k] = v
-	}
-	for k, v := range r.Environment {
-		environment[k] = v
-	}
-	missing := []string{}
-	for _, name := range prepared.Required {
-		if _, ok := environment[name]; !ok {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return nil, fault.Error("PREVIEW_MAPPING_REQUIRED: " + strings.Join(missing, ", "))
-	}
-	for _, port := range routes {
-		if port == prepared.Port {
-			return nil, fault.Error("allocated root port conflicts with a preview backend")
-		}
-		if _, err = c.listener(ctx, port); err != nil {
-			return nil, err
-		}
-	}
-	routes["/"] = prepared.Port
-	preview, err := c.Store.Publish(routes, filepath.Join("/workspace", cwd), profile+"/"+action, r.TTL)
-	if err != nil {
-		return nil, err
-	}
-	id := preview["share_id"].(string)
-	sessionID := ""
-	completed := false
-	defer func() {
-		if !completed {
-			c.Store.Revoke(id)
-			if sessionID != "" {
-				cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_, _ = c.Runtime.Call(cleanup, map[string]any{"operation": "stop_process", "session_id": sessionID})
-			}
-		}
-	}()
-	public := map[string]string{}
-	for name, prefix := range environment {
-		if _, ok := routes[prefix]; !ok {
-			return nil, fault.Error("preview environment route is invalid")
-		}
-		value := preview["url"].(string)
-		if prefix != "/" {
-			value += prefix
-		}
-		public[name] = value + prepared.Suffixes[name]
-	}
-	base["operation"] = "run_action"
-	base["launch_token"] = prepared.Token
-	base["public_environment"] = public
-	if err = runtimeDecode(ctx, c.Runtime, base, &result); err != nil {
-		return nil, err
-	}
-	sessionID, _ = result["session_id"].(string)
-	if sessionID == "" {
-		return nil, fault.Error("invalid action session response")
-	}
-	timeout := c.ReadyTimeout
-	if timeout == 0 {
-		timeout = 20 * time.Second
-	}
-	ready, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	for !c.PortAllowed(ready, prepared.Port) {
-		select {
-		case <-ready.Done():
-			return nil, fault.Error("PREVIEW_NOT_READY: frontend did not start listening")
-		case <-time.After(200 * time.Millisecond):
-		}
-	}
-	if err = ctx.Err(); err != nil {
-		return nil, err
-	}
-	for _, key := range []string{"share_id", "url", "routes", "expires_at", "display_markdown"} {
-		result[key] = preview[key]
-	}
-	result["public_environment"] = public
-	completed = true
-	return result, nil
 }
 
 func PreviewHandlers(c *PreviewController, artifactsStore *artifacts.Store) map[string]mcpserver.Handler {
