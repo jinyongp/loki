@@ -51,6 +51,18 @@ func TestBrokerRejectsPrivateOutputAndUnapprovedInjection(t *testing.T) {
 	}
 }
 
+func TestBrokerRejectsProcessWithoutEncryptedSecrets(t *testing.T) {
+	client, log := fakeClient(t)
+	broker := Broker{Client: client, Secrets: testVault(t)}
+	input := json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)
+	if _, err := broker.Call(context.Background(), "process start", input, "", nil); err == nil || !strings.Contains(err.Error(), "requires selected") {
+		t.Fatalf("empty-secret error = %v", err)
+	}
+	if _, err := os.Stat(log); !os.IsNotExist(err) {
+		t.Fatal("devtools ran without encrypted secrets")
+	}
+}
+
 func TestMergeEnvironmentOverridesAndSorts(t *testing.T) {
 	got, err := mergeEnvironment([]string{"Z=old", "A=one"}, []string{"Z=new"})
 	if err != nil {

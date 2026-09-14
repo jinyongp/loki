@@ -24,7 +24,7 @@ func (b Broker) Call(ctx context.Context, name string, input json.RawMessage, pr
 		return nil, errors.New("devtools client is unavailable")
 	}
 	if len(secretNames) == 0 {
-		return b.Client.Call(ctx, name, input)
+		return nil, errors.New("devtools broker requires selected encrypted secrets")
 	}
 	if name != "process start" && name != "process restart" {
 		return nil, errors.New("secret injection is unavailable for this devtools command")
