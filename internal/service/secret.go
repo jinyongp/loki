@@ -12,14 +12,13 @@ import (
 )
 
 type secretRequest struct {
-	Action     string  `json:"action"`
-	Profile    *string `json:"profile"`
-	Secret     *string `json:"secret"`
-	ActionName *string `json:"action_name"`
-	ImportID   *string `json:"import_id"`
-	Value      *string `json:"value"`
-	Bytes      int     `json:"bytes"`
-	Limit      int     `json:"limit"`
+	Action   string  `json:"action"`
+	Profile  *string `json:"profile"`
+	Secret   *string `json:"secret"`
+	ImportID *string `json:"import_id"`
+	Value    *string `json:"value"`
+	Bytes    int     `json:"bytes"`
+	Limit    int     `json:"limit"`
 }
 
 func SecretHandlers(client RuntimeCaller) map[string]mcpserver.Handler {
@@ -102,15 +101,8 @@ func SecretHandlers(client RuntimeCaller) map[string]mcpserver.Handler {
 				}
 				request["operation"] = "secret_remove"
 				request["secret"] = key
-			case "materialization":
-				key, err := mcpserver.Require(r.ActionName, "action_name")
-				if err != nil {
-					return nil, err
-				}
-				request["operation"] = "clear_action_materialization"
-				request["action_name"] = key
 			default:
-				return nil, fault.Error("secret_delete action must be secret, profile, or materialization")
+				return nil, fault.Error("secret_delete action must be secret or profile")
 			}
 			return runtimeObject(ctx, client, request)
 		}),
