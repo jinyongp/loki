@@ -21,27 +21,58 @@ type Handler func(context.Context, map[string]any) (*mcp.CallToolResult, error)
 // New refuses incomplete or misspelled registrations before accepting requests.
 // The captured catalog is the single source for public schemas and metadata.
 func New(handlers map[string]Handler) (*mcp.Server, error) {
-	return newServer(handlers, nil)
+	definitions, err := baselineDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	return newServer(definitions, handlers, nil)
 }
 
 // NewConfigured derives widget origins from the active service configuration.
 func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
+	definitions, err := baselineDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	return NewConfiguredTools(definitions, handlers, origins)
+}
+
+// NewTools creates a server from an explicit reviewed tool catalog while
+// retaining Loki's initialize metadata and resources.
+func NewTools(definitions []*mcp.Tool, handlers map[string]Handler) (*mcp.Server, error) {
+	return newServer(definitions, handlers, nil)
+}
+
+// NewConfiguredTools applies configured resource origins to an explicit tool catalog.
+func NewConfiguredTools(definitions []*mcp.Tool, handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
 	if err := origins.validate(); err != nil {
 		return nil, err
 	}
-	return newServer(handlers, &origins)
+	return newServer(definitions, handlers, &origins)
 }
-func newServer(handlers map[string]Handler, origins *ResourceOrigins) (*mcp.Server, error) {
+
+func baselineDefinitions() ([]*mcp.Tool, error) {
 	baseline, err := contract.Baseline()
 	if err != nil {
 		return nil, err
 	}
-	definitions, err := baseline.Definitions()
-	if err != nil {
-		return nil, err
-	}
+	return baseline.Definitions()
+}
+
+func newServer(definitions []*mcp.Tool, handlers map[string]Handler, origins *ResourceOrigins) (*mcp.Server, error) {
 	if len(handlers) != len(definitions) {
 		return nil, fmt.Errorf("need %d handlers, got %d", len(definitions), len(handlers))
+	}
+	seen := make(map[string]bool, len(definitions))
+	for _, definition := range definitions {
+		if definition == nil || definition.Name == "" || seen[definition.Name] {
+			return nil, errors.New("tool definitions contain an empty or duplicate name")
+		}
+		seen[definition.Name] = true
+	}
+	baseline, err := contract.Baseline()
+	if err != nil {
+		return nil, err
 	}
 	var init mcp.InitializeResult
 	if err = json.Unmarshal(baseline.Initialize, &init); err != nil {
