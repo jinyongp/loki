@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"loki/internal/audit"
-	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
@@ -18,16 +17,16 @@ import (
 
 // RuntimeOptions is administrator-owned role configuration, never tool input.
 type RuntimeOptions struct {
-	Socket, StateDirectory, InboxDirectory, AuditPath  string
-	AgentUID                                           uint32
-	SocketGID                                          int
-	DevtoolsBinary, DevtoolsHome                       string
-	Workspace, Runner, DockerSocket, SnapshotDirectory string
-	RunnerUID, RunnerGID                               uint32
+	Socket, StateDirectory, InboxDirectory, AuditPath string
+	AgentUID                                          uint32
+	SocketGID                                         int
+	DevtoolsBinary, DevtoolsHome                      string
+	Workspace, DockerSocket, SnapshotDirectory        string
+	RunnerUID, RunnerGID                              uint32
 }
 
-func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready func() error, onAuditError func(error)) error {
-	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.DevtoolsHome, o.Workspace, o.Runner, o.DockerSocket, o.SnapshotDirectory} {
+func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAuditError func(error)) error {
+	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.DevtoolsHome, o.Workspace, o.DockerSocket, o.SnapshotDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
 		}

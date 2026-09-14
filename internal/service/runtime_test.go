@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/config"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )
@@ -42,13 +41,9 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Workspace: workspace, Runner: "/usr/bin/false", DockerSocket: "/run/docker.sock", SnapshotDirectory: filepath.Join(root, "snapshots"), RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: filepath.Join(root, "snapshots"), RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
 	controller := secret.Controller{StateDirectory: o.StateDirectory}
 	if _, err := controller.Initialize(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	c, err := config.Parse(nil)
-	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -56,7 +51,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunRuntime(ctx, c, o, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
+		done <- RunRuntime(ctx, o, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
 	}()
 	select {
 	case <-ready:
@@ -91,19 +86,19 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if len(log["records"].([]any)) < 3 {
 		t.Fatal(log)
 	}
-	if _, err = client.Call(t.Context(), map[string]any{"operation": "devtools_call", "command": "run", "input": map[string]any{}}); err == nil {
+	if _, err := client.Call(t.Context(), map[string]any{"operation": "devtools_call", "command": "run", "input": map[string]any{}}); err == nil {
 		t.Fatal("runtime did not install the devtools broker operation")
 	}
 	cancel()
 	select {
-	case err = <-done:
+	case err := <-done:
 		if err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("shutdown timeout")
 	}
-	if _, err = os.Lstat(socket); !os.IsNotExist(err) {
+	if _, err := os.Lstat(socket); !os.IsNotExist(err) {
 		t.Fatal("runtime socket retained", err)
 	}
 }
