@@ -27,7 +27,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "config", "policy":
 			return runSettings(args, stdout, stderr)
-		case "state", "secret":
+		case "secret":
 			return runAdministration(args, stdout, stderr)
 		}
 	}
