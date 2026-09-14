@@ -42,6 +42,7 @@ type Snapshot struct {
 	Data     json.RawMessage `json:"data"`
 }
 type Validator func(json.RawMessage) error
+type Transformer func(json.RawMessage) (json.RawMessage, error)
 type Store struct {
 	Dir      string
 	Validate Validator
@@ -363,6 +364,21 @@ func (s Store) Update(ctx context.Context, expected *uint64, mutate func(json.Ra
 // ImportLegacy creates a distinct candidate directory. It never changes the
 // Python source. The source must be stopped or an isolated backup copy.
 func ImportLegacy(ctx context.Context, source, destination string, validator Validator) error {
+	return ImportLegacyWithTransform(ctx, source, destination, validator, nil)
+}
+
+func legacyFingerprint(key, encoded []byte) string {
+	hash := sha256.New()
+	hash.Write([]byte("loki-legacy-v1\x00"))
+	hash.Write(key)
+	hash.Write([]byte{0})
+	hash.Write(encoded)
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// ImportLegacyWithTransform decrypts an isolated Python v1 copy, optionally
+// converts its document, and writes a separately encrypted Go v2 vault.
+func ImportLegacyWithTransform(ctx context.Context, source, destination string, validator Validator, transform Transformer) error {
 	source, err := filepath.Abs(source)
 	if err != nil {
 		return err
@@ -389,13 +405,18 @@ func ImportLegacy(ctx context.Context, source, destination string, validator Val
 	if version != 1 {
 		return errors.New("migration source must be Python version 1")
 	}
+	if transform != nil {
+		snapshot.Data, err = transform(bytes.Clone(snapshot.Data))
+		if err != nil {
+			return err
+		}
+	}
 	if validator != nil {
 		if err = validator(snapshot.Data); err != nil {
 			return err
 		}
 	}
-	hash := sha256.Sum256(encoded)
-	fingerprint := hex.EncodeToString(hash[:])
+	fingerprint := legacyFingerprint(key, encoded)
 	if _, err = os.Lstat(destination); err == nil {
 		marker, err := readPrivate(filepath.Join(destination, "migration.json"), 4096)
 		if err != nil {
@@ -462,6 +483,80 @@ func ImportLegacy(ctx context.Context, source, destination string, validator Val
 		return err
 	}
 	// Linux renameat2 guarantees a concurrent migration cannot replace a target.
+	if err = unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, destination, unix.RENAME_NOREPLACE); err != nil {
+		return err
+	}
+	dir, err := os.Open(parent)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
+
+// RestoreLegacy recreates a Python v1 vault from a migration's immutable
+// backup. It never changes the migrated vault or its embedded backup.
+func RestoreLegacy(ctx context.Context, migration, destination string) error {
+	migration, err := filepath.Abs(migration)
+	if err != nil {
+		return err
+	}
+	destination, err = filepath.Abs(destination)
+	if err != nil {
+		return err
+	}
+	if migration == destination {
+		return errors.New("restore requires a separate destination")
+	}
+	marker, err := readPrivate(filepath.Join(migration, "migration.json"), 4096)
+	if err != nil {
+		return err
+	}
+	var metadata struct {
+		SourceSHA256 string `json:"source_sha256"`
+	}
+	if json.Unmarshal(marker, &metadata) != nil || len(metadata.SourceSHA256) != sha256.Size*2 {
+		return errors.New("migration marker is invalid")
+	}
+	legacy := filepath.Join(migration, "legacy")
+	key, err := readPrivate(filepath.Join(legacy, "master.key"), 32)
+	if err != nil {
+		return err
+	}
+	encoded, err := readPrivate(filepath.Join(legacy, "store.json"), maxBytes)
+	if err != nil {
+		return err
+	}
+	if legacyFingerprint(key, encoded) != metadata.SourceSHA256 {
+		return errors.New("legacy backup fingerprint differs from migration marker")
+	}
+	if _, version, decryptErr := decrypt(key, encoded); decryptErr != nil || version != 1 {
+		return ErrDecrypt
+	}
+	if _, err = os.Lstat(destination); err == nil {
+		existingKey, keyErr := readPrivate(filepath.Join(destination, "master.key"), 32)
+		existingStore, storeErr := readPrivate(filepath.Join(destination, "store.json"), maxBytes)
+		if keyErr == nil && storeErr == nil && legacyFingerprint(existingKey, existingStore) == metadata.SourceSHA256 {
+			return nil
+		}
+		return errors.New("restore destination already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	parent := filepath.Dir(destination)
+	stage, err := os.MkdirTemp(parent, ".loki-restore-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	for name, data := range map[string][]byte{"master.key": key, "store.json": encoded} {
+		if err = AtomicWrite(filepath.Join(stage, name), data, false); err != nil {
+			return err
+		}
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
 	if err = unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, destination, unix.RENAME_NOREPLACE); err != nil {
 		return err
 	}

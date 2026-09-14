@@ -267,6 +267,108 @@ func TestMigrationRejectsCorruptionExistingAndWeakPermissions(t *testing.T) {
 	}
 }
 
+func TestLegacyMigrationTransformsAndRestoresWithoutChangingSource(t *testing.T) {
+	key, encoded, _ := legacyFixture(t)
+	parent := t.TempDir()
+	source := filepath.Join(parent, "python-copy")
+	target := filepath.Join(parent, "go")
+	restored := filepath.Join(parent, "restored-python")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "master.key"), key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "store.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var before unix.Stat_t
+	if err := unix.Stat(filepath.Join(source, "store.json"), &before); err != nil {
+		t.Fatal(err)
+	}
+	transform := func(json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage("{\"version\":1,\"profiles\":{\"web\":{\"secrets\":{\"TOKEN\":\"synthetic\"}}}}"), nil
+	}
+	validator := func(data json.RawMessage) error {
+		if !bytes.Contains(data, []byte("\"profiles\"")) {
+			return errors.New("profiles missing")
+		}
+		return nil
+	}
+	if err := ImportLegacyWithTransform(t.Context(), source, target, validator, transform); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := (Store{Dir: target, Validate: validator}).Load(t.Context())
+	if err != nil || !bytes.Contains(loaded.Data, []byte("synthetic")) {
+		t.Fatal("transformed readback failed:", err)
+	}
+	if err = RestoreLegacy(t.Context(), target, restored); err != nil {
+		t.Fatal(err)
+	}
+	if err = RestoreLegacy(t.Context(), target, restored); err != nil {
+		t.Fatal("idempotent restore:", err)
+	}
+	for _, name := range []string{"master.key", "store.json"} {
+		want, readErr := os.ReadFile(filepath.Join(source, name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		got, readErr := os.ReadFile(filepath.Join(restored, name))
+		if readErr != nil || !bytes.Equal(got, want) {
+			t.Fatalf("restored %s differs: %v", name, readErr)
+		}
+	}
+	var after unix.Stat_t
+	if err = unix.Stat(filepath.Join(source, "store.json"), &after); err != nil {
+		t.Fatal(err)
+	}
+	if before.Ino != after.Ino {
+		t.Fatal("migration replaced source inode")
+	}
+	actual, err := os.ReadFile(filepath.Join(source, "store.json"))
+	if err != nil || !bytes.Equal(actual, encoded) {
+		t.Fatal("migration changed source digest")
+	}
+}
+
+func TestLegacyMigrationCancellationAndCorruptRestoreAreAtomic(t *testing.T) {
+	key, encoded, _ := legacyFixture(t)
+	parent := t.TempDir()
+	source := filepath.Join(parent, "python-copy")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "master.key"), key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "store.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	cancelled := filepath.Join(parent, "cancelled")
+	if err := ImportLegacy(ctx, source, cancelled, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled migration = %v", err)
+	}
+	if _, err := os.Lstat(cancelled); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("cancelled migration published a destination")
+	}
+	migration := filepath.Join(parent, "migration")
+	if err := ImportLegacy(t.Context(), source, migration, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(migration, "legacy", "store.json"), []byte("corrupt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	restored := filepath.Join(parent, "restored")
+	if err := RestoreLegacy(t.Context(), migration, restored); err == nil {
+		t.Fatal("corrupt backup was restored")
+	}
+	if _, err := os.Lstat(restored); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("failed restore published a destination")
+	}
+}
+
 func TestAtomicCreatePreservesExisting(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state")
 	if err := AtomicWrite(path, []byte("old"), false); err != nil {
