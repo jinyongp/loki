@@ -1,12 +1,15 @@
 package packaging
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"loki/internal/service"
 )
 
 func waitScript(t *testing.T) string {
@@ -16,6 +19,53 @@ func waitScript(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
+	root := t.TempDir()
+	templates, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "render-loki-go-layouts.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(script, templates, root, "1001", "1002", "1003", "1004")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("render layouts: %v %s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "runtime.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runtime service.RuntimeOptions
+	if err = json.Unmarshal(data, &runtime); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.RunnerUID != 1001 || runtime.RunnerGID != 1002 || runtime.SocketGID != 1003 {
+		t.Fatalf("runtime identities = %#v", runtime)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mcp map[string]any
+	if err = json.Unmarshal(data, &mcp); err != nil {
+		t.Fatal(err)
+	}
+	if mcp["PortGuardUID"] != float64(1001) || mcp["BrowserUID"] != float64(1004) {
+		t.Fatalf("MCP identities = %#v", mcp)
+	}
+	for _, name := range []string{"runtime.json", "mcp.json", "identity.env"} {
+		info, err := os.Stat(filepath.Join(root, name))
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		if info.Mode().Perm() != 0640 {
+			t.Fatalf("%s mode = %v", name, info.Mode().Perm())
+		}
+	}
 }
 
 func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
