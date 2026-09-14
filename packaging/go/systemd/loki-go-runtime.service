@@ -1,5 +1,6 @@
 [Unit]
 Description=Loki Go runtime and encrypted secret broker
+PartOf=loki-go.target
 After=local-fs.target systemd-tmpfiles-setup.service loki-go-signing-agent.service
 Wants=loki-go-signing-agent.service
 Before=loki-go-mcp.service
@@ -41,6 +42,3 @@ RestrictRealtime=yes
 TasksMax=256
 MemoryMax=2G
 TimeoutStopSec=10
-
-[Install]
-WantedBy=multi-user.target

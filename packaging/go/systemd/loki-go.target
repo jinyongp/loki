@@ -1,0 +1,8 @@
+[Unit]
+Description=Loki Go service suite
+Requires=loki-go-mcp.service
+Wants=loki-go-egress-proxy.service
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target

@@ -189,6 +189,41 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	}
 }
 
+func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "systemd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := os.ReadFile(filepath.Join(root, "loki-go.target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Requires=loki-go-mcp.service", "WantedBy=multi-user.target"} {
+		if !strings.Contains(string(target), want) {
+			t.Fatalf("suite target does not contain %q", want)
+		}
+	}
+	entries, err := filepath.Glob(filepath.Join(root, "*.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("service suite is empty")
+	}
+	for _, path := range entries {
+		unit, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(unit), "PartOf=loki-go.target\n") {
+			t.Fatalf("%s does not follow suite lifecycle", filepath.Base(path))
+		}
+		if strings.Contains(string(unit), "WantedBy=multi-user.target") {
+			t.Fatalf("%s is independently enabled at boot", filepath.Base(path))
+		}
+	}
+}
+
 func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

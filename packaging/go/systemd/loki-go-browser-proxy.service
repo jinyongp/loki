@@ -1,5 +1,6 @@
 [Unit]
 Description=Loki Go browser network proxy
+PartOf=loki-go.target
 After=network.target loki-go-port-guard.service
 Requires=loki-go-port-guard.service
 Before=loki-go-browser.service
@@ -30,6 +31,3 @@ AmbientCapabilities=
 RestrictRealtime=yes
 TasksMax=128
 MemoryMax=256M
-
-[Install]
-WantedBy=multi-user.target

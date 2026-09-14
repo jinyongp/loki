@@ -1,5 +1,6 @@
 [Unit]
 Description=Loki Go isolated browser
+PartOf=loki-go.target
 After=network.target loki-go-browser-proxy.service
 Requires=loki-go-browser-proxy.service
 Before=loki-go-mcp.service
@@ -40,6 +41,3 @@ RestrictRealtime=yes
 TasksMax=512
 MemoryMax=2G
 TimeoutStopSec=15
-
-[Install]
-WantedBy=multi-user.target

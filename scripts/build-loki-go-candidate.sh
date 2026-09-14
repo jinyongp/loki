@@ -62,7 +62,7 @@ install -m 0644 "$SOURCE_DIR/packaging/go/egress-policy.json" "$ROOT/usr/share/d
 install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$ROOT/usr/share/doc/loki/toolchain-manifest.json"
 install -m 0644 "$CATALOG" "$ROOT/usr/share/doc/loki/devtools-catalog.json"
 cp -a "$TOOLCHAIN_BUNDLE/." "$ROOT/usr/share/loki/toolchain/"
-install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
+install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$SOURCE_DIR/packaging/go/systemd/"*.target "$ROOT/usr/lib/systemd/system/"
 install -m 0644 "$SOURCE_DIR/packaging/go/tmpfiles.d/loki-go.conf" "$ROOT/usr/lib/tmpfiles.d/loki-go.conf"
 ln -s ../../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
 ln -s ../../../opt/loki/libexec/devtools "$ROOT/usr/local/bin/devtools"

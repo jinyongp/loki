@@ -1,5 +1,6 @@
 [Unit]
 Description=Loki Go workspace port guard
+PartOf=loki-go.target
 After=local-fs.target
 Before=loki-go-mcp.service loki-go-browser-proxy.service
 
@@ -34,6 +35,3 @@ AmbientCapabilities=
 RestrictRealtime=yes
 TasksMax=32
 MemoryMax=128M
-
-[Install]
-WantedBy=multi-user.target

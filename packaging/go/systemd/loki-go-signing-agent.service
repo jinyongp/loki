@@ -1,5 +1,6 @@
 [Unit]
 Description=Loki Go isolated Git signing agent
+PartOf=loki-go.target
 Before=loki-go-runtime.service loki-go-mcp.service
 
 [Service]
@@ -34,6 +35,3 @@ RestrictRealtime=yes
 TasksMax=32
 MemoryMax=64M
 TimeoutStopSec=5
-
-[Install]
-WantedBy=multi-user.target
