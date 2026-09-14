@@ -32,8 +32,12 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		return 2
 	}
 	var policy egress.Policy
-	if err := daemon.ReadJSON(*policyPath, &policy); err != nil || policy.Validate() != nil {
-		fmt.Fprintln(stderr, "invalid egress policy")
+	if err := daemon.ReadJSON(*policyPath, &policy); err != nil {
+		fmt.Fprintf(stderr, "invalid egress policy: %v\n", err)
+		return 2
+	}
+	if err := policy.Validate(); err != nil {
+		fmt.Fprintf(stderr, "invalid egress policy: %v\n", err)
 		return 2
 	}
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: *port})

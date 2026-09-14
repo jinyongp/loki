@@ -28,6 +28,7 @@ func TestRepositoryContractIsValid(t *testing.T) {
 		"runtime-state": "/var/lib/loki-go/runtime",
 		"signing-state": "/var/lib/loki-go/signing",
 		"runner-state":  "/var/lib/loki-go/runner",
+		"snapshots":     "/var/lib/loki-go/snapshots",
 		"runner-cache":  "/var/cache/loki-go/runner",
 		"runner-temp":   "/var/tmp/loki-go/runner",
 		"workspace":     "/workspace",
@@ -36,7 +37,7 @@ func TestRepositoryContractIsValid(t *testing.T) {
 			t.Fatalf("%s path = %q, want %q", name, got, want)
 		}
 	}
-	if got := contract.Environment["PLAYWRIGHT_BROWSERS_PATH"]; got != "/var/cache/loki-go/runner/playwright" {
+	if got := contract.Environment["PLAYWRIGHT_BROWSERS_PATH"]; got != "/var/cache/loki-go/runner-playwright" {
 		t.Fatalf("Playwright cache = %q", got)
 	}
 	if contract.NetworkProfiles["dependency-install"].AllowSecrets {
@@ -58,16 +59,16 @@ func TestEnvironmentListIsClosedAndStable(t *testing.T) {
 	}
 	for _, want := range []string{
 		"HOME=/home/runner",
-		"GH_CONFIG_DIR=/var/lib/loki-go/runner/config/gh",
+		"GH_CONFIG_DIR=/var/lib/loki-go/runner-gh-config",
 		"XDG_CACHE_HOME=/var/cache/loki-go/runner",
-		"NPM_CONFIG_CACHE=/var/cache/loki-go/runner/npm",
-		"npm_config_store_dir=/var/cache/loki-go/runner/pnpm",
-		"PLAYWRIGHT_BROWSERS_PATH=/var/cache/loki-go/runner/playwright",
-		"GOCACHE=/var/cache/loki-go/runner/go-build",
-		"GOMODCACHE=/var/cache/loki-go/runner/go-mod",
-		"PIP_CACHE_DIR=/var/cache/loki-go/runner/pip",
+		"NPM_CONFIG_CACHE=/var/cache/loki-go/runner-npm",
+		"npm_config_store_dir=/var/cache/loki-go/runner-pnpm",
+		"PLAYWRIGHT_BROWSERS_PATH=/var/cache/loki-go/runner-playwright",
+		"GOCACHE=/var/cache/loki-go/runner-go-build",
+		"GOMODCACHE=/var/cache/loki-go/runner-go-mod",
+		"PIP_CACHE_DIR=/var/cache/loki-go/runner-pip",
 		"TMPDIR=/var/tmp/loki-go/runner",
-		"GIT_CONFIG_GLOBAL=/home/runner/.gitconfig",
+		"GIT_CONFIG_GLOBAL=/etc/loki-go/gitconfig",
 	} {
 		if !slices.Contains(environment, want) {
 			t.Fatalf("environment does not contain %q: %#v", want, environment)

@@ -24,12 +24,12 @@ func TestRunnerExecUsesOnlyContractEnvironment(t *testing.T) {
 	}
 	for _, want := range []string{
 		"HOME=/home/runner",
-		"GH_CONFIG_DIR=/var/lib/loki-go/runner/config/gh",
+		"GH_CONFIG_DIR=/var/lib/loki-go/runner-gh-config",
 		"XDG_CACHE_HOME=/var/cache/loki-go/runner",
-		"npm_config_store_dir=/var/cache/loki-go/runner/pnpm",
-		"GOMODCACHE=/var/cache/loki-go/runner/go-mod",
+		"npm_config_store_dir=/var/cache/loki-go/runner-pnpm",
+		"GOMODCACHE=/var/cache/loki-go/runner-go-mod",
 		"TMPDIR=/var/tmp/loki-go/runner",
-		"GIT_CONFIG_GLOBAL=/home/runner/.gitconfig",
+		"GIT_CONFIG_GLOBAL=/etc/loki-go/gitconfig",
 	} {
 		if !slices.Contains(plan.environment, want) {
 			t.Fatalf("runner environment does not contain %q: %#v", want, plan.environment)

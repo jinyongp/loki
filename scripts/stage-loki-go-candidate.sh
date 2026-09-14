@@ -41,22 +41,22 @@ install -d -m 0700 "$TARGET/var/lib/loki-go/signing"
 install -d -m 0700 "$TARGET/var/lib/loki-go/browser"
 install -d -m 0700 "$TARGET/var/log/loki-go/runtime"
 install -d -m 0700 "$TARGET/var/log/loki-go/mcp"
-install -d -g "$4" -m 0770 "$TARGET/srv/workspace/loki"
+install -d -o "$2" -g "$4" -m 2770 "$TARGET/srv/workspace/loki"
 install -d -o "$5" -g "$4" -m 0770 "$TARGET/srv/workspace/loki/.loki-go/browser-downloads"
 install -d -o "$2" -g "$3" -m 0700 \
   "$TARGET/var/lib/loki-go/runner" \
-  "$TARGET/var/lib/loki-go/runner/config" \
-  "$TARGET/var/lib/loki-go/runner/config/gh" \
-  "$TARGET/var/lib/loki-go/runner/data" \
-  "$TARGET/var/lib/loki-go/runner/state" \
-  "$TARGET/var/lib/loki-go/runner/snapshots" \
+  "$TARGET/var/lib/loki-go/runner-config" \
+  "$TARGET/var/lib/loki-go/runner-gh-config" \
+  "$TARGET/var/lib/loki-go/runner-data" \
+  "$TARGET/var/lib/loki-go/runner-xdg-state" \
+  "$TARGET/var/lib/loki-go/snapshots" \
   "$TARGET/var/cache/loki-go/runner" \
-  "$TARGET/var/cache/loki-go/runner/npm" \
-  "$TARGET/var/cache/loki-go/runner/pnpm" \
-  "$TARGET/var/cache/loki-go/runner/playwright" \
-  "$TARGET/var/cache/loki-go/runner/go-build" \
-  "$TARGET/var/cache/loki-go/runner/go-mod" \
-  "$TARGET/var/cache/loki-go/runner/pip" \
+  "$TARGET/var/cache/loki-go/runner-npm" \
+  "$TARGET/var/cache/loki-go/runner-pnpm" \
+  "$TARGET/var/cache/loki-go/runner-playwright" \
+  "$TARGET/var/cache/loki-go/runner-go-build" \
+  "$TARGET/var/cache/loki-go/runner-go-mod" \
+  "$TARGET/var/cache/loki-go/runner-pip" \
   "$TARGET/var/tmp/loki-go/runner"
 
 install -m 0640 "$TARGET/usr/share/doc/loki/config.toml" "$TARGET/etc/loki-go/config.toml"

@@ -52,7 +52,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	runnerState := contract.Directories["runner-state"].Path
 	runnerCache := contract.Directories["runner-cache"].Path
 	runnerTemp := contract.Directories["runner-temp"].Path
-	if o.SnapshotDirectory != filepath.Join(runnerState, "snapshots") {
+	if o.SnapshotDirectory != contract.Directories["snapshots"].Path {
 		return errors.New("snapshot directory does not match execution contract")
 	}
 	runnerDirectories := []string{

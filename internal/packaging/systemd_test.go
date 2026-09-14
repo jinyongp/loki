@@ -123,7 +123,7 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if runtime.Socket != "/run/loki-go/runtime/control.sock" || runtime.StateDirectory != "/var/lib/loki-go/runtime" {
 		t.Fatalf("runtime paths = %#v", runtime)
 	}
-	if runtime.ExecutionContract != "/usr/share/doc/loki/execution-contract.json" || runtime.SnapshotDirectory != "/var/lib/loki-go/runner/snapshots" {
+	if runtime.ExecutionContract != "/usr/share/doc/loki/execution-contract.json" || runtime.SnapshotDirectory != "/var/lib/loki-go/snapshots" {
 		t.Fatalf("runner paths = %#v", runtime)
 	}
 	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
@@ -244,6 +244,7 @@ func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
 	for _, want := range []string{
 		"ConditionFileIsExecutable=/opt/loki/toolchain/bin/chromium",
 		"--chrome /opt/loki/toolchain/bin/chromium",
+		"RuntimeDirectoryMode=0750",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("browser unit does not contain %q", want)

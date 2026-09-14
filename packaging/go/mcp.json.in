@@ -9,7 +9,7 @@
   "GitTemplateRoots": ["/etc/loki-go"],
   "Environment": {
     "HOME": "/home/runner",
-    "PATH": "/opt/loki/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin",
+    "PATH": "/opt/loki/toolchain/bin:/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
     "GIT_CONFIG_GLOBAL": "/etc/loki-go/gitconfig",
     "GIT_CONFIG_NOSYSTEM": "1",
     "SSH_AUTH_SOCK": "/run/loki-go/signing/agent.sock",

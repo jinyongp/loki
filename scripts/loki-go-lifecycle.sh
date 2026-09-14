@@ -45,9 +45,12 @@ require_link_or_absent() {
 
 preflight_integration() {
   require_link_or_absent "$(rooted /opt/loki)"
-  require_link_or_absent "$(rooted /usr/share/doc/loki)"
   require_link_or_absent "$(rooted /usr/local/bin/loki)"
   require_link_or_absent "$(rooted /usr/local/bin/devtools)"
+  docs=$(rooted /usr/share/doc/loki)
+  if test -e "$docs"; then
+    test -d "$docs" -a ! -L "$docs" -a -f "$docs/.loki-go-managed" || fail "$docs is occupied by an unmanaged installation"
+  fi
 }
 
 run_systemctl() {
@@ -74,6 +77,18 @@ check_identity() {
   test -z "$got" || test "$got" = "$want" || fail "$kind $name has id $got, expected $want"
 }
 
+check_id_available() {
+  name=$1
+  want=$2
+  kind=$3
+  if test "$kind" = group; then
+    existing=$(getent group "$want" 2>/dev/null | cut -d: -f1 || true)
+  else
+    existing=$(getent passwd "$want" 2>/dev/null | cut -d: -f1 || true)
+  fi
+  test -z "$existing" -o "$existing" = "$name" || fail "$kind id $want belongs to $existing"
+}
+
 ensure_identities() {
   runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4
   test "$ROOT" = / || return 0
@@ -81,6 +96,10 @@ ensure_identities() {
   check_identity runner "$runner_gid" group
   check_identity runner "$runner_uid" user
   check_identity loki-browser "$browser_uid" user
+  check_id_available workspace "$workspace_gid" group
+  check_id_available runner "$runner_gid" group
+  check_id_available runner "$runner_uid" user
+  check_id_available loki-browser "$browser_uid" user
   getent group workspace >/dev/null || groupadd --gid "$workspace_gid" workspace
   getent group runner >/dev/null || groupadd --gid "$runner_gid" runner
   getent passwd runner >/dev/null || useradd --uid "$runner_uid" --gid runner --groups workspace --home-dir /home/runner --create-home --shell /bin/bash runner
@@ -108,7 +127,10 @@ deploy_integration() {
   install -d "$(dirname "$opt")" "$(dirname "$docs")" "$(rooted /usr/local/bin)" "$(rooted /usr/local/sbin)" \
     "$(rooted /usr/lib/systemd/system)" "$(rooted /usr/lib/tmpfiles.d)"
   atomic_link "loki-go/current/opt/loki" "$opt"
-  atomic_link "../../../opt/loki-go/current/usr/share/doc/loki" "$docs"
+  install -d -m 0755 "$docs"
+  cp -a "$release/usr/share/doc/loki/." "$docs/"
+  : > "$docs/.loki-go-managed"
+  chmod 0644 "$docs/.loki-go-managed"
   atomic_link "../../../opt/loki/bin/loki" "$loki_bin"
   atomic_link "../../../opt/loki/libexec/devtools" "$devtools_bin"
   install -m 0755 "$release/opt/loki/libexec/lifecycle" "$lifecycle_bin"
@@ -139,13 +161,13 @@ prepare_state() {
   "$release/opt/loki/libexec/render-layouts" "$release/usr/share/doc/loki" "$config" "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid"
   install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" "$(rooted /var/lib/loki-go/browser)"
   install -d -o "$runner_uid" -g "$runner_gid" -m 0700 \
-    "$(rooted /var/lib/loki-go/runner)" "$(rooted /var/lib/loki-go/runner/config)" "$(rooted /var/lib/loki-go/runner/config/gh)" \
-    "$(rooted /var/lib/loki-go/runner/data)" "$(rooted /var/lib/loki-go/runner/state)" "$(rooted /var/lib/loki-go/runner/snapshots)" \
-    "$(rooted /var/cache/loki-go/runner)" "$(rooted /var/cache/loki-go/runner/npm)" "$(rooted /var/cache/loki-go/runner/pnpm)" \
-    "$(rooted /var/cache/loki-go/runner/playwright)" "$(rooted /var/cache/loki-go/runner/go-build)" "$(rooted /var/cache/loki-go/runner/go-mod)" \
-    "$(rooted /var/cache/loki-go/runner/pip)" "$(rooted /var/tmp/loki-go/runner)"
+    "$(rooted /var/lib/loki-go/runner)" "$(rooted /var/lib/loki-go/runner-config)" "$(rooted /var/lib/loki-go/runner-gh-config)" \
+    "$(rooted /var/lib/loki-go/runner-data)" "$(rooted /var/lib/loki-go/runner-xdg-state)" "$(rooted /var/lib/loki-go/snapshots)" \
+    "$(rooted /var/cache/loki-go/runner)" "$(rooted /var/cache/loki-go/runner-npm)" "$(rooted /var/cache/loki-go/runner-pnpm)" \
+    "$(rooted /var/cache/loki-go/runner-playwright)" "$(rooted /var/cache/loki-go/runner-go-build)" "$(rooted /var/cache/loki-go/runner-go-mod)" \
+    "$(rooted /var/cache/loki-go/runner-pip)" "$(rooted /var/tmp/loki-go/runner)"
   install -d -m 0700 "$(rooted /var/log/loki-go/runtime)" "$(rooted /var/log/loki-go/mcp)"
-  install -d -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki)"
+  install -d -o "$runner_uid" -g "$workspace_gid" -m 2770 "$(rooted /srv/workspace/loki)"
   install -d -o "$browser_uid" -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki/.loki-go/browser-downloads)"
   install -d -g "$workspace_gid" -m 0755 "$(rooted /srv/workspace/loki/.agents/skills)"
   cp -a "$release/srv/workspace/loki/.agents/skills/." "$(rooted /srv/workspace/loki/.agents/skills/)"
@@ -157,6 +179,24 @@ prepare_state() {
   chmod 0640 "$config/token"
   key=$(rooted /var/lib/loki-go/signing/id_ed25519)
   test -f "$key" || ssh-keygen -q -t ed25519 -N "" -C "loki-go signing" -f "$key"
+  prepare_signing_identity "$runner_uid" "$runner_gid" "$config" "$key"
+}
+
+prepare_signing_identity() {
+  runner_uid=$1 runner_gid=$2 config=$3 key=$4
+  test "$ROOT" = / || return 0
+  identity_name=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.name || true)
+  identity_email=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.email || true)
+  test -n "$identity_name" -a -n "$identity_email" || fail "runner Git user.name and user.email must be configured before installing Loki Go"
+  case "$identity_email" in *' '*|*'	'*|*'
+'*) fail "runner Git user.email must not contain whitespace" ;; esac
+  ssh_dir=$(rooted /home/runner/.ssh)
+  install -d -o "$runner_uid" -g "$runner_gid" -m 0700 "$ssh_dir"
+  install -o "$runner_uid" -g "$runner_gid" -m 0644 "$key.pub" "$ssh_dir/id_ed25519.pub"
+  public_key=$(cat "$key.pub")
+  printf '%s %s\n' "$identity_email" "$public_key" > "$config/allowed_signers"
+  chown root:root "$config/allowed_signers"
+  chmod 0644 "$config/allowed_signers"
 }
 
 health() {

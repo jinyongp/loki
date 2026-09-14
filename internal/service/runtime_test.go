@@ -33,22 +33,32 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	runnerState := filepath.Join(root, "runner")
 	runnerCache := filepath.Join(root, "cache")
 	runnerTemp := filepath.Join(root, "temp")
-	for name, path := range map[string]string{"runner-state": runnerState, "runner-cache": runnerCache, "runner-temp": runnerTemp, "workspace": workspace} {
+	snapshotDirectory := filepath.Join(root, "snapshots")
+	directories := map[string]string{
+		"runner-state": runnerState, "runner-config": filepath.Join(root, "config"),
+		"runner-gh-config": filepath.Join(root, "gh"), "runner-data": filepath.Join(root, "data"),
+		"runner-xdg-state": filepath.Join(root, "xdg-state"), "snapshots": snapshotDirectory,
+		"runner-cache": runnerCache, "runner-npm-cache": filepath.Join(root, "npm"),
+		"runner-pnpm-store": filepath.Join(root, "pnpm"), "runner-playwright-cache": filepath.Join(root, "playwright"),
+		"runner-go-build-cache": filepath.Join(root, "go-build"), "runner-go-mod-cache": filepath.Join(root, "go-mod"),
+		"runner-pip-cache": filepath.Join(root, "pip"), "runner-temp": runnerTemp, "workspace": workspace,
+	}
+	for name, path := range directories {
 		directory := contract.Directories[name]
 		directory.Path = path
 		contract.Directories[name] = directory
 	}
-	contract.Environment["XDG_CONFIG_HOME"] = filepath.Join(runnerState, "config")
-	contract.Environment["GH_CONFIG_DIR"] = filepath.Join(runnerState, "config", "gh")
-	contract.Environment["XDG_DATA_HOME"] = filepath.Join(runnerState, "data")
-	contract.Environment["XDG_STATE_HOME"] = filepath.Join(runnerState, "state")
+	contract.Environment["XDG_CONFIG_HOME"] = directories["runner-config"]
+	contract.Environment["GH_CONFIG_DIR"] = directories["runner-gh-config"]
+	contract.Environment["XDG_DATA_HOME"] = directories["runner-data"]
+	contract.Environment["XDG_STATE_HOME"] = directories["runner-xdg-state"]
 	contract.Environment["XDG_CACHE_HOME"] = runnerCache
-	contract.Environment["NPM_CONFIG_CACHE"] = filepath.Join(runnerCache, "npm")
-	contract.Environment["npm_config_store_dir"] = filepath.Join(runnerCache, "pnpm")
-	contract.Environment["PLAYWRIGHT_BROWSERS_PATH"] = filepath.Join(runnerCache, "playwright")
-	contract.Environment["GOCACHE"] = filepath.Join(runnerCache, "go-build")
-	contract.Environment["GOMODCACHE"] = filepath.Join(runnerCache, "go-mod")
-	contract.Environment["PIP_CACHE_DIR"] = filepath.Join(runnerCache, "pip")
+	contract.Environment["NPM_CONFIG_CACHE"] = directories["runner-npm-cache"]
+	contract.Environment["npm_config_store_dir"] = directories["runner-pnpm-store"]
+	contract.Environment["PLAYWRIGHT_BROWSERS_PATH"] = directories["runner-playwright-cache"]
+	contract.Environment["GOCACHE"] = directories["runner-go-build-cache"]
+	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
+	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
 	encodedContract, err := json.Marshal(contract)
 	if err != nil {
@@ -57,7 +67,6 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if err = os.WriteFile(contractPath, encodedContract, 0600); err != nil {
 		t.Fatal(err)
 	}
-	snapshotDirectory := filepath.Join(runnerState, "snapshots")
 	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
 	for _, path := range []string{
 		runnerState,

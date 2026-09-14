@@ -9,7 +9,7 @@
   "ExecutionContract": "/usr/share/doc/loki/execution-contract.json",
   "Workspace": "/workspace",
   "DockerSocket": "/run/docker.sock",
-  "SnapshotDirectory": "/var/lib/loki-go/runner/snapshots",
+  "SnapshotDirectory": "/var/lib/loki-go/snapshots",
   "RunnerUID": @RUNNER_UID@,
   "RunnerGID": @RUNNER_GID@
 }

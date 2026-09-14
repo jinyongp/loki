@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,8 +19,11 @@ func ReadJSON(path string, out any) error {
 		return errors.New("service layout path must be absolute")
 	}
 	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	if errors.Is(err, unix.ENOSYS) {
+		fd, err = openNoSymlinks(path, unix.O_RDONLY|unix.O_NONBLOCK)
+	}
 	if err != nil {
-		return errors.New("cannot open trusted service layout")
+		return fmt.Errorf("cannot open trusted service layout: %w", err)
 	}
 	f := os.NewFile(uintptr(fd), "service-layout")
 	defer f.Close()

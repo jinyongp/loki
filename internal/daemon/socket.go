@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,11 +33,14 @@ func OwnedPrivateDirectory(path string, uid, gid uint32) error {
 		return errors.New("owned directory must be absolute")
 	}
 	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{
-		Flags:   unix.O_RDONLY | unix.O_CLOEXEC | unix.O_DIRECTORY,
+		Flags:   unix.O_PATH | unix.O_CLOEXEC | unix.O_DIRECTORY,
 		Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
 	})
+	if errors.Is(err, unix.ENOSYS) {
+		fd, err = openNoSymlinks(path, unix.O_PATH|unix.O_DIRECTORY)
+	}
 	if err != nil {
-		return errors.New("cannot open owned directory without symlinks")
+		return fmt.Errorf("cannot open owned directory without symlinks: %w", err)
 	}
 	defer unix.Close(fd)
 	var stat unix.Stat_t

@@ -58,12 +58,23 @@ func (c Contract) Validate() error {
 		return fmt.Errorf("unsupported execution contract version %d", c.Version)
 	}
 	requiredDirectories := map[string]Directory{
-		"runtime-state": {Owner: "root", Group: "root", Mode: "0700"},
-		"signing-state": {Owner: "root", Group: "root", Mode: "0700"},
-		"runner-state":  {Owner: "runner", Group: "runner", Mode: "0700"},
-		"runner-cache":  {Owner: "runner", Group: "runner", Mode: "0700"},
-		"runner-temp":   {Owner: "runner", Group: "runner", Mode: "0700"},
-		"workspace":     {Owner: "runner", Group: "workspace", Mode: "2770"},
+		"runtime-state":           {Owner: "root", Group: "root", Mode: "0700"},
+		"signing-state":           {Owner: "root", Group: "root", Mode: "0700"},
+		"runner-state":            {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-config":           {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-gh-config":        {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-data":             {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-xdg-state":        {Owner: "runner", Group: "runner", Mode: "0700"},
+		"snapshots":               {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-cache":            {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-npm-cache":        {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-pnpm-store":       {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-playwright-cache": {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-go-build-cache":   {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-go-mod-cache":     {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-pip-cache":        {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-temp":             {Owner: "runner", Group: "runner", Mode: "0700"},
+		"workspace":               {Owner: "runner", Group: "workspace", Mode: "2770"},
 	}
 	if len(c.Directories) != len(requiredDirectories) {
 		return errors.New("execution contract directory set is incomplete")
@@ -86,25 +97,24 @@ func (c Contract) Validate() error {
 		seen[got.Path] = name
 	}
 
-	state := c.Directories["runner-state"].Path
 	cache := c.Directories["runner-cache"].Path
 	temp := c.Directories["runner-temp"].Path
 	requiredEnvironment := map[string]string{
 		"HOME":                     "/home/runner",
-		"GH_CONFIG_DIR":            filepath.Join(state, "config", "gh"),
-		"XDG_CONFIG_HOME":          filepath.Join(state, "config"),
-		"XDG_DATA_HOME":            filepath.Join(state, "data"),
-		"XDG_STATE_HOME":           filepath.Join(state, "state"),
+		"GH_CONFIG_DIR":            c.Directories["runner-gh-config"].Path,
+		"XDG_CONFIG_HOME":          c.Directories["runner-config"].Path,
+		"XDG_DATA_HOME":            c.Directories["runner-data"].Path,
+		"XDG_STATE_HOME":           c.Directories["runner-xdg-state"].Path,
 		"XDG_CACHE_HOME":           cache,
-		"NPM_CONFIG_CACHE":         filepath.Join(cache, "npm"),
-		"npm_config_store_dir":     filepath.Join(cache, "pnpm"),
-		"PLAYWRIGHT_BROWSERS_PATH": filepath.Join(cache, "playwright"),
-		"GOCACHE":                  filepath.Join(cache, "go-build"),
-		"GOMODCACHE":               filepath.Join(cache, "go-mod"),
-		"PIP_CACHE_DIR":            filepath.Join(cache, "pip"),
+		"NPM_CONFIG_CACHE":         c.Directories["runner-npm-cache"].Path,
+		"npm_config_store_dir":     c.Directories["runner-pnpm-store"].Path,
+		"PLAYWRIGHT_BROWSERS_PATH": c.Directories["runner-playwright-cache"].Path,
+		"GOCACHE":                  c.Directories["runner-go-build-cache"].Path,
+		"GOMODCACHE":               c.Directories["runner-go-mod-cache"].Path,
+		"PIP_CACHE_DIR":            c.Directories["runner-pip-cache"].Path,
 		"TMPDIR":                   temp,
-		"PATH":                     "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
-		"GIT_CONFIG_GLOBAL":        "/home/runner/.gitconfig",
+		"PATH":                     "/opt/loki/toolchain/bin:/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
+		"GIT_CONFIG_GLOBAL":        "/etc/loki-go/gitconfig",
 		"GIT_CONFIG_NOSYSTEM":      "1",
 		"GIT_OPTIONAL_LOCKS":       "0",
 		"LANG":                     "C.UTF-8",

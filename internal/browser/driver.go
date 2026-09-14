@@ -95,6 +95,10 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	if err = daemon.PrivateDirectory(d.options.Profile); err != nil {
 		return err
 	}
+	temporary := filepath.Join(filepath.Dir(d.options.Profile), "tmp")
+	if err = daemon.PrivateDirectory(temporary); err != nil {
+		return err
+	}
 	if err = prepareDownloads(d.options.Downloads); err != nil {
 		return err
 	}
@@ -125,7 +129,8 @@ func (d *Driver) start(ctx context.Context) (err error) {
 		"--proxy-server="+d.options.Proxy, "--remote-debugging-pipe", "--window-size=1280,800",
 		"--user-data-dir="+d.options.Profile, "about:blank")
 	command.ExtraFiles = []*os.File{inRead, outWrite}
-	command.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + d.options.Profile, "LANG=C.UTF-8"}
+	command.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + d.options.Profile, "TMPDIR=" + temporary, "LANG=C.UTF-8"}
+	command.Stderr = os.Stderr
 	if d.options.LibraryPath != "" {
 		command.Env = append(command.Env, "LD_LIBRARY_PATH="+d.options.LibraryPath)
 	}
