@@ -12,7 +12,18 @@ import (
 var baselineJSON []byte
 
 const BaselineVersion = "0.47.1"
-const CatalogRevision = "2026-09-04.4"
+const CatalogRevision = "2026-09-14.1"
+
+var currentToolNames = []string{
+	"system_inspect",
+	"preview_publish", "shared_resources", "revoke_share",
+	"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot",
+	"workspace_read", "read_image", "share_image", "artifact_publish", "write_image", "workspace_edit",
+	"restore_workspace_file", "remove_tracked_file",
+	"agent_context", "skill_read", "skill_write",
+	"git_inspect", "git_stage", "developer_view",
+	"secret_inspect", "secret_write", "secret_delete",
+}
 
 // Baseline returns an independent copy; callers cannot mutate the canonical data.
 func Baseline() (*Snapshot, error) {
@@ -41,4 +52,30 @@ func (s *Snapshot) Definitions() ([]*mcp.Tool, error) {
 		items = append(items, &t)
 	}
 	return items, nil
+}
+
+// CurrentDefinitions returns Loki-owned tools. Development workflow and process
+// commands are provided by the pinned devtools CLI and its bundled agent skill.
+func CurrentDefinitions() ([]*mcp.Tool, error) {
+	snapshot, err := Baseline()
+	if err != nil {
+		return nil, err
+	}
+	all, err := snapshot.Definitions()
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string]*mcp.Tool, len(all))
+	for _, tool := range all {
+		byName[tool.Name] = tool
+	}
+	selected := make([]*mcp.Tool, 0, len(currentToolNames))
+	for _, name := range currentToolNames {
+		tool := byName[name]
+		if tool == nil {
+			return nil, fmt.Errorf("current tool %s missing from baseline", name)
+		}
+		selected = append(selected, tool)
+	}
+	return selected, nil
 }

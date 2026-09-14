@@ -100,3 +100,27 @@ func TestCurrentBaseline(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentDefinitionsContainOnlyLokiTools(t *testing.T) {
+	tools, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 27 {
+		t.Fatalf("tool count = %d", len(tools))
+	}
+	seen := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		seen[tool.Name] = true
+	}
+	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write"} {
+		if !seen[required] {
+			t.Errorf("missing Loki tool %q", required)
+		}
+	}
+	for _, delegated := range []string{"runtime_stop", "project", "task_inspect", "task_write", "task_delete", "bootstrap_project", "action", "command_run", "command_start", "process_inspect"} {
+		if seen[delegated] {
+			t.Errorf("devtools command remains exposed as MCP tool %q", delegated)
+		}
+	}
+}
