@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,26 @@ import (
 	"loki/internal/secret"
 )
 
+func TestDevtoolsEnvironmentIsClosed(t *testing.T) {
+	t.Setenv("PRIVATE_PARENT_VALUE", "must-not-pass")
+	environment := devtoolsEnvironment("/opt/devtools/bin/devtools", "/var/lib/loki/devtools")
+	for _, entry := range environment {
+		if entry == "PRIVATE_PARENT_VALUE=must-not-pass" {
+			t.Fatal("devtools inherited the parent environment")
+		}
+	}
+	for _, want := range []string{
+		"HOME=/var/lib/loki/devtools",
+		"XDG_CONFIG_HOME=/var/lib/loki/devtools/.config",
+		"PATH=/opt/devtools/bin:/usr/bin:/bin",
+		"GIT_CONFIG_NOSYSTEM=1",
+	} {
+		if !slices.Contains(environment, want) {
+			t.Fatalf("environment does not contain %q: %#v", want, environment)
+		}
+	}
+}
+
 func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
@@ -22,7 +43,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), ProjectStateDirectory: filepath.Join(root, "projects"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), TaskHome: filepath.Join(root, "task-home"), TaskBinary: "/home/linuxbrew/.linuxbrew/bin/task", Layout: action.Layout{Workspace: workspace, Binary: "/unneeded-for-read-only-fixture", RuntimeSocket: socket, RuntimeUID: uid, UID: uid, GID: uint32(os.Getgid()), CallbackPort: new(int)}}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), ProjectStateDirectory: filepath.Join(root, "projects"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), TaskHome: filepath.Join(root, "task-home"), TaskBinary: "/home/linuxbrew/.linuxbrew/bin/task", DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Layout: action.Layout{Workspace: workspace, Binary: "/unneeded-for-read-only-fixture", RuntimeSocket: socket, RuntimeUID: uid, UID: uid, GID: uint32(os.Getgid()), CallbackPort: new(int)}}
 	controller := secret.Controller{StateDirectory: o.StateDirectory}
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
@@ -70,6 +91,9 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	log := call(map[string]any{"operation": "audit"})
 	if len(log["records"].([]any)) < 3 {
 		t.Fatal(log)
+	}
+	if _, err = client.Call(t.Context(), map[string]any{"operation": "devtools_call", "command": "run", "input": map[string]any{}}); err == nil {
+		t.Fatal("runtime did not install the devtools broker operation")
 	}
 	cancel()
 	select {
