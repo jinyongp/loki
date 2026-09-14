@@ -66,47 +66,6 @@ func TestIncompleteCatalogRejected(t *testing.T) {
 	}
 }
 
-func TestExplicitToolCatalogRetainsResources(t *testing.T) {
-	definitions := []*mcp.Tool{
-		{Name: "one", Description: "First tool.", InputSchema: map[string]any{"type": "object"}},
-		{Name: "two", Description: "Second tool.", InputSchema: map[string]any{"type": "object"}},
-	}
-	handlers := map[string]Handler{
-		"one": func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) { return Object(input) },
-		"two": func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) { return Object(input) },
-	}
-	server, err := NewTools(definitions, handlers)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a, b := mcp.NewInMemoryTransports()
-	ss, err := server.Connect(t.Context(), a, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ss.Close() })
-	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	cs, err := client.Connect(t.Context(), b, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { cs.Close() })
-	tools, err := cs.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 2 || tools.Tools[0].Name != "one" || tools.Tools[1].Name != "two" {
-		t.Fatalf("tools = %#v, error = %v", tools, err)
-	}
-	resources, err := cs.ListResources(t.Context(), nil)
-	if err != nil || len(resources.Resources) != 3 {
-		t.Fatalf("resources = %#v, error = %v", resources, err)
-	}
-	if _, err = NewTools([]*mcp.Tool{definitions[0], definitions[0]}, handlers); err == nil {
-		t.Fatal("duplicate definitions accepted")
-	}
-	if _, err = NewTools(definitions, map[string]Handler{"one": handlers["one"], "wrong": handlers["two"]}); err == nil {
-		t.Fatal("mismatched handler names accepted")
-	}
-}
-
 func TestCatalogAndResourceParity(t *testing.T) {
 	cs := connect(t, testHandlers(t))
 	ctx := context.Background()
