@@ -12,11 +12,14 @@ Linux environment. Production deployment remains a separate operation.
 
 ## Architecture
 
-MCP client -> Loki Go MCP -> authenticated runtime broker
-                         -> workspace, Git, browser, artifacts, previews
+agent shell -> devtools CLI -> tasks, workstreams, validation, public state
+Loki Go MCP            -> workspace, Git, browser, artifacts, previews
+Loki secret launcher   -> authenticated runtime broker -> devtools process
 
-The runtime broker owns the Loki AES-GCM secret vault and invokes approved
-devtools commands.
+The bundled devtools skill teaches shell-capable agents to use the pinned CLI
+directly. Loki does not mirror individual devtools commands as MCP tools. The
+runtime broker owns the Loki AES-GCM secret vault and handles only configured
+process launches that request selected encrypted secrets.
 
 devtools owns tasks, workstreams, validation records, public variables,
 configured processes, project inspection, instances, port allocation,
@@ -43,20 +46,22 @@ devtools may store public variables and secret metadata. Its plaintext active
 secret store is not used. Encrypted devtools backups therefore do not replace
 the Loki vault backup procedure.
 
-## Devtools contract
+## Devtools contract and skill
 
-Pin the supported devtools version and generate an allowlisted command manifest
-from devtools schema --all. Generation is an explicit source update, so a
-package upgrade cannot silently change the MCP contract.
+Pin the supported devtools version and generate an allowlisted runtime manifest
+for the configured-process commands that accept encrypted Loki secrets.
+Generation is an explicit source update, so a package upgrade cannot silently
+change the privileged broker contract.
 
-The adapter validates JSON input against the pinned manifest and constructs an
-argument vector without a shell. It applies request deadlines, cancellation,
-bounded output, stable JSON decoding, and public error mapping.
+Bundle the exact `devtools skill` output for the pinned version as Loki's only
+built-in agent skill. Agents discover individual command contracts with
+`devtools schema COMMAND` and invoke the binary from their shell.
 
-Allow project-scoped operations for tasks, workstreams, validation, variables,
-configured processes, project inspection, instances, ports, diagnostics, and
-approved backup operations. Exclude raw child execution, self-update,
-dashboard, shell completion, and unrestricted file arguments from MCP.
+The runtime adapter validates the small secret-launch command subset against
+the pinned manifest and constructs an argument vector without a shell. It
+applies request deadlines, cancellation, bounded output, stable JSON decoding,
+and public error mapping. No general devtools command gateway is published by
+MCP.
 
 ## Work items
 
@@ -69,7 +74,15 @@ the supported format.
 Gate: generation is deterministic and rejects an unsupported binary version or
 an unapproved command.
 
-### 2. Implement the Go adapter
+### 2. Replace bundled agent skills
+
+Remove the existing bundled skills. Vendor the pinned devtools skill and make
+the installer publish that one skill to agent environments.
+
+Gate: the bundled directory contains exactly one valid `devtools/SKILL.md`, its
+content matches `devtools skill`, and installation exposes it to the agent.
+
+### 3. Implement the secret process adapter
 
 Add typed request validation, safe argument construction, subprocess limits,
 JSON result decoding, and structured errors. Test with a fake executable and a
@@ -78,7 +91,7 @@ real isolated devtools profile.
 Gate: success, invalid input, timeout, cancellation, oversized output, malformed
 JSON, and version mismatch tests pass under the race detector.
 
-### 3. Join the adapter to the encrypted runtime
+### 4. Join the adapter to the encrypted runtime
 
 Keep the current state store and secret controller. Add broker operations that
 resolve secret names in the vault and inject values only into approved
@@ -88,26 +101,27 @@ Gate: the MCP identity cannot read the key, encrypted store, or raw values;
 commands receive selected values; responses, logs, and process output do not
 leak them.
 
-### 4. Publish the new MCP surface
+### 5. Publish the reduced MCP surface
 
-Generate approved devtools-backed MCP tools from the pinned manifest. Retain
-focused Loki tools for workspace, Git, signing, browser, artifacts, previews,
-skills, audit, and system diagnostics.
+Retain focused Loki tools for workspace, Git, signing, browser, artifacts,
+previews, encrypted secrets, skill discovery, audit, and system diagnostics.
+Remove task, workstream, validation, variable, configured-process, and project
+workflow tools that the devtools CLI owns.
 
-Gate: tool discovery matches the new manifest and every published tool has a
-successful end-to-end call plus invalid-input coverage.
+Gate: tool discovery contains only retained Loki tools. The devtools skill is
+discoverable and its documented CLI flow succeeds end to end.
 
-### 5. Remove replaced implementation
+### 6. Remove replaced implementation
 
 Delete Loki-owned task, workstream, project workflow, variable, configured
 process, action-policy, legacy migration, rollback, Python contract, and
-Taskwarrior compatibility code after their devtools-backed paths pass. Preserve
+Taskwarrior compatibility code after their devtools CLI paths pass. Preserve
 the small generic subprocess primitive used by Loki's own service roles.
 
 Gate: the Go binary builds without the removed packages and repository search
 finds no live dependency on the Python contract or legacy migration paths.
 
-### 6. Assemble services and packaging
+### 7. Assemble services and packaging
 
 Package the Go MCP and runtime broker with a pinned devtools dependency. Make
 the MCP service require the runtime service and wait for its control socket.
@@ -118,7 +132,7 @@ Gate: a clean disposable install starts correctly after repeated boots and
 service restarts, including delayed runtime socket creation. No Python package
 or virtual environment is required by the candidate.
 
-### 7. Integrated validation
+### 8. Integrated validation
 
 Run formatting, vet, unit, race, broker permission, secret non-disclosure,
 devtools integration, MCP end-to-end, browser, preview, Git signing, clean
