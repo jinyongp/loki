@@ -11,23 +11,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
-var NamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-var EnvPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 var audiencePattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var hostLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
-
-type Command struct {
-	Command        []string
-	CWD            string
-	TimeoutSeconds int
-	MaxOutputBytes int
-	Environment    map[string]string
-}
 
 type Config struct {
 	Root, AuditLog, Host                                         string
@@ -37,10 +26,6 @@ type Config struct {
 	ArtifactBaseURL, PreviewBaseDomain, PreviewAccessAudience    string
 	MaxFileBytes, MaxWriteBytes, MaxOutputBytes, MaxListEntries  int
 	MaxSearchResults, MaxReadLines, MaxPatchBytes, MaxPatchFiles int
-	MaxProcesses, ProcessRetentionSeconds                        int
-	MaxActionProcesses, MaxActionProcessesPerProfile             int
-	Checks, Processes                                            map[string]Command
-	Executables                                                  map[string]string
 }
 
 func Load(path string) (Config, error) {
@@ -99,24 +84,12 @@ func Parse(data []byte) (Config, error) {
 		{"port", 8765, 1024, 65535, &c.Port}, {"max_file_bytes", 16777216, 4096, 268435456, &c.MaxFileBytes}, {"max_write_bytes", 2097152, 4096, 67108864, &c.MaxWriteBytes},
 		{"max_output_bytes", 262144, 4096, 16777216, &c.MaxOutputBytes}, {"max_list_entries", 2000, 10, 100000, &c.MaxListEntries}, {"max_search_results", 500, 1, 10000, &c.MaxSearchResults},
 		{"max_read_lines", 2000, 1, 20000, &c.MaxReadLines}, {"max_patch_bytes", 524288, 1024, 16777216, &c.MaxPatchBytes}, {"max_patch_files", 50, 1, 1000, &c.MaxPatchFiles},
-		{"max_processes", 3, 1, 32, &c.MaxProcesses}, {"process_retention_seconds", 3600, 30, 86400, &c.ProcessRetentionSeconds},
-		{"max_action_processes", 12, 1, 32, &c.MaxActionProcesses}, {"max_action_processes_per_profile", 6, 1, 32, &c.MaxActionProcessesPerProfile},
 	} {
 		value, err := bounded(raw, f.key, f.def, f.min, f.max)
 		if err != nil {
 			return c, err
 		}
 		*f.target = value
-	}
-	for _, key := range []string{"max_action_processes", "max_action_processes_per_profile"} {
-		if v, ok := raw[key]; ok {
-			if _, ok = v.(int64); !ok {
-				return c, fmt.Errorf("%s must be an integer", key)
-			}
-		}
-	}
-	if c.MaxActionProcessesPerProfile > c.MaxActionProcesses {
-		return c, errors.New("max_action_processes_per_profile must not exceed max_action_processes")
 	}
 	c.PublicHosts = []string{}
 	if v, ok := raw["public_hosts"]; ok {
@@ -176,32 +149,6 @@ func Parse(data []byte) (Config, error) {
 			return c, errors.New("preview Access verification requires Cloudflare Access team settings")
 		}
 	}
-	var err error
-	c.Checks, err = commands(raw["checks"], 900, c.MaxOutputBytes)
-	if err != nil {
-		return c, err
-	}
-	c.Processes, err = commands(raw["processes"], 14400, 10485760)
-	if err != nil {
-		return c, err
-	}
-	c.Executables = map[string]string{}
-	if v, ok := raw["executables"]; ok {
-		table, ok := v.(map[string]any)
-		if !ok {
-			return c, errors.New("executables must be a table")
-		}
-		for name, value := range table {
-			if !NamePattern.MatchString(name) {
-				return c, errors.New("invalid executable name")
-			}
-			path, ok := value.(string)
-			if !ok || !strings.HasPrefix(path, "/") || strings.ContainsRune(path, 0) || slices.Contains(strings.Split(path, "/"), "..") {
-				return c, fmt.Errorf("executable %s must use an absolute path without parent traversal", name)
-			}
-			c.Executables[name] = path
-		}
-	}
 	return c, nil
 }
 
@@ -222,10 +169,6 @@ func bounded(raw map[string]any, key string, def, min, max int) (int, error) {
 			err = errors.New("range")
 		} else {
 			n = int(value)
-		}
-	case bool:
-		if value {
-			n = 1
 		}
 	default:
 		err = errors.New("integer")
@@ -250,74 +193,4 @@ func stringList(value any) ([]string, error) {
 		out[i] = s
 	}
 	return out, nil
-}
-
-func RelativeCWD(cwd string) bool {
-	return !strings.HasPrefix(cwd, "/") && !strings.ContainsAny(cwd, "\\\x00") && !slices.Contains(strings.Split(cwd, "/"), "..")
-}
-
-func commands(value any, timeout, maximum int) (map[string]Command, error) {
-	result := map[string]Command{}
-	if value == nil {
-		return result, nil
-	}
-	table, ok := value.(map[string]any)
-	if !ok {
-		return nil, errors.New("command configuration must be a table")
-	}
-	for name, value := range table {
-		if !NamePattern.MatchString(name) {
-			return nil, errors.New("invalid command name")
-		}
-		c := Command{CWD: ".", TimeoutSeconds: timeout, MaxOutputBytes: maximum, Environment: map[string]string{}}
-		var argv any = value
-		if extended, ok := value.(map[string]any); ok {
-			argv = extended["command"]
-			if v, ok := extended["cwd"]; ok {
-				cwd, ok := v.(string)
-				if !ok {
-					return nil, errors.New("command cwd must be a string")
-				}
-				c.CWD = cwd
-			}
-			var err error
-			c.TimeoutSeconds, err = bounded(extended, "timeout_seconds", timeout, 1, 86400)
-			if err != nil {
-				return nil, err
-			}
-			c.MaxOutputBytes, err = bounded(extended, "max_output_bytes", maximum, 4096, 67108864)
-			if err != nil {
-				return nil, err
-			}
-			if env, ok := extended["environment"]; ok {
-				e, ok := env.(map[string]any)
-				if !ok {
-					return nil, errors.New("command environment must be a table")
-				}
-				for key, value := range e {
-					if !EnvPattern.MatchString(key) {
-						return nil, errors.New("invalid command environment key")
-					}
-					if key == "HOME" || key == "PATH" || strings.HasPrefix(key, "LD_") || strings.HasPrefix(key, "PYTHON") {
-						return nil, fmt.Errorf("command cannot override %s", key)
-					}
-					s, ok := value.(string)
-					if !ok || utf8.RuneCountInString(s) > 4096 {
-						return nil, errors.New("invalid command environment value")
-					}
-					c.Environment[key] = s
-				}
-			}
-		}
-		var err error
-		c.Command, err = stringList(argv)
-		if err != nil || len(c.Command) == 0 || slices.Contains(c.Command, "") {
-			return nil, errors.New("command must contain a non-empty string argv array")
-		}
-		if !RelativeCWD(c.CWD) {
-			return nil, errors.New("command cwd must stay inside the workspace")
-		}
-		result[name] = c
-	}
-	return result, nil
 }

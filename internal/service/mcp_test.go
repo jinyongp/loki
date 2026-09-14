@@ -37,8 +37,6 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 	c.Root = t.TempDir()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
-	c.Checks = map[string]config.Command{"hello": {Command: []string{"/usr/bin/printf", "hello"}, CWD: ".", TimeoutSeconds: 5, MaxOutputBytes: 1024}}
-	c.Processes = map[string]config.Command{"wait": {Command: []string{"/usr/bin/sleep", "30"}, CWD: ".", TimeoutSeconds: 60, MaxOutputBytes: 1024}}
 	server := httptest.NewUnstartedServer(nil)
 	defer server.Close()
 	_, port, _ := net.SplitHostPort(server.Listener.Addr().String())

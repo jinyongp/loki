@@ -48,14 +48,6 @@ func socketExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode()&os.ModeSocket != 0
 }
-func keys[V any](m map[string]V) []string {
-	names := make([]string, 0, len(m))
-	for name := range m {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
 func (c *SystemController) Info() map[string]any {
 	sdk := "unknown"
 	if info, ok := debug.ReadBuildInfo(); ok {
@@ -93,14 +85,7 @@ func (c *SystemController) Workspace(ctx context.Context) map[string]any {
 			branch = value
 		}
 	}
-	executables := map[string]bool{}
-	for _, name := range policy.ExecutableNames() {
-		executables[name] = true
-	}
-	for name := range c.Config.Executables {
-		executables[name] = true
-	}
-	return map[string]any{"root": "/workspace", "repository": repository, "branch": branch, "checks": keys(c.Config.Checks), "processes": keys(c.Config.Processes), "executables": keys(executables), "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_patch_bytes": c.Config.MaxPatchBytes, "max_patch_files": c.Config.MaxPatchFiles}}
+	return map[string]any{"root": "/workspace", "repository": repository, "branch": branch, "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_patch_bytes": c.Config.MaxPatchBytes, "max_patch_files": c.Config.MaxPatchFiles}}
 }
 func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	accessible := func(path string, mode uint32) bool {
@@ -134,7 +119,7 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	readable, writable := accessible(c.Paths.Root(), unix.R_OK), accessible(c.Paths.Root(), unix.W_OK)
 	return map[string]any{"healthy": healthy && readable && writable && identity && format == "ssh" && required && publicKey && agent,
 		"workspace": map[string]any{"readable": readable, "writable": writable}, "audit_log": map[string]any{"directory_writable": accessible(filepath.Dir(c.Config.AuditLog), unix.W_OK)}, "github": map[string]any{"config_mounted": exists("/home/runner/.config/gh/hosts.yml"), "protocol": "https"},
-		"git_signing": map[string]any{"identity_configured": identity, "format": signingFormat, "commit_signing_required": required, "public_key_available": publicKey, "agent_socket_available": agent}, "toolchain": toolchain, "repositories": repositories, "configured_executables": keys(c.Config.Executables), "tool_catalog": catalogInfo(),
+		"git_signing": map[string]any{"identity_configured": identity, "format": signingFormat, "commit_signing_required": required, "public_key_available": publicKey, "agent_socket_available": agent}, "toolchain": toolchain, "repositories": repositories, "tool_catalog": catalogInfo(),
 		"browser": map[string]any{"socket_available": exists(c.BrowserSocket), "catalog_revision": "2026-09-03.1", "expected_tool_count": len(browserTools), "expected_tools": browserTools}}
 }
 func SystemHandler(c *SystemController) mcpserver.Handler {

@@ -20,18 +20,6 @@ func TestExecutionUsesChildPathOnly(t *testing.T) {
 	if err != nil || r.Output != "child" {
 		t.Fatalf("finite command inherited server PATH: %q %v", r.Output, err)
 	}
-	m := testManager(t, 1)
-	started, err := m.Start(StartSpec{Name: "path", Spec: spec})
-	if err != nil {
-		t.Fatal(err)
-	}
-	id := started["session_id"].(string)
-	p, _ := m.get(id)
-	awaitComplete(t, p)
-	out, err := m.Read(id, nil, 4096)
-	if err != nil || out["output"] != "child" {
-		t.Fatalf("managed command inherited server PATH: %#v %v", out, err)
-	}
 	spec.Env = []string{"PATH="}
 	r, err = Run(t.Context(), spec)
 	if err != nil || r.Output != "child" {

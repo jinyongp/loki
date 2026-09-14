@@ -19,8 +19,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runCheckpoint(args[1:], stdout, stderr)
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
-		case "config", "policy":
-			return runSettings(args, stdout, stderr)
 		case "secret":
 			return runAdministration(args, stdout, stderr)
 		}
