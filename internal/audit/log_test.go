@@ -15,7 +15,7 @@ func TestConcurrentAuditAndMalformedTail(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := l.Runtime("run_action", 1000, true, nil, nil, nil, nil); err != nil {
+			if err := l.Runtime("devtools_call", 1000, true, nil); err != nil {
 				t.Error(err)
 			}
 		}()

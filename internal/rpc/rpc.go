@@ -61,10 +61,10 @@ type Operation struct {
 	Timeout time.Duration
 }
 type Event struct {
-	Operation                           string
-	UID                                 uint32
-	Success                             bool
-	Profile, Action, ProjectAction, CWD *string
+	Operation string
+	UID       uint32
+	Success   bool
+	Profile   *string
 }
 
 type Server struct {
@@ -251,13 +251,6 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 				return &value
 			}
 			event.Profile = text("profile")
-			event.Action = text("action_name")
-			if request.Operation == "project_state" {
-				event.ProjectAction = text("action")
-			}
-			if request.Operation == "project_state" || request.Operation == "project_task" {
-				event.CWD = text("cwd")
-			}
 		}
 		s.Audit(event)
 	}

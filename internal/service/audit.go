@@ -19,7 +19,7 @@ func AuditOperations(log *audit.Log) map[string]rpc.Operation {
 
 func AuditSink(log *audit.Log, onError func(error)) func(rpc.Event) {
 	return func(e rpc.Event) {
-		if err := log.Runtime(e.Operation, e.UID, e.Success, e.Profile, e.Action, e.ProjectAction, e.CWD); err != nil && onError != nil {
+		if err := log.Runtime(e.Operation, e.UID, e.Success, e.Profile); err != nil && onError != nil {
 			onError(err)
 		}
 	}

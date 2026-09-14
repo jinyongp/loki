@@ -56,8 +56,8 @@ func (l *Log) Append(record map[string]any) error {
 	}
 	return err
 }
-func (l *Log) Runtime(operation string, uid uint32, success bool, profile, action, projectAction, cwd *string) error {
-	return l.Append(map[string]any{"timestamp": float64(time.Now().UnixMicro()) / 1e6, "operation": operation, "uid": uid, "success": success, "profile": profile, "action": action, "project_action": projectAction, "cwd": cwd})
+func (l *Log) Runtime(operation string, uid uint32, success bool, profile *string) error {
+	return l.Append(map[string]any{"timestamp": float64(time.Now().UnixMicro()) / 1e6, "operation": operation, "uid": uid, "success": success, "profile": profile})
 }
 func (l *Log) Read(limit int) (map[string]any, error) {
 	limit = min(max(limit, 1), 200)

@@ -133,18 +133,6 @@ type importInput struct {
 	ID      string            `json:"import_id"`
 	Values  map[string]string `json:"values"`
 }
-type policyInput struct {
-	Profile string          `json:"profile"`
-	Name    string          `json:"action_name"`
-	Action  json.RawMessage `json:"action"`
-}
-type registrationInput struct {
-	Name     *string         `json:"name"`
-	Workflow *string         `json:"workflow"`
-	Steps    json.RawMessage `json:"steps"`
-	Required json.RawMessage `json:"required_secrets"`
-	Timeout  json.RawMessage `json:"timeout_seconds"`
-}
 
 func SecretOperations(c secret.Controller) map[string]rpc.Operation {
 	valueHandler := func(public bool) rpc.Handler {

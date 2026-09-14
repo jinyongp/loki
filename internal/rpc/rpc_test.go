@@ -89,7 +89,7 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 		t.Fatalf("missing audit events: %v", events)
 	}
 	encoded, _ := json.Marshal(events[0])
-	if events[0].Profile == nil || *events[0].Profile != "fixture" || events[0].Action == nil || *events[0].Action != "web" || strings.Contains(string(encoded), "synthetic-hidden") {
+	if events[0].Profile == nil || *events[0].Profile != "fixture" || strings.Contains(string(encoded), "synthetic-hidden") {
 		t.Fatalf("audit metadata: %s", encoded)
 	}
 }
