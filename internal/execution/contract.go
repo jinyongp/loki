@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -57,12 +58,12 @@ func (c Contract) Validate() error {
 		return fmt.Errorf("unsupported execution contract version %d", c.Version)
 	}
 	requiredDirectories := map[string]Directory{
-		"runtime-state": {Path: "/var/lib/loki-go/runtime", Owner: "root", Group: "root", Mode: "0700"},
-		"signing-state": {Path: "/var/lib/loki-go/signing", Owner: "root", Group: "root", Mode: "0700"},
-		"runner-state":  {Path: "/var/lib/loki-go/runner", Owner: "runner", Group: "runner", Mode: "0700"},
-		"runner-cache":  {Path: "/var/cache/loki-go/runner", Owner: "runner", Group: "runner", Mode: "0700"},
-		"runner-temp":   {Path: "/var/tmp/loki-go/runner", Owner: "runner", Group: "runner", Mode: "0700"},
-		"workspace":     {Path: "/workspace", Owner: "runner", Group: "workspace", Mode: "2770"},
+		"runtime-state": {Owner: "root", Group: "root", Mode: "0700"},
+		"signing-state": {Owner: "root", Group: "root", Mode: "0700"},
+		"runner-state":  {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-cache":  {Owner: "runner", Group: "runner", Mode: "0700"},
+		"runner-temp":   {Owner: "runner", Group: "runner", Mode: "0700"},
+		"workspace":     {Owner: "runner", Group: "workspace", Mode: "2770"},
 	}
 	if len(c.Directories) != len(requiredDirectories) {
 		return errors.New("execution contract directory set is incomplete")
@@ -73,7 +74,7 @@ func (c Contract) Validate() error {
 		if !ok {
 			return fmt.Errorf("execution contract directory %q is missing", name)
 		}
-		if got != want {
+		if got.Owner != want.Owner || got.Group != want.Group || got.Mode != want.Mode {
 			return fmt.Errorf("execution contract directory %q = %#v, want %#v", name, got, want)
 		}
 		if !filepath.IsAbs(got.Path) || filepath.Clean(got.Path) != got.Path {
@@ -90,18 +91,22 @@ func (c Contract) Validate() error {
 	temp := c.Directories["runner-temp"].Path
 	requiredEnvironment := map[string]string{
 		"HOME":                     "/home/runner",
+		"GH_CONFIG_DIR":            filepath.Join(state, "config", "gh"),
 		"XDG_CONFIG_HOME":          filepath.Join(state, "config"),
 		"XDG_DATA_HOME":            filepath.Join(state, "data"),
 		"XDG_STATE_HOME":           filepath.Join(state, "state"),
 		"XDG_CACHE_HOME":           cache,
 		"NPM_CONFIG_CACHE":         filepath.Join(cache, "npm"),
+		"npm_config_store_dir":     filepath.Join(cache, "pnpm"),
 		"PLAYWRIGHT_BROWSERS_PATH": filepath.Join(cache, "playwright"),
 		"GOCACHE":                  filepath.Join(cache, "go-build"),
+		"GOMODCACHE":               filepath.Join(cache, "go-mod"),
 		"PIP_CACHE_DIR":            filepath.Join(cache, "pip"),
 		"TMPDIR":                   temp,
 		"PATH":                     "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
 		"GIT_CONFIG_GLOBAL":        "/home/runner/.gitconfig",
 		"GIT_CONFIG_NOSYSTEM":      "1",
+		"GIT_OPTIONAL_LOCKS":       "0",
 		"LANG":                     "C.UTF-8",
 		"LC_ALL":                   "C.UTF-8",
 	}
@@ -130,4 +135,23 @@ func (c Contract) Validate() error {
 		}
 	}
 	return nil
+}
+
+// EnvironmentList returns the complete runner environment in stable order.
+// Callers must use it as the child environment rather than merging the parent
+// process environment.
+func (c Contract) EnvironmentList() ([]string, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(c.Environment))
+	for name := range c.Environment {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	environment := make([]string, 0, len(names))
+	for _, name := range names {
+		environment = append(environment, name+"="+c.Environment[name])
+	}
+	return environment, nil
 }

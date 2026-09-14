@@ -40,6 +40,7 @@ CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/l
 install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"
 install -m 0755 "$SOURCE_DIR/scripts/wait-for-loki-sockets.sh" "$ROOT/opt/loki/libexec/wait-for-loki-sockets"
 install -m 0755 "$SOURCE_DIR/scripts/render-loki-go-layouts.sh" "$ROOT/opt/loki/libexec/render-layouts"
+install -m 0755 "$SOURCE_DIR/scripts/loki-devtools-launch" "$ROOT/opt/loki/libexec/devtools"
 cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/opt/loki/share/skills/"
 cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/srv/workspace/loki/.agents/skills/"
 install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/config.toml"
@@ -50,7 +51,7 @@ install -m 0644 "$SOURCE_DIR/packaging/go/execution-contract.json" "$ROOT/usr/sh
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
 install -m 0644 "$SOURCE_DIR/packaging/go/tmpfiles.d/loki-go.conf" "$ROOT/usr/lib/tmpfiles.d/loki-go.conf"
 ln -s ../../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
-ln -s ../../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
+ln -s ../../../opt/loki/libexec/devtools "$ROOT/usr/local/bin/devtools"
 
 (
   cd "$ROOT"

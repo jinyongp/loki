@@ -25,7 +25,7 @@ func (values *repeatedStrings) Set(value string) error {
 
 func runSecretProcess(args []string, stdout, stderr io.Writer) int {
 	uid := uint32(0)
-	client := rpc.Client{Socket: "/run/loki/runtime/control.sock", ExpectedUID: &uid}
+	client := rpc.Client{Socket: "/run/loki-go/runtime/control.sock", ExpectedUID: &uid}
 	return executeSecretProcess(args, client, stdout, stderr)
 }
 

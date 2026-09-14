@@ -63,6 +63,28 @@ func TestCandidateIncludesExecutionContract(t *testing.T) {
 	}
 }
 
+func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	launcher, err := os.ReadFile(filepath.Join(root, "scripts", "loki-devtools-launch"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "#!/bin/sh\nset -eu\n\nexec /opt/loki/bin/loki runner-exec \\\n  --contract /usr/share/doc/loki/execution-contract.json \\\n  -- /opt/loki/bin/devtools \"$@\"\n"
+	if string(launcher) != want {
+		t.Fatalf("devtools launcher = %q, want %q", launcher, want)
+	}
+	build, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-go-candidate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(build), "ln -s ../../../opt/loki/libexec/devtools \"$ROOT/usr/local/bin/devtools\"") {
+		t.Fatal("candidate does not expose the contracted devtools launcher")
+	}
+}
+
 func waitScript(t *testing.T) string {
 	t.Helper()
 	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "wait-for-loki-sockets.sh"))
@@ -100,7 +122,7 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if runtime.Socket != "/run/loki-go/runtime/control.sock" || runtime.StateDirectory != "/var/lib/loki-go/runtime" {
 		t.Fatalf("runtime paths = %#v", runtime)
 	}
-	if runtime.DevtoolsHome != "/var/lib/loki-go/runner" || runtime.SnapshotDirectory != "/var/lib/loki-go/runner/snapshots" {
+	if runtime.ExecutionContract != "/usr/share/doc/loki/execution-contract.json" || runtime.SnapshotDirectory != "/var/lib/loki-go/runner/snapshots" {
 		t.Fatalf("runner paths = %#v", runtime)
 	}
 	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
@@ -164,6 +186,20 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 		if !strings.Contains(string(tmpfiles), want) {
 			t.Fatalf("tmpfiles contract does not contain %q", want)
 		}
+	}
+}
+
+func TestStageNormalizesArtifactOwnership(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage, err := os.ReadFile(filepath.Join(root, "scripts", "stage-loki-go-candidate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stage), "cp -a --no-preserve=ownership \"$ARTIFACT/rootfs/.\" \"$TARGET/\"") {
+		t.Fatal("candidate stage preserves untrusted builder ownership")
 	}
 }
 

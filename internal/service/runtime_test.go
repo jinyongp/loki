@@ -5,33 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
+	"loki/internal/execution"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )
-
-func TestDevtoolsEnvironmentIsClosed(t *testing.T) {
-	t.Setenv("PRIVATE_PARENT_VALUE", "must-not-pass")
-	environment := devtoolsEnvironment("/opt/devtools/bin/devtools", "/var/lib/loki/devtools")
-	for _, entry := range environment {
-		if entry == "PRIVATE_PARENT_VALUE=must-not-pass" {
-			t.Fatal("devtools inherited the parent environment")
-		}
-	}
-	for _, want := range []string{
-		"HOME=/var/lib/loki/devtools",
-		"XDG_CONFIG_HOME=/var/lib/loki/devtools/.config",
-		"PATH=/opt/devtools/bin:/usr/bin:/bin",
-		"GIT_CONFIG_NOSYSTEM=1",
-	} {
-		if !slices.Contains(environment, want) {
-			t.Fatalf("environment does not contain %q: %#v", want, environment)
-		}
-	}
-}
 
 func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	root := t.TempDir()
@@ -41,9 +21,61 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: filepath.Join(root, "snapshots"), RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
-	for _, path := range []string{o.DevtoolsHome, o.SnapshotDirectory} {
-		if err := os.Mkdir(path, 0700); err != nil {
+	contractPath := filepath.Join(root, "execution-contract.json")
+	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := execution.Load(contractRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnerState := filepath.Join(root, "runner")
+	runnerCache := filepath.Join(root, "cache")
+	runnerTemp := filepath.Join(root, "temp")
+	for name, path := range map[string]string{"runner-state": runnerState, "runner-cache": runnerCache, "runner-temp": runnerTemp, "workspace": workspace} {
+		directory := contract.Directories[name]
+		directory.Path = path
+		contract.Directories[name] = directory
+	}
+	contract.Environment["XDG_CONFIG_HOME"] = filepath.Join(runnerState, "config")
+	contract.Environment["GH_CONFIG_DIR"] = filepath.Join(runnerState, "config", "gh")
+	contract.Environment["XDG_DATA_HOME"] = filepath.Join(runnerState, "data")
+	contract.Environment["XDG_STATE_HOME"] = filepath.Join(runnerState, "state")
+	contract.Environment["XDG_CACHE_HOME"] = runnerCache
+	contract.Environment["NPM_CONFIG_CACHE"] = filepath.Join(runnerCache, "npm")
+	contract.Environment["npm_config_store_dir"] = filepath.Join(runnerCache, "pnpm")
+	contract.Environment["PLAYWRIGHT_BROWSERS_PATH"] = filepath.Join(runnerCache, "playwright")
+	contract.Environment["GOCACHE"] = filepath.Join(runnerCache, "go-build")
+	contract.Environment["GOMODCACHE"] = filepath.Join(runnerCache, "go-mod")
+	contract.Environment["PIP_CACHE_DIR"] = filepath.Join(runnerCache, "pip")
+	contract.Environment["TMPDIR"] = runnerTemp
+	encodedContract, err := json.Marshal(contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(contractPath, encodedContract, 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshotDirectory := filepath.Join(runnerState, "snapshots")
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	for _, path := range []string{
+		runnerState,
+		runnerCache,
+		runnerTemp,
+		snapshotDirectory,
+		contract.Environment["XDG_CONFIG_HOME"],
+		contract.Environment["GH_CONFIG_DIR"],
+		contract.Environment["XDG_DATA_HOME"],
+		contract.Environment["XDG_STATE_HOME"],
+		contract.Environment["NPM_CONFIG_CACHE"],
+		contract.Environment["npm_config_store_dir"],
+		contract.Environment["PLAYWRIGHT_BROWSERS_PATH"],
+		contract.Environment["GOCACHE"],
+		contract.Environment["GOMODCACHE"],
+		contract.Environment["PIP_CACHE_DIR"],
+	} {
+		if err := os.MkdirAll(path, 0700); err != nil {
 			t.Fatal(err)
 		}
 	}

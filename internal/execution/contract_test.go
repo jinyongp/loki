@@ -3,6 +3,7 @@ package execution
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,18 @@ func repositoryContract(t *testing.T) Contract {
 
 func TestRepositoryContractIsValid(t *testing.T) {
 	contract := repositoryContract(t)
+	for name, want := range map[string]string{
+		"runtime-state": "/var/lib/loki-go/runtime",
+		"signing-state": "/var/lib/loki-go/signing",
+		"runner-state":  "/var/lib/loki-go/runner",
+		"runner-cache":  "/var/cache/loki-go/runner",
+		"runner-temp":   "/var/tmp/loki-go/runner",
+		"workspace":     "/workspace",
+	} {
+		if got := contract.Directories[name].Path; got != want {
+			t.Fatalf("%s path = %q, want %q", name, got, want)
+		}
+	}
 	if got := contract.Environment["PLAYWRIGHT_BROWSERS_PATH"]; got != "/var/cache/loki-go/runner/playwright" {
 		t.Fatalf("Playwright cache = %q", got)
 	}
@@ -31,6 +44,37 @@ func TestRepositoryContractIsValid(t *testing.T) {
 	}
 	if got := contract.Directories["runner-state"].Owner; got != "runner" {
 		t.Fatalf("runner state owner = %q", got)
+	}
+}
+
+func TestEnvironmentListIsClosedAndStable(t *testing.T) {
+	t.Setenv("PRIVATE_PARENT_VALUE", "must-not-pass")
+	environment, err := repositoryContract(t).EnvironmentList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.IsSorted(environment) {
+		t.Fatalf("environment is not sorted: %#v", environment)
+	}
+	for _, want := range []string{
+		"HOME=/home/runner",
+		"GH_CONFIG_DIR=/var/lib/loki-go/runner/config/gh",
+		"XDG_CACHE_HOME=/var/cache/loki-go/runner",
+		"NPM_CONFIG_CACHE=/var/cache/loki-go/runner/npm",
+		"npm_config_store_dir=/var/cache/loki-go/runner/pnpm",
+		"PLAYWRIGHT_BROWSERS_PATH=/var/cache/loki-go/runner/playwright",
+		"GOCACHE=/var/cache/loki-go/runner/go-build",
+		"GOMODCACHE=/var/cache/loki-go/runner/go-mod",
+		"PIP_CACHE_DIR=/var/cache/loki-go/runner/pip",
+		"TMPDIR=/var/tmp/loki-go/runner",
+		"GIT_CONFIG_GLOBAL=/home/runner/.gitconfig",
+	} {
+		if !slices.Contains(environment, want) {
+			t.Fatalf("environment does not contain %q: %#v", want, environment)
+		}
+	}
+	if slices.Contains(environment, "PRIVATE_PARENT_VALUE=must-not-pass") {
+		t.Fatal("runner environment inherited a parent value")
 	}
 }
 

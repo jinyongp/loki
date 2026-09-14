@@ -21,6 +21,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "secret":
 			return runAdministration(args, stdout, stderr)
+		case "runner-exec":
+			return runRunnerExec(args[1:], stderr)
 		}
 	}
 	if len(args) > 0 && args[0] == "jwks-refresh" {

@@ -11,6 +11,7 @@ import (
 	"loki/internal/daemon"
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
+	"loki/internal/execution"
 	"loki/internal/process"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -21,13 +22,14 @@ type RuntimeOptions struct {
 	Socket, StateDirectory, InboxDirectory, AuditPath string
 	AgentUID                                          uint32
 	SocketGID                                         int
-	DevtoolsBinary, DevtoolsHome                      string
+	DevtoolsBinary                                    string
+	ExecutionContract                                 string
 	Workspace, DockerSocket, SnapshotDirectory        string
 	RunnerUID, RunnerGID                              uint32
 }
 
 func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAuditError func(error)) error {
-	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.DevtoolsHome, o.Workspace, o.DockerSocket, o.SnapshotDirectory} {
+	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.ExecutionContract, o.Workspace, o.DockerSocket, o.SnapshotDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
 		}
@@ -40,18 +42,55 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 			return err
 		}
 	}
-	for _, path := range []string{o.DevtoolsHome, o.SnapshotDirectory} {
+	var contract execution.Contract
+	if err := daemon.ReadJSON(o.ExecutionContract, &contract); err != nil {
+		return fmt.Errorf("read execution contract: %w", err)
+	}
+	if err := contract.Validate(); err != nil {
+		return err
+	}
+	runnerState := contract.Directories["runner-state"].Path
+	runnerCache := contract.Directories["runner-cache"].Path
+	runnerTemp := contract.Directories["runner-temp"].Path
+	if o.SnapshotDirectory != filepath.Join(runnerState, "snapshots") {
+		return errors.New("snapshot directory does not match execution contract")
+	}
+	runnerDirectories := []string{
+		runnerState,
+		runnerCache,
+		runnerTemp,
+		o.SnapshotDirectory,
+		contract.Environment["XDG_CONFIG_HOME"],
+		contract.Environment["GH_CONFIG_DIR"],
+		contract.Environment["XDG_DATA_HOME"],
+		contract.Environment["XDG_STATE_HOME"],
+		contract.Environment["NPM_CONFIG_CACHE"],
+		contract.Environment["npm_config_store_dir"],
+		contract.Environment["PLAYWRIGHT_BROWSERS_PATH"],
+		contract.Environment["GOCACHE"],
+		contract.Environment["GOMODCACHE"],
+		contract.Environment["PIP_CACHE_DIR"],
+	}
+	for _, path := range runnerDirectories {
 		if err := daemon.OwnedPrivateDirectory(path, o.RunnerUID, o.RunnerGID); err != nil {
 			return fmt.Errorf("validate runner directory %q: %w", path, err)
 		}
 	}
+	environment, err := contract.EnvironmentList()
+	if err != nil {
+		return err
+	}
 	controller := secret.Controller{StateDirectory: o.StateDirectory, InboxDirectory: o.InboxDirectory}
-	devtoolsClient, err := devtools.NewClient(o.DevtoolsBinary, o.Workspace, devtoolsEnvironment(o.DevtoolsBinary, o.DevtoolsHome))
+	devtoolsClient, err := devtools.NewClient(o.DevtoolsBinary, o.Workspace, environment)
 	if err != nil {
 		return err
 	}
 	defer devtoolsClient.Close()
-	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: []uint32{o.RunnerGID}}
+	groups := []uint32{o.RunnerGID}
+	if workspaceGroup := uint32(o.SocketGID); workspaceGroup != o.RunnerGID {
+		groups = append(groups, workspaceGroup)
+	}
+	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: groups}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
@@ -90,19 +129,4 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	}
 	server := rpc.Server{AgentUID: o.AgentUID, Operations: ops, Audit: AuditSink(log, onAuditError)}
 	return server.Serve(ctx, listener)
-}
-
-func devtoolsEnvironment(binary, home string) []string {
-	environment := []string{
-		"HOME=" + home,
-		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
-		"XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"),
-		"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
-		"TMPDIR=/tmp",
-		"LANG=C.UTF-8",
-		"LC_ALL=C.UTF-8",
-		"PATH=" + filepath.Dir(binary) + ":/usr/bin:/bin",
-		"GIT_CONFIG_NOSYSTEM=1",
-	}
-	return environment
 }
