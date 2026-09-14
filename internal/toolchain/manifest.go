@@ -90,7 +90,7 @@ func (m Manifest) Validate() error {
 		if item.Name <= previous || !packageName.MatchString(item.Name) || item.Version == "" || filepath.Base(item.Filename) != item.Filename || !sha256Text.MatchString(item.SHA256) || err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 			return fmt.Errorf("invalid or unsorted toolchain artifact %q", item.Name)
 		}
-		if !slices.Contains([]string{"file", "tar.gz", "tar.xz"}, item.Format) || item.StripComponents < 0 || item.StripComponents > 1 || !filepath.IsAbs(item.InstallPath) || filepath.Clean(item.InstallPath) != item.InstallPath || !strings.HasPrefix(item.InstallPath, "/opt/loki/toolchain/") {
+		if !slices.Contains([]string{"file", "tar.gz", "tar.xz", "zip"}, item.Format) || item.StripComponents < 0 || item.StripComponents > 1 || !filepath.IsAbs(item.InstallPath) || filepath.Clean(item.InstallPath) != item.InstallPath || !strings.HasPrefix(item.InstallPath, "/opt/loki/toolchain/") {
 			return fmt.Errorf("invalid install contract for toolchain artifact %q", item.Name)
 		}
 		if item.Format == "file" && item.StripComponents != 0 {

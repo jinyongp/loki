@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -169,8 +171,13 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		return err
 	}
 	defer os.RemoveAll(temporary)
-	arguments := []string{"-xf", source, "-C", temporary, "--strip-components=" + strconv.Itoa(artifact.StripComponents), "--no-same-owner", "--no-same-permissions"}
-	if err = run(ctx, "tar", arguments...); err != nil {
+	if artifact.Format == "zip" {
+		err = extractZip(source, temporary, artifact.StripComponents)
+	} else {
+		arguments := []string{"-xf", source, "-C", temporary, "--strip-components=" + strconv.Itoa(artifact.StripComponents), "--no-same-owner", "--no-same-permissions"}
+		err = run(ctx, "tar", arguments...)
+	}
+	if err != nil {
 		return fmt.Errorf("extract %s: %w", artifact.Name, err)
 	}
 	want.TreeSHA256, err = treeDigest(temporary)
@@ -182,6 +189,93 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		return err
 	}
 	return os.Rename(temporary, target)
+}
+
+func extractZip(source, destination string, stripComponents int) error {
+	archive, err := zip.OpenReader(source)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+	var expanded uint64
+	for _, entry := range archive.File {
+		name := path.Clean(entry.Name)
+		if name == "." || path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return fmt.Errorf("unsafe zip path %q", entry.Name)
+		}
+		parts := strings.Split(name, "/")
+		if len(parts) <= stripComponents {
+			continue
+		}
+		relative := path.Join(parts[stripComponents:]...)
+		target := filepath.Join(destination, filepath.FromSlash(relative))
+		inside, relErr := filepath.Rel(destination, target)
+		if relErr != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("unsafe zip path %q", entry.Name)
+		}
+		mode := entry.Mode()
+		if mode.IsDir() {
+			if err = os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if entry.UncompressedSize64 > 1<<30 || expanded > 2<<30-entry.UncompressedSize64 {
+			return fmt.Errorf("zip content exceeds extraction limit")
+		}
+		expanded += entry.UncompressedSize64
+		input, openErr := entry.Open()
+		if openErr != nil {
+			return openErr
+		}
+		if err = os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			input.Close()
+			return err
+		}
+		if mode&os.ModeSymlink != 0 {
+			data, readErr := io.ReadAll(io.LimitReader(input, 4097))
+			input.Close()
+			if readErr != nil {
+				return readErr
+			}
+			linkTarget := string(data)
+			resolved := filepath.Clean(filepath.Join(filepath.Dir(target), linkTarget))
+			inside, relErr = filepath.Rel(destination, resolved)
+			if len(data) > 4096 || filepath.IsAbs(linkTarget) || relErr != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("unsafe zip symlink %q", entry.Name)
+			}
+			if err = os.Symlink(linkTarget, target); err != nil {
+				return err
+			}
+			continue
+		}
+		if !mode.IsRegular() {
+			input.Close()
+			return fmt.Errorf("unsupported zip entry %q", entry.Name)
+		}
+		permissions := mode.Perm()
+		if permissions == 0 {
+			permissions = 0644
+		}
+		output, createErr := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permissions)
+		if createErr != nil {
+			input.Close()
+			return createErr
+		}
+		_, copyErr := io.Copy(output, input)
+		closeInputErr := input.Close()
+		closeOutputErr := output.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeInputErr != nil {
+			return closeInputErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+	}
+	return nil
 }
 
 func installLinks(root string, artifacts []Artifact) error {

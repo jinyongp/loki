@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -8,6 +9,35 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+func writeZip(t *testing.T, name string, entries map[string]struct {
+	data []byte
+	mode os.FileMode
+}) {
+	t.Helper()
+	output, err := os.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(output)
+	for path, entry := range entries {
+		header := &zip.FileHeader{Name: path, Method: zip.Store}
+		header.SetMode(entry.mode)
+		writer, createErr := archive.CreateHeader(header)
+		if createErr == nil {
+			_, createErr = writer.Write(entry.data)
+		}
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+	}
+	if err = archive.Close(); err == nil {
+		err = output.Close()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestInstallFileArtifactIsIdempotent(t *testing.T) {
 	bundle, root := t.TempDir(), t.TempDir()
@@ -63,5 +93,54 @@ func TestInstallRejectsChecksumAndOccupiedPath(t *testing.T) {
 	}
 	if err := InstallArtifacts(context.Background(), manifest, bundle, root); err == nil {
 		t.Fatal("occupied path overwritten")
+	}
+}
+
+func TestInstallZipArtifactPreservesExecutables(t *testing.T) {
+	bundle, root := t.TempDir(), t.TempDir()
+	artifacts := filepath.Join(bundle, "artifacts")
+	if err := os.Mkdir(artifacts, 0755); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(artifacts, "browser.zip")
+	writeZip(t, archive, map[string]struct {
+		data []byte
+		mode os.FileMode
+	}{"browser/chrome": {data: []byte("#!/bin/sh\n"), mode: 0755}, "browser/resources.pak": {data: []byte("data"), mode: 0644}})
+	payload, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{Version: 1, Platform: Platform{ID: "ubuntu", Version: "24.04", Arch: "amd64"}, AptPackages: []AptPackage{{Name: "git", Version: "1"}}, Artifacts: []Artifact{{Name: "browser", Version: "1", Filename: "browser.zip", URL: "https://example.test/browser.zip", SHA256: fmt.Sprintf("%x", sha256.Sum256(payload)), Format: "zip", InstallPath: "/opt/loki/toolchain/browser/1", StripComponents: 1, Links: map[string]string{"browser": "chrome"}}}}
+	if err = InstallArtifacts(context.Background(), manifest, bundle, root); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "opt", "loki", "toolchain", "browser", "1", "chrome")
+	if info, statErr := os.Stat(target); statErr != nil || info.Mode().Perm() != 0755 {
+		t.Fatalf("installed executable = %v, %v", info, statErr)
+	}
+}
+
+func TestInstallZipRejectsPathEscape(t *testing.T) {
+	bundle, root := t.TempDir(), t.TempDir()
+	artifacts := filepath.Join(bundle, "artifacts")
+	if err := os.Mkdir(artifacts, 0755); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(artifacts, "browser.zip")
+	writeZip(t, archive, map[string]struct {
+		data []byte
+		mode os.FileMode
+	}{"browser/../../escape": {data: []byte("bad"), mode: 0644}})
+	payload, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{Version: 1, Platform: Platform{ID: "ubuntu", Version: "24.04", Arch: "amd64"}, AptPackages: []AptPackage{{Name: "git", Version: "1"}}, Artifacts: []Artifact{{Name: "browser", Version: "1", Filename: "browser.zip", URL: "https://example.test/browser.zip", SHA256: fmt.Sprintf("%x", sha256.Sum256(payload)), Format: "zip", InstallPath: "/opt/loki/toolchain/browser/1", StripComponents: 1, Links: map[string]string{"browser": "chrome"}}}}
+	if err = InstallArtifacts(context.Background(), manifest, bundle, root); err == nil {
+		t.Fatal("zip path escape accepted")
+	}
+	if _, err = os.Stat(filepath.Join(root, "opt", "loki", "toolchain", "browser", "escape")); !os.IsNotExist(err) {
+		t.Fatal("zip path escape created output")
 	}
 }
