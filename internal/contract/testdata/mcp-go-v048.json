@@ -1,0 +1,2060 @@
+{
+  "baseline": "go-0.48.0-dev",
+  "initialize": {
+    "capabilities": {
+      "experimental": {},
+      "prompts": {
+        "listChanged": false
+      },
+      "resources": {
+        "listChanged": false,
+        "subscribe": false
+      },
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "instructions": "Operate inside the isolated Loki workspace. Before repository work, call agent_context for the intended cwd and activate the devtools skill when it is listed. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, agent skills, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.",
+    "protocolVersion": "2025-11-25",
+    "serverInfo": {
+      "name": "loki",
+      "version": "0.48.0-dev"
+    }
+  },
+  "tools": [
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Inspect Loki itself: action server, diagnostics, workspace, or port.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "default": "server",
+            "enum": [
+              "server",
+              "diagnostics",
+              "workspace",
+              "port"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Port"
+          }
+        },
+        "title": "system_inspectArguments",
+        "type": "object"
+      },
+      "name": "system_inspect",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "system_inspectDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/outputTemplate": "ui://loki/live-preview-v1.html",
+        "openai/toolInvocation/invoked": "Live preview ready.",
+        "openai/toolInvocation/invoking": "Publishing live preview…",
+        "ui": {
+          "resourceUri": "ui://loki/live-preview-v1.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Publish a live preview for one server or an arbitrary route stack.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "server",
+              "stack"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "environment_routes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Environment Routes"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Port"
+          },
+          "routes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Routes"
+          },
+          "ttl_seconds": {
+            "default": 900,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "preview_publishArguments",
+        "type": "object"
+      },
+      "name": "preview_publish",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "preview_publishDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List active temporary resources: kind all, previews, or artifacts.",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "default": "all",
+            "enum": [
+              "all",
+              "previews",
+              "artifacts"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "shared_resourcesArguments",
+        "type": "object"
+      },
+      "name": "shared_resources",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "shared_resourcesDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace cleanup complete.",
+        "openai/toolInvocation/invoking": "Cleaning up a workspace resource…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Revoke a temporary share: kind preview or artifact.",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "preview",
+              "artifact"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "share_id": {
+            "title": "Share Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "share_id"
+        ],
+        "title": "revoke_shareArguments",
+        "type": "object"
+      },
+      "name": "revoke_share",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "revoke_shareDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Browser step complete.",
+        "openai/toolInvocation/invoking": "Working in the browser…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Control browser lifecycle and navigation: action start, navigate, or stop.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "start",
+              "navigate",
+              "stop"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "new_tab": {
+            "default": false,
+            "title": "New Tab",
+            "type": "boolean"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "browser_sessionArguments",
+        "type": "object"
+      },
+      "name": "browser_session",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "browser_sessionDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Browser step complete.",
+        "openai/toolInvocation/invoking": "Working in the browser…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Observe the browser: action state, tabs, console, network, request, websockets, errors, or diagnostics.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "default": "state",
+            "enum": [
+              "state",
+              "tabs",
+              "console",
+              "network",
+              "request",
+              "websockets",
+              "errors",
+              "diagnostics"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "failed_only": {
+            "default": false,
+            "title": "Failed Only",
+            "type": "boolean"
+          },
+          "include_body": {
+            "default": false,
+            "title": "Include Body",
+            "type": "boolean"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Level"
+          },
+          "limit": {
+            "default": 100,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_body_chars": {
+            "default": 65536,
+            "title": "Max Body Chars",
+            "type": "integer"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resource Type"
+          },
+          "since_sequence": {
+            "default": 0,
+            "title": "Since Sequence",
+            "type": "integer"
+          },
+          "status_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status Min"
+          }
+        },
+        "title": "browser_observeArguments",
+        "type": "object"
+      },
+      "name": "browser_observe",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "browser_observeDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Browser step complete.",
+        "openai/toolInvocation/invoking": "Working in the browser…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Interact with the browser: action click, type, press, scroll, back, switch_tab, or close_tab.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "click",
+              "type",
+              "press",
+              "scroll",
+              "back",
+              "switch_tab",
+              "close_tab"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "amount": {
+            "default": 500,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "direction": {
+            "default": "down",
+            "title": "Direction",
+            "type": "string"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Index"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "new_tab": {
+            "default": false,
+            "title": "New Tab",
+            "type": "boolean"
+          },
+          "tab_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tab Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Y"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "browser_interactArguments",
+        "type": "object"
+      },
+      "name": "browser_interact",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "browser_interactDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Browser step complete.",
+        "openai/toolInvocation/invoking": "Working in the browser…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Return a bounded PNG screenshot of the active browser tab as MCP image content.",
+      "inputSchema": {
+        "properties": {
+          "full_page": {
+            "default": false,
+            "title": "Full Page",
+            "type": "boolean"
+          }
+        },
+        "title": "browser_screenshotArguments",
+        "type": "object"
+      },
+      "name": "browser_screenshot"
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Browser step complete.",
+        "openai/toolInvocation/invoking": "Working in the browser…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Capture and atomically save a bounded PNG screenshot inside the workspace.",
+      "inputSchema": {
+        "properties": {
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Sha256"
+          },
+          "full_page": {
+            "default": false,
+            "title": "Full Page",
+            "type": "boolean"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "browser_save_screenshotArguments",
+        "type": "object"
+      },
+      "name": "browser_save_screenshot",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "browser_save_screenshotDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/outputTemplate": "ui://loki/image-viewer-v3.html",
+        "openai/toolInvocation/invoked": "Image ready.",
+        "openai/toolInvocation/invoking": "Preparing image…",
+        "ui": {
+          "resourceUri": "ui://loki/image-viewer-v3.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Capture the active browser tab and immediately render that exact screenshot.",
+      "inputSchema": {
+        "properties": {
+          "full_page": {
+            "default": false,
+            "title": "Full Page",
+            "type": "boolean"
+          },
+          "ttl_seconds": {
+            "default": 900,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "browser_share_screenshotArguments",
+        "type": "object"
+      },
+      "name": "browser_share_screenshot",
+      "outputSchema": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "display_markdown": {
+            "title": "Display Markdown",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "full_page": {
+            "title": "Full Page",
+            "type": "boolean"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "mime_type",
+          "bytes",
+          "sha256",
+          "url",
+          "expires_at",
+          "display_markdown",
+          "full_page"
+        ],
+        "title": "BrowserShareImageResult",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read workspace text and history: action list, file, search, revisions, or revision_diff.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "file",
+              "search",
+              "revisions",
+              "revision_diff"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_depth": {
+            "default": 3,
+            "title": "Max Depth",
+            "type": "integer"
+          },
+          "max_results": {
+            "default": 100,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "path": {
+            "default": ".",
+            "title": "Path",
+            "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          },
+          "regex": {
+            "default": false,
+            "title": "Regex",
+            "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "workspace_readArguments",
+        "type": "object"
+      },
+      "name": "workspace_read",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "workspace_readDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Return image metadata plus bounded PNG, JPEG, WebP, or GIF MCP image content.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "read_imageArguments",
+        "type": "object"
+      },
+      "name": "read_image",
+      "outputSchema": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "mime_type",
+          "bytes",
+          "sha256"
+        ],
+        "title": "ReadImageResult",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/outputTemplate": "ui://loki/image-viewer-v3.html",
+        "openai/toolInvocation/invoked": "Image ready.",
+        "openai/toolInvocation/invoking": "Preparing image…",
+        "ui": {
+          "resourceUri": "ui://loki/image-viewer-v3.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Publish a temporary image and render it in the attached image viewer UI.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 900,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "share_imageArguments",
+        "type": "object"
+      },
+      "name": "share_image",
+      "outputSchema": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "display_markdown": {
+            "title": "Display Markdown",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "mime_type",
+          "bytes",
+          "sha256",
+          "url",
+          "expires_at",
+          "display_markdown"
+        ],
+        "title": "ShareImageResult",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Publish downloadable workspace content: action file or bundle.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "file",
+              "bundle"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "filename": {
+            "default": "loki-workspace.zip",
+            "title": "Filename",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "paths": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paths"
+          },
+          "ttl_seconds": {
+            "default": 900,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "artifact_publishArguments",
+        "type": "object"
+      },
+      "name": "artifact_publish"
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace update complete.",
+        "openai/toolInvocation/invoking": "Updating workspace files…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Decode and atomically save a bounded base64 PNG, JPEG, WebP, or GIF in the workspace.",
+      "inputSchema": {
+        "properties": {
+          "data_base64": {
+            "title": "Data Base64",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Sha256"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "data_base64",
+          "mime_type"
+        ],
+        "title": "write_imageArguments",
+        "type": "object"
+      },
+      "name": "write_image",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "write_imageDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Edit workspace text safely: action create, replace, patch, or move.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "replace",
+              "patch",
+              "move"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Destination"
+          },
+          "expected_replacements": {
+            "default": 1,
+            "title": "Expected Replacements",
+            "type": "integer"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Sha256"
+          },
+          "new": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "New"
+          },
+          "old": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Old"
+          },
+          "patch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Patch"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "workspace_editArguments",
+        "type": "object"
+      },
+      "name": "workspace_edit",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "workspace_editDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Restore one saved pre-mutation file revision after an optimistic hash check.",
+      "inputSchema": {
+        "properties": {
+          "expected_sha256": {
+            "title": "Expected Sha256",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "revision",
+          "expected_sha256"
+        ],
+        "title": "restore_workspace_fileArguments",
+        "type": "object"
+      },
+      "name": "restore_workspace_file",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "restore_workspace_fileDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace cleanup complete.",
+        "openai/toolInvocation/invoking": "Cleaning up a workspace resource…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Remove one Git-tracked file; quarantine unwanted untracked files with move_path instead.",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "remove_tracked_fileArguments",
+        "type": "object"
+      },
+      "name": "remove_tracked_file",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "remove_tracked_fileDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read applicable AGENTS.md and Skills for a workspace-relative or /workspace absolute cwd.",
+      "inputSchema": {
+        "properties": {
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          }
+        },
+        "title": "agent_contextArguments",
+        "type": "object"
+      },
+      "name": "agent_context",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "agent_contextDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read Agent Skills: action list, activate, resource, or validate.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "activate",
+              "resource",
+              "validate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "skill_readArguments",
+        "type": "object"
+      },
+      "name": "skill_read",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "skill_readDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create or edit Agent Skills: action create, edit, or resource.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "edit",
+              "resource"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          },
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "encoding": {
+            "default": "utf-8",
+            "title": "Encoding",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Sha256"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "patch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Patch"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope"
+          }
+        },
+        "required": [
+          "action",
+          "name"
+        ],
+        "title": "skill_writeArguments",
+        "type": "object"
+      },
+      "name": "skill_write",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "skill_writeDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Git step complete.",
+        "openai/toolInvocation/invoking": "Inspecting Git state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Inspect Git: action status, diff, index, or commit_context.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "default": "status",
+            "enum": [
+              "status",
+              "diff",
+              "index",
+              "commit_context"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "staged": {
+            "default": false,
+            "title": "Staged",
+            "type": "boolean"
+          }
+        },
+        "title": "git_inspectArguments",
+        "type": "object"
+      },
+      "name": "git_inspect",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "git_inspectDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Git step complete.",
+        "openai/toolInvocation/invoking": "Inspecting Git state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Modify only the Git index: action paths, unstage, or patch.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "paths",
+              "unstage",
+              "patch"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "expected_index_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Index Sha256"
+          },
+          "patch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Patch"
+          },
+          "paths": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paths"
+          },
+          "reverse": {
+            "default": false,
+            "title": "Reverse",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "git_stageArguments",
+        "type": "object"
+      },
+      "name": "git_stage",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "git_stageDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/outputTemplate": "ui://loki/developer-output-v1.html",
+        "openai/toolInvocation/invoked": "Developer output ready.",
+        "openai/toolInvocation/invoking": "Preparing developer output…",
+        "ui": {
+          "resourceUri": "ui://loki/developer-output-v1.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Render a Git diff or saved test report.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "git_diff",
+              "test_report"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cwd": {
+            "default": ".",
+            "title": "Cwd",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "staged": {
+            "default": false,
+            "title": "Staged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "developer_viewArguments",
+        "type": "object"
+      },
+      "name": "developer_view"
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Inspect encrypted secret metadata: action profiles, imports, profile, status, or audit.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "profiles",
+              "imports",
+              "profile",
+              "status",
+              "audit"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "secret_inspectArguments",
+        "type": "object"
+      },
+      "name": "secret_inspect",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "secret_inspectDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Write profile state. Use set only for non-sensitive public config; its value is visible in the MCP request. Use import_env or generate for credentials and other secrets.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create_profile",
+              "import_env",
+              "set",
+              "generate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "bytes": {
+            "default": 32,
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Import Id"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "action",
+          "profile"
+        ],
+        "title": "secret_writeArguments",
+        "type": "object"
+      },
+      "name": "secret_write",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "secret_writeDictOutput",
+        "type": "object"
+      }
+    },
+    {
+      "_meta": {
+        "openai/toolInvocation/invoked": "Workspace inspection complete.",
+        "openai/toolInvocation/invoking": "Inspecting workspace state…"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Delete an encrypted secret or profile.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "enum": [
+              "secret",
+              "profile"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "secret_deleteArguments",
+        "type": "object"
+      },
+      "name": "secret_delete",
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "secret_deleteDictOutput",
+        "type": "object"
+      }
+    }
+  ],
+  "resources": [
+    {
+      "_meta": {
+        "ui": {
+          "prefersBorder": true,
+          "domain": "https://mcp.streamliner.im",
+          "csp": {
+            "resourceDomains": [
+              "https://mcp.streamliner.im"
+            ]
+          }
+        },
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetDomain": "https://mcp.streamliner.im",
+        "openai/widgetCSP": {
+          "resource_domains": [
+            "https://mcp.streamliner.im"
+          ]
+        }
+      },
+      "description": "Render a temporary Loki workspace image inside an MCP Apps host.",
+      "mimeType": "text/html;profile=mcp-app",
+      "name": "Loki image viewer",
+      "uri": "ui://loki/image-viewer-v3.html"
+    },
+    {
+      "_meta": {
+        "ui": {
+          "prefersBorder": true,
+          "domain": "https://mcp.streamliner.im",
+          "csp": {
+            "frameDomains": [
+              "https://*.streamliner.im"
+            ]
+          }
+        },
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetDomain": "https://mcp.streamliner.im",
+        "openai/widgetCSP": {
+          "frame_domains": [
+            "https://*.streamliner.im"
+          ]
+        }
+      },
+      "description": "Render a temporary Loki development server inside an MCP Apps host.",
+      "mimeType": "text/html;profile=mcp-app",
+      "name": "Loki live development preview",
+      "uri": "ui://loki/live-preview-v1.html"
+    },
+    {
+      "_meta": {
+        "ui": {
+          "prefersBorder": true,
+          "domain": "https://mcp.streamliner.im",
+          "csp": {}
+        },
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetDomain": "https://mcp.streamliner.im",
+        "openai/widgetCSP": {
+          "resource_domains": [],
+          "connect_domains": []
+        }
+      },
+      "description": "Render Git diffs, test reports, and managed process logs.",
+      "mimeType": "text/html;profile=mcp-app",
+      "name": "Loki developer output viewer",
+      "uri": "ui://loki/developer-output-v1.html"
+    }
+  ],
+  "resourceTemplates": [],
+  "resourceContents": {
+    "ui://loki/developer-output-v1.html": {
+      "contents": [
+        {
+          "_meta": {
+            "ui": {
+              "prefersBorder": true,
+              "domain": "https://mcp.streamliner.im",
+              "csp": {}
+            },
+            "openai/widgetPrefersBorder": true,
+            "openai/widgetDomain": "https://mcp.streamliner.im",
+            "openai/widgetCSP": {
+              "resource_domains": [],
+              "connect_domains": []
+            }
+          },
+          "mimeType": "text/html;profile=mcp-app",
+          "text": "\u003c!doctype html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"utf-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\"\u003e\n  \u003cstyle\u003e\n    :root {\n      color-scheme: light dark;\n      font-family: ui-sans-serif, system-ui, sans-serif;\n      --surface: Canvas;\n      --ink: CanvasText;\n      --muted: color-mix(in srgb, CanvasText 62%, Canvas);\n      --line: color-mix(in srgb, CanvasText 16%, transparent);\n      --soft: color-mix(in srgb, CanvasText 5%, Canvas);\n      --green: light-dark(#08783e, #79dfa6);\n      --red: light-dark(#b42318, #ff9b91);\n      --blue: light-dark(#175cd3, #89b4ff);\n      --amber: light-dark(#9a6700, #e8c76a);\n    }\n    * { box-sizing: border-box; }\n    ::selection { background: color-mix(in srgb, var(--blue) 28%, transparent); }\n    body { margin: 0; padding: 8px; background: transparent; color: var(--ink); }\n    [hidden] { display: none !important; }\n    main { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 10px 28px color-mix(in srgb, CanvasText 8%, transparent); }\n    header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }\n    h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 1.35; letter-spacing: -0.015em; }\n    #subtitle { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }\n    nav { display: flex; align-items: center; gap: 2px; }\n    button { border: 0; border-radius: 8px; padding: 6px 9px; color: var(--muted); background: transparent; font: 600 12px/1 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }\n    button:hover { color: var(--ink); background: var(--soft); }\n    button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }\n    #stats { display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--line); background: var(--soft); }\n    .stat { color: var(--muted); font: 600 11px/1.4 ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; }\n    .stat strong { color: var(--ink); }\n    #notice { padding: 8px 16px; color: var(--amber); border-bottom: 1px solid var(--line); font-size: 12px; }\n    #viewport { height: min(64vh, 680px); min-height: 300px; overflow: auto; scrollbar-color: var(--muted) transparent; scrollbar-width: thin; }\n    #viewport::-webkit-scrollbar { width: 10px; height: 10px; }\n    #viewport::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: var(--muted); background-clip: padding-box; }\n    ol { min-width: 100%; width: max-content; margin: 0; padding: 12px 0; counter-reset: line; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }\n    li { display: grid; grid-template-columns: 5ch minmax(0, 1fr); min-height: 1.55em; padding-right: 16px; white-space: pre; }\n    li::before { counter-increment: line; content: counter(line); padding-right: 12px; color: var(--muted); text-align: right; user-select: none; }\n    li.add { color: var(--green); background: color-mix(in srgb, var(--green) 8%, transparent); }\n    li.del { color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }\n    li.hunk, li.meta { color: var(--blue); }\n    li.fail { color: var(--red); font-weight: 600; }\n    li.pass { color: var(--green); }\n    li.warn { color: var(--amber); }\n    main.wrap li { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }\n    #empty { padding: 48px 20px; color: var(--muted); text-align: center; }\n    #status { padding: 20px; color: var(--muted); }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv id=\"status\"\u003eWaiting for developer output…\u003c/div\u003e\n  \u003cmain hidden\u003e\n    \u003cheader\u003e\n      \u003cdiv\u003e\u003ch1 id=\"title\"\u003eDeveloper output\u003c/h1\u003e\u003cdiv id=\"subtitle\"\u003e\u003c/div\u003e\u003c/div\u003e\n      \u003cnav aria-label=\"Viewer controls\"\u003e\n        \u003cbutton id=\"wrap\" type=\"button\" aria-pressed=\"false\"\u003eWrap\u003c/button\u003e\n        \u003cbutton id=\"copy\" type=\"button\"\u003eCopy\u003c/button\u003e\n        \u003cbutton id=\"fullscreen\" type=\"button\"\u003eFullscreen\u003c/button\u003e\n      \u003c/nav\u003e\n    \u003c/header\u003e\n    \u003cdiv id=\"stats\"\u003e\u003c/div\u003e\n    \u003cdiv id=\"notice\" hidden\u003eOutput was truncated. Open the source tool again with a narrower range.\u003c/div\u003e\n    \u003cdiv id=\"viewport\"\u003e\u003col id=\"lines\"\u003e\u003c/ol\u003e\u003cdiv id=\"empty\" hidden\u003eNo output.\u003c/div\u003e\u003c/div\u003e\n  \u003c/main\u003e\n  \u003cscript\u003e\n    const main = document.querySelector(\"main\");\n    const status = document.getElementById(\"status\");\n    const title = document.getElementById(\"title\");\n    const subtitle = document.getElementById(\"subtitle\");\n    const stats = document.getElementById(\"stats\");\n    const lines = document.getElementById(\"lines\");\n    const empty = document.getElementById(\"empty\");\n    const notice = document.getElementById(\"notice\");\n    let current = null;\n    let lastReportedHeight = 0;\n\n    function reportHeight() {\n      const height = Math.ceil(document.documentElement.scrollHeight);\n      if (height === lastReportedHeight) return;\n      lastReportedHeight = height;\n      window.openai?.notifyIntrinsicHeight?.(height);\n    }\n\n    function lineClass(text, kind) {\n      if (kind === \"diff\") {\n        if (text.startsWith(\"+\") \u0026\u0026 !text.startsWith(\"+++\")) return \"add\";\n        if (text.startsWith(\"-\") \u0026\u0026 !text.startsWith(\"---\")) return \"del\";\n        if (text.startsWith(\"@@\")) return \"hunk\";\n        if (/^(diff --git|index |--- |\\+\\+\\+ )/.test(text)) return \"meta\";\n      }\n      if (/\\b(fail(?:ed|ure)?|error|not ok)\\b/i.test(text)) return \"fail\";\n      if (/\\b(pass(?:ed)?|ok|success)\\b/i.test(text)) return \"pass\";\n      if (/\\b(warn(?:ing)?|skipped|todo)\\b/i.test(text)) return \"warn\";\n      return \"\";\n    }\n\n    function render(value) {\n      const result = value?.structuredContent ?? value;\n      if (!result || typeof result.content !== \"string\") return;\n      current = result;\n      title.textContent = typeof result.title === \"string\" ? result.title : \"Developer output\";\n      subtitle.textContent = typeof result.subtitle === \"string\" ? result.subtitle : \"\";\n      stats.replaceChildren();\n      for (const [key, value] of Object.entries(result.stats ?? {})) {\n        if (value === null || value === undefined) continue;\n        const item = document.createElement(\"span\");\n        item.className = \"stat\";\n        const strong = document.createElement(\"strong\");\n        strong.textContent = String(value);\n        item.append(document.createTextNode(`${key} `), strong);\n        stats.append(item);\n      }\n      lines.replaceChildren();\n      const rows = result.content ? result.content.replace(/\\r\\n/g, \"\\n\").split(\"\\n\") : [];\n      if (rows.at(-1) === \"\") rows.pop();\n      for (const text of rows) {\n        const row = document.createElement(\"li\");\n        row.className = lineClass(text, result.kind);\n        const content = document.createElement(\"span\");\n        content.textContent = text || \" \";\n        row.append(content);\n        lines.append(row);\n      }\n      empty.hidden = rows.length \u003e 0;\n      notice.hidden = result.truncated !== true;\n      status.hidden = true;\n      main.hidden = false;\n      requestAnimationFrame(reportHeight);\n    }\n\n    document.getElementById(\"wrap\").addEventListener(\"click\", event =\u003e {\n      const enabled = main.classList.toggle(\"wrap\");\n      event.currentTarget.setAttribute(\"aria-pressed\", String(enabled));\n    });\n    document.getElementById(\"copy\").addEventListener(\"click\", async event =\u003e {\n      if (!current) return;\n      await navigator.clipboard.writeText(current.content);\n      event.currentTarget.textContent = \"Copied\";\n      setTimeout(() =\u003e { event.currentTarget.textContent = \"Copy\"; }, 1200);\n    });\n    document.getElementById(\"fullscreen\").addEventListener(\"click\", () =\u003e {\n      window.openai?.requestDisplayMode?.({ mode: \"fullscreen\" });\n    });\n    window.addEventListener(\"message\", event =\u003e {\n      if (event.source !== window.parent) return;\n      const message = event.data;\n      if (message?.jsonrpc === \"2.0\" \u0026\u0026 message.method === \"ui/notifications/tool-result\") render(message.params);\n    }, { passive: true });\n    window.addEventListener(\"openai:set_globals\", event =\u003e render(event.detail?.globals?.toolOutput), { passive: true });\n    render(window.openai?.toolOutput);\n    new ResizeObserver(reportHeight).observe(document.body);\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+          "uri": "ui://loki/developer-output-v1.html"
+        }
+      ]
+    },
+    "ui://loki/image-viewer-v3.html": {
+      "contents": [
+        {
+          "_meta": {
+            "ui": {
+              "prefersBorder": true,
+              "domain": "https://mcp.streamliner.im",
+              "csp": {
+                "resourceDomains": [
+                  "https://mcp.streamliner.im"
+                ]
+              }
+            },
+            "openai/widgetPrefersBorder": true,
+            "openai/widgetDomain": "https://mcp.streamliner.im",
+            "openai/widgetCSP": {
+              "resource_domains": [
+                "https://mcp.streamliner.im"
+              ]
+            }
+          },
+          "mimeType": "text/html;profile=mcp-app",
+          "text": "\u003c!doctype html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"utf-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\"\u003e\n  \u003cstyle\u003e\n    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }\n    body { margin: 0; padding: 8px; }\n    [hidden] { display: none !important; }\n    figure { margin: 0; display: grid; gap: 8px; }\n    img { display: block; width: 100%; height: auto; max-height: 720px; object-fit: contain; border-radius: 10px; background: Canvas; cursor: zoom-in; }\n    figcaption { display: flex; gap: 8px; align-items: center; color: GrayText; font-size: 12px; overflow-wrap: anywhere; }\n    a { color: LinkText; }\n    #status { padding: 12px; color: GrayText; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv id=\"status\"\u003eLoading image…\u003c/div\u003e\n  \u003cfigure hidden\u003e\n    \u003cimg id=\"image\" alt=\"Image shared from the Loki workspace\"\u003e\n    \u003cfigcaption\u003e\u003cspan id=\"name\"\u003e\u003c/span\u003e\u003ca id=\"open\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eOpen original\u003c/a\u003e\u003c/figcaption\u003e\n  \u003c/figure\u003e\n  \u003cscript\u003e\n    const status = document.getElementById(\"status\");\n    const figure = document.querySelector(\"figure\");\n    const image = document.getElementById(\"image\");\n    const name = document.getElementById(\"name\");\n    const open = document.getElementById(\"open\");\n    let lastReportedHeight = 0;\n\n    function reportHeight() {\n      const height = Math.ceil(document.documentElement.scrollHeight);\n      if (height === lastReportedHeight) return;\n      lastReportedHeight = height;\n      window.openai?.notifyIntrinsicHeight?.(height);\n    }\n\n    function render(value) {\n      const result = value?.structuredContent ?? value;\n      if (!result || typeof result.url !== \"string\") return;\n      try {\n        const url = new URL(result.url);\n        if (url.protocol !== \"https:\") throw new Error(\"unsupported image URL\");\n        image.src = url.href;\n        open.href = url.href;\n        name.textContent = typeof result.path === \"string\" ? result.path : \"Loki image\";\n        status.hidden = true;\n        figure.hidden = false;\n        requestAnimationFrame(reportHeight);\n      } catch (_) {\n        status.textContent = \"The image URL is invalid.\";\n      }\n    }\n\n    image.addEventListener(\"load\", () =\u003e {\n      requestAnimationFrame(reportHeight);\n    });\n\n    image.addEventListener(\"error\", () =\u003e {\n      figure.hidden = true;\n      status.hidden = false;\n      status.textContent = \"The image could not be loaded. The temporary link may have expired.\";\n      requestAnimationFrame(reportHeight);\n    });\n\n    image.addEventListener(\"click\", () =\u003e {\n      window.openai?.requestDisplayMode?.({ mode: \"fullscreen\" });\n    });\n\n    window.addEventListener(\"message\", (event) =\u003e {\n      if (event.source !== window.parent) return;\n      const message = event.data;\n      if (!message || message.jsonrpc !== \"2.0\") return;\n      if (message.method === \"ui/notifications/tool-result\") render(message.params);\n    }, { passive: true });\n\n    window.addEventListener(\"openai:set_globals\", (event) =\u003e {\n      render(event.detail?.globals?.toolOutput);\n    }, { passive: true });\n\n    render(window.openai?.toolOutput);\n    new ResizeObserver(reportHeight).observe(document.body);\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+          "uri": "ui://loki/image-viewer-v3.html"
+        }
+      ]
+    },
+    "ui://loki/live-preview-v1.html": {
+      "contents": [
+        {
+          "_meta": {
+            "ui": {
+              "prefersBorder": true,
+              "domain": "https://mcp.streamliner.im",
+              "csp": {
+                "frameDomains": [
+                  "https://*.streamliner.im"
+                ]
+              }
+            },
+            "openai/widgetPrefersBorder": true,
+            "openai/widgetDomain": "https://mcp.streamliner.im",
+            "openai/widgetCSP": {
+              "frame_domains": [
+                "https://*.streamliner.im"
+              ]
+            }
+          },
+          "mimeType": "text/html;profile=mcp-app",
+          "text": "\u003c!doctype html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"utf-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\"\u003e\n  \u003cstyle\u003e\n    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }\n    body { margin: 0; padding: 8px; }\n    [hidden] { display: none !important; }\n    main { display: grid; gap: 8px; }\n    header { display: flex; align-items: center; gap: 8px; min-width: 0; }\n    #title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }\n    #meta { color: GrayText; font-size: 12px; }\n    button, a { color: LinkText; background: transparent; border: 0; padding: 4px; font: inherit; cursor: pointer; }\n    #frame-wrap { position: relative; height: min(70vh, 720px); min-height: 420px; overflow: hidden; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 12px; background: Canvas; }\n    iframe { display: block; width: 100%; height: 100%; border: 0; background: white; }\n    #status { position: absolute; inset: 0; display: grid; place-items: center; color: GrayText; background: Canvas; }\n    #error { padding: 16px; color: CanvasText; }\n  \u003c/style\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003cdiv id=\"error\"\u003eWaiting for a live preview…\u003c/div\u003e\n  \u003cmain hidden\u003e\n    \u003cheader\u003e\n      \u003cspan id=\"title\"\u003eLoki live preview\u003c/span\u003e\n      \u003cspan id=\"meta\"\u003e\u003c/span\u003e\n      \u003cbutton id=\"reload\" type=\"button\"\u003eReload\u003c/button\u003e\n      \u003cbutton id=\"fullscreen\" type=\"button\"\u003eFullscreen\u003c/button\u003e\n      \u003ca id=\"open\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eOpen in new tab\u003c/a\u003e\n    \u003c/header\u003e\n    \u003cdiv id=\"frame-wrap\"\u003e\n      \u003cdiv id=\"status\"\u003eLoading preview…\u003c/div\u003e\n      \u003ciframe id=\"preview\" title=\"Loki live development preview\" sandbox=\"allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads allow-pointer-lock\" allow=\"clipboard-read; clipboard-write\"\u003e\u003c/iframe\u003e\n    \u003c/div\u003e\n  \u003c/main\u003e\n  \u003cscript\u003e\n    const error = document.getElementById(\"error\");\n    const main = document.querySelector(\"main\");\n    const frame = document.getElementById(\"preview\");\n    const status = document.getElementById(\"status\");\n    const title = document.getElementById(\"title\");\n    const meta = document.getElementById(\"meta\");\n    const open = document.getElementById(\"open\");\n    let currentUrl = \"\";\n    let lastReportedHeight = 0;\n\n    function reportHeight() {\n      const height = Math.ceil(document.documentElement.scrollHeight);\n      if (height === lastReportedHeight) return;\n      lastReportedHeight = height;\n      window.openai?.notifyIntrinsicHeight?.(height);\n    }\n\n    function render(value) {\n      const result = value?.structuredContent ?? value;\n      if (!result || typeof result.url !== \"string\") return;\n      try {\n        const url = new URL(result.url);\n        if (url.protocol !== \"https:\" || !/^loki-[0-9a-f]{32}\\./.test(url.hostname)) {\n          throw new Error(\"unsupported preview URL\");\n        }\n        currentUrl = url.href;\n        frame.src = currentUrl;\n        open.href = currentUrl;\n        title.textContent = typeof result.cwd === \"string\" ? result.cwd : \"Loki live preview\";\n        const expiry = typeof result.expires_at === \"string\" ? new Date(result.expires_at) : null;\n        const routeCount = result.routes \u0026\u0026 typeof result.routes === \"object\"\n          ? Object.keys(result.routes).length\n          : 0;\n        const target = routeCount \u003e 1 ? `${routeCount} routes` : `port ${result.port}`;\n        meta.textContent = expiry \u0026\u0026 !Number.isNaN(expiry.valueOf())\n          ? `${target} · expires ${expiry.toLocaleTimeString()}`\n          : target;\n        error.hidden = true;\n        main.hidden = false;\n        status.hidden = false;\n        requestAnimationFrame(reportHeight);\n      } catch (_) {\n        main.hidden = true;\n        error.hidden = false;\n        error.textContent = \"The live preview URL is invalid.\";\n      }\n    }\n\n    frame.addEventListener(\"load\", () =\u003e {\n      status.hidden = true;\n      requestAnimationFrame(reportHeight);\n    });\n    document.getElementById(\"reload\").addEventListener(\"click\", () =\u003e {\n      if (!currentUrl) return;\n      status.hidden = false;\n      frame.src = currentUrl;\n    });\n    document.getElementById(\"fullscreen\").addEventListener(\"click\", () =\u003e {\n      window.openai?.requestDisplayMode?.({ mode: \"fullscreen\" });\n    });\n    window.addEventListener(\"message\", (event) =\u003e {\n      if (event.source !== window.parent) return;\n      const message = event.data;\n      if (!message || message.jsonrpc !== \"2.0\") return;\n      if (message.method === \"ui/notifications/tool-result\") render(message.params);\n    }, { passive: true });\n    window.addEventListener(\"openai:set_globals\", (event) =\u003e {\n      render(event.detail?.globals?.toolOutput);\n    }, { passive: true });\n    render(window.openai?.toolOutput);\n    new ResizeObserver(reportHeight).observe(document.body);\n  \u003c/script\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+          "uri": "ui://loki/live-preview-v1.html"
+        }
+      ]
+    }
+  }
+}
