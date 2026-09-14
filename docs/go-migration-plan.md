@@ -27,7 +27,7 @@ diagnostics, and backups. Loki retains these boundaries:
 
 - encrypted secret storage and selected environment injection
 - peer authorization and audit records
-- process output redaction
+- secret response and error screening
 - workspace path and executable confinement
 - preview listener ownership checks
 - Git signing key isolation
@@ -106,12 +106,12 @@ leak them.
 ### 5. Publish the reduced MCP surface
 
 Retain focused Loki tools for workspace, Git, signing, browser, artifacts,
-previews, encrypted secrets, skill discovery, audit, and system diagnostics.
+previews, encrypted secrets, audit, and system diagnostics.
 Remove task, workstream, validation, variable, configured-process, and project
 workflow tools that the devtools CLI owns.
 
-Gate: tool discovery contains only retained Loki tools. The devtools skill is
-discoverable and its documented CLI flow succeeds end to end.
+Gate: tool discovery contains only retained Loki tools. The installed devtools
+skill and its documented CLI flow succeed end to end.
 
 ### 6. Remove replaced implementation
 
@@ -140,8 +140,8 @@ Run formatting, vet, unit, race, broker permission, secret non-disclosure,
 devtools integration, MCP end-to-end, browser, preview, Git signing, clean
 installation, restart, and recovery checks against candidate-only state.
 
-Gate: the same candidate artifact passes all required checks in isolation and
-the running Python installation remains unchanged.
+Gate: the same Go and devtools candidate artifact passes all required checks in
+isolation and the running Python installation remains unchanged.
 
 ## Commit cadence
 
