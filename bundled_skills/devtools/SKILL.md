@@ -21,16 +21,30 @@ Help and `skill` return text; `run` forwards the child's output and exit code.
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
-Variables are readable; secrets are metadata-only and enter processes through
-`run` or managed commands. Import mixed dotenv files by path, marking public keys
-with `--var`; new unmarked keys become secrets. Keep secret values out of arguments,
-conversation, and logs. Child output and explicitly captured logs may contain secrets.
+Variables are readable and can use the devtools variable commands. Loki keeps
+active secret values in its AES-GCM vault, so leave the devtools active secret
+store empty. Manage those values with the Loki secret commands. Keep secret
+values out of arguments, conversation, and logs.
 
 Use `run NAME` for foreground work and `process start NAME` for a persistent server.
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
+
+For a configured process that needs encrypted Loki secrets, replace only the
+start or restart command with the brokered form below. Put all options before
+the final command name or execution ID. Repeat `--secret` for each selected name.
+
+```sh
+loki secret-process start --profile VAULT_PROFILE --secret TOKEN --request-id UUID --dir /workspace/PROJECT COMMAND
+loki secret-process restart --profile VAULT_PROFILE --secret TOKEN --request-id UUID EXECUTION_ID
+```
+
+The broker resolves values inside the root-owned vault and passes them to the
+managed process environment. The agent, argv, devtools state, response, and
+audit records receive names only. Continue with ordinary `devtools process
+status`, `check`, `wait`, and `stop` commands using the returned execution ID.
 
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.

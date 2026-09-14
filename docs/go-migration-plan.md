@@ -53,9 +53,10 @@ for the configured-process commands that accept encrypted Loki secrets.
 Generation is an explicit source update, so a package upgrade cannot silently
 change the privileged broker contract.
 
-Bundle the exact `devtools skill` output for the pinned version as Loki's only
-built-in agent skill. Agents discover individual command contracts with
-`devtools schema COMMAND` and invoke the binary from their shell.
+Bundle the pinned `devtools skill` as Loki's only built-in agent skill, with a
+small Loki appendix that directs encrypted process launches through
+`loki secret-process`. Agents discover individual command contracts with
+`devtools schema COMMAND` and invoke ordinary commands from their shell.
 
 The runtime adapter validates the small secret-launch command subset against
 the pinned manifest and constructs an argument vector without a shell. It
@@ -80,7 +81,8 @@ Remove the existing bundled skills. Vendor the pinned devtools skill and make
 the installer publish that one skill to agent environments.
 
 Gate: the bundled directory contains exactly one valid `devtools/SKILL.md`, its
-content matches `devtools skill`, and installation exposes it to the agent.
+upstream body and Loki encrypted-secret guidance are pinned, and installation
+exposes it to the agent.
 
 ### 3. Implement the secret process adapter
 

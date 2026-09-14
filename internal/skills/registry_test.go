@@ -23,7 +23,7 @@ func TestBundledCatalogContainsPinnedDevtoolsSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := digest(raw), "760deed865c993b7ead57d76eb7891216317b33f2e12c37ce6949e46e0e31ed8"; got != want {
+	if got, want := digest(raw), "55a260c71fff25e7a731244bbf7043f055cadde26f5bc79fe4430ff23a0ea3bd"; got != want {
 		t.Fatalf("devtools 0.8.2 skill digest = %s, want %s", got, want)
 	}
 	workspace, err := policy.New(t.TempDir())
