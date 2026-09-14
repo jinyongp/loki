@@ -34,7 +34,7 @@ func candidateArtifact(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeExecutable(t, filepath.Join(root, "opt/loki/bin/loki"), "#!/bin/sh\ntest \"$1\" = toolchain\n")
+	writeExecutable(t, filepath.Join(root, "opt/loki/bin/loki"), "#!/bin/sh\nset -eu\ncase \"$1\" in\n  toolchain) exit 0 ;;\n  migrate-vault) test \"${TEST_MIGRATE_FAIL:-0}\" != 1 || exit 1; while test \"$#\" -gt 0; do if test \"$1\" = --destination; then mkdir -p \"$2\"; : > \"$2/imported-by-candidate\"; exit 0; fi; shift; done ;;\nesac\nexit 1\n")
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/lifecycle"), string(lifecycle))
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/devtools"), "#!/bin/sh\nexit 0\n")
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/render-layouts"), "#!/bin/sh\nset -eu\nmkdir -p \"$2\"\nfor f in runtime.json mcp.json identity.env; do : > \"$2/$f\"; chmod 0640 \"$2/$f\"; done\n")
@@ -190,6 +190,42 @@ func TestLifecycleRejectsUnsafeInputs(t *testing.T) {
 	artifact := candidateArtifact(t, "candidate")
 	runLifecycle(t, environment, false, "install", artifact, "../escape", "1", "1", "1", "1")
 	runLifecycle(t, environment, false, "install", artifact, "v1", "runner", "1", "1", "1")
+}
+
+func TestLifecycleCanMigrateCopiedVaultBeforeActivation(t *testing.T) {
+	root := shortTempRoot(t)
+	environment, closeSockets := lifecycleEnvironment(t, root)
+	defer closeSockets()
+	uid := fmt.Sprint(os.Getuid())
+	gid := fmt.Sprint(os.Getgid())
+	artifact := candidateArtifact(t, "candidate")
+	source := filepath.Join(t.TempDir(), "python-copy")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, source)
+	if _, err := os.Stat(filepath.Join(root, "var/lib/loki-go/runtime/imported-by-candidate")); err != nil {
+		t.Fatal("candidate migration did not run before activation:", err)
+	}
+}
+
+func TestLifecycleCanRetryInterruptedMigration(t *testing.T) {
+	root := shortTempRoot(t)
+	environment, closeSockets := lifecycleEnvironment(t, root)
+	defer closeSockets()
+	uid := fmt.Sprint(os.Getuid())
+	gid := fmt.Sprint(os.Getgid())
+	artifact := candidateArtifact(t, "candidate")
+	source := filepath.Join(t.TempDir(), "python-copy")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	failing := append(append([]string(nil), environment...), "TEST_MIGRATE_FAIL=1")
+	runLifecycle(t, failing, false, "install", artifact, "v1", uid, gid, gid, uid, source)
+	if _, err := os.Lstat(filepath.Join(root, "opt/loki-go/releases/v1")); !os.IsNotExist(err) {
+		t.Fatal("failed migration retained a partial release")
+	}
+	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, source)
 }
 
 func TestLifecycleRejectsUnmanagedPathAndCanRetryActivation(t *testing.T) {

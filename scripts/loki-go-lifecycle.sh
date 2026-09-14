@@ -203,7 +203,7 @@ switch_to() {
 }
 
 install_release() {
-  test "$#" -eq 6 || fail "usage: $0 install ARTIFACT RELEASE RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID"
+  test "$#" -eq 6 -o "$#" -eq 7 || fail "usage: $0 install ARTIFACT RELEASE RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID [PYTHON_VAULT_COPY]"
   artifact=$1 release_id=$2
   valid_release "$release_id" || fail "invalid release id"
   case "$artifact" in /*) ;; *) fail "candidate artifact path must be absolute" ;; esac
@@ -231,6 +231,12 @@ install_release() {
   printf '%s %s %s %s\n' "$3" "$4" "$5" "$6" > "$temporary/opt/loki-go-identities"
   mv "$temporary" "$destination"
   trap - EXIT HUP INT TERM
+  if test "$#" -eq 7; then
+    trap 'rm -rf "$destination"' EXIT HUP INT TERM
+    install -d -m 0755 "$(rooted /var/lib/loki-go)"
+    "$destination/opt/loki/bin/loki" migrate-vault import --source-copy "$7" --destination "$(rooted /var/lib/loki-go/runtime)"
+    trap - EXIT HUP INT TERM
+  fi
   switch_to "$release_id"
 }
 
