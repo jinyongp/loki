@@ -123,4 +123,13 @@ func TestCurrentDefinitionsContainOnlyLokiTools(t *testing.T) {
 			t.Errorf("devtools command remains exposed as MCP tool %q", delegated)
 		}
 	}
+	data, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, legacy := range []string{"process_log", "materialization", "action_name"} {
+		if strings.Contains(string(data), legacy) {
+			t.Errorf("legacy option remains in current tools: %s", legacy)
+		}
+	}
 }

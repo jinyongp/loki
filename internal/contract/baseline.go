@@ -77,7 +77,53 @@ func CurrentDefinitions() ([]*mcp.Tool, error) {
 		if tool == nil {
 			return nil, fmt.Errorf("current tool %s missing from baseline", name)
 		}
+		tool, err = currentTool(tool)
+		if err != nil {
+			return nil, err
+		}
 		selected = append(selected, tool)
 	}
 	return selected, nil
+}
+
+func currentTool(tool *mcp.Tool) (*mcp.Tool, error) {
+	data, err := json.Marshal(tool)
+	if err != nil {
+		return nil, err
+	}
+	var raw map[string]any
+	if err = json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	schema, _ := raw["inputSchema"].(map[string]any)
+	properties, _ := schema["properties"].(map[string]any)
+	action, _ := properties["action"].(map[string]any)
+	remove := func(names ...string) {
+		for _, name := range names {
+			delete(properties, name)
+		}
+	}
+	switch tool.Name {
+	case "preview_publish":
+		action["enum"] = []any{"server", "stack"}
+		remove("profile", "action_name", "cwd")
+		raw["description"] = "Publish a live preview for one server or an arbitrary route stack."
+	case "developer_view":
+		action["enum"] = []any{"git_diff", "test_report"}
+		remove("session_id", "offset", "limit")
+		raw["description"] = "Render a Git diff or saved test report."
+	case "secret_delete":
+		action["enum"] = []any{"secret", "profile"}
+		remove("action_name")
+		raw["description"] = "Delete an encrypted secret or profile."
+	}
+	data, err = json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	var current mcp.Tool
+	if err = json.Unmarshal(data, &current); err != nil {
+		return nil, err
+	}
+	return &current, nil
 }
