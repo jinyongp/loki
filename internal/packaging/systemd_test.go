@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,6 +100,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if runtime.Socket != "/run/loki-go/runtime/control.sock" || runtime.StateDirectory != "/var/lib/loki-go/runtime" {
 		t.Fatalf("runtime paths = %#v", runtime)
 	}
+	if runtime.DevtoolsHome != "/var/lib/loki-go/runner" || runtime.SnapshotDirectory != "/var/lib/loki-go/runner/snapshots" {
+		t.Fatalf("runner paths = %#v", runtime)
+	}
 	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +124,45 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 		}
 		if info.Mode().Perm() != 0640 {
 			t.Fatalf("%s mode = %v", name, info.Mode().Perm())
+		}
+	}
+}
+
+func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-runtime.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(unit)
+	for _, want := range []string{
+		"StateDirectory=loki-go/runtime\n",
+		"/var/lib/loki-go/runner",
+		"/var/cache/loki-go/runner",
+		"/var/tmp/loki-go/runner",
+		"After=local-fs.target systemd-tmpfiles-setup.service",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("runtime unit does not contain %q", want)
+		}
+	}
+	if strings.Contains(text, "StateDirectory=loki-go/runtime loki-go/") {
+		t.Fatal("root runtime still creates runner state")
+	}
+	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "go", "tmpfiles.d", "loki-go.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"d /var/lib/loki-go/runner 0700 runner runner -",
+		"d /var/cache/loki-go/runner 0700 runner runner -",
+		"d /var/tmp/loki-go/runner 0700 runner runner -",
+	} {
+		if !strings.Contains(string(tmpfiles), want) {
+			t.Fatalf("tmpfiles contract does not contain %q", want)
 		}
 	}
 }

@@ -6,10 +6,10 @@
   "AgentUID": @RUNNER_UID@,
   "SocketGID": @WORKSPACE_GID@,
   "DevtoolsBinary": "/opt/loki/bin/devtools",
-  "DevtoolsHome": "/var/lib/loki-go/devtools",
+  "DevtoolsHome": "/var/lib/loki-go/runner",
   "Workspace": "/workspace",
   "DockerSocket": "/run/docker.sock",
-  "SnapshotDirectory": "/var/lib/loki-go/devtools/snapshots",
+  "SnapshotDirectory": "/var/lib/loki-go/runner/snapshots",
   "RunnerUID": @RUNNER_UID@,
   "RunnerGID": @RUNNER_GID@
 }

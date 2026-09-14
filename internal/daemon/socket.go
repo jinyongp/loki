@@ -27,6 +27,26 @@ func PrivateDirectory(path string) error {
 	return nil
 }
 
+func OwnedPrivateDirectory(path string, uid, gid uint32) error {
+	if !filepath.IsAbs(path) {
+		return errors.New("owned directory must be absolute")
+	}
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{
+		Flags:   unix.O_RDONLY | unix.O_CLOEXEC | unix.O_DIRECTORY,
+		Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
+	})
+	if err != nil {
+		return errors.New("cannot open owned directory without symlinks")
+	}
+	defer unix.Close(fd)
+	var stat unix.Stat_t
+	if err = unix.Fstat(fd, &stat); err != nil || stat.Mode&unix.S_IFMT != unix.S_IFDIR ||
+		stat.Uid != uid || stat.Gid != gid || stat.Mode&07777 != 0700 {
+		return errors.New("owned directory has unsafe ownership or permissions")
+	}
+	return nil
+}
+
 func Listen(socket string, gid int) (*net.UnixListener, error) {
 	if !filepath.IsAbs(socket) || gid < 0 {
 		return nil, errors.New("invalid service socket layout")

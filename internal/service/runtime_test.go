@@ -42,6 +42,11 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
 	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", DevtoolsHome: filepath.Join(root, "devtools-home"), Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: filepath.Join(root, "snapshots"), RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	for _, path := range []string{o.DevtoolsHome, o.SnapshotDirectory} {
+		if err := os.Mkdir(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	controller := secret.Controller{StateDirectory: o.StateDirectory}
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)

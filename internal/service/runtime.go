@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"loki/internal/audit"
@@ -37,6 +38,11 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	for _, path := range []string{o.StateDirectory, o.InboxDirectory, filepath.Dir(o.AuditPath)} {
 		if err := daemon.PrivateDirectory(path); err != nil {
 			return err
+		}
+	}
+	for _, path := range []string{o.DevtoolsHome, o.SnapshotDirectory} {
+		if err := daemon.OwnedPrivateDirectory(path, o.RunnerUID, o.RunnerGID); err != nil {
+			return fmt.Errorf("validate runner directory %q: %w", path, err)
 		}
 	}
 	controller := secret.Controller{StateDirectory: o.StateDirectory, InboxDirectory: o.InboxDirectory}

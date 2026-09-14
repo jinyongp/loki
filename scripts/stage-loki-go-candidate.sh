@@ -19,6 +19,10 @@ test ! -e "$TARGET" || {
 }
 test -d "$ARTIFACT/rootfs"
 test -f "$ARTIFACT/SHA256SUMS"
+test "$(id -u)" -eq 0 || {
+  echo "stage must run as root to assign service ownership" >&2
+  exit 1
+}
 
 (
   cd "$ARTIFACT/rootfs"
@@ -29,12 +33,24 @@ mkdir -m 0750 "$TARGET"
 cp -a "$ARTIFACT/rootfs/." "$TARGET/"
 install -d -m 0750 "$TARGET/etc/loki-go"
 install -d -m 0700 "$TARGET/var/lib/loki-go/runtime/inbox"
-install -d -m 0700 "$TARGET/var/lib/loki-go/devtools/snapshots"
 install -d -m 0700 "$TARGET/var/lib/loki-go/signing"
 install -d -m 0700 "$TARGET/var/lib/loki-go/browser"
 install -d -m 0700 "$TARGET/var/log/loki-go/runtime"
 install -d -m 0700 "$TARGET/var/log/loki-go/mcp"
 install -d -m 0770 "$TARGET/srv/workspace/loki/.loki-go/browser-downloads"
+install -d -o "$2" -g "$3" -m 0700 \
+  "$TARGET/var/lib/loki-go/runner" \
+  "$TARGET/var/lib/loki-go/runner/config" \
+  "$TARGET/var/lib/loki-go/runner/data" \
+  "$TARGET/var/lib/loki-go/runner/state" \
+  "$TARGET/var/lib/loki-go/runner/snapshots" \
+  "$TARGET/var/cache/loki-go/runner" \
+  "$TARGET/var/cache/loki-go/runner/npm" \
+  "$TARGET/var/cache/loki-go/runner/pnpm" \
+  "$TARGET/var/cache/loki-go/runner/playwright" \
+  "$TARGET/var/cache/loki-go/runner/go-build" \
+  "$TARGET/var/cache/loki-go/runner/pip" \
+  "$TARGET/var/tmp/loki-go/runner"
 
 install -m 0640 "$TARGET/usr/share/doc/loki/config.toml" "$TARGET/etc/loki-go/config.toml"
 install -m 0644 "$TARGET/usr/share/doc/loki/gitconfig" "$TARGET/etc/loki-go/gitconfig"

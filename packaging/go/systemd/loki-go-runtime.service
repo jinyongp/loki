@@ -1,6 +1,6 @@
 [Unit]
 Description=Loki Go runtime and encrypted secret broker
-After=local-fs.target loki-go-signing-agent.service
+After=local-fs.target systemd-tmpfiles-setup.service loki-go-signing-agent.service
 Wants=loki-go-signing-agent.service
 Before=loki-go-mcp.service
 
@@ -15,7 +15,7 @@ RestartSec=2
 RuntimeDirectory=loki-go/runtime
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
-StateDirectory=loki-go/runtime loki-go/devtools
+StateDirectory=loki-go/runtime
 StateDirectoryMode=0700
 LogsDirectory=loki-go/runtime
 LogsDirectoryMode=0700
@@ -30,7 +30,7 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
-ReadWritePaths=/srv/workspace/loki /var/lib/loki-go/runtime /var/lib/loki-go/devtools /var/log/loki-go/runtime /run/loki-go /run/docker.sock
+ReadWritePaths=/srv/workspace/loki /var/lib/loki-go/runtime /var/lib/loki-go/runner /var/cache/loki-go/runner /var/tmp/loki-go/runner /var/log/loki-go/runtime /run/loki-go /run/docker.sock
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost
