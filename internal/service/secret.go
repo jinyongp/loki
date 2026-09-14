@@ -7,7 +7,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/policy"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )
@@ -116,128 +115,6 @@ func SecretHandlers(client RuntimeCaller) map[string]mcpserver.Handler {
 			return runtimeObject(ctx, client, request)
 		}),
 	}
-}
-
-type actionRequest struct {
-	Operation     string            `json:"operation"`
-	Profile       *string           `json:"profile"`
-	Name          *string           `json:"action_name"`
-	CWD           *string           `json:"cwd"`
-	Command       *[]string         `json:"command"`
-	Secrets       []string          `json:"secrets"`
-	AllSecrets    bool              `json:"all_secrets"`
-	Required      []string          `json:"required_secrets"`
-	Timeout       int               `json:"timeout_seconds"`
-	MaxOutput     int               `json:"max_output_bytes"`
-	EnvFile       *string           `json:"materialize_env_file"`
-	EnvPath       *string           `json:"materialize_env_path"`
-	Docker        bool              `json:"docker_access"`
-	Preferred     *int              `json:"preferred_port"`
-	PortEnv       *string           `json:"port_environment"`
-	OriginEnv     *string           `json:"origin_environment"`
-	Singleton     bool              `json:"singleton"`
-	LockProbe     *string           `json:"lock_probe"`
-	LocalCallback bool              `json:"local_callback"`
-	PublicEnv     []string          `json:"public_environment"`
-	PreviewEnv    map[string]string `json:"preview_environment"`
-	BindCallback  bool              `json:"bind_local_callback"`
-	SessionID     *string           `json:"session_id"`
-	Offset        *int              `json:"offset"`
-	Limit         int               `json:"limit"`
-}
-
-func ActionHandler(client RuntimeCaller, paths *policy.Workspace) mcpserver.Handler {
-	return mcpserver.Typed(func(ctx context.Context, r actionRequest) (*mcp.CallToolResult, error) {
-		request := map[string]any{}
-		switch r.Operation {
-		case "processes":
-			request["operation"] = "list_processes"
-		case "process", "stop":
-			id, err := mcpserver.Require(r.SessionID, "session_id")
-			if err != nil {
-				return nil, err
-			}
-			request["session_id"] = id
-			if r.Operation == "stop" {
-				request["operation"] = "stop_process"
-			} else {
-				request["operation"] = "read_process"
-				request["offset"] = r.Offset
-				request["limit"] = max(1, r.Limit)
-			}
-		case "list", "set", "remove", "clear_materialization", "run":
-			name, err := mcpserver.Require(r.Profile, "profile")
-			if err != nil {
-				return nil, err
-			}
-			request["profile"] = name
-			if r.Operation == "list" {
-				request["operation"] = "get_profile"
-				break
-			}
-			key, err := mcpserver.Require(r.Name, "action_name")
-			if err != nil {
-				return nil, err
-			}
-			request["action_name"] = key
-			switch r.Operation {
-			case "remove":
-				request["operation"] = "action_remove"
-			case "clear_materialization":
-				request["operation"] = "clear_action_materialization"
-			case "run":
-				request["operation"] = "run_action"
-				request["cwd"] = r.CWD
-				request["public_environment"] = map[string]string{}
-				request["bind_local_callback"] = r.BindCallback
-			case "set":
-				cwd, err := mcpserver.Require(r.CWD, "cwd")
-				if err != nil {
-					return nil, err
-				}
-				command, err := mcpserver.Require(r.Command, "command")
-				if err != nil {
-					return nil, err
-				}
-				cwd, err = relativeCWD(paths, cwd)
-				if err != nil {
-					return nil, err
-				}
-				var dynamic any
-				if r.Preferred == nil {
-					if r.PortEnv != nil || r.OriginEnv != nil {
-						return nil, fault.Error("port_environment and origin_environment require preferred_port")
-					}
-				} else {
-					if r.PortEnv == nil {
-						return nil, fault.Error("port_environment is required with preferred_port")
-					}
-					d := map[string]any{"preferred": *r.Preferred, "environment": *r.PortEnv}
-					if r.OriginEnv != nil && *r.OriginEnv != "" {
-						d["origin_environment"] = *r.OriginEnv
-					}
-					dynamic = d
-				}
-				if r.Secrets == nil {
-					r.Secrets = []string{}
-				}
-				if r.Required == nil {
-					r.Required = []string{}
-				}
-				if r.PublicEnv == nil {
-					r.PublicEnv = []string{}
-				}
-				if r.PreviewEnv == nil {
-					r.PreviewEnv = map[string]string{}
-				}
-				request["operation"] = "action_set"
-				request["action"] = map[string]any{"cwd": cwd, "command": command, "secrets": r.Secrets, "required_secrets": r.Required, "all_secrets": r.AllSecrets, "materialize_env_file": r.EnvFile, "materialize_env_path": r.EnvPath, "docker_access": r.Docker, "dynamic_port": dynamic, "singleton": r.Singleton, "lock_probe": r.LockProbe, "local_callback": r.LocalCallback, "public_environment": r.PublicEnv, "preview_environment": r.PreviewEnv, "timeout_seconds": r.Timeout, "max_output_bytes": r.MaxOutput}
-			}
-		default:
-			return nil, fault.Error("action operation must be list, set, remove, clear_materialization, run, processes, process, or stop")
-		}
-		return runtimeObject(ctx, client, request)
-	})
 }
 
 func runtimeTyped[T any](handler func(context.Context, T) (map[string]any, error)) rpc.Handler {
