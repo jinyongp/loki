@@ -1,0 +1,185 @@
+package toolchain
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+type installedArtifact struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+}
+
+func InstallArtifacts(ctx context.Context, manifest Manifest, bundle, root string) error {
+	if err := manifest.Validate(); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(bundle) || !filepath.IsAbs(root) || filepath.Clean(root) != root {
+		return errors.New("bundle and root must be clean absolute paths")
+	}
+	for _, artifact := range manifest.Artifacts {
+		source := filepath.Join(bundle, "artifacts", artifact.Filename)
+		got, err := fileDigest(source)
+		if err != nil {
+			return fmt.Errorf("verify %s: %w", artifact.Name, err)
+		}
+		if got != artifact.SHA256 {
+			return fmt.Errorf("artifact %s checksum mismatch", artifact.Name)
+		}
+		if err = installArtifact(ctx, root, source, artifact); err != nil {
+			return err
+		}
+	}
+	return installLinks(root, manifest.Artifacts)
+}
+
+func InstallApt(ctx context.Context, manifest Manifest) error {
+	if os.Geteuid() != 0 {
+		return errors.New("apt installation requires root")
+	}
+	if err := manifest.Validate(); err != nil {
+		return err
+	}
+	if err := run(ctx, "apt-get", "update"); err != nil {
+		return err
+	}
+	arguments := []string{"install", "-y", "--no-install-recommends"}
+	for _, item := range manifest.AptPackages {
+		arguments = append(arguments, item.Name+"="+item.Version)
+	}
+	return run(ctx, "apt-get", arguments...)
+}
+
+func installArtifact(ctx context.Context, root, source string, artifact Artifact) error {
+	target := rooted(root, artifact.InstallPath)
+	marker := target + ".loki-artifact.json"
+	if artifact.Format != "file" {
+		marker = filepath.Join(target, ".loki-artifact.json")
+	}
+	want := installedArtifact{Name: artifact.Name, Version: artifact.Version, SHA256: artifact.SHA256}
+	if _, err := os.Lstat(target); err == nil {
+		var got installedArtifact
+		raw, readErr := os.ReadFile(marker)
+		if readErr == nil {
+			readErr = json.Unmarshal(raw, &got)
+		}
+		if readErr == nil && got == want {
+			return nil
+		}
+		return fmt.Errorf("toolchain install path %s is occupied", artifact.InstallPath)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	parent := filepath.Dir(target)
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		return err
+	}
+	if artifact.Format == "file" {
+		temporary, err := os.CreateTemp(parent, "."+filepath.Base(target)+"-")
+		if err != nil {
+			return err
+		}
+		name := temporary.Name()
+		defer os.Remove(name)
+		input, err := os.Open(source)
+		if err == nil {
+			_, err = io.Copy(temporary, input)
+			_ = input.Close()
+		}
+		if err == nil {
+			err = temporary.Chmod(0755)
+		}
+		if closeErr := temporary.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return err
+		}
+		if err = os.Rename(name, target); err != nil {
+			return err
+		}
+		raw, _ := json.Marshal(want)
+		return os.WriteFile(marker, append(raw, '\n'), 0644)
+	}
+	temporary, err := os.MkdirTemp(parent, "."+filepath.Base(target)+"-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temporary)
+	arguments := []string{"-xf", source, "-C", temporary, "--strip-components=" + strconv.Itoa(artifact.StripComponents), "--no-same-owner", "--no-same-permissions"}
+	if err = run(ctx, "tar", arguments...); err != nil {
+		return fmt.Errorf("extract %s: %w", artifact.Name, err)
+	}
+	raw, _ := json.Marshal(want)
+	if err = os.WriteFile(filepath.Join(temporary, ".loki-artifact.json"), append(raw, '\n'), 0644); err != nil {
+		return err
+	}
+	return os.Rename(temporary, target)
+}
+
+func installLinks(root string, artifacts []Artifact) error {
+	bin := rooted(root, "/opt/loki/toolchain/bin")
+	if err := os.MkdirAll(bin, 0755); err != nil {
+		return err
+	}
+	for _, artifact := range artifacts {
+		for name, relative := range artifact.Links {
+			canonical := artifact.InstallPath
+			if relative != "." {
+				canonical = filepath.Join(canonical, relative)
+			}
+			link := filepath.Join(bin, name)
+			if current, err := os.Readlink(link); err == nil && current == canonical {
+				continue
+			}
+			if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
+				return fmt.Errorf("toolchain link %s is occupied", name)
+			}
+			temporary := link + ".new"
+			_ = os.Remove(temporary)
+			if err := os.Symlink(canonical, temporary); err != nil {
+				return err
+			}
+			if err := os.Rename(temporary, link); err != nil {
+				_ = os.Remove(temporary)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rooted(root, path string) string { return filepath.Join(root, strings.TrimPrefix(path, "/")) }
+
+func fileDigest(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err = io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func run(ctx context.Context, name string, arguments ...string) error {
+	command := exec.CommandContext(ctx, name, arguments...)
+	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("%s failed: %w", name, err)
+	}
+	return nil
+}
