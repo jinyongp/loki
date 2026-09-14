@@ -8,12 +8,18 @@ import (
 	"testing"
 )
 
-func TestParseVersionRequiresPinnedRelease(t *testing.T) {
-	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test"}}`)); err != nil {
-		t.Fatal(err)
+func TestParseVersionAcceptsCompatibleReleases(t *testing.T) {
+	for _, release := range []string{"0.9.0", "0.10.0", "1.0.0-rc.1+build.7"} {
+		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test"}}`)
+		if _, err := ParseVersion(raw); err != nil {
+			t.Fatalf("release %q: %v", release, err)
+		}
 	}
-	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.8.2","commit":"test"}}`)); err == nil {
-		t.Fatal("version drift accepted")
+	for _, release := range []string{"", "latest", "01.2.3", "1.2"} {
+		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test"}}`)
+		if _, err := ParseVersion(raw); err == nil {
+			t.Fatalf("invalid release %q accepted", release)
+		}
 	}
 }
 

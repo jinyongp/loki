@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 )
+
+var semanticVersion = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
 
 type Version struct {
 	Version string `json:"version"`
@@ -26,8 +29,8 @@ func ParseVersion(raw []byte) (Version, error) {
 	if err := json.Unmarshal(envelope.Data, &version); err != nil {
 		return Version{}, fmt.Errorf("decode devtools version: %w", err)
 	}
-	if version.Version != SupportedVersion {
-		return Version{}, fmt.Errorf("unsupported devtools version %q; require %s", version.Version, SupportedVersion)
+	if !semanticVersion.MatchString(version.Version) {
+		return Version{}, fmt.Errorf("invalid devtools version %q", version.Version)
 	}
 	return version, nil
 }

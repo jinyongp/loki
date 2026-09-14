@@ -16,9 +16,14 @@ func fakeClient(t *testing.T) (*Client, string) {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "args")
+	catalog := filepath.Join(dir, "catalog.json")
+	if err := os.WriteFile(catalog, embeddedCatalog, 0600); err != nil {
+		t.Fatal(err)
+	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + catalog + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + log + "\"\n" +
 		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"started\":true}}'\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
@@ -92,14 +97,14 @@ func TestClientRejectsInvalidAndUnsafeCalls(t *testing.T) {
 	}
 }
 
-func TestClientRejectsVersionDriftAndTimeout(t *testing.T) {
+func TestClientRejectsInvalidVersionAndTimeout(t *testing.T) {
 	client, _ := fakeClient(t)
 	client.Binary = filepath.Join(client.CWD, "wrong")
-	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.8.2\",\"commit\":\"test\"}}'\n"), 0700); err != nil {
+	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"latest\",\"commit\":\"test\"}}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)); err == nil {
-		t.Fatal("version drift accepted")
+		t.Fatal("invalid version accepted")
 	}
 
 	client, _ = fakeClient(t)
@@ -110,6 +115,19 @@ func TestClientRejectsVersionDriftAndTimeout(t *testing.T) {
 	client.Timeout = 20 * time.Millisecond
 	if _, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)); err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("timeout error = %v", err)
+	}
+}
+
+func TestClientRejectsIncompatibleCatalog(t *testing.T) {
+	client, _ := fakeClient(t)
+	body := "#!/bin/sh\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"protocol_version\":2,\"commands\":[]}}'\n"
+	if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)); err == nil || !strings.Contains(err.Error(), "protocol version") {
+		t.Fatalf("catalog error = %v", err)
 	}
 }
 

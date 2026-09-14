@@ -24,10 +24,9 @@ test -x "$DEVTOOLS" || {
 }
 
 VERSION=$("$DEVTOOLS" version)
-case "$VERSION" in
-  *'"version":"0.9.0"'*) ;;
-  *) echo "candidate requires devtools 0.9.0" >&2; exit 1 ;;
-esac
+CATALOG=$(mktemp /tmp/loki-devtools-catalog.XXXXXX)
+trap 'rm -f "$CATALOG"' EXIT HUP INT TERM
+go run "$SOURCE_DIR/internal/devtools/cmd/gencatalog" -binary "$DEVTOOLS" -output "$CATALOG"
 
 ROOT="$OUTPUT/rootfs"
 install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills"

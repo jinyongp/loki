@@ -23,7 +23,8 @@ CGO_ENABLED=0 go build -trimpath -o .tmp/loki ./cmd/loki
 
 The repository uses `devtools.toml` as its developer command profile. The
 `devtools` executable is an external, versioned input to candidate packaging;
-version 0.9.0 is currently required.
+the supplied release must implement protocol version 1 and the required
+`process start` and `process restart` command schemas.
 
 ## Go candidate
 
@@ -37,7 +38,7 @@ The Go service candidate uses isolated names and paths:
 - ports: 18765 (MCP), 18766 (egress), and 18767 (browser proxy)
 
 Build a candidate by passing a new absolute output directory and the absolute
-path to a `devtools 0.9.0` executable:
+path to a compatible `devtools` executable:
 
 ```sh
 ./scripts/build-loki-go-candidate.sh \

@@ -1,4 +1,4 @@
-// Package devtools defines the pinned CLI contract admitted by Loki.
+// Package devtools defines the CLI contract admitted by Loki.
 package devtools
 
 import (
@@ -9,7 +9,6 @@ import (
 	"sort"
 )
 
-const SupportedVersion = "0.9.0"
 const ProtocolVersion = 1
 
 //go:embed testdata/catalog-v0.9.0.json

@@ -68,6 +68,10 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	compiled, err := compileCommands(commands)
+	if err != nil {
+		return nil, err
+	}
 	workspace, err := policy.New(cwd)
 	if err != nil {
 		return nil, err
@@ -75,7 +79,7 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 	client := &Client{
 		Binary: binary, CWD: cwd, Env: slices.Clone(env),
 		Timeout: 30 * time.Second, MaxOutput: defaultMaxOutput,
-		Workspace: workspace, commands: make(map[string]compiledCommand, len(commands)),
+		Workspace: workspace, commands: compiled,
 	}
 	success := false
 	defer func() {
@@ -83,9 +87,15 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 			workspace.Close()
 		}
 	}()
+	success = true
+	return client, nil
+}
+
+func compileCommands(commands []Command) (map[string]compiledCommand, error) {
+	compiled := make(map[string]compiledCommand, len(commands))
 	for _, command := range commands {
 		var schema jsonschema.Schema
-		if err = json.Unmarshal(command.InputSchema, &schema); err != nil {
+		if err := json.Unmarshal(command.InputSchema, &schema); err != nil {
 			return nil, fmt.Errorf("decode input schema for %q: %w", command.Name, err)
 		}
 		input, resolveErr := schema.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true})
@@ -93,17 +103,16 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 			return nil, fmt.Errorf("resolve input schema for %q: %w", command.Name, resolveErr)
 		}
 		var outputSchema jsonschema.Schema
-		if err = json.Unmarshal(command.OutputSchema, &outputSchema); err != nil {
+		if err := json.Unmarshal(command.OutputSchema, &outputSchema); err != nil {
 			return nil, fmt.Errorf("decode output schema for %q: %w", command.Name, err)
 		}
 		output, resolveErr := outputSchema.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true})
 		if resolveErr != nil {
 			return nil, fmt.Errorf("resolve output schema for %q: %w", command.Name, resolveErr)
 		}
-		client.commands[command.Name] = compiledCommand{command: command, input: input, output: output}
+		compiled[command.Name] = compiledCommand{command: command, input: input, output: output}
 	}
-	success = true
-	return client, nil
+	return compiled, nil
 }
 
 func (c *Client) Close() error {
@@ -135,6 +144,28 @@ func (c *Client) verify(ctx context.Context) error {
 	if _, err = ParseVersion(result.Raw); err != nil {
 		return err
 	}
+	result, err = process.Run(ctx, process.Spec{
+		Argv: []string{c.Binary, "schema", "--all"}, CWD: c.CWD, Env: c.Env,
+		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: c.maxOutput(),
+	})
+	if err != nil {
+		return fmt.Errorf("execute devtools schema --all: %w", err)
+	}
+	if result.TimedOut {
+		return errors.New("devtools schema check timed out")
+	}
+	if result.Truncated || result.ExitCode != 0 {
+		return errors.New("devtools schema check failed")
+	}
+	commands, err := ParseCatalog(result.Raw)
+	if err != nil {
+		return err
+	}
+	compiled, err := compileCommands(commands)
+	if err != nil {
+		return err
+	}
+	c.commands = compiled
 	c.verified = true
 	return nil
 }
@@ -144,6 +175,9 @@ func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (js
 }
 
 func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, environment []string) (json.RawMessage, error) {
+	if err := c.verify(ctx); err != nil {
+		return nil, err
+	}
 	command, ok := c.commands[name]
 	if !ok {
 		return nil, errors.New("devtools command is not approved")
@@ -177,9 +211,6 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	}
 	argv, err := buildArgv(command.command, input)
 	if err != nil {
-		return nil, err
-	}
-	if err = c.verify(ctx); err != nil {
 		return nil, err
 	}
 	result, err := process.Run(ctx, process.Spec{
