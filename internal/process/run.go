@@ -168,7 +168,7 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 	return result, nil
 }
 
-// boundedText mirrors Python UTF-8 replacement decoding followed by a byte
+// boundedText applies UTF-8 replacement decoding followed by a byte
 // limit. An invalid byte in the middle must not discard the valid suffix.
 func boundedText(raw []byte, limit int, truncated bool) (string, bool) {
 	var text strings.Builder

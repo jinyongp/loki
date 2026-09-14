@@ -1,11 +1,9 @@
 package gitops
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -121,72 +119,6 @@ func TestIndexPathsAndPartialPatch(t *testing.T) {
 	}
 }
 
-func TestPython0471GitDifferential(t *testing.T) {
-	python := os.Getenv("LOKI_REFERENCE_PYTHON")
-	if python == "" {
-		t.Skip("Python reference not configured")
-	}
-	c := fixture(t)
-	write(t, c, "a.txt", "one\ntwo\n")
-	git(t, c, "add", "a.txt")
-	git(t, c, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "baseline")
-	write(t, c, "a.txt", "changed\ntwo\n")
-	patch := "--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n-one\n+changed\n two\n"
-	got := []map[string]any{}
-	add := func(value map[string]any, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-		got = append(got, value)
-	}
-	add(c.Status(t.Context(), "repo"))
-	add(c.Diff(t.Context(), "repo", false, nil))
-	add(c.Index(t.Context(), "repo"))
-	add(c.StagePatch(t.Context(), "repo", patch, false, nil))
-	add(c.Diff(t.Context(), "repo", true, nil))
-	add(c.StagePatch(t.Context(), "repo", patch, true, nil))
-	add(c.MutatePaths(t.Context(), "stage", "repo", []string{"a.txt"}, nil))
-	add(c.MutatePaths(t.Context(), "unstage", "repo", []string{"a.txt"}, nil))
-	add(c.CommitContext(t.Context(), "repo"))
-	script := `import json,sys,subprocess,threading
-from pathlib import Path
-from types import SimpleNamespace
-from loki_mcp.tools import WorkspaceTools
-from loki_mcp.policy import WorkspacePolicy
-root=Path(sys.argv[1]);repo=root/'repo';repo.mkdir()
-env=json.loads(sys.argv[3])
-def git(*args): subprocess.run(['/usr/bin/git',*args],cwd=repo,env=env,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-git('init','-q','--initial-branch=main')
-(repo/'a.txt').write_text('one\ntwo\n');git('add','a.txt');git('-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','-qm','baseline');(repo/'a.txt').write_text('changed\ntwo\n')
-t=WorkspaceTools.__new__(WorkspaceTools);t.policy=WorkspacePolicy(root);t.config=SimpleNamespace(max_output_bytes=262144,max_patch_bytes=524288,max_patch_files=50,max_file_bytes=16777216)
-t._environment=lambda extra=None: env;t._audit=lambda *a,**kw: None;t._mutation_lock=threading.RLock()
-p=sys.argv[2]
-print(json.dumps([t.git_status('repo'),t.git_diff(cwd='repo'),t.git_index_state('repo'),t.git_stage_patch(p,'repo'),t.git_diff(True,cwd='repo'),t.git_stage_patch(p,'repo',True),t.git_stage_paths(['a.txt'],'repo'),t.git_unstage_paths(['a.txt'],'repo'),t.git_commit_context('repo')]))`
-	env := map[string]string{}
-	for _, entry := range c.Env {
-		key, value, _ := strings.Cut(entry, "=")
-		env[key] = value
-	}
-	encodedEnv, _ := json.Marshal(env)
-	cmd := exec.CommandContext(t.Context(), python, "-c", script, t.TempDir(), patch, string(encodedEnv))
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%v %s", err, data)
-	}
-	encoded, _ := json.Marshal(got)
-	var normalized, want any
-	if err := json.Unmarshal(encoded, &normalized); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(data, &want); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(normalized, want) {
-		t.Fatalf("Go: %s\nPython: %s", encoded, data)
-	}
-	t.Log("9 Python Git responses match")
-}
 func TestGitInspectionAndTemplates(t *testing.T) {
 	c := fixture(t)
 	write(t, c, "file.txt", "content\n")

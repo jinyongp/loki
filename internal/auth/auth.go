@@ -135,7 +135,7 @@ func LoadToken(path string) (string, error) {
 	return token, nil
 }
 
-// HostPolicy retains Python's configured host allowlist and rejects any Origin.
+// HostPolicy stores the configured host allowlist and rejects any Origin.
 // Preview and opaque artifact routes have their own checks before this handler.
 func HostPolicy(port int, publicHosts []string, next http.Handler) http.Handler {
 	allowed := map[string]bool{}

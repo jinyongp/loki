@@ -65,7 +65,7 @@ func (f *Files) read(path string, maximum int) ([]byte, os.FileInfo, error) {
 	return data, info, nil
 }
 
-// Lines follows Python str.splitlines(keepends=True), including Unicode breaks.
+// Lines preserves line endings, including Unicode line boundaries.
 func Lines(s string) []string {
 	result := []string{}
 	start := 0

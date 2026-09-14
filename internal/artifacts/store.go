@@ -73,7 +73,7 @@ func (s *Store) purge(now time.Time) {
 	s.order = order
 }
 
-// timestamp matches Python datetime.isoformat at microsecond precision.
+// timestamp uses ISO 8601 with microsecond precision.
 func timestamp(t time.Time) string {
 	t = t.UTC().Truncate(time.Microsecond)
 	if t.Nanosecond() == 0 {

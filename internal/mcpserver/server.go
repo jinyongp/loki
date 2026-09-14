@@ -177,7 +177,7 @@ func errorResult(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: message}}}
 }
 
-// Object returns the same text and structured JSON pair as Python dict tools.
+// Object returns matching text and structured JSON payloads.
 func Object(value map[string]any) (*mcp.CallToolResult, error) {
 	data, err := json.Marshal(value)
 	if err != nil {

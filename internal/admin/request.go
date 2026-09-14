@@ -34,7 +34,7 @@ var commands = map[string]command{
 	"secret stage-env":      {"stage_env", []string{"file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 }
 
-// Request keeps options interspersed with positionals, as in the Python CLI.
+// Request keeps options interspersed with positional arguments.
 // '--' terminates option parsing and preserves child argv byte-for-byte.
 func Request(args []string) (map[string]any, error) {
 	var spec command
