@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 )
 
 const maxEnvironmentSecrets = 256
@@ -80,7 +81,7 @@ func (c Controller) ResolveEnvironment(ctx context.Context, profileName string, 
 	values := make(map[string]string, len(names))
 	for _, name := range names {
 		value, ok := stored[name].(string)
-		if !ok || value == "" {
+		if !ok || value == "" || strings.ContainsRune(value, 0) {
 			return plan, errors.New("requested environment secret is not configured")
 		}
 		values[name] = value

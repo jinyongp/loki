@@ -119,6 +119,10 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+	return c.call(ctx, name, raw, c.Env)
+}
+
+func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, environment []string) (json.RawMessage, error) {
 	command, ok := c.commands[name]
 	if !ok {
 		return nil, errors.New("devtools command is not approved")
@@ -144,7 +148,7 @@ func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (js
 		return nil, err
 	}
 	result, err := process.Run(ctx, process.Spec{
-		Argv: append([]string{c.Binary}, argv...), CWD: c.CWD, Env: c.Env,
+		Argv: append([]string{c.Binary}, argv...), CWD: c.CWD, Env: environment,
 		Timeout: c.timeout(), MaxOutput: c.maxOutput(),
 	})
 	if err != nil {
