@@ -25,6 +25,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runRunnerExec(args[1:], stderr)
 		case "toolchain":
 			return runToolchain(args[1:], stdout, stderr)
+		case "migrate-vault":
+			return runMigrateVault(args[1:], stdout, stderr)
 		}
 	}
 	if len(args) > 0 && args[0] == "jwks-refresh" {
@@ -59,6 +61,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki version | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki version | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
 	return 2
 }

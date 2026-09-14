@@ -12,6 +12,12 @@ import (
 	"loki/internal/fault"
 )
 
+func faultSchema() error   { return fault.Error("secret store schema is invalid") }
+func faultProfiles() error { return fault.Error("secret profile collection is invalid") }
+func faultProfile() error  { return fault.Error("secret profile is invalid") }
+func faultSecrets() error  { return fault.Error("secret collection is invalid") }
+func faultSecret() error   { return fault.Error("secret value is invalid") }
+
 const (
 	MaxProfiles    = 128
 	MaxSecrets     = 512
@@ -63,11 +69,11 @@ func Validate(data json.RawMessage) error { _, err := decode(data); return err }
 func validateDocument(value document) error {
 	version, ok := value["version"].(json.Number)
 	if !ok || version.String() != "1" || len(value) != 2 {
-		return fault.Error("secret store schema is invalid")
+		return faultSchema()
 	}
 	profiles := object(value["profiles"])
 	if profiles == nil || len(profiles) > MaxProfiles {
-		return fault.Error("secret profile collection is invalid")
+		return faultProfiles()
 	}
 	for _, name := range keys(profiles) {
 		if err := ProfileName(name); err != nil {
@@ -75,11 +81,11 @@ func validateDocument(value document) error {
 		}
 		profile := object(profiles[name])
 		if profile == nil || len(profile) != 1 {
-			return fault.Error("secret profile is invalid")
+			return faultProfile()
 		}
 		secrets := object(profile["secrets"])
 		if secrets == nil || len(secrets) > MaxSecrets {
-			return fault.Error("secret collection is invalid")
+			return faultSecrets()
 		}
 		for _, key := range keys(secrets) {
 			if err := SecretName(key); err != nil {
@@ -87,7 +93,7 @@ func validateDocument(value document) error {
 			}
 			text, ok := secrets[key].(string)
 			if !ok || len(text) > MaxSecretBytes {
-				return fault.Error("secret value is invalid")
+				return faultSecret()
 			}
 		}
 	}
