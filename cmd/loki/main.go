@@ -34,6 +34,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		switch args[0] {
 		case "checkpoint":
 			return runCheckpoint(args[1:], stdout, stderr)
+		case "secret-process":
+			return runSecretProcess(args[1:], stdout, stderr)
 		case "config", "policy":
 			return runSettings(args, stdout, stderr)
 		case "bootstrap", "state", "project", "secret", "action":
@@ -95,7 +97,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki version | contract capture --output PATH [--url URL --token-file PATH]")
+	fmt.Fprintln(stderr, "usage: loki version | secret-process start|restart [OPTIONS] TARGET | contract capture --output PATH [--url URL --token-file PATH]")
 	return 2
 }
 
