@@ -28,13 +28,17 @@ func fakeClient(t *testing.T) (*Client, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { client.Close() })
 	return client, log
 }
 
 func TestClientBuildsArgumentsWithoutShell(t *testing.T) {
 	client, log := fakeClient(t)
 	marker := filepath.Join(client.CWD, "executed")
-	value := "$(touch " + marker + ")"
+	value := "$(touch executed)"
+	if err := os.Mkdir(filepath.Join(client.CWD, value), 0700); err != nil {
+		t.Fatal(err)
+	}
 	raw, _ := json.Marshal(map[string]any{"args": []string{"web"}, "dir": value, "request-id": "00000000-0000-0000-0000-000000000000"})
 	result, err := client.Call(context.Background(), "process start", raw)
 	if err != nil {
@@ -54,6 +58,24 @@ func TestClientBuildsArgumentsWithoutShell(t *testing.T) {
 		if !strings.Contains(string(args), want) {
 			t.Fatalf("arguments %q do not contain %q", args, want)
 		}
+	}
+}
+
+func TestClientConfinesProcessDirectory(t *testing.T) {
+	client, _ := fakeClient(t)
+	request := func(directory string) json.RawMessage {
+		raw, _ := json.Marshal(map[string]any{"args": []string{"web"}, "dir": directory, "request-id": "00000000-0000-0000-0000-000000000000"})
+		return raw
+	}
+	if _, err := client.Call(context.Background(), "process start", request("/tmp")); err == nil {
+		t.Fatal("outside process directory accepted")
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(client.CWD, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Call(context.Background(), "process start", request("linked")); err == nil {
+		t.Fatal("symlinked process directory accepted")
 	}
 }
 

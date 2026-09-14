@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"loki/internal/policy"
 	"loki/internal/process"
 )
 
@@ -30,6 +31,7 @@ type Client struct {
 	Timeout   time.Duration
 	MaxOutput int
 	Identity  *process.Identity
+	Workspace *policy.Workspace
 
 	mu       sync.Mutex
 	verified bool
@@ -66,11 +68,21 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	workspace, err := policy.New(cwd)
+	if err != nil {
+		return nil, err
+	}
 	client := &Client{
 		Binary: binary, CWD: cwd, Env: slices.Clone(env),
 		Timeout: 30 * time.Second, MaxOutput: defaultMaxOutput,
-		commands: make(map[string]compiledCommand, len(commands)),
+		Workspace: workspace, commands: make(map[string]compiledCommand, len(commands)),
 	}
+	success := false
+	defer func() {
+		if !success {
+			workspace.Close()
+		}
+	}()
 	for _, command := range commands {
 		var schema jsonschema.Schema
 		if err = json.Unmarshal(command.InputSchema, &schema); err != nil {
@@ -90,7 +102,15 @@ func NewClient(binary, cwd string, env []string) (*Client, error) {
 		}
 		client.commands[command.Name] = compiledCommand{command: command, input: input, output: output}
 	}
+	success = true
 	return client, nil
+}
+
+func (c *Client) Close() error {
+	if c.Workspace == nil {
+		return nil
+	}
+	return c.Workspace.Close()
 }
 
 func (c *Client) verify(ctx context.Context) error {
@@ -140,6 +160,20 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	}
 	if (name == "process start" || name == "process restart") && input["capture-logs"] == true {
 		return nil, errors.New("devtools raw process logs are disabled")
+	}
+	if name == "process start" {
+		requested, _ := input["dir"].(string)
+		if requested == "" {
+			requested = "."
+		}
+		if c.Workspace == nil {
+			return nil, errors.New("devtools workspace is unavailable")
+		}
+		confined, err := c.Workspace.ResolveCWD(requested)
+		if err != nil {
+			return nil, errors.New("devtools process directory is outside the workspace")
+		}
+		input["dir"] = confined
 	}
 	argv, err := buildArgv(command.command, input)
 	if err != nil {

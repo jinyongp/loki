@@ -40,6 +40,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { client.Close() })
 	vault := filepath.Join(root, "vault")
 	if err = os.Mkdir(vault, 0700); err != nil {
 		t.Fatal(err)
@@ -56,7 +57,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	if _, err = controller.SetSecret(ctx, "project", "TOKEN", private, false); err != nil {
 		t.Fatal(err)
 	}
-	request := json.RawMessage(`{"args":["probe"],"dir":"` + root + `","request-id":"6ab1d7f0-21b6-4d0b-9f47-83be95872c51"}`)
+	request := json.RawMessage(`{"args":["probe"],"dir":".","request-id":"6ab1d7f0-21b6-4d0b-9f47-83be95872c51"}`)
 	result, err := (Broker{Client: client, Secrets: controller}).Call(ctx, "process start", request, "project", []string{"TOKEN"})
 	if err != nil {
 		t.Fatal(err)

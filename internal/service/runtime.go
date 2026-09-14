@@ -53,6 +53,7 @@ func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready fu
 	if err != nil {
 		return err
 	}
+	defer devtoolsClient.Close()
 	devtoolsClient.Identity = &process.Identity{UID: o.Layout.UID, GID: o.Layout.GID, Groups: []uint32{o.Layout.GID}}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	o.Layout.MaxProfileProcesses = c.MaxActionProcessesPerProfile
