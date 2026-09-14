@@ -29,7 +29,7 @@ func New(handlers map[string]Handler) (*mcp.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, nil, "")
+	return newServer(baseline, handlers, definitions, nil, "")
 }
 
 // NewConfigured derives widget origins from the active service configuration.
@@ -45,7 +45,7 @@ func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.S
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, &origins, "")
+	return newServer(baseline, handlers, definitions, &origins, "")
 }
 
 // NewConfiguredCurrent serves the reduced Loki-owned catalog. New and
@@ -58,19 +58,19 @@ func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) 
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, &origins, contract.CurrentInstructions)
-}
-
-func newServer(handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {
-	baseline, err := contract.Baseline()
+	current, err := contract.Current()
 	if err != nil {
 		return nil, err
 	}
+	return newServer(current, handlers, definitions, &origins, contract.CurrentInstructions)
+}
+
+func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {
 	if len(handlers) != len(definitions) {
 		return nil, fmt.Errorf("need %d handlers, got %d", len(definitions), len(handlers))
 	}
 	var init mcp.InitializeResult
-	if err = json.Unmarshal(baseline.Initialize, &init); err != nil {
+	if err := json.Unmarshal(snapshot.Initialize, &init); err != nil {
 		return nil, err
 	}
 	if instructions != "" {
@@ -91,15 +91,15 @@ func newServer(handlers map[string]Handler, definitions []*mcp.Tool, origins *Re
 		}
 		server.AddTool(definition, wrapped)
 	}
-	for _, raw := range baseline.Resources {
+	for _, raw := range snapshot.Resources {
 		var resource mcp.Resource
-		if err = json.Unmarshal(raw, &resource); err != nil {
+		if err := json.Unmarshal(raw, &resource); err != nil {
 			return nil, err
 		}
 		if origins != nil {
 			resource.Meta = origins.metadata(resource.URI)
 		}
-		contents, ok := baseline.ResourceContents[resource.URI]
+		contents, ok := snapshot.ResourceContents[resource.URI]
 		if !ok {
 			return nil, fmt.Errorf("missing resource %s", resource.URI)
 		}
