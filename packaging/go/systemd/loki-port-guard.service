@@ -1,0 +1,39 @@
+[Unit]
+Description=Loki Go workspace port guard
+After=local-fs.target
+Before=loki-mcp.service loki-browser-proxy.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=runner
+Group=workspace
+EnvironmentFile=/etc/loki/identity.env
+RuntimeDirectory=loki/port-guard
+RuntimeDirectoryMode=0750
+ExecStart=/opt/loki/bin/loki port-guard --workspace /workspace --socket /run/loki/port-guard/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID
+Restart=on-failure
+RestartSec=2
+UMask=0007
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+BindReadOnlyPaths=/srv/workspace/loki:/workspace
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+IPAddressDeny=any
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=32
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,45 @@
+[Unit]
+Description=Loki Go isolated browser
+After=network.target loki-browser-proxy.service
+Requires=loki-browser-proxy.service
+Before=loki-mcp.service
+ConditionFileIsExecutable=/opt/loki-browser/chromium/chrome-linux64/chrome
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=loki-browser
+Group=workspace
+EnvironmentFile=/etc/loki/identity.env
+RuntimeDirectory=loki/browser
+RuntimeDirectoryMode=0770
+StateDirectory=loki/browser
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/loki/browser
+ExecStart=/opt/loki/bin/loki browser --socket /run/loki/browser/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID --chrome /opt/loki-browser/chromium/chrome-linux64/chrome --profile /var/lib/loki/browser/profile --downloads /srv/workspace/loki/.browser-downloads --proxy http://127.0.0.1:8767
+Restart=on-failure
+RestartSec=3
+UMask=0007
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/loki/browser /run/loki/browser /srv/workspace/loki/.browser-downloads
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=512
+MemoryMax=2G
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

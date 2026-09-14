@@ -1,0 +1,46 @@
+[Unit]
+Description=Loki Go runtime and encrypted secret broker
+After=local-fs.target loki-signing-agent.service
+Wants=loki-signing-agent.service
+Before=loki-mcp.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=root
+Group=workspace
+ExecStart=/opt/loki/bin/loki runtime --layout /etc/loki/runtime.json
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=loki/runtime
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+StateDirectory=loki/runtime loki/devtools
+StateDirectoryMode=0700
+LogsDirectory=loki/runtime
+LogsDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=read-only
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+BindPaths=/srv/workspace/loki:/workspace
+ReadWritePaths=/srv/workspace/loki /var/lib/loki/runtime /var/lib/loki/devtools /var/log/loki/runtime /run/loki /run/docker.sock
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+LockPersonality=yes
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+AmbientCapabilities=CAP_SETUID CAP_SETGID
+RestrictRealtime=yes
+TasksMax=256
+MemoryMax=2G
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

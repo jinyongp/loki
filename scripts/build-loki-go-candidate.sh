@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+if test "$#" -ne 2; then
+  echo "usage: build-loki-go-candidate.sh OUTPUT_DIRECTORY DEVTOOLS_BINARY" >&2
+  exit 2
+fi
+
+SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+OUTPUT=$1
+DEVTOOLS=$2
+
+case "$OUTPUT" in
+  /*) ;;
+  *) echo "output directory must be absolute" >&2; exit 2 ;;
+esac
+test ! -e "$OUTPUT" || {
+  echo "output directory already exists" >&2
+  exit 1
+}
+test -x "$DEVTOOLS" || {
+  echo "devtools binary is not executable" >&2
+  exit 1
+}
+
+VERSION=$("$DEVTOOLS" version)
+case "$VERSION" in
+  *'"version":"0.8.2"'*) ;;
+  *) echo "candidate requires devtools 0.8.2" >&2; exit 1 ;;
+esac
+
+ROOT="$OUTPUT/rootfs"
+install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills/devtools"
+install -d "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/doc/loki"
+install -d "$ROOT/usr/local/bin" "$ROOT/srv/workspace/loki/.agents/skills/devtools"
+	install -d "$ROOT/etc/loki"
+
+CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/loki"
+install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"
+install -m 0755 "$SOURCE_DIR/scripts/wait-for-loki-sockets.sh" "$ROOT/opt/loki/libexec/wait-for-loki-sockets"
+install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/opt/loki/share/skills/devtools/SKILL.md"
+install -m 0644 "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" "$ROOT/srv/workspace/loki/.agents/skills/devtools/SKILL.md"
+install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/config.toml"
+install -m 0644 "$SOURCE_DIR/packaging/go/runtime.json.in" "$ROOT/usr/share/doc/loki/runtime.json.in"
+install -m 0644 "$SOURCE_DIR/packaging/go/mcp.json.in" "$ROOT/usr/share/doc/loki/mcp.json.in"
+install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
+ln -s ../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
+ln -s ../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
+
+(
+  cd "$ROOT"
+  find . -type f -print0 | sort -z | xargs -0 sha256sum
+) > "$OUTPUT/SHA256SUMS"
+
+printf '%s\n' "loki=$("$ROOT/opt/loki/bin/loki" version)" > "$OUTPUT/VERSIONS"
+printf '%s\n' "devtools=$VERSION" >> "$OUTPUT/VERSIONS"

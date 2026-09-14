@@ -1,0 +1,15 @@
+{
+  "Socket": "/run/loki/runtime/control.sock",
+  "StateDirectory": "/var/lib/loki/runtime",
+  "InboxDirectory": "/var/lib/loki/runtime/inbox",
+  "AuditPath": "/var/log/loki/runtime/audit.jsonl",
+  "AgentUID": @RUNNER_UID@,
+  "SocketGID": @WORKSPACE_GID@,
+  "DevtoolsBinary": "/opt/loki/bin/devtools",
+  "DevtoolsHome": "/var/lib/loki/devtools",
+  "Workspace": "/workspace",
+  "DockerSocket": "/run/docker.sock",
+  "SnapshotDirectory": "/var/lib/loki/devtools/snapshots",
+  "RunnerUID": @RUNNER_UID@,
+  "RunnerGID": @RUNNER_GID@
+}

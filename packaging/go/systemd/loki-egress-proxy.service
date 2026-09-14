@@ -1,0 +1,35 @@
+[Unit]
+Description=Loki Go allowlisted egress proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+DynamicUser=yes
+ExecStart=/opt/loki/bin/loki egress-proxy --port 8766
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+InaccessiblePaths=/etc/loki /srv/workspace /root
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=64
+MemoryMax=128M
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

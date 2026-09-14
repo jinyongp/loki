@@ -1,0 +1,19 @@
+{
+  "RuntimeSocket": "/run/loki/runtime/control.sock",
+  "PortGuardSocket": "/run/loki/port-guard/control.sock",
+  "BrowserSocket": "/run/loki/browser/control.sock",
+  "RGPath": "/usr/bin/rg",
+  "RuntimeUID": 0,
+  "PortGuardUID": @RUNNER_UID@,
+  "BrowserUID": @BROWSER_UID@,
+  "GitTemplateRoots": ["/etc/loki"],
+  "Environment": {
+    "HOME": "/home/runner",
+    "PATH": "/opt/loki/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin",
+    "GIT_CONFIG_GLOBAL": "/etc/loki/gitconfig",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "SSH_AUTH_SOCK": "/run/loki/signing/agent.sock",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8"
+  }
+}
