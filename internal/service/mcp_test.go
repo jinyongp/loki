@@ -167,11 +167,6 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if len(app.Artifacts.List()) != 0 {
 		t.Fatal("shares retained on shutdown")
 	}
-	for _, process := range app.manager.List()["processes"].([]map[string]any) {
-		if process["status"] == "running" {
-			t.Fatal("managed process retained")
-		}
-	}
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, httptest.NewRequest("GET", server.URL+"/mcp", nil))
 	if w.Code != 503 {

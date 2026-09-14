@@ -28,7 +28,6 @@ var browserTools = []string{"browser_session", "browser_observe", "browser_inter
 type SystemController struct {
 	Config                       config.Config
 	Paths                        *policy.Workspace
-	Processes                    *process.Manager
 	Started                      time.Time
 	RuntimeSocket, BrowserSocket string
 	Artifacts, Previews          bool
@@ -76,7 +75,7 @@ func (c *SystemController) Info() map[string]any {
 			"secret_management": map[string]any{"opaque_staged_imports": true, "agent_profile_lifecycle": true, "direct_value_access": false, "action_registration": "root-only"},
 			"agent_skills":      map[string]any{"revision": "2026-09-03.1", "builtin_root": "builtin", "shared_root": ".agents/skills", "project_override": true, "precedence": []string{"project", "shared", "builtin"}, "dynamic_catalog": true},
 			"github_https":      true, "structured_browser": exists(c.BrowserSocket), "browser_devtools": exists(c.BrowserSocket), "browser_tool_catalog": map[string]any{"revision": "2026-09-03.1", "count": len(browserTools), "tools": browserTools},
-		}, "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_image_bytes": workspace.MaxImageBytes, "max_shared_file_bytes": workspace.MaxSharedBytes, "max_bundle_files": 512, "max_processes": c.Config.MaxProcesses}}
+		}, "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_image_bytes": workspace.MaxImageBytes, "max_shared_file_bytes": workspace.MaxSharedBytes, "max_bundle_files": 512}}
 }
 func (c *SystemController) git(ctx context.Context, args ...string) string {
 	r, err := process.Run(ctx, process.Spec{Argv: append([]string{"/usr/bin/git"}, args...), CWD: c.Paths.Root(), Env: c.GitEnvironment, Timeout: 10 * time.Second, MaxOutput: 4096})
@@ -101,7 +100,7 @@ func (c *SystemController) Workspace(ctx context.Context) map[string]any {
 	for name := range c.Config.Executables {
 		executables[name] = true
 	}
-	return map[string]any{"root": "/workspace", "repository": repository, "branch": branch, "checks": keys(c.Config.Checks), "processes": keys(c.Config.Processes), "executables": keys(executables), "running_processes": c.Processes.Usage()["total"], "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_patch_bytes": c.Config.MaxPatchBytes, "max_patch_files": c.Config.MaxPatchFiles, "max_processes": c.Config.MaxProcesses}}
+	return map[string]any{"root": "/workspace", "repository": repository, "branch": branch, "checks": keys(c.Config.Checks), "processes": keys(c.Config.Processes), "executables": keys(executables), "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_patch_bytes": c.Config.MaxPatchBytes, "max_patch_files": c.Config.MaxPatchFiles}}
 }
 func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	accessible := func(path string, mode uint32) bool {

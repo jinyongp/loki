@@ -16,7 +16,6 @@ import (
 	"loki/internal/artifacts"
 	"loki/internal/audit"
 	"loki/internal/auth"
-	"loki/internal/commands"
 	"loki/internal/config"
 	"loki/internal/contract"
 	"loki/internal/daemon"
@@ -24,7 +23,6 @@ import (
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/previews"
-	"loki/internal/process"
 	"loki/internal/skills"
 	"loki/internal/workspace"
 )
@@ -47,7 +45,6 @@ type MCPApp struct {
 	Artifacts *artifacts.Store
 	Previews  *previews.Store
 	files     *workspace.Files
-	manager   *process.Manager
 	roots     []*policy.Workspace
 	preview   *previews.Proxy
 	handler   http.Handler
@@ -82,10 +79,6 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.RGPath != "" {
 		app.files.RGPath = options.RGPath
 	}
-	app.manager, err = process.NewManager(process.ManagerOptions{MaxProcesses: c.MaxProcesses, MaxOutputBytes: c.MaxOutputBytes, Retention: time.Duration(c.ProcessRetentionSeconds) * time.Second})
-	if err != nil {
-		return nil, err
-	}
 	registry := &skills.Registry{Workspace: app.files.Policy}
 	if options.BuiltinSkills != "" {
 		registry.Builtin, err = policy.New(options.BuiltinSkills)
@@ -103,8 +96,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		app.roots = append(app.roots, root)
 		git.TemplateRoots = append(git.TemplateRoots, root)
 	}
-	command := &commands.Controller{Config: c, Paths: app.files.Policy, Manager: app.manager, Git: git, Environment: options.Environment}
-	git.Env = command.ToolEnvironment()
+	git.Env = toolEnvironment(options.Environment)
 	if c.ArtifactBaseURL != "" {
 		hosts := append([]string{"127.0.0.1", "127.0.0.1:" + strconv.Itoa(c.Port), "localhost", "localhost:" + strconv.Itoa(c.Port)}, c.PublicHosts...)
 		app.Artifacts = artifacts.New(artifacts.Options{BaseURL: c.ArtifactBaseURL, AllowedHosts: hosts})
@@ -121,7 +113,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.PortAllowed)
 	}
-	system := &SystemController{Config: c, Paths: app.files.Policy, Processes: app.manager, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+	system := &SystemController{Config: c, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return InspectWorkspacePort(ctx, inspect, options.Runtime, port)
 	}}
 	definitions, err := contract.CurrentDefinitions()
@@ -211,9 +203,6 @@ func (a *MCPApp) Close() {
 		a.closed.Store(true)
 		if a.preview != nil {
 			a.preview.Close()
-		}
-		if a.manager != nil {
-			a.manager.Close()
 		}
 		if a.Artifacts != nil {
 			a.Artifacts.Clear()

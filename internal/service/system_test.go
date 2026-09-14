@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"loki/internal/config"
-	"loki/internal/process"
 )
 
 func TestSystemInformation(t *testing.T) {
@@ -18,12 +17,7 @@ func TestSystemInformation(t *testing.T) {
 	}
 	c.Root = paths.Root()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
-	manager, err := process.NewManager(process.ManagerOptions{MaxProcesses: 1, MaxOutputBytes: 4096, Retention: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer manager.Close()
-	system := &SystemController{Config: c, Paths: paths, Processes: manager, Started: time.Now(), Artifacts: true, Previews: true, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+	system := &SystemController{Config: c, Paths: paths, Started: time.Now(), Artifacts: true, Previews: true, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return map[string]any{"port": port, "in_use": false, "listeners": []any{}}, nil
 	}}
 	h := SystemHandler(system)
@@ -39,7 +33,7 @@ func TestSystemInformation(t *testing.T) {
 				t.Fatal(value)
 			}
 		case "workspace":
-			if value["root"] != "/workspace" || value["running_processes"] != 0 {
+			if value["root"] != "/workspace" || value["running_processes"] != nil {
 				t.Fatal(value)
 			}
 		case "diagnostics":
