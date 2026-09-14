@@ -25,8 +25,8 @@ test -x "$DEVTOOLS" || {
 
 VERSION=$("$DEVTOOLS" version)
 case "$VERSION" in
-  *'"version":"0.8.2"'*) ;;
-  *) echo "candidate requires devtools 0.8.2" >&2; exit 1 ;;
+  *'"version":"0.9.0"'*) ;;
+  *) echo "candidate requires devtools 0.9.0" >&2; exit 1 ;;
 esac
 
 ROOT="$OUTPUT/rootfs"

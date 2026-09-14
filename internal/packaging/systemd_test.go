@@ -39,8 +39,8 @@ func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := fmt.Sprintf("%x", sha256.Sum256(data)), "55a260c71fff25e7a731244bbf7043f055cadde26f5bc79fe4430ff23a0ea3bd"; got != want {
-		t.Fatalf("devtools 0.8.2 skill digest = %s, want %s", got, want)
+	if got, want := fmt.Sprintf("%x", sha256.Sum256(data)), "dd389e167c2109551c918271dc504d60f01a8d0da0500e8af3313b84e213be61"; got != want {
+		t.Fatalf("devtools 0.9.0 skill digest = %s, want %s", got, want)
 	}
 }
 

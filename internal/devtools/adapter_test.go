@@ -18,7 +18,7 @@ func fakeClient(t *testing.T) (*Client, string) {
 	log := filepath.Join(dir, "args")
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.8.2\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + log + "\"\n" +
 		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"started\":true}}'\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
@@ -95,7 +95,7 @@ func TestClientRejectsInvalidAndUnsafeCalls(t *testing.T) {
 func TestClientRejectsVersionDriftAndTimeout(t *testing.T) {
 	client, _ := fakeClient(t)
 	client.Binary = filepath.Join(client.CWD, "wrong")
-	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'\n"), 0700); err != nil {
+	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.8.2\",\"commit\":\"test\"}}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)); err == nil {

@@ -1,6 +1,6 @@
 ---
 name: devtools
-description: Use the devtools CLI for project environment setup, managed local servers, and task/workstream coordination across agent sessions.
+description: Use the devtools CLI for project environment setup, ports and local reverse proxy routes, managed servers, and task/workstream coordination across agent sessions.
 ---
 
 # devtools
@@ -21,10 +21,10 @@ Help and `skill` return text; `run` forwards the child's output and exit code.
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
-Variables are readable and can use the devtools variable commands. Loki keeps
-active secret values in its AES-GCM vault, so leave the devtools active secret
-store empty. Manage those values with the Loki secret commands. Keep secret
-values out of arguments, conversation, and logs.
+Variables are readable and may use devtools storage. Loki keeps active secret
+values in its AES-GCM vault, so leave the devtools active secret store empty.
+Manage those values with Loki secret commands. Keep secret values out of
+arguments, conversation, logs, devtools state, and workspace files.
 
 Use `run NAME` for foreground work and `process start NAME` for a persistent server.
 Save the returned execution ID. `process status` reports lifetime; a configured
@@ -32,7 +32,7 @@ Save the returned execution ID. `process status` reports lifetime; a configured
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
 
-For a configured process that needs encrypted Loki secrets, replace only the
+For a configured process that needs encrypted Loki secrets, replace only its
 start or restart command with the brokered form below. Put all options before
 the final command name or execution ID. Repeat `--secret` for each selected name.
 
@@ -49,6 +49,21 @@ status`, `check`, `wait`, and `stop` commands using the returned execution ID.
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.
 Coordinate consumers when a stored port changes.
+
+Use `proxy` when worktrees need stable `.localhost` hostnames instead of direct
+port URLs. Routes come from each instance's tracked `[proxies.NAME]` declaration
+and current port assignment. When a route uses `${instance.alias}`, give every
+routed instance an alias with `instance name`. Allocate the referenced service
+port, then inspect `proxy list` before starting the user-global daemon. Do not
+start one daemon per project or worktree; route, alias, and assignment changes
+are picked up on the next request.
+
+`proxy start` and `proxy stop` require a request UUID. Reuse a UUID with identical
+input only after an uncertain response. The listener port remains reserved after
+stop; changing it requires starting the stopped daemon with an explicit new port.
+Treat non-`ready` list entries as diagnostics to resolve, not fallback targets.
+The proxy accepts only loopback HTTP traffic and routes only `.localhost` hosts
+to stored local assignments; use the project's own TLS setup when HTTPS is needed.
 
 ## Plan, claim, recover
 

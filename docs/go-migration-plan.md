@@ -33,7 +33,7 @@ Loki 자체 브라우저 조작 검증은 Browser Plugin으로 수행한다. 이
 
 ### 이미 갖춘 부분
 
-- Go 바이너리, 고정 devtools 0.8.2, unit, 설정 템플릿과 전체 번들 스킬을 후보 아티팩트로 만들 수 있다.
+- Go 바이너리, 고정 devtools 0.9.0, unit, 설정 템플릿과 전체 번들 스킬을 후보 아티팩트로 만들 수 있다.
 - stage 스크립트는 새 루트만 허용하고 체크섬을 검증한다.
 - MCP는 runtime, port guard, browser, signing 소켓을 제한 시간 동안 기다린다.
 - Go vault에는 Python v1 복사본을 v2 envelope로 가져오는 반복 가능 로직과 손상·권한 테스트가 있다.

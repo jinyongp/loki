@@ -15,7 +15,7 @@ func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 	client, _ := fakeClient(t)
 	script := client.Binary
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.8.2\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
 		"if [ \"$TOKEN\" != \"private-token-value\" ]; then exit 9; fi\n" +
 		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"started\":true}}'\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
@@ -36,7 +36,7 @@ func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 func TestBrokerRejectsPrivateOutputAndUnapprovedInjection(t *testing.T) {
 	client, _ := fakeClient(t)
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.8.2\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
 		"printf '%s\\n' \"{\\\"schema_version\\\":1,\\\"ok\\\":true,\\\"data\\\":{\\\"value\\\":\\\"$TOKEN\\\"}}\"\n"
 	if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
 		t.Fatal(err)

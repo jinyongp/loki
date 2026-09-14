@@ -9,10 +9,10 @@ import (
 )
 
 func TestParseVersionRequiresPinnedRelease(t *testing.T) {
-	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.8.2","commit":"test"}}`)); err != nil {
+	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test"}}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test"}}`)); err == nil {
+	if _, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.8.2","commit":"test"}}`)); err == nil {
 		t.Fatal("version drift accepted")
 	}
 }
@@ -24,7 +24,7 @@ func TestGenerateCatalogChecksVersionAndNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	version := filepath.Join(dir, "version.json")
-	if err := os.WriteFile(version, []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.8.2","commit":"test"}}`), 0600); err != nil {
+	if err := os.WriteFile(version, []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	script := filepath.Join(dir, "devtools")

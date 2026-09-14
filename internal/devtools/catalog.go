@@ -9,10 +9,10 @@ import (
 	"sort"
 )
 
-const SupportedVersion = "0.8.2"
+const SupportedVersion = "0.9.0"
 const ProtocolVersion = 1
 
-//go:embed testdata/catalog-v0.8.2.json
+//go:embed testdata/catalog-v0.9.0.json
 var embeddedCatalog []byte
 
 type Envelope struct {
