@@ -54,7 +54,11 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"initialized": true, "profiles": len(profiles["profiles"].([]map[string]any))}, nil
+		items, ok := profiles["profiles"].([]map[string]any)
+		if !ok {
+			return nil, errors.New("invalid vault profile response")
+		}
+		return map[string]any{"initialized": true, "profiles": len(items)}, nil
 	}}
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),

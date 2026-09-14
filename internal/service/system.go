@@ -61,10 +61,11 @@ func (c *SystemController) Info() map[string]any {
 	if !c.Started.IsZero() {
 		uptime = math.Round(time.Since(c.Started).Seconds()*1000) / 1000
 	}
-	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-04.1", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "workspace": "/workspace", "tool_catalog": catalogInfo(),
+	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-14.1", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "workspace": "/workspace", "tool_catalog": catalogInfo(),
 		"capabilities": map[string]any{
-			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"}, "temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts, "workspace_bundles": c.Artifacts, "developer_output_viewer": true, "shared_project_state": true, "temporary_live_previews": c.Previews, "command_execution": true, "managed_processes": true, "workspace_port_control": true, "go_toolchain": true, "rust_toolchain": true, "git_checkpoints": true, "file_revisions": true, "git_partial_staging": true, "signed_git_commits": true, "secret_profiles": socketExists(c.RuntimeSocket),
-			"secret_management": map[string]any{"opaque_staged_imports": true, "agent_profile_lifecycle": true, "direct_value_access": false, "action_registration": "root-only"},
+			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"}, "temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts, "workspace_bundles": c.Artifacts, "developer_output_viewer": true, "temporary_live_previews": c.Previews, "git_checkpoints": true, "file_revisions": true, "git_partial_staging": true, "signed_git_commits": true, "secret_profiles": socketExists(c.RuntimeSocket),
+			"devtools":          map[string]any{"direct_cli": true, "project_state": true, "task_queues": true, "configured_commands": true, "managed_processes": true, "workspace_ports": true},
+			"secret_management": map[string]any{"vault": "AES-GCM", "opaque_staged_imports": true, "profile_lifecycle": true, "direct_value_access": false, "brokered_process_start": true},
 			"agent_skills":      map[string]any{"revision": "2026-09-14.1", "installed": []string{"devtools"}},
 			"github_https":      true, "structured_browser": exists(c.BrowserSocket), "browser_devtools": exists(c.BrowserSocket), "browser_tool_catalog": map[string]any{"revision": "2026-09-03.1", "count": len(browserTools), "tools": browserTools},
 		}, "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_image_bytes": workspace.MaxImageBytes, "max_shared_file_bytes": workspace.MaxSharedBytes, "max_bundle_files": 512}}
@@ -91,13 +92,6 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	accessible := func(path string, mode uint32) bool {
 		return unix.Faccessat(unix.AT_FDCWD, path, mode, unix.AT_EACCESS) == nil
 	}
-	toolchain := map[string]bool{}
-	healthy := true
-	for _, name := range []string{"fnm", "fd", "gh", "git", "go", "just", "jq", "hyperfine", "actionlint", "actions-up", "python3", "rg", "rustup", "cargo", "rustc"} {
-		path, _ := policy.ExecutablePath(name)
-		toolchain[name] = accessible(path, unix.X_OK)
-		healthy = healthy && toolchain[name]
-	}
 	repositories := []string{}
 	entries, _ := os.ReadDir(c.Paths.Root())
 	for _, entry := range entries {
@@ -117,9 +111,9 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 		signingFormat = format
 	}
 	readable, writable := accessible(c.Paths.Root(), unix.R_OK), accessible(c.Paths.Root(), unix.W_OK)
-	return map[string]any{"healthy": healthy && readable && writable && identity && format == "ssh" && required && publicKey && agent,
+	return map[string]any{"healthy": readable && writable && identity && format == "ssh" && required && publicKey && agent,
 		"workspace": map[string]any{"readable": readable, "writable": writable}, "audit_log": map[string]any{"directory_writable": accessible(filepath.Dir(c.Config.AuditLog), unix.W_OK)}, "github": map[string]any{"config_mounted": exists("/home/runner/.config/gh/hosts.yml"), "protocol": "https"},
-		"git_signing": map[string]any{"identity_configured": identity, "format": signingFormat, "commit_signing_required": required, "public_key_available": publicKey, "agent_socket_available": agent}, "toolchain": toolchain, "repositories": repositories, "tool_catalog": catalogInfo(),
+		"git_signing": map[string]any{"identity_configured": identity, "format": signingFormat, "commit_signing_required": required, "public_key_available": publicKey, "agent_socket_available": agent}, "repositories": repositories, "tool_catalog": catalogInfo(),
 		"browser": map[string]any{"socket_available": exists(c.BrowserSocket), "catalog_revision": "2026-09-03.1", "expected_tool_count": len(browserTools), "expected_tools": browserTools}}
 }
 func SystemHandler(c *SystemController) mcpserver.Handler {
