@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "directories": {
+    "runtime-state": {"path": "/var/lib/loki-go/runtime", "owner": "root", "group": "root", "mode": "0700"},
+    "signing-state": {"path": "/var/lib/loki-go/signing", "owner": "root", "group": "root", "mode": "0700"},
+    "runner-state": {"path": "/var/lib/loki-go/runner", "owner": "runner", "group": "runner", "mode": "0700"},
+    "runner-cache": {"path": "/var/cache/loki-go/runner", "owner": "runner", "group": "runner", "mode": "0700"},
+    "runner-temp": {"path": "/var/tmp/loki-go/runner", "owner": "runner", "group": "runner", "mode": "0700"},
+    "workspace": {"path": "/workspace", "owner": "runner", "group": "workspace", "mode": "2770"}
+  },
+  "environment": {
+    "HOME": "/home/runner",
+    "XDG_CONFIG_HOME": "/var/lib/loki-go/runner/config",
+    "XDG_DATA_HOME": "/var/lib/loki-go/runner/data",
+    "XDG_STATE_HOME": "/var/lib/loki-go/runner/state",
+    "XDG_CACHE_HOME": "/var/cache/loki-go/runner",
+    "NPM_CONFIG_CACHE": "/var/cache/loki-go/runner/npm",
+    "PLAYWRIGHT_BROWSERS_PATH": "/var/cache/loki-go/runner/playwright",
+    "GOCACHE": "/var/cache/loki-go/runner/go-build",
+    "PIP_CACHE_DIR": "/var/cache/loki-go/runner/pip",
+    "TMPDIR": "/var/tmp/loki-go/runner",
+    "PATH": "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
+    "GIT_CONFIG_GLOBAL": "/home/runner/.gitconfig",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8"
+  },
+  "network_profiles": {
+    "dependency-install": {"mode": "proxy", "proxy": "http://127.0.0.1:18766", "allow_secrets": false, "administrator_allowlist": true},
+    "runtime-default": {"mode": "loopback", "allow_secrets": true, "administrator_allowlist": false},
+    "runtime-profile": {"mode": "proxy", "proxy": "http://127.0.0.1:18766", "allow_secrets": true, "administrator_allowlist": true},
+    "browser": {"mode": "proxy", "proxy": "http://127.0.0.1:18767", "allow_secrets": false, "administrator_allowlist": true}
+  }
+}

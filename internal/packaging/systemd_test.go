@@ -44,6 +44,24 @@ func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 	}
 }
 
+func TestCandidateIncludesExecutionContract(t *testing.T) {
+	path, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err = json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document["version"] != float64(1) {
+		t.Fatalf("execution contract version = %#v", document["version"])
+	}
+}
+
 func waitScript(t *testing.T) string {
 	t.Helper()
 	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "wait-for-loki-sockets.sh"))

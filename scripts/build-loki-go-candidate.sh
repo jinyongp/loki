@@ -45,6 +45,7 @@ install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/conf
 install -m 0644 "$SOURCE_DIR/config/loki-gitconfig" "$ROOT/usr/share/doc/loki/gitconfig"
 install -m 0644 "$SOURCE_DIR/packaging/go/runtime.json.in" "$ROOT/usr/share/doc/loki/runtime.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/go/mcp.json.in" "$ROOT/usr/share/doc/loki/mcp.json.in"
+install -m 0644 "$SOURCE_DIR/packaging/go/execution-contract.json" "$ROOT/usr/share/doc/loki/execution-contract.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
 ln -s ../../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"
 ln -s ../../../opt/loki/bin/devtools "$ROOT/usr/local/bin/devtools"
