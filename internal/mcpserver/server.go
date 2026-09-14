@@ -29,7 +29,7 @@ func New(handlers map[string]Handler) (*mcp.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, nil)
+	return newServer(handlers, definitions, nil, "")
 }
 
 // NewConfigured derives widget origins from the active service configuration.
@@ -45,7 +45,7 @@ func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.S
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, &origins)
+	return newServer(handlers, definitions, &origins, "")
 }
 
 // NewConfiguredCurrent serves the reduced Loki-owned catalog. New and
@@ -58,10 +58,10 @@ func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) 
 	if err != nil {
 		return nil, err
 	}
-	return newServer(handlers, definitions, &origins)
+	return newServer(handlers, definitions, &origins, contract.CurrentInstructions)
 }
 
-func newServer(handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins) (*mcp.Server, error) {
+func newServer(handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {
 	baseline, err := contract.Baseline()
 	if err != nil {
 		return nil, err
@@ -72,6 +72,9 @@ func newServer(handlers map[string]Handler, definitions []*mcp.Tool, origins *Re
 	var init mcp.InitializeResult
 	if err = json.Unmarshal(baseline.Initialize, &init); err != nil {
 		return nil, err
+	}
+	if instructions != "" {
+		init.Instructions = instructions
 	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "loki",

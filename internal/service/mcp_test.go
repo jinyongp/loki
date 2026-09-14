@@ -119,6 +119,9 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
+	if instructions := client.InitializeResult().Instructions; !strings.Contains(instructions, "devtools schema") || strings.Contains(instructions, "Use project for") {
+		t.Fatal("stale MCP instructions", instructions)
+	}
 	tools, err := client.ListTools(t.Context(), nil)
 	if err != nil || len(tools.Tools) != 27 {
 		t.Fatal(tools, err)

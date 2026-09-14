@@ -14,6 +14,8 @@ var baselineJSON []byte
 const BaselineVersion = "0.47.1"
 const CatalogRevision = "2026-09-14.1"
 
+const CurrentInstructions = `Operate inside the isolated Loki workspace. Before repository work, call agent_context for the intended cwd and activate the devtools skill when it is listed. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, agent skills, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
+
 var currentToolNames = []string{
 	"system_inspect",
 	"preview_publish", "shared_resources", "revoke_share",
