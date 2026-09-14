@@ -20,10 +20,10 @@ import (
 )
 
 type mcpLayout struct {
-	RuntimeSocket, PortGuardSocket, BrowserSocket, BuiltinSkills, RGPath string
-	RuntimeUID, PortGuardUID, BrowserUID                                 *uint32
-	GitTemplateRoots                                                     []string
-	Environment                                                          map[string]string
+	RuntimeSocket, PortGuardSocket, BrowserSocket, RGPath string
+	RuntimeUID, PortGuardUID, BrowserUID                  *uint32
+	GitTemplateRoots                                      []string
+	Environment                                           map[string]string
 }
 
 func (l mcpLayout) options(token string) (service.MCPOptions, error) {
@@ -35,12 +35,12 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 	if l.RuntimeUID == nil || l.PortGuardUID == nil || l.BrowserUID == nil {
 		return service.MCPOptions{}, errors.New("MCP layout requires explicit service UIDs")
 	}
-	for _, path := range append([]string{l.BuiltinSkills, l.RGPath}, l.GitTemplateRoots...) {
+	for _, path := range append([]string{l.RGPath}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
 			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
 	}
-	return service.MCPOptions{Runtime: rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}, PortGuard: rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}, Browser: service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID), RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket, BuiltinSkills: l.BuiltinSkills, RGPath: l.RGPath, GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token}, nil
+	return service.MCPOptions{Runtime: rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}, PortGuard: rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}, Browser: service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID), RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket, RGPath: l.RGPath, GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token}, nil
 }
 func runMCP(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)

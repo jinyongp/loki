@@ -8,7 +8,7 @@ func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	if _, err := valid.options("token"); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutate := range []func(*mcpLayout){func(l *mcpLayout) { l.RuntimeUID = nil }, func(l *mcpLayout) { l.PortGuardUID = nil }, func(l *mcpLayout) { l.BrowserUID = nil }, func(l *mcpLayout) { l.RuntimeSocket = "relative" }, func(l *mcpLayout) { l.BuiltinSkills = "relative" }} {
+	for _, mutate := range []func(*mcpLayout){func(l *mcpLayout) { l.RuntimeUID = nil }, func(l *mcpLayout) { l.PortGuardUID = nil }, func(l *mcpLayout) { l.BrowserUID = nil }, func(l *mcpLayout) { l.RuntimeSocket = "relative" }, func(l *mcpLayout) { l.RGPath = "relative" }} {
 		layout := valid
 		mutate(&layout)
 		if _, err := layout.options("token"); err == nil {

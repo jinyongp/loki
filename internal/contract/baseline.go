@@ -15,9 +15,9 @@ var baselineJSON []byte
 var currentJSON []byte
 
 const BaselineVersion = "0.47.1"
-const CatalogRevision = "2026-09-14.1"
+const CatalogRevision = "2026-09-14.2"
 
-const CurrentInstructions = `Operate inside the isolated Loki workspace. Before repository work, call agent_context for the intended cwd and activate the devtools skill when it is listed. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, agent skills, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
+const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
 var currentToolNames = []string{
 	"system_inspect",
@@ -25,7 +25,6 @@ var currentToolNames = []string{
 	"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot",
 	"workspace_read", "read_image", "share_image", "artifact_publish", "write_image", "workspace_edit",
 	"restore_workspace_file", "remove_tracked_file",
-	"agent_context", "skill_read", "skill_write",
 	"git_inspect", "git_stage", "developer_view",
 	"secret_inspect", "secret_write", "secret_delete",
 }
@@ -77,14 +76,21 @@ func CurrentDefinitions() ([]*mcp.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	selected, err := snapshot.Definitions()
+	definitions, err := snapshot.Definitions()
 	if err != nil {
 		return nil, err
 	}
+	byName := make(map[string]*mcp.Tool, len(definitions))
+	for _, definition := range definitions {
+		byName[definition.Name] = definition
+	}
+	selected := make([]*mcp.Tool, 0, len(currentToolNames))
 	for index, name := range currentToolNames {
-		if selected[index].Name != name {
-			return nil, fmt.Errorf("invalid current tool order at %d", index)
+		definition := byName[name]
+		if definition == nil {
+			return nil, fmt.Errorf("current tool %q is missing at %d", name, index)
 		}
+		selected = append(selected, definition)
 	}
 	return selected, nil
 }

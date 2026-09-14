@@ -17,25 +17,23 @@ import (
 	"loki/internal/audit"
 	"loki/internal/auth"
 	"loki/internal/config"
-	"loki/internal/contract"
 	"loki/internal/daemon"
 	"loki/internal/gitops"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/previews"
-	"loki/internal/skills"
 	"loki/internal/workspace"
 )
 
 type MCPOptions struct {
-	OnAuditError                                        func(error)
-	Runtime, PortGuard                                  RuntimeCaller
-	Browser                                             BrowserCaller
-	RuntimeSocket, BrowserSocket, BuiltinSkills, RGPath string
-	GitTemplateRoots                                    []string
-	Environment                                         map[string]string
-	Token                                               string
-	Access, PreviewAccess                               auth.Verifier
+	OnAuditError                         func(error)
+	Runtime, PortGuard                   RuntimeCaller
+	Browser                              BrowserCaller
+	RuntimeSocket, BrowserSocket, RGPath string
+	GitTemplateRoots                     []string
+	Environment                          map[string]string
+	Token                                string
+	Access, PreviewAccess                auth.Verifier
 }
 
 // MCPApp owns local command sessions, share stores and pinned workspace roots.
@@ -79,14 +77,6 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.RGPath != "" {
 		app.files.RGPath = options.RGPath
 	}
-	registry := &skills.Registry{Workspace: app.files.Policy}
-	if options.BuiltinSkills != "" {
-		registry.Builtin, err = policy.New(options.BuiltinSkills)
-		if err != nil {
-			return nil, err
-		}
-		app.roots = append(app.roots, registry.Builtin)
-	}
 	git := &gitops.Controller{Paths: app.files.Policy, Config: c}
 	for _, path := range options.GitTemplateRoots {
 		root, e := policy.New(path)
@@ -116,19 +106,10 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	system := &SystemController{Config: c, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return InspectWorkspacePort(ctx, inspect, options.Runtime, port)
 	}}
-	definitions, err := contract.CurrentDefinitions()
-	if err != nil {
-		return nil, err
-	}
-	names := map[string]bool{}
-	for _, definition := range definitions {
-		names[definition.Name] = true
-	}
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
-		"skill_write": SkillWriteHandler(registry),
 	}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), SkillReadHandlers(registry, names)} {
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

@@ -73,7 +73,7 @@ func (c *SystemController) Info() map[string]any {
 		"capabilities": map[string]any{
 			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"}, "temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts, "workspace_bundles": c.Artifacts, "developer_output_viewer": true, "shared_project_state": true, "temporary_live_previews": c.Previews, "command_execution": true, "managed_processes": true, "workspace_port_control": true, "go_toolchain": true, "rust_toolchain": true, "git_checkpoints": true, "file_revisions": true, "git_partial_staging": true, "signed_git_commits": true, "secret_profiles": socketExists(c.RuntimeSocket),
 			"secret_management": map[string]any{"opaque_staged_imports": true, "agent_profile_lifecycle": true, "direct_value_access": false, "action_registration": "root-only"},
-			"agent_skills":      map[string]any{"revision": "2026-09-03.1", "builtin_root": "builtin", "shared_root": ".agents/skills", "project_override": true, "precedence": []string{"project", "shared", "builtin"}, "dynamic_catalog": true},
+			"agent_skills":      map[string]any{"revision": "2026-09-14.1", "installed": []string{"devtools"}},
 			"github_https":      true, "structured_browser": exists(c.BrowserSocket), "browser_devtools": exists(c.BrowserSocket), "browser_tool_catalog": map[string]any{"revision": "2026-09-03.1", "count": len(browserTools), "tools": browserTools},
 		}, "limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_image_bytes": workspace.MaxImageBytes, "max_shared_file_bytes": workspace.MaxSharedBytes, "max_bundle_files": 512}}
 }

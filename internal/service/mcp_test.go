@@ -123,7 +123,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 27 {
+	if err != nil || len(tools.Tools) != 24 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -149,7 +149,6 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(r)
 	}
 	call("system_inspect", map[string]any{"action": "server"})
-	call("agent_context", map[string]any{})
 	call("browser_session", map[string]any{"action": "start"})
 	call("secret_inspect", map[string]any{"action": "status"})
 	shared := call("artifact_publish", map[string]any{"action": "file", "path": "hello.txt"})
@@ -174,14 +173,5 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(c.Root, "hello.txt")); err != nil || string(data) != "fixture" {
 		t.Fatal("workspace content not preserved", err)
-	}
-}
-func TestMCPConstructorFailureCleanup(t *testing.T) {
-	c, _ := config.Parse(nil)
-	c.Root = t.TempDir()
-	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return nil, nil })
-	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return nil, nil })
-	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Token: strings.Repeat("t", 43), BuiltinSkills: filepath.Join(t.TempDir(), "missing")}); err == nil {
-		t.Fatal("missing builtin root accepted")
 	}
 }

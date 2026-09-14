@@ -106,7 +106,7 @@ func TestCurrentDefinitionsContainOnlyLokiTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools) != 27 {
+	if len(tools) != 24 {
 		t.Fatalf("tool count = %d", len(tools))
 	}
 	seen := make(map[string]bool, len(tools))
@@ -118,7 +118,7 @@ func TestCurrentDefinitionsContainOnlyLokiTools(t *testing.T) {
 			t.Errorf("missing Loki tool %q", required)
 		}
 	}
-	for _, delegated := range []string{"runtime_stop", "project", "task_inspect", "task_write", "task_delete", "bootstrap_project", "action", "command_run", "command_start", "process_inspect"} {
+	for _, delegated := range []string{"runtime_stop", "project", "task_inspect", "task_write", "task_delete", "bootstrap_project", "action", "command_run", "command_start", "process_inspect", "agent_context", "skill_read", "skill_write"} {
 		if seen[delegated] {
 			t.Errorf("devtools command remains exposed as MCP tool %q", delegated)
 		}
