@@ -48,8 +48,9 @@ directory and a compatible `devtools` executable:
   /tmp/loki-toolchain-bundle
 ```
 
-The result contains static Loki and devtools executables, all bundled Agent
-Skills, configuration templates, systemd units, checksums, and a staging script.
+The result contains static Loki and devtools executables, the verified Chromium
+runtime and license, all bundled Agent Skills, configuration templates, systemd
+units, checksums, and a staging script.
 It contains no Python environment.
 
 Stage the candidate into a new root with the target service identities:

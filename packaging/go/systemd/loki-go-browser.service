@@ -3,7 +3,7 @@ Description=Loki Go isolated browser
 After=network.target loki-go-browser-proxy.service
 Requires=loki-go-browser-proxy.service
 Before=loki-go-mcp.service
-ConditionFileIsExecutable=/opt/loki-browser/chromium/chrome-linux64/chrome
+ConditionFileIsExecutable=/opt/loki/toolchain/bin/chromium
 
 [Service]
 Type=notify
@@ -16,7 +16,7 @@ RuntimeDirectoryMode=0770
 StateDirectory=loki-go/browser
 StateDirectoryMode=0700
 WorkingDirectory=/var/lib/loki-go/browser
-ExecStart=/opt/loki/bin/loki browser --socket /run/loki-go/browser/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID --chrome /opt/loki-browser/chromium/chrome-linux64/chrome --profile /var/lib/loki-go/browser/profile --downloads /srv/workspace/loki/.loki-go/browser-downloads --proxy http://127.0.0.1:18767
+ExecStart=/opt/loki/bin/loki browser --socket /run/loki-go/browser/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID --chrome /opt/loki/toolchain/bin/chromium --profile /var/lib/loki-go/browser/profile --downloads /srv/workspace/loki/.loki-go/browser-downloads --proxy http://127.0.0.1:18767
 Restart=on-failure
 RestartSec=3
 UMask=0007

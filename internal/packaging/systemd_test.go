@@ -189,6 +189,26 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	}
 }
 
+func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-browser.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(unit)
+	for _, want := range []string{
+		"ConditionFileIsExecutable=/opt/loki/toolchain/bin/chromium",
+		"--chrome /opt/loki/toolchain/bin/chromium",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("browser unit does not contain %q", want)
+		}
+	}
+}
+
 func TestStageNormalizesArtifactOwnership(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

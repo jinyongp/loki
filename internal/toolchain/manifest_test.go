@@ -15,7 +15,7 @@ func TestRepositoryManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.AptPackages) < 20 || len(manifest.Artifacts) != 4 {
+	if len(manifest.AptPackages) < 20 || len(manifest.Artifacts) != 6 {
 		t.Fatalf("manifest contents = %d packages, %d artifacts", len(manifest.AptPackages), len(manifest.Artifacts))
 	}
 }
