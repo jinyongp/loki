@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,10 +25,34 @@ type Spec struct {
 	Argv      []string
 	CWD       string
 	Env       []string
+	Identity  *Identity
 	Input     []byte
 	Timeout   time.Duration
 	MaxOutput int
 }
+
+// Identity drops a privileged parent to the configured service account before
+// exec. UID and GID zero are rejected because this boundary is for delegation.
+type Identity struct {
+	UID, GID uint32
+	Groups   []uint32
+}
+
+func (i *Identity) validate() error {
+	if i == nil {
+		return nil
+	}
+	if i.UID == 0 || i.GID == 0 {
+		return errors.New("delegated process identity must be unprivileged")
+	}
+	for _, group := range i.Groups {
+		if group == 0 {
+			return errors.New("delegated process groups must be unprivileged")
+		}
+	}
+	return nil
+}
+
 type Buffer struct {
 	mu        sync.Mutex
 	data      []byte
@@ -77,11 +102,21 @@ func Command(ctx context.Context, spec Spec) *exec.Cmd {
 	if lookupErr != nil {
 		cmd.Err = lookupErr
 	}
+	identityErr := spec.Identity.validate()
+	if identityErr != nil && cmd.Err == nil {
+		cmd.Err = identityErr
+	}
 	if len(spec.Argv) > 0 {
 		cmd.Args[0] = spec.Argv[0]
 	}
 	cmd.Dir, cmd.Env = spec.CWD, env
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if spec.Identity != nil && identityErr == nil {
+		cmd.SysProcAttr.Credential = &syscall.Credential{
+			Uid: spec.Identity.UID, Gid: spec.Identity.GID,
+			Groups: slices.Clone(spec.Identity.Groups),
+		}
+	}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil

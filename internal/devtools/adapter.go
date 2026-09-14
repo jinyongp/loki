@@ -29,6 +29,7 @@ type Client struct {
 	Env       []string
 	Timeout   time.Duration
 	MaxOutput int
+	Identity  *process.Identity
 
 	mu       sync.Mutex
 	verified bool
@@ -100,7 +101,7 @@ func (c *Client) verify(ctx context.Context) error {
 	}
 	result, err := process.Run(ctx, process.Spec{
 		Argv: []string{c.Binary, "version"}, CWD: c.CWD, Env: c.Env,
-		Timeout: c.timeout(), MaxOutput: 64 << 10,
+		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: 64 << 10,
 	})
 	if err != nil {
 		return fmt.Errorf("execute devtools version: %w", err)
@@ -149,7 +150,7 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	}
 	result, err := process.Run(ctx, process.Spec{
 		Argv: append([]string{c.Binary}, argv...), CWD: c.CWD, Env: environment,
-		Timeout: c.timeout(), MaxOutput: c.maxOutput(),
+		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: c.maxOutput(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("execute devtools command: %w", err)

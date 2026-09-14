@@ -2,11 +2,28 @@ package process
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestCommandConfiguresUnprivilegedIdentity(t *testing.T) {
+	identity := &Identity{UID: 1001, GID: 1002, Groups: []uint32{1002, 1003}}
+	cmd := Command(t.Context(), Spec{Argv: []string{"/usr/bin/true"}, Identity: identity})
+	credential := cmd.SysProcAttr.Credential
+	if cmd.Err != nil || credential == nil || credential.Uid != identity.UID || credential.Gid != identity.GID || !reflect.DeepEqual(credential.Groups, identity.Groups) {
+		t.Fatalf("credential = %#v, error = %v", credential, cmd.Err)
+	}
+	identity.Groups[0] = 42
+	if credential.Groups[0] != 1002 {
+		t.Fatal("credential groups alias caller memory")
+	}
+	if _, err := Run(t.Context(), Spec{Argv: []string{"/usr/bin/true"}, Identity: &Identity{}}); err == nil {
+		t.Fatal("privileged delegated identity accepted")
+	}
+}
 
 func TestBoundedBuffer(t *testing.T) {
 	b := NewBuffer(100)

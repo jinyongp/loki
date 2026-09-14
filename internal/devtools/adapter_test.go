@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"loki/internal/process"
 )
 
 func fakeClient(t *testing.T) (*Client, string) {
@@ -86,5 +88,13 @@ func TestClientRejectsVersionDriftAndTimeout(t *testing.T) {
 	client.Timeout = 20 * time.Millisecond
 	if _, err := client.Call(context.Background(), "env list", json.RawMessage(`{"profile":"test"}`)); err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("timeout error = %v", err)
+	}
+}
+
+func TestClientRejectsPrivilegedDelegatedIdentity(t *testing.T) {
+	client, _ := fakeClient(t)
+	client.Identity = &process.Identity{}
+	if _, err := client.Call(context.Background(), "env list", json.RawMessage(`{"profile":"test"}`)); err == nil || !strings.Contains(err.Error(), "unprivileged") {
+		t.Fatalf("identity error = %v", err)
 	}
 }
