@@ -72,7 +72,7 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "#!/bin/sh\nset -eu\n\nexec /opt/loki/bin/loki runner-exec \\\n  --contract /usr/share/doc/loki/execution-contract.json \\\n  -- /opt/loki/bin/devtools \"$@\"\n"
+	want := "#!/bin/sh\nset -eu\n\nnetwork_profile=runtime-default\ncase \"${1-}\" in\n  run|update) network_profile=dependency-install ;;\nesac\n\nexec /opt/loki/bin/loki runner-exec \\\n  --contract /usr/share/doc/loki/execution-contract.json \\\n  --network-profile \"$network_profile\" \\\n  -- /opt/loki/bin/devtools \"$@\"\n"
 	if string(launcher) != want {
 		t.Fatalf("devtools launcher = %q, want %q", launcher, want)
 	}

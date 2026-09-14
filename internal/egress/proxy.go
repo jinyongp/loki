@@ -2,6 +2,7 @@
 package egress
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -11,23 +12,33 @@ import (
 	"loki/internal/browsernet"
 )
 
-var allowed = map[string]bool{
-	"api.github.com": true, "codeload.github.com": true, "github.com": true, "nodejs.org": true,
-	"objects.githubusercontent.com": true, "placehold.co": true, "raw.githubusercontent.com": true,
-	"registry.npmjs.org": true, "proxy.golang.org": true, "storage.googleapis.com": true, "sum.golang.org": true,
-	"index.crates.io": true, "static.crates.io": true, "static.rust-lang.org": true,
-}
-
 type Proxy struct {
 	handler http.Handler
 	close   func()
+	policy  Policy
+	profile string
+	audit   func(Decision)
 }
 
-func New() *Proxy {
+type Decision struct {
+	Profile string
+	Host    string
+	Port    int
+	Allowed bool
+	Reason  string
+}
+
+func New(policy Policy, profile string, audit func(Decision)) (*Proxy, error) {
+	if err := policy.Validate(); err != nil {
+		return nil, err
+	}
+	if _, ok := policy.Profiles[profile]; !ok {
+		return nil, errors.New("unknown egress profile")
+	}
 	proxy := browsernet.New(browsernet.Policy{})
 	proxy.IdleTimeout = 300 * time.Second
 	proxy.TunnelErrorStatus = http.StatusBadGateway
-	return &Proxy{handler: proxy, close: proxy.Close}
+	return &Proxy{handler: proxy, close: proxy.Close, policy: policy, profile: profile, audit: audit}, nil
 }
 func (p *Proxy) Close() { p.close() }
 func response(w http.ResponseWriter, status int) {
@@ -44,21 +55,25 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if line > 8192 || total > 65536 {
+		p.record(Decision{Profile: p.profile, Allowed: false, Reason: "request-too-large"})
 		response(w, 431)
 		return
 	}
 	host, port, err := net.SplitHostPort(r.RequestURI)
 	if err != nil {
+		p.record(Decision{Profile: p.profile, Allowed: false, Reason: "invalid-authority"})
 		response(w, 400)
 		return
 	}
 	host = strings.ToLower(strings.TrimRight(host, "."))
 	number, err := strconv.Atoi(port)
 	if err != nil {
+		p.record(Decision{Profile: p.profile, Host: host, Allowed: false, Reason: "invalid-port"})
 		response(w, 400)
 		return
 	}
-	if r.Method != "CONNECT" || number != 443 || !allowed[host] {
+	if r.Method != "CONNECT" || !p.policy.Allows(p.profile, host, number) {
+		p.record(Decision{Profile: p.profile, Host: host, Port: number, Allowed: false, Reason: "not-allowlisted"})
 		response(w, 403)
 		return
 	}
@@ -66,5 +81,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	request := r.Clone(r.Context())
 	request.Host = net.JoinHostPort(host, "443")
 	request.URL.Host = request.Host
+	p.record(Decision{Profile: p.profile, Host: host, Port: number, Allowed: true, Reason: "allowlisted"})
 	p.handler.ServeHTTP(w, request)
+}
+
+func (p *Proxy) record(decision Decision) {
+	if p.audit != nil {
+		p.audit(decision)
+	}
 }

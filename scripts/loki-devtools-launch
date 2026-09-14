@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+network_profile=runtime-default
+case "${1-}" in
+  run|update) network_profile=dependency-install ;;
+esac
+
 exec /opt/loki/bin/loki runner-exec \
   --contract /usr/share/doc/loki/execution-contract.json \
+  --network-profile "$network_profile" \
   -- /opt/loki/bin/devtools "$@"

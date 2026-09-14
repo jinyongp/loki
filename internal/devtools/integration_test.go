@@ -24,7 +24,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	resultPath := filepath.Join(root, "inherited.txt")
 	configuration := "profile = \"loki-broker-test\"\n\n" +
 		"[commands.probe]\n" +
-		"exec = [\"sh\", \"-c\", \"printf '%s' \\\"$TOKEN\\\" > inherited.txt\"]\n"
+		"exec = [\"sh\", \"-c\", \"printf '%s\\\\n%s' \\\"$TOKEN\\\" \\\"${HTTPS_PROXY-unset}\\\" > inherited.txt\"]\n"
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(configuration), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(inherited) != private {
+	if string(inherited) != private+"\nunset" {
 		t.Fatalf("managed process inherited %q", inherited)
 	}
 }

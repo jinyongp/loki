@@ -78,6 +78,25 @@ func TestEnvironmentListIsClosedAndStable(t *testing.T) {
 	}
 }
 
+func TestDependencyEnvironmentUsesOnlyLoopbackProxy(t *testing.T) {
+	environment, err := repositoryContract(t).EnvironmentForNetwork("dependency-install")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"HTTP_PROXY=http://127.0.0.1:18766",
+		"HTTPS_PROXY=http://127.0.0.1:18766",
+		"NO_PROXY=127.0.0.1,localhost",
+	} {
+		if !slices.Contains(environment, want) {
+			t.Fatalf("dependency environment does not contain %q", want)
+		}
+	}
+	if _, err = repositoryContract(t).EnvironmentForNetwork("unknown"); err == nil {
+		t.Fatal("unknown network profile accepted")
+	}
+}
+
 func TestContractRejectsRootOwnedRunnerState(t *testing.T) {
 	contract := repositoryContract(t)
 	directory := contract.Directories["runner-state"]

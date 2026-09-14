@@ -141,17 +141,38 @@ func (c Contract) Validate() error {
 // Callers must use it as the child environment rather than merging the parent
 // process environment.
 func (c Contract) EnvironmentList() ([]string, error) {
+	return c.EnvironmentForNetwork("runtime-default")
+}
+
+// EnvironmentForNetwork returns the closed runner environment for one
+// administrator-defined network profile.
+func (c Contract) EnvironmentForNetwork(profile string) ([]string, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(c.Environment))
-	for name := range c.Environment {
+	network, ok := c.NetworkProfiles[profile]
+	if !ok {
+		return nil, fmt.Errorf("unknown execution network profile %q", profile)
+	}
+	values := make(map[string]string, len(c.Environment)+6)
+	for name, value := range c.Environment {
+		values[name] = value
+	}
+	if network.Mode == "proxy" {
+		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+			values[name] = network.Proxy
+		}
+		values["NO_PROXY"] = "127.0.0.1,localhost"
+		values["no_proxy"] = "127.0.0.1,localhost"
+	}
+	names := make([]string, 0, len(values))
+	for name := range values {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	environment := make([]string, 0, len(names))
 	for _, name := range names {
-		environment = append(environment, name+"="+c.Environment[name])
+		environment = append(environment, name+"="+values[name])
 	}
 	return environment, nil
 }

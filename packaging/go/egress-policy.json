@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "profiles": {
+    "dependency-install": {
+      "allowed_hosts": [
+        "api.github.com",
+        "cdn.playwright.dev",
+        "codeload.github.com",
+        "files.pythonhosted.org",
+        "github.com",
+        "index.crates.io",
+        "nodejs.org",
+        "objects.githubusercontent.com",
+        "playwright.download.prss.microsoft.com",
+        "proxy.golang.org",
+        "pypi.org",
+        "raw.githubusercontent.com",
+        "registry.npmjs.org",
+        "release-assets.githubusercontent.com",
+        "static.crates.io",
+        "static.rust-lang.org",
+        "storage.googleapis.com",
+        "sum.golang.org"
+      ],
+      "allowed_ports": [443]
+    }
+  }
+}

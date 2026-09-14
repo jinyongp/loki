@@ -46,3 +46,17 @@ func TestRunnerExecRejectsRelativeCommands(t *testing.T) {
 		t.Fatal("relative runner command accepted")
 	}
 }
+
+func TestRunnerExecSelectsDependencyNetwork(t *testing.T) {
+	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := buildRunnerExecPlan([]string{"--contract", contract, "--network-profile", "dependency-install", "--", "/usr/bin/env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(plan.environment, "HTTPS_PROXY=http://127.0.0.1:18766") {
+		t.Fatalf("dependency proxy missing: %#v", plan.environment)
+	}
+}

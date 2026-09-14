@@ -23,6 +23,7 @@ func buildRunnerExecPlan(args []string) (runnerExecPlan, error) {
 	flags := flag.NewFlagSet("runner-exec", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	contractPath := flags.String("contract", "/usr/share/doc/loki/execution-contract.json", "administrator-owned execution contract")
+	networkProfile := flags.String("network-profile", "runtime-default", "administrator-defined execution network profile")
 	if err := flags.Parse(args); err != nil {
 		return runnerExecPlan{}, err
 	}
@@ -37,7 +38,7 @@ func buildRunnerExecPlan(args []string) (runnerExecPlan, error) {
 	if err := contract.Validate(); err != nil {
 		return runnerExecPlan{}, err
 	}
-	environment, err := contract.EnvironmentList()
+	environment, err := contract.EnvironmentForNetwork(*networkProfile)
 	if err != nil {
 		return runnerExecPlan{}, err
 	}
