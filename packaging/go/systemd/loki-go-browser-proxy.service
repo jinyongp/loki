@@ -1,16 +1,18 @@
 [Unit]
-Description=Loki Go allowlisted egress proxy
-After=network-online.target
-Wants=network-online.target
+Description=Loki Go browser network proxy
+After=network.target loki-go-port-guard.service
+Requires=loki-go-port-guard.service
+Before=loki-go-browser.service
 
 [Service]
 Type=notify
 NotifyAccess=main
 DynamicUser=yes
-ExecStart=/opt/loki/bin/loki egress-proxy --port 8766
+SupplementaryGroups=workspace
+EnvironmentFile=/etc/loki-go/identity.env
+ExecStart=/opt/loki/bin/loki browser-proxy --port 18767 --port-guard-socket /run/loki-go/port-guard/control.sock --port-guard-uid $RUNNER_UID
 Restart=on-failure
-RestartSec=3
-UMask=0077
+RestartSec=2
 NoNewPrivileges=yes
 PrivateDevices=yes
 PrivateTmp=yes
@@ -21,15 +23,13 @@ ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
-InaccessiblePaths=/etc/loki /srv/workspace /root
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictRealtime=yes
-TasksMax=64
-MemoryMax=128M
-TimeoutStopSec=10
+TasksMax=128
+MemoryMax=256M
 
 [Install]
 WantedBy=multi-user.target

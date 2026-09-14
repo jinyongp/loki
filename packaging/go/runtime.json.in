@@ -1,15 +1,15 @@
 {
-  "Socket": "/run/loki/runtime/control.sock",
-  "StateDirectory": "/var/lib/loki/runtime",
-  "InboxDirectory": "/var/lib/loki/runtime/inbox",
-  "AuditPath": "/var/log/loki/runtime/audit.jsonl",
+  "Socket": "/run/loki-go/runtime/control.sock",
+  "StateDirectory": "/var/lib/loki-go/runtime",
+  "InboxDirectory": "/var/lib/loki-go/runtime/inbox",
+  "AuditPath": "/var/log/loki-go/runtime/audit.jsonl",
   "AgentUID": @RUNNER_UID@,
   "SocketGID": @WORKSPACE_GID@,
   "DevtoolsBinary": "/opt/loki/bin/devtools",
-  "DevtoolsHome": "/var/lib/loki/devtools",
+  "DevtoolsHome": "/var/lib/loki-go/devtools",
   "Workspace": "/workspace",
   "DockerSocket": "/run/docker.sock",
-  "SnapshotDirectory": "/var/lib/loki/devtools/snapshots",
+  "SnapshotDirectory": "/var/lib/loki-go/devtools/snapshots",
   "RunnerUID": @RUNNER_UID@,
   "RunnerGID": @RUNNER_GID@
 }

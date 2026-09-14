@@ -1,8 +1,8 @@
 [Unit]
 Description=Loki Go isolated browser
-After=network.target loki-browser-proxy.service
-Requires=loki-browser-proxy.service
-Before=loki-mcp.service
+After=network.target loki-go-browser-proxy.service
+Requires=loki-go-browser-proxy.service
+Before=loki-go-mcp.service
 ConditionFileIsExecutable=/opt/loki-browser/chromium/chrome-linux64/chrome
 
 [Service]
@@ -10,13 +10,13 @@ Type=notify
 NotifyAccess=main
 User=loki-browser
 Group=workspace
-EnvironmentFile=/etc/loki/identity.env
-RuntimeDirectory=loki/browser
+EnvironmentFile=/etc/loki-go/identity.env
+RuntimeDirectory=loki-go/browser
 RuntimeDirectoryMode=0770
-StateDirectory=loki/browser
+StateDirectory=loki-go/browser
 StateDirectoryMode=0700
-WorkingDirectory=/var/lib/loki/browser
-ExecStart=/opt/loki/bin/loki browser --socket /run/loki/browser/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID --chrome /opt/loki-browser/chromium/chrome-linux64/chrome --profile /var/lib/loki/browser/profile --downloads /srv/workspace/loki/.browser-downloads --proxy http://127.0.0.1:8767
+WorkingDirectory=/var/lib/loki-go/browser
+ExecStart=/opt/loki/bin/loki browser --socket /run/loki-go/browser/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID --chrome /opt/loki-browser/chromium/chrome-linux64/chrome --profile /var/lib/loki-go/browser/profile --downloads /srv/workspace/loki/.loki-go/browser-downloads --proxy http://127.0.0.1:18767
 Restart=on-failure
 RestartSec=3
 UMask=0007
@@ -29,7 +29,7 @@ ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
-ReadWritePaths=/var/lib/loki/browser /run/loki/browser /srv/workspace/loki/.browser-downloads
+ReadWritePaths=/var/lib/loki-go/browser /run/loki-go/browser /srv/workspace/loki/.loki-go/browser-downloads
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost

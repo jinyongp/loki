@@ -1,16 +1,16 @@
 [Unit]
 Description=Loki Go isolated Git signing agent
-Before=loki-runtime.service loki-mcp.service
+Before=loki-go-runtime.service loki-go-mcp.service
 
 [Service]
 Type=notify
 NotifyAccess=main
 User=root
 Group=workspace
-EnvironmentFile=/etc/loki/identity.env
-RuntimeDirectory=loki/signing
+EnvironmentFile=/etc/loki-go/identity.env
+RuntimeDirectory=loki-go/signing
 RuntimeDirectoryMode=0750
-ExecStart=/opt/loki/bin/loki signing-agent --private-socket /run/loki/signing/private.sock --public-socket /run/loki/signing/agent.sock --key /var/lib/loki/signing/id_ed25519 --runner-uid $RUNNER_UID --socket-gid $WORKSPACE_GID
+ExecStart=/opt/loki/bin/loki signing-agent --private-socket /run/loki-go/signing/private.sock --public-socket /run/loki-go/signing/agent.sock --key /var/lib/loki-go/signing/id_ed25519 --runner-uid $RUNNER_UID --socket-gid $WORKSPACE_GID
 Restart=on-failure
 RestartSec=3
 UMask=0077
@@ -24,8 +24,8 @@ ProtectKernelLogs=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
-ReadWritePaths=/run/loki/signing
-ReadOnlyPaths=/var/lib/loki/signing/id_ed25519
+ReadWritePaths=/run/loki-go/signing
+ReadOnlyPaths=/var/lib/loki-go/signing/id_ed25519
 RestrictAddressFamilies=AF_UNIX
 LockPersonality=yes
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID

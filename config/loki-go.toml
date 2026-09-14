@@ -1,7 +1,7 @@
 root = "/workspace"
-audit_log = "/var/log/loki/mcp/audit.jsonl"
+audit_log = "/var/log/loki-go/mcp/audit.jsonl"
 host = "127.0.0.1"
-port = 8765
+port = 18765
 public_hosts = []
 max_file_bytes = 16777216
 max_write_bytes = 2097152

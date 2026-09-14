@@ -69,6 +69,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if runtime.RunnerUID != 1001 || runtime.RunnerGID != 1002 || runtime.SocketGID != 1003 {
 		t.Fatalf("runtime identities = %#v", runtime)
 	}
+	if runtime.Socket != "/run/loki-go/runtime/control.sock" || runtime.StateDirectory != "/var/lib/loki-go/runtime" {
+		t.Fatalf("runtime paths = %#v", runtime)
+	}
 	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +82,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	}
 	if mcp["PortGuardUID"] != float64(1001) || mcp["BrowserUID"] != float64(1004) {
 		t.Fatalf("MCP identities = %#v", mcp)
+	}
+	if mcp["RuntimeSocket"] != "/run/loki-go/runtime/control.sock" {
+		t.Fatalf("MCP runtime socket = %#v", mcp["RuntimeSocket"])
 	}
 	for _, name := range []string{"runtime.json", "mcp.json", "identity.env"} {
 		info, err := os.Stat(filepath.Join(root, name))

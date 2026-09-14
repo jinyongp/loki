@@ -1,17 +1,17 @@
 [Unit]
 Description=Loki Go workspace port guard
 After=local-fs.target
-Before=loki-mcp.service loki-browser-proxy.service
+Before=loki-go-mcp.service loki-go-browser-proxy.service
 
 [Service]
 Type=notify
 NotifyAccess=main
 User=runner
 Group=workspace
-EnvironmentFile=/etc/loki/identity.env
-RuntimeDirectory=loki/port-guard
+EnvironmentFile=/etc/loki-go/identity.env
+RuntimeDirectory=loki-go/port-guard
 RuntimeDirectoryMode=0750
-ExecStart=/opt/loki/bin/loki port-guard --workspace /workspace --socket /run/loki/port-guard/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID
+ExecStart=/opt/loki/bin/loki port-guard --workspace /workspace --socket /run/loki-go/port-guard/control.sock --agent-uid $RUNNER_UID --socket-gid $WORKSPACE_GID
 Restart=on-failure
 RestartSec=2
 UMask=0007

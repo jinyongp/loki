@@ -33,7 +33,7 @@ ROOT="$OUTPUT/rootfs"
 install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills/devtools"
 install -d "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/doc/loki"
 install -d "$ROOT/usr/local/bin" "$ROOT/srv/workspace/loki/.agents/skills/devtools"
-	install -d "$ROOT/etc/loki"
+install -d "$ROOT/etc/loki-go"
 
 CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/loki"
 install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"

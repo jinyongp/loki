@@ -1,10 +1,10 @@
 [Unit]
 Description=Loki Go MCP server
-Requires=loki-runtime.service loki-port-guard.service loki-browser.service loki-signing-agent.service
-Wants=loki-egress-proxy.service
-After=network.target loki-egress-proxy.service loki-port-guard.service loki-browser.service loki-signing-agent.service loki-runtime.service
-ConditionPathExists=/etc/loki/config.toml
-ConditionPathExists=/etc/loki/token
+Requires=loki-go-runtime.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service
+Wants=loki-go-egress-proxy.service
+After=network.target loki-go-egress-proxy.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-runtime.service
+ConditionPathExists=/etc/loki-go/config.toml
+ConditionPathExists=/etc/loki-go/token
 StartLimitIntervalSec=0
 
 [Service]
@@ -13,12 +13,12 @@ NotifyAccess=main
 User=runner
 Group=workspace
 WorkingDirectory=/workspace
-Environment=LOKI_RUN_ROOT=/run/loki
+Environment=LOKI_RUN_ROOT=/run/loki-go
 Environment=LOKI_SOCKET_ATTEMPTS=150
 Environment=LOKI_SOCKET_INTERVAL=0.2
 ExecStartPre=/opt/loki/libexec/wait-for-loki-sockets
 TimeoutStartSec=35
-ExecStart=/opt/loki/bin/loki mcp --config /etc/loki/config.toml --layout /etc/loki/mcp.json --token-file /etc/loki/token --jwks-file /etc/loki/cloudflare-jwks.json
+ExecStart=/opt/loki/bin/loki mcp --config /etc/loki-go/config.toml --layout /etc/loki-go/mcp.json --token-file /etc/loki-go/token --jwks-file /etc/loki-go/cloudflare-jwks.json
 Restart=on-failure
 RestartSec=3
 UMask=0077
@@ -32,7 +32,7 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
-ReadWritePaths=/srv/workspace/loki /var/log/loki/mcp
+ReadWritePaths=/srv/workspace/loki /var/log/loki-go/mcp
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost

@@ -1,23 +1,23 @@
 [Unit]
 Description=Loki Go runtime and encrypted secret broker
-After=local-fs.target loki-signing-agent.service
-Wants=loki-signing-agent.service
-Before=loki-mcp.service
+After=local-fs.target loki-go-signing-agent.service
+Wants=loki-go-signing-agent.service
+Before=loki-go-mcp.service
 
 [Service]
 Type=notify
 NotifyAccess=main
 User=root
 Group=workspace
-ExecStart=/opt/loki/bin/loki runtime --layout /etc/loki/runtime.json
+ExecStart=/opt/loki/bin/loki runtime --layout /etc/loki-go/runtime.json
 Restart=on-failure
 RestartSec=2
-RuntimeDirectory=loki/runtime
+RuntimeDirectory=loki-go/runtime
 RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
-StateDirectory=loki/runtime loki/devtools
+StateDirectory=loki-go/runtime loki-go/devtools
 StateDirectoryMode=0700
-LogsDirectory=loki/runtime
+LogsDirectory=loki-go/runtime
 LogsDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=yes
@@ -30,7 +30,7 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
-ReadWritePaths=/srv/workspace/loki /var/lib/loki/runtime /var/lib/loki/devtools /var/log/loki/runtime /run/loki /run/docker.sock
+ReadWritePaths=/srv/workspace/loki /var/lib/loki-go/runtime /var/lib/loki-go/devtools /var/log/loki-go/runtime /run/loki-go /run/docker.sock
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost
