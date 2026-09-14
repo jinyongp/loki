@@ -23,6 +23,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runAdministration(args, stdout, stderr)
 		case "runner-exec":
 			return runRunnerExec(args[1:], stderr)
+		case "toolchain":
+			return runToolchain(args[1:], stdout, stderr)
 		}
 	}
 	if len(args) > 0 && args[0] == "jwks-refresh" {

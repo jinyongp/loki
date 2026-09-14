@@ -16,9 +16,10 @@ import (
 )
 
 type installedArtifact struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	SHA256  string `json:"sha256"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	SHA256     string `json:"sha256"`
+	TreeSHA256 string `json:"tree_sha256"`
 }
 
 func InstallArtifacts(ctx context.Context, manifest Manifest, bundle, root string) error {
@@ -74,8 +75,11 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		if readErr == nil {
 			readErr = json.Unmarshal(raw, &got)
 		}
-		if readErr == nil && got == want {
-			return nil
+		if readErr == nil && got.Name == want.Name && got.Version == want.Version && got.SHA256 == want.SHA256 {
+			current, digestErr := installedDigest(target, artifact.Format)
+			if digestErr == nil && current == got.TreeSHA256 {
+				return nil
+			}
 		}
 		return fmt.Errorf("toolchain install path %s is occupied", artifact.InstallPath)
 	} else if !os.IsNotExist(err) {
@@ -109,6 +113,7 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		if err = os.Rename(name, target); err != nil {
 			return err
 		}
+		want.TreeSHA256 = artifact.SHA256
 		raw, _ := json.Marshal(want)
 		return os.WriteFile(marker, append(raw, '\n'), 0644)
 	}
@@ -120,6 +125,10 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 	arguments := []string{"-xf", source, "-C", temporary, "--strip-components=" + strconv.Itoa(artifact.StripComponents), "--no-same-owner", "--no-same-permissions"}
 	if err = run(ctx, "tar", arguments...); err != nil {
 		return fmt.Errorf("extract %s: %w", artifact.Name, err)
+	}
+	want.TreeSHA256, err = treeDigest(temporary)
+	if err != nil {
+		return err
 	}
 	raw, _ := json.Marshal(want)
 	if err = os.WriteFile(filepath.Join(temporary, ".loki-artifact.json"), append(raw, '\n'), 0644); err != nil {
@@ -170,6 +179,57 @@ func fileDigest(path string) (string, error) {
 	defer file.Close()
 	hash := sha256.New()
 	if _, err = io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func installedDigest(target, format string) (string, error) {
+	if format == "file" {
+		return fileDigest(target)
+	}
+	return treeDigest(target)
+}
+
+func treeDigest(root string) (string, error) {
+	hash := sha256.New()
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil || relative == "." || relative == ".loki-artifact.json" {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(hash, "%s\x00%o\x00", filepath.ToSlash(relative), info.Mode())
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			_, _ = io.WriteString(hash, target)
+		} else if info.Mode().IsRegular() {
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(hash, file)
+			closeErr := file.Close()
+			if err != nil {
+				return err
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
+		_, _ = io.WriteString(hash, "\x00")
+		return nil
+	})
+	if err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil

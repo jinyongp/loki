@@ -33,6 +33,12 @@ func TestInstallFileArtifactIsIdempotent(t *testing.T) {
 	if got, err := os.Readlink(link); err != nil || got != "/opt/loki/toolchain/tool/1/tool" {
 		t.Fatalf("link = %q, %v", got, err)
 	}
+	if err := os.WriteFile(target, []byte("tampered"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := InstallArtifacts(context.Background(), manifest, bundle, root); err == nil {
+		t.Fatal("tampered installed artifact accepted")
+	}
 }
 
 func TestInstallRejectsChecksumAndOccupiedPath(t *testing.T) {

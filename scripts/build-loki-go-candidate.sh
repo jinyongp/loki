@@ -48,6 +48,7 @@ install -m 0644 "$SOURCE_DIR/packaging/go/runtime.json.in" "$ROOT/usr/share/doc/
 install -m 0644 "$SOURCE_DIR/packaging/go/mcp.json.in" "$ROOT/usr/share/doc/loki/mcp.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/go/execution-contract.json" "$ROOT/usr/share/doc/loki/execution-contract.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/egress-policy.json" "$ROOT/usr/share/doc/loki/egress-policy.json"
+install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$ROOT/usr/share/doc/loki/toolchain-manifest.json"
 install -m 0644 "$CATALOG" "$ROOT/usr/share/doc/loki/devtools-catalog.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
 install -m 0644 "$SOURCE_DIR/packaging/go/tmpfiles.d/loki-go.conf" "$ROOT/usr/lib/tmpfiles.d/loki-go.conf"
