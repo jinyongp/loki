@@ -80,7 +80,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		return result
 	}
 	status := call(map[string]any{"operation": "status"})
-	if status["initialized"] != true || status["running_processes"] != float64(0) {
+	if status["initialized"] != true || status["profiles"] != float64(0) {
 		t.Fatal(status)
 	}
 	call(map[string]any{"operation": "profile_create", "profile": "fixture"})

@@ -193,59 +193,6 @@ func SecretOperations(c secret.Controller) map[string]rpc.Operation {
 		"secret_remove": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r secretInput) (map[string]any, error) {
 			return c.RemoveSecret(ctx, r.Profile, r.Secret)
 		})},
-		"action_set": {Permission: rpc.Administrative, Handle: runtimeTyped(func(ctx context.Context, r policyInput) (map[string]any, error) {
-			return c.SetAction(ctx, r.Profile, r.Name, r.Action)
-		})},
-		"action_remove": {Permission: rpc.Administrative, Handle: runtimeTyped(func(ctx context.Context, r policyInput) (map[string]any, error) {
-			return c.RemoveAction(ctx, r.Profile, r.Name)
-		})},
-	}
-	for _, operation := range []string{"project_register", "project_unregister", "project_status", "project_set_workflow", "project_remove_workflow", "project_workflow"} {
-		permission := rpc.Administrative
-		if operation == "project_status" || operation == "project_workflow" {
-			permission = rpc.Agent
-		}
-		ops[operation] = rpc.Operation{Permission: permission, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
-			cwd, err := runtimeCWD(raw)
-			if err != nil {
-				return nil, err
-			}
-			r, err := rpc.Decode[registrationInput](raw)
-			if err != nil {
-				return nil, err
-			}
-			name := "development"
-			if r.Workflow != nil {
-				name = *r.Workflow
-			}
-			switch operation {
-			case "project_register":
-				return c.Register(ctx, cwd, r.Name)
-			case "project_unregister":
-				return c.Unregister(ctx, cwd)
-			case "project_status":
-				return c.Registration(ctx, cwd)
-			case "project_workflow":
-				return c.Workflow(ctx, cwd, name)
-			case "project_remove_workflow":
-				return c.RemoveWorkflow(ctx, cwd, name)
-			default:
-				if len(r.Steps) == 0 {
-					r.Steps = json.RawMessage("null")
-				}
-				if len(r.Required) == 0 {
-					r.Required = json.RawMessage("{}")
-				}
-				if len(r.Timeout) == 0 {
-					r.Timeout = json.RawMessage("3600")
-				}
-				workflow, err := json.Marshal(map[string]json.RawMessage{"steps": r.Steps, "required_secrets": r.Required, "timeout_seconds": r.Timeout})
-				if err != nil {
-					return nil, err
-				}
-				return c.SetWorkflow(ctx, cwd, name, workflow)
-			}
-		}}
 	}
 	return ops
 }

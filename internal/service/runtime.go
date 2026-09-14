@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
-	"time"
 
 	"loki/internal/action"
 	"loki/internal/audit"
@@ -13,7 +13,6 @@ import (
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
 	"loki/internal/process"
-	"loki/internal/project"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )
@@ -42,13 +41,7 @@ func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready fu
 			return err
 		}
 	}
-	projects, err := project.New(o.Layout.Workspace, o.ProjectStateDirectory)
-	if err != nil {
-		return err
-	}
-	projects.Runner = o.Layout.Runner
-	projects.GroupID = int(o.Layout.GID)
-	controller := secret.Controller{StateDirectory: o.StateDirectory, InboxDirectory: o.InboxDirectory, Projects: projects}
+	controller := secret.Controller{StateDirectory: o.StateDirectory, InboxDirectory: o.InboxDirectory}
 	devtoolsClient, err := devtools.NewClient(o.DevtoolsBinary, o.Layout.Workspace, devtoolsEnvironment(o.DevtoolsBinary, o.DevtoolsHome))
 	if err != nil {
 		return err
@@ -56,19 +49,18 @@ func RunRuntime(ctx context.Context, c config.Config, o RuntimeOptions, ready fu
 	defer devtoolsClient.Close()
 	devtoolsClient.Identity = &process.Identity{UID: o.Layout.UID, GID: o.Layout.GID, Groups: []uint32{o.Layout.GID}}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
-	o.Layout.MaxProfileProcesses = c.MaxActionProcessesPerProfile
-	o.Layout.PreviewBaseDomain = c.PreviewBaseDomain
-	runtime, err := action.NewRuntime(controller, o.Layout, process.ManagerOptions{MaxProcesses: c.MaxActionProcesses, MaxOutputBytes: 8 * 1024 * 1024, Retention: time.Duration(c.ProcessRetentionSeconds) * time.Second})
-	if err != nil {
-		return err
-	}
-	defer runtime.Close()
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
+	ops["status"] = rpc.Operation{Permission: rpc.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) {
+		profiles, err := controller.Profiles(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"initialized": true, "profiles": len(profiles["profiles"].([]map[string]any))}, nil
+	}}
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
-		ProjectStateOperations(projects, project.Tasks{Store: projects, Binary: o.TaskBinary, Home: o.TaskHome}),
-		ActionOperations(runtime), AuditOperations(log),
+		AuditOperations(log),
 		DockerOperations(dockerproxy.Inspector{Workspace: o.Layout.Workspace, SnapshotRoot: o.Layout.SnapshotDirectory, Socket: "unix://" + o.Layout.DockerSocket}),
 	} {
 		for name, op := range group {
