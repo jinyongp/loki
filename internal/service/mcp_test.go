@@ -120,7 +120,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 	defer client.Close()
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 37 {
+	if err != nil || len(tools.Tools) != 27 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -145,11 +145,6 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if r := call("workspace_read", map[string]any{"action": "file", "path": "hello.txt"}); r["sha256"] == nil {
 		t.Fatal(r)
 	}
-	if r := call("command_run", map[string]any{"action": "check", "name": "hello"}); r["output"] != "hello" {
-		t.Fatal(r)
-	}
-	call("command_start", map[string]any{"action": "configured", "name": "wait"})
-	call("process_inspect", map[string]any{"action": "list"})
 	call("system_inspect", map[string]any{"action": "server"})
 	call("agent_context", map[string]any{})
 	call("browser_session", map[string]any{"action": "start"})

@@ -37,13 +37,12 @@ type SystemController struct {
 }
 
 func catalogInfo() map[string]any {
-	baseline, _ := contract.Baseline()
-	definitions, _ := baseline.Definitions()
+	definitions, _ := contract.CurrentDefinitions()
 	names := make([]string, 0, len(definitions))
 	for _, d := range definitions {
 		names = append(names, d.Name)
 	}
-	return map[string]any{"revision": "2026-09-04.4", "count": len(names), "tools": names, "sha256": workspace.Digest([]byte(strings.Join(names, "\n"))), "client_sync": "ChatGPT custom-app actions are a frozen snapshot; refresh the app actions and start a new chat when this revision changes"}
+	return map[string]any{"revision": contract.CatalogRevision, "count": len(names), "tools": names, "sha256": workspace.Digest([]byte(strings.Join(names, "\n"))), "client_sync": "ChatGPT custom-app actions are a frozen snapshot; refresh the app actions and start a new chat when this revision changes"}
 }
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
 func socketExists(path string) bool {

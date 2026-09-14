@@ -35,7 +35,7 @@ func TestSystemInformation(t *testing.T) {
 		value := r.StructuredContent.(map[string]any)
 		switch action {
 		case "server":
-			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 37 {
+			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 27 {
 				t.Fatal(value)
 			}
 		case "workspace":

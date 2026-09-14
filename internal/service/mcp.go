@@ -124,11 +124,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	system := &SystemController{Config: c, Paths: app.files.Policy, Processes: app.manager, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return InspectWorkspacePort(ctx, inspect, options.Runtime, port)
 	}}
-	baseline, err := contract.Baseline()
-	if err != nil {
-		return nil, err
-	}
-	definitions, err := baseline.Definitions()
+	definitions, err := contract.CurrentDefinitions()
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +134,9 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git, app.manager),
-		"skill_write": SkillWriteHandler(registry), "action": ActionHandler(options.Runtime, app.files.Policy),
-		"bootstrap_project": BootstrapHandler(options.Runtime, app.files.Policy), "process_inspect": ProcessInspectHandler(app.manager),
+		"skill_write": SkillWriteHandler(registry),
 	}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), CommandHandlers(command, options.PortGuard), GitHandlers(git), ProjectHandlers(options.Runtime, app.files.Policy), SecretHandlers(options.Runtime), SkillReadHandlers(registry, names)} {
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), SkillReadHandlers(registry, names)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)
@@ -162,7 +157,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	for name, handler := range handlers {
 		handlers[name] = auditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfigured(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
+	app.Server, err = mcpserver.NewConfiguredCurrent(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
 	if err != nil {
 		return nil, err
 	}
