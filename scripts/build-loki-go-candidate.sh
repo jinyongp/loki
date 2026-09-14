@@ -1,14 +1,15 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 2; then
-  echo "usage: build-loki-go-candidate.sh OUTPUT_DIRECTORY DEVTOOLS_BINARY" >&2
+if test "$#" -ne 3; then
+  echo "usage: build-loki-go-candidate.sh OUTPUT_DIRECTORY DEVTOOLS_BINARY TOOLCHAIN_BUNDLE" >&2
   exit 2
 fi
 
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUTPUT=$1
 DEVTOOLS=$2
+TOOLCHAIN_BUNDLE=$3
 
 case "$OUTPUT" in
   /*) ;;
@@ -22,6 +23,15 @@ test -x "$DEVTOOLS" || {
   echo "devtools binary is not executable" >&2
   exit 1
 }
+test -f "$TOOLCHAIN_BUNDLE/manifest.json" -a -f "$TOOLCHAIN_BUNDLE/SHA256SUMS" -a -d "$TOOLCHAIN_BUNDLE/artifacts" || {
+  echo "verified toolchain bundle is incomplete" >&2
+  exit 1
+}
+cmp "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$TOOLCHAIN_BUNDLE/manifest.json" || {
+  echo "toolchain bundle manifest does not match the candidate source" >&2
+  exit 1
+}
+(cd "$TOOLCHAIN_BUNDLE" && sha256sum -c SHA256SUMS)
 
 VERSION=$("$DEVTOOLS" version)
 CATALOG=$(mktemp /tmp/loki-devtools-catalog.XXXXXX)
@@ -34,6 +44,7 @@ install -d "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/doc/loki"
 install -d "$ROOT/usr/lib/tmpfiles.d"
 install -d "$ROOT/usr/local/bin" "$ROOT/srv/workspace/loki/.agents/skills"
 install -d "$ROOT/etc/loki-go"
+install -d "$ROOT/usr/share/loki/toolchain"
 
 CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/loki"
 install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"
@@ -50,6 +61,7 @@ install -m 0644 "$SOURCE_DIR/packaging/go/execution-contract.json" "$ROOT/usr/sh
 install -m 0644 "$SOURCE_DIR/packaging/go/egress-policy.json" "$ROOT/usr/share/doc/loki/egress-policy.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$ROOT/usr/share/doc/loki/toolchain-manifest.json"
 install -m 0644 "$CATALOG" "$ROOT/usr/share/doc/loki/devtools-catalog.json"
+cp -a "$TOOLCHAIN_BUNDLE/." "$ROOT/usr/share/loki/toolchain/"
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$ROOT/usr/lib/systemd/system/"
 install -m 0644 "$SOURCE_DIR/packaging/go/tmpfiles.d/loki-go.conf" "$ROOT/usr/lib/tmpfiles.d/loki-go.conf"
 ln -s ../../../opt/loki/bin/loki "$ROOT/usr/local/bin/loki"

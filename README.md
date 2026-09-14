@@ -37,13 +37,15 @@ The Go service candidate uses isolated names and paths:
 - logs: `/var/log/loki-go`
 - ports: 18765 (MCP), 18766 (egress), and 18767 (browser proxy)
 
-Build a candidate by passing a new absolute output directory and the absolute
-path to a compatible `devtools` executable:
+Build a verified toolchain bundle, then pass it with a new absolute output
+directory and a compatible `devtools` executable:
 
 ```sh
+./scripts/build-loki-toolchain-bundle.sh /tmp/loki-toolchain-bundle
 ./scripts/build-loki-go-candidate.sh \
   /tmp/loki-go-candidate \
-  /absolute/path/to/devtools
+  /absolute/path/to/devtools \
+  /tmp/loki-toolchain-bundle
 ```
 
 The result contains static Loki and devtools executables, all bundled Agent

@@ -45,6 +45,52 @@ func InstallArtifacts(ctx context.Context, manifest Manifest, bundle, root strin
 	return installLinks(root, manifest.Artifacts)
 }
 
+func InstallMetadata(raw []byte, manifest Manifest, root string) error {
+	if err := manifest.Validate(); err != nil {
+		return err
+	}
+	provenance := Provenance{Version: 1, ManifestSHA: digest(raw)}
+	for _, artifact := range manifest.Artifacts {
+		provenance.Artifacts = append(provenance.Artifacts, ProvenanceArtifact{Name: artifact.Name, URL: artifact.URL, SHA256: artifact.SHA256})
+	}
+	encoded, err := json.MarshalIndent(provenance, "", "  ")
+	if err != nil {
+		return err
+	}
+	metadata := []struct {
+		path string
+		data []byte
+	}{
+		{path: "/opt/loki/toolchain/provenance.json", data: append(encoded, '\n')},
+		{path: "/usr/share/doc/loki/toolchain-manifest.json", data: raw},
+	}
+	for _, item := range metadata {
+		target := rooted(root, item.path)
+		if err = os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		temporary, err := os.CreateTemp(filepath.Dir(target), ".toolchain-metadata-")
+		if err != nil {
+			return err
+		}
+		name := temporary.Name()
+		if _, err = temporary.Write(item.data); err == nil {
+			err = temporary.Chmod(0644)
+		}
+		if closeErr := temporary.Close(); err == nil {
+			err = closeErr
+		}
+		if err == nil {
+			err = os.Rename(name, target)
+		}
+		if err != nil {
+			_ = os.Remove(name)
+			return err
+		}
+	}
+	return nil
+}
+
 func InstallApt(ctx context.Context, manifest Manifest) error {
 	if os.Geteuid() != 0 {
 		return errors.New("apt installation requires root")
@@ -52,14 +98,15 @@ func InstallApt(ctx context.Context, manifest Manifest) error {
 	if err := manifest.Validate(); err != nil {
 		return err
 	}
-	if err := run(ctx, "apt-get", "update"); err != nil {
+	environment := append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	if err := runWithEnvironment(ctx, environment, "apt-get", "update"); err != nil {
 		return err
 	}
 	arguments := []string{"install", "-y", "--no-install-recommends"}
 	for _, item := range manifest.AptPackages {
 		arguments = append(arguments, item.Name+"="+item.Version)
 	}
-	return run(ctx, "apt-get", arguments...)
+	return runWithEnvironment(ctx, environment, "apt-get", arguments...)
 }
 
 func installArtifact(ctx context.Context, root, source string, artifact Artifact) error {
@@ -236,7 +283,14 @@ func treeDigest(root string) (string, error) {
 }
 
 func run(ctx context.Context, name string, arguments ...string) error {
+	return runWithEnvironment(ctx, nil, name, arguments...)
+}
+
+func runWithEnvironment(ctx context.Context, environment []string, name string, arguments ...string) error {
 	command := exec.CommandContext(ctx, name, arguments...)
+	if environment != nil {
+		command.Env = environment
+	}
 	command.Stdout, command.Stderr = os.Stdout, os.Stderr
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("%s failed: %w", name, err)

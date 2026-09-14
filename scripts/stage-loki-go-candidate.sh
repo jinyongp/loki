@@ -31,6 +31,10 @@ test "$(id -u)" -eq 0 || {
 
 mkdir -m 0750 "$TARGET"
 cp -a --no-preserve=ownership "$ARTIFACT/rootfs/." "$TARGET/"
+"$TARGET/opt/loki/bin/loki" toolchain install \
+  --bundle "$TARGET/usr/share/loki/toolchain" \
+  --root "$TARGET" \
+  --skip-apt
 install -d -m 0750 "$TARGET/etc/loki-go"
 install -d -m 0700 "$TARGET/var/lib/loki-go/runtime/inbox"
 install -d -m 0700 "$TARGET/var/lib/loki-go/signing"

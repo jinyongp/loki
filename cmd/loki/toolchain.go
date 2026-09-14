@@ -38,6 +38,9 @@ func runToolchain(args []string, stdout, stderr io.Writer) int {
 		if err == nil {
 			err = toolchain.InstallArtifacts(context.Background(), manifest, *bundle, *root)
 		}
+		if err == nil {
+			err = toolchain.InstallMetadata(raw, manifest, *root)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1

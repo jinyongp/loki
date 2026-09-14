@@ -40,6 +40,11 @@ func TestToolchainInstallAndOfflineDoctor(t *testing.T) {
 	if code := runToolchain([]string{"install", "--bundle", bundle, "--root", root, "--skip-apt"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("install = %d, %s", code, stderr.String())
 	}
+	for _, name := range []string{filepath.Join(root, "usr", "share", "doc", "loki", "toolchain-manifest.json"), filepath.Join(root, "opt", "loki", "toolchain", "provenance.json")} {
+		if _, err = os.Stat(name); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if code := runToolchain([]string{"doctor", "--manifest", filepath.Join(bundle, "manifest.json"), "--root", root, "--skip-apt"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("doctor = %d, %s", code, stderr.String())
 	}
