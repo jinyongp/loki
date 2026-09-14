@@ -32,6 +32,7 @@ type Driver struct {
 	wait      chan error
 	target    string
 	sessions  map[string]string
+	closed    map[string]struct{}
 	debug     Debug
 	downloads *downloads
 }
@@ -81,6 +82,7 @@ func (d *Driver) stop() {
 	}
 	d.target = ""
 	d.sessions = nil
+	d.closed = nil
 	d.debug.Reset()
 }
 func (d *Driver) start(ctx context.Context) (err error) {
@@ -138,6 +140,7 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	outWrite.Close()
 	d.debug.Reset()
 	d.sessions = map[string]string{}
+	d.closed = map[string]struct{}{}
 	defer func() {
 		if err != nil {
 			d.stop()
@@ -166,7 +169,7 @@ func (d *Driver) targets(ctx context.Context) ([]targetInfo, error) {
 	}
 	targets := []targetInfo{}
 	for _, t := range result.TargetInfos {
-		if t.Type == "page" {
+		if _, closed := d.closed[t.TargetID]; t.Type == "page" && !closed {
 			targets = append(targets, t)
 		}
 	}
@@ -409,6 +412,7 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		if err = d.client.Call(ctx, "", "Target.closeTarget", map[string]any{"targetId": target}, nil); err != nil {
 			return nil, err
 		}
+		d.closed[target] = struct{}{}
 		delete(d.sessions, target)
 		if target == d.target {
 			d.target = ""
