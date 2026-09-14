@@ -1,7 +1,9 @@
 package packaging
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -11,6 +13,27 @@ import (
 
 	"loki/internal/service"
 )
+
+func TestBundledSkillIsPinnedDevtoolsOnly(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "bundled_skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "devtools" || !entries[0].IsDir() {
+		t.Fatalf("bundled skills = %#v", entries)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "devtools", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmt.Sprintf("%x", sha256.Sum256(data)), "55a260c71fff25e7a731244bbf7043f055cadde26f5bc79fe4430ff23a0ea3bd"; got != want {
+		t.Fatalf("devtools 0.8.2 skill digest = %s, want %s", got, want)
+	}
+}
 
 func waitScript(t *testing.T) string {
 	t.Helper()

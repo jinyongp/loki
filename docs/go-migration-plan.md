@@ -97,7 +97,8 @@ JSON, and version mismatch tests pass under the race detector.
 
 Keep the current state store and secret controller. Add broker operations that
 resolve secret names in the vault and inject values only into approved
-configured devtools processes. Reuse output redaction and Unix peer checks.
+configured devtools processes. Screen private values from responses and errors,
+and retain Unix peer checks.
 
 Gate: the MCP identity cannot read the key, encrypted store, or raw values;
 commands receive selected values; responses, logs, and process output do not
