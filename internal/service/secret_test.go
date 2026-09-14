@@ -66,8 +66,7 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		}
 	}
 	handlers := SecretHandlers(client)
-	baseline, _ := contract.Baseline()
-	defs, _ := baseline.Definitions()
+	defs, _ := contract.CurrentDefinitions()
 	for _, def := range defs {
 		if handlers[def.Name] == nil {
 			handlers[def.Name] = func(context.Context, map[string]any) (*mcp.CallToolResult, error) {

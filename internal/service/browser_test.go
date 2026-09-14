@@ -48,8 +48,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	})
 	store := artifacts.New(artifacts.Options{BaseURL: "https://example.test/artifacts", AllowedHosts: []string{"example.test"}})
 	handlers := BrowserHandlers(browser, files, store)
-	baseline, _ := contract.Baseline()
-	definitions, _ := baseline.Definitions()
+	definitions, _ := contract.CurrentDefinitions()
 	for _, definition := range definitions {
 		if handlers[definition.Name] == nil {
 			handlers[definition.Name] = func(context.Context, map[string]any) (*mcp.CallToolResult, error) {

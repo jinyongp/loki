@@ -35,8 +35,7 @@ func TestArtifactMCP(t *testing.T) {
 	}
 	store := artifacts.New(artifacts.Options{BaseURL: "https://example.test/artifacts", AllowedHosts: []string{"example.test"}})
 	handlers := ArtifactHandlers(f, store)
-	baseline, _ := contract.Baseline()
-	defs, _ := baseline.Definitions()
+	defs, _ := contract.CurrentDefinitions()
 	for _, d := range defs {
 		if handlers[d.Name] == nil {
 			handlers[d.Name] = func(context.Context, map[string]any) (*mcp.CallToolResult, error) {

@@ -21,15 +21,15 @@ type Handler func(context.Context, map[string]any) (*mcp.CallToolResult, error)
 // New refuses incomplete or misspelled registrations before accepting requests.
 // The captured catalog is the single source for public schemas and metadata.
 func New(handlers map[string]Handler) (*mcp.Server, error) {
-	baseline, err := contract.Baseline()
+	current, err := contract.Current()
 	if err != nil {
 		return nil, err
 	}
-	definitions, err := baseline.Definitions()
+	definitions, err := current.Definitions()
 	if err != nil {
 		return nil, err
 	}
-	return newServer(baseline, handlers, definitions, nil, "")
+	return newServer(current, handlers, definitions, nil, contract.CurrentInstructions)
 }
 
 // NewConfigured derives widget origins from the active service configuration.
@@ -37,32 +37,20 @@ func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.S
 	if err := origins.validate(); err != nil {
 		return nil, err
 	}
-	baseline, err := contract.Baseline()
-	if err != nil {
-		return nil, err
-	}
-	definitions, err := baseline.Definitions()
-	if err != nil {
-		return nil, err
-	}
-	return newServer(baseline, handlers, definitions, &origins, "")
-}
-
-// NewConfiguredCurrent serves the reduced Loki-owned catalog. New and
-// NewConfigured retain the Python baseline for isolated parity tests only.
-func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
-	if err := origins.validate(); err != nil {
-		return nil, err
-	}
-	definitions, err := contract.CurrentDefinitions()
-	if err != nil {
-		return nil, err
-	}
 	current, err := contract.Current()
 	if err != nil {
 		return nil, err
 	}
+	definitions, err := current.Definitions()
+	if err != nil {
+		return nil, err
+	}
 	return newServer(current, handlers, definitions, &origins, contract.CurrentInstructions)
+}
+
+// NewConfiguredCurrent is retained as the product-facing constructor name.
+func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
+	return NewConfigured(handlers, origins)
 }
 
 func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {

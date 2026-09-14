@@ -17,8 +17,7 @@ func TestSkillsMCP(t *testing.T) {
 	registry := &skills.Registry{Workspace: paths}
 	handlers := SkillReadHandlers(registry, map[string]bool{"workspace_read": true})
 	handlers["skill_write"] = SkillWriteHandler(registry)
-	baseline, _ := contract.Baseline()
-	definitions, _ := baseline.Definitions()
+	definitions, _ := contract.CurrentDefinitions()
 	for _, definition := range definitions {
 		if handlers[definition.Name] == nil {
 			handlers[definition.Name] = func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
