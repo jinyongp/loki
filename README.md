@@ -53,6 +53,16 @@ runtime and license, all bundled Agent Skills, configuration templates, systemd
 units, checksums, and a staging script.
 It contains no Python environment.
 
+Run the isolated install, upgrade, reboot, browser, signing, migration, and
+rollback acceptance before considering a cutover:
+
+```sh
+./scripts/accept-loki-go-candidate.sh /tmp/loki-go-candidate
+```
+
+See [the Go candidate runbook](docs/go-candidate-runbook.md) for installation,
+health checks, migration, and recovery commands.
+
 Stage the candidate into a new root with the target service identities:
 
 ```sh

@@ -29,25 +29,17 @@ Loki는 AES-GCM 비밀 저장·선택적 주입, Unix peer 인증, 감사, 비�
 
 Loki 자체 브라우저 조작 검증은 Browser Plugin으로 수행한다. 이미 Playwright를 사용하는 프로젝트에는 그 프로젝트의 E2E 명령이 실행될 런타임과 캐시를 제공한다.
 
-## 조사 결과
+## 현재 상태
 
-### 이미 갖춘 부분
+- Go 바이너리, 빌드 시 선택한 devtools, 고정 toolchain, Chromium, 전체 번들 스킬, unit과 설정을 checksum이 있는 후보 아티팩트로 만든다.
+- root 비밀 상태와 runner의 설정·캐시·snapshot 경로가 분리되어 있으며 서비스 시작 시 소유권, 모드와 symlink 부재를 검사한다.
+- 직접 devtools, MCP 도구와 비밀 주입 프로세스가 같은 폐쇄형 runner 환경과 관리자 Git 서명 정책을 사용한다.
+- MCP는 runtime, port guard, browser, signing socket을 기다리며 Docker socket 생성 순서와 무관하게 재부팅 후 기동한다.
+- Python v1 vault 복사본을 반복 가능하게 가져오고 fingerprint, readback, backup과 원본 불변성을 검사한다.
+- installer는 release 링크를 원자적으로 전환하고 health 실패 시 이전 release로 복귀한다.
+- 격리 acceptance는 같은 후보로 두 번 clean install, upgrade, Chromium RPC, Git signing, reboot, rollback과 vault restore를 검증한다.
 
-- Go 바이너리, 호환 계약을 통과한 최신 devtools, unit, 설정 템플릿과 전체 번들 스킬을 후보 아티팩트로 만들 수 있다.
-- stage 스크립트는 새 루트만 허용하고 체크섬을 검증한다.
-- MCP는 runtime, port guard, browser, signing 소켓을 제한 시간 동안 기다린다.
-- Go vault에는 Python v1 복사본을 v2 envelope로 가져오는 반복 가능 로직과 손상·권한 테스트가 있다.
-- 비밀 주입은 승인된 devtools `process start`와 `process restart`로 제한된다.
-
-### 배포를 막는 공백
-
-1. **소유권:** root runtime의 `StateDirectory=loki-go/runtime loki-go/devtools`는 devtools HOME도 root 전용으로 만든다. 실제 자식은 runner UID/GID로 실행된다.
-2. **환경 불일치:** 직접 셸과 MCP는 `/home/runner`, 비밀 프로세스는 `/var/lib/loki-go/devtools`를 HOME으로 사용한다. 도구 설정과 캐시가 실행 경로마다 달라진다.
-3. **다운로드 단절:** runtime은 localhost 외 IP를 차단하지만 devtools 자식에 패키지 프록시를 전달하지 않는다. 허용 목록에도 Playwright CDN과 PyPI 등이 없다.
-4. **후보 Chromium 부재:** Go browser가 Python 배포의 `/opt/loki-browser/.../chrome`을 참조한다. 후보 아티팩트는 Chromium과 OS 라이브러리를 제공하지 않는다.
-5. **설치기 부재:** stage는 파일만 배치한다. 사용자·그룹, 소유권, OS 패키지, unit 활성화, 원자적 전환과 롤백은 없다.
-6. **마이그레이션 진입점 부재:** 안전한 `ImportLegacy`는 있지만 Go CLI와 설치·복구 절차에서 호출되지 않는다.
-7. **Docker 권한:** runtime의 raw `/run/docker.sock` 접근은 호스트 root에 준하므로 일반 E2E 실행 경계로 확대할 수 없다.
+실제 명령과 장애 복구 절차는 [Go 후보 설치·검증·복구 Runbook](go-candidate-runbook.md)에 있다. 운영 전환은 승인된 후보를 대상으로 수행하는 별도 작업이다.
 
 ## 목표 구조
 
@@ -58,8 +50,8 @@ Loki 자체 브라우저 조작 검증은 Browser Plugin으로 수행한다. 이
 ### 상태와 캐시
 
 - root 전용: `/var/lib/loki-go/runtime`, `/var/lib/loki-go/signing`
-- runner 전용 상태: `/var/lib/loki-go/runner`
-- runner 전용 캐시: `/var/cache/loki-go/runner/{npm,pnpm,playwright,go-build,pip}`
+- runner 전용 상태: `/var/lib/loki-go/runner*`, `/var/lib/loki-go/snapshots`
+- runner 전용 캐시: `/var/cache/loki-go/runner*`
 - 프로젝트 출력: `/workspace`
 - 임시 파일: 작업별 `mktemp -d`와 종료 trap
 
