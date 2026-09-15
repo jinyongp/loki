@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "platforms": ["linux-container", "linux-systemd"],
+  "container_architectures": ["amd64", "arm64"],
+  "images": {
+    "loki": {"roles": ["egress", "mcp", "runtime", "signing"], "optional": false},
+    "loki-browser": {"roles": ["browser"], "optional": true}
+  },
+  "services": {
+    "browser": {"image":"loki-browser","role":"browser","user":"browser","required":false,"profile":"browser","vault_access":false,"workspace_access":"none","networks":["private"],"read_only_root":true,"no_new_privileges":true,"memory_mb":1024,"pids":256},
+    "egress": {"image":"loki","role":"egress","user":"egress","required":true,"vault_access":false,"workspace_access":"none","networks":["outbound","private"],"read_only_root":true,"no_new_privileges":true,"memory_mb":128,"pids":64},
+    "mcp": {"image":"loki","role":"mcp","user":"runner","required":true,"vault_access":false,"workspace_access":"write","networks":["private"],"read_only_root":true,"no_new_privileges":true,"memory_mb":512,"pids":128},
+    "runtime": {"image":"loki","role":"runtime","user":"root","required":true,"vault_access":true,"workspace_access":"write","networks":["private"],"read_only_root":true,"no_new_privileges":true,"memory_mb":1024,"pids":512},
+    "signing": {"image":"loki","role":"signing","user":"root","required":false,"profile":"signing","vault_access":false,"workspace_access":"none","networks":[],"read_only_root":true,"no_new_privileges":true,"memory_mb":64,"pids":32}
+  },
+  "volumes": {
+    "cache":{"path":"/var/cache/loki","owner":"runner","group":"runner","mode":"0700","persistent":true,"external":false},
+    "runtime-state":{"path":"/var/lib/loki/runtime","owner":"root","group":"root","mode":"0700","persistent":true,"external":false},
+    "runner-state":{"path":"/var/lib/loki/runner","owner":"runner","group":"runner","mode":"0700","persistent":true,"external":false},
+    "signing-state":{"path":"/var/lib/loki/signing","owner":"root","group":"root","mode":"0700","persistent":true,"external":false},
+    "sockets":{"path":"/run/loki","owner":"root","group":"workspace","mode":"0750","persistent":false,"external":false},
+    "workspace":{"path":"/workspace","owner":"runner","group":"workspace","mode":"2770","persistent":true,"external":true}
+  },
+  "sockets": {
+    "browser":{"path":"/run/loki/browser/control.sock","owner":"browser","clients":["mcp"]},
+    "runtime":{"path":"/run/loki/runtime/control.sock","owner":"runtime","clients":["mcp"]},
+    "signing":{"path":"/run/loki/signing/agent.sock","owner":"signing","clients":["mcp","runtime"]}
+  },
+  "networks": {
+    "outbound":{"internal":false,"services":["egress"]},
+    "private":{"internal":true,"services":["browser","egress","mcp","runtime"]}
+  },
+  "features": {
+    "browser":{"activation":"profile","default":false,"services":["browser"]},
+    "docker":{"activation":"config","default":false,"services":[]},
+    "github":{"activation":"config","default":false,"services":["egress","runtime"]},
+    "signing":{"activation":"profile","default":false,"services":["signing"]}
+  }
+}
