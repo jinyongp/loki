@@ -151,6 +151,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		githubCommands = &githubapp.CommandRunner{
 			Config: githubapp.CommandConfig{
 				Binary: o.GitHubBinary, CWD: workspace, Environment: githubEnvironment, Identity: identity,
+				TempDir:       runnerTemp,
 				Timeout:       time.Duration(c.GitHubCommandTimeoutSeconds) * time.Second,
 				MaxInputBytes: c.GitHubMaxInputBytes, MaxOutputBytes: c.GitHubMaxOutputBytes,
 			},

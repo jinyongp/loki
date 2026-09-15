@@ -56,6 +56,7 @@ func commandRunnerFixture(t *testing.T) (*CommandRunner, *atomic.Int32) {
 
 func TestCommandRunnerUsesFixedRepositoryAndCleanEnvironment(t *testing.T) {
 	runner, calls := commandRunnerFixture(t)
+	runner.Config.TempDir = t.TempDir()
 	result, err := runner.Run(t.Context(), CommandRequest{
 		Target: " Connextable/Loki ",
 		Args:   []string{"issue", "list", "--limit", "1"},
@@ -73,6 +74,9 @@ func TestCommandRunnerUsesFixedRepositoryAndCleanEnvironment(t *testing.T) {
 	configDir, ok := strings.CutPrefix(first, "config=")
 	if !ok {
 		t.Fatalf("missing config directory: %q", result.Output)
+	}
+	if filepath.Dir(configDir) != runner.Config.TempDir {
+		t.Fatalf("gh config must use the runner-accessible temporary root: %s", configDir)
 	}
 	if _, statErr := os.Stat(configDir); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("temporary gh config remains: %v", statErr)

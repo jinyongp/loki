@@ -20,6 +20,7 @@ type RepositoryTokenSource interface {
 type CommandConfig struct {
 	Binary         string
 	CWD            string
+	TempDir        string
 	Environment    []string
 	Identity       *process.Identity
 	Timeout        time.Duration
@@ -63,7 +64,7 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 	if err != nil || token == "" {
 		return process.Result{}, errors.New("GitHub credential is unavailable")
 	}
-	configDir, err := os.MkdirTemp("", "loki-gh-")
+	configDir, err := os.MkdirTemp(r.Config.TempDir, "loki-gh-")
 	if err != nil {
 		return process.Result{}, errors.New("GitHub command environment is unavailable")
 	}
