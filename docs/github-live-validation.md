@@ -6,8 +6,8 @@ Validated on 2026-09-16 (Asia/Seoul) using an isolated Compose project named
 ## Deployment
 
 - Endpoint: `http://127.0.0.1:18765/mcp` (Bearer authentication required).
-- Image: `loki:validation-55bd835`, an amd64 validation image built from the
-  previously verified release candidate with the Go binary from commit `55bd835`.
+- Image: `loki:release-e71e706`, built from commit `e71e706` using the core OCI
+  build script for amd64 and arm64. Browser image: `loki-browser:release-e71e706`.
 - Workspace: `/home/jinyongp/loki-validation-workspace`.
 - Lifecycle state: `/home/jinyongp/.local/state/loki-validation`.
 - GitHub configuration: `/home/jinyongp/.config/loki/github-validation.toml`.
@@ -31,6 +31,20 @@ installation access to other repositories does not add them to Loki's target map
 - Restored MCP audit data retained UID/GID 10000:10000 and mode 0600.
 - `go test ./...`, `go vet ./...`, and race tests for `internal/githubapp` and
   `internal/service` passed. Packaging tests passed after the restore correction.
+- Fresh amd64/arm64 core and browser builds passed. Downloaded tool archives were
+  checked against their official release checksums; actual binary hashes are in
+  image provenance.
+- The complete `scripts/verify-loki-release.sh` gate passed on `e71e706`, including
+  full Go tests, full race tests, vet, two systemd candidate runs, populated-state
+  Compose restore, credential rotation, upgrade/rollback, derived image and browser.
+- GitHub writes through MCP passed: temporary issue #1 and PR #2 were created,
+  edited, read back and closed. The temporary branch was deleted. Nothing was merged
+  and the default branch was unchanged. Closed issue/PR records remain on GitHub.
+- Existing Python MCP separately responded with version `0.47.1` during validation.
+  Its deployment filesystem hash was not collected from this Ubuntu session.
+
+Compressed release logs and the write-test result are stored under
+`/home/jinyongp/.local/state/loki-validation/evidence/e71e706` (private host state).
 
 ## Defects found
 
@@ -44,11 +58,12 @@ this regression with populated state.
 
 ## Remaining validation
 
-No GitHub issues, pull requests or branches were created or changed. Organization
-installation and Issue Fields checks remain untested. The modified binary has
-not undergone a fresh multi-architecture release build or the full systemd release
-suite. This is a running validation deployment, not a completed production cutover
-or authorization to delete the preserved Python implementation.
+Organization installation and Issue Fields checks remain untested because no
+organization installation was supplied. The personal repository and release gates
+passed. This is a running validation deployment; production client cutover and
+removal of the preserved Python implementation are separate steps. The older
+workstream's deployment-hash invariant remains unverified; Python MCP liveness
+alone is not evidence of filesystem equality.
 
 ## Lifecycle commands
 
