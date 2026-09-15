@@ -65,3 +65,30 @@ func TestMCPAuditRecordsOnlySelectedMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestGitHubMCPAuditOmitsCommandContent(t *testing.T) {
+	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
+	handler := auditHandler(log, "github", func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return mcpserver.Object(map[string]any{"exit_code": 0, "output": "private-output-sentinel"})
+	}, func(err error) { t.Error(err) })
+	result, err := handler(t.Context(), map[string]any{
+		"target": "owner/repo", "args": []string{"issue", "create", "--body", "private-argument-sentinel"},
+		"input": "private-input-sentinel", "token": "private-token-sentinel",
+	})
+	if err != nil || result.IsError {
+		t.Fatal(result, err)
+	}
+	data, err := os.ReadFile(log.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, private := range []string{"private-output-sentinel", "private-argument-sentinel", "private-input-sentinel", "private-token-sentinel"} {
+		if strings.Contains(text, private) {
+			t.Fatalf("audit leaked %q: %s", private, text)
+		}
+	}
+	if !strings.Contains(text, "\"target\":\"owner/repo\"") || !strings.Contains(text, "\"exit_code\":0") {
+		t.Fatal("safe GitHub audit metadata missing", text)
+	}
+}

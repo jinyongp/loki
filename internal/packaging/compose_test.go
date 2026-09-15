@@ -30,8 +30,9 @@ type composeService struct {
 	Networks    []string `yaml:"networks"`
 	Ports       []string `yaml:"ports"`
 	Volumes     []string `yaml:"volumes"`
-	Secrets     []string `yaml:"secrets"`
+	Secrets     []any    `yaml:"secrets"`
 	Configs     []string `yaml:"configs"`
+	Tmpfs       []string `yaml:"tmpfs"`
 	ReadOnly    bool     `yaml:"read_only"`
 	CapDrop     []string `yaml:"cap_drop"`
 	CapAdd      []string `yaml:"cap_add"`
@@ -85,10 +86,10 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 			t.Errorf("%s bypasses the private network", name)
 		}
 	}
-	if !slices.Equal(compose.Services["mcp"].Secrets, []string{"mcp_token"}) {
+	if !slices.Equal(secretNames(compose.Services["mcp"].Secrets), []string{"mcp_token"}) {
 		t.Fatal("MCP token is not a read-only Compose secret")
 	}
-	if !slices.Equal(compose.Services["runtime"].Secrets, []string{"github_app_private_key"}) ||
+	if !slices.Equal(secretNames(compose.Services["runtime"].Secrets), []string{"github_app_private_key"}) ||
 		!slices.Equal(compose.Services["runtime"].Configs, []string{"github_config"}) ||
 		!slices.Equal(compose.Services["mcp"].Configs, []string{"github_config"}) {
 		t.Fatal("GitHub config and private key injection boundary is invalid")
@@ -97,8 +98,12 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		compose.Secrets["github_app_private_key"].File != "${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}" {
 		t.Fatal("GitHub Compose sources are invalid")
 	}
+	if !slices.Contains(compose.Services["runtime"].Tmpfs, "/run/loki-private:uid=0,gid=0,mode=0700") {
+		t.Fatal("GitHub private runtime tmpfs is missing")
+	}
 	if !slices.Contains(compose.Services["runtime"].Command, "--github-private-key-file") ||
-		!slices.Contains(compose.Services["runtime"].Command, "/run/secrets/github_app_private_key") ||
+		!slices.Contains(compose.Services["runtime"].Command, "/run/loki-private/github-app-private-key") ||
+		secretTarget(compose.Services["runtime"].Secrets, "github_app_private_key") != "/run/loki-private/github-app-private-key" ||
 		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
 		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
 		t.Fatal("GitHub Compose arguments are incomplete")
@@ -124,6 +129,32 @@ func hasMount(mounts []string, destination string) bool {
 		}
 	}
 	return false
+}
+
+func secretNames(values []any) []string {
+	names := make([]string, 0, len(values))
+	for _, value := range values {
+		switch value := value.(type) {
+		case string:
+			names = append(names, value)
+		case map[string]any:
+			if source, ok := value["source"].(string); ok {
+				names = append(names, source)
+			}
+		}
+	}
+	return names
+}
+
+func secretTarget(values []any, source string) string {
+	for _, value := range values {
+		entry, ok := value.(map[string]any)
+		if ok && entry["source"] == source {
+			target, _ := entry["target"].(string)
+			return target
+		}
+	}
+	return ""
 }
 
 func TestComposeSigningProfileIsPrivateAndOptional(t *testing.T) {
@@ -203,5 +234,43 @@ func TestComposeBrowserProfileSeparatesChromiumAndEgress(t *testing.T) {
 		if _, ok := compose.Services[name].DependsOn["browser-proxy"]; ok {
 			t.Fatalf("%s depends on optional browser proxy", name)
 		}
+	}
+}
+
+func TestComposeGitHubPrivateKeyIsRuntimeEphemeral(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compose composeFile
+	if err = yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatal(err)
+	}
+	for name, service := range compose.Services {
+		hasKey := slices.Contains(secretNames(service.Secrets), "github_app_private_key")
+		if hasKey != (name == "runtime") {
+			t.Errorf("%s GitHub private-key access = %v", name, hasKey)
+		}
+	}
+	runtime := compose.Services["runtime"]
+	if secretTarget(runtime.Secrets, "github_app_private_key") != "/run/loki-private/github-app-private-key" ||
+		!slices.Contains(runtime.Tmpfs, "/run/loki-private:uid=0,gid=0,mode=0700") ||
+		hasMount(runtime.Volumes, "/run/loki-private") {
+		t.Fatal("GitHub private key is not isolated in root-only ephemeral storage")
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(root, "packaging", "container", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(dockerfile), "github_app_private_key") || strings.Contains(string(dockerfile), "BEGIN PRIVATE KEY") {
+		t.Fatal("GitHub private key is referenced by the image build")
+	}
+	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts", "loki-compose-lifecycle.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(lifecycle), "loki-private") || !strings.Contains(string(lifecycle), "for n in runtime-state runner-state") {
+		t.Fatal("GitHub private key entered the Compose backup set")
 	}
 }

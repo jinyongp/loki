@@ -127,7 +127,7 @@ services:
 
   runtime:
     <<: *loki-service
-    command: [runtime, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --github-private-key-file, /run/secrets/github_app_private_key, --layout, /etc/loki/runtime.json]
+    command: [runtime, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --github-private-key-file, /run/loki-private/github-app-private-key, --layout, /etc/loki/runtime.json]
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     group_add: ["10001"]
@@ -142,9 +142,12 @@ services:
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
     configs: [github_config]
-    secrets: [github_app_private_key]
+    secrets:
+      - source: github_app_private_key
+        target: /run/loki-private/github-app-private-key
     tmpfs:
       - /tmp:uid=0,gid=0,mode=0700
+      - /run/loki-private:uid=0,gid=0,mode=0700
       - /var/tmp/loki/runner:uid=10000,gid=10000,mode=0700
     healthcheck:
       test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/runtime/control.sock]
