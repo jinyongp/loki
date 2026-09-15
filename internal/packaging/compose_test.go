@@ -31,7 +31,7 @@ type composeService struct {
 	Ports       []string `yaml:"ports"`
 	Volumes     []string `yaml:"volumes"`
 	Secrets     []any    `yaml:"secrets"`
-	Configs     []string `yaml:"configs"`
+	Configs     []any    `yaml:"configs"`
 	Tmpfs       []string `yaml:"tmpfs"`
 	ReadOnly    bool     `yaml:"read_only"`
 	CapDrop     []string `yaml:"cap_drop"`
@@ -90,8 +90,8 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		t.Fatal("MCP token is not a read-only Compose secret")
 	}
 	if !slices.Equal(secretNames(compose.Services["runtime"].Secrets), []string{"github_app_private_key"}) ||
-		!slices.Equal(compose.Services["runtime"].Configs, []string{"github_config"}) ||
-		!slices.Equal(compose.Services["mcp"].Configs, []string{"github_config"}) {
+		!slices.Equal(secretNames(compose.Services["runtime"].Configs), []string{"github_config"}) ||
+		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{"github_config"}) {
 		t.Fatal("GitHub config and private key injection boundary is invalid")
 	}
 	if compose.Configs["github_config"].File != "${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}" ||
@@ -104,6 +104,8 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if !slices.Contains(compose.Services["runtime"].Command, "--github-private-key-file") ||
 		!slices.Contains(compose.Services["runtime"].Command, "/run/loki-private/github-app-private-key") ||
 		secretTarget(compose.Services["runtime"].Secrets, "github_app_private_key") != "/run/loki-private/github-app-private-key" ||
+		secretTarget(compose.Services["runtime"].Configs, "github_config") != "/etc/loki/github.toml" ||
+		secretTarget(compose.Services["mcp"].Configs, "github_config") != "/etc/loki/github.toml" ||
 		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
 		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
 		t.Fatal("GitHub Compose arguments are incomplete")

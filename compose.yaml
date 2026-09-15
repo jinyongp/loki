@@ -141,7 +141,9 @@ services:
       - runner-state:/var/lib/loki/runner
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
-    configs: [github_config]
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
     secrets:
       - source: github_app_private_key
         target: /run/loki-private/github-app-private-key
@@ -170,7 +172,9 @@ services:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runner-state:/var/lib/loki/runner
       - sockets:/run/loki
-    configs: [github_config]
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
     secrets: [mcp_token]
     tmpfs:
       - /tmp:uid=10000,gid=10000,mode=0700
