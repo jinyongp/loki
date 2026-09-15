@@ -17,7 +17,15 @@ import (
 
 var audiencePattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var hostLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
-var githubTargetPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9_.-]{1,100}$`)
+var githubAccountPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$`)
+var githubRepositoryPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+
+type GitHubInstallation struct {
+	Account        string
+	AccountType    string
+	InstallationID int64
+	Repositories   []string
+}
 
 type Config struct {
 	Root, AuditLog, Host                                         string
@@ -27,10 +35,13 @@ type Config struct {
 	ArtifactBaseURL, PreviewBaseDomain, PreviewAccessAudience    string
 	MaxFileBytes, MaxWriteBytes, MaxOutputBytes, MaxListEntries  int
 	MaxSearchResults, MaxReadLines, MaxPatchBytes, MaxPatchFiles int
-	GitHubAppID, GitHubInstallationID                            int64
+	GitHubAppID                                                  int64
 	GitHubAPIVersion                                             string
+	GitHubInstallations                                          []GitHubInstallation
 	GitHubTargets                                                []string
 	GitHubMaxResponseBytes, GitHubMaxPages                       int
+	GitHubCommandTimeoutSeconds                                  int
+	GitHubMaxInputBytes, GitHubMaxOutputBytes                    int
 }
 
 func Load(path string) (Config, error) {
@@ -39,6 +50,47 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	return Parse(data)
+}
+
+// LoadWithGitHub merges a deployment-provided public GitHub TOML fragment
+// into the primary configuration. The fragment is limited to GitHub settings
+// so a mounted Compose config cannot alter runtime isolation.
+func LoadWithGitHub(path, githubPath string) (Config, error) {
+	if githubPath == "" {
+		return Load(path)
+	}
+	base, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	fragment, err := os.ReadFile(githubPath)
+	if err != nil {
+		return Config{}, err
+	}
+	var primary, injected map[string]any
+	if toml.Unmarshal(base, &primary) != nil || toml.Unmarshal(fragment, &injected) != nil {
+		return Config{}, errors.New("invalid Loki TOML configuration")
+	}
+	allowed := map[string]bool{
+		"github_app_id": true, "github_installations": true, "github_api_version": true,
+		"github_max_response_bytes": true, "github_max_pages": true,
+		"github_command_timeout_seconds": true, "github_max_input_bytes": true,
+		"github_max_output_bytes": true,
+	}
+	for key, value := range injected {
+		if !allowed[key] {
+			return Config{}, fmt.Errorf("GitHub configuration contains unsupported setting %q", key)
+		}
+		if _, exists := primary[key]; exists {
+			return Config{}, fmt.Errorf("GitHub setting %q is configured more than once", key)
+		}
+		primary[key] = value
+	}
+	merged, err := toml.Marshal(primary)
+	if err != nil {
+		return Config{}, errors.New("invalid Loki TOML configuration")
+	}
+	return Parse(merged)
 }
 
 func Hostname(host string) bool {
@@ -165,13 +217,9 @@ func parseGitHub(raw map[string]any, c *Config) error {
 	if err != nil {
 		return err
 	}
-	installation, installationSet, err := positiveInt64(raw, "github_installation_id")
-	if err != nil {
-		return err
-	}
-	targetValue, targetsSet := raw["github_targets"]
-	if appSet != installationSet || appSet != targetsSet {
-		return errors.New("GitHub App ID, installation ID, and targets must be configured together")
+	installationValue, installationsSet := raw["github_installations"]
+	if appSet != installationsSet {
+		return errors.New("GitHub App ID and installations must be configured together")
 	}
 	c.GitHubAPIVersion = "2026-03-10"
 	if value, ok := raw["github_api_version"]; ok {
@@ -189,31 +237,96 @@ func parseGitHub(raw map[string]any, c *Config) error {
 	if err != nil {
 		return err
 	}
+	c.GitHubCommandTimeoutSeconds, err = bounded(raw, "github_command_timeout_seconds", 120, 1, 600)
+	if err != nil {
+		return err
+	}
+	c.GitHubMaxInputBytes, err = bounded(raw, "github_max_input_bytes", 1048576, 4096, 16777216)
+	if err != nil {
+		return err
+	}
+	c.GitHubMaxOutputBytes, err = bounded(raw, "github_max_output_bytes", 4194304, 4096, 16777216)
+	if err != nil {
+		return err
+	}
 	if !appSet {
-		for _, key := range []string{"github_api_version", "github_max_response_bytes", "github_max_pages"} {
+		for _, key := range []string{"github_api_version", "github_max_response_bytes", "github_max_pages", "github_command_timeout_seconds", "github_max_input_bytes", "github_max_output_bytes"} {
 			if _, ok := raw[key]; ok {
 				return errors.New("GitHub limits require GitHub App configuration")
 			}
 		}
 		return nil
 	}
-	targets, err := stringList(targetValue)
-	if err != nil || len(targets) == 0 || len(targets) > 64 {
-		return errors.New("github_targets must contain 1 to 64 repositories")
+	installations, err := githubInstallationList(installationValue)
+	if err != nil || len(installations) == 0 || len(installations) > 16 {
+		return errors.New("github_installations must contain 1 to 16 installations")
 	}
-	for _, target := range targets {
-		target = strings.TrimSpace(target)
-		if !githubTargetPattern.MatchString(target) || strings.Contains(target, "..") {
-			return errors.New("invalid GitHub repository target")
+	installationIDs := []int64{}
+	for _, rawInstallation := range installations {
+		accountValue, accountSet := rawInstallation["account"]
+		accountTypeValue, accountTypeSet := rawInstallation["account_type"]
+		id, idSet, idErr := positiveInt64(rawInstallation, "installation_id")
+		repositoriesValue, repositoriesSet := rawInstallation["repositories"]
+		if idErr != nil {
+			return idErr
 		}
-		canonical := strings.ToLower(target)
-		if slices.Contains(c.GitHubTargets, canonical) {
-			return errors.New("duplicate GitHub repository target")
+		account, accountOK := accountValue.(string)
+		accountType, accountTypeOK := accountTypeValue.(string)
+		if !accountSet || !accountTypeSet || !idSet || !repositoriesSet || !accountOK || !accountTypeOK || len(rawInstallation) != 4 {
+			return errors.New("GitHub installation requires account, account_type, installation_id, and repositories")
 		}
-		c.GitHubTargets = append(c.GitHubTargets, canonical)
+		account = strings.ToLower(strings.TrimSpace(account))
+		accountType = strings.ToLower(strings.TrimSpace(accountType))
+		if !githubAccountPattern.MatchString(account) || !slices.Contains([]string{"organization", "user"}, accountType) {
+			return errors.New("invalid GitHub installation account")
+		}
+		if slices.Contains(installationIDs, id) {
+			return errors.New("duplicate GitHub installation ID")
+		}
+		installationIDs = append(installationIDs, id)
+		repositories, listErr := stringList(repositoriesValue)
+		if listErr != nil || len(repositories) == 0 {
+			return errors.New("GitHub installation repositories must not be empty")
+		}
+		installation := GitHubInstallation{Account: account, AccountType: accountType, InstallationID: id}
+		for _, repository := range repositories {
+			repository = strings.ToLower(strings.TrimSpace(repository))
+			if !githubRepositoryPattern.MatchString(repository) || strings.Contains(repository, "..") {
+				return errors.New("invalid GitHub repository name")
+			}
+			target := account + "/" + repository
+			if slices.Contains(c.GitHubTargets, target) {
+				return errors.New("duplicate GitHub repository target")
+			}
+			installation.Repositories = append(installation.Repositories, repository)
+			c.GitHubTargets = append(c.GitHubTargets, target)
+		}
+		c.GitHubInstallations = append(c.GitHubInstallations, installation)
+		if len(c.GitHubTargets) > 64 {
+			return errors.New("GitHub installations must contain at most 64 repositories")
+		}
 	}
-	c.GitHubAppID, c.GitHubInstallationID = app, installation
+	c.GitHubAppID = app
 	return nil
+}
+
+func githubInstallationList(value any) ([]map[string]any, error) {
+	switch list := value.(type) {
+	case []map[string]any:
+		return list, nil
+	case []any:
+		out := make([]map[string]any, len(list))
+		for index, item := range list {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				return nil, errors.New("expected GitHub installation array")
+			}
+			out[index] = entry
+		}
+		return out, nil
+	default:
+		return nil, errors.New("expected GitHub installation array")
+	}
 }
 
 func positiveInt64(raw map[string]any, key string) (int64, bool, error) {

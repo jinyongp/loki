@@ -104,15 +104,20 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	var issueFields IssueFieldsClient
 	if c.GitHubAppID != 0 {
+		installation := c.GitHubInstallations[0]
+		targets := make([]string, 0, len(installation.Repositories))
+		for _, repository := range installation.Repositories {
+			targets = append(targets, installation.Account+"/"+repository)
+		}
 		proxyURL, parseErr := url.Parse(o.GitHubProxy)
 		if parseErr != nil || proxyURL.Scheme != "http" || proxyURL.Host == "" || proxyURL.User != nil || proxyURL.Path != "" {
 			return errors.New("GitHub egress proxy is invalid")
 		}
 		httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
-		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: c.GitHubInstallationID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
+		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: installation.InstallationID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
 			return controller.ManagedSecret(ctx, githubVaultProfile, githubPrivateKey)
 		}}
-		issueFields = &githubapp.Client{Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: c.GitHubTargets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages}, HTTP: httpClient, Tokens: issuer}
+		issueFields = &githubapp.Client{Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: targets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages}, HTTP: httpClient, Tokens: issuer}
 	}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
