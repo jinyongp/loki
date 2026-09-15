@@ -33,6 +33,11 @@ var commands = map[string]command{
 	"secret import-env":     {"import_env", []string{"profile", "file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"secret stage-env":      {"stage_env", []string{"file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"github app-key set":    {"github_app_key_set", nil, nil},
+	"github fields list":    {"github_fields_list", []string{"target"}, nil},
+	"github values list":    {"github_values_list", []string{"target"}, map[string]option{"issue": {"issue", "integer", 0}}},
+	"github values add":     {"github_values_add", []string{"target", "values_json"}, map[string]option{"issue": {"issue", "integer", 0}}},
+	"github values set":     {"github_values_set", []string{"target", "values_json"}, map[string]option{"issue": {"issue", "integer", 0}}},
+	"github values clear":   {"github_values_clear", []string{"target"}, map[string]option{"issue": {"issue", "integer", 0}, "field-id": {"field_id", "integer", 0}}},
 }
 
 // Request keeps options interspersed with positional arguments.

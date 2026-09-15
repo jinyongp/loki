@@ -133,9 +133,11 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 		if json.Unmarshal(args, &input) != nil || input == nil {
 			return errorResult("invalid arguments: request; inspect the tool schema and retry"), nil
 		}
-		// Pydantic's exposed callable models ignore extra arguments.
 		for key := range input {
 			if _, known := schema.Properties[key]; !known {
+				if tool.Name == "github_issue_fields" {
+					return errorResult("invalid arguments: unknown field; inspect the tool schema and retry"), nil
+				}
 				delete(input, key)
 			}
 		}

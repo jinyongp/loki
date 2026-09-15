@@ -21,7 +21,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runHealth(args[1:], stderr)
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
-		case "secret":
+		case "secret", "github":
 			return runAdministration(args, stdout, stderr)
 		case "runner-exec":
 			return runRunnerExec(args[1:], stderr)
@@ -63,6 +63,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki version | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki version | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
 	return 2
 }

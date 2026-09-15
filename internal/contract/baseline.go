@@ -11,7 +11,7 @@ import (
 //go:embed testdata/mcp-go-v048.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-14.2"
+const CatalogRevision = "2026-09-15.1"
 
 const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
@@ -22,7 +22,7 @@ var currentToolNames = []string{
 	"workspace_read", "read_image", "share_image", "artifact_publish", "write_image", "workspace_edit",
 	"restore_workspace_file", "remove_tracked_file",
 	"git_inspect", "git_stage", "developer_view",
-	"secret_inspect", "secret_write", "secret_delete",
+	"secret_inspect", "secret_write", "secret_delete", "github_issue_fields",
 }
 
 // Current returns an independent copy; callers cannot mutate canonical data.

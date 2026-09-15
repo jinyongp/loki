@@ -52,7 +52,7 @@ services:
 
   runtime:
     <<: *loki-service
-    command: [runtime, --layout, /etc/loki/runtime.json]
+    command: [runtime, --config, /etc/loki/loki.toml, --layout, /etc/loki/runtime.json]
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     group_add: ["10001"]

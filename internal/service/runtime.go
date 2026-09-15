@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"path/filepath"
 
 	"loki/internal/audit"
+	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
 	"loki/internal/execution"
+	"loki/internal/githubapp"
 	"loki/internal/portguard"
 	"loki/internal/process"
 	"loki/internal/rpc"
@@ -26,10 +30,11 @@ type RuntimeOptions struct {
 	DevtoolsBinary                                    string
 	ExecutionContract                                 string
 	Workspace, DockerSocket, SnapshotDirectory        string
+	GitHubProxy                                       string
 	RunnerUID, RunnerGID                              uint32
 }
 
-func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAuditError func(error)) error {
+func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready func() error, onAuditError func(error)) error {
 	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.ExecutionContract, o.Workspace, o.DockerSocket, o.SnapshotDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
@@ -97,6 +102,18 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	}
 	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: groups}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
+	var issueFields IssueFieldsClient
+	if c.GitHubAppID != 0 {
+		proxyURL, parseErr := url.Parse(o.GitHubProxy)
+		if parseErr != nil || proxyURL.Scheme != "http" || proxyURL.Host == "" || proxyURL.User != nil || proxyURL.Path != "" {
+			return errors.New("GitHub egress proxy is invalid")
+		}
+		httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: c.GitHubInstallationID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
+			return controller.ManagedSecret(ctx, githubVaultProfile, githubPrivateKey)
+		}}
+		issueFields = &githubapp.Client{Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: c.GitHubTargets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages}, HTTP: httpClient, Tokens: issuer}
+	}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
 	ops["status"] = rpc.Operation{Permission: rpc.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) {
@@ -113,6 +130,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
+		GitHubIssueFieldsOperations(issueFields),
 		AuditOperations(log),
 		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID}),
 		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),

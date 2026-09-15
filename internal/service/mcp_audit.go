@@ -15,7 +15,7 @@ import (
 func auditMetadata(args map[string]any) map[string]any {
 	metadata := map[string]any{}
 	budget := 8192
-	for _, key := range []string{"action", "operation", "cwd", "path", "source", "destination", "profile", "action_name", "name", "scope", "session_id", "share_id", "kind", "request_id", "port", "full_page", "ttl_seconds", "overwrite", "index", "staged", "reverse", "regex"} {
+	for _, key := range []string{"action", "operation", "cwd", "path", "source", "destination", "profile", "action_name", "name", "scope", "session_id", "share_id", "kind", "request_id", "port", "full_page", "ttl_seconds", "overwrite", "index", "staged", "reverse", "regex", "target", "issue", "field_id"} {
 		v, exists := args[key]
 		if !exists {
 			continue

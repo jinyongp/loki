@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"loki/internal/config"
 	"loki/internal/execution"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -98,7 +99,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunRuntime(ctx, o, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
+		done <- RunRuntime(ctx, o, config.Config{}, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
 	}()
 	select {
 	case <-ready:

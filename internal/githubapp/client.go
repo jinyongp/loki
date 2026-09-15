@@ -58,11 +58,11 @@ type IssueFieldValue struct {
 }
 
 type Value struct {
-	FieldID  int64
-	DataType string
-	Text     string
-	Number   float64
-	Options  []string
+	FieldID  int64    `json:"field_id"`
+	DataType string   `json:"data_type"`
+	Text     string   `json:"text,omitempty"`
+	Number   float64  `json:"number,omitempty"`
+	Options  []string `json:"options,omitempty"`
 }
 
 func (c *Client) ListFields(ctx context.Context, target string) ([]IssueField, error) {

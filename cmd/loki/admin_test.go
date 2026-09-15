@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"loki/internal/githubapp"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 	"loki/internal/service"
@@ -151,6 +152,34 @@ func TestGitHubAppKeyCLIUsesTerminalOnlyAndRedacts(t *testing.T) {
 	for _, args := range [][]string{{"github", "app-key", "set", private}, {"github", "app-key", "set", "--file", "key.pem"}} {
 		if code := executeAdministrationInput(args, client, read, &stdout, &stderr); code != 2 {
 			t.Fatalf("accepted key argument: %#v", args)
+		}
+	}
+}
+
+func TestGitHubIssueFieldsCLIUsesTypedNarrowRequest(t *testing.T) {
+	client := adminCall(func(_ context.Context, request any) (json.RawMessage, error) {
+		values := request.(map[string]any)
+		if values["operation"] != "github_values_set" || values["target"] != "owner/repo" || values["issue"] != 7 {
+			t.Fatalf("request: %#v", values)
+		}
+		fields, ok := values["values"].([]githubapp.Value)
+		if !ok || len(fields) != 1 || fields[0].FieldID != 3 || fields[0].Text != "High" {
+			t.Fatalf("values: %#v", values["values"])
+		}
+		return json.RawMessage(`{"values":[]}`), nil
+	})
+	read := func(context.Context, io.Writer, bool) (string, error) {
+		t.Fatal("credential reader invoked")
+		return "", nil
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"github", "values", "set", "owner/repo", `[{"field_id":3,"data_type":"single_select","text":"High"}]`, "--issue", "7"}
+	if code := executeAdministrationInput(args, client, read, &stdout, &stderr); code != 0 {
+		t.Fatal(code, stderr.String())
+	}
+	for _, option := range []string{"--token", "--url", "--headers", "--method"} {
+		if code := executeAdministrationInput([]string{"github", "fields", "list", "owner/repo", option, "private"}, client, read, &stdout, &stderr); code != 2 {
+			t.Fatal("accepted", option)
 		}
 	}
 }

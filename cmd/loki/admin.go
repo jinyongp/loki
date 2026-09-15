@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"loki/internal/admin"
 	"loki/internal/fault"
+	"loki/internal/githubapp"
 	"loki/internal/rpc"
 	"loki/internal/service"
 )
@@ -54,6 +56,22 @@ func executeAdministrationInput(args []string, client service.RuntimeCaller, rea
 		delete(request, "file")
 		delete(request, "delete_source")
 		request["values"] = source.Values
+	}
+	if rawValues, ok := request["values_json"].(string); ok {
+		var values []githubapp.Value
+		decoder := json.NewDecoder(bytes.NewBufferString(rawValues))
+		decoder.DisallowUnknownFields()
+		if err = decoder.Decode(&values); err != nil {
+			fmt.Fprintln(stderr, "invalid GitHub issue field values")
+			return 2
+		}
+		var trailing any
+		if err = decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+			fmt.Fprintln(stderr, "invalid GitHub issue field values")
+			return 2
+		}
+		request["values"] = values
+		delete(request, "values_json")
 	}
 	if request["operation"] == "secret_set" || request["operation"] == "github_app_key_set" {
 		request["value"], err = readSecret(ctx, stderr, request["operation"] == "github_app_key_set")

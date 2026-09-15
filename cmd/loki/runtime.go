@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/service"
 )
@@ -17,6 +18,7 @@ func runRuntime(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("runtime", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	layoutPath := flags.String("layout", "", "administrator-owned runtime JSON layout")
+	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -29,9 +31,14 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid runtime layout")
 		return 2
 	}
+	configuration, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot load runtime configuration")
+		return 1
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	err := service.RunRuntime(ctx, options, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
+	err = service.RunRuntime(ctx, options, configuration, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
 	if err != nil {
 		fmt.Fprintln(stderr, "runtime service failed:", err)
 		return 1

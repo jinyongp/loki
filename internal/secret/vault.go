@@ -180,6 +180,29 @@ func (c Controller) SetSecret(ctx context.Context, name, key, value string, publ
 	})
 }
 
+// ManagedSecret returns one reserved secret to an in-process credential consumer.
+func (c Controller) ManagedSecret(ctx context.Context, name, key string) (string, error) {
+	if err := ProfileName(name); err != nil {
+		return "", err
+	}
+	if err := SecretName(key); err != nil {
+		return "", err
+	}
+	document, err := c.load(ctx)
+	if err != nil {
+		return "", err
+	}
+	valueProfile, err := profile(document, name)
+	if err != nil {
+		return "", err
+	}
+	value, ok := object(valueProfile["secrets"])[key].(string)
+	if !ok || value == "" {
+		return "", fault.Error("managed credential is not configured")
+	}
+	return value, nil
+}
+
 // SetManagedSecret atomically creates its reserved profile or replaces the value.
 func (c Controller) SetManagedSecret(ctx context.Context, name, key, value string) (map[string]any, error) {
 	if err := ProfileName(name); err != nil {

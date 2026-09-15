@@ -109,7 +109,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
 	}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime)} {
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

@@ -1656,6 +1656,38 @@
         "title": "secret_deleteDictOutput",
         "type": "object"
       }
+    },
+    {
+      "name": "github_issue_fields",
+      "description": "Use the configured GitHub App to list organization issue fields, list issue values, add or replace typed values, or clear one value on an allowlisted repository.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {"type": "string", "enum": ["list_fields", "list_values", "add_values", "set_values", "clear_value"]},
+          "target": {"type": "string"},
+          "issue": {"type": "integer", "minimum": 0, "default": 0},
+          "field_id": {"type": "integer", "minimum": 0, "default": 0},
+          "values": {
+            "type": "array",
+            "default": [],
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "field_id": {"type": "integer", "minimum": 1},
+                "data_type": {"type": "string", "enum": ["text", "single_select", "number", "date", "multi_select"]},
+                "text": {"type": "string"},
+                "number": {"type": "number"},
+                "options": {"type": "array", "items": {"type": "string"}, "maxItems": 25}
+              },
+              "required": ["field_id", "data_type"]
+            }
+          }
+        },
+        "required": ["action", "target"]
+      }
     }
   ],
   "resources": [
