@@ -35,6 +35,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	runnerState := filepath.Join(root, "runner")
 	runnerCache := filepath.Join(root, "cache")
 	runnerTemp := filepath.Join(root, "temp")
+	githubTemp := filepath.Join(root, "github-temp")
 	snapshotDirectory := filepath.Join(root, "snapshots")
 	directories := map[string]string{
 		"runner-state": runnerState, "runner-config": filepath.Join(root, "config"),
@@ -69,7 +70,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if err = os.WriteFile(contractPath, encodedContract, 0600); err != nil {
 		t.Fatal(err)
 	}
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
 	c := config.Config{
 		GitHubAppID: 123, GitHubAPIVersion: "2026-03-10",
 		GitHubInstallations: []config.GitHubInstallation{

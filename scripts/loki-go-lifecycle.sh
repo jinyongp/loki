@@ -166,6 +166,7 @@ prepare_state() {
     "$(rooted /var/cache/loki-go/runner)" "$(rooted /var/cache/loki-go/runner-npm)" "$(rooted /var/cache/loki-go/runner-pnpm)" \
     "$(rooted /var/cache/loki-go/runner-playwright)" "$(rooted /var/cache/loki-go/runner-go-build)" "$(rooted /var/cache/loki-go/runner-go-mod)" \
     "$(rooted /var/cache/loki-go/runner-pip)" "$(rooted /var/tmp/loki-go/runner)"
+  install -d -o 0 -g "$workspace_gid" -m 0710 "$(rooted /var/tmp/loki-go/github)"
   install -d -m 0700 "$(rooted /var/log/loki-go/runtime)" "$(rooted /var/log/loki-go/mcp)"
   install -d -o "$runner_uid" -g "$workspace_gid" -m 2770 "$(rooted /srv/workspace/loki)"
   install -d -o "$browser_uid" -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki/.loki-go/browser-downloads)"

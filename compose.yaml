@@ -151,6 +151,7 @@ services:
       - /tmp:uid=0,gid=0,mode=0700
       - /run/loki-private:uid=0,gid=0,mode=0700
       - /var/tmp/loki/runner:uid=10000,gid=10000,mode=0700
+      - /var/tmp/loki/github:uid=0,gid=10001,mode=0710
     healthcheck:
       test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/runtime/control.sock]
       interval: 2s

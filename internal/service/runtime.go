@@ -34,11 +34,12 @@ type RuntimeOptions struct {
 	ExecutionContract                                 string
 	Workspace, DockerSocket, SnapshotDirectory        string
 	GitHubProxy, GitHubBinary, GitHubPrivateKeyFile   string
+	GitHubTempDirectory                               string
 	RunnerUID, RunnerGID                              uint32
 }
 
 func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready func() error, onAuditError func(error)) error {
-	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.ExecutionContract, o.Workspace, o.DockerSocket, o.SnapshotDirectory} {
+	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.ExecutionContract, o.Workspace, o.DockerSocket, o.SnapshotDirectory, o.GitHubTempDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
 		}
@@ -54,6 +55,9 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		if err := daemon.PrivateDirectory(path); err != nil {
 			return err
 		}
+	}
+	if err := daemon.PrivateDirectory(o.GitHubTempDirectory); err != nil {
+		return fmt.Errorf("validate GitHub temporary directory: %w", err)
 	}
 	var contract execution.Contract
 	if err := daemon.ReadJSON(o.ExecutionContract, &contract); err != nil {
@@ -151,7 +155,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		githubCommands = &githubapp.CommandRunner{
 			Config: githubapp.CommandConfig{
 				Binary: o.GitHubBinary, CWD: workspace, Environment: githubEnvironment, Identity: identity,
-				TempDir:       runnerTemp,
+				TempDir:       o.GitHubTempDirectory,
 				Timeout:       time.Duration(c.GitHubCommandTimeoutSeconds) * time.Second,
 				MaxInputBytes: c.GitHubMaxInputBytes, MaxOutputBytes: c.GitHubMaxOutputBytes,
 			},

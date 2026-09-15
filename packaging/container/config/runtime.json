@@ -13,6 +13,7 @@
   "GitHubProxy": "http://egress:18766",
   "GitHubBinary": "/usr/bin/gh",
   "GitHubPrivateKeyFile": "",
+  "GitHubTempDirectory": "/var/tmp/loki/github",
   "RunnerUID": 10000,
   "RunnerGID": 10000
 }

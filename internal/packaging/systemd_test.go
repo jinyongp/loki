@@ -126,6 +126,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if runtime.ExecutionContract != "/usr/share/doc/loki/execution-contract.json" || runtime.SnapshotDirectory != "/var/lib/loki-go/snapshots" {
 		t.Fatalf("runner paths = %#v", runtime)
 	}
+	if runtime.GitHubTempDirectory != "/var/tmp/loki-go/github" {
+		t.Fatalf("GitHub temporary directory = %q", runtime.GitHubTempDirectory)
+	}
 	data, err = os.ReadFile(filepath.Join(root, "mcp.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -169,6 +172,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 		"/var/lib/loki-go/runner",
 		"/var/cache/loki-go/runner",
 		"/var/tmp/loki-go/runner",
+		"/var/tmp/loki-go/github",
 		"After=local-fs.target systemd-tmpfiles-setup.service",
 	} {
 		if !strings.Contains(text, want) {
@@ -186,6 +190,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 		"d /var/lib/loki-go/runner 0700 runner runner -",
 		"d /var/cache/loki-go/runner 0700 runner runner -",
 		"d /var/tmp/loki-go/runner 0700 runner runner -",
+		"d /var/tmp/loki-go/github 0710 root workspace -",
 	} {
 		if !strings.Contains(string(tmpfiles), want) {
 			t.Fatalf("tmpfiles contract does not contain %q", want)
