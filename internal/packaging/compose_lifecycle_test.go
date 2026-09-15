@@ -123,6 +123,12 @@ func TestComposeLifecycleRecoversFailuresAndRejectsBadInput(t *testing.T) {
 	if token, _ := os.ReadFile(filepath.Join(f.state, "mcp-token")); string(token) != "next-secret-0123456789-abcdefghijklmnopqrstuvwxyz" {
 		t.Fatalf("invalid rotation changed token = %q", token)
 	}
+	failed := f
+	failed.env += "\x00FAKE_DOCKER_UP_FAIL=1"
+	failed.run(t, "replacement-secret-0123456789-abcdefghijklmnop", false, "rotate-credentials")
+	if token, _ := os.ReadFile(filepath.Join(f.state, "mcp-token")); string(token) != "next-secret-0123456789-abcdefghijklmnopqrstuvwxyz" {
+		t.Fatalf("failed rotation changed token = %q", token)
+	}
 	corrupt := filepath.Join(filepath.Dir(f.state), "corrupt")
 	if err := os.Mkdir(corrupt, 0700); err != nil {
 		t.Fatal(err)

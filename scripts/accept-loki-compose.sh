@@ -54,6 +54,28 @@ wait_healthy() {
   return 1
 }
 
+container_id() { compose ps -q "$1"; }
+
+assert_networks() {
+  local service=$1 expected=$2 actual
+  actual=$("$docker" inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(container_id "$service")" | sed '/^$/d' | sort)
+  test "$actual" = "$expected" || die "$service network isolation changed: $actual"
+}
+
+assert_no_mount() {
+  local service=$1 destination=$2
+  if "$docker" inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$(container_id "$service")" | grep -Fxq "$destination"; then
+    die "$service received forbidden mount: $destination"
+  fi
+}
+
+assert_not_inspectable() {
+  local service=$1 sentinel=$2
+  if "$docker" inspect "$(container_id "$service")" | grep -Fq -- "$sentinel"; then
+    die "$service inspect data disclosed a credential sentinel"
+  fi
+}
+
 cleanup() {
   result=$?
   trap - EXIT HUP INT TERM
@@ -92,12 +114,23 @@ for service in browser browser-proxy signing; do
   if grep -qx "$service" <<<"$services"; then die "optional service started in the core profile: $service"; fi
 done
 compose exec -T --user 10000:10000 runtime /usr/local/bin/devtools version >/dev/null
+assert_networks runtime "${project}_private"
+assert_networks mcp "${project}_private"
+assert_networks egress "$(printf '%s\n%s' "${project}_outbound" "${project}_private" | sort)"
+assert_no_mount mcp /var/lib/loki/runtime
+assert_not_inspectable mcp "$token"
+assert_not_inspectable egress "$token"
 
 life restart
 life health
 life backup "$backup"
 life restore "$backup"
-printf %s "$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" | life rotate-credentials
+rotated_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+printf %s "$rotated_token" | life rotate-credentials
+assert_not_inspectable mcp "$token"
+assert_not_inspectable mcp "$rotated_token"
+assert_not_inspectable egress "$token"
+assert_not_inspectable egress "$rotated_token"
 
 "$docker" tag "$image" "$upgrade_image"
 life upgrade "$upgrade_image"
@@ -116,6 +149,13 @@ base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
 if test -n "$browser_image"; then
   compose --profile browser up -d browser
   wait_healthy browser || die "browser profile is unhealthy"
+  assert_networks browser "${project}_private"
+  assert_networks browser-proxy "$(printf '%s\n%s' "${project}_outbound" "${project}_private" | sort)"
+  for service in browser browser-proxy; do
+    assert_no_mount "$service" /workspace
+    assert_no_mount "$service" /var/lib/loki/runtime
+    assert_not_inspectable "$service" "$rotated_token"
+  done
   life health
 fi
 

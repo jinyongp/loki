@@ -10,6 +10,7 @@ if test "$first" = info; then exit 0; fi
 if test "$first" = inspect; then case "${!#}" in *bad-health*) echo unhealthy;; *) echo healthy;; esac; exit 0; fi
 if test "$first" = volume; then exit 0; fi
 if test "$first" = compose; then
+  if test "${FAKE_DOCKER_UP_FAIL:-0}" = 1; then case " $* " in *" up "*) exit 1;; esac; fi
   case " $* " in
     *" version "*|*" config "*|*" stop "*|*" down "*|*" up "*|*" restart "*) exit 0;;
     *" ps "*" --status running "*) echo running; exit 0;;

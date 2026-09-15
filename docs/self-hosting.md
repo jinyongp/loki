@@ -68,7 +68,7 @@ Run the disposable acceptance harness with the exact image intended for installa
 LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/accept-loki-compose.sh
 ```
 
-The harness creates a unique Compose project under a private temporary directory, then checks installation, health, restart, backup and restore, credential rotation, upgrade and rollback, a derived project image, and clean removal. It also confirms that optional services stay stopped in the core profile. Set `LOKI_BROWSER_IMAGE` to exercise the browser profile and `LOKI_SIGNING_KEY_FILE` to exercise signing.
+The harness creates a unique Compose project under a private temporary directory, then checks installation, health, restart, backup and restore, credential rotation, upgrade and rollback, a derived project image, and clean removal. It also confirms that optional services stay stopped in the core profile, credentials do not appear in container inspection data, and runtime, MCP, browser, and proxy containers retain their network and mount boundaries. Set `LOKI_BROWSER_IMAGE` to exercise the browser profile and `LOKI_SIGNING_KEY_FILE` to exercise signing.
 
 To prove that an existing deployment remains unchanged, pass newline-separated files or directory roots through `LOKI_ACCEPTANCE_INVARIANT_PATHS`. The harness records file hashes before startup, compares them after every acceptance operation, and never mounts those paths into the test stack.
 
