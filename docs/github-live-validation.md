@@ -67,14 +67,12 @@ repository lists. After recreating runtime and MCP with the updated host config,
 repository, issue and PR reads passed through MCP for all six targets (18 checks).
 Organization writes were not exercised.
 
-Issue Fields listing failed through MCP for both organizations. Direct API checks
-with temporary installation tokens returned HTTP 403, `Resource not accessible
-by integration`; the temporary tokens were revoked after diagnosis. Neither
-installation grants the organization-level Issue Fields permission. GitHub's
-[endpoint documentation](https://docs.github.com/en/rest/orgs/issue-fields)
-requires that permission with read access for listing. Add it to the App and
-approve the updated permissions on both installations before repeating this check.
-The MCP error currently hides the upstream failure behind a generic server error.
+Both installations now grant organization-level Issue Fields and Projects write
+permissions. Runtime and MCP were recreated to discard installation tokens issued
+before the permission update. Issue Fields and organization Projects listing then
+passed through MCP for both organizations: sectile returned five issue fields and
+one project; connextable returned four issue fields and no projects. No project or
+organization Issue Fields mutations were made during this read-only validation.
 
 The personal repository and release gates passed. This is a running validation
 deployment; production client cutover and
