@@ -60,6 +60,18 @@ Upgrade validates the Loki image label, takes a consistent backup, records the c
 
 Lifecycle operations use a directory lock and reject concurrent maintenance. Backup destinations must not already exist. Image references, paths, and credentials are stored separately so secrets do not enter Compose arguments, process listings, or lifecycle output.
 
+## Run Linux or WSL2 acceptance
+
+Run the disposable acceptance harness with the exact image intended for installation:
+
+```sh
+LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/accept-loki-compose.sh
+```
+
+The harness creates a unique Compose project under a private temporary directory, then checks installation, health, restart, backup and restore, credential rotation, upgrade and rollback, a derived project image, and clean removal. It also confirms that optional services stay stopped in the core profile. Set `LOKI_BROWSER_IMAGE` to exercise the browser profile and `LOKI_SIGNING_KEY_FILE` to exercise signing.
+
+To prove that an existing deployment remains unchanged, pass newline-separated files or directory roots through `LOKI_ACCEPTANCE_INVARIANT_PATHS`. The harness records file hashes before startup, compares them after every acceptance operation, and never mounts those paths into the test stack.
+
 ## Add project runtimes
 
 Loki ships one multi-role image. Add project-specific language runtimes in a derived image instead of changing service roles or adding language-specific runner services. Start from an immutable digest or local image ID:
