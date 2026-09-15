@@ -114,7 +114,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 			return errors.New("GitHub egress proxy is invalid")
 		}
 		httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
-		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: installation.InstallationID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
+		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: installation.InstallationID, Repository: installation.Repositories[0], APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
 			return controller.ManagedSecret(ctx, githubVaultProfile, githubPrivateKey)
 		}}
 		issueFields = &githubapp.Client{Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: targets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages}, HTTP: httpClient, Tokens: issuer}

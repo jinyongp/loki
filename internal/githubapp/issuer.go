@@ -27,6 +27,7 @@ const (
 
 type IssuerConfig struct {
 	AppID, InstallationID int64
+	Repository            string
 	APIVersion            string
 	MaxResponseBytes      int
 }
@@ -53,8 +54,9 @@ func (i *Issuer) Token(ctx context.Context) (string, error) {
 	if i.token != "" && now.Before(i.expires.Add(-cacheSkew)) {
 		return i.token, nil
 	}
-	if i.Config.AppID <= 0 || i.Config.InstallationID <= 0 || i.Config.APIVersion != "2026-03-10" ||
-		i.Config.MaxResponseBytes < 4096 || i.Config.MaxResponseBytes > 16777216 || i.Client == nil || i.PrivateKey == nil {
+	if i.Config.AppID <= 0 || i.Config.InstallationID <= 0 || !repositoryName(i.Config.Repository) ||
+		i.Config.APIVersion != "2026-03-10" || i.Config.MaxResponseBytes < 4096 ||
+		i.Config.MaxResponseBytes > 16777216 || i.Client == nil || i.PrivateKey == nil {
 		return "", errors.New("GitHub App issuer is not configured")
 	}
 	private, err := i.PrivateKey(ctx)
@@ -76,9 +78,13 @@ func (i *Issuer) Token(ctx context.Context) (string, error) {
 		base = defaultAPIURL
 	}
 	endpoint := strings.TrimRight(base, "/") + "/app/installations/" + strconv.FormatInt(i.Config.InstallationID, 10) + "/access_tokens"
+	requestBody, err := json.Marshal(map[string]any{"repositories": []string{i.Config.Repository}})
+	if err != nil {
+		return "", errors.New("GitHub App token request failed")
+	}
 	requestCtx, cancel := context.WithTimeout(ctx, issuerTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, strings.NewReader("{}"))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
 	if err != nil {
 		return "", errors.New("GitHub App token request failed")
 	}
@@ -118,6 +124,78 @@ func (i *Issuer) Token(ctx context.Context) (string, error) {
 	}
 	i.token, i.expires = value.Token, value.ExpiresAt
 	return value.Token, nil
+}
+
+type Target struct {
+	InstallationID int64
+	Repository     string
+}
+
+type BrokerConfig struct {
+	AppID            int64
+	APIVersion       string
+	MaxResponseBytes int
+	Targets          map[string]Target
+}
+
+type Broker struct {
+	Config     BrokerConfig
+	Client     *http.Client
+	PrivateKey func(context.Context) (string, error)
+	Now        func() time.Time
+
+	mu      sync.Mutex
+	issuers map[string]*Issuer
+	apiURL  string
+}
+
+func (b *Broker) Token(ctx context.Context, target string) (string, error) {
+	canonical := strings.ToLower(strings.TrimSpace(target))
+	resolved, ok := b.Config.Targets[canonical]
+	if !ok || !targetName(canonical) || resolved.InstallationID <= 0 || !repositoryName(resolved.Repository) {
+		return "", errors.New("GitHub repository target is not allowed")
+	}
+	if b.Config.AppID <= 0 || b.Config.APIVersion != "2026-03-10" ||
+		b.Config.MaxResponseBytes < 4096 || b.Config.MaxResponseBytes > 16777216 ||
+		b.Client == nil || b.PrivateKey == nil {
+		return "", errors.New("GitHub App broker is not configured")
+	}
+	b.mu.Lock()
+	if b.issuers == nil {
+		b.issuers = map[string]*Issuer{}
+	}
+	issuer := b.issuers[canonical]
+	if issuer == nil {
+		issuer = &Issuer{
+			Config: IssuerConfig{
+				AppID: b.Config.AppID, InstallationID: resolved.InstallationID,
+				Repository: resolved.Repository, APIVersion: b.Config.APIVersion,
+				MaxResponseBytes: b.Config.MaxResponseBytes,
+			},
+			Client: b.Client, PrivateKey: b.PrivateKey, Now: b.Now, apiURL: b.apiURL,
+		}
+		b.issuers[canonical] = issuer
+	}
+	b.mu.Unlock()
+	return issuer.Token(ctx)
+}
+
+func targetName(value string) bool {
+	owner, repository, ok := strings.Cut(value, "/")
+	return ok && owner != "" && !strings.Contains(repository, "/") && repositoryName(owner) && repositoryName(repository)
+}
+
+func repositoryName(value string) bool {
+	if value == "" || len(value) > 100 || strings.Contains(value, "..") {
+		return false
+	}
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_.-", r) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func signJWT(key *rsa.PrivateKey, appID int64, now time.Time) (string, error) {

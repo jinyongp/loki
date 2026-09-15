@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,7 @@ func issuerFixture(t *testing.T, handler http.HandlerFunc) (*Issuer, *rsa.Privat
 	t.Cleanup(server.Close)
 	now := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
 	issuer := &Issuer{
-		Config: IssuerConfig{AppID: 123, InstallationID: 456, APIVersion: "2026-03-10", MaxResponseBytes: 4096},
+		Config: IssuerConfig{AppID: 123, InstallationID: 456, Repository: "repo", APIVersion: "2026-03-10", MaxResponseBytes: 4096},
 		Client: server.Client(), PrivateKey: func(context.Context) (string, error) { return private, nil },
 		Now: func() time.Time { return now }, apiURL: server.URL,
 	}
@@ -44,6 +45,10 @@ func TestIssuerJWTExchangeAndCache(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != "/app/installations/456/access_tokens" ||
 			r.Header.Get("X-GitHub-Api-Version") != "2026-03-10" || r.Header.Get("Accept") != "application/vnd.github+json" {
 			t.Error("invalid request")
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil || string(body) != `{"repositories":["repo"]}` {
+			t.Errorf("request body: %s (%v)", body, err)
 		}
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		parts := strings.Split(token, ".")
@@ -104,5 +109,150 @@ func TestIssuerRejectsOversizeAndMalformedResponses(t *testing.T) {
 		if _, err := issuer.Token(t.Context()); err == nil || calls.Load() != 1 {
 			t.Fatal("invalid response accepted")
 		}
+	}
+}
+
+func brokerFixture(t *testing.T, handler http.HandlerFunc) (*Broker, *atomic.Int32, *atomic.Int32) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	private := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
+	var requests, keyReads atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		handler(w, r)
+	}))
+	t.Cleanup(server.Close)
+	now := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	broker := &Broker{
+		Config: BrokerConfig{
+			AppID: 123, APIVersion: "2026-03-10", MaxResponseBytes: 4096,
+			Targets: map[string]Target{
+				"connextable/loki":  {InstallationID: 456, Repository: "loki"},
+				"jinyongp/personal": {InstallationID: 789, Repository: "personal"},
+			},
+		},
+		Client: server.Client(),
+		PrivateKey: func(context.Context) (string, error) {
+			keyReads.Add(1)
+			return private, nil
+		},
+		Now:    func() time.Time { return now },
+		apiURL: server.URL,
+	}
+	return broker, &requests, &keyReads
+}
+
+func TestBrokerScopesAndCachesTokensPerTarget(t *testing.T) {
+	broker, requests, keyReads := brokerFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		request := map[string][]string{}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request["repositories"]) != 1 {
+			t.Errorf("request: %#v (%v)", request, err)
+			return
+		}
+		var token string
+		switch r.URL.Path {
+		case "/app/installations/456/access_tokens":
+			if request["repositories"][0] != "loki" {
+				t.Errorf("repositories: %#v", request["repositories"])
+			}
+			token = "organization-token"
+		case "/app/installations/789/access_tokens":
+			if request["repositories"][0] != "personal" {
+				t.Errorf("repositories: %#v", request["repositories"])
+			}
+			token = "personal-token"
+		default:
+			t.Errorf("path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, "{\"token\":\""+token+"\",\"expires_at\":\"2026-09-15T01:00:00Z\"}")
+	})
+	for target, want := range map[string]string{
+		"connextable/loki":  "organization-token",
+		"JINYONGP/PERSONAL": "personal-token",
+	} {
+		got, err := broker.Token(t.Context(), target)
+		if err != nil || got != want {
+			t.Fatalf("%s: %q %v", target, got, err)
+		}
+	}
+	if _, err := broker.Token(t.Context(), "connextable/loki"); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 2 || keyReads.Load() != 2 {
+		t.Fatalf("requests=%d key reads=%d", requests.Load(), keyReads.Load())
+	}
+}
+
+func TestBrokerRejectsUnknownTargetBeforeCredentialAccess(t *testing.T) {
+	broker, requests, keyReads := brokerFixture(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("unexpected request")
+	})
+	if _, err := broker.Token(t.Context(), "other/repository"); err == nil {
+		t.Fatal("unknown target accepted")
+	}
+	if requests.Load() != 0 || keyReads.Load() != 0 {
+		t.Fatalf("requests=%d key reads=%d", requests.Load(), keyReads.Load())
+	}
+}
+
+func TestBrokerSerializesSameTargetWithoutBlockingOtherTargets(t *testing.T) {
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	broker, requests, _ := brokerFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		request := map[string][]string{}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		token := "personal-token"
+		if r.URL.Path == "/app/installations/456/access_tokens" {
+			select {
+			case <-slowStarted:
+			default:
+				close(slowStarted)
+			}
+			<-releaseSlow
+			token = "organization-token"
+		}
+		w.WriteHeader(http.StatusCreated)
+		io.WriteString(w, "{\"token\":\""+token+"\",\"expires_at\":\"2026-09-15T01:00:00Z\"}")
+	})
+	slowResults := make(chan error, 2)
+	go func() {
+		_, err := broker.Token(t.Context(), "connextable/loki")
+		slowResults <- err
+	}()
+	<-slowStarted
+	go func() {
+		_, err := broker.Token(t.Context(), "connextable/loki")
+		slowResults <- err
+	}()
+	fastResult := make(chan error, 1)
+	go func() {
+		token, err := broker.Token(t.Context(), "jinyongp/personal")
+		if err == nil && token != "personal-token" {
+			err = errors.New("wrong token")
+		}
+		fastResult <- err
+	}()
+	select {
+	case err := <-fastResult:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("independent target was blocked")
+	}
+	close(releaseSlow)
+	for range 2 {
+		if err := <-slowResults; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("same-target exchange was not shared: %d requests", requests.Load())
 	}
 }
