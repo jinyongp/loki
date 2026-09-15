@@ -1,11 +1,65 @@
 package daemon
 
 import (
+	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestListenReplacesOwnedStaleSocket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "service", "control.sock")
+	if err := os.Mkdir(filepath.Dir(path), 0750); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale.SetUnlinkOnClose(false)
+	if err = stale.Close(); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := Listen(path, os.Getgid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.Close()
+	if _, err = os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("socket retained after close", err)
+	}
+}
+
+func TestListenRejectsActiveAndNonSocketPaths(t *testing.T) {
+	root := t.TempDir()
+	activePath := filepath.Join(root, "active", "control.sock")
+	if err := os.Mkdir(filepath.Dir(activePath), 0750); err != nil {
+		t.Fatal(err)
+	}
+	active, err := net.ListenUnix("unix", &net.UnixAddr{Name: activePath, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer active.Close()
+	if listener, listenErr := Listen(activePath, os.Getgid()); listenErr == nil {
+		listener.Close()
+		t.Fatal("active service socket replaced")
+	}
+
+	filePath := filepath.Join(root, "file", "control.sock")
+	if err = os.Mkdir(filepath.Dir(filePath), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filePath, []byte("occupied"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if listener, listenErr := Listen(filePath, os.Getgid()); listenErr == nil {
+		listener.Close()
+		t.Fatal("non-socket path replaced")
+	}
+}
 
 func TestOwnedPrivateDirectoryAcceptsExactIdentityAndMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "runner")

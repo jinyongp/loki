@@ -12,6 +12,7 @@ import (
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
 	"loki/internal/execution"
+	"loki/internal/portguard"
 	"loki/internal/process"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -36,6 +37,10 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	}
 	if o.RunnerUID != o.AgentUID {
 		return errors.New("runtime runner identity does not match authorized agent")
+	}
+	workspace, err := filepath.EvalSymlinks(o.Workspace)
+	if err != nil {
+		return errors.New("runtime workspace cannot be resolved")
 	}
 	for _, path := range []string{o.StateDirectory, o.InboxDirectory, filepath.Dir(o.AuditPath)} {
 		if err := daemon.PrivateDirectory(path); err != nil {
@@ -108,6 +113,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
 		AuditOperations(log),
+		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID}),
 		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),
 	} {
 		for name, op := range group {

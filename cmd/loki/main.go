@@ -17,6 +17,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		switch args[0] {
 		case "checkpoint":
 			return runCheckpoint(args[1:], stdout, stderr)
+		case "health":
+			return runHealth(args[1:], stderr)
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "secret":

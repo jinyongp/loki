@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -122,6 +123,16 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	status := call(map[string]any{"operation": "status"})
 	if status["initialized"] != true || status["profiles"] != float64(0) {
 		t.Fatal(status)
+	}
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	probe.Close()
+	ports := call(map[string]any{"operation": "inspect", "port": port})
+	if ports["in_use"] != false {
+		t.Fatal(ports)
 	}
 	call(map[string]any{"operation": "profile_create", "profile": "fixture"})
 	profiles := call(map[string]any{"operation": "list_profiles"})

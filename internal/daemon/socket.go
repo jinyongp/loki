@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -74,6 +75,9 @@ func Listen(socket string, gid int) (*net.UnixListener, error) {
 			return nil, errors.New("existing socket directory must already permit its configured group")
 		}
 	}
+	if err := removeStaleSocket(socket); err != nil {
+		return nil, err
+	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
 	if err != nil {
 		return nil, err
@@ -86,4 +90,30 @@ func Listen(socket string, gid int) (*net.UnixListener, error) {
 		return nil, err
 	}
 	return listener, nil
+}
+
+func removeStaleSocket(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stat unix.Stat_t
+	if err = unix.Lstat(path, &stat); err != nil || info.Mode()&os.ModeSocket == 0 || stat.Uid != uint32(os.Getuid()) {
+		return errors.New("existing service socket is not an owned Unix socket")
+	}
+	connection, dialErr := net.DialTimeout("unix", path, 100*time.Millisecond)
+	if dialErr == nil {
+		connection.Close()
+		return errors.New("service socket is already active")
+	}
+	if !errors.Is(dialErr, unix.ECONNREFUSED) && !errors.Is(dialErr, os.ErrNotExist) {
+		return fmt.Errorf("cannot determine service socket state: %w", dialErr)
+	}
+	if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }

@@ -1,10 +1,10 @@
 {
   "RuntimeSocket": "/run/loki/runtime/control.sock",
-  "PortGuardSocket": "/run/loki/port-guard/control.sock",
+  "PortGuardSocket": "/run/loki/runtime/control.sock",
   "BrowserSocket": "/run/loki/browser/control.sock",
   "RGPath": "/usr/bin/rg",
   "RuntimeUID": 0,
-  "PortGuardUID": 10000,
+  "PortGuardUID": 0,
   "BrowserUID": 10003,
   "GitTemplateRoots": ["/usr/share/doc/loki"],
   "Environment": {

@@ -29,7 +29,10 @@ type composeService struct {
 	CapAdd      []string `yaml:"cap_add"`
 	Security    []string `yaml:"security_opt"`
 	NetworkMode string   `yaml:"network_mode"`
-	DependsOn   map[string]struct {
+	Healthcheck struct {
+		Test []string `yaml:"test"`
+	} `yaml:"healthcheck"`
+	DependsOn map[string]struct {
 		Condition string `yaml:"condition"`
 	} `yaml:"depends_on"`
 }
@@ -82,6 +85,11 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if compose.Services["runtime"].DependsOn["egress"].Condition != "service_healthy" ||
 		compose.Services["mcp"].DependsOn["runtime"].Condition != "service_healthy" {
 		t.Fatal("core readiness order is incomplete")
+	}
+	for _, name := range []string{"runtime", "mcp"} {
+		if !slices.Contains(compose.Services[name].Healthcheck.Test, "--unix") {
+			t.Errorf("%s healthcheck does not connect to its Unix dependency", name)
+		}
 	}
 }
 
