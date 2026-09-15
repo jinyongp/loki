@@ -13,12 +13,17 @@ import (
 const MaxPrivateKeyBytes = 1_048_576
 
 func ValidatePrivateKey(value string) error {
+	_, err := parsePrivateKey(value)
+	return err
+}
+
+func parsePrivateKey(value string) (*rsa.PrivateKey, error) {
 	if len(value) == 0 || len(value) > MaxPrivateKeyBytes {
-		return fault.Error("invalid GitHub App private key")
+		return nil, fault.Error("invalid GitHub App private key")
 	}
 	block, rest := pem.Decode([]byte(value))
 	if block == nil || len(bytes.TrimSpace(rest)) != 0 || block.Type != "RSA PRIVATE KEY" && block.Type != "PRIVATE KEY" {
-		return fault.Error("invalid GitHub App private key")
+		return nil, fault.Error("invalid GitHub App private key")
 	}
 	var key *rsa.PrivateKey
 	var err error
@@ -32,7 +37,7 @@ func ValidatePrivateKey(value string) error {
 		}
 	}
 	if err != nil || key == nil || key.N.BitLen() < 2048 || key.Validate() != nil {
-		return fault.Error("invalid GitHub App private key")
+		return nil, fault.Error("invalid GitHub App private key")
 	}
-	return nil
+	return key, nil
 }
