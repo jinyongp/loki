@@ -173,10 +173,10 @@ func parseGitHub(raw map[string]any, c *Config) error {
 	if appSet != installationSet || appSet != targetsSet {
 		return errors.New("GitHub App ID, installation ID, and targets must be configured together")
 	}
-	c.GitHubAPIVersion = "2022-11-28"
+	c.GitHubAPIVersion = "2026-03-10"
 	if value, ok := raw["github_api_version"]; ok {
 		version, valid := value.(string)
-		if !valid || version != "2022-11-28" {
+		if !valid || version != "2026-03-10" {
 			return errors.New("unsupported GitHub API version")
 		}
 		c.GitHubAPIVersion = version

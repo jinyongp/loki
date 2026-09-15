@@ -31,7 +31,7 @@ func issuerFixture(t *testing.T, handler http.HandlerFunc) (*Issuer, *rsa.Privat
 	t.Cleanup(server.Close)
 	now := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
 	issuer := &Issuer{
-		Config: IssuerConfig{AppID: 123, InstallationID: 456, APIVersion: "2022-11-28", MaxResponseBytes: 4096},
+		Config: IssuerConfig{AppID: 123, InstallationID: 456, APIVersion: "2026-03-10", MaxResponseBytes: 4096},
 		Client: server.Client(), PrivateKey: func(context.Context) (string, error) { return private, nil },
 		Now: func() time.Time { return now }, apiURL: server.URL,
 	}
@@ -42,7 +42,7 @@ func TestIssuerJWTExchangeAndCache(t *testing.T) {
 	var public *rsa.PublicKey
 	issuer, key, calls, advance := issuerFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/app/installations/456/access_tokens" ||
-			r.Header.Get("X-GitHub-Api-Version") != "2022-11-28" || r.Header.Get("Accept") != "application/vnd.github+json" {
+			r.Header.Get("X-GitHub-Api-Version") != "2026-03-10" || r.Header.Get("Accept") != "application/vnd.github+json" {
 			t.Error("invalid request")
 		}
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

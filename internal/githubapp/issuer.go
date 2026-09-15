@@ -53,7 +53,7 @@ func (i *Issuer) Token(ctx context.Context) (string, error) {
 	if i.token != "" && now.Before(i.expires.Add(-cacheSkew)) {
 		return i.token, nil
 	}
-	if i.Config.AppID <= 0 || i.Config.InstallationID <= 0 || i.Config.APIVersion != "2022-11-28" ||
+	if i.Config.AppID <= 0 || i.Config.InstallationID <= 0 || i.Config.APIVersion != "2026-03-10" ||
 		i.Config.MaxResponseBytes < 4096 || i.Config.MaxResponseBytes > 16777216 || i.Client == nil || i.PrivateKey == nil {
 		return "", errors.New("GitHub App issuer is not configured")
 	}

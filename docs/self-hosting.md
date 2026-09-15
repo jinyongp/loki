@@ -90,7 +90,7 @@ Create the GitHub App in GitHub and install it only on repositories Loki may acc
 github_app_id = 123456
 github_installation_id = 789012
 github_targets = ["owner/repository"]
-github_api_version = "2022-11-28"
+github_api_version = "2026-03-10"
 github_max_response_bytes = 1048576
 github_max_pages = 20
 ```

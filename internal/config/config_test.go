@@ -68,7 +68,7 @@ github_max_pages=30
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.GitHubAppID != 123 || c.GitHubInstallationID != 456 || c.GitHubAPIVersion != "2022-11-28" ||
+	if c.GitHubAppID != 123 || c.GitHubInstallationID != 456 || c.GitHubAPIVersion != "2026-03-10" ||
 		len(c.GitHubTargets) != 2 || c.GitHubTargets[0] != "owner/repo" || c.GitHubMaxResponseBytes != 2097152 || c.GitHubMaxPages != 30 {
 		t.Fatalf("GitHub config: %#v", c)
 	}
