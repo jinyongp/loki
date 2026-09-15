@@ -8,12 +8,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//go:embed testdata/mcp-go-v048.json
+//go:embed testdata/mcp-go-v049.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-15.1"
+const CatalogRevision = "2026-09-15.2"
 
-const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, and encrypted secret metadata. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
+const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
 var currentToolNames = []string{
 	"system_inspect",
@@ -22,7 +22,7 @@ var currentToolNames = []string{
 	"workspace_read", "read_image", "share_image", "artifact_publish", "write_image", "workspace_edit",
 	"restore_workspace_file", "remove_tracked_file",
 	"git_inspect", "git_stage", "developer_view",
-	"secret_inspect", "secret_write", "secret_delete", "github_issue_fields",
+	"secret_inspect", "secret_write", "secret_delete", "github", "github_issue_fields",
 }
 
 // Current returns an independent copy; callers cannot mutate canonical data.
@@ -31,7 +31,7 @@ func Current() (*Snapshot, error) {
 	if err := json.Unmarshal(currentJSON, &snapshot); err != nil {
 		return nil, err
 	}
-	if snapshot.Baseline != "go-0.48.0-dev" || len(snapshot.Tools) != len(currentToolNames) {
+	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != len(currentToolNames) {
 		return nil, fmt.Errorf("invalid embedded Go contract")
 	}
 	return &snapshot, nil

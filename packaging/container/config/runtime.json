@@ -11,6 +11,8 @@
   "DockerSocket": "/run/docker.sock",
   "SnapshotDirectory": "/var/lib/loki/runner/snapshots",
   "GitHubProxy": "http://egress:18766",
+  "GitHubBinary": "/usr/bin/gh",
+  "GitHubPrivateKeyFile": "",
   "RunnerUID": 10000,
   "RunnerGID": 10000
 }

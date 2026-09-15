@@ -135,7 +135,7 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 		}
 		for key := range input {
 			if _, known := schema.Properties[key]; !known {
-				if tool.Name == "github_issue_fields" {
+				if tool.Name == "github_issue_fields" || tool.Name == "github" {
 					return errorResult("invalid arguments: unknown field; inspect the tool schema and retry"), nil
 				}
 				delete(input, key)

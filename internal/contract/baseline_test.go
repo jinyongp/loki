@@ -11,7 +11,7 @@ func TestCurrentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Baseline != "go-0.48.0-dev" || len(snapshot.Tools) != 25 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
+	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != 26 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
 		t.Fatal("incomplete current contract")
 	}
 	definitions, err := CurrentDefinitions()
@@ -22,7 +22,7 @@ func TestCurrentContract(t *testing.T) {
 	for _, definition := range definitions {
 		seen[definition.Name] = true
 	}
-	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github_issue_fields"} {
+	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github", "github_issue_fields"} {
 		if !seen[required] {
 			t.Errorf("missing Loki tool %q", required)
 		}

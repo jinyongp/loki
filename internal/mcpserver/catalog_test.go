@@ -53,7 +53,7 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	}
 	client := connect(t, testHandlers(t))
 	listed, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(listed.Tools) != 25 {
+	if err != nil || len(listed.Tools) != 26 {
 		t.Fatal(listed, err)
 	}
 	current, _ := contract.Current()
@@ -108,6 +108,19 @@ func TestGitHubIssueFieldsRejectsCredentialAndTransportArguments(t *testing.T) {
 	client := connect(t, testHandlers(t))
 	for _, key := range []string{"token", "url", "headers", "method"} {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "github_issue_fields", Arguments: map[string]any{"action": "list_fields", "target": "owner/repo", key: "private"}})
+		if err != nil || !result.IsError {
+			t.Fatalf("accepted %s: %#v %v", key, result, err)
+		}
+	}
+}
+
+func TestGitHubCommandRejectsCredentialAndScopeArguments(t *testing.T) {
+	client := connect(t, testHandlers(t))
+	for _, key := range []string{"token", "headers", "environment", "cwd"} {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+			Name:      "github",
+			Arguments: map[string]any{"target": "owner/repo", "args": []string{"issue", "list"}, key: "private"},
+		})
 		if err != nil || !result.IsError {
 			t.Fatalf("accepted %s: %#v %v", key, result, err)
 		}

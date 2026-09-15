@@ -15,10 +15,6 @@ import (
 	"time"
 )
 
-type TokenSource interface {
-	Token(context.Context) (string, error)
-}
-
 type ClientConfig struct {
 	APIVersion                 string
 	Targets                    []string
@@ -28,7 +24,7 @@ type ClientConfig struct {
 type Client struct {
 	Config ClientConfig
 	HTTP   *http.Client
-	Tokens TokenSource
+	Tokens RepositoryTokenSource
 	apiURL string
 }
 
@@ -66,12 +62,12 @@ type Value struct {
 }
 
 func (c *Client) ListFields(ctx context.Context, target string) ([]IssueField, error) {
-	owner, _, err := c.target(target)
+	owner, repo, err := c.target(target)
 	if err != nil {
 		return nil, err
 	}
 	var fields []IssueField
-	if err = c.request(ctx, http.MethodGet, "/orgs/"+url.PathEscape(owner)+"/issue-fields", nil, http.StatusOK, &fields); err != nil {
+	if err = c.request(ctx, owner+"/"+repo, http.MethodGet, "/orgs/"+url.PathEscape(owner)+"/issue-fields", nil, http.StatusOK, &fields); err != nil {
 		return nil, err
 	}
 	for _, field := range fields {
@@ -91,7 +87,7 @@ func (c *Client) ListValues(ctx context.Context, target string, issue int64) ([]
 	for page := 1; page <= c.Config.MaxPages; page++ {
 		path := fmt.Sprintf("/repos/%s/%s/issues/%d/issue-field-values?per_page=100&page=%d", url.PathEscape(owner), url.PathEscape(repo), issue, page)
 		var values []IssueFieldValue
-		if err = c.request(ctx, http.MethodGet, path, nil, http.StatusOK, &values); err != nil {
+		if err = c.request(ctx, owner+"/"+repo, http.MethodGet, path, nil, http.StatusOK, &values); err != nil {
 			return nil, err
 		}
 		for _, value := range values {
@@ -124,7 +120,7 @@ func (c *Client) writeValues(ctx context.Context, method, target string, issue i
 	}
 	var result []IssueFieldValue
 	path := fmt.Sprintf("/repos/%s/%s/issues/%d/issue-field-values", url.PathEscape(owner), url.PathEscape(repo), issue)
-	if err = c.request(ctx, method, path, body, http.StatusOK, &result); err != nil {
+	if err = c.request(ctx, owner+"/"+repo, method, path, body, http.StatusOK, &result); err != nil {
 		return nil, err
 	}
 	for _, value := range result {
@@ -143,7 +139,7 @@ func (c *Client) ClearValue(ctx context.Context, target string, issue, fieldID i
 		return errors.New("invalid GitHub issue field ID")
 	}
 	path := fmt.Sprintf("/repos/%s/%s/issues/%d/issue-field-values/%d", url.PathEscape(owner), url.PathEscape(repo), issue, fieldID)
-	return c.request(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil)
+	return c.request(ctx, owner+"/"+repo, http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
 
 func encodeValues(values []Value) ([]byte, error) {
@@ -224,11 +220,11 @@ func validateResult(value IssueFieldValue) error {
 	}
 	return nil
 }
-func (c *Client) request(ctx context.Context, method, path string, body []byte, status int, out any) error {
+func (c *Client) request(ctx context.Context, target, method, path string, body []byte, status int, out any) error {
 	if c.HTTP == nil || c.Tokens == nil || c.Config.APIVersion != "2026-03-10" || c.Config.MaxResponseBytes < 4096 || c.Config.MaxResponseBytes > 16777216 || c.Config.MaxPages < 1 || c.Config.MaxPages > 100 {
 		return errors.New("GitHub Issue Fields client is not configured")
 	}
-	token, err := c.Tokens.Token(ctx)
+	token, err := c.Tokens.Token(ctx, target)
 	if err != nil {
 		return errors.New("GitHub authentication is unavailable")
 	}

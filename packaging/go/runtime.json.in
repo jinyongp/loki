@@ -11,6 +11,8 @@
   "DockerSocket": "/run/docker.sock",
   "SnapshotDirectory": "/var/lib/loki-go/snapshots",
   "GitHubProxy": "http://127.0.0.1:18766",
+  "GitHubBinary": "/opt/loki/toolchain/bin/gh",
+  "GitHubPrivateKeyFile": "",
   "RunnerUID": @RUNNER_UID@,
   "RunnerGID": @RUNNER_GID@
 }

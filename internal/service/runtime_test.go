@@ -69,7 +69,17 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if err = os.WriteFile(contractPath, encodedContract, 0600); err != nil {
 		t.Fatal(err)
 	}
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	c := config.Config{
+		GitHubAppID: 123, GitHubAPIVersion: "2026-03-10",
+		GitHubInstallations: []config.GitHubInstallation{
+			{Account: "organization", AccountType: "organization", InstallationID: 456, Repositories: []string{"repository"}},
+			{Account: "person", AccountType: "user", InstallationID: 789, Repositories: []string{"personal"}},
+		},
+		GitHubTargets:          []string{"organization/repository", "person/personal"},
+		GitHubMaxResponseBytes: 4096, GitHubMaxPages: 2,
+		GitHubCommandTimeoutSeconds: 1, GitHubMaxInputBytes: 4096, GitHubMaxOutputBytes: 4096,
+	}
 	for _, path := range []string{
 		runnerState,
 		runnerCache,
@@ -99,7 +109,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunRuntime(ctx, o, config.Config{}, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
+		done <- RunRuntime(ctx, o, c, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
 	}()
 	select {
 	case <-ready:
@@ -146,6 +156,12 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	if _, err := client.Call(t.Context(), map[string]any{"operation": "devtools_call", "command": "run", "input": map[string]any{}}); err == nil {
 		t.Fatal("runtime did not install the devtools broker operation")
+	}
+	if _, err := client.Call(t.Context(), map[string]any{"operation": "github_command", "target": "organization/repository", "args": []string{"issue", "list"}}); err == nil {
+		t.Fatal("runtime did not install the GitHub command broker")
+	}
+	if _, err := client.Call(t.Context(), map[string]any{"operation": "github_fields_list", "target": "person/personal"}); err == nil {
+		t.Fatal("personal repository accepted for organization-only Issue Fields")
 	}
 	cancel()
 	select {

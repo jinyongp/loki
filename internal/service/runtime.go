@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"loki/internal/audit"
 	"loki/internal/config"
@@ -30,7 +31,7 @@ type RuntimeOptions struct {
 	DevtoolsBinary                                    string
 	ExecutionContract                                 string
 	Workspace, DockerSocket, SnapshotDirectory        string
-	GitHubProxy                                       string
+	GitHubProxy, GitHubBinary, GitHubPrivateKeyFile   string
 	RunnerUID, RunnerGID                              uint32
 }
 
@@ -103,21 +104,56 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: groups}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	var issueFields IssueFieldsClient
+	var githubCommands GitHubCommandRunner
 	if c.GitHubAppID != 0 {
-		installation := c.GitHubInstallations[0]
-		targets := make([]string, 0, len(installation.Repositories))
-		for _, repository := range installation.Repositories {
-			targets = append(targets, installation.Account+"/"+repository)
+		if !filepath.IsAbs(o.GitHubBinary) || o.GitHubPrivateKeyFile != "" && !filepath.IsAbs(o.GitHubPrivateKeyFile) {
+			return errors.New("GitHub runtime paths must be absolute")
 		}
 		proxyURL, parseErr := url.Parse(o.GitHubProxy)
 		if parseErr != nil || proxyURL.Scheme != "http" || proxyURL.Host == "" || proxyURL.User != nil || proxyURL.Path != "" {
 			return errors.New("GitHub egress proxy is invalid")
 		}
 		httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
-		issuer := &githubapp.Issuer{Config: githubapp.IssuerConfig{AppID: c.GitHubAppID, InstallationID: installation.InstallationID, Repository: installation.Repositories[0], APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes}, Client: httpClient, PrivateKey: func(ctx context.Context) (string, error) {
+		targets := make(map[string]githubapp.Target, len(c.GitHubTargets))
+		issueFieldTargets := make([]string, 0, len(c.GitHubTargets))
+		for _, installation := range c.GitHubInstallations {
+			for _, repository := range installation.Repositories {
+				target := installation.Account + "/" + repository
+				targets[target] = githubapp.Target{InstallationID: installation.InstallationID, Repository: repository}
+				if installation.AccountType == "organization" {
+					issueFieldTargets = append(issueFieldTargets, target)
+				}
+			}
+		}
+		privateKey := func(ctx context.Context) (string, error) {
+			if o.GitHubPrivateKeyFile != "" {
+				return githubapp.LoadPrivateKeyFile(ctx, o.GitHubPrivateKeyFile)
+			}
 			return controller.ManagedSecret(ctx, githubVaultProfile, githubPrivateKey)
-		}}
-		issueFields = &githubapp.Client{Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: targets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages}, HTTP: httpClient, Tokens: issuer}
+		}
+		broker := &githubapp.Broker{
+			Config: githubapp.BrokerConfig{AppID: c.GitHubAppID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes, Targets: targets},
+			Client: httpClient, PrivateKey: privateKey,
+		}
+		issueFields = &githubapp.Client{
+			Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: issueFieldTargets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages},
+			HTTP:   httpClient, Tokens: broker,
+		}
+		githubEnvironment := append([]string{}, environment...)
+		githubEnvironment = append(githubEnvironment,
+			"HTTPS_PROXY="+o.GitHubProxy, "HTTP_PROXY="+o.GitHubProxy,
+			"https_proxy="+o.GitHubProxy, "http_proxy="+o.GitHubProxy,
+			"NO_PROXY=127.0.0.1,localhost", "no_proxy=127.0.0.1,localhost",
+		)
+		identity := &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: groups}
+		githubCommands = &githubapp.CommandRunner{
+			Config: githubapp.CommandConfig{
+				Binary: o.GitHubBinary, CWD: workspace, Environment: githubEnvironment, Identity: identity,
+				Timeout:       time.Duration(c.GitHubCommandTimeoutSeconds) * time.Second,
+				MaxInputBytes: c.GitHubMaxInputBytes, MaxOutputBytes: c.GitHubMaxOutputBytes,
+			},
+			Tokens: broker,
+		}
 	}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
@@ -136,6 +172,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
 		GitHubIssueFieldsOperations(issueFields),
+		GitHubCommandOperations(githubCommands),
 		AuditOperations(log),
 		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID}),
 		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),

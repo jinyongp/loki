@@ -12,16 +12,21 @@ import (
 	"testing"
 )
 
-type tokenFunc func(context.Context) (string, error)
+type tokenFunc func(context.Context, string) (string, error)
 
-func (f tokenFunc) Token(ctx context.Context) (string, error) { return f(ctx) }
+func (f tokenFunc) Token(ctx context.Context, target string) (string, error) { return f(ctx, target) }
 
 func clientFixture(t *testing.T, handler http.HandlerFunc) (*Client, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); handler(w, r) }))
 	t.Cleanup(server.Close)
-	return &Client{Config: ClientConfig{APIVersion: "2026-03-10", Targets: []string{"owner/repo"}, MaxResponseBytes: 4096, MaxPages: 2}, HTTP: server.Client(), Tokens: tokenFunc(func(context.Context) (string, error) { return "installation-token", nil }), apiURL: server.URL}, &calls
+	return &Client{Config: ClientConfig{APIVersion: "2026-03-10", Targets: []string{"owner/repo"}, MaxResponseBytes: 4096, MaxPages: 2}, HTTP: server.Client(), Tokens: tokenFunc(func(_ context.Context, target string) (string, error) {
+		if target != "owner/repo" {
+			t.Fatal(target)
+		}
+		return "installation-token", nil
+	}), apiURL: server.URL}, &calls
 }
 
 func TestIssueFieldsOperations(t *testing.T) {

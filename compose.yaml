@@ -127,7 +127,7 @@ services:
 
   runtime:
     <<: *loki-service
-    command: [runtime, --config, /etc/loki/loki.toml, --layout, /etc/loki/runtime.json]
+    command: [runtime, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --github-private-key-file, /run/secrets/github_app_private_key, --layout, /etc/loki/runtime.json]
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
     group_add: ["10001"]
@@ -141,6 +141,8 @@ services:
       - runner-state:/var/lib/loki/runner
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
+    configs: [github_config]
+    secrets: [github_app_private_key]
     tmpfs:
       - /tmp:uid=0,gid=0,mode=0700
       - /var/tmp/loki/runner:uid=10000,gid=10000,mode=0700
@@ -155,7 +157,7 @@ services:
 
   mcp:
     <<: *loki-service
-    command: [mcp, --config, /etc/loki/loki.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
+    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
     user: "10000:10000"
     group_add: ["10001"]
     networks: [private]
@@ -165,6 +167,7 @@ services:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runner-state:/var/lib/loki/runner
       - sockets:/run/loki
+    configs: [github_config]
     secrets: [mcp_token]
     tmpfs:
       - /tmp:uid=10000,gid=10000,mode=0700
@@ -190,6 +193,12 @@ volumes:
   signing-state: {}
   sockets: {}
 
+configs:
+  github_config:
+    file: ${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}
+
 secrets:
   mcp_token:
     file: ${LOKI_MCP_TOKEN_FILE:?set LOKI_MCP_TOKEN_FILE to a token file}
+  github_app_private_key:
+    file: ${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}

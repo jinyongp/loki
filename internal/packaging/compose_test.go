@@ -12,9 +12,15 @@ import (
 
 type composeFile struct {
 	Services map[string]composeService `yaml:"services"`
+	Configs  map[string]composeSource  `yaml:"configs"`
+	Secrets  map[string]composeSource  `yaml:"secrets"`
 	Networks map[string]struct {
 		Internal bool `yaml:"internal"`
 	} `yaml:"networks"`
+}
+
+type composeSource struct {
+	File string `yaml:"file"`
 }
 
 type composeService struct {
@@ -25,6 +31,7 @@ type composeService struct {
 	Ports       []string `yaml:"ports"`
 	Volumes     []string `yaml:"volumes"`
 	Secrets     []string `yaml:"secrets"`
+	Configs     []string `yaml:"configs"`
 	ReadOnly    bool     `yaml:"read_only"`
 	CapDrop     []string `yaml:"cap_drop"`
 	CapAdd      []string `yaml:"cap_add"`
@@ -80,6 +87,21 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	}
 	if !slices.Equal(compose.Services["mcp"].Secrets, []string{"mcp_token"}) {
 		t.Fatal("MCP token is not a read-only Compose secret")
+	}
+	if !slices.Equal(compose.Services["runtime"].Secrets, []string{"github_app_private_key"}) ||
+		!slices.Equal(compose.Services["runtime"].Configs, []string{"github_config"}) ||
+		!slices.Equal(compose.Services["mcp"].Configs, []string{"github_config"}) {
+		t.Fatal("GitHub config and private key injection boundary is invalid")
+	}
+	if compose.Configs["github_config"].File != "${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}" ||
+		compose.Secrets["github_app_private_key"].File != "${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}" {
+		t.Fatal("GitHub Compose sources are invalid")
+	}
+	if !slices.Contains(compose.Services["runtime"].Command, "--github-private-key-file") ||
+		!slices.Contains(compose.Services["runtime"].Command, "/run/secrets/github_app_private_key") ||
+		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
+		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
+		t.Fatal("GitHub Compose arguments are incomplete")
 	}
 	if hasMount(compose.Services["mcp"].Volumes, "/var/lib/loki/runtime") || !hasMount(compose.Services["runtime"].Volumes, "/var/lib/loki/runtime") {
 		t.Fatal("runtime vault mount is not isolated")

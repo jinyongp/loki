@@ -19,6 +19,8 @@ func runRuntime(args []string, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	layoutPath := flags.String("layout", "", "administrator-owned runtime JSON layout")
 	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
+	githubConfigPath := flags.String("github-config", "", "deployment-provided public GitHub TOML configuration")
+	githubPrivateKeyPath := flags.String("github-private-key-file", "", "runtime-only GitHub App private key file")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -31,7 +33,10 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid runtime layout")
 		return 2
 	}
-	configuration, err := config.Load(*configPath)
+	if *githubPrivateKeyPath != "" {
+		options.GitHubPrivateKeyFile = *githubPrivateKeyPath
+	}
+	configuration, err := config.LoadWithGitHub(*configPath, *githubConfigPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot load runtime configuration")
 		return 1

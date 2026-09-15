@@ -46,6 +46,7 @@ func runMCP(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
+	githubConfigPath := flags.String("github-config", "", "deployment-provided public GitHub TOML configuration")
 	layoutPath := flags.String("layout", "", "administrator-owned MCP JSON layout")
 	tokenPath := flags.String("token-file", "/etc/loki-go/token", "MCP bearer token file")
 	jwksPath := flags.String("jwks-file", "/etc/loki-go/cloudflare-jwks.json", "Cloudflare verification keys")
@@ -56,7 +57,7 @@ func runMCP(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "mcp requires --layout PATH")
 		return 2
 	}
-	c, err := config.Load(*configPath)
+	c, err := config.LoadWithGitHub(*configPath, *githubConfigPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot load MCP configuration")
 		return 1
