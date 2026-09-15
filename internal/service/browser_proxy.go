@@ -12,13 +12,13 @@ import (
 
 func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy browsernet.Policy, ready func() error) error {
 	proxy := browsernet.New(policy)
-	return runLoopbackProxy(ctx, listener, proxy, proxy.Close, ready)
+	return runHTTPProxy(ctx, listener, proxy, proxy.Close, ready, false)
 }
-func runLoopbackProxy(ctx context.Context, listener *net.TCPListener, handler http.Handler, closeProxy func(), ready func() error) error {
+func runHTTPProxy(ctx context.Context, listener *net.TCPListener, handler http.Handler, closeProxy func(), ready func() error, allowUnspecified bool) error {
 	defer closeProxy()
 	address, ok := listener.Addr().(*net.TCPAddr)
-	if !ok || !address.IP.Equal(net.ParseIP("127.0.0.1")) {
-		return errors.New("proxy must listen on 127.0.0.1")
+	if !ok || !address.IP.IsLoopback() && !(allowUnspecified && address.IP.IsUnspecified()) {
+		return errors.New("proxy must listen on loopback or an explicitly allowed container address")
 	}
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 65536, BaseContext: func(net.Listener) context.Context { return ctx }}
 	defer server.Close()

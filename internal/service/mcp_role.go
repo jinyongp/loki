@@ -15,8 +15,8 @@ import (
 func RunMCP(ctx context.Context, c config.Config, options MCPOptions, listener *net.TCPListener, ready func() error) error {
 	defer listener.Close()
 	address := listener.Addr().(*net.TCPAddr)
-	if !address.IP.IsLoopback() || !address.IP.Equal(net.ParseIP(c.Host)) || address.Port != c.Port {
-		return errors.New("MCP listener does not match configured loopback address")
+	if !address.IP.Equal(net.ParseIP(c.Host)) || address.Port != c.Port {
+		return errors.New("MCP listener does not match configured address")
 	}
 	app, err := NewMCP(c, options)
 	if err != nil {

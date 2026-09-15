@@ -1,0 +1,13 @@
+root = "/workspace"
+audit_log = "/var/lib/loki/runner/mcp-audit.jsonl"
+host = "0.0.0.0"
+port = 18765
+public_hosts = []
+max_file_bytes = 16777216
+max_write_bytes = 2097152
+max_output_bytes = 262144
+max_list_entries = 2000
+max_search_results = 500
+max_read_lines = 2000
+max_patch_bytes = 524288
+max_patch_files = 50

@@ -40,7 +40,9 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
  && ln -s /opt/loki/bin/loki /rootfs/usr/local/bin/loki \
  && ln -s /opt/loki/libexec/devtools /rootfs/usr/local/bin/devtools
 
-FROM alpine/git@sha256:0b5f57d22181e8b8fbe8ac5ca8754faa0d577f101b9857418f1acc43955ad464
+FROM alpine/git@sha256:0b5f57d22181e8b8fbe8ac5ca8754faa0d577f101b9857418f1acc43955ad464 AS git-root
+
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 ARG TARGETARCH
 ARG LOKI_VERSION
 ARG LOKI_REVISION
@@ -60,6 +62,7 @@ LABEL org.opencontainers.image.title="Loki" \
       io.loki.ripgrep.amd64.sha256="$RIPGREP_AMD64_SHA256" \
       io.loki.ripgrep.arm64.sha256="$RIPGREP_ARM64_SHA256"
 
+COPY --from=git-root / /
 COPY --from=layout /rootfs/ /
 COPY --from=build /out/loki /opt/loki/bin/loki
 COPY --from=artifacts --chmod=0755 /devtools/${TARGETARCH}/devtools /opt/loki/bin/devtools
@@ -70,6 +73,8 @@ COPY --chmod=0755 scripts/loki-devtools-launch /opt/loki/libexec/devtools
 COPY bundled_skills/ /opt/loki/share/skills/
 COPY config/loki-go.toml config/loki-gitconfig /usr/share/doc/loki/
 COPY packaging/go/execution-contract.json packaging/go/egress-policy.json packaging/go/deployment-contract.json /usr/share/doc/loki/
+COPY packaging/container/config/ /etc/loki/
+COPY packaging/container/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json
 
 ENV PATH=/opt/loki/bin:/usr/local/bin:/usr/bin:/bin \
     LANG=C.UTF-8 \

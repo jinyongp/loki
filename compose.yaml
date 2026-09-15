@@ -1,0 +1,115 @@
+name: loki
+
+x-loki-service: &loki-service
+  image: ${LOKI_IMAGE:-loki:local}
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 10s
+
+services:
+  prepare:
+    <<: *loki-service
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - >-
+        for path in
+        /var/lib/loki/runner/state /var/lib/loki/runner/config
+        /var/lib/loki/runner/gh-config /var/lib/loki/runner/data
+        /var/lib/loki/runner/xdg-state /var/lib/loki/runner/snapshots
+        /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
+        /var/cache/loki/playwright /var/cache/loki/go-build
+        /var/cache/loki/go-mod /var/cache/loki/pip;
+        do install -d -o 10000 -g 10000 -m 0700 "$$path"; done
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    network_mode: none
+    restart: "no"
+    volumes:
+      - runner-state:/var/lib/loki/runner
+      - runner-cache:/var/cache/loki
+    mem_limit: 32m
+    pids_limit: 16
+
+  egress:
+    <<: *loki-service
+    command: [egress-proxy, --host, 0.0.0.0, --port, "18766", --policy, /usr/share/doc/loki/egress-policy.json, --profile, dependency-install, --audit, /var/log/loki/audit.jsonl, --forward-host, 0.0.0.0, --forward-port, "18765", --forward-target, "mcp:18765"]
+    user: "10002:10002"
+    networks: [private, outbound]
+    ports: ["127.0.0.1:18765:18765"]
+    tmpfs:
+      - /tmp:uid=10002,gid=10002,mode=0700
+      - /var/log/loki:uid=10002,gid=10002,mode=0700
+    healthcheck:
+      test: [CMD-SHELL, "nc -z 127.0.0.1 18766 && nc -z 127.0.0.1 18765"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    mem_limit: 128m
+    pids_limit: 64
+
+  runtime:
+    <<: *loki-service
+    command: [runtime, --layout, /etc/loki/runtime.json]
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+      egress: {condition: service_healthy}
+    volumes:
+      - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
+      - runtime-state:/var/lib/loki/runtime
+      - runner-state:/var/lib/loki/runner
+      - runner-cache:/var/cache/loki
+      - sockets:/run/loki
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+      - /var/tmp/loki/runner:uid=10000,gid=10000,mode=0700
+    healthcheck:
+      test: [CMD, test, -S, /run/loki/runtime/control.sock]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    mem_limit: 1g
+    pids_limit: 512
+
+  mcp:
+    <<: *loki-service
+    command: [mcp, --config, /etc/loki/loki.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
+    user: "10000:10000"
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      runtime: {condition: service_healthy}
+    volumes:
+      - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
+      - runner-state:/var/lib/loki/runner
+      - sockets:/run/loki
+    secrets: [mcp_token]
+    tmpfs:
+      - /tmp:uid=10000,gid=10000,mode=0700
+    healthcheck:
+      test: [CMD, nc, -z, 127.0.0.1, "18765"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    mem_limit: 512m
+    pids_limit: 128
+
+networks:
+  private: {internal: true}
+  outbound: {}
+
+volumes:
+  runtime-state: {}
+  runner-state: {}
+  runner-cache: {}
+  sockets: {}
+
+secrets:
+  mcp_token:
+    file: ${LOKI_MCP_TOKEN_FILE:?set LOKI_MCP_TOKEN_FILE to a token file}

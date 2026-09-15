@@ -83,7 +83,12 @@ func runMCP(args []string, stderr io.Writer) int {
 		options.PreviewAccess = auth.Access{TeamDomain: c.CloudflareTeamDomain, Audience: c.PreviewAccessAudience, JWKSPath: *jwksPath}
 	}
 	options.OnAuditError = func(error) { fmt.Fprintln(stderr, "MCP audit write failed") }
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP(c.Host), Port: c.Port})
+	listenIP := net.ParseIP(c.Host)
+	network := "tcp6"
+	if listenIP.To4() != nil {
+		network = "tcp4"
+	}
+	listener, err := net.ListenTCP(network, &net.TCPAddr{IP: listenIP, Port: c.Port})
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot bind MCP listener")
 		return 1

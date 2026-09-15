@@ -73,8 +73,8 @@ func Parse(data []byte) (Config, error) {
 		}
 		*f.target = s
 	}
-	if c.Host != "127.0.0.1" && c.Host != "::1" {
-		return c, errors.New("host must be a loopback address")
+	if c.Host != "127.0.0.1" && c.Host != "::1" && c.Host != "0.0.0.0" {
+		return c, errors.New("host must be a loopback or container wildcard address")
 	}
 	for _, f := range []struct {
 		key           string

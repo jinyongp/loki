@@ -13,6 +13,8 @@
 !packaging/
 !packaging/container/
 !packaging/container/Dockerfile
+!packaging/container/config/
+!packaging/container/config/**
 !packaging/go/
 !packaging/go/execution-contract.json
 !packaging/go/egress-policy.json

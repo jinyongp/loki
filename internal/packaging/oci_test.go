@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"loki/internal/execution"
 )
 
 func TestOCIImageDefinesPortableRuntime(t *testing.T) {
@@ -78,6 +80,20 @@ func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 	}
 }
 
+func TestContainerExecutionContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "container", "config", "execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := execution.Load(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contract.NetworkProfiles["dependency-install"].Proxy != "http://egress:18766" || contract.Environment["GIT_CONFIG_GLOBAL"] != "/usr/share/doc/loki/loki-gitconfig" {
+		t.Fatal("container execution contract does not use container service paths")
+	}
+}
+
 func readOCIFile(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -116,6 +132,7 @@ type ociConfig struct {
 		Cmd        []string          `json:"Cmd"`
 		WorkingDir string            `json:"WorkingDir"`
 		Labels     map[string]string `json:"Labels"`
+		Volumes    map[string]any    `json:"Volumes"`
 	} `json:"config"`
 }
 
@@ -217,6 +234,9 @@ func assertOCIImage(t *testing.T, blobs map[string][]byte, manifest ociManifest,
 		!slices.Equal(config.Config.Entrypoint, []string{"/opt/loki/bin/loki"}) ||
 		!slices.Equal(config.Config.Cmd, []string{"version"}) || config.Config.WorkingDir != "/workspace" {
 		t.Fatalf("%s config = %#v", arch, config)
+	}
+	if len(config.Config.Volumes) != 0 {
+		t.Fatalf("%s image declares writable volumes: %v", arch, config.Config.Volumes)
 	}
 	if config.Config.Labels["io.loki.devtools.version"] == "" || config.Config.Labels["io.loki.ripgrep.version"] == "" ||
 		config.Config.Labels["org.opencontainers.image.revision"] == "" {

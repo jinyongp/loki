@@ -30,5 +30,5 @@ func RunEgressProxy(ctx context.Context, listener *net.TCPListener, policy egres
 	if err != nil {
 		return err
 	}
-	return runLoopbackProxy(ctx, listener, proxy, proxy.Close, ready)
+	return runHTTPProxy(ctx, listener, proxy, proxy.Close, ready, true)
 }

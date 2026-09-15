@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -99,6 +100,12 @@ func (c Contract) Validate() error {
 
 	cache := c.Directories["runner-cache"].Path
 	temp := c.Directories["runner-temp"].Path
+	if !slices.Contains([]string{"/opt/loki/toolchain/bin:/opt/loki/bin:/usr/local/bin:/usr/bin:/bin", "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin"}, c.Environment["PATH"]) {
+		return errors.New("execution contract PATH is not a supported service layout")
+	}
+	if !slices.Contains([]string{"/etc/loki-go/gitconfig", "/usr/share/doc/loki/loki-gitconfig"}, c.Environment["GIT_CONFIG_GLOBAL"]) {
+		return errors.New("execution contract Git config is not a supported service layout")
+	}
 	requiredEnvironment := map[string]string{
 		"HOME":                     "/home/runner",
 		"GH_CONFIG_DIR":            c.Directories["runner-gh-config"].Path,
@@ -113,8 +120,8 @@ func (c Contract) Validate() error {
 		"GOMODCACHE":               c.Directories["runner-go-mod-cache"].Path,
 		"PIP_CACHE_DIR":            c.Directories["runner-pip-cache"].Path,
 		"TMPDIR":                   temp,
-		"PATH":                     "/opt/loki/toolchain/bin:/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
-		"GIT_CONFIG_GLOBAL":        "/etc/loki-go/gitconfig",
+		"PATH":                     c.Environment["PATH"],
+		"GIT_CONFIG_GLOBAL":        c.Environment["GIT_CONFIG_GLOBAL"],
 		"GIT_CONFIG_NOSYSTEM":      "1",
 		"GIT_OPTIONAL_LOCKS":       "0",
 		"LANG":                     "C.UTF-8",
@@ -131,17 +138,30 @@ func (c Contract) Validate() error {
 	}
 
 	requiredNetworks := map[string]NetworkProfile{
-		"dependency-install": {Mode: "proxy", Proxy: "http://127.0.0.1:18766", AllowSecrets: false, AdministratorAllowlist: true},
+		"dependency-install": {Mode: "proxy", AllowSecrets: false, AdministratorAllowlist: true},
 		"runtime-default":    {Mode: "loopback", AllowSecrets: true},
-		"runtime-profile":    {Mode: "proxy", Proxy: "http://127.0.0.1:18766", AllowSecrets: true, AdministratorAllowlist: true},
-		"browser":            {Mode: "proxy", Proxy: "http://127.0.0.1:18767", AllowSecrets: false, AdministratorAllowlist: true},
+		"runtime-profile":    {Mode: "proxy", AllowSecrets: true, AdministratorAllowlist: true},
+		"browser":            {Mode: "proxy", AllowSecrets: false, AdministratorAllowlist: true},
 	}
 	if len(c.NetworkProfiles) != len(requiredNetworks) {
 		return errors.New("execution contract network profile set is incomplete")
 	}
 	for name, want := range requiredNetworks {
-		if got, ok := c.NetworkProfiles[name]; !ok || got != want {
+		got, ok := c.NetworkProfiles[name]
+		proxy := got.Proxy
+		got.Proxy = ""
+		if !ok || got != want {
 			return fmt.Errorf("execution contract network profile %q = %#v, want %#v", name, got, want)
+		}
+		allowed := []string{""}
+		switch name {
+		case "dependency-install", "runtime-profile":
+			allowed = []string{"http://127.0.0.1:18766", "http://egress:18766"}
+		case "browser":
+			allowed = []string{"http://127.0.0.1:18767", "http://browser-proxy:18767"}
+		}
+		if !slices.Contains(allowed, proxy) {
+			return fmt.Errorf("execution contract network profile %q has unsupported proxy", name)
 		}
 	}
 	return nil

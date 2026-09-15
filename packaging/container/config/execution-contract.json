@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "directories": {
+    "runtime-state": {"path":"/var/lib/loki/runtime","owner":"root","group":"root","mode":"0700"},
+    "signing-state": {"path":"/var/lib/loki/signing","owner":"root","group":"root","mode":"0700"},
+    "runner-state": {"path":"/var/lib/loki/runner/state","owner":"runner","group":"runner","mode":"0700"},
+    "runner-config": {"path":"/var/lib/loki/runner/config","owner":"runner","group":"runner","mode":"0700"},
+    "runner-gh-config": {"path":"/var/lib/loki/runner/gh-config","owner":"runner","group":"runner","mode":"0700"},
+    "runner-data": {"path":"/var/lib/loki/runner/data","owner":"runner","group":"runner","mode":"0700"},
+    "runner-xdg-state": {"path":"/var/lib/loki/runner/xdg-state","owner":"runner","group":"runner","mode":"0700"},
+    "snapshots": {"path":"/var/lib/loki/runner/snapshots","owner":"runner","group":"runner","mode":"0700"},
+    "runner-cache": {"path":"/var/cache/loki/runner","owner":"runner","group":"runner","mode":"0700"},
+    "runner-npm-cache": {"path":"/var/cache/loki/npm","owner":"runner","group":"runner","mode":"0700"},
+    "runner-pnpm-store": {"path":"/var/cache/loki/pnpm","owner":"runner","group":"runner","mode":"0700"},
+    "runner-playwright-cache": {"path":"/var/cache/loki/playwright","owner":"runner","group":"runner","mode":"0700"},
+    "runner-go-build-cache": {"path":"/var/cache/loki/go-build","owner":"runner","group":"runner","mode":"0700"},
+    "runner-go-mod-cache": {"path":"/var/cache/loki/go-mod","owner":"runner","group":"runner","mode":"0700"},
+    "runner-pip-cache": {"path":"/var/cache/loki/pip","owner":"runner","group":"runner","mode":"0700"},
+    "runner-temp": {"path":"/var/tmp/loki/runner","owner":"runner","group":"runner","mode":"0700"},
+    "workspace": {"path":"/workspace","owner":"runner","group":"workspace","mode":"2770"}
+  },
+  "environment": {
+    "HOME":"/home/runner",
+    "GH_CONFIG_DIR":"/var/lib/loki/runner/gh-config",
+    "XDG_CONFIG_HOME":"/var/lib/loki/runner/config",
+    "XDG_DATA_HOME":"/var/lib/loki/runner/data",
+    "XDG_STATE_HOME":"/var/lib/loki/runner/xdg-state",
+    "XDG_CACHE_HOME":"/var/cache/loki/runner",
+    "NPM_CONFIG_CACHE":"/var/cache/loki/npm",
+    "npm_config_store_dir":"/var/cache/loki/pnpm",
+    "PLAYWRIGHT_BROWSERS_PATH":"/var/cache/loki/playwright",
+    "GOCACHE":"/var/cache/loki/go-build",
+    "GOMODCACHE":"/var/cache/loki/go-mod",
+    "PIP_CACHE_DIR":"/var/cache/loki/pip",
+    "TMPDIR":"/var/tmp/loki/runner",
+    "PATH":"/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
+    "GIT_CONFIG_GLOBAL":"/usr/share/doc/loki/loki-gitconfig",
+    "GIT_CONFIG_NOSYSTEM":"1",
+    "GIT_OPTIONAL_LOCKS":"0",
+    "LANG":"C.UTF-8",
+    "LC_ALL":"C.UTF-8"
+  },
+  "network_profiles": {
+    "dependency-install":{"mode":"proxy","proxy":"http://egress:18766","allow_secrets":false,"administrator_allowlist":true},
+    "runtime-default":{"mode":"loopback","allow_secrets":true,"administrator_allowlist":false},
+    "runtime-profile":{"mode":"proxy","proxy":"http://egress:18766","allow_secrets":true,"administrator_allowlist":true},
+    "browser":{"mode":"proxy","proxy":"http://browser-proxy:18767","allow_secrets":false,"administrator_allowlist":true}
+  }
+}
