@@ -23,6 +23,10 @@
         "sum.golang.org"
       ],
       "allowed_ports": [443]
+    },
+    "github-api": {
+      "allowed_hosts": ["api.github.com"],
+      "allowed_ports": [443]
     }
   }
 }

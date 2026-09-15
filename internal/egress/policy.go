@@ -44,22 +44,28 @@ func (p Policy) Validate() error {
 	if p.Version != PolicyVersion {
 		return fmt.Errorf("unsupported egress policy version %d", p.Version)
 	}
-	if len(p.Profiles) != 1 {
-		return errors.New("egress policy must define only dependency-install")
+	if len(p.Profiles) != 2 {
+		return errors.New("egress policy must define dependency-install and github-api")
 	}
-	profile, ok := p.Profiles["dependency-install"]
-	if !ok || len(profile.AllowedHosts) == 0 || !slices.Equal(profile.AllowedPorts, []int{443}) {
+	dependency, ok := p.Profiles["dependency-install"]
+	if !ok || len(dependency.AllowedHosts) == 0 || !slices.Equal(dependency.AllowedPorts, []int{443}) {
 		return errors.New("dependency-install egress profile is incomplete")
 	}
-	if !slices.IsSorted(profile.AllowedHosts) {
-		return errors.New("dependency-install hosts must be sorted")
+	github, ok := p.Profiles["github-api"]
+	if !ok || !slices.Equal(github.AllowedHosts, []string{"api.github.com"}) || !slices.Equal(github.AllowedPorts, []int{443}) {
+		return errors.New("github-api egress profile must allow only api.github.com:443")
 	}
-	previous := ""
-	for _, host := range profile.AllowedHosts {
-		if host == previous || host != strings.ToLower(host) || strings.TrimRight(host, ".") != host || net.ParseIP(host) != nil || host == "localhost" || strings.HasSuffix(host, ".localhost") || !validHostname(host) {
-			return fmt.Errorf("invalid dependency host %q", host)
+	for name, profile := range p.Profiles {
+		if !slices.IsSorted(profile.AllowedHosts) {
+			return fmt.Errorf("%s hosts must be sorted", name)
 		}
-		previous = host
+		previous := ""
+		for _, host := range profile.AllowedHosts {
+			if host == previous || host != strings.ToLower(host) || strings.TrimRight(host, ".") != host || net.ParseIP(host) != nil || host == "localhost" || strings.HasSuffix(host, ".localhost") || !validHostname(host) {
+				return fmt.Errorf("invalid %s host %q", name, host)
+			}
+			previous = host
+		}
 	}
 	return nil
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func TestFixedDownloadAllowlist(t *testing.T) {
-	policy := Policy{Version: PolicyVersion, Profiles: map[string]Profile{"dependency-install": {AllowedHosts: []string{"github.com", "registry.npmjs.org"}, AllowedPorts: []int{443}}}}
+	policy := testPolicy(Profile{AllowedHosts: []string{"github.com", "registry.npmjs.org"}, AllowedPorts: []int{443}})
 	decisions := []Decision{}
 	proxy, err := New(policy, "dependency-install", func(decision Decision) { decisions = append(decisions, decision) })
 	if err != nil {
@@ -64,7 +64,7 @@ func TestFixedDownloadAllowlist(t *testing.T) {
 }
 
 func TestAllowedHostResolvingToPrivateAddressIsBlocked(t *testing.T) {
-	policy := Policy{Version: PolicyVersion, Profiles: map[string]Profile{"dependency-install": {AllowedHosts: []string{"registry.npmjs.org"}, AllowedPorts: []int{443}}}}
+	policy := testPolicy(Profile{AllowedHosts: []string{"registry.npmjs.org"}, AllowedPorts: []int{443}})
 	proxy, err := New(policy, "dependency-install", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -86,15 +86,15 @@ func TestAllowedHostResolvingToPrivateAddressIsBlocked(t *testing.T) {
 }
 
 func TestRedirectTargetRequiresAnotherAllowlistedTunnel(t *testing.T) {
-	policy := Policy{Version: PolicyVersion, Profiles: map[string]Profile{"dependency-install": {AllowedHosts: []string{"cdn.playwright.dev"}, AllowedPorts: []int{443}}}}
-	proxy, err := New(policy, "dependency-install", nil)
+	policy := testPolicy(Profile{AllowedHosts: []string{"cdn.playwright.dev"}, AllowedPorts: []int{443}})
+	proxy, err := New(policy, "github-api", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
 	proxy.handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	for authority, want := range map[string]int{
-		"cdn.playwright.dev:443":     http.StatusOK,
+		"api.github.com:443":         http.StatusOK,
 		"redirect.attacker.test:443": http.StatusForbidden,
 	} {
 		r := httptest.NewRequest("CONNECT", "http://fixture", nil)
@@ -105,4 +105,11 @@ func TestRedirectTargetRequiresAnotherAllowlistedTunnel(t *testing.T) {
 			t.Fatalf("redirect tunnel %q status = %d, want %d", authority, w.Code, want)
 		}
 	}
+}
+
+func testPolicy(dependency Profile) Policy {
+	return Policy{Version: PolicyVersion, Profiles: map[string]Profile{
+		"dependency-install": dependency,
+		"github-api":         {AllowedHosts: []string{"api.github.com"}, AllowedPorts: []int{443}},
+	}}
 }

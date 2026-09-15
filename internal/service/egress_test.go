@@ -25,7 +25,10 @@ func TestEgressProxyRoleLifecycle(t *testing.T) {
 	defer cancel()
 	ready := make(chan struct{})
 	done := make(chan error, 1)
-	policy := egress.Policy{Version: egress.PolicyVersion, Profiles: map[string]egress.Profile{"dependency-install": {AllowedHosts: []string{"github.com"}, AllowedPorts: []int{443}}}}
+	policy := egress.Policy{Version: egress.PolicyVersion, Profiles: map[string]egress.Profile{
+		"dependency-install": {AllowedHosts: []string{"github.com"}, AllowedPorts: []int{443}},
+		"github-api":         {AllowedHosts: []string{"api.github.com"}, AllowedPorts: []int{443}},
+	}}
 	log := &audit.Log{Path: filepath.Join(t.TempDir(), "egress.jsonl")}
 	go func() {
 		done <- RunEgressProxy(ctx, listener, policy, "dependency-install", log, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
