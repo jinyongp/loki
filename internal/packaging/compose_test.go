@@ -171,6 +171,9 @@ func TestComposeBrowserProfileSeparatesChromiumAndEgress(t *testing.T) {
 		proxy.DependsOn["runtime"].Condition != "service_healthy" {
 		t.Fatal("browser readiness order is incomplete")
 	}
+	if !strings.Contains(strings.Join(compose.Services["prepare"].Command, "\n"), "install -d -o 10003 -g 10001 -m 0750 /run/loki/browser") {
+		t.Fatal("prepare does not create the browser socket directory")
+	}
 	for _, name := range []string{"runtime", "mcp"} {
 		if _, ok := compose.Services[name].DependsOn["browser"]; ok {
 			t.Fatalf("%s depends on optional browser", name)

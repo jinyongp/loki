@@ -23,7 +23,8 @@ services:
         /var/cache/loki/playwright /var/cache/loki/go-build
         /var/cache/loki/go-mod /var/cache/loki/pip;
         do install -d -o 10000 -g 10000 -m 0700 "$$path"; done;
-        install -d -o 0 -g 10001 -m 0750 /run/loki/signing
+        install -d -o 0 -g 10001 -m 0750 /run/loki/signing;
+        install -d -o 10003 -g 10001 -m 0750 /run/loki/browser
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
     network_mode: none
