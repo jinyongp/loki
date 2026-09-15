@@ -26,6 +26,14 @@ The repository uses `devtools.toml` as its developer command profile. The
 the supplied release must implement protocol version 1 and the required
 `process start` and `process restart` command schemas.
 
+## Self-hosting
+
+The verified self-hosting targets are Linux and WSL2 with Docker Compose v2.
+Build or load the core and optional browser images, then follow the
+[self-hosting runbook](docs/self-hosting.md) for initialization, recovery,
+upgrades, and release acceptance. macOS has a documented host-adapter seam but
+is outside the current support and acceptance gate.
+
 ## Go candidate
 
 The Go service candidate uses isolated names and paths:

@@ -47,6 +47,19 @@
 
 실패하면 harness는 failed unit과 `loki-go*` journal을 출력한다. 생성한 컨테이너와 acceptance image는 종료 trap이 해당 실행 ID만 정리한다.
 
+## 릴리스 통합 검증
+
+systemd 후보와 self-hosting 이미지를 함께 승인할 때는 빌드가 끝난 동일 소스 리비전의 산출물 세 개를 전달한다.
+
+```sh
+./scripts/verify-loki-release.sh \
+  /tmp/loki-go-candidate \
+  loki:release-candidate \
+  loki-browser:release-candidate
+```
+
+이 명령은 전체 Go 테스트, race detector, vet, 격리 systemd 설치·재부팅·rollback, core/browser OCI 메타데이터, WSL2 또는 Linux Compose 수명주기, 파생 이미지, browser profile, credential·network·mount 경계를 순서대로 검사한다. 어느 단계든 실패하면 릴리스 후보는 승인되지 않는다. 현재 배포 서비스로의 전환은 이 검증과 별개다.
+
 ## 설치 전 준비
 
 runner Git identity를 확인한다.
