@@ -105,3 +105,17 @@ loki github app-key set
 ```
 
 Paste the PEM when prompted and finish with Ctrl-D. The command accepts no key argument, file option, environment variable, or standard input. Loki validates an RSA key of at least 2048 bits before atomically replacing the prior key. It returns only configured/rotated metadata; the key remains encrypted in runtime state.
+
+
+## Enable optional Git signing
+
+The core stack starts without signing. To enable the isolated signing profile, create an unencrypted SSH signing key owned by the host administrator with mode `0600`, then set its absolute path only for the Compose invocation:
+
+```sh
+LOKI_SIGNING_KEY_FILE=/secure/loki-signing-key \
+  docker compose --profile signing up -d
+```
+
+The signing container uses the same Loki image, has no network or workspace mount, and receives the key read-only. Its private agent socket and state remain in the private `signing-state` volume; runtime and MCP can reach only the restricted public socket in the shared socket volume. The proxy permits signing and public-key listing while rejecting agent mutation requests.
+
+Disable the option with `docker compose stop signing`. Core runtime and MCP do not depend on the signing service and continue without it.

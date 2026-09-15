@@ -22,7 +22,8 @@ services:
         /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
         /var/cache/loki/playwright /var/cache/loki/go-build
         /var/cache/loki/go-mod /var/cache/loki/pip;
-        do install -d -o 10000 -g 10000 -m 0700 "$$path"; done
+        do install -d -o 10000 -g 10000 -m 0700 "$$path"; done;
+        install -d -o 0 -g 10001 -m 0750 /run/loki/signing
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
     network_mode: none
@@ -30,6 +31,7 @@ services:
     volumes:
       - runner-state:/var/lib/loki/runner
       - runner-cache:/var/cache/loki
+      - sockets:/run/loki
     mem_limit: 32m
     pids_limit: 16
 
@@ -49,6 +51,30 @@ services:
       retries: 12
     mem_limit: 128m
     pids_limit: 64
+
+  signing:
+    <<: *loki-service
+    profiles: [signing]
+    command: [signing-agent, --private-socket, /run/loki/signing/private.sock, --public-socket, /run/loki/signing/agent.sock, --key, /var/lib/loki/signing/key, --runner-uid, "10000", --socket-gid, "10001"]
+    user: "0:0"
+    cap_add: [CHOWN]
+    network_mode: none
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+    volumes:
+      - signing-state:/var/lib/loki/signing
+      - sockets:/run/loki
+      - ${LOKI_SIGNING_KEY_FILE:-/dev/null}:/var/lib/loki/signing/key:ro
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/signing/agent.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+    pids_limit: 32
 
   runtime:
     <<: *loki-service
@@ -110,6 +136,7 @@ volumes:
   runtime-state: {}
   runner-state: {}
   runner-cache: {}
+  signing-state: {}
   sockets: {}
 
 secrets:

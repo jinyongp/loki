@@ -29,6 +29,7 @@ type composeService struct {
 	CapAdd      []string `yaml:"cap_add"`
 	Security    []string `yaml:"security_opt"`
 	NetworkMode string   `yaml:"network_mode"`
+	Profiles    []string `yaml:"profiles"`
 	Healthcheck struct {
 		Test []string `yaml:"test"`
 	} `yaml:"healthcheck"`
@@ -100,4 +101,35 @@ func hasMount(mounts []string, destination string) bool {
 		}
 	}
 	return false
+}
+
+func TestComposeSigningProfileIsPrivateAndOptional(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compose composeFile
+	if err = yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatal(err)
+	}
+	signing := compose.Services["signing"]
+	if !slices.Equal(signing.Profiles, []string{"signing"}) || signing.NetworkMode != "none" ||
+		!signing.ReadOnly || !slices.Equal(signing.CapDrop, []string{"ALL"}) || !slices.Equal(signing.CapAdd, []string{"CHOWN"}) {
+		t.Fatalf("signing hardening: %#v", signing)
+	}
+	for _, destination := range []string{"/var/lib/loki/signing", "/run/loki"} {
+		if !hasMount(signing.Volumes, destination) {
+			t.Errorf("missing signing mount %s", destination)
+		}
+	}
+	if hasMount(signing.Volumes, "/workspace") || hasMount(signing.Volumes, "/var/lib/loki/runtime") ||
+		!strings.Contains(strings.Join(signing.Volumes, "\n"), "/var/lib/loki/signing/key:ro") {
+		t.Fatal("signing mount boundary is invalid")
+	}
+	if !slices.Contains(signing.Healthcheck.Test, "test -S /run/loki/signing/agent.sock") {
+		t.Fatal("signing healthcheck does not verify public socket")
+	}
+	if _, ok := compose.Services["runtime"].DependsOn["signing"]; ok {
+		t.Fatal("core runtime depends on optional signing")
+	}
 }
