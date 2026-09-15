@@ -30,6 +30,7 @@ func commandRunnerFixture(t *testing.T) (*CommandRunner, *atomic.Int32) {
 		"[ \"$GH_PROMPT_DISABLED\" = 1 ] || exit 24\n" +
 		"[ -z \"$AMBIENT_SECRET\" ] || exit 25\n" +
 		"[ \"$HOME\" = \"$GH_CONFIG_DIR\" ] || exit 26\n" +
+		"[ \"$(stat -c %a \"$GH_CONFIG_DIR\")\" = 750 ] || exit 27\n" +
 		"printf 'config=%s\\n' \"$GH_CONFIG_DIR\"\n" +
 		"for value in \"$@\"; do printf 'arg=%s\\n' \"$value\"; done\n" +
 		"cat\n"

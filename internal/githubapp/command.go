@@ -69,13 +69,11 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 		return process.Result{}, errors.New("GitHub command environment is unavailable")
 	}
 	defer os.RemoveAll(configDir)
-	if err = os.Chmod(configDir, 0700); err != nil {
+	// App-backed commands receive credentials through GH_TOKEN. Keep their
+	// config directory readable by the delegated workspace group without
+	// requiring CAP_CHOWN in the root runtime service.
+	if err = os.Chmod(configDir, 0750); err != nil {
 		return process.Result{}, errors.New("GitHub command environment is unavailable")
-	}
-	if identity := r.Config.Identity; identity != nil {
-		if err = os.Chown(configDir, int(identity.UID), int(identity.GID)); err != nil {
-			return process.Result{}, errors.New("GitHub command environment is unavailable")
-		}
 	}
 	supervisor := r.Supervisor
 	if supervisor == nil {
