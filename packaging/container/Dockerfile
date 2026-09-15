@@ -52,6 +52,9 @@ ARG DEVTOOLS_ARM64_SHA256
 ARG RIPGREP_VERSION
 ARG RIPGREP_AMD64_SHA256
 ARG RIPGREP_ARM64_SHA256
+ARG GH_VERSION
+ARG GH_AMD64_SHA256
+ARG GH_ARM64_SHA256
 LABEL org.opencontainers.image.title="Loki" \
       org.opencontainers.image.version="$LOKI_VERSION" \
       org.opencontainers.image.revision="$LOKI_REVISION" \
@@ -60,13 +63,17 @@ LABEL org.opencontainers.image.title="Loki" \
       io.loki.devtools.arm64.sha256="$DEVTOOLS_ARM64_SHA256" \
       io.loki.ripgrep.version="$RIPGREP_VERSION" \
       io.loki.ripgrep.amd64.sha256="$RIPGREP_AMD64_SHA256" \
-      io.loki.ripgrep.arm64.sha256="$RIPGREP_ARM64_SHA256"
+      io.loki.ripgrep.arm64.sha256="$RIPGREP_ARM64_SHA256" \
+      io.loki.gh.version="$GH_VERSION" \
+      io.loki.gh.amd64.sha256="$GH_AMD64_SHA256" \
+      io.loki.gh.arm64.sha256="$GH_ARM64_SHA256"
 
 COPY --from=git-root / /
 COPY --from=layout /rootfs/ /
 COPY --from=build /out/loki /opt/loki/bin/loki
 COPY --from=artifacts --chmod=0755 /devtools/${TARGETARCH}/devtools /opt/loki/bin/devtools
 COPY --from=artifacts --chmod=0755 /ripgrep/${TARGETARCH}/rg /usr/bin/rg
+COPY --from=artifacts --chmod=0755 /gh/${TARGETARCH}/gh /usr/bin/gh
 COPY --from=artifacts /metadata/devtools-catalog.json /usr/share/doc/loki/devtools-catalog.json
 COPY --from=artifacts /metadata/provenance.json /usr/share/doc/loki/provenance.json
 COPY --chmod=0755 scripts/loki-devtools-launch /opt/loki/libexec/devtools

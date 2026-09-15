@@ -132,7 +132,11 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		return result
 	}
 	status := call(map[string]any{"operation": "status"})
-	if status["initialized"] != true || status["profiles"] != float64(0) {
+	githubStatus := status["github"].(map[string]any)
+	if status["initialized"] != true || status["profiles"] != float64(0) ||
+		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
+		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||
+		githubStatus["credential_available"] != false {
 		t.Fatal(status)
 	}
 	probe, err := net.Listen("tcp", "127.0.0.1:0")

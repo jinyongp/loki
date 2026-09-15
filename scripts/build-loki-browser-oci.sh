@@ -13,7 +13,7 @@ case "$output" in
   *) echo "output path must be absolute" >&2; exit 2 ;;
 esac
 
-loki_version=${LOKI_VERSION:-0.48.0-dev}
+loki_version=${LOKI_VERSION:-0.49.0-dev}
 loki_revision=${LOKI_REVISION:-$(git -C "$source_dir" rev-parse HEAD)}
 loki_date=${LOKI_DATE:-$(git -C "$source_dir" show -s --format=%cI "$loki_revision" 2>/dev/null || printf unknown)}
 

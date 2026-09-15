@@ -18,7 +18,7 @@
     "protocolVersion": "2025-11-25",
     "serverInfo": {
       "name": "loki",
-      "version": "0.48.0-dev"
+      "version": "0.49.0-dev"
     }
   },
   "tools": [

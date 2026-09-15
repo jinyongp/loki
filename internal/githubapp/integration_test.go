@@ -87,6 +87,8 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 		{Target: "connextable/loki", Args: []string{"pr", "list"}},
 		{Target: "jinyongp/personal", Args: []string{"pr", "view"}},
 		{Target: "jinyongp/personal", Args: []string{"api", "/repos/jinyongp/personal"}},
+		{Target: "connextable/loki", Args: []string{"search", "issues", "is:open"}},
+		{Target: "jinyongp/personal", Args: []string{"status"}},
 	} {
 		result, err := runner.Run(t.Context(), request)
 		if err != nil || result.ExitCode != 0 || !strings.HasPrefix(result.Output, request.Target+":") {

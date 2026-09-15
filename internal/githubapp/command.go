@@ -42,12 +42,12 @@ type CommandRunner struct {
 var repositoryCommandGroups = map[string]bool{
 	"api": true, "attestation": true, "cache": true, "issue": true, "label": true,
 	"pr": true, "release": true, "repo": true, "ruleset": true, "run": true,
-	"secret": true, "variable": true, "workflow": true,
+	"search": true, "secret": true, "status": true, "variable": true, "workflow": true,
 }
 
 var prohibitedCommandFlags = map[string]bool{
-	"-R": true, "--repo": true, "--hostname": true, "--org": true, "--user": true,
-	"--web": true, "-w": true, "--editor": true, "--browser": true,
+	"-R": true, "--repo": true, "--hostname": true, "--org": true,
+	"--web": true, "--editor": true, "--browser": true,
 }
 
 func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (process.Result, error) {
@@ -55,6 +55,10 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 		return process.Result{}, err
 	}
 	target := strings.ToLower(strings.TrimSpace(request.Target))
+	arguments, err := scopedCommandArguments(target, request.Args)
+	if err != nil {
+		return process.Result{}, err
+	}
 	token, err := r.Tokens.Token(ctx, target)
 	if err != nil || token == "" {
 		return process.Result{}, errors.New("GitHub credential is unavailable")
@@ -77,7 +81,7 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 		supervisor = process.SystemdSupervisor{}
 	}
 	result, err := supervisor.Run(ctx, process.Spec{
-		Argv:      append([]string{r.Config.Binary}, request.Args...),
+		Argv:      append([]string{r.Config.Binary}, arguments...),
 		CWD:       r.Config.CWD,
 		Env:       commandEnvironment(r.Config.Environment, configDir, target, token),
 		Identity:  r.Config.Identity,
@@ -130,6 +134,17 @@ func (r *CommandRunner) validate(request CommandRequest) error {
 		}
 	}
 	return nil
+}
+
+func scopedCommandArguments(target string, arguments []string) ([]string, error) {
+	result := append([]string{}, arguments...)
+	if len(result) == 0 || result[0] != "search" {
+		return result, nil
+	}
+	if len(result) < 2 || !map[string]bool{"code": true, "commits": true, "issues": true, "prs": true}[result[1]] {
+		return nil, errors.New("GitHub search command is not repository-scoped")
+	}
+	return append(result, "--repo", target), nil
 }
 
 func commandEnvironment(base []string, configDir, target, token string) []string {

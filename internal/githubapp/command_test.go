@@ -77,6 +77,13 @@ func TestCommandRunnerUsesFixedRepositoryAndCleanEnvironment(t *testing.T) {
 	if _, statErr := os.Stat(configDir); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("temporary gh config remains: %v", statErr)
 	}
+	search, err := runner.Run(t.Context(), CommandRequest{
+		Target: "connextable/loki", Args: []string{"search", "issues", "is:open"},
+	})
+	if err != nil || !strings.Contains(search.Output, "arg=--repo") ||
+		!strings.Contains(search.Output, "arg=connextable/loki") {
+		t.Fatal("search was not fixed to the target repository", search, err)
+	}
 }
 
 func TestCommandRunnerRejectsCommandAndScopeOverridesBeforeTokenAccess(t *testing.T) {
@@ -98,6 +105,11 @@ func TestCommandRunnerRejectsCommandAndScopeOverridesBeforeTokenAccess(t *testin
 		Target: "connextable/loki", Args: []string{"issue", "create", "--", "--repo"},
 	}); err != nil {
 		t.Fatalf("positional value after -- rejected: %v", err)
+	}
+	if _, err := runner.Run(t.Context(), CommandRequest{
+		Target: "connextable/loki", Args: []string{"search", "repos", "loki"},
+	}); err == nil {
+		t.Fatal("cross-repository search accepted")
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("credentials accessed for rejected commands: %d", calls.Load())

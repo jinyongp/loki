@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 5; then
-  echo "usage: build-loki-oci.sh OUTPUT_OCI DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64" >&2
+if test "$#" -ne 7; then
+  echo "usage: build-loki-oci.sh OUTPUT_OCI DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64 GH_AMD64 GH_ARM64" >&2
   exit 2
 fi
 
@@ -12,6 +12,8 @@ devtools_amd64=$2
 devtools_arm64=$3
 ripgrep_amd64=$4
 ripgrep_arm64=$5
+gh_amd64=$6
+gh_arm64=$7
 
 case "$output" in
   /*) ;;
@@ -49,6 +51,14 @@ test -x "$ripgrep_arm64" && test "$(elf_machine "$ripgrep_arm64")" = 183 || {
   echo "arm64 ripgrep input has the wrong architecture" >&2
   exit 1
 }
+test -x "$gh_amd64" && test "$(elf_machine "$gh_amd64")" = 62 || {
+  echo "amd64 gh input has the wrong architecture" >&2
+  exit 1
+}
+test -x "$gh_arm64" && test "$(elf_machine "$gh_arm64")" = 183 || {
+  echo "arm64 gh input has the wrong architecture" >&2
+  exit 1
+}
 
 devtools_version_json=$($devtools_amd64 version)
 devtools_version=$(printf '%s\n' "$devtools_version_json" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
@@ -60,7 +70,11 @@ ripgrep_version=$($ripgrep_amd64 --version | sed -n '1s/^ripgrep //p')
 test -n "$ripgrep_version" || { echo "invalid ripgrep version response" >&2; exit 1; }
 ripgrep_amd64_sha=$(sha256sum "$ripgrep_amd64" | cut -d' ' -f1)
 ripgrep_arm64_sha=$(sha256sum "$ripgrep_arm64" | cut -d' ' -f1)
-loki_version=${LOKI_VERSION:-0.48.0-dev}
+gh_version=$($gh_amd64 version | sed -n '1s/^gh version \([^ ]*\).*/\1/p')
+test -n "$gh_version" || { echo "invalid gh version response" >&2; exit 1; }
+gh_amd64_sha=$(sha256sum "$gh_amd64" | cut -d' ' -f1)
+gh_arm64_sha=$(sha256sum "$gh_arm64" | cut -d' ' -f1)
+loki_version=${LOKI_VERSION:-0.49.0-dev}
 loki_revision=${LOKI_REVISION:-$(git -C "$source_dir" rev-parse HEAD)}
 loki_date=${LOKI_DATE:-$(git -C "$source_dir" show -s --format=%cI "$loki_revision" 2>/dev/null || printf unknown)}
 source_date_epoch=${SOURCE_DATE_EPOCH:-$(git -C "$source_dir" show -s --format=%ct "$loki_revision" 2>/dev/null || printf 0)}
@@ -68,14 +82,16 @@ source_date_epoch=${SOURCE_DATE_EPOCH:-$(git -C "$source_dir" show -s --format=%
 artifacts=$(mktemp -d "${TMPDIR:-/tmp}/loki-oci-artifacts.XXXXXX")
 cleanup() { rm -rf "$artifacts"; }
 trap cleanup EXIT HUP INT TERM
-install -d "$artifacts/devtools/amd64" "$artifacts/devtools/arm64" "$artifacts/ripgrep/amd64" "$artifacts/ripgrep/arm64" "$artifacts/metadata"
+install -d "$artifacts/devtools/amd64" "$artifacts/devtools/arm64" "$artifacts/ripgrep/amd64" "$artifacts/ripgrep/arm64" "$artifacts/gh/amd64" "$artifacts/gh/arm64" "$artifacts/metadata"
 install -m 0755 "$devtools_amd64" "$artifacts/devtools/amd64/devtools"
 install -m 0755 "$devtools_arm64" "$artifacts/devtools/arm64/devtools"
 install -m 0755 "$ripgrep_amd64" "$artifacts/ripgrep/amd64/rg"
 install -m 0755 "$ripgrep_arm64" "$artifacts/ripgrep/arm64/rg"
+install -m 0755 "$gh_amd64" "$artifacts/gh/amd64/gh"
+install -m 0755 "$gh_arm64" "$artifacts/gh/arm64/gh"
 go run "$source_dir/internal/devtools/cmd/gencatalog" -binary "$devtools_amd64" -output "$artifacts/metadata/devtools-catalog.json"
-printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtools":%s,"binaries":{"devtools":{"amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"ripgrep":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}}}}\n' \
-  "$loki_version" "$loki_revision" "$loki_date" "$devtools_version_json" "$amd64_sha" "$arm64_sha" "$ripgrep_version" "$ripgrep_amd64_sha" "$ripgrep_arm64_sha" \
+printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtools":%s,"binaries":{"devtools":{"amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"ripgrep":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"gh":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}}}}\n' \
+  "$loki_version" "$loki_revision" "$loki_date" "$devtools_version_json" "$amd64_sha" "$arm64_sha" "$ripgrep_version" "$ripgrep_amd64_sha" "$ripgrep_arm64_sha" "$gh_version" "$gh_amd64_sha" "$gh_arm64_sha" \
   > "$artifacts/metadata/provenance.json"
 
 docker buildx build "$source_dir" \
@@ -92,5 +108,8 @@ docker buildx build "$source_dir" \
   --build-arg "RIPGREP_VERSION=$ripgrep_version" \
   --build-arg "RIPGREP_AMD64_SHA256=$ripgrep_amd64_sha" \
   --build-arg "RIPGREP_ARM64_SHA256=$ripgrep_arm64_sha" \
+  --build-arg "GH_VERSION=$gh_version" \
+  --build-arg "GH_AMD64_SHA256=$gh_amd64_sha" \
+  --build-arg "GH_ARM64_SHA256=$gh_arm64_sha" \
   --provenance=mode=max \
   --output "type=oci,dest=$output"

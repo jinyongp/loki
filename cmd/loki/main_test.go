@@ -12,7 +12,7 @@ func TestVersion(t *testing.T) {
 	if code := run([]string{"version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("run(version) = %d, stderr = %q", code, stderr.String())
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "loki 0.48.0-dev" {
+	if got := strings.TrimSpace(stdout.String()); got != "loki 0.49.0-dev" {
 		t.Fatalf("version = %q", got)
 	}
 }

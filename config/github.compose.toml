@@ -1,2 +1,26 @@
-# Optional public GitHub App installation configuration for Compose.
-# See docs/github-app.md before adding github_app_id and github_installations.
+# Optional public GitHub App configuration for Compose.
+# Copy this file to an operator-owned path, fill in the values, and set
+# LOKI_GITHUB_CONFIG_FILE to that absolute path. Keep the PEM separate.
+#
+# github_app_id = 123456
+# github_api_version = "2026-03-10"
+# github_max_response_bytes = 1048576
+# github_max_pages = 20
+# github_command_timeout_seconds = 120
+# github_max_input_bytes = 1048576
+# github_max_output_bytes = 4194304
+#
+# [[github_installations]]
+# account = "example-org"
+# account_type = "organization"
+# installation_id = 789012
+# repositories = ["loki", "another-repository"]
+#
+# [[github_installations]]
+# account = "personal-owner"
+# account_type = "user"
+# installation_id = 345678
+# repositories = ["private-repository"]
+#
+# See docs/github-app.md for App permissions, installation, Compose injection,
+# command scope, and key rotation.

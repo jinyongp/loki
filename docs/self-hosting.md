@@ -1,6 +1,6 @@
 # Self-host Loki with Compose
 
-The current verified host targets are Linux and WSL2. The repository `compose.yaml` defines the portable Linux-container contract for the core `runtime`, `mcp`, and `egress` roles. GitHub, browser, and signing are optional profiles added separately.
+The current verified host targets are Linux and WSL2. The repository `compose.yaml` defines the portable Linux-container contract for the core `runtime`, `mcp`, and `egress` roles. Browser and signing run as optional profiles. GitHub credentials can be added to the core services through host file paths.
 
 ## Requirements
 
@@ -102,27 +102,15 @@ The validator compares OCI configuration and provenance labels, hashes Loki-mana
 
 ## Configure the optional GitHub App
 
-Create the GitHub App in GitHub and install it only on repositories Loki may access. Put its public identity and repository allowlist in `config/loki-go.toml`:
-
-```toml
-github_app_id = 123456
-github_installation_id = 789012
-github_targets = ["owner/repository"]
-github_api_version = "2026-03-10"
-github_max_response_bytes = 1048576
-github_max_pages = 20
-```
-
-Loki requires positive App and installation IDs, 1-64 unique `owner/repository` targets, the supported API version, a 4 KiB-16 MiB response limit, and a 1-100 page limit. The feature stays disabled when these settings are absent.
-
-Initialize the encrypted vault once, then import or rotate the private key from an interactive terminal:
+GitHub integration uses a repository-scoped GitHub App installation token. Supply the public App and installation configuration plus the private-key host path to the core Compose services:
 
 ```sh
-loki secret init
-loki github app-key set
+export LOKI_GITHUB_CONFIG_FILE=/secure/loki/github.toml
+export LOKI_GITHUB_PRIVATE_KEY_FILE=/secure/loki/github-app.pem
+docker compose up -d --force-recreate runtime mcp
 ```
 
-Paste the PEM when prompted and finish with Ctrl-D. The command accepts no key argument, file option, environment variable, or standard input. Loki validates an RSA key of at least 2048 bits before atomically replacing the prior key. It returns only configured/rotated metadata; the key remains encrypted in runtime state.
+The configuration supports installations on organization and personal accounts. Follow [GitHub App integration](github-app.md) for App registration, permissions, repository selection, configuration format, PEM handling, rotation, and the supported `gh` command contract.
 
 
 ## Enable optional Git signing

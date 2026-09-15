@@ -3,7 +3,7 @@ package buildinfo
 import "strings"
 
 var (
-	Version = "0.48.0-dev"
+	Version = "0.49.0-dev"
 	Commit  = ""
 	Date    = ""
 )

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"loki/internal/audit"
@@ -166,7 +168,31 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		if !ok {
 			return nil, errors.New("invalid vault profile response")
 		}
-		return map[string]any{"initialized": true, "profiles": len(items)}, nil
+		credentialSource := "disabled"
+		credentialAvailable := false
+		if c.GitHubAppID != 0 {
+			credentialSource = "vault"
+			if o.GitHubPrivateKeyFile != "" {
+				credentialSource = "file"
+				info, statErr := os.Stat(o.GitHubPrivateKeyFile)
+				credentialAvailable = statErr == nil && info.Mode().IsRegular()
+			} else {
+				for _, item := range items {
+					if item["name"] == githubVaultProfile {
+						names, _ := item["secret_names"].([]string)
+						credentialAvailable = slices.Contains(names, githubPrivateKey) && item["configured_secret_count"] == 1
+					}
+				}
+			}
+		}
+		return map[string]any{
+			"initialized": true, "profiles": len(items),
+			"github": map[string]any{
+				"configured": c.GitHubAppID != 0, "installation_count": len(c.GitHubInstallations),
+				"target_count": len(c.GitHubTargets), "credential_source": credentialSource,
+				"credential_available": credentialAvailable,
+			},
+		}, nil
 	}}
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
