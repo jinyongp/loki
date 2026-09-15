@@ -13,10 +13,14 @@ Validated on 2026-09-16 (Asia/Seoul) using an isolated Compose project named
 - GitHub configuration: `/home/jinyongp/.config/loki/github-validation.toml`.
 - PEM source: `/home/jinyongp/.config/loki/secrets/github-app.pem` (mode 0600).
 - MCP client token: `mcp-token` in the private lifecycle state directory.
-- Configured target: `jinyongp/loki`.
+- Configured targets: `jinyongp/loki`, `sectile/sectile`,
+  `connextable/homebrew-tap`, `connextable/stamp.is-api`,
+  `connextable/stamp.is-web`, `connextable/stamp.is-fab`.
 
-The validation configuration deliberately includes one repository. GitHub App
-installation access to other repositories does not add them to Loki's target map.
+The host configuration maps personal installation `162035578`, sectile
+installation `162041287`, and connextable installation `162041495` to these
+repositories. GitHub App installation access to other repositories does not
+automatically add them to Loki's target map.
 
 ## Results
 
@@ -58,9 +62,22 @@ this regression with populated state.
 
 ## Remaining validation
 
-Organization installation and Issue Fields checks remain untested because no
-organization installation was supplied. The personal repository and release gates
-passed. This is a running validation deployment; production client cutover and
+Both organization installations were verified against the App identity and their
+repository lists. After recreating runtime and MCP with the updated host config,
+repository, issue and PR reads passed through MCP for all six targets (18 checks).
+Organization writes were not exercised.
+
+Issue Fields listing failed through MCP for both organizations. Direct API checks
+with temporary installation tokens returned HTTP 403, `Resource not accessible
+by integration`; the temporary tokens were revoked after diagnosis. Neither
+installation grants the organization-level Issue Fields permission. GitHub's
+[endpoint documentation](https://docs.github.com/en/rest/orgs/issue-fields)
+requires that permission with read access for listing. Add it to the App and
+approve the updated permissions on both installations before repeating this check.
+The MCP error currently hides the upstream failure behind a generic server error.
+
+The personal repository and release gates passed. This is a running validation
+deployment; production client cutover and
 removal of the preserved Python implementation are separate steps. The older
 workstream's deployment-hash invariant remains unverified; Python MCP liveness
 alone is not evidence of filesystem equality.
