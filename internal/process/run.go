@@ -19,6 +19,7 @@ type Result struct {
 	Output    string `json:"output"`
 	Truncated bool   `json:"truncated"`
 	TimedOut  bool   `json:"timed_out,omitempty"`
+	Canceled  bool   `json:"canceled,omitempty"`
 	Raw       []byte `json:"-"`
 }
 type Spec struct {
@@ -83,6 +84,12 @@ func Environment() []string {
 }
 
 func Command(ctx context.Context, spec Spec) *exec.Cmd {
+	return command(ctx, spec, func(cmd *exec.Cmd) error {
+		return signalGroup(cmd, syscall.SIGKILL)
+	})
+}
+
+func command(ctx context.Context, spec Spec, cancel func(*exec.Cmd) error) *exec.Cmd {
 	env := spec.Env
 	if env == nil {
 		env = Environment()
@@ -117,17 +124,69 @@ func Command(ctx context.Context, spec Spec) *exec.Cmd {
 			Groups: slices.Clone(spec.Identity.Groups),
 		}
 	}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}
+	cmd.Cancel = func() error { return cancel(cmd) }
 	cmd.WaitDelay = 2 * time.Second
 	return cmd
 }
 
+// Supervisor owns subprocess lifecycle policy. Systemd and container services
+// use distinct implementations while sharing execution, identity, and output
+// boundaries.
+type Supervisor interface {
+	Run(context.Context, Spec) (Result, error)
+}
+
+// SystemdSupervisor preserves the native service behavior: cancellation kills
+// the delegated process group immediately and systemd supervises the Loki role.
+type SystemdSupervisor struct{}
+
+func (SystemdSupervisor) Run(ctx context.Context, spec Spec) (Result, error) {
+	return run(ctx, spec, func(cmd *exec.Cmd, _ <-chan struct{}) error {
+		return signalGroup(cmd, syscall.SIGKILL)
+	})
+}
+
+// ContainerSupervisor forwards SIGTERM to the delegated process group and
+// escalates to SIGKILL when it does not exit during GracePeriod.
+type ContainerSupervisor struct {
+	GracePeriod time.Duration
+}
+
+func (s ContainerSupervisor) Run(ctx context.Context, spec Spec) (Result, error) {
+	grace := s.GracePeriod
+	if grace <= 0 {
+		grace = 2 * time.Second
+	}
+	return run(ctx, spec, func(cmd *exec.Cmd, done <-chan struct{}) error {
+		err := signalGroup(cmd, syscall.SIGTERM)
+		if err != nil && !errors.Is(err, syscall.ESRCH) {
+			return err
+		}
+		timer := time.NewTimer(grace)
+		go func() {
+			defer timer.Stop()
+			select {
+			case <-done:
+			case <-timer.C:
+				select {
+				case <-done:
+					return
+				default:
+				}
+				_ = signalGroup(cmd, syscall.SIGKILL)
+			}
+		}()
+		return nil
+	})
+}
+
 func Run(ctx context.Context, spec Spec) (Result, error) {
+	return (SystemdSupervisor{}).Run(ctx, spec)
+}
+
+type cancelProcess func(*exec.Cmd, <-chan struct{}) error
+
+func run(ctx context.Context, spec Spec, cancelProcess cancelProcess) (Result, error) {
 	if len(spec.Argv) == 0 {
 		return Result{}, errors.New("missing executable")
 	}
@@ -139,7 +198,8 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, spec.Timeout)
 	defer cancel()
-	cmd := Command(ctx, spec)
+	done := make(chan struct{})
+	cmd := command(ctx, spec, func(cmd *exec.Cmd) error { return cancelProcess(cmd, done) })
 	if spec.Input != nil {
 		cmd.Stdin = bytes.NewReader(spec.Input)
 	}
@@ -147,12 +207,18 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 	cmd.Stdout = buffer
 	cmd.Stderr = buffer
 	err := cmd.Run()
+	close(done)
 	raw, truncated := buffer.Snapshot()
 	output, clipped := boundedText(raw, spec.MaxOutput, truncated)
 	result := Result{Raw: raw, Output: output, Truncated: clipped}
-	if ctx.Err() != nil {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.ExitCode = 124
 		result.TimedOut = true
+		return result, nil
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		result.ExitCode = 130
+		result.Canceled = true
 		return result, nil
 	}
 	if err != nil {
@@ -166,6 +232,13 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 		}
 	}
 	return result, nil
+}
+
+func signalGroup(cmd *exec.Cmd, signal syscall.Signal) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	return syscall.Kill(-cmd.Process.Pid, signal)
 }
 
 // boundedText applies UTF-8 replacement decoding followed by a byte

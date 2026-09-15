@@ -61,6 +61,61 @@ func TestRunExitTimeoutAndTruncation(t *testing.T) {
 	}
 }
 
+func TestSupervisionAdaptersEnforceExecutionBoundaries(t *testing.T) {
+	adapters := map[string]Supervisor{
+		"systemd":   SystemdSupervisor{},
+		"container": ContainerSupervisor{GracePeriod: 50 * time.Millisecond},
+	}
+	for name, adapter := range adapters {
+		t.Run(name, func(t *testing.T) {
+			r, err := adapter.Run(t.Context(), Spec{Argv: []string{"/usr/bin/printf", "abcdef"}, MaxOutput: 3})
+			if err != nil || r.Output != "abc" || !r.Truncated {
+				t.Fatalf("bounded output: %#v, %v", r, err)
+			}
+
+			r, err = adapter.Run(t.Context(), Spec{Argv: []string{"/usr/bin/sleep", "5"}, Timeout: 20 * time.Millisecond})
+			if err != nil || !r.TimedOut || r.Canceled || r.ExitCode != 124 {
+				t.Fatalf("timeout: %#v, %v", r, err)
+			}
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			r, err = adapter.Run(ctx, Spec{Argv: []string{"/usr/bin/sleep", "5"}})
+			if err != nil || !r.Canceled || r.TimedOut || r.ExitCode != 130 {
+				t.Fatalf("cancellation: %#v, %v", r, err)
+			}
+
+			_, err = adapter.Run(t.Context(), Spec{Argv: []string{"/usr/bin/true"}, Identity: &Identity{}})
+			if err == nil || !strings.Contains(err.Error(), "identity") {
+				t.Fatalf("privileged identity error = %v", err)
+			}
+		})
+	}
+}
+
+func TestContainerSupervisorAllowsGracefulGroupShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(30*time.Millisecond, cancel)
+	r, err := (ContainerSupervisor{GracePeriod: time.Second}).Run(ctx, Spec{
+		Argv: []string{"/bin/sh", "-c", `trap 'printf terminated; exit 0' TERM; while :; do sleep 1; done`},
+	})
+	if err != nil || !r.Canceled || !strings.Contains(r.Output, "terminated") {
+		t.Fatalf("graceful cancellation: %#v, %v", r, err)
+	}
+}
+
+func TestContainerSupervisorEscalatesAfterGracePeriod(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(30*time.Millisecond, cancel)
+	started := time.Now()
+	r, err := (ContainerSupervisor{GracePeriod: 40 * time.Millisecond}).Run(ctx, Spec{
+		Argv: []string{"/bin/sh", "-c", `trap '' TERM; while :; do :; done`},
+	})
+	if err != nil || !r.Canceled || time.Since(started) > time.Second {
+		t.Fatalf("forced cancellation after %s: %#v, %v", time.Since(started), r, err)
+	}
+}
+
 func TestUTF8ReplacementAndByteLimits(t *testing.T) {
 	for _, tc := range []struct {
 		raw             []byte
