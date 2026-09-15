@@ -55,6 +55,36 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 	}
 }
 
+func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
+	root := filepath.Join("..", "..")
+	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "container", "browser.Dockerfile"))
+	for _, required := range []string{
+		"ARG TARGETARCH",
+		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
+		"chromium=$CHROMIUM_VERSION",
+		"CHROMIUM_VERSION=142.0.7444.59-r0",
+		"golang:1.27.1-bookworm@sha256:",
+		"alpine:3.22@sha256:",
+		"USER 10003:10003",
+		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",
+	} {
+		if !strings.Contains(dockerfile, required) {
+			t.Errorf("browser Dockerfile is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"playwright", "node", "python", "docker.sock"} {
+		if strings.Contains(strings.ToLower(dockerfile), forbidden) {
+			t.Errorf("browser image contains unrelated dependency %q", forbidden)
+		}
+	}
+	script := readOCIFile(t, filepath.Join(root, "scripts", "build-loki-browser-oci.sh"))
+	for _, required := range []string{"--platform linux/amd64,linux/arm64", "--provenance=mode=max", "type=oci,dest=$output"} {
+		if !strings.Contains(script, required) {
+			t.Errorf("browser build script is missing %q", required)
+		}
+	}
+}
+
 func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 	root := filepath.Join("..", "..")
 	script := readOCIFile(t, filepath.Join(root, "scripts", "build-loki-oci.sh"))

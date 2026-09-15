@@ -3,6 +3,7 @@ package deployment
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,13 @@ func TestRepositoryContractDefinesPortableTopology(t *testing.T) {
 	}
 	if !c.Images["loki-browser"].Optional || c.Features["browser"].Default || c.Features["github"].Default {
 		t.Fatal("optional features are enabled")
+	}
+	if got := c.Features["browser"].Services; !slices.Equal(got, []string{"browser", "browser-proxy"}) {
+		t.Fatalf("browser feature services = %v", got)
+	}
+	if !slices.Equal(c.Services["browser"].Networks, []string{"private"}) ||
+		!slices.Equal(c.Services["browser-proxy"].Networks, []string{"outbound", "private"}) {
+		t.Fatal("browser egress boundary is invalid")
 	}
 	if !c.Volumes["workspace"].External || c.Volumes["sockets"].Persistent {
 		t.Fatal("volume lifecycle is invalid")

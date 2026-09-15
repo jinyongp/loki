@@ -18,6 +18,7 @@ type composeFile struct {
 }
 
 type composeService struct {
+	Image       string   `yaml:"image"`
 	Command     []string `yaml:"command"`
 	User        string   `yaml:"user"`
 	Networks    []string `yaml:"networks"`
@@ -131,5 +132,51 @@ func TestComposeSigningProfileIsPrivateAndOptional(t *testing.T) {
 	}
 	if _, ok := compose.Services["runtime"].DependsOn["signing"]; ok {
 		t.Fatal("core runtime depends on optional signing")
+	}
+}
+
+func TestComposeBrowserProfileSeparatesChromiumAndEgress(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compose composeFile
+	if err = yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatal(err)
+	}
+	browser := compose.Services["browser"]
+	proxy := compose.Services["browser-proxy"]
+	if !slices.Equal(browser.Profiles, []string{"browser"}) || !slices.Equal(proxy.Profiles, []string{"browser"}) {
+		t.Fatal("browser services are not optional")
+	}
+	if browser.Image != "${LOKI_BROWSER_IMAGE:-loki-browser:local}" || proxy.Image != "${LOKI_IMAGE:-loki:local}" {
+		t.Fatalf("browser images = %q, %q", browser.Image, proxy.Image)
+	}
+	if !slices.Equal(browser.Networks, []string{"private"}) || !slices.Equal(proxy.Networks, []string{"private", "outbound"}) {
+		t.Fatal("browser network boundary is invalid")
+	}
+	for _, destination := range []string{"/var/lib/loki/browser", "/var/lib/loki/browser-downloads", "/run/loki"} {
+		if !hasMount(browser.Volumes, destination) {
+			t.Errorf("missing browser mount %s", destination)
+		}
+	}
+	if hasMount(browser.Volumes, "/workspace") || hasMount(browser.Volumes, "/var/lib/loki/runtime") ||
+		hasMount(proxy.Volumes, "/workspace") || hasMount(proxy.Volumes, "/var/lib/loki/runtime") {
+		t.Fatal("browser profile received project or vault state")
+	}
+	if len(browser.Ports) != 0 || len(proxy.Ports) != 0 || !hasMount(proxy.Volumes, "/run/loki") {
+		t.Fatal("browser profile exposes a host port or lacks the trusted runtime socket")
+	}
+	if browser.DependsOn["browser-proxy"].Condition != "service_healthy" ||
+		proxy.DependsOn["runtime"].Condition != "service_healthy" {
+		t.Fatal("browser readiness order is incomplete")
+	}
+	for _, name := range []string{"runtime", "mcp"} {
+		if _, ok := compose.Services[name].DependsOn["browser"]; ok {
+			t.Fatalf("%s depends on optional browser", name)
+		}
+		if _, ok := compose.Services[name].DependsOn["browser-proxy"]; ok {
+			t.Fatalf("%s depends on optional browser proxy", name)
+		}
 	}
 }

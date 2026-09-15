@@ -119,7 +119,7 @@ func (c Contract) Validate() error {
 		if !validName(name) || !ok || !slices.Contains(image.Roles, service.Role) || !validName(service.User) {
 			return fmt.Errorf("invalid service %q", name)
 		}
-		if service.Required == (service.Profile != "") || service.Profile != "" && service.Profile != name {
+		if service.Required == (service.Profile != "") || service.Profile != "" && !validName(service.Profile) {
 			return fmt.Errorf("service %q profile is invalid", name)
 		}
 		if service.VaultAccess != (name == "runtime") {
@@ -131,7 +131,7 @@ func (c Contract) Validate() error {
 		if !service.ReadOnlyRoot || !service.NoNewPrivileges || service.MemoryMB < 32 || service.PIDs < 16 {
 			return fmt.Errorf("service %q resource policy is incomplete", name)
 		}
-		if slices.Contains(service.Networks, "outbound") != (name == "egress") {
+		if slices.Contains(service.Networks, "outbound") != (name == "egress" || name == "browser-proxy") {
 			return fmt.Errorf("service %q has invalid outbound access", name)
 		}
 		for _, network := range service.Networks {
@@ -189,12 +189,16 @@ func (c Contract) Validate() error {
 			return fmt.Errorf("optional feature %q is invalid", name)
 		}
 		for _, member := range feature.Services {
-			if _, ok := c.Services[member]; !ok {
+			service, ok := c.Services[member]
+			if !ok {
 				return fmt.Errorf("feature %q references unknown service", name)
+			}
+			if feature.Activation == "profile" && service.Profile != name {
+				return fmt.Errorf("feature %q service %q uses another profile", name, member)
 			}
 		}
 	}
-	if c.Features["browser"].Activation != "profile" || !slices.Equal(c.Features["browser"].Services, []string{"browser"}) ||
+	if c.Features["browser"].Activation != "profile" || !slices.Equal(c.Features["browser"].Services, []string{"browser", "browser-proxy"}) ||
 		c.Features["signing"].Activation != "profile" || !slices.Equal(c.Features["signing"].Services, []string{"signing"}) ||
 		c.Features["github"].Activation != "config" || !slices.Equal(c.Features["github"].Services, []string{"egress", "runtime"}) ||
 		len(c.Features["docker"].Services) != 0 {

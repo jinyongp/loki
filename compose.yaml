@@ -52,6 +52,54 @@ services:
     mem_limit: 128m
     pids_limit: 64
 
+  browser-proxy:
+    <<: *loki-service
+    profiles: [browser]
+    command: [browser-proxy, --port, "18767", --port-guard-socket, /run/loki/runtime/control.sock, --port-guard-uid, "0"]
+    user: "10002:10002"
+    group_add: ["10001"]
+    networks: [private, outbound]
+    depends_on:
+      runtime: {condition: service_healthy}
+    volumes:
+      - sockets:/run/loki
+    tmpfs:
+      - /tmp:uid=10002,gid=10002,mode=0700
+    healthcheck:
+      test: [CMD-SHELL, "nc -z 127.0.0.1 18767"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 128m
+    pids_limit: 64
+
+  browser:
+    <<: *loki-service
+    image: ${LOKI_BROWSER_IMAGE:-loki-browser:local}
+    profiles: [browser]
+    command: [browser, --socket, /run/loki/browser/control.sock, --agent-uid, "10000", --socket-gid, "10001", --chrome, /usr/bin/chromium-browser, --profile, /var/lib/loki/browser/profile, --downloads, /var/lib/loki/browser-downloads, --proxy, "http://browser-proxy:18767"]
+    user: "10003:10003"
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      browser-proxy: {condition: service_healthy}
+    volumes:
+      - browser-state:/var/lib/loki/browser
+      - browser-downloads:/var/lib/loki/browser-downloads
+      - sockets:/run/loki
+    tmpfs:
+      - /tmp:uid=10003,gid=10003,mode=0700
+    shm_size: 256m
+    healthcheck:
+      test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/browser/control.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 1g
+    pids_limit: 256
+
   signing:
     <<: *loki-service
     profiles: [signing]
@@ -133,6 +181,8 @@ networks:
   outbound: {}
 
 volumes:
+  browser-downloads: {}
+  browser-state: {}
   runtime-state: {}
   runner-state: {}
   runner-cache: {}
