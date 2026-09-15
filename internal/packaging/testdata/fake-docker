@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -eu
+printf '%s|%s\n' "${LOKI_IMAGE:-}" "$*" >>"$FAKE_DOCKER_LOG"
+first="${1:-}"; second="${2:-}"
+if test "$first" = image && test "$second" = inspect; then
+  test "${!#}" != not-loki || { echo Other; exit 0; }
+  echo Loki; exit 0
+fi
+if test "$first" = info; then exit 0; fi
+if test "$first" = inspect; then case "${!#}" in *bad-health*) echo unhealthy;; *) echo healthy;; esac; exit 0; fi
+if test "$first" = volume; then exit 0; fi
+if test "$first" = compose; then
+  case " $* " in
+    *" version "*|*" config "*|*" stop "*|*" down "*|*" up "*|*" restart "*) exit 0;;
+    *" ps "*" --status running "*) echo running; exit 0;;
+    *" ps "*) case "${LOKI_IMAGE:-}" in *bad-health*) echo bad-health-id;; *) echo healthy-id;; esac; exit 0;;
+  esac
+fi
+if test "$first" = run; then
+  backup=
+  for arg in "$@"; do case "$arg" in type=bind,src=*,dst=/backup) backup=${arg#type=bind,src=}; backup=${backup%,dst=/backup};; esac; done
+  case "$*" in *dst=/source*) name=${@: -3:1}; mkdir -p "$backup"; printf 'payload:%s\n' "$name" >"$backup/$name.tar";; esac
+fi
