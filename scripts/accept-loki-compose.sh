@@ -123,8 +123,10 @@ assert_not_inspectable egress "$token"
 
 life restart
 life health
+compose exec -T --user 10000:10000 mcp sh -ec 'printf "runner-owned\n" > /var/lib/loki/runner/restore-owner-check; chmod 0600 /var/lib/loki/runner/restore-owner-check'
 life backup "$backup"
 life restore "$backup"
+compose exec -T --user 10000:10000 mcp sh -ec 'test "$(cat /var/lib/loki/runner/restore-owner-check)" = runner-owned; test "$(stat -c %u:%g /var/lib/loki/runner/restore-owner-check)" = 10000:10000; rm /var/lib/loki/runner/restore-owner-check'
 rotated_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 printf %s "$rotated_token" | life rotate-credentials
 assert_not_inspectable mcp "$token"
