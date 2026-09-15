@@ -1,10 +1,10 @@
 # Self-host Loki with Compose
 
-The repository `compose.yaml` is the portable service contract for Linux, WSL2, and macOS with Docker Desktop or Colima. It runs the core `runtime`, `mcp`, and `egress` roles. GitHub, browser, and signing are optional profiles added separately.
+The current verified host targets are Linux and WSL2. The repository `compose.yaml` defines the portable Linux-container contract for the core `runtime`, `mcp`, and `egress` roles. GitHub, browser, and signing are optional profiles added separately.
 
 ## Requirements
 
-Install Docker with Compose v2 and build or load a Loki image whose `org.opencontainers.image.title` label is `Loki`. Choose an absolute workspace path. On Linux and WSL2, a newly created empty workspace receives an ACL for container UID 10000 plus an inheritable default. Existing workspaces are never modified and must already be readable, writable, and searchable by UID 10000. Docker Desktop or Colima must provide equivalent bind-mount access; service health confirms it during install. The lifecycle script keeps operator state under `${XDG_STATE_HOME:-$HOME/.local/state}/loki-compose` by default. Override it with `LOKI_COMPOSE_STATE_DIR` when multiple installations are needed.
+Install Docker with Compose v2 and build or load a Loki image whose `org.opencontainers.image.title` label is `Loki`. Choose an absolute workspace path. On Linux and WSL2, a newly created empty workspace receives an ACL for container UID 10000 plus an inheritable default. Existing workspaces are never modified and must already be readable, writable, and searchable by UID 10000. Service health confirms bind-mount access during install. The lifecycle script keeps operator state under `${XDG_STATE_HOME:-$HOME/.local/state}/loki-compose` by default. Override it with `LOKI_COMPOSE_STATE_DIR` when multiple installations are needed.
 
 The state directory is mode `0700`. Its `mcp-token` is the single Compose client-token file. The file is mode `0444` because the non-root MCP container must read the bind-mounted Compose secret; the private parent directory prevents other host users from opening it. The token must contain at least 43 characters (256 bits of encoded entropy). It is never accepted as an argument or printed.
 
@@ -71,6 +71,12 @@ LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/accept-loki-compose.sh
 The harness creates a unique Compose project under a private temporary directory, then checks installation, health, restart, backup and restore, credential rotation, upgrade and rollback, a derived project image, and clean removal. It also confirms that optional services stay stopped in the core profile, credentials do not appear in container inspection data, and runtime, MCP, browser, and proxy containers retain their network and mount boundaries. Set `LOKI_BROWSER_IMAGE` to exercise the browser profile and `LOKI_SIGNING_KEY_FILE` to exercise signing.
 
 To prove that an existing deployment remains unchanged, pass newline-separated files or directory roots through `LOKI_ACCEPTANCE_INVARIANT_PATHS`. The harness records file hashes before startup, compares them after every acceptance operation, and never mounts those paths into the test stack.
+
+## Future macOS extension seam
+
+macOS execution is outside the current support and acceptance gate. The reserved future host entry point is `scripts/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep `compose.yaml`, the OCI images, container paths, service identities, network boundaries, and lifecycle state format unchanged.
+
+That adapter must validate bind-mount sharing for the selected absolute workspace, provide host-specific workspace permission preparation in place of the Linux ACL step, select a Docker context, and then exercise the same core, optional-profile, recovery, credential, and cleanup assertions as `scripts/accept-loki-compose.sh`. Adding the adapter must not weaken the Linux or WSL2 gates.
 
 ## Add project runtimes
 
