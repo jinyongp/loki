@@ -13,15 +13,32 @@ import (
 )
 
 func ReadSecret(ctx context.Context, prompt io.Writer) (string, error) {
+	return readTTY(ctx, prompt, false)
+}
+
+func ReadPrivateKey(ctx context.Context, prompt io.Writer) (string, error) {
+	return readTTY(ctx, prompt, true)
+}
+
+func readTTY(ctx context.Context, prompt io.Writer, multiline bool) (string, error) {
 	terminal, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return "", fault.Error("secret input requires an interactive terminal")
 	}
 	defer terminal.Close()
-	return readTerminal(ctx, terminal, prompt)
+	if multiline {
+		if _, err = fmt.Fprintln(prompt, "Paste GitHub App private key, then press Ctrl-D:"); err != nil {
+			return "", err
+		}
+	}
+	return readTerminalMode(ctx, terminal, prompt, multiline)
 }
 
 func readTerminal(ctx context.Context, terminal *os.File, prompt io.Writer) (value string, err error) {
+	return readTerminalMode(ctx, terminal, prompt, false)
+}
+
+func readTerminalMode(ctx context.Context, terminal *os.File, prompt io.Writer, multiline bool) (value string, err error) {
 	fd := int(terminal.Fd())
 	original, err := unix.IoctlGetTermios(fd, unix.TCGETS)
 	if err != nil {
@@ -75,11 +92,20 @@ func readTerminal(ctx context.Context, terminal *os.File, prompt io.Writer) (val
 		}
 		switch next[0] {
 		case '\n', '\r':
+			if multiline {
+				if next[0] == '\n' || len(data) == 0 || data[len(data)-1] != '\n' {
+					data = append(data, '\n')
+				}
+				continue
+			}
 			if !utf8.Valid(data) {
 				return "", fault.Error("secret input must be UTF-8")
 			}
 			return string(data), nil
 		case 4:
+			if multiline && len(data) > 0 && utf8.Valid(data) {
+				return string(data), nil
+			}
 			return "", io.EOF
 		case 8, 127:
 			if len(data) > 0 {

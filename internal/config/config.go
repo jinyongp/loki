@@ -17,6 +17,7 @@ import (
 
 var audiencePattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var hostLabel = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+var githubTargetPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9_.-]{1,100}$`)
 
 type Config struct {
 	Root, AuditLog, Host                                         string
@@ -26,6 +27,10 @@ type Config struct {
 	ArtifactBaseURL, PreviewBaseDomain, PreviewAccessAudience    string
 	MaxFileBytes, MaxWriteBytes, MaxOutputBytes, MaxListEntries  int
 	MaxSearchResults, MaxReadLines, MaxPatchBytes, MaxPatchFiles int
+	GitHubAppID, GitHubInstallationID                            int64
+	GitHubAPIVersion                                             string
+	GitHubTargets                                                []string
+	GitHubMaxResponseBytes, GitHubMaxPages                       int
 }
 
 func Load(path string) (Config, error) {
@@ -149,7 +154,78 @@ func Parse(data []byte) (Config, error) {
 			return c, errors.New("preview Access verification requires Cloudflare Access team settings")
 		}
 	}
+	if err := parseGitHub(raw, &c); err != nil {
+		return c, err
+	}
 	return c, nil
+}
+
+func parseGitHub(raw map[string]any, c *Config) error {
+	app, appSet, err := positiveInt64(raw, "github_app_id")
+	if err != nil {
+		return err
+	}
+	installation, installationSet, err := positiveInt64(raw, "github_installation_id")
+	if err != nil {
+		return err
+	}
+	targetValue, targetsSet := raw["github_targets"]
+	if appSet != installationSet || appSet != targetsSet {
+		return errors.New("GitHub App ID, installation ID, and targets must be configured together")
+	}
+	c.GitHubAPIVersion = "2022-11-28"
+	if value, ok := raw["github_api_version"]; ok {
+		version, valid := value.(string)
+		if !valid || version != "2022-11-28" {
+			return errors.New("unsupported GitHub API version")
+		}
+		c.GitHubAPIVersion = version
+	}
+	c.GitHubMaxResponseBytes, err = bounded(raw, "github_max_response_bytes", 1048576, 4096, 16777216)
+	if err != nil {
+		return err
+	}
+	c.GitHubMaxPages, err = bounded(raw, "github_max_pages", 20, 1, 100)
+	if err != nil {
+		return err
+	}
+	if !appSet {
+		for _, key := range []string{"github_api_version", "github_max_response_bytes", "github_max_pages"} {
+			if _, ok := raw[key]; ok {
+				return errors.New("GitHub limits require GitHub App configuration")
+			}
+		}
+		return nil
+	}
+	targets, err := stringList(targetValue)
+	if err != nil || len(targets) == 0 || len(targets) > 64 {
+		return errors.New("github_targets must contain 1 to 64 repositories")
+	}
+	for _, target := range targets {
+		target = strings.TrimSpace(target)
+		if !githubTargetPattern.MatchString(target) || strings.Contains(target, "..") {
+			return errors.New("invalid GitHub repository target")
+		}
+		canonical := strings.ToLower(target)
+		if slices.Contains(c.GitHubTargets, canonical) {
+			return errors.New("duplicate GitHub repository target")
+		}
+		c.GitHubTargets = append(c.GitHubTargets, canonical)
+	}
+	c.GitHubAppID, c.GitHubInstallationID = app, installation
+	return nil
+}
+
+func positiveInt64(raw map[string]any, key string) (int64, bool, error) {
+	value, ok := raw[key]
+	if !ok {
+		return 0, false, nil
+	}
+	n, valid := value.(int64)
+	if !valid || n <= 0 {
+		return 0, true, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return n, true, nil
 }
 
 func bounded(raw map[string]any, key string, def, min, max int) (int, error) {

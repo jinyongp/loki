@@ -81,3 +81,27 @@ docker build \
 Copy project runtime binaries and support files only under `/usr/local` or `/opt/project`. Keep the inherited entrypoint, command, user, working directory, labels, Loki binaries, devtools, rg, identity database, workspace metadata, and volume declarations.
 
 The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for `LOKI_IMAGE`.
+
+## Configure the optional GitHub App
+
+Create the GitHub App in GitHub and install it only on repositories Loki may access. Put its public identity and repository allowlist in `config/loki-go.toml`:
+
+```toml
+github_app_id = 123456
+github_installation_id = 789012
+github_targets = ["owner/repository"]
+github_api_version = "2022-11-28"
+github_max_response_bytes = 1048576
+github_max_pages = 20
+```
+
+Loki requires positive App and installation IDs, 1-64 unique `owner/repository` targets, the supported API version, a 4 KiB-16 MiB response limit, and a 1-100 page limit. The feature stays disabled when these settings are absent.
+
+Initialize the encrypted vault once, then import or rotate the private key from an interactive terminal:
+
+```sh
+loki secret init
+loki github app-key set
+```
+
+Paste the PEM when prompted and finish with Ctrl-D. The command accepts no key argument, file option, environment variable, or standard input. Loki validates an RSA key of at least 2048 bits before atomically replacing the prior key. It returns only configured/rotated metadata; the key remains encrypted in runtime state.

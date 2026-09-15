@@ -179,6 +179,29 @@ func (c Controller) SetSecret(ctx context.Context, name, key, value string, publ
 		return map[string]any{"profile": name, "secret": key, "stored": true}, nil
 	})
 }
+
+// SetManagedSecret atomically creates its reserved profile or replaces the value.
+func (c Controller) SetManagedSecret(ctx context.Context, name, key, value string) (map[string]any, error) {
+	if err := ProfileName(name); err != nil {
+		return nil, err
+	}
+	if err := SecretName(key); err != nil {
+		return nil, err
+	}
+	return c.mutate(ctx, func(document document) (map[string]any, error) {
+		profiles := object(document["profiles"])
+		valueProfile := object(profiles[name])
+		if valueProfile == nil {
+			valueProfile = map[string]any{"secrets": map[string]any{}}
+			profiles[name] = valueProfile
+		}
+		secrets := object(valueProfile["secrets"])
+		_, rotated := secrets[key]
+		secrets[key] = value
+		return map[string]any{"configured": true, "rotated": rotated}, nil
+	})
+}
+
 func (c Controller) Generate(ctx context.Context, name, key string, count int) (map[string]any, error) {
 	if err := ProfileName(name); err != nil {
 		return nil, err

@@ -22,10 +22,15 @@ func runAdministration(args []string, stdout, stderr io.Writer) int {
 }
 
 func executeAdministration(args []string, client service.RuntimeCaller, stdout, stderr io.Writer) int {
-	return executeAdministrationInput(args, client, admin.ReadSecret, stdout, stderr)
+	return executeAdministrationInput(args, client, func(ctx context.Context, prompt io.Writer, multiline bool) (string, error) {
+		if multiline {
+			return admin.ReadPrivateKey(ctx, prompt)
+		}
+		return admin.ReadSecret(ctx, prompt)
+	}, stdout, stderr)
 }
 
-func executeAdministrationInput(args []string, client service.RuntimeCaller, readSecret func(context.Context, io.Writer) (string, error), stdout, stderr io.Writer) int {
+func executeAdministrationInput(args []string, client service.RuntimeCaller, readSecret func(context.Context, io.Writer, bool) (string, error), stdout, stderr io.Writer) int {
 	request, err := admin.Request(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "loki:", fault.Public(err))
@@ -50,8 +55,8 @@ func executeAdministrationInput(args []string, client service.RuntimeCaller, rea
 		delete(request, "delete_source")
 		request["values"] = source.Values
 	}
-	if request["operation"] == "secret_set" {
-		request["value"], err = readSecret(ctx, stderr)
+	if request["operation"] == "secret_set" || request["operation"] == "github_app_key_set" {
+		request["value"], err = readSecret(ctx, stderr, request["operation"] == "github_app_key_set")
 		if err != nil {
 			fmt.Fprintln(stderr, "secret input failed")
 			return 1

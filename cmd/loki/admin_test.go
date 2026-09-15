@@ -45,7 +45,7 @@ func TestSecretCLIImportsOnlyDeleteConfirmedSources(t *testing.T) {
 		return json.Marshal(result)
 	})
 	var stdout, stderr bytes.Buffer
-	input := func(context.Context, io.Writer) (string, error) { return "synthetic-terminal-secret", nil }
+	input := func(context.Context, io.Writer, bool) (string, error) { return "synthetic-terminal-secret", nil }
 	if code := executeAdministrationInput([]string{"secret", "set", "fixture", "TERMINAL"}, realCall, input, &stdout, &stderr); code != 0 {
 		t.Fatalf("secret set: %s", &stderr)
 	}
@@ -125,6 +125,32 @@ func TestAdministrativeCLIEncryptedRuntime(t *testing.T) {
 		}
 		if !json.Valid(stdout.Bytes()) {
 			t.Fatalf("invalid output: %s", &stdout)
+		}
+	}
+}
+
+func TestGitHubAppKeyCLIUsesTerminalOnlyAndRedacts(t *testing.T) {
+	private := "synthetic-private-key-input"
+	calls := 0
+	client := adminCall(func(_ context.Context, request any) (json.RawMessage, error) {
+		calls++
+		values := request.(map[string]any)
+		if values["operation"] != "github_app_key_set" || values["value"] != private {
+			t.Fatalf("request: %#v", values)
+		}
+		return json.RawMessage(`{"configured":true,"rotated":false}`), nil
+	})
+	read := func(context.Context, io.Writer, bool) (string, error) { return private, nil }
+	var stdout, stderr bytes.Buffer
+	if code := executeAdministrationInput([]string{"github", "app-key", "set"}, client, read, &stdout, &stderr); code != 0 {
+		t.Fatal(code, stderr.String())
+	}
+	if calls != 1 || strings.Contains(stdout.String()+stderr.String(), private) {
+		t.Fatal("private key disclosed")
+	}
+	for _, args := range [][]string{{"github", "app-key", "set", private}, {"github", "app-key", "set", "--file", "key.pem"}} {
+		if code := executeAdministrationInput(args, client, read, &stdout, &stderr); code != 2 {
+			t.Fatalf("accepted key argument: %#v", args)
 		}
 	}
 }

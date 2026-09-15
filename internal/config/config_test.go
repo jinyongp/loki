@@ -57,3 +57,50 @@ func TestCheckedInConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestGitHubAppConfiguration(t *testing.T) {
+	c, err := Parse([]byte(`github_app_id=123
+github_installation_id=456
+github_targets=["Owner/Repo","second/project"]
+github_max_response_bytes=2097152
+github_max_pages=30
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.GitHubAppID != 123 || c.GitHubInstallationID != 456 || c.GitHubAPIVersion != "2022-11-28" ||
+		len(c.GitHubTargets) != 2 || c.GitHubTargets[0] != "owner/repo" || c.GitHubMaxResponseBytes != 2097152 || c.GitHubMaxPages != 30 {
+		t.Fatalf("GitHub config: %#v", c)
+	}
+}
+
+func TestInvalidGitHubAppConfiguration(t *testing.T) {
+	for _, text := range []string{
+		`github_app_id=1`,
+		`github_app_id=0
+github_installation_id=2
+github_targets=["owner/repo"]`,
+		`github_app_id=1
+github_installation_id=2
+github_targets=[]`,
+		`github_app_id=1
+github_installation_id=2
+github_targets=["owner/repo","OWNER/REPO"]`,
+		`github_app_id=1
+github_installation_id=2
+github_targets=["owner/../repo"]`,
+		`github_max_pages=2`,
+		`github_app_id=1
+github_installation_id=2
+github_targets=["owner/repo"]
+github_max_pages=101`,
+		`github_app_id=1
+github_installation_id=2
+github_targets=["owner/repo"]
+github_api_version="latest"`,
+	} {
+		if _, err := Parse([]byte(text)); err == nil {
+			t.Errorf("accepted invalid GitHub config: %s", text)
+		}
+	}
+}

@@ -112,6 +112,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, ready func() error, onAud
 	}}
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsOperations(devtoolsBroker),
+		GitHubOperations(controller),
 		AuditOperations(log),
 		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID}),
 		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),

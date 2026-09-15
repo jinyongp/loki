@@ -32,6 +32,7 @@ var commands = map[string]command{
 	"secret set":            {"secret_set", []string{"profile", "secret"}, nil},
 	"secret import-env":     {"import_env", []string{"profile", "file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"secret stage-env":      {"stage_env", []string{"file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
+	"github app-key set":    {"github_app_key_set", nil, nil},
 }
 
 // Request keeps options interspersed with positional arguments.
