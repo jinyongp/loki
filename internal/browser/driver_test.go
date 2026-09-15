@@ -124,9 +124,15 @@ func TestBrowserConfigurationAndQueueCancellation(t *testing.T) {
 			t.Fatal(proxy)
 		}
 	}
-	d, err := NewDriver(Options{Binary: "/chrome", Profile: "/profile", Downloads: "/downloads", Proxy: "http://127.0.0.1:8767"})
-	if err != nil {
-		t.Fatal(err)
+	var (
+		d   *Driver
+		err error
+	)
+	for _, proxy := range []string{"http://127.0.0.1:8767", "http://browser-proxy:18767"} {
+		d, err = NewDriver(Options{Binary: "/chrome", Profile: "/profile", Downloads: "/downloads", Proxy: proxy})
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	d.gate <- struct{}{}
 	ctx, cancel := context.WithCancel(t.Context())

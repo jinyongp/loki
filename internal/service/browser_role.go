@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -27,11 +30,21 @@ func NewBrowserRPC(socket string, uid uint32) BrowserRPC {
 	return BrowserRPC{Client: rpc.Client{Socket: socket, ExpectedUID: &uid, Limits: BrowserLimits()}}
 }
 func (c BrowserRPC) Call(ctx context.Context, operation string, args map[string]any) (map[string]any, error) {
+	if _, err := os.Stat(c.Client.Socket); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fault.Error("browser is not configured")
+		}
+		return nil, err
+	}
 	if args == nil {
 		args = map[string]any{}
 	}
 	var result map[string]any
 	err := runtimeDecode(ctx, c.Client, map[string]any{"operation": operation, "arguments": args}, &result)
+	var networkError *net.OpError
+	if errors.As(err, &networkError) {
+		return nil, fault.Error("browser is unavailable")
+	}
 	return result, err
 }
 func BrowserOperations(driver BrowserCaller) map[string]rpc.Operation {

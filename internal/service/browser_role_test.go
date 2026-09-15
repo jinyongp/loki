@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,6 +41,27 @@ func TestBrowserOperationEnvelope(t *testing.T) {
 		}
 	}
 }
+func TestBrowserRPCReportsMissingOptionalSocket(t *testing.T) {
+	client := NewBrowserRPC(filepath.Join(t.TempDir(), "browser.sock"), uint32(os.Getuid()))
+	if _, err := client.Call(t.Context(), "state", nil); err == nil || err.Error() != "browser is not configured" {
+		t.Fatalf("missing browser error = %v", err)
+	}
+}
+
+func TestBrowserRPCReportsStaleSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "browser.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.(*net.UnixListener).SetUnlinkOnClose(false)
+	listener.Close()
+	client := NewBrowserRPC(socket, uint32(os.Getuid()))
+	if _, err = client.Call(t.Context(), "state", nil); err == nil || err.Error() != "browser is unavailable" {
+		t.Fatalf("stale browser error = %v", err)
+	}
+}
+
 func TestBrowserRoleLifecycle(t *testing.T) {
 	root := t.TempDir()
 	socket := filepath.Join(root, "socket", "browser.sock")
