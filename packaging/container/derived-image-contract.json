@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "base_reference": ["name@sha256:digest"],
+  "extension_roots": ["/usr/local", "/opt/project"],
+  "preserve": {
+    "config": ["Entrypoint", "Cmd", "User", "WorkingDir", "Volumes"],
+    "labels": [
+      "org.opencontainers.image.title",
+      "org.opencontainers.image.revision",
+      "io.loki.devtools.version",
+      "io.loki.ripgrep.version"
+    ],
+    "files": [
+      "/opt/loki/bin/loki",
+      "/opt/loki/bin/devtools",
+      "/opt/loki/libexec/devtools",
+      "/usr/bin/rg",
+      "/usr/share/doc/loki/devtools-catalog.json",
+      "/usr/share/doc/loki/provenance.json"
+    ],
+    "identities": {
+      "runner": "10000:10000",
+      "workspace": "10001",
+      "egress": "10002:10002"
+    },
+    "workspace": {"path": "/workspace", "uid": 10000, "gid": 10001, "mode": "2770"}
+  },
+  "required_label": "io.loki.derived.base",
+  "required_label_value": "base image Config.Id"
+}

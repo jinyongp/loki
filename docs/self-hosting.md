@@ -59,3 +59,25 @@ Load or pull the new image before upgrading:
 Upgrade validates the Loki image label, takes a consistent backup, records the current image, recreates services, and waits for health. A failed upgrade restores the prior image and state automatically. `rollback` later switches back to the recorded image and restores the matching pre-upgrade state.
 
 Lifecycle operations use a directory lock and reject concurrent maintenance. Backup destinations must not already exist. Image references, paths, and credentials are stored separately so secrets do not enter Compose arguments, process listings, or lifecycle output.
+
+## Add project runtimes
+
+Loki ships one multi-role image. Add project-specific language runtimes in a derived image instead of changing service roles or adding language-specific runner services. Start from an immutable digest or local image ID:
+
+```sh
+BASE_REF=registry.example/loki@sha256:...
+docker pull "$BASE_REF"
+BASE_ID=$(docker image inspect --format '{{.Id}}' "$BASE_REF")
+docker build \
+  --build-arg LOKI_BASE="$BASE_REF" \
+  --build-arg LOKI_BASE_ID="$BASE_ID" \
+  --file packaging/container/derived/Dockerfile \
+  --tag local/loki-project:current \
+  .
+./scripts/verify-loki-derived-image.sh "$BASE_REF" local/loki-project:current
+./scripts/loki-compose-lifecycle.sh upgrade local/loki-project:current
+```
+
+Copy project runtime binaries and support files only under `/usr/local` or `/opt/project`. Keep the inherited entrypoint, command, user, working directory, labels, Loki binaries, devtools, rg, identity database, workspace metadata, and volume declarations.
+
+The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for `LOKI_IMAGE`.

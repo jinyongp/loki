@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -eu
+if test "$1 $2" = "image inspect"; then
+  format=$4
+  image=$5
+  case "$format" in
+    *io.loki.derived.base*) case "$image" in derived-base-bad) echo sha256:wrong;; derived-*) echo sha256:base;; *) echo "<no value>";; esac;;
+    *org.opencontainers.image.title*) echo Loki;;
+    *org.opencontainers.image.revision*) echo revision;;
+    *io.loki.devtools.version*) echo 0.10.0;;
+    *io.loki.ripgrep.version*) echo 14.1.1;;
+    *'{{.Id}}'*) echo sha256:base;;
+    *Entrypoint*) case "$image" in derived-config-bad) echo '["bad"]';; *) echo '["/opt/loki/bin/loki"]';; esac;;
+    *Cmd*) echo '["version"]';;
+    *User*) echo '""';;
+    *WorkingDir*) echo '"/workspace"';;
+    *Volumes*) echo null;;
+    *'{{.Os}}'*) echo linux;;
+    *'{{.Architecture}}'*) echo amd64;;
+  esac
+  exit 0
+fi
+if test "$1" = run; then
+  case " $* " in
+    *" --entrypoint sha256sum "*)
+      case "$*" in *derived-files-bad*) echo changed;; *) printf 'same  file\n';; esac;;
+    *) exit 0;;
+  esac
+fi
