@@ -1,5 +1,7 @@
 # Go 전환 실행 계획
 
+> 이 문서는 기존 native/systemd 후보판의 전환 설계와 검증 절차를 보존한 기록이다. 새 일반 배포의 기준은 [설치·배포 계획](installation-distribution-plan.md)과 [아키텍처 개선 계획](architecture-improvement-plan.md)이며, 현재 구현의 결함과 검증 한계는 [Go 종합 검토](go-readiness-review.md)에 기록한다. 아래의 직접 CLI 접근, 고정 toolchain, 상시 필수 구성요소 가정은 새 MCP-only 구조의 요구사항이 아니다. 이전 API·설정과의 호환성은 유지하지 않아도 되지만, 운영 데이터 보존과 실제 전환·복구 승인은 별도로 지켜야 한다.
+
 ## 목적
 
 현재 운영 중인 Python Loki를 건드리지 않고 Go 후보판을 독립적으로 설치·검증·복구할 수 있게 만든다. 에이전트는 일반 개발 작업을 `devtools`와 셸로 수행하고, Loki는 비밀·브라우저·Git 서명·공유·격리 경계를 담당한다.
