@@ -1,0 +1,790 @@
+{
+  "allowed_edges": [
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/admin"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/auth"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/browser"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/browsernet"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/egress"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/execution"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/githubapp"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/gitops"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/service"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/signing"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/state"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/internal/admin",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/admin",
+      "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/internal/auth",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/auth",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/browser",
+      "to": "loki/internal/browsernet"
+    },
+    {
+      "from": "loki/internal/browser",
+      "to": "loki/internal/cdp"
+    },
+    {
+      "from": "loki/internal/browser",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/devtools",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/devtools",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/devtools/cmd/gencatalog",
+      "to": "loki/internal/devtools"
+    },
+    {
+      "from": "loki/internal/dockerproxy",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/dockerproxy",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/dockerproxy",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/githubapp",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/githubapp",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/contract"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/policy",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/rpc",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/secret",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/secret",
+      "to": "loki/internal/state"
+    },
+    {
+      "from": "loki/internal/signing",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/toolchain/cmd/fetch",
+      "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/internal/workspace",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/workspace",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/workspace",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/workspace",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/browser"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/contract"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/gitops"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/mcpserver"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/service"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/workspace"
+    }
+  ],
+  "edge_exceptions": [
+    {
+      "from": "loki/internal/auth",
+      "reason": "safe dialing owned by browser package",
+      "remove_unit": "S02",
+      "to": "loki/internal/browsernet"
+    },
+    {
+      "from": "loki/internal/browsernet",
+      "reason": "network mechanics depend on endpoint termination policy",
+      "remove_unit": "S02/S04",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/devtools",
+      "reason": "devtools adapter brokers secrets directly",
+      "remove_unit": "A04/S04",
+      "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/internal/egress",
+      "reason": "workload egress depends on browser-named mechanics",
+      "remove_unit": "S02/S04",
+      "to": "loki/internal/browsernet"
+    },
+    {
+      "from": "loki/internal/gitops",
+      "reason": "Git checkpoint uses vault-oriented persistence",
+      "remove_unit": "S02/S04",
+      "to": "loki/internal/state"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/artifacts"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/auth"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/browser"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/browsernet"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/contract"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/devtools"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/dockerproxy"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/egress"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/execution"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/githubapp"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/gitops"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/mcpserver"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/previews"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/workspace"
+    },
+    {
+      "from": "loki/internal/workspace",
+      "reason": "workspace revisions use vault-oriented persistence",
+      "remove_unit": "S02/S04",
+      "to": "loki/internal/state"
+    }
+  ],
+  "export_rules": [
+    {
+      "allowed_tags": [
+        "mcp-wire",
+        "diagnostic"
+      ],
+      "description": "MCP SDK types must not leak from feature APIs",
+      "import_prefix": "github.com/modelcontextprotocol/go-sdk/mcp"
+    }
+  ],
+  "module": "loki",
+  "packages": {
+    "loki/cmd/loki": {
+      "kind": "legacy-composition",
+      "owner": "app/roles",
+      "tags": [
+        "legacy-multi-role"
+      ],
+      "target": "cmd/<role> + app/<role>"
+    },
+    "loki/internal/admin": {
+      "kind": "legacy-mixed",
+      "owner": "host-control",
+      "tags": [],
+      "target": "host + control/credentials + transport/cli"
+    },
+    "loki/internal/artifacts": {
+      "kind": "integration",
+      "owner": "sharing",
+      "tags": [],
+      "target": "integrations/sharing"
+    },
+    "loki/internal/audit": {
+      "kind": "control",
+      "owner": "audit",
+      "tags": [],
+      "target": "control/audit"
+    },
+    "loki/internal/auth": {
+      "kind": "legacy-mixed",
+      "owner": "connection-auth",
+      "tags": [],
+      "target": "transport/http + control/identity"
+    },
+    "loki/internal/browser": {
+      "kind": "integration",
+      "owner": "browser",
+      "tags": [
+        "browser-worker"
+      ],
+      "target": "integrations/browser"
+    },
+    "loki/internal/browsernet": {
+      "kind": "legacy-mixed",
+      "owner": "network-mechanics",
+      "tags": [],
+      "target": "platform/netguard + work/network"
+    },
+    "loki/internal/buildinfo": {
+      "kind": "platform",
+      "owner": "buildinfo",
+      "tags": [],
+      "target": "platform/buildinfo"
+    },
+    "loki/internal/cdp": {
+      "kind": "private-integration",
+      "owner": "browser",
+      "tags": [],
+      "target": "integrations/browser/internal/cdp"
+    },
+    "loki/internal/config": {
+      "kind": "host-config",
+      "owner": "config",
+      "tags": [
+        "host-config"
+      ],
+      "target": "host/config"
+    },
+    "loki/internal/contract": {
+      "kind": "legacy-transport",
+      "owner": "mcp",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "transport/mcp"
+    },
+    "loki/internal/daemon": {
+      "kind": "legacy-platform",
+      "owner": "platform",
+      "tags": [],
+      "target": "platform/safeio + transport + app"
+    },
+    "loki/internal/deployment": {
+      "kind": "host",
+      "owner": "deployment",
+      "tags": [],
+      "target": "host/config + host/releases"
+    },
+    "loki/internal/devtools": {
+      "kind": "integration",
+      "owner": "devtools",
+      "tags": [
+        "devtools",
+        "project-execution-local"
+      ],
+      "target": "integrations/devtools"
+    },
+    "loki/internal/devtools/cmd/gencatalog": {
+      "kind": "tooling",
+      "owner": "devtools",
+      "tags": [
+        "tooling"
+      ],
+      "target": "tools/cataloggen"
+    },
+    "loki/internal/dockerproxy": {
+      "kind": "legacy-platform",
+      "owner": "sandbox",
+      "tags": [
+        "launcher-implementation"
+      ],
+      "target": "platform/sandbox"
+    },
+    "loki/internal/e2e": {
+      "kind": "test",
+      "owner": "acceptance",
+      "tags": [
+        "test"
+      ],
+      "target": "tests/acceptance"
+    },
+    "loki/internal/egress": {
+      "kind": "legacy-work",
+      "owner": "network",
+      "tags": [],
+      "target": "work/network"
+    },
+    "loki/internal/execution": {
+      "kind": "legacy-work",
+      "owner": "jobs",
+      "tags": [],
+      "target": "work/jobs"
+    },
+    "loki/internal/fault": {
+      "kind": "legacy-crosscutting",
+      "owner": "errors",
+      "tags": [],
+      "target": "feature errors + control/operations"
+    },
+    "loki/internal/githubapp": {
+      "kind": "integration",
+      "owner": "github",
+      "tags": [
+        "provider-private-key"
+      ],
+      "target": "integrations/github"
+    },
+    "loki/internal/gitops": {
+      "kind": "legacy-work",
+      "owner": "workspace",
+      "tags": [
+        "project-execution-local"
+      ],
+      "target": "work/workspace"
+    },
+    "loki/internal/mcpserver": {
+      "kind": "transport",
+      "owner": "mcp",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "transport/mcp"
+    },
+    "loki/internal/packaging": {
+      "kind": "test",
+      "owner": "packaging",
+      "tags": [
+        "test"
+      ],
+      "target": "tests/acceptance/packaging"
+    },
+    "loki/internal/policy": {
+      "kind": "legacy-platform",
+      "owner": "safeio",
+      "tags": [],
+      "target": "platform/safeio + work/workspace"
+    },
+    "loki/internal/portguard": {
+      "kind": "legacy-mixed",
+      "owner": "endpoints",
+      "tags": [],
+      "target": "platform/proc + work/endpoints"
+    },
+    "loki/internal/previews": {
+      "kind": "integration",
+      "owner": "sharing",
+      "tags": [],
+      "target": "integrations/sharing"
+    },
+    "loki/internal/process": {
+      "kind": "legacy-platform",
+      "owner": "process",
+      "tags": [
+        "project-execution-local"
+      ],
+      "target": "platform/proc + work/jobs"
+    },
+    "loki/internal/rpc": {
+      "kind": "transport",
+      "owner": "rpc",
+      "tags": [],
+      "target": "transport/rpc"
+    },
+    "loki/internal/secret": {
+      "kind": "legacy-mixed",
+      "owner": "credentials",
+      "tags": [
+        "platform-credential-store"
+      ],
+      "target": "work/secrets + control/credentials"
+    },
+    "loki/internal/service": {
+      "kind": "legacy-umbrella",
+      "owner": "composition",
+      "tags": [
+        "mcp-wire",
+        "project-execution-local"
+      ],
+      "target": "app + transport + feature owners"
+    },
+    "loki/internal/signing": {
+      "kind": "integration",
+      "owner": "signing",
+      "tags": [],
+      "target": "integrations/signing"
+    },
+    "loki/internal/state": {
+      "kind": "legacy-platform",
+      "owner": "persistence",
+      "tags": [
+        "platform-credential-store"
+      ],
+      "target": "platform/securestore + safeio"
+    },
+    "loki/internal/toolchain": {
+      "kind": "work",
+      "owner": "toolchains",
+      "tags": [],
+      "target": "work/toolchains"
+    },
+    "loki/internal/toolchain/cmd/fetch": {
+      "kind": "tooling",
+      "owner": "toolchains",
+      "tags": [
+        "tooling"
+      ],
+      "target": "tools/toolchainfetch"
+    },
+    "loki/internal/workspace": {
+      "kind": "work",
+      "owner": "workspace",
+      "tags": [],
+      "target": "work/workspace"
+    },
+    "loki/tools/archcheck": {
+      "kind": "tooling",
+      "owner": "architecture",
+      "tags": [
+        "tooling"
+      ],
+      "target": "tools/archcheck"
+    },
+    "loki/tools/readinessprobe": {
+      "kind": "tooling",
+      "owner": "readiness",
+      "tags": [
+        "tooling",
+        "diagnostic"
+      ],
+      "target": "tools/readinessprobe"
+    }
+  },
+  "roles": [
+    {
+      "forbidden_tags": [
+        "launcher-implementation",
+        "platform-credential-store",
+        "project-execution-local",
+        "browser-worker"
+      ],
+      "name": "gateway",
+      "optional": true,
+      "root": "loki/cmd/loki-gateway"
+    },
+    {
+      "forbidden_tags": [
+        "mcp-wire",
+        "platform-credential-store",
+        "project-execution-local",
+        "browser-worker",
+        "provider-private-key",
+        "devtools"
+      ],
+      "name": "launcher",
+      "optional": true,
+      "root": "loki/cmd/loki-launcher"
+    }
+  ],
+  "third_party_rules": [
+    {
+      "allowed_tags": [
+        "mcp-wire",
+        "diagnostic"
+      ],
+      "description": "MCP SDK is transport/tooling owned",
+      "import_prefix": "github.com/modelcontextprotocol/go-sdk/mcp"
+    },
+    {
+      "allowed_tags": [
+        "host-config",
+        "project-selector",
+        "diagnostic"
+      ],
+      "description": "TOML parsing belongs to host config or project selectors",
+      "import_prefix": "github.com/pelletier/go-toml/v2"
+    }
+  ],
+  "variants": [
+    {
+      "goarch": "amd64",
+      "goos": "linux",
+      "name": "linux-amd64",
+      "tags": []
+    }
+  ],
+  "version": 1
+}
