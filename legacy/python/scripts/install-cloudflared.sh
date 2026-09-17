@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-SOURCE_DIR=${1:-/tmp/loki-mcp-src}
+REPO_DIR=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)}
+REPO_DIR=$(CDPATH= cd -- "$REPO_DIR" && pwd)
+SOURCE_DIR="$REPO_DIR/legacy/python"
 
 test "$(id -u)" -eq 0
 test -f "$SOURCE_DIR/systemd/loki-cloudflared.service"

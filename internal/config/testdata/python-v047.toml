@@ -1,0 +1,23 @@
+# Synthetic Python 0.47 configuration fixture for Go parser compatibility.
+# Kept independently of the archived Python server and its deployment scripts.
+root = "/workspace"
+audit_log = "/var/log/loki/mcp/audit.jsonl"
+host = "127.0.0.1"
+port = 8765
+public_hosts = []
+max_file_bytes = 16777216
+max_write_bytes = 2097152
+max_output_bytes = 262144
+max_list_entries = 2000
+max_search_results = 500
+max_read_lines = 2000
+max_patch_bytes = 524288
+max_patch_files = 50
+max_processes = 3
+max_action_processes = 12
+max_action_processes_per_profile = 6
+process_retention_seconds = 3600
+
+[executables]
+[checks]
+[processes]

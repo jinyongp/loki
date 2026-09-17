@@ -1,7 +1,12 @@
 #!/bin/sh
 set -eu
 
-SOURCE_DIR=$1
+REPO_DIR=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)}
+REPO_DIR=$(CDPATH= cd -- "$REPO_DIR" && pwd)
+SOURCE_DIR="$REPO_DIR/legacy/python"
+test -f "$SOURCE_DIR/pyproject.toml"
+test -d "$REPO_DIR/bundled_skills"
+test -f "$REPO_DIR/config/loki-gitconfig"
 VERIFY_DIR=$(mktemp -d /tmp/loki-verify.XXXXXX)
 cleanup() {
   status=$?
@@ -18,7 +23,7 @@ python3 -m venv "$VERIFY_DIR/venv"
 "$VERIFY_DIR/venv/bin/python" -m pip install --quiet "$SOURCE_DIR[test]"
 "$VERIFY_DIR/venv/bin/python" -m pytest -q "$SOURCE_DIR/tests"
 
-/bin/sh "$SOURCE_DIR/scripts/install-loki-mcp.sh" "$SOURCE_DIR"
+/bin/sh "$SOURCE_DIR/scripts/install-loki-mcp.sh" "$REPO_DIR"
 attempt=0
 while test ! -S /run/loki/browser/control.sock && test "$attempt" -lt 40; do
   sleep 0.25

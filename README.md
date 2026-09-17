@@ -89,6 +89,12 @@ appears after systemd starts the MCP unit is handled without a manual restart.
 
 ## Production separation
 
+The retained Python implementation, browser sidecar, tests, and deployment
+assets live together under [legacy/python](legacy/python/README.md). Keep that
+retirement unit until the Go deployment and recovery checks have passed; its
+README records maintenance entrypoints and removal conditions. The repository
+root is the Go project, not an installable Python package.
+
 The currently deployed Python service is separate from this Go candidate.
 Building, staging, and testing the candidate do not alter or restart the
 deployed service. Activating the Go units is a separate cutover operation.

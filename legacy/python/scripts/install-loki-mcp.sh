@@ -1,10 +1,14 @@
 #!/bin/sh
 set -eu
 
-SOURCE_DIR=${1:-/tmp/loki-mcp-src}
+REPO_DIR=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)}
+REPO_DIR=$(CDPATH= cd -- "$REPO_DIR" && pwd)
+SOURCE_DIR="$REPO_DIR/legacy/python"
 
 test "$(id -u)" -eq 0
 test -f "$SOURCE_DIR/pyproject.toml"
+test -d "$REPO_DIR/bundled_skills"
+test -f "$REPO_DIR/config/loki-gitconfig"
 
 systemctl stop loki-mcp.service loki-runtime.service \
   loki-browser.service loki-port-guard.service loki-signing-agent.service \
@@ -39,7 +43,7 @@ if id runner >/dev/null 2>&1; then
   if test ! -e /srv/workspace/loki/.agents/skills/devtools; then
     install -d -o runner -g workspace -m 2770 /srv/workspace/loki/.agents/skills/devtools
     install -o runner -g workspace -m 0660 \
-      "$SOURCE_DIR/bundled_skills/devtools/SKILL.md" \
+      "$REPO_DIR/bundled_skills/devtools/SKILL.md" \
       /srv/workspace/loki/.agents/skills/devtools/SKILL.md
   fi
   if test -x /home/linuxbrew/.linuxbrew/bin/rustup; then
@@ -69,7 +73,7 @@ python3 -m venv /opt/loki-mcp/venv
 /opt/loki-mcp/venv/bin/python -m pip install --no-cache-dir "$SOURCE_DIR"
 install -d -o root -g root -m 0755 /opt/loki-mcp/share /opt/loki-mcp/share/skills
 find /opt/loki-mcp/share/skills -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-cp -a "$SOURCE_DIR/bundled_skills/." /opt/loki-mcp/share/skills/
+cp -a "$REPO_DIR/bundled_skills/." /opt/loki-mcp/share/skills/
 chown -R root:root /opt/loki-mcp/share/skills
 find /opt/loki-mcp/share/skills -type d -exec chmod 0755 {} +
 find /opt/loki-mcp/share/skills -type f -exec chmod 0644 {} +
@@ -90,7 +94,7 @@ chown root:root /var/lib/loki/signing/id_ed25519 /var/lib/loki/signing/id_ed2551
 chmod 0600 /var/lib/loki/signing/id_ed25519
 chmod 0644 /var/lib/loki/signing/id_ed25519.pub
 install -o root -g root -m 0644 /var/lib/loki/signing/id_ed25519.pub /etc/loki/signing_key.pub
-install -o root -g root -m 0644 "$SOURCE_DIR/config/loki-gitconfig" /etc/loki/gitconfig
+install -o root -g root -m 0644 "$REPO_DIR/config/loki-gitconfig" /etc/loki/gitconfig
 git_identity_name=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.name || true)
 git_identity_email=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.email || true)
 if test -z "$git_identity_name" || test -z "$git_identity_email"; then

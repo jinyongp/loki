@@ -54,7 +54,7 @@ func TestInvalidConfiguration(t *testing.T) {
 }
 
 func TestCheckedInConfig(t *testing.T) {
-	for _, path := range []string{"../../config/loki-mcp.toml", "../../config/loki-go.toml"} {
+	for _, path := range []string{"testdata/python-v047.toml", "../../config/loki-go.toml"} {
 		if _, err := Load(path); err != nil {
 			t.Fatal(path, err)
 		}

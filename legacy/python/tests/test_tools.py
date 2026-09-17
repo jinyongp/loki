@@ -865,7 +865,7 @@ def test_agent_skills_builtin_shared_project_precedence(
 def test_bundled_agent_skills_are_valid_and_mcp_adapted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    builtin_root = Path(__file__).resolve().parents[1] / "bundled_skills"
+    builtin_root = Path(__file__).resolve().parents[3] / "bundled_skills"
     monkeypatch.setattr(skills_module, "BUILTIN_SKILL_ROOT", builtin_root)
     tools = make_tools(tmp_path)
     expected = {"devtools"}
