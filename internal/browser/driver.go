@@ -44,8 +44,13 @@ func NewDriver(options Options) (*Driver, error) {
 		}
 	}
 	proxy, err := url.Parse(options.Proxy)
+	if err != nil {
+		return nil, errors.New("browser requires the managed HTTP proxy")
+	}
 	proxyHost := proxy.Hostname()
-	if err != nil || proxy.Scheme != "http" || proxyHost != "127.0.0.1" && proxyHost != "browser-proxy" || proxy.Port() == "" || proxy.User != nil || proxy.Path != "" || proxy.RawQuery != "" || proxy.Fragment != "" {
+	if proxy.Scheme != "http" || proxyHost != "127.0.0.1" && proxyHost != "browser-proxy" ||
+		proxy.Port() == "" || proxy.User != nil || proxy.Opaque != "" || proxy.Path != "" ||
+		proxy.RawQuery != "" || proxy.ForceQuery || strings.Contains(options.Proxy, "#") {
 		return nil, errors.New("browser requires the managed HTTP proxy")
 	}
 	port, err := strconv.Atoi(proxy.Port())

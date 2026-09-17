@@ -226,10 +226,6 @@
     },
     {
       "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/browser"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
       "to": "loki/internal/portguard"
     },
     {

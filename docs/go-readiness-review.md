@@ -209,7 +209,9 @@ Correction: transactional initialization/recovery, explicit mutation outcomes an
 
 Priority: P2. Evidence: reproduced at constructor/validation level.
 
-`browser.NewDriver` calls Hostname on the parsed proxy before checking the URL parse error; a malformed configured proxy such as an invalid percent escape panics instead of returning a validation error. Browser startup also disables Chromium's sandbox, making the outer browser worker boundary especially important; changing that flag requires a real clean-environment test rather than assumption.
+Constructor containment status: `browser.NewDriver` now checks URL parsing errors before reading the parsed proxy and returns a static validation error without exposing the input. Managed native/Compose HTTP endpoints remain supported; credentials, paths, queries (including an empty `?`), fragments (including an empty `#`), unsupported hosts/protocols and invalid ports are rejected. Deterministic and fuzz regressions in `internal/browser/proxy_validation_test.go` replace the constructor observation and verify that construction does not create browser process/filesystem state.
+
+At the reviewed baseline, `Hostname` was called before checking the parse error, so malformed percent escapes, brackets and ports could panic. Browser startup still disables Chromium's sandbox, making the outer browser worker boundary especially important; changing that flag requires a real clean-environment test rather than assumption. This constructor fix does not change that boundary or close R14's remaining protected-port work.
 
 `portguard.Validate` rejects Python-era 8765/8766/8767 but accepts Go's 18765. The probe confirms the validator inconsistency, not that a real core process was terminated: ownership checks are additional restrictions. Service/cgroup names are similarly spread across policy, manifests and native/Compose layouts.
 
