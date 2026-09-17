@@ -93,9 +93,11 @@ Acceptance: an MCP-only client must discover, start, inspect, cancel, and collec
 
 Priority: P1. Evidence: reproduced.
 
-`internal/config/config.go:Parse` consumes selected entries from a generic TOML map without rejecting unused keys. A document containing legacy `max_processes`, `[executables]`, and `[checks]` parses successfully and produces exactly the default Config. The typo `max_output_byte = 8192` is accepted while the effective limit remains 262144. `max_output_bytes = 8192.9` is also accepted and truncated to 8192.
+Containment status: `internal/config` now owns an explicit top-level setting allowlist and rejects unsupported or obsolete keys before building an effective Config. Integer limits accept only TOML integer scalars within range; numeric strings and floating-point values are not coerced or truncated. The current Go configuration and valid GitHub fragment merge remain positive regressions, while the Python 0.47 fixture is retained as an intentional negative compatibility test.
 
-This is not semantic compatibility. With compatibility no longer required, reject obsolete/unknown fields directly and require integer types for integer settings. Effective-policy inspection must report what will actually be enforced, without disclosing credentials. A failed configuration change must leave the active generation unchanged.
+At the reviewed baseline, `Parse` consumed selected entries from a generic TOML map without rejecting unused keys. Legacy `max_processes`, `[executables]`, and `[checks]` were silently ignored; the misspelled `max_output_byte = 8192` was accepted while the effective limit remained 262144; `max_output_bytes = 8192.9` was truncated to 8192.
+
+Remaining correction: later control-plane work still needs effective-policy inspection and transactional configuration generation/apply semantics so an operator can see exactly what is enforced and a failed change cannot disturb the active generation. The reproduced silent-ignore/coercion path itself is now covered by permanent `internal/config` regressions and is retired from readinessprobe.
 
 ## R4 — Managed platform credentials are ordinary mutable/injectable profiles
 
@@ -177,11 +179,11 @@ Correction: bind/listen policy and network endpoint identity must be explicit in
 
 Priority: P1. Evidence: reproduced over in-memory MCP transports with stub handlers.
 
-`internal/mcpserver/server.go:wrap` deletes unknown keys before schema validation except for two GitHub tools. A `git_stage` request with a misspelled expected-index field succeeded against the stub handler; the actual `expected_index_sha256` default became null. No real index mutation was performed by this probe.
+Containment status: the generic MCP wrapper now rejects every unknown tool argument before defaults or handler execution; no per-tool exceptions remain. Typed runtime RPC decoding removes only the transport-owned `operation` field, then rejects unknown operation-specific fields, wrong scalar types, and trailing JSON before domain execution. Permanent regressions verify that a misspelled Git index precondition never reaches the handler and that invalid runtime input cannot mutate secret state.
 
-This turns a caller's intended concurrency precondition into no precondition without an error. Captured catalog JSON, Go input structs, handler maps and compatibility wrappers are separate sources of behavior. Generic dictionary output schemas provide little assurance about real results.
+At the reviewed baseline, `internal/mcpserver/server.go:wrap` deleted unknown keys before schema validation except for two GitHub tools. A `git_stage` request with a misspelled expected-index field therefore reached the stub handler with `expected_index_sha256 = null`. The typed runtime decoder likewise ignored unknown operation-specific fields. No real index mutation was performed by the baseline probe.
 
-Correction: reject unknown input/config fields, validate discriminated action-specific requests, define typed result/error contracts, and generate catalog/schema/docs from reviewed definitions. Snapshots are regression artifacts, not the canonical reason an old behavior must remain. Mandatory preconditions are explicit; public errors carry stable codes, operation IDs and retryability instead of generic advice to retry every failure.
+Remaining correction: A02/A07 still need action-specific typed request/result/error contracts, stable public error codes and generated schema/catalog documentation. The reproduced silent-discard path is now covered by permanent `internal/mcpserver`, `internal/rpc`, and `internal/service` regressions and is retired from readinessprobe.
 
 ## R12 — Lifecycle failure reporting and state publication are not transactional
 

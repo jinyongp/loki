@@ -48,6 +48,27 @@ func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, sock
 	uid := uint32(os.Getuid())
 	return rpc.Client{Socket: socket, ExpectedUID: &uid}
 }
+func TestRuntimeTypedRejectsUnknownFieldsBeforeMutation(t *testing.T) {
+	controller := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "runtime")}
+	if _, err := controller.Initialize(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	op := SecretOperations(controller)["profile_create"]
+	if _, err := op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create","profile":"web","profiel":"typo"}`)); err == nil {
+		t.Fatal("unknown runtime field reached profile mutation")
+	}
+	profiles, err := controller.Profiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles["profiles"].([]map[string]any)) != 0 {
+		t.Fatal("invalid runtime request mutated the vault")
+	}
+	if _, err = op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create","profile":"web"}`)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSecretAndWorkflowMCP(t *testing.T) {
 	c := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "runtime")}
 	if _, err := c.Initialize(t.Context()); err != nil {

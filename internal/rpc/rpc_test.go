@@ -12,6 +12,25 @@ import (
 	"testing"
 )
 
+func TestDecodeRejectsUnknownAndTrailingOperationInput(t *testing.T) {
+	type request struct {
+		Profile string `json:"profile"`
+	}
+	value, err := Decode[request](json.RawMessage(`{"operation":"profile_create","profile":"web"}`))
+	if err != nil || value.Profile != "web" {
+		t.Fatalf("valid typed request = %#v, %v", value, err)
+	}
+	for _, raw := range []json.RawMessage{
+		json.RawMessage(`{"operation":"profile_create","profile":"web","profiel":"typo"}`),
+		json.RawMessage(`{"operation":"profile_create","profile":7}`),
+		json.RawMessage(`{"operation":"profile_create","profile":"web"} {}`),
+	} {
+		if _, err = Decode[request](raw); err == nil {
+			t.Fatalf("accepted invalid typed request: %s", raw)
+		}
+	}
+}
+
 func TestPeerPolicy(t *testing.T) {
 	s := Server{AgentUID: 1000}
 	s.ReadCgroup = func(int32) ([]byte, error) { return []byte("0::/system.slice/loki-mcp.service\n"), nil }

@@ -104,6 +104,30 @@ func TestSchemaValidationAndSafeErrors(t *testing.T) {
 	}
 }
 
+func TestUnknownToolArgumentsNeverReachHandlers(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["git_stage"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(input)
+	}
+	client := connect(t, handlers)
+	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "git_stage",
+		Arguments: map[string]any{
+			"action":               "paths",
+			"paths":                []string{"fixture.txt"},
+			"expected_index_sha25": "misspelled-not-a-real-index",
+		},
+	})
+	if err != nil || !result.IsError {
+		t.Fatalf("unknown field was accepted: %#v %v", result, err)
+	}
+	if calls != 0 {
+		t.Fatal("unknown tool input reached handler")
+	}
+}
+
 func TestGitHubIssueFieldsRejectsCredentialAndTransportArguments(t *testing.T) {
 	client := connect(t, testHandlers(t))
 	for _, key := range []string{"token", "url", "headers", "method"} {

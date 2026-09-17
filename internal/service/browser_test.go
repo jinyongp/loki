@@ -93,7 +93,16 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	}
 	for tool, actions := range map[string][]string{"browser_session": {"start", "navigate", "stop"}, "browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "type", "press", "scroll", "back", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
-			result := decode(call(tool, map[string]any{"action": action, "url": "https://example.com", "index": 0, "text": "test", "key": "Enter", "tab_id": "1234", "request_id": "r1"}))
+			args := map[string]any{"action": action}
+			switch tool {
+			case "browser_session":
+				args["url"] = "https://example.com"
+			case "browser_observe":
+				args["request_id"] = "r1"
+			case "browser_interact":
+				args["index"], args["text"], args["key"], args["tab_id"] = 0, "test", "Enter", "1234"
+			}
+			result := decode(call(tool, args))
 			want := action
 			if action == "tabs" {
 				want = "list_tabs"

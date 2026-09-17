@@ -230,18 +230,6 @@
     },
     {
       "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/contract"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/mcpserver"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
       "to": "loki/internal/portguard"
     },
     {

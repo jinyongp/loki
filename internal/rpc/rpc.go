@@ -280,9 +280,26 @@ func invoke(ctx context.Context, h Handler, raw json.RawMessage) (result any, er
 }
 
 // Decode extracts the operation-specific typed request before domain execution.
+// The transport-owned operation field is removed before strict domain decoding.
 func Decode[T any](raw json.RawMessage) (T, error) {
 	var value T
-	if err := json.Unmarshal(raw, &value); err != nil {
+	var envelope map[string]json.RawMessage
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(&envelope); err != nil || envelope == nil {
+		return value, fault.Error("invalid runtime arguments")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return value, fault.Error("invalid runtime arguments")
+	}
+	delete(envelope, "operation")
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return value, fault.Error("invalid runtime arguments")
+	}
+	decoder = json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&value); err != nil {
 		return value, fault.Error("invalid runtime arguments")
 	}
 	return value, nil

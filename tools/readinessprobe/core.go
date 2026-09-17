@@ -5,40 +5,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
-	"loki/internal/config"
 	"loki/internal/process"
 )
-
-type r3Observation struct {
-	LegacyUnknownKeysAcceptedAndIgnored bool `json:"legacy_unknown_keys_accepted_and_ignored"`
-	MisspelledKeyAccepted               bool `json:"misspelled_key_accepted"`
-	FractionalIntegerAccepted           bool `json:"fractional_integer_accepted"`
-}
 
 type r7Observation struct {
 	TimeoutReported                   bool `json:"timeout_reported"`
 	DetachedDescendantSurvivedTimeout bool `json:"detached_descendant_survived_timeout"`
-}
-
-func observeConfig() (r3Observation, error) {
-	empty, err := config.Parse(nil)
-	if err != nil {
-		return r3Observation{}, err
-	}
-	legacy, legacyErr := config.Parse([]byte("max_processes=1\n[executables]\nnode='/unused'\n[checks]\ntest=['false']\n"))
-	_, typoErr := config.Parse([]byte("max_output_byte=8192\n"))
-	_, fractionalErr := config.Parse([]byte("max_output_bytes=8192.9\n"))
-	return r3Observation{
-		LegacyUnknownKeysAcceptedAndIgnored: legacyErr == nil && reflect.DeepEqual(empty, legacy),
-		MisspelledKeyAccepted:               typoErr == nil,
-		FractionalIntegerAccepted:           fractionalErr == nil,
-	}, nil
 }
 
 func observeProcessCleanup() (r7Observation, error) {
