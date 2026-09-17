@@ -32,20 +32,16 @@ type r3Observation struct {
 	FractionalIntegerAccepted           bool `json:"fractional_integer_accepted"`
 }
 
-type r5Observation struct {
-	ProjectTextconvExecuted bool `json:"project_textconv_executed"`
-}
-
 type r7Observation struct {
 	TimeoutReported                   bool `json:"timeout_reported"`
 	DetachedDescendantSurvivedTimeout bool `json:"detached_descendant_survived_timeout"`
 }
 
-func observeGit() (r1Observation, r5Observation, error) {
+func observeGit() (r1Observation, error) {
 	ctx := context.Background()
 	root, err := os.MkdirTemp("", "loki-readiness-git-")
 	if err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	defer os.RemoveAll(root)
 
@@ -59,7 +55,7 @@ func observeGit() (r1Observation, r5Observation, error) {
 	}
 	repository := filepath.Join(root, "repo")
 	if err = os.Mkdir(repository, 0700); err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	git := func(arguments ...string) error {
 		command := exec.Command("/usr/bin/git", arguments...)
@@ -72,27 +68,27 @@ func observeGit() (r1Observation, r5Observation, error) {
 		return nil
 	}
 	if err = git("init", "-q"); err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	write := func(path, value string, mode os.FileMode) error {
 		return os.WriteFile(path, []byte(value), mode)
 	}
 	tracked := filepath.Join(repository, "tracked.txt")
 	if err = write(tracked, "before\n", 0600); err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	if err = git("add", "--", "tracked.txt"); err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 
 	paths, err := policy.New(root)
 	if err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	defer paths.Close()
 	configuration, err := config.Parse(nil)
 	if err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	configuration.Root = root
 	configuration.AuditLog = filepath.Join(root, "logs", "audit.jsonl")
@@ -100,7 +96,7 @@ func observeGit() (r1Observation, r5Observation, error) {
 
 	moved := filepath.Join(repository, "moved.txt")
 	if err = os.Rename(tracked, moved); err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	_, stageErr := controller.MutatePaths(ctx, "stage", "repo", []string{"tracked.txt", "moved.txt"}, nil)
 	deleted := "tracked.txt"
@@ -109,34 +105,17 @@ func observeGit() (r1Observation, r5Observation, error) {
 
 	files, err := workspace.New(configuration)
 	if err != nil {
-		return r1Observation{}, r5Observation{}, err
+		return r1Observation{}, err
 	}
 	defer files.Close()
 	_, nestedRemoveErr := files.RemoveTracked(ctx, "repo/moved.txt")
-
-	converter := filepath.Join(root, "textconv.sh")
-	marker := filepath.Join(root, "textconv-ran")
-	if err = write(converter, "#!/bin/sh\nprintf ran > '"+marker+"'\ncat \"$1\"\n", 0700); err != nil {
-		return r1Observation{}, r5Observation{}, err
-	}
-	if err = git("config", "diff.review.textconv", converter); err != nil {
-		return r1Observation{}, r5Observation{}, err
-	}
-	if err = write(filepath.Join(repository, ".gitattributes"), "*.txt diff=review\n", 0600); err != nil {
-		return r1Observation{}, r5Observation{}, err
-	}
-	if err = write(moved, "after\n", 0600); err != nil {
-		return r1Observation{}, r5Observation{}, err
-	}
-	_, _ = controller.Diff(ctx, "repo", false, nil)
-	_, markerErr := os.Stat(marker)
 
 	return r1Observation{
 		DeletedPathStageRejected:   stageErr != nil,
 		DeletedPathDiffRejected:    diffErr != nil,
 		NativeScopedStageSucceeded: nativeErr == nil,
 		NestedRepoRemoveRejected:   nestedRemoveErr != nil,
-	}, r5Observation{ProjectTextconvExecuted: markerErr == nil}, nil
+	}, nil
 }
 
 func observeConfig() (r3Observation, error) {

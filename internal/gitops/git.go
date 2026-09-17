@@ -33,7 +33,31 @@ type Controller struct {
 
 func hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 func (c *Controller) git(ctx context.Context, cwd string, input []byte, maximum int, args ...string) (process.Result, error) {
-	return process.Run(ctx, process.Spec{Argv: append([]string{"/usr/bin/git", "--literal-pathspecs"}, args...), CWD: cwd, Env: c.Env, Input: input, Timeout: 30 * time.Second, MaxOutput: maximum})
+	prefix := []string{
+		"/usr/bin/git", "--no-pager", "--literal-pathspecs",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.hooksPath=/dev/null",
+	}
+	return process.Run(ctx, process.Spec{Argv: append(prefix, args...), CWD: cwd, Env: c.Env, Input: input, Timeout: 30 * time.Second, MaxOutput: maximum})
+}
+
+func (c *Controller) rejectExecutableFilters(ctx context.Context, cwd string) error {
+	result, err := c.git(ctx, cwd, nil, c.Config.MaxOutputBytes,
+		"config", "--includes", "--name-only", "--get-regexp", `^filter\..*\.(clean|smudge|process)$`)
+	if err != nil {
+		return err
+	}
+	switch result.ExitCode {
+	case 1:
+		return nil
+	case 0:
+		if result.Truncated {
+			return fault.Error("unable to inspect Git filter configuration")
+		}
+		return fault.Error("repository executable Git filters are unavailable in the Git controller")
+	default:
+		return fault.Error("unable to inspect Git filter configuration")
+	}
 }
 func public(result process.Result, err error) (map[string]any, error) {
 	if err != nil {
@@ -68,6 +92,9 @@ func (c *Controller) Status(ctx context.Context, cwd string) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
+	if err = c.rejectExecutableFilters(ctx, full); err != nil {
+		return nil, err
+	}
 	return public(c.git(ctx, full, nil, c.Config.MaxOutputBytes, "status", "--short", "--branch", "--untracked-files=all"))
 }
 func (c *Controller) Diff(ctx context.Context, cwd string, staged bool, path *string) (map[string]any, error) {
@@ -75,7 +102,10 @@ func (c *Controller) Diff(ctx context.Context, cwd string, staged bool, path *st
 	if err != nil {
 		return nil, err
 	}
-	args := []string{"diff", "--no-ext-diff"}
+	if err = c.rejectExecutableFilters(ctx, full); err != nil {
+		return nil, err
+	}
+	args := []string{"diff", "--no-ext-diff", "--no-textconv"}
 	if staged {
 		args = append(args, "--cached")
 	}
@@ -151,6 +181,11 @@ func (c *Controller) MutatePaths(ctx context.Context, operation, cwd string, pat
 	full, err := c.Paths.ResolveCWD(cwd)
 	if err != nil {
 		return nil, err
+	}
+	if operation == "stage" {
+		if err = c.rejectExecutableFilters(ctx, full); err != nil {
+			return nil, err
+		}
 	}
 	clean := []string{}
 	for _, path := range paths {

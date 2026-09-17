@@ -115,13 +115,15 @@ Remaining correction: A04/S04 must move platform credentials, application secret
 
 Priority: P0. Evidence: local code execution reproduced; deployment consequences traced statically.
 
-The Git controller's `Diff` uses `--no-ext-diff` but not `--no-textconv`. A disposable repository's textconv command wrote a synthetic marker when the Go controller performed a diff. Git documents these as separate switches.
+At the reviewed baseline, `Diff` disabled external diff but still allowed textconv. Follow-up synthetic controller probes also showed repository `core.fsmonitor` execution from status/diff/stage and executable clean-filter invocation from diff/stage. Those project-selected programs therefore ran from the Git controller's process context rather than a workload sandbox.
 
-`internal/service/mcp.go` constructs this controller inside the MCP service; `internal/gitops/git.go` calls `process.Run` without a separate Identity or workload sandbox. The Compose MCP process has its transport token and broker sockets mounted. Code run by a repository-controlled Git extension is therefore not necessarily executing with a work-only view of the world.
+Containment status: every Git subprocess now disables paging, repository hooks and fsmonitor through controller-owned global options. Diff also disables textconv and external diff. Status, diff and path staging fail closed when effective Git configuration contains executable clean/smudge/process filters, before invoking those filters; permanent `internal/gitops` regressions cover these paths. This intentionally rejects dedicated-tool use for repositories that require executable filters instead of approximating or running their programs in the privileged controller.
 
-`internal/rpc/rpc.go:Authorized` also treats every matching AgentUID as the same Agent principal and treats a matching MCP cgroup suffix as administrative authority. A synthetic same-UID peer with that suffix passed Administrative authorization. Native/Compose cgroups differ, so this result is not a claim that the current Compose deployment permits every administrative request.
+`internal/service/mcp.go` still constructs the Git controller inside the MCP service, and `internal/gitops` still uses the shared process layer rather than the future Job sandbox. The containment above therefore removes the reproduced repository-executable routes; it is not the final execution architecture.
 
-The fundamental correction is to stop executing project-controlled programs in the gateway/controller security context. Harden inspection commands, but do not rely on a growing list of Git flags as the only sandbox. Git hooks, filters, fsmonitor, local configuration, project scripts and their children must run in the same work-only execution model. A process must not acquire gateway/host identity merely by inheriting its UID or cgroup.
+`internal/rpc/rpc.go:Authorized` also still treats every matching AgentUID as the same Agent principal and treats a matching MCP cgroup suffix as administrative authority. A synthetic same-UID peer with that suffix passed Administrative authorization. Native/Compose cgroups differ, so this result is not a claim that the current Compose deployment permits every administrative request.
+
+The fundamental correction remains to execute project-controlled programs only in the work-only Job model. General Git commands, intentional filters/hooks/project scripts and their children belong there. A process must not acquire gateway/host identity merely by inheriting its UID or cgroup.
 
 ## R6 — Declared network profiles are not isolated workload authorities
 
