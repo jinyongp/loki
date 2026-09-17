@@ -31,6 +31,8 @@ type Controller struct {
 	mu            sync.Mutex
 }
 
+var errNotRepository = errors.New("cwd is not inside a Git repository")
+
 func hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 func (c *Controller) git(ctx context.Context, cwd string, input []byte, maximum int, args ...string) (process.Result, error) {
 	prefix := []string{
@@ -87,6 +89,107 @@ func (c *Controller) path(cwd, requested string, exists bool) (string, error) {
 	}
 	return filepath.Rel(cwd, target)
 }
+
+func (c *Controller) repositoryRoot(ctx context.Context, cwd string) (string, error) {
+	repository, err := c.git(ctx, cwd, nil, c.Config.MaxOutputBytes, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	if repository.ExitCode != 0 || repository.Truncated {
+		return "", errNotRepository
+	}
+	root, err := filepath.EvalSymlinks(strings.TrimSpace(repository.Output))
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(c.Paths.Root(), root)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fault.Error("repository escapes workspace")
+	}
+	for _, option := range []string{"--git-common-dir", "--git-dir"} {
+		metadata, runErr := c.git(ctx, cwd, nil, c.Config.MaxOutputBytes, "rev-parse", "--path-format=absolute", option)
+		if runErr != nil {
+			return "", runErr
+		}
+		if metadata.ExitCode != 0 || metadata.Truncated {
+			return "", fault.Error("unable to inspect Git metadata")
+		}
+		target, resolveErr := filepath.EvalSymlinks(strings.TrimSpace(metadata.Output))
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+		relative, resolveErr = filepath.Rel(c.Paths.Root(), target)
+		if resolveErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return "", fault.Error("Git metadata escapes workspace")
+		}
+	}
+	return root, nil
+}
+
+func (c *Controller) repositoryKnowsPath(ctx context.Context, cwd, relative string) (bool, error) {
+	root, err := c.repositoryRoot(ctx, cwd)
+	if err != nil {
+		if errors.Is(err, errNotRepository) {
+			return false, fault.Error(errNotRepository.Error())
+		}
+		return false, err
+	}
+	absolute := filepath.Clean(filepath.Join(cwd, relative))
+	repositoryRelative, err := filepath.Rel(root, absolute)
+	if err != nil || repositoryRelative == ".." || strings.HasPrefix(repositoryRelative, ".."+string(filepath.Separator)) {
+		return false, fault.Error("Git path escapes repository")
+	}
+	pathspec := filepath.ToSlash(repositoryRelative)
+	tracked, err := c.git(ctx, root, nil, c.Config.MaxOutputBytes, "ls-files", "-z", "--", pathspec)
+	if err != nil {
+		return false, err
+	}
+	if tracked.ExitCode != 0 || tracked.Truncated {
+		return false, fault.Error("unable to inspect Git tracked paths")
+	}
+	if len(tracked.Raw) != 0 {
+		return true, nil
+	}
+	head, err := c.git(ctx, root, nil, c.Config.MaxOutputBytes, "rev-parse", "--verify", "--quiet", "HEAD")
+	if err != nil {
+		return false, err
+	}
+	if head.ExitCode == 1 {
+		return false, nil
+	}
+	if head.ExitCode != 0 || head.Truncated {
+		return false, fault.Error("unable to inspect Git HEAD")
+	}
+	committed, err := c.git(ctx, root, nil, c.Config.MaxOutputBytes, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", pathspec)
+	if err != nil {
+		return false, err
+	}
+	if committed.ExitCode != 0 || committed.Truncated {
+		return false, fault.Error("unable to inspect Git committed paths")
+	}
+	return len(committed.Raw) != 0, nil
+}
+
+func (c *Controller) knownPath(ctx context.Context, cwd, requested string) (string, error) {
+	relative, err := c.path(cwd, requested, false)
+	if err != nil {
+		return "", err
+	}
+	if _, err = c.path(cwd, requested, true); err == nil {
+		return relative, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	known, err := c.repositoryKnowsPath(ctx, cwd, relative)
+	if err != nil {
+		return "", err
+	}
+	if !known {
+		return "", fault.Error("Git path does not exist and is not tracked")
+	}
+	return relative, nil
+}
+
 func (c *Controller) Status(ctx context.Context, cwd string) (map[string]any, error) {
 	full, err := c.Paths.ResolveCWD(cwd)
 	if err != nil {
@@ -110,7 +213,7 @@ func (c *Controller) Diff(ctx context.Context, cwd string, staged bool, path *st
 		args = append(args, "--cached")
 	}
 	if path != nil {
-		relative, err := c.path(full, *path, true)
+		relative, err := c.knownPath(ctx, full, *path)
 		if err != nil {
 			return nil, err
 		}
@@ -119,37 +222,11 @@ func (c *Controller) Diff(ctx context.Context, cwd string, staged bool, path *st
 	return public(c.git(ctx, full, nil, c.Config.MaxOutputBytes, args...))
 }
 func (c *Controller) index(ctx context.Context, cwd string) (string, error) {
-	repository, err := c.git(ctx, cwd, nil, c.Config.MaxOutputBytes, "rev-parse", "--show-toplevel")
-	if err != nil {
+	if _, err := c.repositoryRoot(ctx, cwd); err != nil {
+		if errors.Is(err, errNotRepository) {
+			return "", fault.Error(errNotRepository.Error())
+		}
 		return "", err
-	}
-	if repository.ExitCode != 0 {
-		return "", fault.Error("cwd is not inside a Git repository")
-	}
-	root, err := filepath.EvalSymlinks(strings.TrimSpace(repository.Output))
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(c.Paths.Root(), root)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", fault.Error("repository escapes workspace")
-	}
-	for _, option := range []string{"--git-common-dir", "--git-dir"} {
-		metadata, err := c.git(ctx, cwd, nil, c.Config.MaxOutputBytes, "rev-parse", "--path-format=absolute", option)
-		if err != nil {
-			return "", err
-		}
-		if metadata.ExitCode != 0 || metadata.Truncated {
-			return "", fault.Error("unable to inspect Git metadata")
-		}
-		target, err := filepath.EvalSymlinks(strings.TrimSpace(metadata.Output))
-		if err != nil {
-			return "", err
-		}
-		rel, err := filepath.Rel(c.Paths.Root(), target)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
-			return "", fault.Error("Git metadata escapes workspace")
-		}
 	}
 	result, err := c.git(ctx, cwd, nil, 64*1024*1024, "ls-files", "--stage", "-z")
 	if err != nil {
@@ -189,7 +266,12 @@ func (c *Controller) MutatePaths(ctx context.Context, operation, cwd string, pat
 	}
 	clean := []string{}
 	for _, path := range paths {
-		relative, err := c.path(full, path, operation == "stage")
+		var relative string
+		if operation == "stage" {
+			relative, err = c.knownPath(ctx, full, path)
+		} else {
+			relative, err = c.path(full, path, false)
+		}
 		if err != nil {
 			return nil, err
 		}
