@@ -262,10 +262,6 @@
     },
     {
       "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/toolchain"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
       "to": "loki/internal/workspace"
     }
   ],

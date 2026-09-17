@@ -138,7 +138,7 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 		return err
 	}
 	parent := filepath.Dir(target)
-	if err := os.MkdirAll(parent, 0755); err != nil {
+	if err := makeInstallDirectories(root, parent); err != nil {
 		return err
 	}
 	if artifact.Format == "file" {
@@ -187,8 +187,8 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 	if err != nil {
 		return fmt.Errorf("extract %s: %w", artifact.Name, err)
 	}
-	if err = os.Chmod(temporary, 0755); err != nil {
-		return err
+	if err = normalizeExtractedTree(temporary); err != nil {
+		return fmt.Errorf("validate extracted %s: %w", artifact.Name, err)
 	}
 	want.TreeSHA256, err = treeDigest(temporary)
 	if err != nil {
@@ -201,12 +201,27 @@ func installArtifact(ctx context.Context, root, source string, artifact Artifact
 	return os.Rename(temporary, target)
 }
 
+type zipExtractEntry struct {
+	file     *zip.File
+	relative string
+	mode     os.FileMode
+}
+
 func extractZip(source, destination string, stripComponents int) error {
 	archive, err := zip.OpenReader(source)
 	if err != nil {
 		return err
 	}
 	defer archive.Close()
+	root, err := os.OpenRoot(destination)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	items := make([]zipExtractEntry, 0, len(archive.File))
+	symlinks := map[string]bool{}
+	seen := map[string]bool{}
 	var expanded uint64
 	for _, entry := range archive.File {
 		name := path.Clean(entry.Name)
@@ -218,65 +233,84 @@ func extractZip(source, destination string, stripComponents int) error {
 			continue
 		}
 		relative := path.Join(parts[stripComponents:]...)
-		target := filepath.Join(destination, filepath.FromSlash(relative))
-		inside, relErr := filepath.Rel(destination, target)
-		if relErr != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+		if relative == "." || relative == ".." || strings.HasPrefix(relative, "../") {
 			return fmt.Errorf("unsafe zip path %q", entry.Name)
 		}
+		if seen[relative] || relative == ".loki-artifact.json" {
+			return fmt.Errorf("duplicate or reserved zip path %q", entry.Name)
+		}
+		seen[relative] = true
 		mode := entry.Mode()
-		if mode.IsDir() {
-			if err = os.MkdirAll(target, 0755); err != nil {
+		if !mode.IsDir() {
+			if entry.UncompressedSize64 > 1<<30 || expanded > 2<<30-entry.UncompressedSize64 {
+				return fmt.Errorf("zip content exceeds extraction limit")
+			}
+			expanded += entry.UncompressedSize64
+		}
+		if mode&os.ModeSymlink != 0 {
+			if entry.UncompressedSize64 > 4096 {
+				return fmt.Errorf("zip symlink target exceeds limit: %q", entry.Name)
+			}
+			symlinks[relative] = true
+		} else if !mode.IsDir() && !mode.IsRegular() {
+			return fmt.Errorf("unsupported zip entry %q", entry.Name)
+		}
+		items = append(items, zipExtractEntry{file: entry, relative: relative, mode: mode})
+	}
+
+	// Never interpret an archive entry underneath another archive-provided
+	// symlink. This keeps each entry's logical path identical to its on-disk
+	// location when symlinks are published in the second pass.
+	for _, item := range items {
+		for parent := path.Dir(item.relative); parent != "." && parent != "/"; parent = path.Dir(parent) {
+			if symlinks[parent] {
+				return fmt.Errorf("zip entry %q is nested below symlink %q", item.file.Name, parent)
+			}
+		}
+	}
+
+	for _, item := range items {
+		if item.mode&os.ModeSymlink != 0 {
+			continue
+		}
+		relative := filepath.FromSlash(item.relative)
+		if item.mode.IsDir() {
+			if err = root.MkdirAll(relative, 0700); err != nil {
 				return err
 			}
 			continue
 		}
-		if entry.UncompressedSize64 > 1<<30 || expanded > 2<<30-entry.UncompressedSize64 {
-			return fmt.Errorf("zip content exceeds extraction limit")
+		parent := filepath.Dir(relative)
+		if parent != "." {
+			if err = root.MkdirAll(parent, 0700); err != nil {
+				return err
+			}
 		}
-		expanded += entry.UncompressedSize64
-		input, openErr := entry.Open()
+		input, openErr := item.file.Open()
 		if openErr != nil {
 			return openErr
 		}
-		if err = os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			input.Close()
-			return err
+		createMode := os.FileMode(0600)
+		if item.mode.Perm()&0111 != 0 {
+			createMode = 0700
 		}
-		if mode&os.ModeSymlink != 0 {
-			data, readErr := io.ReadAll(io.LimitReader(input, 4097))
-			input.Close()
-			if readErr != nil {
-				return readErr
-			}
-			linkTarget := string(data)
-			resolved := filepath.Clean(filepath.Join(filepath.Dir(target), linkTarget))
-			inside, relErr = filepath.Rel(destination, resolved)
-			if len(data) > 4096 || filepath.IsAbs(linkTarget) || relErr != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("unsafe zip symlink %q", entry.Name)
-			}
-			if err = os.Symlink(linkTarget, target); err != nil {
-				return err
-			}
-			continue
-		}
-		if !mode.IsRegular() {
-			input.Close()
-			return fmt.Errorf("unsupported zip entry %q", entry.Name)
-		}
-		permissions := mode.Perm()
-		if permissions == 0 {
-			permissions = 0644
-		}
-		output, createErr := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, permissions)
+		output, createErr := root.OpenFile(relative, os.O_WRONLY|os.O_CREATE|os.O_EXCL, createMode)
 		if createErr != nil {
 			input.Close()
 			return createErr
 		}
-		_, copyErr := io.Copy(output, input)
+		written, copyErr := io.Copy(output, io.LimitReader(input, int64(item.file.UncompressedSize64)+1))
+		if copyErr == nil {
+			// Preserve executable intent even if umask removed creation bits.
+			copyErr = output.Chmod(createMode)
+		}
 		closeInputErr := input.Close()
 		closeOutputErr := output.Close()
 		if copyErr != nil {
 			return copyErr
+		}
+		if written != int64(item.file.UncompressedSize64) {
+			return fmt.Errorf("zip entry size mismatch: %q", item.file.Name)
 		}
 		if closeInputErr != nil {
 			return closeInputErr
@@ -285,12 +319,120 @@ func extractZip(source, destination string, stripComponents int) error {
 			return closeOutputErr
 		}
 	}
+
+	for _, item := range items {
+		if item.mode&os.ModeSymlink == 0 {
+			continue
+		}
+		input, openErr := item.file.Open()
+		if openErr != nil {
+			return openErr
+		}
+		data, readErr := io.ReadAll(io.LimitReader(input, 4097))
+		closeErr := input.Close()
+		if readErr != nil {
+			return readErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		linkTarget := string(data)
+		resolved := path.Clean(path.Join(path.Dir(item.relative), linkTarget))
+		if linkTarget == "" || len(data) > 4096 || path.IsAbs(linkTarget) || resolved == ".." || strings.HasPrefix(resolved, "../") {
+			return fmt.Errorf("unsafe zip symlink %q", item.file.Name)
+		}
+		relative := filepath.FromSlash(item.relative)
+		parent := filepath.Dir(relative)
+		if parent != "." {
+			if err = root.MkdirAll(parent, 0700); err != nil {
+				return err
+			}
+		}
+		if err = root.Symlink(linkTarget, relative); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// normalizeExtractedTree runs only on a private, quiescent staging tree.
+// Validate complete symlink resolution before making the root traversable.
+func normalizeExtractedTree(directory string) error {
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	var links []string
+	err = filepath.WalkDir(directory, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(directory, current)
+		if err != nil {
+			return err
+		}
+		if relative == ".loki-artifact.json" {
+			return errors.New("archive contains reserved installation marker")
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := root.Readlink(relative)
+			if err != nil {
+				return err
+			}
+			resolved := filepath.Join(filepath.Dir(relative), target)
+			if target == "" || len(target) > 4096 || filepath.IsAbs(target) || resolved == ".." || strings.HasPrefix(resolved, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("unsafe extracted symlink %q", relative)
+			}
+			links = append(links, relative)
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported extracted object %q", relative)
+		}
+		mode := os.FileMode(0644)
+		if info.IsDir() || info.Mode().Perm()&0111 != 0 {
+			mode = 0755
+		}
+		if relative == "." {
+			return nil
+		}
+		file, err := root.Open(relative)
+		if err != nil {
+			return err
+		}
+		chmodErr := file.Chmod(mode)
+		return errors.Join(chmodErr, file.Close())
+	})
+	if err != nil {
+		return err
+	}
+	for _, link := range links {
+		// Stat follows the entire chain under the pinned root, including ..
+		// after link expansion. Lexical cleaning alone cannot prove this.
+		info, err := root.Stat(link)
+		if err != nil {
+			return fmt.Errorf("unresolvable or unsafe extracted symlink %q: %w", link, err)
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported extracted symlink target %q", link)
+		}
+	}
+	file, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	chmodErr := file.Chmod(0755)
+	return errors.Join(chmodErr, file.Close())
 }
 
 func installLinks(root string, artifacts []Artifact) error {
 	bin := rooted(root, "/opt/loki/toolchain/bin")
-	if err := os.MkdirAll(bin, 0755); err != nil {
+	if err := makeInstallDirectories(root, bin); err != nil {
 		return err
 	}
 	for _, artifact := range artifacts {
@@ -315,6 +457,50 @@ func installLinks(root string, artifacts []Artifact) error {
 				_ = os.Remove(temporary)
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// makeInstallDirectories sets modes only on newly created install ancestors.
+// It never broadens permissions on existing host directories or the given root.
+func makeInstallDirectories(directory, destination string) error {
+	relative, err := filepath.Rel(directory, destination)
+	if err != nil || !filepath.IsLocal(relative) {
+		return errors.New("installation directory is outside the supplied root")
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	current := "."
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		err := root.Mkdir(current, 0700)
+		if errors.Is(err, os.ErrExist) {
+			info, statErr := root.Lstat(current)
+			if statErr != nil {
+				return statErr
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("installation ancestor %q is not a directory", current)
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		file, err := root.Open(current)
+		if err != nil {
+			return err
+		}
+		chmodErr := file.Chmod(0755)
+		if err := errors.Join(chmodErr, file.Close()); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -18,8 +18,6 @@ type report struct {
 	R4  r4Observation  `json:"r4_managed_credentials"`
 	R5  r5Observation  `json:"r5_git_textconv"`
 	R7  r7Observation  `json:"r7_process_cleanup"`
-	R8  r8Observation  `json:"r8_archive_containment"`
-	R9  r9Observation  `json:"r9_archive_modes"`
 	R11 r11Observation `json:"r11_mcp_decoding"`
 	R14 r14Observation `json:"r14_validation"`
 }
@@ -52,9 +50,6 @@ func runAll() (report, error) {
 	}
 	if out.R7, err = observeProcessCleanup(); err != nil {
 		return report{}, fmt.Errorf("process observations: %w", err)
-	}
-	if out.R8, out.R9, err = observeArchiveInstall(); err != nil {
-		return report{}, fmt.Errorf("archive observations: %w", err)
 	}
 	if out.R11, out.R14, err = observeProtocolAndValidation(); err != nil {
 		return report{}, fmt.Errorf("protocol observations: %w", err)

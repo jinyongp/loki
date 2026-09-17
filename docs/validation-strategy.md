@@ -16,7 +16,7 @@ go build ./...
 
 Tests that are explicitly classified as integration checks may report a clear skip when their prerequisite is absent during ordinary development. Everything else in the default suite must be independent of ambient host state such as umask, user home contents, network access, or a previously installed Loki instance.
 
-A default-suite failure caused by product behavior remains a failure. In particular, `internal/toolchain.TestInstallZipArtifactPreservesExecutables` is the R9 product regression: an archive entry declared as executable is currently installed as `0700` under umask `0077`. It is not an integration prerequisite and must stay failing until the extraction/install implementation is corrected.
+A default-suite failure caused by product behavior remains a failure. `internal/toolchain.TestInstallZipArtifactPreservesExecutables` now verifies the R9 correction under both umask `0022` and `0077`; the tar.gz case checks the same final mode policy. R8 containment regressions reject chained and late symlink parents, unsafe resolved links, duplicate paths, reserved metadata, and unsupported object types, while preserving safe in-root link chains. These are product tests, not optional integration prerequisites. The ZIP extractor uses root-bound writes; the retained external GNU tar extractor receives final tree validation and mode normalization, not a new extraction sandbox. A09 still owns that broader isolation work.
 
 The auth and daemon fixtures that previously depended on ambient umask are ordinary unit tests. Their fixture modes are now applied explicitly; they are not moved to the integration tier.
 
