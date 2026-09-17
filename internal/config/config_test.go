@@ -13,7 +13,7 @@ func TestDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Root != "." || c.Port != 8765 || c.MaxFileBytes != 16777216 || c.MaxOutputBytes != 262144 {
+	if c.Root != "." || c.Port != 18765 || c.MaxFileBytes != 16777216 || c.MaxOutputBytes != 262144 {
 		t.Fatalf("config: %#v", c)
 	}
 }

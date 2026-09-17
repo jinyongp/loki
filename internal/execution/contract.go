@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -165,6 +167,33 @@ func (c Contract) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (c Contract) ProxyPorts() ([]int, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	seen := map[int]struct{}{}
+	for _, profile := range c.NetworkProfiles {
+		if profile.Proxy == "" {
+			continue
+		}
+		proxy, err := url.Parse(profile.Proxy)
+		if err != nil || proxy.Port() == "" {
+			return nil, errors.New("execution contract proxy port is invalid")
+		}
+		port, err := strconv.Atoi(proxy.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return nil, errors.New("execution contract proxy port is invalid")
+		}
+		seen[port] = struct{}{}
+	}
+	ports := make([]int, 0, len(seen))
+	for port := range seen {
+		ports = append(ports, port)
+	}
+	sort.Ints(ports)
+	return ports, nil
 }
 
 // EnvironmentList returns the complete runner environment in stable order.

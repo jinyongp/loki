@@ -23,7 +23,7 @@ func runBrowser(args []string, stderr io.Writer) int {
 	binary := flags.String("chrome", "", "installed Chromium binary")
 	profile := flags.String("profile", "", "private persistent browser profile")
 	downloads := flags.String("downloads", "", "sandboxed downloads directory")
-	proxy := flags.String("proxy", "http://127.0.0.1:8767", "confined browser proxy")
+	proxy := flags.String("proxy", defaultBrowserProxyURL, "confined browser proxy")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

@@ -21,7 +21,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("egress-proxy", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	host := flags.String("host", "127.0.0.1", "proxy listen address")
-	port := flags.Int("port", 8766, "loopback proxy port")
+	port := flags.Int("port", defaultEgressProxyPort, "loopback proxy port")
 	policyPath := flags.String("policy", "", "administrator-owned egress policy")
 	profile := flags.String("profile", "", "egress policy profile")
 	auditPath := flags.String("audit", "", "private egress audit log")

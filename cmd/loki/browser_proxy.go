@@ -21,7 +21,7 @@ import (
 func runBrowserProxy(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("browser-proxy", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	port := flags.Int("port", 8767, "loopback proxy port")
+	port := flags.Int("port", defaultBrowserProxyPort, "loopback proxy port")
 	socket := flags.String("port-guard-socket", "", "trusted port-guard socket")
 	uid := flags.Int64("port-guard-uid", -1, "expected port-guard UID")
 	if err := flags.Parse(args); err != nil {
