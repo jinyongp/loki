@@ -69,8 +69,8 @@ func TestGitHubAppKeyRejectsInvalidWithoutReplacing(t *testing.T) {
 	if _, err := op.Handle(t.Context(), raw); err == nil || strings.Contains(err.Error(), "bad-private-sentinel") {
 		t.Fatal("unsafe invalid-key result")
 	}
-	plan, err := controller.ResolveEnvironment(t.Context(), githubVaultProfile, []string{githubPrivateKey})
-	if err != nil || plan.Entries()[0] != githubPrivateKey+"="+valid {
+	stored, err := controller.ManagedCredentials().Get(t.Context(), secret.ManagedGitHubAppPrivateKey)
+	if err != nil || stored != valid {
 		t.Fatal("valid key was replaced")
 	}
 }

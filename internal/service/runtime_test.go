@@ -105,6 +105,9 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := controller.ManagedCredentials().Set(t.Context(), secret.ManagedGitHubAppPrivateKey, "synthetic-platform"); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	ready := make(chan struct{})
@@ -137,7 +140,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if status["initialized"] != true || status["profiles"] != float64(0) ||
 		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
 		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||
-		githubStatus["credential_available"] != false {
+		githubStatus["credential_available"] != true {
 		t.Fatal(status)
 	}
 	probe, err := net.Listen("tcp", "127.0.0.1:0")

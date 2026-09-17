@@ -15,7 +15,6 @@ import (
 type report struct {
 	R1  r1Observation  `json:"r1_git_paths"`
 	R3  r3Observation  `json:"r3_config"`
-	R4  r4Observation  `json:"r4_managed_credentials"`
 	R5  r5Observation  `json:"r5_git_textconv"`
 	R7  r7Observation  `json:"r7_process_cleanup"`
 	R11 r11Observation `json:"r11_mcp_decoding"`
@@ -44,9 +43,6 @@ func runAll() (report, error) {
 	}
 	if out.R3, err = observeConfig(); err != nil {
 		return report{}, fmt.Errorf("config observations: %w", err)
-	}
-	if out.R4, err = observeManagedCredentials(); err != nil {
-		return report{}, fmt.Errorf("managed credential observations: %w", err)
 	}
 	if out.R7, err = observeProcessCleanup(); err != nil {
 		return report{}, fmt.Errorf("process observations: %w", err)

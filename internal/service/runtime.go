@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"loki/internal/audit"
@@ -135,7 +134,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 			if o.GitHubPrivateKeyFile != "" {
 				return githubapp.LoadPrivateKeyFile(ctx, o.GitHubPrivateKeyFile)
 			}
-			return controller.ManagedSecret(ctx, githubVaultProfile, githubPrivateKey)
+			return controller.ManagedCredentials().Get(ctx, secret.ManagedGitHubAppPrivateKey)
 		}
 		broker := &githubapp.Broker{
 			Config: githubapp.BrokerConfig{AppID: c.GitHubAppID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes, Targets: targets},
@@ -182,11 +181,9 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 				info, statErr := os.Stat(o.GitHubPrivateKeyFile)
 				credentialAvailable = statErr == nil && info.Mode().IsRegular()
 			} else {
-				for _, item := range items {
-					if item["name"] == githubVaultProfile {
-						names, _ := item["secret_names"].([]string)
-						credentialAvailable = slices.Contains(names, githubPrivateKey) && item["configured_secret_count"] == 1
-					}
+				credentialAvailable, err = controller.ManagedCredentials().Configured(ctx, secret.ManagedGitHubAppPrivateKey)
+				if err != nil {
+					return nil, err
 				}
 			}
 		}

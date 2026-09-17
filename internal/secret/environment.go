@@ -53,7 +53,7 @@ func (p EnvironmentPlan) RedactionValues() []string {
 // Callers must keep the returned plan inside the privileged runtime.
 func (c Controller) ResolveEnvironment(ctx context.Context, profileName string, requested []string) (EnvironmentPlan, error) {
 	var plan EnvironmentPlan
-	if err := ProfileName(profileName); err != nil {
+	if err := applicationProfileName(profileName); err != nil {
 		return plan, err
 	}
 	if len(requested) > maxEnvironmentSecrets {

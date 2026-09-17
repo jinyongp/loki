@@ -83,12 +83,15 @@ func (c Controller) Profiles(ctx context.Context) (map[string]any, error) {
 	profiles := object(document["profiles"])
 	items := make([]map[string]any, 0, len(profiles))
 	for _, name := range keys(profiles) {
+		if isManagedProfile(name) {
+			continue
+		}
 		items = append(items, profileMetadata(name, object(profiles[name])))
 	}
 	return map[string]any{"profiles": items}, nil
 }
 func (c Controller) Profile(ctx context.Context, name string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	document, err := c.load(ctx)
@@ -102,7 +105,7 @@ func (c Controller) Profile(ctx context.Context, name string) (map[string]any, e
 	return profileMetadata(name, value), nil
 }
 func (c Controller) CreateProfile(ctx context.Context, name string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	return c.mutate(ctx, func(document document) (map[string]any, error) {
@@ -115,7 +118,7 @@ func (c Controller) CreateProfile(ctx context.Context, name string) (map[string]
 	})
 }
 func (c Controller) RemoveProfile(ctx context.Context, name string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	return c.mutate(ctx, func(document document) (map[string]any, error) {
@@ -127,7 +130,7 @@ func (c Controller) RemoveProfile(ctx context.Context, name string) (map[string]
 	})
 }
 func (c Controller) ImportValues(ctx context.Context, name string, values map[string]string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	if len(values) == 0 {
@@ -154,7 +157,7 @@ func (c Controller) ImportValues(ctx context.Context, name string, values map[st
 	})
 }
 func (c Controller) SetSecret(ctx context.Context, name, key, value string, public bool) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	if err := SecretName(key); err != nil {
@@ -180,53 +183,8 @@ func (c Controller) SetSecret(ctx context.Context, name, key, value string, publ
 	})
 }
 
-// ManagedSecret returns one reserved secret to an in-process credential consumer.
-func (c Controller) ManagedSecret(ctx context.Context, name, key string) (string, error) {
-	if err := ProfileName(name); err != nil {
-		return "", err
-	}
-	if err := SecretName(key); err != nil {
-		return "", err
-	}
-	document, err := c.load(ctx)
-	if err != nil {
-		return "", err
-	}
-	valueProfile, err := profile(document, name)
-	if err != nil {
-		return "", err
-	}
-	value, ok := object(valueProfile["secrets"])[key].(string)
-	if !ok || value == "" {
-		return "", fault.Error("managed credential is not configured")
-	}
-	return value, nil
-}
-
-// SetManagedSecret atomically creates its reserved profile or replaces the value.
-func (c Controller) SetManagedSecret(ctx context.Context, name, key, value string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
-		return nil, err
-	}
-	if err := SecretName(key); err != nil {
-		return nil, err
-	}
-	return c.mutate(ctx, func(document document) (map[string]any, error) {
-		profiles := object(document["profiles"])
-		valueProfile := object(profiles[name])
-		if valueProfile == nil {
-			valueProfile = map[string]any{"secrets": map[string]any{}}
-			profiles[name] = valueProfile
-		}
-		secrets := object(valueProfile["secrets"])
-		_, rotated := secrets[key]
-		secrets[key] = value
-		return map[string]any{"configured": true, "rotated": rotated}, nil
-	})
-}
-
 func (c Controller) Generate(ctx context.Context, name, key string, count int) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	if err := SecretName(key); err != nil {
@@ -254,7 +212,7 @@ func (c Controller) Generate(ctx context.Context, name, key string, count int) (
 	})
 }
 func (c Controller) RemoveSecret(ctx context.Context, name, key string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	if err := SecretName(key); err != nil {

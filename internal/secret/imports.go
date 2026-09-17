@@ -118,7 +118,7 @@ func (c Controller) ListImports() (map[string]any, error) {
 	return map[string]any{"imports": items}, nil
 }
 func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[string]any, error) {
-	if err := ProfileName(name); err != nil {
+	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
 	if !idPattern.MatchString(id) {

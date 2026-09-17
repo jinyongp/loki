@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,8 +16,6 @@ import (
 	"loki/internal/gitops"
 	"loki/internal/policy"
 	"loki/internal/process"
-	"loki/internal/secret"
-	"loki/internal/service"
 	"loki/internal/workspace"
 )
 
@@ -33,12 +30,6 @@ type r3Observation struct {
 	LegacyUnknownKeysAcceptedAndIgnored bool `json:"legacy_unknown_keys_accepted_and_ignored"`
 	MisspelledKeyAccepted               bool `json:"misspelled_key_accepted"`
 	FractionalIntegerAccepted           bool `json:"fractional_integer_accepted"`
-}
-
-type r4Observation struct {
-	ManagedProfileSelectableAsEnvironment bool `json:"managed_profile_selectable_as_environment"`
-	ManagedValueOverwriteAllowed          bool `json:"managed_value_overwrite_allowed"`
-	ManagedProfileDeleteAllowed           bool `json:"managed_profile_delete_allowed"`
 }
 
 type r5Observation struct {
@@ -160,35 +151,6 @@ func observeConfig() (r3Observation, error) {
 		LegacyUnknownKeysAcceptedAndIgnored: legacyErr == nil && reflect.DeepEqual(empty, legacy),
 		MisspelledKeyAccepted:               typoErr == nil,
 		FractionalIntegerAccepted:           fractionalErr == nil,
-	}, nil
-}
-
-func observeManagedCredentials() (r4Observation, error) {
-	ctx := context.Background()
-	root, err := os.MkdirTemp("", "loki-readiness-secret-")
-	if err != nil {
-		return r4Observation{}, err
-	}
-	defer os.RemoveAll(root)
-	vaultDir := filepath.Join(root, "vault")
-	if err = os.Mkdir(vaultDir, 0700); err != nil {
-		return r4Observation{}, err
-	}
-	controller := secret.Controller{StateDirectory: vaultDir, InboxDirectory: filepath.Join(root, "inbox")}
-	if _, err = controller.Initialize(ctx); err != nil {
-		return r4Observation{}, err
-	}
-	if _, err = controller.SetManagedSecret(ctx, "github-app", "PRIVATE_KEY", "synthetic-fixture-not-a-real-key"); err != nil {
-		return r4Observation{}, err
-	}
-	plan, selectErr := controller.ResolveEnvironment(ctx, "github-app", []string{"PRIVATE_KEY"})
-	operations := service.SecretOperations(controller)
-	_, overwriteErr := operations["public_value_set"].Handle(ctx, json.RawMessage(`{"profile":"github-app","secret":"PRIVATE_KEY","value":"synthetic-replacement"}`))
-	_, deleteErr := operations["profile_remove"].Handle(ctx, json.RawMessage(`{"profile":"github-app"}`))
-	return r4Observation{
-		ManagedProfileSelectableAsEnvironment: selectErr == nil && len(plan.Names()) == 1,
-		ManagedValueOverwriteAllowed:          overwriteErr == nil,
-		ManagedProfileDeleteAllowed:           deleteErr == nil,
 	}, nil
 }
 

@@ -254,14 +254,6 @@
     },
     {
       "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/secret"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/service"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
       "to": "loki/internal/workspace"
     }
   ],

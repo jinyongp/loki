@@ -8,9 +8,6 @@ import (
 	"loki/internal/secret"
 )
 
-const githubVaultProfile = "github-app"
-const githubPrivateKey = "PRIVATE_KEY"
-
 func GitHubOperations(c secret.Controller) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
 		"github_app_key_set": {
@@ -24,7 +21,7 @@ func GitHubOperations(c secret.Controller) map[string]rpc.Operation {
 				if err := githubapp.ValidatePrivateKey(*r.Value); err != nil {
 					return nil, err
 				}
-				return c.SetManagedSecret(ctx, githubVaultProfile, githubPrivateKey, *r.Value)
+				return c.ManagedCredentials().Set(ctx, secret.ManagedGitHubAppPrivateKey, *r.Value)
 			}),
 		},
 	}

@@ -101,13 +101,15 @@ This is not semantic compatibility. With compatibility no longer required, rejec
 
 Priority: P0. Evidence: reproduced with a synthetic vault; live credentials were not read.
 
-`internal/service/github.go` stores the managed GitHub App key under `github-app/PRIVATE_KEY` using `SetManagedSecret`. `internal/secret/vault.go` represents that as the same map structure as ordinary application secrets; the word "reserved" in comments is not enforced by the generic profile/value APIs.
+Containment status: the application-secret boundary now reserves managed profiles independently of provisioning state, hides them from ordinary discovery, and rejects generic read/write/import/delete/environment selection. Trusted consumers use a closed managed-credential identifier and boolean availability API. This closes the reproduced R4 application-API path; full process/store separation and workload-scoped grants remain A04/S04 work.
 
-A fake managed entry was successfully selected by `ResolveEnvironment`. The Agent-permitted `public_value_set` handler overwrote it, and the Agent-permitted `profile_remove` handler deleted the profile. The `devtools_call` Agent operation selects secrets by profile/name, and its broker contains no managed-profile exclusion before environment resolution.
+At the reviewed baseline, `internal/service/github.go` stored the managed GitHub App key under `github-app/PRIVATE_KEY` using an arbitrary profile/key managed-secret API. The encrypted document used the same map shape as ordinary application secrets, while the generic profile/value APIs did not enforce the intended reservation.
 
-Impact: the vault-backed platform key has neither a protected namespace nor a distinct operation authority. General secret manipulation can damage it, and the selection path permits treating it as an application environment variable. A deployment using only a separately mounted key file has different exposure; this probe does not assert that a real deployed PEM was extracted or that every deployment uses the vault-backed key.
+The synthetic baseline probe selected that managed entry through `ResolveEnvironment`, overwrote it through the Agent-permitted public-value path, and deleted its profile. The devtools path also accepted arbitrary profile/name secret selection. These behaviors are now permanent negative regressions rather than readiness observations.
 
-Correction: distinct typed credential classes/stores and controllers for platform credentials, application secrets, and public configuration. Platform credentials are never listable, writable, removable, importable, or selectable through application-secret operations. Application-secret usage is bound to host-owned grants and a concrete workload, not an arbitrary profile name alone. Reserve critical execution environment names; merging secrets must not override PATH, loader variables, broker addresses, or policy-controlled proxy settings.
+Original impact: the vault-backed platform key lacked a protected application namespace and could be damaged or selected as workload environment data. A deployment using only a separately mounted key file had different exposure; the probe did not assert that a real deployed PEM was extracted or that every deployment used the vault-backed key.
+
+Remaining correction: A04/S04 must move platform credentials, application secrets, and public configuration into distinct ownership/store boundaries and bind application-secret use to host-owned grants plus a concrete workload. Environment merge policy must also reserve execution-critical names such as loader variables, broker addresses, and policy-controlled proxy settings. The current containment intentionally does not claim those process-level guarantees.
 
 ## R5 — A read-looking Git request executes project code in the MCP context
 
