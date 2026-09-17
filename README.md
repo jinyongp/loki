@@ -97,8 +97,7 @@ Machine credentials and state must stay outside the repository. Never commit
 MCP or tunnel tokens, signing private keys, vault keys, imported dotenv files,
 or files copied from a deployed `/etc` or `/var/lib` tree.
 
-## Repository visibility
+## License
 
-No license is granted by this repository. Keep the GitHub repository private
-unless a distribution license has been selected and the bundled Agent Skill has
-been reviewed for redistribution.
+Loki is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the
+full license text.
