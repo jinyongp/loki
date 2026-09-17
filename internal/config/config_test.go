@@ -53,11 +53,29 @@ func TestInvalidConfiguration(t *testing.T) {
 	}
 }
 
+func TestStrictConfigurationInput(t *testing.T) {
+	for _, text := range []string{
+		`max_processes=1`,
+		`max_output_byte=8192`,
+		`max_output_bytes=8192.9`,
+		`max_output_bytes="8192"`,
+		`[executables]\nnode="/unused"`,
+		`[checks]\ntest=["false"]`,
+	} {
+		t.Run(text, func(t *testing.T) {
+			if _, err := Parse([]byte(text)); err == nil {
+				t.Fatal("accepted unsupported or coerced configuration")
+			}
+		})
+	}
+}
+
 func TestCheckedInConfig(t *testing.T) {
-	for _, path := range []string{"testdata/python-v047.toml", "../../config/loki-go.toml"} {
-		if _, err := Load(path); err != nil {
-			t.Fatal(path, err)
-		}
+	if _, err := Load("../../config/loki-go.toml"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load("testdata/python-v047.toml"); err == nil || !strings.Contains(err.Error(), "unsupported Loki configuration setting") {
+		t.Fatalf("legacy Python configuration was not rejected: %v", err)
 	}
 }
 

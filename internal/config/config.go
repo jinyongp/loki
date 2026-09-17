@@ -4,12 +4,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -109,6 +107,11 @@ func Parse(data []byte) (Config, error) {
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return Config{}, errors.New("invalid Loki TOML configuration")
+	}
+	for key := range raw {
+		if _, ok := allowedKeys[key]; !ok {
+			return Config{}, fmt.Errorf("unsupported Loki configuration setting %q", key)
+		}
 	}
 	var c Config
 	for _, f := range []struct {
@@ -346,26 +349,11 @@ func bounded(raw map[string]any, key string, def, min, max int) (int, error) {
 	if !ok {
 		return def, nil
 	}
-	var n int
-	var err error
-	switch value := v.(type) {
-	case int64:
-		n = int(value)
-	case string:
-		n, err = strconv.Atoi(strings.TrimSpace(value))
-	case float64:
-		if math.IsNaN(value) || math.IsInf(value, 0) || value > float64(max) || value < float64(min) {
-			err = errors.New("range")
-		} else {
-			n = int(value)
-		}
-	default:
-		err = errors.New("integer")
+	n, ok := v.(int64)
+	if !ok || n < int64(min) || n > int64(max) {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", key, min, max)
 	}
-	if err != nil || n < min || n > max {
-		return 0, fmt.Errorf("%s must be between %d and %d", key, min, max)
-	}
-	return n, nil
+	return int(n), nil
 }
 
 func stringList(value any) ([]string, error) {
