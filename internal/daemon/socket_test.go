@@ -9,11 +9,21 @@ import (
 	"testing"
 )
 
-func TestListenReplacesOwnedStaleSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "service", "control.sock")
-	if err := os.Mkdir(filepath.Dir(path), 0750); err != nil {
+func makeSocketDirectory(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Mkdir(path, 0750); err != nil {
 		t.Fatal(err)
 	}
+	// The service contract requires group traversal on a pre-existing socket
+	// directory; make the fixture independent of the runner's ambient umask.
+	if err := os.Chmod(path, 0750); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListenReplacesOwnedStaleSocket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "service", "control.sock")
+	makeSocketDirectory(t, filepath.Dir(path))
 	stale, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -35,9 +45,7 @@ func TestListenReplacesOwnedStaleSocket(t *testing.T) {
 func TestListenRejectsActiveAndNonSocketPaths(t *testing.T) {
 	root := t.TempDir()
 	activePath := filepath.Join(root, "active", "control.sock")
-	if err := os.Mkdir(filepath.Dir(activePath), 0750); err != nil {
-		t.Fatal(err)
-	}
+	makeSocketDirectory(t, filepath.Dir(activePath))
 	active, err := net.ListenUnix("unix", &net.UnixAddr{Name: activePath, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
@@ -49,9 +57,7 @@ func TestListenRejectsActiveAndNonSocketPaths(t *testing.T) {
 	}
 
 	filePath := filepath.Join(root, "file", "control.sock")
-	if err = os.Mkdir(filepath.Dir(filePath), 0750); err != nil {
-		t.Fatal(err)
-	}
+	makeSocketDirectory(t, filepath.Dir(filePath))
 	if err = os.WriteFile(filePath, []byte("occupied"), 0600); err != nil {
 		t.Fatal(err)
 	}

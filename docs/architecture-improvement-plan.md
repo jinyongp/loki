@@ -230,7 +230,7 @@ For each protected resource, exercise every applicable route: dedicated tool, ge
 | Host recovery | Crash before/after publication, disk full, failed restoration, stale lock, active jobs, disabled component | Truthful status, deterministic repair/rollback, no unexpected workspace or credential deletion |
 | Protocol/config contracts | Unknown or misspelled fields, wrong scalar types, omitted mandatory preconditions, stale revisions, unsupported schema versions | Canonical generated schemas/config examples round-trip into the exact effective policy and return stable typed errors for invalid/conflicting requests |
 
-Validation is tiered so the default developer suite is trustworthy rather than environment-dependent:
+Validation follows the concrete prerequisite contract in [Validation tiers and prerequisites](validation-strategy.md), so the default developer suite is trustworthy rather than environment-dependent:
 
 - **Unit/default:** `go test ./...` covers pure package behavior and local deterministic fixtures without requiring Docker, Chromium, systemd or `setfacl`. A host-specific assumption belongs in an integration fixture, not an unconditional unit assertion.
 - **Race/static:** `go test -race` for packages whose tests are local/deterministic, plus `go vet` and architecture/import checks. Race success is not treated as process/network isolation evidence.

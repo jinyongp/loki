@@ -13,8 +13,20 @@ type composeLife struct {
 	env, state, workspace, log string
 }
 
+func requirePOSIXACL(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("setfacl"); err == nil {
+		return
+	}
+	if os.Getenv("LOKI_REQUIRE_POSIX_ACL_TESTS") == "1" {
+		t.Fatal("setfacl is required for the POSIX ACL lifecycle integration tests")
+	}
+	t.Skip("setfacl is not installed; skipping POSIX ACL lifecycle integration tests")
+}
+
 func newComposeLife(t *testing.T) composeLife {
 	t.Helper()
+	requirePOSIXACL(t)
 	root := t.TempDir()
 	fixture, err := os.ReadFile(filepath.Join("testdata", "fake-docker"))
 	if err != nil {

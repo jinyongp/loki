@@ -25,6 +25,11 @@ func TestRefreshKeysPreservesLastFile(t *testing.T) {
 			if err := os.WriteFile(target, []byte("old keys"), 0640); err != nil {
 				t.Fatal(err)
 			}
+			// The fixture promises an existing 0640 file regardless of the test
+			// runner's ambient umask; RefreshKeys must preserve that mode on failure.
+			if err := os.Chmod(target, 0640); err != nil {
+				t.Fatal(err)
+			}
 			client := &http.Client{Transport: refreshTransport(func(r *http.Request) (*http.Response, error) {
 				if r.URL.String() != "https://fixture.cloudflareaccess.com/cdn-cgi/access/certs" || r.Header.Get("Accept") != "application/json" || r.Header.Get("User-Agent") != "loki-jwks-refresh/1" {
 					t.Fatal(r.URL, r.Header)
