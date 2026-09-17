@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"loki/internal/fault"
+	"loki/internal/gitops"
 	"loki/internal/policy"
 	"loki/internal/process"
 )
@@ -227,12 +228,11 @@ func (f *Files) RemoveTracked(ctx context.Context, path string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	relative, _ := policy.Relative(path)
-	tracked, err := f.git(ctx, []string{"ls-files", "--error-unmatch", "--", relative}, nil, 10*time.Second)
+	tracked, err := (&gitops.Controller{Paths: f.Policy, Config: f.Config}).TrackedFile(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	if tracked.ExitCode != 0 {
+	if !tracked {
 		return nil, fault.Error("only Git-tracked files may be removed; move unwanted untracked files into the repository's ignored .tmp/loki-quarantine/ directory with move_path")
 	}
 	revision, err := f.capture(path, "remove_tracked_file", data, info.Mode())

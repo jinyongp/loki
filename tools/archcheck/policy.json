@@ -214,6 +214,10 @@
     },
     {
       "from": "loki/internal/workspace",
+      "to": "loki/internal/gitops"
+    },
+    {
+      "from": "loki/internal/workspace",
       "to": "loki/internal/policy"
     },
     {
@@ -234,15 +238,7 @@
     },
     {
       "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/gitops"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
       "to": "loki/internal/mcpserver"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/policy"
     },
     {
       "from": "loki/tools/readinessprobe",
@@ -251,10 +247,6 @@
     {
       "from": "loki/tools/readinessprobe",
       "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/workspace"
     }
   ],
   "edge_exceptions": [

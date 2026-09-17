@@ -13,7 +13,6 @@ import (
 )
 
 type report struct {
-	R1  r1Observation  `json:"r1_git_paths"`
 	R3  r3Observation  `json:"r3_config"`
 	R7  r7Observation  `json:"r7_process_cleanup"`
 	R11 r11Observation `json:"r11_mcp_decoding"`
@@ -37,9 +36,6 @@ func main() {
 func runAll() (report, error) {
 	var out report
 	var err error
-	if out.R1, err = observeGit(); err != nil {
-		return report{}, fmt.Errorf("git observations: %w", err)
-	}
 	if out.R3, err = observeConfig(); err != nil {
 		return report{}, fmt.Errorf("config observations: %w", err)
 	}

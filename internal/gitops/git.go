@@ -126,6 +126,43 @@ func (c *Controller) repositoryRoot(ctx context.Context, cwd string) (string, er
 	return root, nil
 }
 
+// TrackedFile reports whether an existing confined file is tracked by its
+// nearest owning repository. Repository metadata must remain inside the
+// workspace; absence of a repository is reported as untracked rather than
+// falling back to a parent workspace repository assumption.
+func (c *Controller) TrackedFile(ctx context.Context, requested string) (bool, error) {
+	relative, err := policy.Relative(requested)
+	if err != nil {
+		return false, err
+	}
+	target, err := c.Paths.Resolve(relative, true)
+	if err != nil {
+		return false, err
+	}
+	root, err := c.repositoryRoot(ctx, filepath.Dir(target))
+	if err != nil {
+		if errors.Is(err, errNotRepository) {
+			return false, nil
+		}
+		return false, err
+	}
+	repositoryRelative, err := filepath.Rel(root, target)
+	if err != nil || repositoryRelative == ".." || strings.HasPrefix(repositoryRelative, ".."+string(filepath.Separator)) {
+		return false, fault.Error("Git path escapes repository")
+	}
+	result, err := c.git(ctx, root, nil, c.Config.MaxOutputBytes, "ls-files", "--error-unmatch", "--", filepath.ToSlash(repositoryRelative))
+	if err != nil {
+		return false, err
+	}
+	if result.ExitCode == 1 {
+		return false, nil
+	}
+	if result.ExitCode != 0 || result.Truncated {
+		return false, fault.Error("unable to inspect Git tracked file")
+	}
+	return true, nil
+}
+
 func (c *Controller) repositoryKnowsPath(ctx context.Context, cwd, relative string) (bool, error) {
 	root, err := c.repositoryRoot(ctx, cwd)
 	if err != nil {

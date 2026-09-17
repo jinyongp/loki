@@ -73,11 +73,11 @@ Evidence is identified as reproduced, source/topology-confirmed, or an explicitl
 
 Priority: P1. Evidence: reproduced against Go controllers.
 
-`internal/gitops/git.go` requires the requested path to exist for `MutatePaths("stage", ...)` and path-filtered `Diff`. A tracked file renamed away consequently fails with `no such file or directory`. An unfiltered diff and native explicitly scoped Git staging succeed. The same existence requirement is present in `legacy/python/src/loki_mcp/tools.py`; the port inherited the defect.
+Containment status: Git path validation now separates filesystem existence from repository identity. Scoped staging and diff accept absent paths only when the nearest repository knows the literal path through its index or `HEAD`, so deletions, renames and deleted directory prefixes work while arbitrary absent paths remain rejected. Repository identity validates the worktree root, git-dir and common-dir against the approved workspace.
 
-A second reproduction places a repository under an ordinary workspace directory. `internal/workspace/search_patch.go` runs `RemoveTracked`'s `git ls-files` from the workspace root instead of the owning repository, then reports the nested tracked file as untracked. Its error recommends quarantine even though repository identity, not Git tracking, is the actual failure.
+At the reviewed baseline, `MutatePaths("stage", ...)` and path-filtered `Diff` required the requested path to exist, so tracked deletions and rename sources failed before Git could interpret them. `RemoveTracked` also ran `git ls-files` from the workspace root rather than the file's nearest owning repository, causing nested tracked files to be reported as untracked. The Python implementation carried the same existence-based staging defect.
 
-Regression scenarios: deleted files and deleted parents; renames; nested repositories; worktrees with in-bound metadata; unborn indexes; literal pathspecs; unrelated staged hunks; unknown absent paths; in-bound and out-of-bound symlinks; filtered diff of deleted paths. Introduce one repository identity/path model rather than changing a boolean independently in each handler.
+Permanent regressions now cover deleted files and parents, renames, staged deletion, unknown absent paths, literal pathspecs, nested repositories, in-workspace linked worktrees, external metadata rejection, nearest-repository destructive removal and recovery. R1 is therefore retired from the observation-only readiness probe. The later S04 package consolidation still owns the temporary `workspace -> gitops` dependency; this fix does not claim that structural cleanup is complete.
 
 ## R2 — The Go MCP endpoint cannot carry the intended development workflow
 
