@@ -60,7 +60,7 @@ func ValidateURL(value string) (string, error) {
 		}
 	}
 	if host == "127.0.0.1" {
-		if err := portguard.Validate(port); err != nil {
+		if err := portguard.ValidateNumber(port); err != nil {
 			return "", errors.New("local development port is not allowed")
 		}
 		return value, nil
@@ -85,7 +85,7 @@ type Policy struct {
 func (p Policy) Addresses(ctx context.Context, host string, port int) ([]netip.Addr, error) {
 	host = strings.ToLower(strings.TrimRight(host, "."))
 	if host == "127.0.0.1" {
-		if portguard.Validate(port) != nil || p.ValidatePort == nil || !p.ValidatePort(ctx, port) {
+		if portguard.ValidateNumber(port) != nil || p.ValidatePort == nil || !p.ValidatePort(ctx, port) {
 			return nil, errors.New("workspace development port is not allowed")
 		}
 		return []netip.Addr{netip.MustParseAddr(host)}, nil

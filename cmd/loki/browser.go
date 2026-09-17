@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"loki/internal/browser"
@@ -23,12 +24,18 @@ func runBrowser(args []string, stderr io.Writer) int {
 	binary := flags.String("chrome", "", "installed Chromium binary")
 	profile := flags.String("profile", "", "private persistent browser profile")
 	downloads := flags.String("downloads", "", "sandboxed downloads directory")
+	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "administrator-owned execution contract")
 	proxy := flags.String("proxy", defaultBrowserProxyURL, "confined browser proxy")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if flags.NArg() != 0 || *uid < 0 || *uid > 4294967295 || *gid < 0 {
-		fmt.Fprintln(stderr, "browser requires agent UID and socket GID")
+	if flags.NArg() != 0 || *uid < 0 || *uid > 4294967295 || *gid < 0 || !filepath.IsAbs(*contractPath) {
+		fmt.Fprintln(stderr, "browser requires agent UID, socket GID, and execution contract")
+		return 2
+	}
+	contractProxy, _, err := loadExecutionProxy(*contractPath, "browser")
+	if err != nil || contractProxy != *proxy {
+		fmt.Fprintln(stderr, "browser proxy does not match execution contract")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

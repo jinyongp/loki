@@ -15,12 +15,14 @@ import (
 	"loki/internal/artifacts"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
+	"loki/internal/portguard"
 	"loki/internal/previews"
 )
 
 type PreviewController struct {
 	Store   *previews.Store
 	Runtime RuntimeCaller
+	Ports   portguard.Policy
 	Inspect func(context.Context, int) (map[string]any, error)
 }
 type previewRequest struct {
@@ -45,7 +47,7 @@ func runtimeDecode(ctx context.Context, client RuntimeCaller, request any, out a
 	return nil
 }
 func (c *PreviewController) listener(ctx context.Context, port int) (map[string]any, error) {
-	result, err := InspectWorkspacePort(ctx, c.Inspect, c.Runtime, port)
+	result, err := InspectWorkspacePort(ctx, c.Ports, c.Inspect, c.Runtime, port)
 	if err != nil {
 		return nil, err
 	}

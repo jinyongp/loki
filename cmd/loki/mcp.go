@@ -21,6 +21,7 @@ import (
 
 type mcpLayout struct {
 	RuntimeSocket, PortGuardSocket, BrowserSocket, RGPath string
+	ExecutionContract                                     string
 	RuntimeUID, PortGuardUID, BrowserUID                  *uint32
 	GitTemplateRoots                                      []string
 	Environment                                           map[string]string
@@ -35,7 +36,10 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 	if l.RuntimeUID == nil || l.PortGuardUID == nil || l.BrowserUID == nil {
 		return service.MCPOptions{}, errors.New("MCP layout requires explicit service UIDs")
 	}
-	for _, path := range append([]string{l.RGPath}, l.GitTemplateRoots...) {
+	if !filepath.IsAbs(l.ExecutionContract) {
+		return service.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
+	}
+	for _, path := range append([]string{l.RGPath, l.ExecutionContract}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
 			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
@@ -75,6 +79,16 @@ func runMCP(args []string, stderr io.Writer) int {
 	options, err := layout.options(token)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	contract, err := loadExecutionContract(layout.ExecutionContract)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid MCP execution contract")
+		return 2
+	}
+	options.Ports, err = service.ProtectedPortPolicy(c.Port, contract)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid MCP protected-port policy")
 		return 2
 	}
 	if c.CloudflareTeamDomain != "" {

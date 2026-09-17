@@ -143,6 +143,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if mcp["RuntimeSocket"] != "/run/loki-go/runtime/control.sock" {
 		t.Fatalf("MCP runtime socket = %#v", mcp["RuntimeSocket"])
 	}
+	if mcp["ExecutionContract"] != "/usr/share/doc/loki/execution-contract.json" {
+		t.Fatalf("MCP execution contract = %#v", mcp["ExecutionContract"])
+	}
 	for _, name := range []string{"runtime.json", "mcp.json", "identity.env"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		if err != nil {

@@ -2,6 +2,7 @@
   "RuntimeSocket": "/run/loki-go/runtime/control.sock",
   "PortGuardSocket": "/run/loki-go/port-guard/control.sock",
   "BrowserSocket": "/run/loki-go/browser/control.sock",
+  "ExecutionContract": "/usr/share/doc/loki/execution-contract.json",
   "RGPath": "/usr/bin/rg",
   "RuntimeUID": 0,
   "PortGuardUID": @RUNNER_UID@,

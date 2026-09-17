@@ -3,8 +3,11 @@ package dockerproxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+
+	"loki/internal/portguard"
 )
 
 func TestComposePortInspection(t *testing.T) {
@@ -61,5 +64,23 @@ func TestComposePortInspection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInspectorRejectsProtectedPortBeforeDocker(t *testing.T) {
+	ports, err := portguard.NewPolicy(18765)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	inspector := Inspector{Ports: ports, run: func(context.Context, ...string) (string, error) {
+		calls++
+		return "", nil
+	}}
+	if _, err := inspector.Inspect(t.Context(), 18765); !errors.Is(err, portguard.ErrProtected) {
+		t.Fatalf("protected port error = %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("protected port invoked Docker %d times", calls)
 	}
 }

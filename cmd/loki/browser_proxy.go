@@ -22,13 +22,19 @@ func runBrowserProxy(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("browser-proxy", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	port := flags.Int("port", defaultBrowserProxyPort, "loopback proxy port")
+	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "administrator-owned execution contract")
 	socket := flags.String("port-guard-socket", "", "trusted port-guard socket")
 	uid := flags.Int64("port-guard-uid", -1, "expected port-guard UID")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if flags.NArg() != 0 || *port < 1024 || *port > 65535 || !filepath.IsAbs(*socket) || *uid < 0 || *uid > 4294967295 {
-		fmt.Fprintln(stderr, "browser-proxy requires a valid port and trusted port-guard socket/UID")
+	if flags.NArg() != 0 || *port < 1024 || *port > 65535 || !filepath.IsAbs(*contractPath) || !filepath.IsAbs(*socket) || *uid < 0 || *uid > 4294967295 {
+		fmt.Fprintln(stderr, "browser-proxy requires a valid port, execution contract, and trusted port-guard socket/UID")
+		return 2
+	}
+	_, contractPort, err := loadExecutionProxy(*contractPath, "browser")
+	if err != nil || contractPort != *port {
+		fmt.Fprintln(stderr, "browser-proxy port does not match execution contract")
 		return 2
 	}
 	expected := uint32(*uid)

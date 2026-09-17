@@ -13,8 +13,7 @@ import (
 )
 
 type report struct {
-	R7  r7Observation  `json:"r7_process_cleanup"`
-	R14 r14Observation `json:"r14_validation"`
+	R7 r7Observation `json:"r7_process_cleanup"`
 }
 
 func main() {
@@ -37,6 +36,5 @@ func runAll() (report, error) {
 	if out.R7, err = observeProcessCleanup(); err != nil {
 		return report{}, fmt.Errorf("process observations: %w", err)
 	}
-	out.R14 = observeValidation()
 	return out, nil
 }

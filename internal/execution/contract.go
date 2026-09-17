@@ -169,6 +169,33 @@ func (c Contract) Validate() error {
 	return nil
 }
 
+func proxyEndpointPort(value string) (int, error) {
+	proxy, err := url.Parse(value)
+	if err != nil || proxy.Port() == "" {
+		return 0, errors.New("execution contract proxy port is invalid")
+	}
+	port, err := strconv.Atoi(proxy.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return 0, errors.New("execution contract proxy port is invalid")
+	}
+	return port, nil
+}
+
+func (c Contract) ProxyEndpoint(profile string) (string, int, error) {
+	if err := c.Validate(); err != nil {
+		return "", 0, err
+	}
+	network, ok := c.NetworkProfiles[profile]
+	if !ok || network.Mode != "proxy" || network.Proxy == "" {
+		return "", 0, fmt.Errorf("execution network profile %q has no proxy", profile)
+	}
+	port, err := proxyEndpointPort(network.Proxy)
+	if err != nil {
+		return "", 0, err
+	}
+	return network.Proxy, port, nil
+}
+
 func (c Contract) ProxyPorts() ([]int, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -178,13 +205,9 @@ func (c Contract) ProxyPorts() ([]int, error) {
 		if profile.Proxy == "" {
 			continue
 		}
-		proxy, err := url.Parse(profile.Proxy)
-		if err != nil || proxy.Port() == "" {
-			return nil, errors.New("execution contract proxy port is invalid")
-		}
-		port, err := strconv.Atoi(proxy.Port())
-		if err != nil || port < 1 || port > 65535 {
-			return nil, errors.New("execution contract proxy port is invalid")
+		port, err := proxyEndpointPort(profile.Proxy)
+		if err != nil {
+			return nil, err
 		}
 		seen[port] = struct{}{}
 	}

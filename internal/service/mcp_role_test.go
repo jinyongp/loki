@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"loki/internal/config"
+	"loki/internal/portguard"
 )
 
 func TestMCPRoleReadinessAndCancellation(t *testing.T) {
@@ -23,6 +24,10 @@ func TestMCPRoleReadinessAndCancellation(t *testing.T) {
 	}
 	defer listener.Close()
 	c.Port = listener.Addr().(*net.TCPAddr).Port
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
 	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
 	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
 	ctx, cancel := context.WithCancel(t.Context())
@@ -30,7 +35,7 @@ func TestMCPRoleReadinessAndCancellation(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunMCP(ctx, c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Token: strings.Repeat("t", 43)}, listener, func() error { close(ready); return nil })
+		done <- RunMCP(ctx, c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports, Token: strings.Repeat("t", 43)}, listener, func() error { close(ready); return nil })
 	}()
 	select {
 	case <-ready:

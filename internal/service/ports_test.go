@@ -4,13 +4,43 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"loki/internal/execution"
+	"loki/internal/portguard"
 )
 
 type runtimeFixture func(context.Context, any) (json.RawMessage, error)
 
 func (f runtimeFixture) Call(ctx context.Context, r any) (json.RawMessage, error) { return f(ctx, r) }
+
+func TestProtectedPortPolicyUsesMCPAndExecutionContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := execution.Load(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ports, err := ProtectedPortPolicy(18765, contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, port := range []int{18765, 18766, 18767} {
+		if !errors.Is(ports.Validate(port), portguard.ErrProtected) {
+			t.Fatalf("port %d is not protected", port)
+		}
+	}
+}
+
 func TestWorkspacePortOwnershipFallback(t *testing.T) {
+	ports, err := portguard.NewPolicy(18765, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
 	owned := map[string]any{"in_use": true, "listeners": []map[string]any{{"command": "node"}}}
 	empty := map[string]any{"in_use": false, "listeners": []any{}}
 	denied := errors.New("untrusted listener")
@@ -35,13 +65,33 @@ func TestWorkspacePortOwnershipFallback(t *testing.T) {
 				raw, _ := json.Marshal(test.docker)
 				return raw, test.dockerErr
 			})
-			result, err := InspectWorkspacePort(t.Context(), inspect, runtime, 43000)
+			result, err := InspectWorkspacePort(t.Context(), ports, inspect, runtime, 43000)
 			if (err != nil) != test.wantErr || (portListener(result) != nil) != test.want {
 				t.Fatal(result, err)
 			}
 		})
 	}
-	if _, err := InspectWorkspacePort(t.Context(), nil, nil, 8765); err == nil {
-		t.Fatal("protected port accepted")
+}
+
+func TestProtectedWorkspacePortSkipsAllOwnershipFallback(t *testing.T) {
+	ports, err := portguard.NewPolicy(18765)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guardCalls := 0
+	dockerCalls := 0
+	inspect := func(context.Context, int) (map[string]any, error) {
+		guardCalls++
+		return map[string]any{"in_use": true}, nil
+	}
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) {
+		dockerCalls++
+		return json.RawMessage(`{"in_use":true,"listeners":[{"command":"container"}]}`), nil
+	})
+	if _, err := InspectWorkspacePort(t.Context(), ports, inspect, runtime, 18765); !errors.Is(err, portguard.ErrProtected) {
+		t.Fatalf("protected port error = %v", err)
+	}
+	if guardCalls != 0 || dockerCalls != 0 {
+		t.Fatalf("protected port reached ownership fallback: guard=%d docker=%d", guardCalls, dockerCalls)
 	}
 }

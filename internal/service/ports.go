@@ -5,11 +5,20 @@ import (
 	"encoding/json"
 
 	"loki/internal/dockerproxy"
+	"loki/internal/execution"
 	"loki/internal/portguard"
 	"loki/internal/rpc"
 )
 
 type portRequest struct{ Port int }
+
+func ProtectedPortPolicy(mcpPort int, contract execution.Contract) (portguard.Policy, error) {
+	proxyPorts, err := contract.ProxyPorts()
+	if err != nil {
+		return portguard.Policy{}, err
+	}
+	return portguard.NewPolicy(append([]int{mcpPort}, proxyPorts...)...)
+}
 
 func portListener(result map[string]any) map[string]any {
 	if result["in_use"] != true {
@@ -28,8 +37,8 @@ func portListener(result map[string]any) map[string]any {
 
 // InspectWorkspacePort preserves guard failures unless a trusted Compose
 // listener positively establishes ownership of the same port.
-func InspectWorkspacePort(ctx context.Context, inspect func(context.Context, int) (map[string]any, error), runtime RuntimeCaller, port int) (map[string]any, error) {
-	if err := portguard.Validate(port); err != nil {
+func InspectWorkspacePort(ctx context.Context, ports portguard.Policy, inspect func(context.Context, int) (map[string]any, error), runtime RuntimeCaller, port int) (map[string]any, error) {
+	if err := ports.Validate(port); err != nil {
 		return nil, err
 	}
 	var guarded, docker map[string]any

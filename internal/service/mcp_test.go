@@ -17,6 +17,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
+	"loki/internal/portguard"
 )
 
 type bearerTransport struct{ token string }
@@ -61,7 +62,11 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) {
 		return map[string]any{"status": "running"}, nil
 	})
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Ports: ports, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,5 +176,19 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(c.Root, "hello.txt")); err != nil || string(data) != "fixture" {
 		t.Fatal("workspace content not preserved", err)
+	}
+}
+
+func TestNewMCPRequiresProtectedListenerPolicy(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
+		t.Fatalf("missing listener protection error = %v", err)
 	}
 }

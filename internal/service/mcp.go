@@ -21,6 +21,7 @@ import (
 	"loki/internal/gitops"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
+	"loki/internal/portguard"
 	"loki/internal/previews"
 	"loki/internal/workspace"
 )
@@ -32,6 +33,7 @@ type MCPOptions struct {
 	RuntimeSocket, BrowserSocket, RGPath string
 	GitTemplateRoots                     []string
 	Environment                          map[string]string
+	Ports                                portguard.Policy
 	Token                                string
 	Access, PreviewAccess                auth.Verifier
 }
@@ -56,6 +58,9 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	if options.Runtime == nil || options.PortGuard == nil || options.Browser == nil {
 		return nil, errors.New("MCP requires runtime, port-guard and browser clients")
+	}
+	if !errors.Is(options.Ports.Validate(c.Port), portguard.ErrProtected) {
+		return nil, errors.New("MCP protected-port policy does not include listener")
 	}
 	if c.CloudflareTeamDomain != "" && options.Access == nil {
 		return nil, errors.New("MCP Access verifier is required")
@@ -99,12 +104,12 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		err := runtimeDecode(ctx, options.PortGuard, map[string]any{"operation": "inspect", "port": port}, &result)
 		return result, err
 	}
-	preview := &PreviewController{Store: app.Previews, Runtime: options.Runtime, Inspect: inspect}
+	preview := &PreviewController{Store: app.Previews, Runtime: options.Runtime, Ports: options.Ports, Inspect: inspect}
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.PortAllowed)
 	}
 	system := &SystemController{Config: c, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
-		return InspectWorkspacePort(ctx, inspect, options.Runtime, port)
+		return InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
 	}}
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),

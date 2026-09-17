@@ -2,10 +2,12 @@ package portguard
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -78,10 +80,23 @@ func TestInspectAndStopOwnedListener(t *testing.T) {
 	}
 }
 func TestBoundary(t *testing.T) {
-	for _, port := range []int{0, 1023, 65536, 8765, 8766, 8767} {
-		if Validate(port) == nil {
+	for _, port := range []int{0, 1023, 65536} {
+		if ValidateNumber(port) == nil {
 			t.Fatal(port)
 		}
+	}
+	ports, err := NewPolicy(18765, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, port := range []int{18765, 18766, 18767} {
+		if !errors.Is(ports.Validate(port), ErrProtected) {
+			t.Fatal(port)
+		}
+	}
+	guard := &Guard{Root: t.TempDir(), UID: uint32(os.Getuid()), Ports: ports, proc: filepath.Join(t.TempDir(), "missing-proc")}
+	if _, err := guard.Inspect(t.Context(), 18765); !errors.Is(err, ErrProtected) {
+		t.Fatalf("protected port reached proc inspection: %v", err)
 	}
 	for _, path := range []string{"/workspace-other", "/workspace/../etc"} {
 		if within("/workspace", path) {

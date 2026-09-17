@@ -22,6 +22,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	host := flags.String("host", "127.0.0.1", "proxy listen address")
 	port := flags.Int("port", defaultEgressProxyPort, "loopback proxy port")
+	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "administrator-owned execution contract")
 	policyPath := flags.String("policy", "", "administrator-owned egress policy")
 	profile := flags.String("profile", "", "egress policy profile")
 	auditPath := flags.String("audit", "", "private egress audit log")
@@ -32,8 +33,13 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		return 2
 	}
 	listenIP := net.ParseIP(*host)
-	if flags.NArg() != 0 || listenIP == nil || !listenIP.IsUnspecified() && !listenIP.IsLoopback() || *port < 1024 || *port > 65535 || *profile == "" || !filepath.IsAbs(*policyPath) || !filepath.IsAbs(*auditPath) {
-		fmt.Fprintln(stderr, "egress-proxy requires port, policy, profile, and audit path")
+	if flags.NArg() != 0 || listenIP == nil || !listenIP.IsUnspecified() && !listenIP.IsLoopback() || *port < 1024 || *port > 65535 || *profile == "" || !filepath.IsAbs(*contractPath) || !filepath.IsAbs(*policyPath) || !filepath.IsAbs(*auditPath) {
+		fmt.Fprintln(stderr, "egress-proxy requires port, execution contract, policy, profile, and audit path")
+		return 2
+	}
+	_, contractPort, err := loadExecutionProxy(*contractPath, *profile)
+	if err != nil || contractPort != *port {
+		fmt.Fprintln(stderr, "egress-proxy port does not match execution contract")
 		return 2
 	}
 	var forwardListener *net.TCPListener

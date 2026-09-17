@@ -17,9 +17,10 @@ import (
 )
 
 type Guard struct {
-	Root string
-	UID  uint32
-	proc string
+	Root  string
+	UID   uint32
+	Ports Policy
+	proc  string
 }
 type listener struct {
 	PID          int
@@ -29,15 +30,6 @@ type listener struct {
 
 var scopePattern = regexp.MustCompile(`^/system\.slice/loki-(?:action|project-bootstrap)-[0-9a-f]{16}\.scope$`)
 
-func Validate(port int) error {
-	if port < 1024 || port > 65535 {
-		return errors.New("port must be an integer between 1024 and 65535")
-	}
-	if port == 8765 || port == 8766 || port == 8767 {
-		return errors.New("protected Loki service port")
-	}
-	return nil
-}
 func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
@@ -195,7 +187,7 @@ func (g *Guard) once(ctx context.Context, port int) ([]listener, error) {
 	return result, nil
 }
 func (g *Guard) listeners(ctx context.Context, port int) ([]listener, error) {
-	if err := Validate(port); err != nil {
+	if err := g.Ports.Validate(port); err != nil {
 		return nil, err
 	}
 	var result []listener

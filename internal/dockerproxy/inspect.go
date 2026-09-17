@@ -16,6 +16,7 @@ import (
 
 type Inspector struct {
 	Workspace, SnapshotRoot, Binary, Socket string
+	Ports                                   portguard.Policy
 	run                                     func(context.Context, ...string) (string, error)
 }
 
@@ -76,7 +77,7 @@ func (i Inspector) command(ctx context.Context, args ...string) (string, error) 
 	return r.Output, nil
 }
 func (i Inspector) Inspect(ctx context.Context, port int) (map[string]any, error) {
-	if err := portguard.Validate(port); err != nil {
+	if err := i.Ports.Validate(port); err != nil {
 		return nil, err
 	}
 	listed, err := i.command(ctx, "container", "ls", "--filter", "publish="+strconv.Itoa(port), "--format", "{{.ID}}")

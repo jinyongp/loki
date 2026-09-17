@@ -58,11 +58,16 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 	if err := daemon.PrivateDirectory(o.GitHubTempDirectory); err != nil {
 		return fmt.Errorf("validate GitHub temporary directory: %w", err)
 	}
-	var contract execution.Contract
-	if err := daemon.ReadJSON(o.ExecutionContract, &contract); err != nil {
+	contractRaw, err := os.ReadFile(o.ExecutionContract)
+	if err != nil {
 		return fmt.Errorf("read execution contract: %w", err)
 	}
-	if err := contract.Validate(); err != nil {
+	contract, err := execution.Load(contractRaw)
+	if err != nil {
+		return err
+	}
+	ports, err := ProtectedPortPolicy(c.Port, contract)
+	if err != nil {
 		return err
 	}
 	runnerState := contract.Directories["runner-state"].Path
@@ -202,8 +207,8 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 		GitHubIssueFieldsOperations(issueFields),
 		GitHubCommandOperations(githubCommands),
 		AuditOperations(log),
-		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID}),
-		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket}),
+		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID, Ports: ports}),
+		DockerOperations(dockerproxy.Inspector{Workspace: o.Workspace, SnapshotRoot: o.SnapshotDirectory, Socket: "unix://" + o.DockerSocket, Ports: ports}),
 	} {
 		for name, op := range group {
 			if _, exists := ops[name]; exists {
