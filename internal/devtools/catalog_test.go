@@ -24,12 +24,13 @@ func TestEmbeddedCatalogContainsOnlyApprovedCommands(t *testing.T) {
 	}
 	if !slices.Equal(approvedNames, []string{
 		"command inspect", "command list", "process restart", "process start", "project inspect",
-		"task checkpoint list", "task context", "task current", "task history", "task next", "task show",
+		"task checkpoint", "task checkpoint list", "task claim", "task context", "task current", "task done",
+		"task history", "task next", "task release", "task resume", "task show", "task takeover",
 		"task workstream context", "task workstream history", "task workstream list", "task workstream show",
 	}) {
 		t.Fatalf("runtime allowlist = %#v", approvedNames)
 	}
-	for _, denied := range []string{"doctor", "run", "secret set", "secret list", "import", "process logs", "project up", "task claim", "task takeover", "task checkpoint", "task release", "task done", "backup restore", "cleanup apply", "update"} {
+	for _, denied := range []string{"doctor", "run", "secret set", "secret list", "import", "process logs", "project up", "task add", "task update", "task workstream close", "task validation record", "backup restore", "cleanup apply", "update"} {
 		if slices.Contains(approvedNames, denied) {
 			t.Fatalf("unsafe command approved: %q", denied)
 		}

@@ -203,6 +203,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	for _, group := range []map[string]rpc.Operation{
 		DevtoolsMetadataOperations(devtoolsClient),
 		DevtoolsCoordinationOperations(devtoolsClient),
+		DevtoolsCoordinationMutationOperations(devtoolsClient),
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
 		GitHubIssueFieldsOperations(issueFields),

@@ -6,10 +6,13 @@ non-executing `project inspect`, `command list`, and `command inspect` metadata
 contracts used by Loki's typed project adapter. Metadata output schemas in this
 bootstrap fixture are intentionally broad objects; the typed adapter performs a
 second strict decode and path sanitization. The fixture also contains the
-read-only task/workstream/run context queries admitted by Loki; task mutations,
-claim credentials, doctor execution and lifecycle mutations remain excluded.
-Runtime verification replaces this fixture with the selected binary's actual
-catalog before any call.
+read-only task/workstream/run context queries admitted by Loki. It also carries
+the narrow claim/takeover/resume/checkpoint/release/done mutation contracts used
+by the session-bound coordination adapter. Claim credentials are stripped from
+public projections and kept only in protected session state; task definition
+edits, validation mutations, doctor execution and runtime lifecycle mutations
+remain excluded. Runtime verification replaces this fixture with the selected
+binary's actual catalog before any call.
 
 Review basis (2026-09-18): devtools `internal/cli/processes.go`,
 `internal/cli/commands.go`, `internal/cli/schema.go`, `internal/cli/cli.go` and
