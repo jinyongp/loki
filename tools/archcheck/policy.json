@@ -1,6 +1,22 @@
 {
   "allowed_edges": [
     {
+      "from": "loki/cmd/loki-executor",
+      "to": "loki/internal/app/executor"
+    },
+    {
+      "from": "loki/cmd/loki-executor",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/cmd/loki-executor",
+      "to": "loki/internal/work/jobs"
+    },
+    {
+      "from": "loki/cmd/loki-executor",
+      "to": "loki/internal/work/jobs/remote"
+    },
+    {
       "from": "loki/cmd/loki-launcher",
       "to": "loki/internal/app/launcher"
     },
@@ -99,6 +115,26 @@
     {
       "from": "loki/cmd/loki",
       "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/internal/app/executor",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/app/executor",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/app/executor",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/app/executor",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/app/executor",
+      "to": "loki/internal/work/jobs"
     },
     {
       "from": "loki/internal/app/launcher",
@@ -491,6 +527,12 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/cmd/loki-executor": {
+      "kind": "role",
+      "owner": "executor",
+      "tags": [],
+      "target": "cmd/loki-executor"
+    },
     "loki/cmd/loki-launcher": {
       "kind": "role",
       "owner": "launcher",
@@ -522,6 +564,12 @@
       "owner": "audit",
       "tags": [],
       "target": "control/audit"
+    },
+    "loki/internal/app/executor": {
+      "kind": "app",
+      "owner": "executor",
+      "tags": [],
+      "target": "app/executor"
     },
     "loki/internal/app/launcher": {
       "kind": "app",
@@ -816,6 +864,19 @@
     }
   },
   "roles": [
+    {
+      "forbidden_tags": [
+        "launcher-implementation",
+        "platform-credential-store",
+        "mcp-wire",
+        "browser-worker",
+        "provider-private-key",
+        "devtools"
+      ],
+      "name": "executor",
+      "optional": false,
+      "root": "loki/cmd/loki-executor"
+    },
     {
       "forbidden_tags": [
         "launcher-implementation",
