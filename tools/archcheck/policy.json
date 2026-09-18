@@ -265,6 +265,14 @@
       "to": "loki/internal/fault"
     },
     {
+      "from": "loki/internal/work/jobs/remote",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/work/jobs/remote",
+      "to": "loki/internal/work/jobs"
+    },
+    {
       "from": "loki/internal/service",
       "to": "loki/internal/control/identity"
     },
@@ -770,6 +778,18 @@
         "tooling"
       ],
       "target": "tools/toolchainfetch"
+    },
+    "loki/internal/work/jobs": {
+      "kind": "work",
+      "owner": "jobs",
+      "tags": [],
+      "target": "work/jobs"
+    },
+    "loki/internal/work/jobs/remote": {
+      "kind": "work-adapter",
+      "owner": "jobs",
+      "tags": ["project-execution-local"],
+      "target": "work/jobs/remote"
     },
     "loki/internal/workspace": {
       "kind": "work",
