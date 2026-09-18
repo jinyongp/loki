@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"loki/internal/config"
+	controlpolicy "loki/internal/control/policy"
 )
 
 func TestSystemInformation(t *testing.T) {
@@ -17,7 +18,8 @@ func TestSystemInformation(t *testing.T) {
 	}
 	c.Root = paths.Root()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
-	system := &SystemController{Config: c, Paths: paths, Started: time.Now(), Artifacts: true, Previews: true, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+	generation := policyGenerationFixture(t)
+	system := &SystemController{Config: c, Policy: generation, Paths: paths, Started: time.Now(), Artifacts: true, Previews: true, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return map[string]any{"port": port, "in_use": false, "listeners": []any{}}, nil
 	}}
 	h := SystemHandler(system)
@@ -29,7 +31,8 @@ func TestSystemInformation(t *testing.T) {
 		value := r.StructuredContent.(map[string]any)
 		switch action {
 		case "server":
-			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 26 {
+			metadata := value["policy_generation"].(controlpolicy.GenerationMetadata)
+			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 26 || metadata.SHA256 != generation.Digest() {
 				t.Fatal(value)
 			}
 		case "workspace":

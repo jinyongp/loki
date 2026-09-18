@@ -54,6 +54,10 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/policy"
     },
     {

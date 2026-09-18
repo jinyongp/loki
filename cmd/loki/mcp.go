@@ -15,6 +15,7 @@ import (
 	"loki/internal/auth"
 	"loki/internal/config"
 	"loki/internal/daemon"
+	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
 	"loki/internal/service"
 )
@@ -84,6 +85,11 @@ func runMCP(args []string, stderr io.Writer) int {
 	contract, err := loadExecutionContract(layout.ExecutionContract)
 	if err != nil {
 		fmt.Fprintln(stderr, "invalid MCP execution contract")
+		return 2
+	}
+	options.Policy, err = hostpolicy.Compile(c, contract)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid MCP effective policy")
 		return 2
 	}
 	options.Ports, err = service.ProtectedPortPolicy(c.Port, contract)

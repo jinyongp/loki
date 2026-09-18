@@ -6,8 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/policy"
 )
+
+func policyGenerationFixture(t *testing.T) controlpolicy.Generation {
+	t.Helper()
+	generation, err := controlpolicy.NewGeneration(map[string]any{"fixture": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return generation
+}
 
 func serviceFixture(t *testing.T) *policy.Workspace {
 	t.Helper()

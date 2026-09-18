@@ -113,7 +113,10 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var runtime service.RuntimeOptions
+	var runtime struct {
+		service.RuntimeOptions
+		ExecutionContract string
+	}
 	if err = json.Unmarshal(data, &runtime); err != nil {
 		t.Fatal(err)
 	}

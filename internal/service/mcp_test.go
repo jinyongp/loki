@@ -66,7 +66,8 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Ports: ports, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	generation := policyGenerationFixture(t)
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +152,11 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if r := call("workspace_read", map[string]any{"action": "file", "path": "hello.txt"}); r["sha256"] == nil {
 		t.Fatal(r)
 	}
-	call("system_inspect", map[string]any{"action": "server"})
+	serverInfo := call("system_inspect", map[string]any{"action": "server"})
+	policyInfo := serverInfo["policy_generation"].(map[string]any)
+	if policyInfo["sha256"] != generation.Digest() || policyInfo["schema"] != float64(1) {
+		t.Fatalf("policy generation info = %#v", policyInfo)
+	}
 	call("browser_session", map[string]any{"action": "start"})
 	call("secret_inspect", map[string]any{"action": "status"})
 	shared := call("artifact_publish", map[string]any{"action": "file", "path": "hello.txt"})
@@ -179,6 +184,24 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 }
 
+func TestNewMCPRequiresEffectivePolicyGeneration(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports, Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "effective policy generation") {
+		t.Fatalf("missing policy generation error = %v", err)
+	}
+}
+
 func TestNewMCPRequiresProtectedListenerPolicy(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
@@ -188,7 +211,7 @@ func TestNewMCPRequiresProtectedListenerPolicy(t *testing.T) {
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
 	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
 	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
-	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
 		t.Fatalf("missing listener protection error = %v", err)
 	}
 }

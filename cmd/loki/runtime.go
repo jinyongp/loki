@@ -7,12 +7,19 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"loki/internal/config"
 	"loki/internal/daemon"
+	hostpolicy "loki/internal/host/policy"
 	"loki/internal/service"
 )
+
+type runtimeLayout struct {
+	service.RuntimeOptions
+	ExecutionContract string
+}
 
 func runRuntime(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("runtime", flag.ContinueOnError)
@@ -28,11 +35,16 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "runtime requires --layout PATH")
 		return 2
 	}
-	var options service.RuntimeOptions
-	if err := daemon.ReadJSON(*layoutPath, &options); err != nil {
+	var layout runtimeLayout
+	if err := daemon.ReadJSON(*layoutPath, &layout); err != nil {
 		fmt.Fprintln(stderr, "invalid runtime layout")
 		return 2
 	}
+	if !filepath.IsAbs(layout.ExecutionContract) {
+		fmt.Fprintln(stderr, "invalid runtime execution contract")
+		return 2
+	}
+	options := layout.RuntimeOptions
 	if *githubPrivateKeyPath != "" {
 		options.GitHubPrivateKeyFile = *githubPrivateKeyPath
 	}
@@ -41,9 +53,19 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "cannot load runtime configuration")
 		return 1
 	}
+	contract, err := loadExecutionContract(layout.ExecutionContract)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid runtime execution contract")
+		return 2
+	}
+	generation, err := hostpolicy.Compile(configuration, contract)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid runtime effective policy")
+		return 2
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	err = service.RunRuntime(ctx, options, configuration, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
+	err = service.RunRuntime(ctx, options, configuration, contract, generation, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
 	if err != nil {
 		fmt.Fprintln(stderr, "runtime service failed:", err)
 		return 1

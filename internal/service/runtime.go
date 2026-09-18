@@ -32,15 +32,20 @@ type RuntimeOptions struct {
 	AgentUID                                          uint32
 	SocketGID                                         int
 	DevtoolsBinary                                    string
-	ExecutionContract                                 string
 	Workspace, DockerSocket, SnapshotDirectory        string
 	GitHubProxy, GitHubBinary, GitHubPrivateKeyFile   string
 	GitHubTempDirectory                               string
 	RunnerUID, RunnerGID                              uint32
 }
 
-func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready func() error, onAuditError func(error)) error {
-	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.ExecutionContract, o.Workspace, o.DockerSocket, o.SnapshotDirectory, o.GitHubTempDirectory} {
+func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract execution.Contract, generation controlpolicy.Generation, ready func() error, onAuditError func(error)) error {
+	if !generation.Valid() {
+		return errors.New("runtime requires a valid effective policy generation")
+	}
+	if err := contract.Validate(); err != nil {
+		return err
+	}
+	for _, path := range []string{o.Socket, o.StateDirectory, o.InboxDirectory, o.AuditPath, o.DevtoolsBinary, o.Workspace, o.DockerSocket, o.SnapshotDirectory, o.GitHubTempDirectory} {
 		if !filepath.IsAbs(path) {
 			return errors.New("runtime role paths must be absolute")
 		}
@@ -59,14 +64,6 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 	}
 	if err := daemon.PrivateDirectory(o.GitHubTempDirectory); err != nil {
 		return fmt.Errorf("validate GitHub temporary directory: %w", err)
-	}
-	contractRaw, err := os.ReadFile(o.ExecutionContract)
-	if err != nil {
-		return fmt.Errorf("read execution contract: %w", err)
-	}
-	contract, err := execution.Load(contractRaw)
-	if err != nil {
-		return err
 	}
 	ports, err := ProtectedPortPolicy(c.Port, contract)
 	if err != nil {
@@ -195,7 +192,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 			}
 		}
 		return map[string]any{
-			"initialized": true, "profiles": len(items),
+			"initialized": true, "profiles": len(items), "policy_generation": generation.Metadata(),
 			"github": map[string]any{
 				"configured": c.GitHubAppID != 0, "installation_count": len(c.GitHubInstallations),
 				"target_count": len(c.GitHubTargets), "credential_source": credentialSource,

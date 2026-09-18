@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"loki/internal/daemon"
+)
 
 func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	uid := uint32(1000)
@@ -14,5 +20,25 @@ func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 		if _, err := layout.options("token"); err == nil {
 			t.Fatal("invalid peer/resource configuration accepted")
 		}
+	}
+}
+
+func TestServiceLayoutsCannotInjectPolicyGeneration(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		out  any
+	}{
+		{name: "mcp", out: &mcpLayout{}},
+		{name: "runtime", out: &runtimeLayout{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "layout.json")
+			if err := os.WriteFile(path, []byte(`{"PolicyGeneration":{"schema":1,"sha256":"forged"}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := daemon.ReadJSON(path, test.out); err == nil {
+				t.Fatal("caller-controlled policy generation was accepted")
+			}
+		})
 	}
 }

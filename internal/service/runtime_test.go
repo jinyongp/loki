@@ -11,6 +11,7 @@ import (
 
 	"loki/internal/config"
 	"loki/internal/execution"
+	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )
@@ -23,7 +24,6 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	contractPath := filepath.Join(root, "execution-contract.json")
 	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -63,23 +63,28 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	encodedContract, err := json.Marshal(contract)
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(contractPath, encodedContract, 0600); err != nil {
-		t.Fatal(err)
+	c.Root = workspace
+	c.AuditLog = o.AuditPath
+	c.GitHubAppID = 123
+	c.GitHubAPIVersion = "2026-03-10"
+	c.GitHubInstallations = []config.GitHubInstallation{
+		{Account: "organization", AccountType: "organization", InstallationID: 456, Repositories: []string{"repository"}},
+		{Account: "person", AccountType: "user", InstallationID: 789, Repositories: []string{"personal"}},
 	}
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", ExecutionContract: contractPath, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
-	c := config.Config{
-		Port: 18765, GitHubAppID: 123, GitHubAPIVersion: "2026-03-10",
-		GitHubInstallations: []config.GitHubInstallation{
-			{Account: "organization", AccountType: "organization", InstallationID: 456, Repositories: []string{"repository"}},
-			{Account: "person", AccountType: "user", InstallationID: 789, Repositories: []string{"personal"}},
-		},
-		GitHubTargets:          []string{"organization/repository", "person/personal"},
-		GitHubMaxResponseBytes: 4096, GitHubMaxPages: 2,
-		GitHubCommandTimeoutSeconds: 1, GitHubMaxInputBytes: 4096, GitHubMaxOutputBytes: 4096,
+	c.GitHubTargets = []string{"organization/repository", "person/personal"}
+	c.GitHubMaxResponseBytes = 4096
+	c.GitHubMaxPages = 2
+	c.GitHubCommandTimeoutSeconds = 1
+	c.GitHubMaxInputBytes = 4096
+	c.GitHubMaxOutputBytes = 4096
+	generation, err := hostpolicy.Compile(c, contract)
+	if err != nil {
+		t.Fatal(err)
 	}
 	for _, path := range []string{
 		runnerState,
@@ -113,7 +118,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunRuntime(ctx, o, c, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
+		done <- RunRuntime(ctx, o, c, contract, generation, func() error { close(ready); return nil }, func(err error) { t.Error(err) })
 	}()
 	select {
 	case <-ready:
@@ -136,7 +141,11 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		return result
 	}
 	status := call(map[string]any{"operation": "status"})
+	policyStatus := status["policy_generation"].(map[string]any)
 	githubStatus := status["github"].(map[string]any)
+	if policyStatus["sha256"] != generation.Digest() || policyStatus["schema"] != float64(1) {
+		t.Fatalf("policy generation status = %#v", policyStatus)
+	}
 	if status["initialized"] != true || status["profiles"] != float64(0) ||
 		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
 		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||

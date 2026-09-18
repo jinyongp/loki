@@ -16,6 +16,7 @@ import (
 	"loki/internal/buildinfo"
 	"loki/internal/config"
 	"loki/internal/contract"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
@@ -27,6 +28,7 @@ var browserTools = []string{"browser_session", "browser_observe", "browser_inter
 
 type SystemController struct {
 	Config                       config.Config
+	Policy                       controlpolicy.Generation
 	Paths                        *policy.Workspace
 	Started                      time.Time
 	RuntimeSocket, BrowserSocket string
@@ -61,7 +63,7 @@ func (c *SystemController) Info() map[string]any {
 	if !c.Started.IsZero() {
 		uptime = math.Round(time.Since(c.Started).Seconds()*1000) / 1000
 	}
-	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-15.2", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "workspace": "/workspace", "tool_catalog": catalogInfo(),
+	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-15.2", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "workspace": "/workspace", "policy_generation": c.Policy.Metadata(), "tool_catalog": catalogInfo(),
 		"capabilities": map[string]any{
 			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"}, "temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts, "workspace_bundles": c.Artifacts, "developer_output_viewer": true, "temporary_live_previews": c.Previews, "git_checkpoints": true, "file_revisions": true, "git_partial_staging": true, "signed_git_commits": true, "secret_profiles": socketExists(c.RuntimeSocket),
 			"devtools":          map[string]any{"direct_cli": true, "project_state": true, "task_queues": true, "configured_commands": true, "managed_processes": true, "workspace_ports": true},
