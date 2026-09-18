@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestCurrentContract(t *testing.T) {
@@ -11,7 +13,7 @@ func TestCurrentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != 26 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
+	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != 28 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
 		t.Fatal("incomplete current contract")
 	}
 	definitions, err := CurrentDefinitions()
@@ -22,7 +24,7 @@ func TestCurrentContract(t *testing.T) {
 	for _, definition := range definitions {
 		seen[definition.Name] = true
 	}
-	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github", "github_issue_fields"} {
+	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github", "github_issue_fields", "project_coordination", "project_coordination_write"} {
 		if !seen[required] {
 			t.Errorf("missing Loki tool %q", required)
 		}
@@ -30,6 +32,20 @@ func TestCurrentContract(t *testing.T) {
 	for _, delegated := range []string{"runtime_stop", "project", "task_inspect", "task_write", "task_delete", "bootstrap_project", "action", "command_run", "command_start", "process_inspect", "agent_context", "skill_read", "skill_write"} {
 		if seen[delegated] {
 			t.Errorf("delegated command remains exposed as MCP tool %q", delegated)
+		}
+	}
+	for _, name := range []string{"project_coordination", "project_coordination_write"} {
+		forbidden := map[string]bool{"context": true, "session_id": true, "profile": true, "command": true}
+		var schema map[string]any
+		encoded, err := json.Marshal(seenDefinition(definitions, name).InputSchema)
+		if err != nil || json.Unmarshal(encoded, &schema) != nil {
+			t.Fatalf("decode %s schema: %v", name, err)
+		}
+		properties, _ := schema["properties"].(map[string]any)
+		for key := range forbidden {
+			if _, exists := properties[key]; exists {
+				t.Errorf("%s exposes forbidden field %q", name, key)
+			}
 		}
 	}
 	data, err := json.Marshal(definitions)
@@ -70,4 +86,13 @@ func TestCurrentReturnsIndependentCopies(t *testing.T) {
 	if second.Tools[0][0] == 'x' {
 		t.Fatal("current contract returned shared mutable data")
 	}
+}
+
+func seenDefinition(definitions []*mcp.Tool, name string) *mcp.Tool {
+	for _, definition := range definitions {
+		if definition.Name == name {
+			return definition
+		}
+	}
+	return nil
 }

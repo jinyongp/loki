@@ -62,6 +62,24 @@ func (s *DevtoolsSessionClaims) clear(sessionID, runID string) {
 	}
 }
 
+func (s *DevtoolsSessionClaims) clearAll() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clear(s.bindings)
+}
+
+func (s *DevtoolsSessionClaims) count() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.bindings)
+}
+
 type DevtoolsSessionMutationRequest struct {
 	CWD                 string
 	TargetID            string

@@ -46,6 +46,7 @@ type MCPApp struct {
 	Server    *mcp.Server
 	Artifacts *artifacts.Store
 	Previews  *previews.Store
+	Claims    *DevtoolsSessionClaims
 	files     *workspace.Files
 	roots     []*policy.Workspace
 	preview   *previews.Proxy
@@ -73,7 +74,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if c.PreviewAccessAudience != "" && options.PreviewAccess == nil {
 		return nil, errors.New("preview Access verifier is required")
 	}
-	app = &MCPApp{}
+	app = &MCPApp{Claims: NewDevtoolsSessionClaims()}
 	owned := app
 	defer func() {
 		if err != nil {
@@ -119,7 +120,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
 	}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime)} {
+	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)
@@ -201,6 +203,9 @@ func (a *MCPApp) Close() {
 		}
 		if a.Previews != nil {
 			a.Previews.Clear()
+		}
+		if a.Claims != nil {
+			a.Claims.clearAll()
 		}
 		for _, root := range a.roots {
 			root.Close()

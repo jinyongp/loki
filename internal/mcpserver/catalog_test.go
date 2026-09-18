@@ -56,7 +56,7 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	}
 	client := connect(t, testHandlers(t))
 	listed, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(listed.Tools) != 26 {
+	if err != nil || len(listed.Tools) != 28 {
 		t.Fatal(listed, err)
 	}
 	current, _ := contract.Current()

@@ -11,9 +11,9 @@ import (
 //go:embed testdata/mcp-go-v049.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-15.2"
+const CatalogRevision = "2026-09-19.1"
 
-const CurrentInstructions = `Operate inside the isolated Loki workspace. The devtools agent skill is preinstalled. Use the devtools CLI directly for project state, task queues, configured commands, checks, ports, and managed processes; inspect exact command contracts with devtools schema. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. For a configured process that needs those secrets, use loki secret-process start or restart with secret names; use ordinary devtools process commands for later status, readiness, logs, and stopping. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
+const CurrentInstructions = `Operate inside the isolated Loki workspace. Use project_coordination for shared devtools-backed task, workstream, Run, history, and checkpoint reads, and project_coordination_write for claim, takeover, resume, checkpoint, release, and done transitions. Claim context and MCP session identifiers are server-private and must never be requested, stored, or echoed. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. Configured command and managed-process execution still follows the currently exposed runtime workflow until Loki Environment/Job delegation replaces it. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
 var currentToolNames = []string{
 	"system_inspect",
@@ -23,6 +23,7 @@ var currentToolNames = []string{
 	"restore_workspace_file", "remove_tracked_file",
 	"git_inspect", "git_stage", "developer_view",
 	"secret_inspect", "secret_write", "secret_delete", "github", "github_issue_fields",
+	"project_coordination", "project_coordination_write",
 }
 
 // Current returns an independent copy; callers cannot mutate canonical data.
