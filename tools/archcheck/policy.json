@@ -153,6 +153,18 @@
       "to": "loki/internal/process"
     },
     {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/execution"
+    },
+    {
       "from": "loki/internal/gitops",
       "to": "loki/internal/config"
     },
@@ -585,6 +597,14 @@
         "provider-private-key"
       ],
       "target": "integrations/github"
+    },
+    "loki/internal/host/policy": {
+      "kind": "host",
+      "owner": "policy-compiler",
+      "tags": [
+        "host-config"
+      ],
+      "target": "host/policy"
     },
     "loki/internal/gitops": {
       "kind": "legacy-work",
