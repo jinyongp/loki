@@ -267,22 +267,10 @@
   ],
   "edge_exceptions": [
     {
-      "from": "loki/internal/browsernet",
-      "reason": "legacy proxy consumes neutral policy until proxy moves",
-      "remove_unit": "WI-002",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
       "from": "loki/internal/devtools",
       "reason": "devtools adapter brokers secrets directly",
       "remove_unit": "A04/S04",
       "to": "loki/internal/secret"
-    },
-    {
-      "from": "loki/internal/egress",
-      "reason": "workload egress depends on browser-named mechanics",
-      "remove_unit": "S02/S04",
-      "to": "loki/internal/browsernet"
     },
     {
       "from": "loki/internal/gitops",
@@ -313,12 +301,6 @@
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
       "to": "loki/internal/browser"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/browsernet"
     },
     {
       "from": "loki/internal/service",
@@ -492,12 +474,6 @@
         "browser-worker"
       ],
       "target": "integrations/browser"
-    },
-    "loki/internal/browsernet": {
-      "kind": "legacy-mixed",
-      "owner": "network-mechanics",
-      "tags": [],
-      "target": "platform/netguard + work/network"
     },
     "loki/internal/buildinfo": {
       "kind": "platform",

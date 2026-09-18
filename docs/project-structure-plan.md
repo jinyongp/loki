@@ -1,8 +1,8 @@
 # Loki package structure and dependency plan
 
-Status: proposed implementation layout, based on the repository inspected on 2026-09-17 at `50a0d65d6cacfcae5673889d004a08f8100df392`. No production packages have been moved by this review. This document refines the package-ownership part of the [architecture improvement plan](architecture-improvement-plan.md); it does not replace the [readiness findings](go-readiness-review.md) or the agreed [installation behavior](installation-distribution-plan.md).
+Status: implementation target based on the repository inspected on 2026-09-17 at `50a0d65d6cacfcae5673889d004a08f8100df392`. Section 1 preserves that reviewed baseline; landed structural slices are recorded in the relevant migration sections. This document refines the package-ownership part of the [architecture improvement plan](architecture-improvement-plan.md); it does not replace the [readiness findings](go-readiness-review.md) or the agreed [installation behavior](installation-distribution-plan.md).
 
-## 1. Current dependency evidence
+## 1. Reviewed baseline dependency evidence
 
 The current Linux/amd64 build graph was obtained with `go list -mod=readonly -json ./...`; imports were separated from test imports. It contains 36 package directories, 34 with production source, 110 production Go files, 15,238 production lines, and 85 direct imports between packages in this module. There are 33 immediate directories under `internal/`. These are observations, not target counts or complexity thresholds. Build-selected imports do not cover every possible build-tag combination.
 
@@ -194,6 +194,8 @@ Move traversal-resistant filesystem mechanics from today's `policy` and reusable
 
 Extract public-address classification, DNS validation and pinned dialing from `browsernet` into `platform/netguard`. Browser-specific navigation policy stays in browser, dependency egress selection stays in work/network, and the decision that a local endpoint belongs to a job stays in work/endpoints. A transport authentication refresher can depend on safe dialing mechanics without importing browser behavior or port-termination policy.
 
+S02 status: neutral destination validation, bounded dialing, and generic HTTP/CONNECT proxy mechanics now live in `internal/platform/netguard`; `internal/browsernet` has been removed. Auth, browser, egress, and browser-proxy composition consume the neutral primitive directly. Workload-scoped network grants and endpoint ownership remain A06/S04 work rather than being folded into this platform package.
+
 ### Separate configuration sources and consumed options
 
 `host/config` parses operator configuration strictly and compiles it into typed effective component configurations. Each feature accepts only its own immutable Options and granted capabilities. Do not thread one whole server Config through Git, files, browser, execution and every adapter. Project toolchain selector parsing remains in toolchain providers: it is not host-policy parsing even if both use TOML.
@@ -218,7 +220,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/audit` | `control/audit` event contract and private sink/retention adapter using safeio. |
 | `internal/auth` | Core bearer/local connection auth in `transport/http` and trusted principal values in `control/identity`. Cloudflare-specific Access verification/JWKS refresh is not a core-install dependency; retain it only as an optional external-access integration or maintainer migration path if that feature is kept, and never route its safe dialing through browser policy. |
 | `internal/browser` | `integrations/browser` facade, local worker adapter and private Chromium driver/JavaScript. |
-| `internal/browsernet` | Shared mechanics to `platform/netguard`; navigation/proxy adapters to browser; workload grant enforcement to `work/network`. |
+| `internal/browsernet` | **S02 completed:** package removed; shared validation/dial/proxy mechanics now live in `internal/platform/netguard`. Workload grant enforcement remains targeted at `work/network`. |
 | `internal/buildinfo` | `platform/buildinfo`, a leaf package containing build metadata only. |
 | `internal/cdp` | `integrations/browser/internal/cdp` until another real independent consumer justifies extraction. |
 | `internal/config` | Strict `host/config` loading plus feature-owned Options; neutral syntax helpers extracted only with actual reuse. |

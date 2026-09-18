@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"loki/internal/browsernet"
 	"loki/internal/platform/netguard"
 )
 
@@ -36,7 +35,7 @@ func New(policy Policy, profile string, audit func(Decision)) (*Proxy, error) {
 	if _, ok := policy.Profiles[profile]; !ok {
 		return nil, errors.New("unknown egress profile")
 	}
-	proxy := browsernet.New(netguard.Policy{})
+	proxy := netguard.New(netguard.Policy{})
 	proxy.IdleTimeout = 300 * time.Second
 	proxy.TunnelErrorStatus = http.StatusBadGateway
 	return &Proxy{handler: proxy, close: proxy.Close, policy: policy, profile: profile, audit: audit}, nil

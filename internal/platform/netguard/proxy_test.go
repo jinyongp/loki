@@ -1,4 +1,4 @@
-package browsernet
+package netguard
 
 import (
 	"bufio"
@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"loki/internal/platform/netguard"
 )
 
 func TestHTTPAndConnectProxy(t *testing.T) {
@@ -30,7 +28,7 @@ func TestHTTPAndConnectProxy(t *testing.T) {
 	port, _ := strconv.Atoi(portText)
 	var allowed atomic.Bool
 	allowed.Store(true)
-	p := New(netguard.Policy{ValidatePort: func(ctx context.Context, value int) bool { return allowed.Load() && value == port }})
+	p := New(Policy{ValidatePort: func(ctx context.Context, value int) bool { return allowed.Load() && value == port }})
 	defer p.Close()
 	server := httptest.NewServer(p)
 	defer server.Close()
@@ -87,7 +85,7 @@ func TestTunnelIdleTimeoutTracksActivity(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
 	defer upstream.Close()
 	port := upstream.Listener.Addr().(*net.TCPAddr).Port
-	proxy := New(netguard.Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }})
+	proxy := New(Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }})
 	proxy.IdleTimeout = 250 * time.Millisecond
 	defer proxy.Close()
 	server := httptest.NewServer(proxy)

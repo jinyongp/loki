@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/browsernet"
 	"loki/internal/platform/netguard"
 )
 
@@ -32,7 +31,7 @@ func chromeDriver(t *testing.T, handler http.Handler) (*Driver, string) {
 	t.Cleanup(server.Close)
 	_, portText, _ := net.SplitHostPort(server.Listener.Addr().String())
 	port, _ := strconv.Atoi(portText)
-	proxy := browsernet.New(netguard.Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }, Lookup: func(context.Context, string) ([]netip.Addr, error) {
+	proxy := netguard.New(netguard.Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }, Lookup: func(context.Context, string) ([]netip.Addr, error) {
 		return nil, errors.New("fixture disables external DNS")
 	}})
 	proxyServer := httptest.NewServer(proxy)
