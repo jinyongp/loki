@@ -45,6 +45,16 @@ var approvedNames = []string{
 	"process restart",
 	"process start",
 	"project inspect",
+	"task checkpoint list",
+	"task context",
+	"task current",
+	"task history",
+	"task next",
+	"task show",
+	"task workstream context",
+	"task workstream history",
+	"task workstream list",
+	"task workstream show",
 }
 
 func ApprovedNames() []string {

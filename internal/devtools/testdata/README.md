@@ -5,8 +5,11 @@ full release catalog. It contains the existing `process start` / `process restar
 non-executing `project inspect`, `command list`, and `command inspect` metadata
 contracts used by Loki's typed project adapter. Metadata output schemas in this
 bootstrap fixture are intentionally broad objects; the typed adapter performs a
-second strict decode and path sanitization. Runtime verification replaces this
-fixture with the selected binary's actual catalog before any call.
+second strict decode and path sanitization. The fixture also contains the
+read-only task/workstream/run context queries admitted by Loki; task mutations,
+claim credentials, doctor execution and lifecycle mutations remain excluded.
+Runtime verification replaces this fixture with the selected binary's actual
+catalog before any call.
 
 Review basis (2026-09-18): devtools `internal/cli/processes.go`,
 `internal/cli/commands.go`, `internal/cli/schema.go`, `internal/cli/cli.go` and

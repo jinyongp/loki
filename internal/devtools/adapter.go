@@ -171,8 +171,8 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-	if isMetadataCommand(name) {
-		return nil, errors.New("devtools metadata command requires the typed adapter")
+	if isMetadataCommand(name) || isCoordinationCommand(name) {
+		return nil, errors.New("devtools typed command requires the typed adapter")
 	}
 	return c.call(ctx, name, raw, c.Env)
 }

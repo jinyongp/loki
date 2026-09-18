@@ -141,3 +141,75 @@ func TestDevtoolsMetadataOperationsPreserveReaderFailure(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+type recordingCoordinationReader struct {
+	cwd     string
+	query   devtools.CoordinationQuery
+	request devtools.CoordinationRequest
+	err     error
+}
+
+func (r *recordingCoordinationReader) QueryCoordination(_ context.Context, cwd string, query devtools.CoordinationQuery, request devtools.CoordinationRequest) (devtools.CoordinationProjection, error) {
+	r.cwd, r.query, r.request = cwd, query, request
+	return devtools.CoordinationProjection{Profile: "fixture", Revision: 9}, r.err
+}
+
+func TestDevtoolsCoordinationOperationsMapFixedQueries(t *testing.T) {
+	reader := &recordingCoordinationReader{}
+	ops := DevtoolsCoordinationOperations(reader)
+	if len(ops) != 10 {
+		t.Fatalf("coordination operation count = %d", len(ops))
+	}
+	cases := map[string]struct {
+		raw        string
+		query      devtools.CoordinationQuery
+		target     string
+		workstream string
+		limit      int
+		cursor     string
+	}{
+		"devtools_task_next":          {`{"operation":"devtools_task_next","cwd":"repo","workstream_id":"33333333-3333-4333-8333-333333333333"}`, devtools.CoordinationTaskNext, "", "33333333-3333-4333-8333-333333333333", 0, ""},
+		"devtools_task_show":          {`{"operation":"devtools_task_show","cwd":"repo","task_id":"11111111-1111-4111-8111-111111111111"}`, devtools.CoordinationTaskShow, "11111111-1111-4111-8111-111111111111", "", 0, ""},
+		"devtools_task_current":       {`{"operation":"devtools_task_current","cwd":"repo","limit":25,"cursor":"next"}`, devtools.CoordinationTaskCurrent, "", "", 25, "next"},
+		"devtools_task_context":       {`{"operation":"devtools_task_context","task_id":"11111111-1111-4111-8111-111111111111"}`, devtools.CoordinationTaskContext, "11111111-1111-4111-8111-111111111111", "", 0, ""},
+		"devtools_task_history":       {`{"operation":"devtools_task_history","task_id":"11111111-1111-4111-8111-111111111111","limit":50}`, devtools.CoordinationTaskHistory, "11111111-1111-4111-8111-111111111111", "", 50, ""},
+		"devtools_checkpoint_list":    {`{"operation":"devtools_checkpoint_list","run_id":"22222222-2222-4222-8222-222222222222"}`, devtools.CoordinationCheckpointList, "22222222-2222-4222-8222-222222222222", "", 0, ""},
+		"devtools_workstream_list":    {`{"operation":"devtools_workstream_list","limit":20}`, devtools.CoordinationWorkstreamList, "", "", 20, ""},
+		"devtools_workstream_show":    {`{"operation":"devtools_workstream_show","workstream_id":"33333333-3333-4333-8333-333333333333"}`, devtools.CoordinationWorkstreamShow, "33333333-3333-4333-8333-333333333333", "", 0, ""},
+		"devtools_workstream_context": {`{"operation":"devtools_workstream_context","workstream_id":"33333333-3333-4333-8333-333333333333"}`, devtools.CoordinationWorkstreamContext, "33333333-3333-4333-8333-333333333333", "", 0, ""},
+		"devtools_workstream_history": {`{"operation":"devtools_workstream_history","workstream_id":"33333333-3333-4333-8333-333333333333","cursor":"next"}`, devtools.CoordinationWorkstreamHistory, "33333333-3333-4333-8333-333333333333", "", 0, "next"},
+	}
+	for name, test := range cases {
+		reader.cwd, reader.query, reader.request = "", "", devtools.CoordinationRequest{}
+		result, err := ops[name].Handle(t.Context(), json.RawMessage(test.raw))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if ops[name].Grant != controlpolicy.Agent || result.(devtools.CoordinationProjection).Revision != 9 {
+			t.Fatalf("%s result/grant = %#v / %v", name, result, ops[name].Grant)
+		}
+		if reader.query != test.query || reader.request.Target != test.target || reader.request.Workstream != test.workstream || reader.request.Limit != test.limit || reader.request.Cursor != test.cursor {
+			t.Fatalf("%s mapping = query=%q request=%#v", name, reader.query, reader.request)
+		}
+	}
+}
+
+func TestDevtoolsCoordinationOperationsRejectIrrelevantFieldsAndUnavailableReader(t *testing.T) {
+	reader := &recordingCoordinationReader{}
+	ops := DevtoolsCoordinationOperations(reader)
+	for name, raw := range map[string]string{
+		"devtools_task_show":       `{"operation":"devtools_task_show","task_id":"11111111-1111-4111-8111-111111111111","run_id":"22222222-2222-4222-8222-222222222222"}`,
+		"devtools_task_context":    `{"operation":"devtools_task_context","task_id":"11111111-1111-4111-8111-111111111111","limit":10}`,
+		"devtools_workstream_show": `{"operation":"devtools_workstream_show","workstream_id":"33333333-3333-4333-8333-333333333333","task_id":"11111111-1111-4111-8111-111111111111"}`,
+	} {
+		if _, err := ops[name].Handle(t.Context(), json.RawMessage(raw)); err == nil {
+			t.Fatalf("%s accepted irrelevant fields", name)
+		}
+	}
+	if reader.query != "" {
+		t.Fatal("coordination reader ran for rejected request")
+	}
+	if _, err := DevtoolsCoordinationOperations(nil)["devtools_task_next"].Handle(t.Context(), json.RawMessage(`{"operation":"devtools_task_next"}`)); err == nil {
+		t.Fatal("unavailable coordination reader accepted")
+	}
+}
