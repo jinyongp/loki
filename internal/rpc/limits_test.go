@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 )
 
 func TestIndependentRequestResponseLimits(t *testing.T) {
@@ -21,12 +24,12 @@ func TestIndependentRequestResponseLimits(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	limits := Limits{RequestBytes: 1024, ResponseBytes: 3 * 1024 * 1024, Timeout: time.Second}
-	server := Server{AgentUID: uint32(os.Getuid()), Limits: limits, Operations: map[string]Operation{
-		"large": {Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
-		"oversized": {Handle: func(context.Context, json.RawMessage) (any, error) {
+	server := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Limits: limits, Operations: map[string]Operation{
+		"large": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
+		"oversized": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) {
 			return strings.Repeat("x", limits.ResponseBytes), nil
 		}},
-		"wait": {Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { <-ctx.Done(); return nil, ctx.Err() }},
+		"wait": {Grant: controlpolicy.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { <-ctx.Done(); return nil, ctx.Err() }},
 	}}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, listener) }()

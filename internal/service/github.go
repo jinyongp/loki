@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/githubapp"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -11,7 +12,7 @@ import (
 func GitHubOperations(c secret.Controller) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
 		"github_app_key_set": {
-			Permission: rpc.Administrative,
+			Grant: controlpolicy.HostAdministration,
 			Handle: runtimeTyped(func(ctx context.Context, r struct {
 				Value *string `json:"value"`
 			}) (map[string]any, error) {

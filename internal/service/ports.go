@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/dockerproxy"
 	"loki/internal/execution"
 	"loki/internal/portguard"
@@ -68,12 +69,12 @@ func InspectWorkspacePort(ctx context.Context, ports portguard.Policy, inspect f
 
 func PortOperations(guard *portguard.Guard) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
-		"inspect": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Inspect(ctx, r.Port) })},
-		"stop":    {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Stop(ctx, r.Port) })},
+		"inspect": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Inspect(ctx, r.Port) })},
+		"stop":    {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Stop(ctx, r.Port) })},
 	}
 }
 func DockerOperations(inspector dockerproxy.Inspector) map[string]rpc.Operation {
-	return map[string]rpc.Operation{"inspect_docker_port": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) {
+	return map[string]rpc.Operation{"inspect_docker_port": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) {
 		return inspector.Inspect(ctx, r.Port)
 	})}}
 }

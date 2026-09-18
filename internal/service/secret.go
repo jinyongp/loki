@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
@@ -153,32 +154,32 @@ func SecretOperations(c secret.Controller) map[string]rpc.Operation {
 		})
 	}
 	ops := map[string]rpc.Operation{
-		"init":          {Permission: rpc.Administrative, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Initialize(ctx) }},
-		"list_profiles": {Permission: rpc.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Profiles(ctx) }},
-		"list_imports":  {Permission: rpc.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return c.ListImports() }},
-		"get_profile":   {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) { return c.Profile(ctx, r.Profile) })},
-		"profile_create": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) {
+		"init":          {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Initialize(ctx) }},
+		"list_profiles": {Grant: controlpolicy.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Profiles(ctx) }},
+		"list_imports":  {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return c.ListImports() }},
+		"get_profile":   {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) { return c.Profile(ctx, r.Profile) })},
+		"profile_create": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) {
 			return c.CreateProfile(ctx, r.Profile)
 		})},
-		"profile_remove": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) {
+		"profile_remove": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) {
 			return c.RemoveProfile(ctx, r.Profile)
 		})},
-		"import_env": {Permission: rpc.Administrative, Handle: runtimeTyped(func(ctx context.Context, r importInput) (map[string]any, error) {
+		"import_env": {Grant: controlpolicy.HostAdministration, Handle: runtimeTyped(func(ctx context.Context, r importInput) (map[string]any, error) {
 			return c.ImportValues(ctx, r.Profile, r.Values)
 		})},
-		"import_staged_env": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r importInput) (map[string]any, error) {
+		"import_staged_env": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r importInput) (map[string]any, error) {
 			return c.ImportStaged(ctx, r.Profile, r.ID)
 		})},
-		"secret_set":       {Permission: rpc.Administrative, Handle: valueHandler(false)},
-		"public_value_set": {Permission: rpc.Agent, Handle: valueHandler(true)},
-		"secret_generate": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r secretInput) (map[string]any, error) {
+		"secret_set":       {Grant: controlpolicy.HostAdministration, Handle: valueHandler(false)},
+		"public_value_set": {Grant: controlpolicy.Agent, Handle: valueHandler(true)},
+		"secret_generate": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r secretInput) (map[string]any, error) {
 			size := 32
 			if r.Bytes != nil {
 				size = *r.Bytes
 			}
 			return c.Generate(ctx, r.Profile, r.Secret, size)
 		})},
-		"secret_remove": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r secretInput) (map[string]any, error) {
+		"secret_remove": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r secretInput) (map[string]any, error) {
 			return c.RemoveSecret(ctx, r.Profile, r.Secret)
 		})},
 	}

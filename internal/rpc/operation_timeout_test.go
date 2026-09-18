@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 )
 
 func TestAuthorizedOperationDeadline(t *testing.T) {
@@ -26,9 +29,9 @@ func TestAuthorizedOperationDeadline(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	server := Server{AgentUID: uint32(os.Getuid()), Limits: Limits{Timeout: 50 * time.Millisecond}, Operations: map[string]Operation{
-		"long":    {Timeout: time.Second, Handle: handler},
-		"default": {Handle: handler},
+	server := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Limits: Limits{Timeout: 50 * time.Millisecond}, Operations: map[string]Operation{
+		"long":    {Grant: controlpolicy.Agent, Timeout: time.Second, Handle: handler},
+		"default": {Grant: controlpolicy.Agent, Handle: handler},
 	}}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, listener) }()

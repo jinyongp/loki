@@ -13,13 +13,15 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/contract"
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 	"loki/internal/state"
 )
 
-func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, socketPaths ...string) rpc.Client {
+func secretSocket(t *testing.T, ops map[string]rpc.Operation, socketPaths ...string) rpc.Client {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "secret.sock")
 	if len(socketPaths) > 0 {
@@ -31,12 +33,7 @@ func secretSocket(t *testing.T, ops map[string]rpc.Operation, mcpPeer bool, sock
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	server := rpc.Server{AgentUID: uint32(os.Getuid()), Operations: ops, ReadCgroup: func(int32) ([]byte, error) {
-		if mcpPeer {
-			return []byte("0::/system.slice/loki-mcp.service\n"), nil
-		}
-		return []byte("0::/system.slice/loki-action-fixture.service\n"), nil
-	}}
+	server := rpc.Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Operations: ops}
 	go func() { done <- server.Serve(ctx, listener) }()
 	t.Cleanup(func() {
 		cancel()
@@ -75,14 +72,14 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	ops := SecretOperations(c)
-	client := secretSocket(t, ops, true)
+	client := secretSocket(t, ops)
 	for _, name := range []string{"init", "import_env", "secret_set"} {
-		if ops[name].Permission != rpc.Administrative {
+		if ops[name].Grant != controlpolicy.HostAdministration {
 			t.Fatalf("administrative operation exposed: %s", name)
 		}
 	}
 	for _, name := range []string{"public_value_set", "secret_generate", "import_staged_env"} {
-		if ops[name].Permission != rpc.Agent {
+		if ops[name].Grant != controlpolicy.Agent {
 			t.Fatalf("delegated operation changed: %s", name)
 		}
 	}
@@ -179,7 +176,7 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		}
 	}
 	if os.Getuid() != 0 {
-		untrusted := secretSocket(t, ops, false)
+		untrusted := secretSocket(t, ops)
 		for _, operation := range []string{"secret_set"} {
 			_, err := untrusted.Call(t.Context(), map[string]any{"operation": operation, "cwd": "repo", "profile": "web", "secret": "TOKEN", "value": "should-not-be-stored"})
 			if err == nil || !strings.Contains(err.Error(), "administrative operations") {

@@ -13,6 +13,8 @@ import (
 
 	"loki/internal/audit"
 	"loki/internal/config"
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
@@ -168,7 +170,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 	}
 	log := &audit.Log{Path: o.AuditPath}
 	ops := SecretOperations(controller)
-	ops["status"] = rpc.Operation{Permission: rpc.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) {
+	ops["status"] = rpc.Operation{Grant: controlpolicy.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) {
 		profiles, err := controller.Profiles(ctx)
 		if err != nil {
 			return nil, err
@@ -227,6 +229,6 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, ready fu
 			return err
 		}
 	}
-	server := rpc.Server{AgentUID: o.AgentUID, Operations: ops, Audit: AuditSink(log, onAuditError)}
+	server := rpc.Server{Principals: identity.UnixResolver{AgentUID: o.AgentUID}, Operations: ops, Audit: AuditSink(log, onAuditError)}
 	return server.Serve(ctx, listener)
 }

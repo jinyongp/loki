@@ -7,15 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/fault"
 )
 
@@ -45,17 +44,10 @@ type Peer struct {
 	PID      int32
 	UID, GID uint32
 }
-type Permission uint8
-
-const (
-	Agent Permission = iota
-	Administrative
-)
-
 type Handler func(context.Context, json.RawMessage) (any, error)
 type Operation struct {
-	Permission Permission
-	Handle     Handler
+	Grant  controlpolicy.Grant
+	Handle Handler
 	// Timeout is a trusted execution allowance applied only after a bounded
 	// request has been read and its peer authorized. Zero keeps service limits.
 	Timeout time.Duration
@@ -69,13 +61,10 @@ type Event struct {
 
 type Server struct {
 	Limits         Limits
-	AgentUID       uint32
-	MCPUnits       []string
+	Principals     identity.Resolver
 	Operations     map[string]Operation
 	Audit          func(Event)
 	MaxConnections int
-	// ReadCgroup is injected in permission tests; production reads /proc directly.
-	ReadCgroup func(int32) ([]byte, error)
 }
 
 func PeerCredentials(conn *net.UnixConn) (Peer, error) {
@@ -95,44 +84,12 @@ func PeerCredentials(conn *net.UnixConn) (Peer, error) {
 	return Peer{cred.Pid, cred.Uid, cred.Gid}, nil
 }
 
-func (s *Server) Authorized(peer Peer, permission Permission) bool {
-	if peer.UID == 0 {
-		return true
-	}
-	if peer.UID != s.AgentUID {
+func (s *Server) Authorized(peer Peer, grant controlpolicy.Grant) bool {
+	if s.Principals == nil {
 		return false
 	}
-	if permission == Agent {
-		return true
-	}
-	if peer.PID <= 0 {
-		return false
-	}
-	read := s.ReadCgroup
-	if read == nil {
-		read = func(pid int32) ([]byte, error) { return os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid)) }
-	}
-	data, err := read(peer.PID)
-	if err != nil {
-		return false
-	}
-	units := s.MCPUnits
-	if len(units) == 0 {
-		units = []string{"loki-mcp.service"}
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		_, path, ok := strings.Cut(line, "::")
-		if !ok {
-			continue
-		}
-		path = strings.TrimRight(path, "/")
-		for _, unit := range units {
-			if strings.HasSuffix(path, "/"+unit) {
-				return true
-			}
-		}
-	}
-	return false
+	principal := s.Principals.Resolve(peer.PID, peer.UID, peer.GID)
+	return controlpolicy.Allows(principal, grant)
 }
 
 func (s *Server) Serve(ctx context.Context, listener *net.UnixListener) error {
@@ -222,11 +179,11 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 			err = fault.Error("operation is required")
 		} else if !ok || op.Handle == nil {
 			err = fault.Error("unknown operation")
-		} else if !s.Authorized(peer, op.Permission) {
-			if op.Permission == Administrative {
-				err = fault.Error("administrative operations require root or the Loki MCP service")
+		} else if !s.Authorized(peer, op.Grant) {
+			if op.Grant == controlpolicy.HostAdministration {
+				err = fault.Error("administrative operations require the host administrator")
 			} else {
-				err = fault.Error("delegated secret operation requires the Loki agent user")
+				err = fault.Error("delegated operation requires the Loki agent user")
 			}
 		} else {
 			if op.Timeout > 0 {

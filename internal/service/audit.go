@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"loki/internal/audit"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/rpc"
 )
 
 func AuditOperations(log *audit.Log) map[string]rpc.Operation {
-	return map[string]rpc.Operation{"audit": {Permission: rpc.Agent, Handle: runtimeTyped(func(ctx context.Context, r struct{ Limit *int }) (map[string]any, error) {
+	return map[string]rpc.Operation{"audit": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r struct{ Limit *int }) (map[string]any, error) {
 		limit := 50
 		if r.Limit != nil {
 			limit = *r.Limit

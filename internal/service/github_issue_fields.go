@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/githubapp"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
@@ -30,7 +31,7 @@ type githubRequest struct {
 
 func GitHubIssueFieldsOperations(client IssueFieldsClient) map[string]rpc.Operation {
 	call := func(handler func(context.Context, githubRequest) (map[string]any, error)) rpc.Operation {
-		return rpc.Operation{Permission: rpc.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+		return rpc.Operation{Grant: controlpolicy.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var r githubRequest
 			decoder := json.NewDecoder(bytes.NewReader(raw))
 			decoder.DisallowUnknownFields()

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 )
 
 func TestDecodeRejectsUnknownAndTrailingOperationInput(t *testing.T) {
@@ -31,24 +34,29 @@ func TestDecodeRejectsUnknownAndTrailingOperationInput(t *testing.T) {
 	}
 }
 
-func TestPeerPolicy(t *testing.T) {
-	s := Server{AgentUID: 1000}
-	s.ReadCgroup = func(int32) ([]byte, error) { return []byte("0::/system.slice/loki-mcp.service\n"), nil }
-	if !s.Authorized(Peer{PID: 42, UID: 1000}, Administrative) {
-		t.Fatal("MCP peer rejected")
-	}
-	for _, path := range []string{"0::/system.slice/loki-action-test.service", "0::/user.slice/shell.scope", "0::/system.slice/loki-mcp.service/child", "0::/system.slice/fake-loki-mcp.service"} {
-		s.ReadCgroup = func(int32) ([]byte, error) { return []byte(path), nil }
-		if s.Authorized(Peer{PID: 42, UID: 1000}, Administrative) {
-			t.Fatalf("authorized %s", path)
+func TestAgentUIDCannotElevateThroughProcessIdentity(t *testing.T) {
+	s := Server{Principals: identity.UnixResolver{AgentUID: 1000}}
+	for _, pid := range []int32{0, 1, 42, 9999} {
+		if s.Authorized(Peer{PID: pid, UID: 1000}, controlpolicy.HostAdministration) {
+			t.Fatalf("Agent UID elevated to host administration with pid %d", pid)
 		}
 	}
-	if !s.Authorized(Peer{UID: 0}, Administrative) || !s.Authorized(Peer{UID: 1000}, Agent) || s.Authorized(Peer{UID: 1001}, Agent) {
-		t.Fatal("UID permission policy failed")
+}
+
+func TestPeerPolicy(t *testing.T) {
+	s := Server{Principals: identity.UnixResolver{AgentUID: 1000}}
+	if !s.Authorized(Peer{PID: 1, UID: 0}, controlpolicy.HostAdministration) ||
+		!s.Authorized(Peer{PID: 1, UID: 0}, controlpolicy.Agent) ||
+		!s.Authorized(Peer{PID: 42, UID: 1000}, controlpolicy.Agent) ||
+		s.Authorized(Peer{PID: 42, UID: 1000}, controlpolicy.HostAdministration) ||
+		s.Authorized(Peer{PID: 42, UID: 1001}, controlpolicy.Agent) {
+		t.Fatal("principal grant policy failed")
 	}
-	s.ReadCgroup = func(int32) ([]byte, error) { return nil, os.ErrPermission }
-	if s.Authorized(Peer{PID: 42, UID: 1000}, Administrative) {
-		t.Fatal("failed open on /proc error")
+	if s.Authorized(Peer{PID: 1, UID: 0}, controlpolicy.Grant(0)) {
+		t.Fatal("unset grant failed open")
+	}
+	if (&Server{}).Authorized(Peer{UID: 0}, controlpolicy.Agent) {
+		t.Fatal("server without a principal resolver failed open")
 	}
 }
 
@@ -64,11 +72,11 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	defer listener.Close()
 	var mu sync.Mutex
 	events := []Event{}
-	s := Server{AgentUID: uint32(os.Getuid()), Operations: map[string]Operation{
-		"echo":    {Handle: func(ctx context.Context, raw json.RawMessage) (any, error) { return Decode[map[string]any](raw) }},
-		"failure": {Handle: func(context.Context, json.RawMessage) (any, error) { return nil, errors.New("synthetic-private-value") }},
-		"panic":   {Handle: func(context.Context, json.RawMessage) (any, error) { panic("private-panic") }},
-		"large":   {Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
+	s := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Operations: map[string]Operation{
+		"echo":    {Grant: controlpolicy.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) { return Decode[map[string]any](raw) }},
+		"failure": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return nil, errors.New("synthetic-private-value") }},
+		"panic":   {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { panic("private-panic") }},
+		"large":   {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
 	}, Audit: func(e Event) { mu.Lock(); defer mu.Unlock(); events = append(events, e) }}
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(ctx, listener) }()

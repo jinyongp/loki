@@ -185,12 +185,32 @@
       "to": "loki/internal/fault"
     },
     {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/control/identity"
+    },
+    {
       "from": "loki/internal/control/policy",
       "to": "loki/internal/control/identity"
     },
     {
       "from": "loki/internal/rpc",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/rpc",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/rpc",
       "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/service",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/service",
+      "to": "loki/internal/control/policy"
     },
     {
       "from": "loki/internal/secret",

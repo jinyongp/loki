@@ -19,6 +19,7 @@ func TestAllowsReviewedGrants(t *testing.T) {
 		{"agent-host", identity.Principal{Kind: identity.Agent}, HostAdministration, false},
 		{"unknown-agent", identity.Principal{Kind: identity.Unknown}, Agent, false},
 		{"unknown-host", identity.Principal{Kind: identity.Unknown}, HostAdministration, false},
+		{"unset-grant", identity.Principal{Kind: identity.HostAdministrator}, Grant(0), false},
 		{"unknown-grant", identity.Principal{Kind: identity.HostAdministrator}, Grant(255), false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

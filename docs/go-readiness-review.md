@@ -123,9 +123,9 @@ Containment status: every Git subprocess now disables paging, repository hooks a
 
 `internal/service/mcp.go` still constructs the Git controller inside the MCP service, and `internal/gitops` still uses the shared process layer rather than the future Job sandbox. The containment above therefore removes the reproduced repository-executable routes; it is not the final execution architecture.
 
-`internal/rpc/rpc.go:Authorized` also still treats every matching AgentUID as the same Agent principal and treats a matching MCP cgroup suffix as administrative authority. A synthetic same-UID peer with that suffix passed Administrative authorization. Native/Compose cgroups differ, so this result is not a claim that the current Compose deployment permits every administrative request.
+Authority-boundary status: internal RPC no longer infers administrative authority from PID, cgroup paths, or service-unit names. Role composition now resolves trusted Unix peer credentials into typed principals: UID 0 is HostAdministrator, the configured Agent UID is Agent only, and other peers are unknown. Operations declare explicit control-policy grants, with unset/unknown grants failing closed; permanent control/RPC regressions cover the former same-UID elevation path. This establishes the first A02/S02 authority slice but does not yet provide workload/resource-scoped grants.
 
-The fundamental correction remains to execute project-controlled programs only in the work-only Job model. General Git commands, intentional filters/hooks/project scripts and their children belong there. A process must not acquire gateway/host identity merely by inheriting its UID or cgroup.
+The fundamental correction remains to execute project-controlled programs only in the work-only Job model. General Git commands, intentional filters/hooks/project scripts and their children belong there. A process must not acquire gateway/host identity merely by inheriting a UID, PID, cgroup, or resource identifier.
 
 ## R6 — Declared network profiles are not isolated workload authorities
 

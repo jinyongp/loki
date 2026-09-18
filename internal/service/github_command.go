@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/githubapp"
 	"loki/internal/mcpserver"
 	"loki/internal/process"
@@ -27,7 +28,7 @@ type githubCommandRequest struct {
 
 func GitHubCommandOperations(runner GitHubCommandRunner) map[string]rpc.Operation {
 	return map[string]rpc.Operation{"github_command": {
-		Permission: rpc.Agent,
+		Grant: controlpolicy.Agent,
 		Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var request githubCommandRequest
 			decoder := json.NewDecoder(bytes.NewReader(raw))

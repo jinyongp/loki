@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/rpc"
 )
 
@@ -25,7 +26,7 @@ type devtoolsRequest struct {
 func DevtoolsOperations(caller DevtoolsCaller) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
 		"devtools_call": {
-			Permission: rpc.Agent,
+			Grant: controlpolicy.Agent,
 			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 				request, err := rpc.Decode[devtoolsRequest](raw)
 				if err != nil {

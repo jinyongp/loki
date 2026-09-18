@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"loki/internal/config"
+	"loki/internal/control/identity"
 	"loki/internal/daemon"
 	"loki/internal/portguard"
 	"loki/internal/rpc"
@@ -62,7 +63,7 @@ func runPortGuard(args []string, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	guard := &portguard.Guard{Root: root, UID: uint32(*uid), Ports: ports}
-	server := rpc.Server{AgentUID: uint32(*uid), Operations: service.PortOperations(guard)}
+	server := rpc.Server{Principals: identity.UnixResolver{AgentUID: uint32(*uid)}, Operations: service.PortOperations(guard)}
 	if err = daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1"); err != nil {
 		fmt.Fprintln(stderr, "port-guard readiness notification failed")
 		return 1

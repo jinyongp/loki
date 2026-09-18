@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"loki/internal/control/identity"
 	"loki/internal/githubapp"
 	"loki/internal/rpc"
 	"loki/internal/secret"
@@ -100,7 +101,9 @@ func TestAdministrativeCLIEncryptedRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	server := rpc.Server{AgentUID: uint32(os.Getuid()), Operations: service.SecretOperations(controller), ReadCgroup: func(int32) ([]byte, error) { return []byte("0::/system.slice/loki-mcp.service\n"), nil }}
+	server := rpc.Server{Principals: identity.ResolverFunc(func(pid int32, uid, gid uint32) identity.Principal {
+		return identity.Principal{Kind: identity.HostAdministrator, PID: pid, UID: uid, GID: gid}
+	}), Operations: service.SecretOperations(controller)}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, listener) }()
 	t.Cleanup(func() {

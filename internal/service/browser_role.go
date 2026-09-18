@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"loki/internal/browser"
+	"loki/internal/control/identity"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/fault"
 	"loki/internal/rpc"
@@ -50,7 +52,7 @@ func (c BrowserRPC) Call(ctx context.Context, operation string, args map[string]
 func BrowserOperations(driver BrowserCaller) map[string]rpc.Operation {
 	operations := map[string]rpc.Operation{}
 	for _, operation := range []string{"start", "navigate", "state", "click", "type", "press", "scroll", "back", "list_tabs", "switch_tab", "close_tab", "screenshot", "console", "network", "request", "websockets", "page_errors", "debug_diagnostics", "stop"} {
-		operations[operation] = rpc.Operation{Permission: rpc.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+		operations[operation] = rpc.Operation{Grant: controlpolicy.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var envelope struct{ Arguments json.RawMessage }
 			if json.Unmarshal(raw, &envelope) != nil {
 				return nil, fault.Error("invalid browser request")
@@ -97,7 +99,7 @@ func RunBrowser(ctx context.Context, options BrowserOptions, ready func() error)
 		return err
 	}
 	defer listener.Close()
-	server := rpc.Server{AgentUID: options.AgentUID, Limits: BrowserLimits(), MaxConnections: 8, Operations: BrowserOperations(driver)}
+	server := rpc.Server{Principals: identity.UnixResolver{AgentUID: options.AgentUID}, Limits: BrowserLimits(), MaxConnections: 8, Operations: BrowserOperations(driver)}
 	if ready != nil {
 		if err = ready(); err != nil {
 			return err

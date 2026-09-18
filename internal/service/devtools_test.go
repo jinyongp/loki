@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"loki/internal/rpc"
+	controlpolicy "loki/internal/control/policy"
 )
 
 type recordingDevtoolsCaller struct {
@@ -37,8 +37,8 @@ func TestDevtoolsOperationForwardsOnlyTypedFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operation.Permission != rpc.Agent {
-		t.Fatalf("permission = %v", operation.Permission)
+	if operation.Grant != controlpolicy.Agent {
+		t.Fatalf("grant = %v", operation.Grant)
 	}
 	if caller.command != "process start" || caller.profile != "local" || string(caller.input) != `{"name":"web"}` {
 		t.Fatalf("forwarded call = %#v", caller)

@@ -23,7 +23,7 @@ func TestSecretMCPRejectsManagedProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client := secretSocket(t, SecretOperations(controller), true)
+	client := secretSocket(t, SecretOperations(controller))
 	handlers := SecretHandlers(client)
 	definitions, err := contract.CurrentDefinitions()
 	if err != nil {
