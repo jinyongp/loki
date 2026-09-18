@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/platform/safeio"
 )
 
 var (
@@ -122,43 +123,6 @@ func readPrivate(path string, limit int64) ([]byte, error) {
 		return nil, errors.New("state file exceeds size limit")
 	}
 	return data, nil
-}
-
-func AtomicWrite(path string, data []byte, overwrite bool) error {
-	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".loki-state-")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	defer os.Remove(name)
-	if err = f.Chmod(0600); err == nil {
-		_, err = f.Write(data)
-	}
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if overwrite {
-		err = os.Rename(name, path)
-	} else {
-		err = os.Link(name, path)
-	}
-	if err != nil {
-		return err
-	}
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
 }
 
 func seal(key []byte, snapshot Snapshot) ([]byte, error) {
@@ -315,10 +279,10 @@ func (s Store) initialize(ctx context.Context, data json.RawMessage) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	if err = AtomicWrite(keyPath, key, false); err != nil {
+	if err = safeio.PublishPrivate(keyPath, key, false); err != nil {
 		return false, err
 	}
-	if err = AtomicWrite(storePath, encoded, false); err != nil {
+	if err = safeio.PublishPrivate(storePath, encoded, false); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -355,7 +319,7 @@ func (s Store) Update(ctx context.Context, expected *uint64, mutate func(json.Ra
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err = AtomicWrite(filepath.Join(s.Dir, "store.json"), encoded, true); err != nil {
+	if err = safeio.PublishPrivate(filepath.Join(s.Dir, "store.json"), encoded, true); err != nil {
 		return Snapshot{}, err
 	}
 	return snapshot, nil
@@ -445,7 +409,7 @@ func ImportLegacyWithTransform(ctx context.Context, source, destination string, 
 		return err
 	}
 	for name, data := range map[string][]byte{"master.key": key, "store.json": v2} {
-		if err = AtomicWrite(filepath.Join(stage, name), data, false); err != nil {
+		if err = safeio.PublishPrivate(filepath.Join(stage, name), data, false); err != nil {
 			return err
 		}
 	}
@@ -453,7 +417,7 @@ func ImportLegacyWithTransform(ctx context.Context, source, destination string, 
 		return err
 	}
 	for name, data := range map[string][]byte{"master.key": key, "store.json": encoded} {
-		if err = AtomicWrite(filepath.Join(stage, "legacy", name), data, false); err != nil {
+		if err = safeio.PublishPrivate(filepath.Join(stage, "legacy", name), data, false); err != nil {
 			return err
 		}
 	}
@@ -476,7 +440,7 @@ func ImportLegacyWithTransform(ctx context.Context, source, destination string, 
 		return errors.New("migration readback differs")
 	}
 	marker, _ := json.Marshal(map[string]any{"source_version": 1, "target_version": 2, "source_sha256": fingerprint})
-	if err = AtomicWrite(filepath.Join(stage, "migration.json"), marker, false); err != nil {
+	if err = safeio.PublishPrivate(filepath.Join(stage, "migration.json"), marker, false); err != nil {
 		return err
 	}
 	if err = ctx.Err(); err != nil {
@@ -550,7 +514,7 @@ func RestoreLegacy(ctx context.Context, migration, destination string) error {
 	}
 	defer os.RemoveAll(stage)
 	for name, data := range map[string][]byte{"master.key": key, "store.json": encoded} {
-		if err = AtomicWrite(filepath.Join(stage, name), data, false); err != nil {
+		if err = safeio.PublishPrivate(filepath.Join(stage, name), data, false); err != nil {
 			return err
 		}
 	}

@@ -369,20 +369,6 @@ func TestLegacyMigrationCancellationAndCorruptRestoreAreAtomic(t *testing.T) {
 	}
 }
 
-func TestAtomicCreatePreservesExisting(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state")
-	if err := AtomicWrite(path, []byte("old"), false); err != nil {
-		t.Fatal(err)
-	}
-	if err := AtomicWrite(path, []byte("new"), false); !errors.Is(err, os.ErrExist) {
-		t.Fatalf("overwrite: %v", err)
-	}
-	actual, _ := os.ReadFile(path)
-	if string(actual) != "old" {
-		t.Fatal("overwrote existing file")
-	}
-}
-
 func TestLockRejectsSpecialFilesAndPublicPermissions(t *testing.T) {
 	dir := t.TempDir()
 	fifo := filepath.Join(dir, "fifo")

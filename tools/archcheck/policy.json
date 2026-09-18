@@ -237,6 +237,10 @@
       "to": "loki/internal/rpc"
     },
     {
+      "from": "loki/internal/state",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
       "from": "loki/internal/toolchain/cmd/fetch",
       "to": "loki/internal/toolchain"
     },
@@ -615,6 +619,12 @@
       "owner": "netguard",
       "tags": [],
       "target": "platform/netguard"
+    },
+    "loki/internal/platform/safeio": {
+      "kind": "platform",
+      "owner": "safeio",
+      "tags": [],
+      "target": "platform/safeio"
     },
     "loki/internal/policy": {
       "kind": "legacy-platform",
