@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"loki/internal/control/identity"
 	controlpolicy "loki/internal/control/policy"
@@ -118,5 +119,70 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	encoded, _ := json.Marshal(events[0])
 	if events[0].Profile == nil || *events[0].Profile != "fixture" || strings.Contains(string(encoded), "synthetic-hidden") {
 		t.Fatalf("audit metadata: %s", encoded)
+	}
+}
+
+func TestClientDisconnectCancelsServerOperationContext(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "runtime.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancelServer := context.WithCancel(t.Context())
+	defer cancelServer()
+	defer listener.Close()
+
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	server := Server{
+		Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())},
+		Operations: map[string]Operation{
+			"wait": {
+				Grant:   controlpolicy.Agent,
+				Timeout: 5 * time.Second,
+				Handle: func(ctx context.Context, _ json.RawMessage) (any, error) {
+					close(started)
+					<-ctx.Done()
+					close(canceled)
+					return nil, ctx.Err()
+				},
+			},
+		},
+	}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(ctx, listener) }()
+
+	uid := uint32(os.Getuid())
+	client := Client{Socket: socket, ExpectedUID: &uid, Limits: Limits{Timeout: 5 * time.Second}}
+	callCtx, cancelCall := context.WithCancel(t.Context())
+	callDone := make(chan error, 1)
+	go func() {
+		_, err := client.Call(callCtx, map[string]any{"operation": "wait"})
+		callDone <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("operation did not start")
+	}
+	cancelCall()
+	select {
+	case err := <-callDone:
+		if err == nil {
+			t.Fatal("canceled client call returned success")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("client call did not stop after cancellation")
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("server operation context survived client disconnect")
+	}
+
+	cancelServer()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

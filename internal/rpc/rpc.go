@@ -155,8 +155,9 @@ type response struct {
 func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	parent := ctx
 	limits := s.Limits.normalized()
-	ctx, cancel := context.WithTimeout(ctx, limits.Timeout)
-	defer cancel()
+	requestCtx, requestCancel := context.WithTimeout(ctx, limits.Timeout)
+	defer requestCancel()
+	ctx = requestCtx
 	deadline, _ := ctx.Deadline()
 	conn.SetDeadline(deadline)
 	peer, err := PeerCredentials(conn)
@@ -167,6 +168,7 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 		Operation string `json:"operation"`
 	}
 	raw, err := readBoundedFrame(conn, limits.RequestBytes)
+	_ = conn.SetReadDeadline(time.Time{})
 	if err == nil {
 		if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &request) != nil {
 			err = fault.Error("request must be an object")
@@ -186,13 +188,23 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 				err = fault.Error("delegated operation requires the Loki agent user")
 			}
 		} else {
+			operationParent, disconnectCancel := context.WithCancel(parent)
+			defer disconnectCancel()
+			go func() {
+				var extra [1]byte
+				_, _ = conn.Read(extra[:])
+				disconnectCancel()
+			}()
+
+			timeout := limits.Timeout
 			if op.Timeout > 0 {
-				operationContext, operationCancel := context.WithTimeout(parent, op.Timeout)
-				defer operationCancel()
-				ctx = operationContext
-				deadline, _ := ctx.Deadline()
-				conn.SetDeadline(deadline)
+				timeout = op.Timeout
 			}
+			operationContext, operationCancel := context.WithTimeout(operationParent, timeout)
+			defer operationCancel()
+			ctx = operationContext
+			deadline, _ := ctx.Deadline()
+			conn.SetWriteDeadline(deadline)
 			result, err = invoke(ctx, op.Handle, raw)
 		}
 	}

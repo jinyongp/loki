@@ -20,19 +20,28 @@ import (
 )
 
 type recordingSandboxRunner struct {
-	mu    sync.Mutex
-	plans []sandbox.Plan
-	err   error
-	wait  bool
+	mu           sync.Mutex
+	plans        []sandbox.Plan
+	err          error
+	wait         bool
+	waitStarted  chan struct{}
+	waitCanceled chan struct{}
 }
 
 func (r *recordingSandboxRunner) Run(ctx context.Context, plan sandbox.Plan) (sandbox.Result, error) {
 	r.mu.Lock()
 	r.plans = append(r.plans, plan)
 	err, wait := r.err, r.wait
+	started, canceled := r.waitStarted, r.waitCanceled
 	r.mu.Unlock()
 	if wait {
+		if started != nil {
+			close(started)
+		}
 		<-ctx.Done()
+		if canceled != nil {
+			close(canceled)
+		}
 		return sandbox.Result{}, ctx.Err()
 	}
 	if err != nil {
@@ -59,10 +68,13 @@ func (r *recordingSandboxRunner) setFailure(err error) {
 	r.err, r.wait = err, false
 }
 
-func (r *recordingSandboxRunner) setWait() {
+func (r *recordingSandboxRunner) setWait() (<-chan struct{}, <-chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.err, r.wait = nil, true
+	r.waitStarted = make(chan struct{})
+	r.waitCanceled = make(chan struct{})
+	return r.waitStarted, r.waitCanceled
 }
 
 func waitReady(t *testing.T, ready <-chan struct{}, done <-chan error, role string) {
@@ -111,12 +123,14 @@ func TestExecutorToLauncherTrustedAuthorityBoundary(t *testing.T) {
 	launcherDone := make(chan error, 1)
 	go func() {
 		launcherDone <- applauncher.Run(ctx, applauncher.Options{
-			Socket:      launcherSocket,
-			SocketGID:   os.Getgid(),
-			ExecutorUID: roleUID,
-			Policy:      policy,
-			Runner:      runner,
-			RunTimeout:  time.Second,
+			Socket:          launcherSocket,
+			SocketGID:       os.Getgid(),
+			ExecutorUID:     roleUID,
+			Policy:          policy,
+			Runner:          runner,
+			RunTimeout:      10 * time.Second,
+			ResultRetention: 5 * time.Second,
+			MaxJobs:         8,
 			Ready: func() error {
 				close(launcherReady)
 				return nil
@@ -129,7 +143,7 @@ func TestExecutorToLauncherTrustedAuthorityBoundary(t *testing.T) {
 		Socket:       launcherSocket,
 		ExpectedUID:  &actualUID,
 		PolicySHA256: policyDigest,
-		Timeout:      3 * time.Second,
+		Timeout:      8 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +161,7 @@ func TestExecutorToLauncherTrustedAuthorityBoundary(t *testing.T) {
 			SocketGID:  os.Getgid(),
 			AgentUID:   roleUID,
 			Runner:     jobService,
-			RunTimeout: 4 * time.Second,
+			RunTimeout: 6 * time.Second,
 			Ready: func() error {
 				close(executorReady)
 				return nil
@@ -207,11 +221,33 @@ func TestExecutorToLauncherTrustedAuthorityBoundary(t *testing.T) {
 		t.Fatal("launcher rejection became executor success")
 	}
 
-	runner.setWait()
-	if _, err := client.Call(t.Context(), map[string]any{
-		"operation": "run", "cwd": ".", "argv": []string{"/bin/sleep", "10"},
-	}); err == nil {
-		t.Fatal("launcher timeout became executor success")
+	started, canceledByLauncher := runner.setWait()
+	callCtx, cancelCall := context.WithCancel(t.Context())
+	callDone := make(chan error, 1)
+	go func() {
+		_, err := client.Call(callCtx, map[string]any{
+			"operation": "run", "cwd": ".", "argv": []string{"/bin/sleep", "10"},
+		})
+		callDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("cancel fixture did not reach sandbox runner")
+	}
+	cancelCall()
+	select {
+	case err := <-callDone:
+		if err == nil {
+			t.Fatal("canceled executor client returned success")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("executor client did not stop after cancellation")
+	}
+	select {
+	case <-canceledByLauncher:
+	case <-time.After(time.Second):
+		t.Fatal("executor client cancellation did not cancel launcher-owned workload")
 	}
 
 	cancel()

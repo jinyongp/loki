@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,25 @@ import (
 
 type fakeResponse func(map[string]json.RawMessage) []byte
 
+type requestLog struct {
+	mu         sync.Mutex
+	operations []string
+}
+
+func (l *requestLog) add(request map[string]json.RawMessage) {
+	var operation string
+	_ = json.Unmarshal(request["operation"], &operation)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.operations = append(l.operations, operation)
+}
+
+func (l *requestLog) snapshot() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.operations...)
+}
+
 func fakeLauncherSocket(t *testing.T, respond fakeResponse) string {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "launcher.sock")
@@ -23,34 +43,51 @@ func fakeLauncherSocket(t *testing.T, respond fakeResponse) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { listener.Close() })
+
+	var workers sync.WaitGroup
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		conn, err := listener.AcceptUnix()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		raw, err := bufio.NewReader(conn).ReadBytes('\n')
-		if err != nil {
-			return
-		}
-		var request map[string]json.RawMessage
-		if json.Unmarshal(raw, &request) != nil {
-			return
-		}
-		response := respond(request)
-		if len(response) != 0 {
-			conn.Write(append(response, '\n'))
+		for {
+			conn, err := listener.AcceptUnix()
+			if err != nil {
+				return
+			}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				defer conn.Close()
+				raw, err := bufio.NewReader(conn).ReadBytes('\n')
+				if err != nil {
+					return
+				}
+				var request map[string]json.RawMessage
+				if json.Unmarshal(raw, &request) != nil {
+					return
+				}
+				response := respond(request)
+				if len(response) != 0 {
+					_, _ = conn.Write(append(response, '\n'))
+				}
+			}()
 		}
 	}()
 	t.Cleanup(func() {
-		listener.Close()
+		_ = listener.Close()
 		select {
 		case <-done:
 		case <-time.After(time.Second):
-			t.Fatal("fake launcher did not stop")
+			t.Fatal("fake launcher accept loop did not stop")
+		}
+		waitDone := make(chan struct{})
+		go func() {
+			workers.Wait()
+			close(waitDone)
+		}()
+		select {
+		case <-waitDone:
+		case <-time.After(time.Second):
+			t.Fatal("fake launcher workers did not stop")
 		}
 	})
 	return socket
@@ -75,31 +112,41 @@ func validWorkload() jobs.Workload {
 	}
 }
 
-func TestLauncherInjectsTrustedPolicyAndExactWireShape(t *testing.T) {
+func TestLauncherUsesStartThenWaitWithTrustedPolicy(t *testing.T) {
+	log := &requestLog{}
 	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
-		if len(request) != 5 {
-			t.Fatalf("request keys = %#v", request)
-		}
-		var operation, id, policy, cwd string
-		var argv []string
-		for key, target := range map[string]any{
-			"operation":     &operation,
-			"id":            &id,
-			"policy_sha256": &policy,
-			"cwd":           &cwd,
-			"argv":          &argv,
-		} {
-			raw, ok := request[key]
-			if !ok || json.Unmarshal(raw, target) != nil {
-				t.Fatalf("request[%q] = %s", key, raw)
+		log.add(request)
+		var operation string
+		_ = json.Unmarshal(request["operation"], &operation)
+		switch operation {
+		case "start":
+			if len(request) != 5 {
+				t.Fatalf("start request keys = %#v", request)
 			}
+			var id, policy, cwd string
+			var argv []string
+			for key, target := range map[string]any{
+				"id": &id, "policy_sha256": &policy, "cwd": &cwd, "argv": &argv,
+			} {
+				raw, ok := request[key]
+				if !ok || json.Unmarshal(raw, target) != nil {
+					t.Fatalf("start request[%q] = %s", key, raw)
+				}
+			}
+			if id != strings.Repeat("b", 32) || policy != strings.Repeat("a", 64) ||
+				cwd != "." || len(argv) != 2 || argv[0] != "/bin/true" || argv[1] != "argument" {
+				t.Fatalf("start request = %#v", request)
+			}
+			return []byte("{\"ok\":true,\"result\":{\"id\":\"" + id + "\"}}")
+		case "wait":
+			if len(request) != 2 {
+				t.Fatalf("wait request keys = %#v", request)
+			}
+			return []byte("{\"ok\":true,\"result\":{\"exit_code\":9}}")
+		default:
+			t.Fatalf("unexpected operation %q", operation)
+			return nil
 		}
-		if operation != "run" || id != strings.Repeat("b", 32) ||
-			policy != strings.Repeat("a", 64) || cwd != "." ||
-			len(argv) != 2 || argv[0] != "/bin/true" || argv[1] != "argument" {
-			t.Fatalf("request = %#v", request)
-		}
-		return []byte(`{"ok":true,"result":{"exit_code":9}}`)
 	})
 	launcher, err := New(validOptions(t, socket))
 	if err != nil {
@@ -114,15 +161,88 @@ func TestLauncherInjectsTrustedPolicyAndExactWireShape(t *testing.T) {
 	if result.ExitCode != 9 {
 		t.Fatalf("result = %#v", result)
 	}
+	if got := strings.Join(log.snapshot(), ","); got != "start,wait" {
+		t.Fatalf("operations = %q", got)
+	}
 }
 
-func TestLauncherStrictlyRejectsInvalidResult(t *testing.T) {
-	for _, response := range [][]byte{
-		[]byte(`{"ok":true,"result":{"exit_code":0,"extra":true}}`),
-		[]byte(`{"ok":true,"result":{"exit_code":999}}`),
+func TestLauncherCancelsAfterWaitFailure(t *testing.T) {
+	log := &requestLog{}
+	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
+		log.add(request)
+		var operation string
+		_ = json.Unmarshal(request["operation"], &operation)
+		switch operation {
+		case "start":
+			return []byte("{\"ok\":true,\"result\":{\"id\":\"" + strings.Repeat("b", 32) + "\"}}")
+		case "wait":
+			return []byte("{\"ok\":false,\"error\":\"synthetic wait failure\"}")
+		case "cancel":
+			return []byte("{\"ok\":true,\"result\":{\"canceled\":true}}")
+		default:
+			return []byte("{\"ok\":false,\"error\":\"unexpected\"}")
+		}
+	})
+	launcher, err := New(validOptions(t, socket))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = launcher.Run(t.Context(), validWorkload()); err == nil || !strings.Contains(err.Error(), "synthetic wait failure") {
+		t.Fatalf("wait failure = %v", err)
+	}
+	if got := strings.Join(log.snapshot(), ","); got != "start,wait,cancel" {
+		t.Fatalf("operations = %q", got)
+	}
+}
+
+func TestLauncherCancelsAfterUncertainStart(t *testing.T) {
+	log := &requestLog{}
+	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
+		log.add(request)
+		var operation string
+		_ = json.Unmarshal(request["operation"], &operation)
+		if operation == "start" {
+			return nil
+		}
+		if operation == "cancel" {
+			return []byte("{\"ok\":true,\"result\":{\"canceled\":false}}")
+		}
+		return []byte("{\"ok\":false,\"error\":\"unexpected\"}")
+	})
+	launcher, err := New(validOptions(t, socket))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = launcher.Run(t.Context(), validWorkload()); err == nil {
+		t.Fatal("uncertain start returned success")
+	}
+	if got := strings.Join(log.snapshot(), ","); got != "start,cancel" {
+		t.Fatalf("operations = %q", got)
+	}
+}
+
+func TestLauncherStrictlyRejectsInvalidResultsAndCleansUp(t *testing.T) {
+	for _, response := range []string{
+		"{\"ok\":true,\"result\":{\"exit_code\":0,\"extra\":true}}",
+		"{\"ok\":true,\"result\":{\"exit_code\":999}}",
 	} {
-		t.Run(string(response), func(t *testing.T) {
-			socket := fakeLauncherSocket(t, func(map[string]json.RawMessage) []byte { return response })
+		t.Run(response, func(t *testing.T) {
+			log := &requestLog{}
+			socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
+				log.add(request)
+				var operation string
+				_ = json.Unmarshal(request["operation"], &operation)
+				switch operation {
+				case "start":
+					return []byte("{\"ok\":true,\"result\":{\"id\":\"" + strings.Repeat("b", 32) + "\"}}")
+				case "wait":
+					return []byte(response)
+				case "cancel":
+					return []byte("{\"ok\":true,\"result\":{\"canceled\":false}}")
+				default:
+					return nil
+				}
+			})
 			launcher, err := New(validOptions(t, socket))
 			if err != nil {
 				t.Fatal(err)
@@ -130,13 +250,16 @@ func TestLauncherStrictlyRejectsInvalidResult(t *testing.T) {
 			if _, err = launcher.Run(t.Context(), validWorkload()); err == nil {
 				t.Fatal("invalid launcher result was accepted")
 			}
+			if got := strings.Join(log.snapshot(), ","); got != "start,wait,cancel" {
+				t.Fatalf("operations = %q", got)
+			}
 		})
 	}
 }
 
 func TestLauncherRejectsUntrustedPeer(t *testing.T) {
 	socket := fakeLauncherSocket(t, func(map[string]json.RawMessage) []byte {
-		return []byte(`{"ok":true,"result":{"exit_code":0}}`)
+		return []byte("{\"ok\":true,\"result\":{\"id\":\"" + strings.Repeat("b", 32) + "\"}}")
 	})
 	options := validOptions(t, socket)
 	uid := uint32(os.Getuid()) ^ 1
@@ -176,23 +299,9 @@ func TestLauncherConfigurationFailsClosed(t *testing.T) {
 	}
 }
 
-func TestLauncherPropagatesRPCFailure(t *testing.T) {
-	socket := fakeLauncherSocket(t, func(map[string]json.RawMessage) []byte {
-		return []byte(`{"ok":false,"error":"synthetic launcher rejection"}`)
-	})
-	launcher, err := New(validOptions(t, socket))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = launcher.Run(context.Background(), validWorkload())
-	if err == nil || !strings.Contains(err.Error(), "synthetic launcher rejection") {
-		t.Fatalf("RPC failure = %v", err)
-	}
-}
-
 func TestNilLauncherFailsClosed(t *testing.T) {
 	var launcher *Launcher
-	if _, err := launcher.Run(t.Context(), validWorkload()); err == nil {
+	if _, err := launcher.Run(context.Background(), validWorkload()); err == nil {
 		t.Fatal("nil launcher was accepted")
 	}
 }
