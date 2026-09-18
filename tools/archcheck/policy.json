@@ -646,6 +646,12 @@
       "tags": [],
       "target": "platform/safeio"
     },
+    "loki/internal/platform/sandbox": {
+      "kind": "platform",
+      "owner": "sandbox",
+      "tags": ["launcher-implementation"],
+      "target": "platform/sandbox"
+    },
     "loki/internal/policy": {
       "kind": "legacy-platform",
       "owner": "safeio",
