@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ func TestAuthorizedOperationDeadline(t *testing.T) {
 	}
 	server := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Limits: Limits{Timeout: 50 * time.Millisecond}, Operations: map[string]Operation{
 		"long":    {Grant: controlpolicy.Agent, Timeout: time.Second, Handle: handler},
+		"short":   {Grant: controlpolicy.Agent, Timeout: 25 * time.Millisecond, Handle: handler},
 		"default": {Grant: controlpolicy.Agent, Handle: handler},
 	}}
 	done := make(chan error, 1)
@@ -47,6 +49,9 @@ func TestAuthorizedOperationDeadline(t *testing.T) {
 	if _, err = client.Call(ctx, map[string]any{"operation": "long"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = client.Call(ctx, map[string]any{"operation": "short"}); err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("operation timeout response = %v", err)
+	}
 	if _, err = client.Call(ctx, map[string]any{"operation": "default", "timeout_seconds": 1800}); err == nil {
 		t.Fatal("request extended default execution limit")
 	}
@@ -58,7 +63,11 @@ func TestAuthorizedOperationDeadline(t *testing.T) {
 	connection.SetReadDeadline(time.Now().Add(time.Second))
 	connection.Write([]byte(`{"operation":"long"`))
 	buffer := make([]byte, 256)
-	if _, err = connection.Read(buffer); err == nil {
-		t.Fatal("unfinished request was accepted")
+	n, err := connection.Read(buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(buffer[:n]), `"ok":false`) {
+		t.Fatalf("unfinished request response = %q", buffer[:n])
 	}
 }

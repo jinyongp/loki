@@ -89,6 +89,30 @@
       "to": "loki/internal/toolchain"
     },
     {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/platform/sandbox"
+    },
+    {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/rpc"
+    },
+    {
       "from": "loki/internal/admin",
       "to": "loki/internal/fault"
     },
@@ -472,6 +496,12 @@
       "owner": "audit",
       "tags": [],
       "target": "control/audit"
+    },
+    "loki/internal/app/launcher": {
+      "kind": "app",
+      "owner": "launcher",
+      "tags": [],
+      "target": "app/launcher"
     },
     "loki/internal/auth": {
       "kind": "legacy-mixed",

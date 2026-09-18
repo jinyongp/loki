@@ -223,6 +223,13 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	if len(data)+1 > limits.ResponseBytes {
 		data = []byte(`{"ok":false,"error":"response is too large"}`)
 	}
+	if parent.Err() == nil {
+		grace := limits.Timeout
+		if grace > time.Second {
+			grace = time.Second
+		}
+		conn.SetWriteDeadline(time.Now().Add(grace))
+	}
 	conn.Write(append(data, '\n'))
 }
 

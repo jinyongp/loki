@@ -143,6 +143,26 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	}, nil
 }
 
+func (p Policy) Valid() bool {
+	if !digestPattern.MatchString(p.generationSHA256) || !imageDigestPattern.MatchString(p.image) ||
+		!filepath.IsAbs(p.workspace) || filepath.Clean(p.workspace) != p.workspace || p.workspace == string(filepath.Separator) ||
+		p.uid == 0 || p.gid == 0 || p.memoryBytes < minMemoryBytes || p.memoryBytes > maxMemoryBytes ||
+		p.pids < minPIDs || p.pids > maxPIDs || p.tmpfsBytes < minTmpfsBytes || p.tmpfsBytes > maxTmpfsBytes ||
+		p.tmpfsBytes > p.memoryBytes {
+		return false
+	}
+	normalized, err := normalizeEnvironment(p.environment)
+	if err != nil || len(normalized) != len(p.environment) {
+		return false
+	}
+	for index := range normalized {
+		if normalized[index] != p.environment[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeEnvironment(values []string) ([]string, error) {
 	if len(values) > maxEnv {
 		return nil, errors.New("sandbox environment has too many entries")
