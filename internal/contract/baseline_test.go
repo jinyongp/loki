@@ -74,6 +74,27 @@ func TestCurrentContract(t *testing.T) {
 	}
 }
 
+func TestCurrentDefinitionsOmitCustomInvocationStatusMetadata(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, definition := range definitions {
+		if definition.Meta == nil {
+			continue
+		}
+		for _, key := range []string{"openai/toolInvocation/invoking", "openai/toolInvocation/invoked"} {
+			if _, exists := definition.Meta[key]; exists {
+				t.Errorf("%s exposes custom invocation status metadata %q", definition.Name, key)
+			}
+		}
+	}
+	viewer := seenDefinition(definitions, "browser_share_screenshot")
+	if viewer == nil || viewer.Meta == nil || viewer.Meta["openai/outputTemplate"] == nil {
+		t.Fatal("viewer output template metadata was removed")
+	}
+}
+
 func TestCurrentContractContainsNoCredentialMaterial(t *testing.T) {
 	lower := strings.ToLower(string(currentJSON))
 	for _, forbidden := range []string{

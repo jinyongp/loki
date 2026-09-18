@@ -62,8 +62,9 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	current, _ := contract.Current()
 	wanted := map[string]json.RawMessage{}
 	definitions, _ := current.Definitions()
-	for index, definition := range definitions {
-		wanted[definition.Name] = current.Tools[index]
+	for _, definition := range definitions {
+		raw, _ := json.Marshal(definition)
+		wanted[definition.Name] = raw
 	}
 	for _, tool := range listed.Tools {
 		actual, _ := json.Marshal(tool)
@@ -213,4 +214,73 @@ func TestHandlerContextCarriesStableServerSessionID(t *testing.T) {
 	if _, ok := SessionID(context.Background()); ok {
 		t.Fatal("session id appeared outside a server request context")
 	}
+}
+
+func TestStreamableHTTPFailuresAreTerminalAndSessionReusable(t *testing.T) {
+	handlers := testHandlers(t)
+	handlers["preview_publish"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		port, _ := input["port"].(float64)
+		if port == 43001 {
+			return nil, errors.New("private-handler-detail")
+		}
+		if port == 43002 {
+			panic("private-panic-detail")
+		}
+		return Object(map[string]any{"ok": true})
+	}
+	server, err := New(handlers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpServer := httptest.NewServer(mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{
+			Stateless:    false,
+			JSONResponse: true,
+		},
+	))
+	defer httpServer.Close()
+
+	client, err := mcp.NewClient(&mcp.Implementation{Name: "terminal-lifecycle", Version: "1"}, nil).Connect(
+		t.Context(),
+		&mcp.StreamableClientTransport{Endpoint: httpServer.URL, DisableStandaloneSSE: true},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	recoverSession := func(label string) {
+		t.Helper()
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+			Name:      "system_inspect",
+			Arguments: map[string]any{"action": "server"},
+		})
+		if err != nil || result.IsError {
+			t.Fatalf("%s left MCP session unusable: result=%#v err=%v", label, result, err)
+		}
+	}
+	expectTerminalError := func(label string, arguments map[string]any) {
+		t.Helper()
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+			Name:      "preview_publish",
+			Arguments: arguments,
+		})
+		if err != nil {
+			t.Fatalf("%s became a transport/RPC error: %v", label, err)
+		}
+		if result == nil || !result.IsError {
+			t.Fatalf("%s did not return a terminal tool error: %#v", label, result)
+		}
+		encoded, _ := json.Marshal(result)
+		if strings.Contains(string(encoded), "private-handler-detail") || strings.Contains(string(encoded), "private-panic-detail") {
+			t.Fatalf("%s leaked private failure detail: %s", label, encoded)
+		}
+		recoverSession(label)
+	}
+
+	expectTerminalError("validation failure", map[string]any{})
+	expectTerminalError("handler failure", map[string]any{"action": "server", "port": 43001})
+	expectTerminalError("panic failure", map[string]any{"action": "server", "port": 43002})
 }

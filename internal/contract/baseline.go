@@ -11,7 +11,7 @@ import (
 //go:embed testdata/mcp-go-v049.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-19.2"
+const CatalogRevision = "2026-09-19.3"
 
 const CurrentInstructions = `Operate inside the isolated Loki workspace. Use project_coordination for shared devtools-backed task, workstream, Run, history, and checkpoint reads, and project_coordination_write for claim, takeover, resume, checkpoint, release, and done transitions. When task_context returns context_basis and a compact handoff is useful, checkpoint with compaction_fingerprint and compaction_through from that read; canonical state and delta remain authoritative. Claim context and MCP session identifiers are server-private and must never be requested, stored, or echoed. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. Configured command and managed-process execution still follows the currently exposed runtime workflow until Loki Environment/Job delegation replaces it. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
@@ -59,6 +59,11 @@ func (s *Snapshot) Definitions() ([]*mcp.Tool, error) {
 		if t.Name == "" || seen[t.Name] {
 			return nil, fmt.Errorf("invalid or duplicate tool name")
 		}
+		// ChatGPT-specific invocation text is optional presentation state. Loki
+		// relies on terminal MCP CallToolResult semantics instead, so a failed
+		// tool cannot leave a separate custom "invoking" label visually stale.
+		delete(t.Meta, "openai/toolInvocation/invoking")
+		delete(t.Meta, "openai/toolInvocation/invoked")
 		seen[t.Name] = true
 		items = append(items, &t)
 	}
