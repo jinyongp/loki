@@ -15,19 +15,21 @@ type DevtoolsCoordinationMutator interface {
 }
 
 type devtoolsCoordinationMutationRequest struct {
-	Action              string   `json:"action"`
-	CWD                 string   `json:"cwd"`
-	TargetID            string   `json:"target_id"`
-	WorkstreamID        string   `json:"workstream_id"`
-	ExpectedRunID       string   `json:"expected_run_id"`
-	RequestID           string   `json:"request_id"`
-	Context             string   `json:"context"`
-	Summary             string   `json:"summary"`
-	Decisions           []string `json:"decisions"`
-	ValidationRecordIDs []string `json:"validation_record_ids"`
-	Remaining           []string `json:"remaining"`
-	NextAction          string   `json:"next_action"`
-	Blockers            []string `json:"blockers"`
+	Action                string   `json:"action"`
+	CWD                   string   `json:"cwd"`
+	TargetID              string   `json:"target_id"`
+	WorkstreamID          string   `json:"workstream_id"`
+	ExpectedRunID         string   `json:"expected_run_id"`
+	RequestID             string   `json:"request_id"`
+	Context               string   `json:"context"`
+	Summary               string   `json:"summary"`
+	Decisions             []string `json:"decisions"`
+	ValidationRecordIDs   []string `json:"validation_record_ids"`
+	Remaining             []string `json:"remaining"`
+	NextAction            string   `json:"next_action"`
+	Blockers              []string `json:"blockers"`
+	CompactionFingerprint string   `json:"compaction_fingerprint"`
+	CompactionThrough     int      `json:"compaction_through"`
 }
 
 func DevtoolsCoordinationMutationOperations(mutator DevtoolsCoordinationMutator) map[string]rpc.Operation {
@@ -54,6 +56,7 @@ func DevtoolsCoordinationMutationOperations(mutator DevtoolsCoordinationMutator)
 					ExpectedRun: request.ExpectedRunID, Context: request.Context, Summary: request.Summary,
 					Decisions: request.Decisions, ValidationRecordIDs: request.ValidationRecordIDs,
 					Remaining: request.Remaining, NextAction: request.NextAction, Blockers: request.Blockers,
+					CompactionFingerprint: request.CompactionFingerprint, CompactionThrough: request.CompactionThrough,
 				})
 				if err != nil {
 					return nil, err

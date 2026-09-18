@@ -142,3 +142,37 @@ func TestCoordinationMutationRejectsUnsafeInputsAndPrivateNestedOutput(t *testin
 		t.Fatalf("nested private field error = %v", err)
 	}
 }
+
+func TestCoordinationCheckpointForwardsCompactionBasisOnlyForCheckpoint(t *testing.T) {
+	client, files := metadataClient(t)
+	data := mutationBase(client)
+	data["run"] = nil
+	data["context_valid"] = true
+	delete(data, "context")
+	setMutationResponse(t, client, files, data)
+
+	fingerprint := strings.Repeat("c", 64)
+	if _, err := client.MutateCoordination(t.Context(), ".", CoordinationCheckpoint, CoordinationMutationRequest{
+		RequestID: "abababab-abab-4bab-8bab-abababababab", Target: fixtureRunID,
+		Context: fixtureClaimContext, Summary: "compact",
+		CompactionFingerprint: fingerprint, CompactionThrough: 12,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	args, err := os.ReadFile(files["log"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"--compaction-fingerprint", fingerprint, "--compaction-through", "12"} {
+		if !strings.Contains(string(args), want) {
+			t.Fatalf("checkpoint args %q do not contain %q", args, want)
+		}
+	}
+
+	if _, err := client.MutateCoordination(t.Context(), ".", CoordinationCheckpoint, CoordinationMutationRequest{
+		RequestID: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", Target: fixtureRunID,
+		Context: fixtureClaimContext, Summary: "bad", CompactionFingerprint: fingerprint,
+	}); err == nil || !strings.Contains(err.Error(), "required together") {
+		t.Fatalf("partial compaction basis error = %v", err)
+	}
+}

@@ -20,19 +20,21 @@ type projectCoordinationRequest struct {
 }
 
 type projectCoordinationWriteRequest struct {
-	Action              string   `json:"action"`
-	CWD                 string   `json:"cwd"`
-	TaskID              string   `json:"task_id"`
-	RunID               string   `json:"run_id"`
-	WorkstreamID        string   `json:"workstream_id"`
-	ExpectedRunID       string   `json:"expected_run_id"`
-	RequestID           string   `json:"request_id"`
-	Summary             string   `json:"summary"`
-	Decisions           []string `json:"decisions"`
-	ValidationRecordIDs []string `json:"validation_record_ids"`
-	Remaining           []string `json:"remaining"`
-	NextAction          string   `json:"next_action"`
-	Blockers            []string `json:"blockers"`
+	Action                string   `json:"action"`
+	CWD                   string   `json:"cwd"`
+	TaskID                string   `json:"task_id"`
+	RunID                 string   `json:"run_id"`
+	WorkstreamID          string   `json:"workstream_id"`
+	ExpectedRunID         string   `json:"expected_run_id"`
+	RequestID             string   `json:"request_id"`
+	Summary               string   `json:"summary"`
+	Decisions             []string `json:"decisions"`
+	ValidationRecordIDs   []string `json:"validation_record_ids"`
+	Remaining             []string `json:"remaining"`
+	NextAction            string   `json:"next_action"`
+	Blockers              []string `json:"blockers"`
+	CompactionFingerprint string   `json:"compaction_fingerprint"`
+	CompactionThrough     int      `json:"compaction_through"`
 }
 
 func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessionCoordination) map[string]mcpserver.Handler {
@@ -72,6 +74,13 @@ func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessio
 		if action == "" {
 			return nil, errors.New("unsupported project coordination write action")
 		}
+		hasCompaction := request.CompactionFingerprint != "" || request.CompactionThrough != 0
+		if action != devtools.CoordinationCheckpoint && hasCompaction {
+			return nil, errors.New("compaction basis is available only for checkpoint")
+		}
+		if action == devtools.CoordinationCheckpoint && (request.CompactionFingerprint == "") != (request.CompactionThrough == 0) {
+			return nil, errors.New("compaction fingerprint and through sequence are required together")
+		}
 		if request.CWD == "" {
 			request.CWD = "."
 		}
@@ -84,6 +93,7 @@ func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessio
 			RequestID: request.RequestID, Summary: request.Summary, Decisions: request.Decisions,
 			ValidationRecordIDs: request.ValidationRecordIDs, Remaining: request.Remaining,
 			NextAction: request.NextAction, Blockers: request.Blockers,
+			CompactionFingerprint: request.CompactionFingerprint, CompactionThrough: request.CompactionThrough,
 		})
 		if err != nil {
 			return nil, err

@@ -51,7 +51,8 @@ func TestProjectCoordinationMCPKeepsClaimContextSessionPrivate(t *testing.T) {
 				response["run_id"] = runID
 				response["task_id"] = taskID
 			case "task checkpoint":
-				if row["context"] != privateContext || row["target_id"] != runID {
+				if row["context"] != privateContext || row["target_id"] != runID ||
+					row["compaction_fingerprint"] != strings.Repeat("d", 64) || row["compaction_through"] != float64(12) && row["compaction_through"] != 12 {
 					t.Fatalf("checkpoint private request = %#v", row)
 				}
 				mu.Lock()
@@ -135,6 +136,7 @@ func TestProjectCoordinationMCPKeepsClaimContextSessionPrivate(t *testing.T) {
 
 	checkpoint := call(first, "project_coordination_write", map[string]any{
 		"action": "checkpoint", "run_id": runID, "request_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "summary": "progress",
+		"compaction_fingerprint": strings.Repeat("d", 64), "compaction_through": 12,
 	})
 	if checkpoint.IsError {
 		t.Fatalf("checkpoint failed: %#v", checkpoint)
@@ -145,6 +147,13 @@ func TestProjectCoordinationMCPKeepsClaimContextSessionPrivate(t *testing.T) {
 	}
 
 	second := connect("second")
+	irrelevant := call(second, "project_coordination_write", map[string]any{
+		"action": "claim", "task_id": taskID, "request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+		"compaction_fingerprint": strings.Repeat("e", 64), "compaction_through": 12,
+	})
+	if !irrelevant.IsError {
+		t.Fatalf("non-checkpoint compaction fields were accepted: %#v", irrelevant)
+	}
 	cross := call(second, "project_coordination_write", map[string]any{
 		"action": "checkpoint", "run_id": runID, "request_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "summary": "cross-session",
 	})

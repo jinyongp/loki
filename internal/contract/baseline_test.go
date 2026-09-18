@@ -48,6 +48,21 @@ func TestCurrentContract(t *testing.T) {
 			}
 		}
 	}
+	write := seenDefinition(definitions, "project_coordination_write")
+	encodedWrite, err := json.Marshal(write.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var writeSchema map[string]any
+	if json.Unmarshal(encodedWrite, &writeSchema) != nil {
+		t.Fatal("invalid project_coordination_write schema")
+	}
+	writeProperties := writeSchema["properties"].(map[string]any)
+	for _, key := range []string{"compaction_fingerprint", "compaction_through"} {
+		if _, ok := writeProperties[key]; !ok {
+			t.Errorf("project_coordination_write missing %q", key)
+		}
+	}
 	data, err := json.Marshal(definitions)
 	if err != nil {
 		t.Fatal(err)
