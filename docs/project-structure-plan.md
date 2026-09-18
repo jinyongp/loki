@@ -73,12 +73,12 @@ internal/
     network/                  workload egress grants and enforcement adapters
     endpoints/                owned service locations and leases
 
-  integrations/               provider/optional capability boundaries
+  integrations/               provider and capability adapter boundaries
     github/
     browser/
     signing/
     sharing/                  artifact links and preview use cases
-    devtools/                 optional CLI integration, not execution authority
+    devtools/                 required project/task coordination adapter; no runtime authority
 
   host/                       operator lifecycle; never a workload API
     config/                   host file parsing and effective config assembly
@@ -231,7 +231,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/contract` | Reviewed MCP definitions/generated artifacts in `transport/mcp`; domain types with their respective feature, never in a global SDK-dependent contract package. |
 | `internal/daemon` | Safe file/ownership helpers to `platform/safeio`, Unix framing/listener helpers to transport or platform as appropriate, startup to `app/<role>`. |
 | `internal/deployment` | `host/config`/`host/releases` validation used by actual prepare/startup; purely image assertions to tests/packaging tooling. |
-| `internal/devtools` | `integrations/devtools`; CLI execution through jobs; secret brokerage removed from this adapter. |
+| `internal/devtools` | `integrations/devtools`; required adapter to devtools-owned workstreams, plans, tasks, runs/claims, checkpoints, compaction records, validation basis and history. Reusable standard Skill inventory and path-scoped AGENTS.md resolution/context contracts belong in the devtools integration scope; canonical instructions remain portable files, and Skill distribution reuses existing installers. Resolve guidance against actual worktree/target paths, preserve ordered source/revision references outside lossy compaction, and keep task history in devtools rather than appending it to AGENTS.md. Trusted project/profile mapping, confined file access, MCP/session/runtime links and safe scope-aware instruction delivery belong to Loki. Executable project commands and Skill scripts use jobs; secret brokerage is removed from this adapter. No Taskwarrior backend, parallel task database, proprietary Skill format or privileged plugin loader is introduced. |
 | `internal/devtools/cmd/gencatalog` | `tools/cataloggen` or a devtools-specific generator beneath it; generated catalog stays with the owning adapter. |
 | `internal/dockerproxy` | **A03 foundation updated:** raw transparent forwarding has been removed. The remaining package is a legacy Docker-backed endpoint inspector targeted at `work/endpoints`; OCI launch mechanics now belong exclusively to `internal/platform/sandbox`. |
 | `internal/e2e` | `tests/acceptance` or `tests/integration`, explicitly classified by runtime prerequisites. |
