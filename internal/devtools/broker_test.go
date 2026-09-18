@@ -15,10 +15,10 @@ func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 	client, _ := fakeClient(t)
 	script := client.Binary
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\",\"protocol_version\":3}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + filepath.Join(client.CWD, "catalog.json") + "\"; exit 0; fi\n" +
 		"if [ \"$TOKEN\" != \"private-token-value\" ]; then exit 9; fi\n" +
-		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"started\":true}}'\n"
+		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"item\":{},\"changed\":true,\"replayed\":false}}'\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -37,9 +37,9 @@ func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 func TestBrokerRejectsPrivateOutputAndUnapprovedInjection(t *testing.T) {
 	client, _ := fakeClient(t)
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.9.0\",\"commit\":\"test\",\"protocol_version\":3}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + filepath.Join(client.CWD, "catalog.json") + "\"; exit 0; fi\n" +
-		"printf '%s\\n' \"{\\\"schema_version\\\":1,\\\"ok\\\":true,\\\"data\\\":{\\\"value\\\":\\\"$TOKEN\\\"}}\"\n"
+		"printf '%s\\n' \"{\\\"schema_version\\\":1,\\\"ok\\\":true,\\\"data\\\":{\\\"item\\\":{\\\"value\\\":\\\"$TOKEN\\\"},\\\"changed\\\":true,\\\"replayed\\\":false}}\"\n"
 	if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}

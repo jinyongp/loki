@@ -226,20 +226,20 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	if result.Truncated {
 		return nil, errors.New("devtools response exceeded the output limit")
 	}
-	var envelope Envelope
-	if err = json.Unmarshal(result.Raw, &envelope); err != nil {
-		return nil, errors.New("devtools returned an invalid response")
+	envelope, err := decodeEnvelope(result.Raw)
+	if err != nil {
+		return nil, err
 	}
-	if result.ExitCode != 0 || !envelope.OK {
+	if (result.ExitCode == 0) != envelope.OK {
+		return nil, errors.New("devtools exit status contradicts its response envelope")
+	}
+	if !envelope.OK {
 		var failure struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		}
 		_ = json.Unmarshal(envelope.Error, &failure)
 		return nil, &CLIError{ExitCode: result.ExitCode, Code: failure.Code, Message: failure.Message}
-	}
-	if envelope.SchemaVersion != ProtocolVersion || len(envelope.Data) == 0 || len(envelope.Error) != 0 {
-		return nil, errors.New("devtools returned an unsupported response")
 	}
 	var output any
 	if err = json.Unmarshal(envelope.Data, &output); err != nil || command.output.Validate(output) != nil {

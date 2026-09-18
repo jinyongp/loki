@@ -9,9 +9,12 @@ import (
 	"sort"
 )
 
-const ProtocolVersion = 1
+// ProtocolVersion describes command schemas independently of EnvelopeVersion.
+const ProtocolVersion = 3
 
-//go:embed testdata/catalog-v0.9.0.json
+// This reviewed consumer subset is not a captured full release catalog.
+//
+//go:embed testdata/catalog-protocol-v3.json
 var embeddedCatalog []byte
 
 type Envelope struct {
@@ -30,6 +33,7 @@ type Command struct {
 	Name             string          `json:"name"`
 	Description      string          `json:"description"`
 	AcceptsChildArgs bool            `json:"accepts_child_args"`
+	OutputMode       string          `json:"output_mode"`
 	Options          []Option        `json:"options"`
 	InputSchema      json.RawMessage `json:"input_schema"`
 	OutputSchema     json.RawMessage `json:"output_schema"`
@@ -49,15 +53,12 @@ func EmbeddedCatalog() ([]Command, error) {
 }
 
 func ParseCatalog(raw []byte) ([]Command, error) {
-	var envelope Envelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return nil, fmt.Errorf("decode devtools catalog envelope: %w", err)
-	}
-	if envelope.SchemaVersion != ProtocolVersion || !envelope.OK || len(envelope.Error) != 0 {
-		return nil, errors.New("unsupported devtools catalog envelope")
+	data, err := successData(raw)
+	if err != nil {
+		return nil, err
 	}
 	var catalog Catalog
-	if err := json.Unmarshal(envelope.Data, &catalog); err != nil {
+	if err := json.Unmarshal(data, &catalog); err != nil {
 		return nil, fmt.Errorf("decode devtools catalog: %w", err)
 	}
 	if catalog.ProtocolVersion != ProtocolVersion {
@@ -69,9 +70,8 @@ func ParseCatalog(raw []byte) ([]Command, error) {
 		if command.Name == "" || available[command.Name].Name != "" {
 			return nil, errors.New("devtools catalog contains an empty or duplicate command")
 		}
-		if !json.Valid(command.InputSchema) || !json.Valid(command.OutputSchema) {
-			return nil, fmt.Errorf("devtools command %q has an invalid schema", command.Name)
-		}
+		// Non-JSON commands legitimately have no output schema. Their
+		// definitions are not execution authority for this adapter.
 		available[command.Name] = command
 	}
 
@@ -83,6 +83,12 @@ func ParseCatalog(raw []byte) ([]Command, error) {
 		}
 		if command.AcceptsChildArgs {
 			return nil, fmt.Errorf("approved devtools command %q accepts child arguments", name)
+		}
+		if command.OutputMode != "json" {
+			return nil, fmt.Errorf("approved devtools command %q requires JSON output mode", name)
+		}
+		if !jsonObject(command.InputSchema) || !jsonObject(command.OutputSchema) {
+			return nil, fmt.Errorf("approved devtools command %q has an invalid schema", name)
 		}
 		approved = append(approved, command)
 	}

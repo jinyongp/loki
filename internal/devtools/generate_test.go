@@ -10,13 +10,13 @@ import (
 
 func TestParseVersionAcceptsCompatibleReleases(t *testing.T) {
 	for _, release := range []string{"0.9.0", "0.10.0", "1.0.0-rc.1+build.7"} {
-		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test"}}`)
+		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test","protocol_version":3}}`)
 		if _, err := ParseVersion(raw); err != nil {
 			t.Fatalf("release %q: %v", release, err)
 		}
 	}
 	for _, release := range []string{"", "latest", "01.2.3", "1.2"} {
-		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test"}}`)
+		raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"` + release + `","commit":"test","protocol_version":3}}`)
 		if _, err := ParseVersion(raw); err == nil {
 			t.Fatalf("invalid release %q accepted", release)
 		}
@@ -30,7 +30,7 @@ func TestGenerateCatalogChecksVersionAndNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	version := filepath.Join(dir, "version.json")
-	if err := os.WriteFile(version, []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test"}}`), 0600); err != nil {
+	if err := os.WriteFile(version, []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.9.0","commit":"test","protocol_version":3}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	script := filepath.Join(dir, "devtools")

@@ -22,10 +22,10 @@ func fakeClient(t *testing.T) (*Client, string) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\",\"protocol_version\":3}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + catalog + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + log + "\"\n" +
-		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"started\":true}}'\n"
+		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"item\":{},\"changed\":true,\"replayed\":false}}'\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestClientRejectsInvalidAndUnsafeCalls(t *testing.T) {
 func TestClientRejectsInvalidVersionAndTimeout(t *testing.T) {
 	client, _ := fakeClient(t)
 	client.Binary = filepath.Join(client.CWD, "wrong")
-	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"latest\",\"commit\":\"test\"}}'\n"), 0700); err != nil {
+	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"latest\",\"commit\":\"test\",\"protocol_version\":3}}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)); err == nil {
@@ -121,7 +121,7 @@ func TestClientRejectsInvalidVersionAndTimeout(t *testing.T) {
 func TestClientRejectsIncompatibleCatalog(t *testing.T) {
 	client, _ := fakeClient(t)
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\"}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\",\"protocol_version\":3}}'; exit 0; fi\n" +
 		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"protocol_version\":2,\"commands\":[]}}'\n"
 	if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
 		t.Fatal(err)

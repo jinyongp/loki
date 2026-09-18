@@ -13,24 +13,25 @@ import (
 var semanticVersion = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
 
 type Version struct {
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
+	Version         string `json:"version"`
+	Commit          string `json:"commit"`
+	ProtocolVersion int    `json:"protocol_version"`
 }
 
 func ParseVersion(raw []byte) (Version, error) {
-	var envelope Envelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return Version{}, fmt.Errorf("decode devtools version envelope: %w", err)
-	}
-	if envelope.SchemaVersion != ProtocolVersion || !envelope.OK || len(envelope.Error) != 0 {
-		return Version{}, errors.New("unsupported devtools version envelope")
+	data, err := successData(raw)
+	if err != nil {
+		return Version{}, err
 	}
 	var version Version
-	if err := json.Unmarshal(envelope.Data, &version); err != nil {
-		return Version{}, fmt.Errorf("decode devtools version: %w", err)
+	if err := decodeObject(data, &version); err != nil {
+		return Version{}, errors.New("invalid devtools version response")
+	}
+	if version.ProtocolVersion != ProtocolVersion {
+		return Version{}, fmt.Errorf("unsupported devtools protocol version %d", version.ProtocolVersion)
 	}
 	if !semanticVersion.MatchString(version.Version) {
-		return Version{}, fmt.Errorf("invalid devtools version %q", version.Version)
+		return Version{}, errors.New("invalid devtools release version")
 	}
 	return version, nil
 }
