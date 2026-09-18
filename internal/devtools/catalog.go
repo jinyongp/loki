@@ -40,8 +40,11 @@ type Command struct {
 }
 
 var approvedNames = []string{
+	"command inspect",
+	"command list",
 	"process restart",
 	"process start",
+	"project inspect",
 }
 
 func ApprovedNames() []string {

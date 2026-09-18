@@ -22,10 +22,10 @@ func TestEmbeddedCatalogContainsOnlyApprovedCommands(t *testing.T) {
 			t.Fatalf("approved command accepts child arguments: %q", command.Name)
 		}
 	}
-	if !slices.Equal(approvedNames, []string{"process restart", "process start"}) {
+	if !slices.Equal(approvedNames, []string{"command inspect", "command list", "process restart", "process start", "project inspect"}) {
 		t.Fatalf("runtime allowlist = %#v", approvedNames)
 	}
-	for _, denied := range []string{"run", "secret set", "secret list", "import", "process logs", "backup restore", "cleanup apply", "update"} {
+	for _, denied := range []string{"doctor", "run", "secret set", "secret list", "import", "process logs", "project up", "backup restore", "cleanup apply", "update"} {
 		if slices.Contains(approvedNames, denied) {
 			t.Fatalf("unsafe command approved: %q", denied)
 		}

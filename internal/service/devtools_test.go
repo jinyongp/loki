@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/devtools"
 )
 
 type recordingDevtoolsCaller struct {
@@ -66,6 +67,76 @@ func TestDevtoolsOperationPreservesCallerFailure(t *testing.T) {
 	want := errors.New("devtools unavailable")
 	caller := &recordingDevtoolsCaller{err: want}
 	_, err := DevtoolsOperations(caller)["devtools_call"].Handle(context.Background(), json.RawMessage(`{"command":"doctor","input":{}}`))
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+type recordingMetadataReader struct {
+	projectCWD string
+	listCWD    string
+	inspectCWD string
+	name       string
+	err        error
+}
+
+func (r *recordingMetadataReader) InspectProject(_ context.Context, cwd string) (devtools.ProjectMetadata, error) {
+	r.projectCWD = cwd
+	return devtools.ProjectMetadata{Profile: "fixture", Source: "file", Root: ".", ConfigPath: "devtools.toml"}, r.err
+}
+
+func (r *recordingMetadataReader) ListCommands(_ context.Context, cwd string) (devtools.CommandCatalog, error) {
+	r.listCWD = cwd
+	return devtools.CommandCatalog{Profile: "fixture", Items: []devtools.CommandSummary{{Name: "web"}}}, r.err
+}
+
+func (r *recordingMetadataReader) InspectCommand(_ context.Context, cwd, name string) (devtools.CommandDetail, error) {
+	r.inspectCWD, r.name = cwd, name
+	return devtools.CommandDetail{Profile: "fixture", Item: devtools.CommandMetadata{Name: name}}, r.err
+}
+
+func TestDevtoolsMetadataOperationsUseFixedTypedMethods(t *testing.T) {
+	reader := &recordingMetadataReader{}
+	ops := DevtoolsMetadataOperations(reader)
+	if len(ops) != 3 {
+		t.Fatalf("metadata operation count = %d", len(ops))
+	}
+	project, err := ops["devtools_project_inspect"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_project_inspect\",\"cwd\":\"repo\"}"))
+	if err != nil || reader.projectCWD != "repo" || project.(devtools.ProjectMetadata).Profile != "fixture" {
+		t.Fatalf("project result=%#v cwd=%q err=%v", project, reader.projectCWD, err)
+	}
+	list, err := ops["devtools_command_list"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_command_list\",\"cwd\":\"repo\"}"))
+	if err != nil || reader.listCWD != "repo" || len(list.(devtools.CommandCatalog).Items) != 1 {
+		t.Fatalf("list result=%#v cwd=%q err=%v", list, reader.listCWD, err)
+	}
+	detail, err := ops["devtools_command_inspect"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_command_inspect\",\"cwd\":\"repo\",\"name\":\"web\"}"))
+	if err != nil || reader.inspectCWD != "repo" || reader.name != "web" || detail.(devtools.CommandDetail).Item.Name != "web" {
+		t.Fatalf("detail result=%#v cwd=%q name=%q err=%v", detail, reader.inspectCWD, reader.name, err)
+	}
+	for name, operation := range ops {
+		if operation.Grant != controlpolicy.Agent {
+			t.Fatalf("%s grant = %v", name, operation.Grant)
+		}
+	}
+}
+
+func TestDevtoolsMetadataOperationsRejectUnknownFieldsAndUnavailableReader(t *testing.T) {
+	reader := &recordingMetadataReader{}
+	if _, err := DevtoolsMetadataOperations(reader)["devtools_project_inspect"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_project_inspect\",\"cwd\":\".\",\"command\":\"doctor\"}")); err == nil {
+		t.Fatal("unknown command field accepted")
+	}
+	if reader.projectCWD != "" {
+		t.Fatal("metadata reader ran for invalid request")
+	}
+	if _, err := DevtoolsMetadataOperations(nil)["devtools_command_list"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_command_list\"}")); err == nil {
+		t.Fatal("unavailable metadata reader accepted")
+	}
+}
+
+func TestDevtoolsMetadataOperationsPreserveReaderFailure(t *testing.T) {
+	want := errors.New("metadata unavailable")
+	reader := &recordingMetadataReader{err: want}
+	_, err := DevtoolsMetadataOperations(reader)["devtools_command_inspect"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_command_inspect\",\"name\":\"web\"}"))
 	if !errors.Is(err, want) {
 		t.Fatalf("error = %v", err)
 	}

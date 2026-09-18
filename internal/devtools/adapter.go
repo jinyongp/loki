@@ -171,7 +171,19 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+	if isMetadataCommand(name) {
+		return nil, errors.New("devtools metadata command requires the typed adapter")
+	}
 	return c.call(ctx, name, raw, c.Env)
+}
+
+func isMetadataCommand(name string) bool {
+	switch name {
+	case "project inspect", "command list", "command inspect":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, environment []string) (json.RawMessage, error) {
@@ -195,7 +207,12 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	if (name == "process start" || name == "process restart") && input["capture-logs"] == true {
 		return nil, errors.New("devtools raw process logs are disabled")
 	}
-	if name == "process start" {
+	if name == "project inspect" {
+		if profile, _ := input["profile"].(string); profile != "" {
+			return nil, errors.New("devtools explicit profile lookup is unavailable through Loki")
+		}
+	}
+	if name == "process start" || isMetadataCommand(name) {
 		requested, _ := input["dir"].(string)
 		if requested == "" {
 			requested = "."
@@ -205,7 +222,7 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 		}
 		confined, err := c.Workspace.ResolveCWD(requested)
 		if err != nil {
-			return nil, errors.New("devtools process directory is outside the workspace")
+			return nil, errors.New("devtools command directory is outside the workspace")
 		}
 		input["dir"] = confined
 	}
