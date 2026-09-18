@@ -14,8 +14,8 @@ import (
 
 	"github.com/pmezard/go-difflib/difflib"
 	"loki/internal/fault"
+	"loki/internal/platform/safeio"
 	"loki/internal/policy"
-	"loki/internal/state"
 )
 
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -52,7 +52,7 @@ func (f *Files) capture(path, operation string, data []byte, mode os.FileMode) (
 	if err != nil {
 		return "", err
 	}
-	if err = state.AtomicWrite(filepath.Join(dir, revision+".bin"), data, false); err != nil {
+	if err = safeio.PublishPrivate(filepath.Join(dir, revision+".bin"), data, false); err != nil {
 		return "", err
 	}
 	metadata := Revision{revision, relative, operation, time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00"), len(data), digest, uint32(mode.Perm())}
@@ -60,7 +60,7 @@ func (f *Files) capture(path, operation string, data []byte, mode os.FileMode) (
 	if err != nil {
 		return "", err
 	}
-	if err = state.AtomicWrite(filepath.Join(dir, revision+".json"), encoded, false); err != nil {
+	if err = safeio.PublishPrivate(filepath.Join(dir, revision+".json"), encoded, false); err != nil {
 		return "", err
 	}
 	if err = f.prune(dir); err != nil {

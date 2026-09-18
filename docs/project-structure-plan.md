@@ -206,6 +206,8 @@ Today's `internal/deployment` validators must either participate in the actual p
 
 The shared encrypted persistence implementation may live in `platform/securestore`, but platform credentials and application secrets require different controllers, storage instances and mounted access. Generic workspace revisions need safe atomic files, not a dependency on the encryption/migration package. Host lifecycle journal, job journal and audit retention have different records and failure semantics; avoid combining all of them into a global State manager.
 
+S02 status: trusted-parent private atomic publication now lives in `internal/platform/safeio`. `internal/state` consumes that primitive for encrypted-state and migration files, while Git checkpoints and workspace revisions consume it directly and no longer import `internal/state`. The state package still owns encrypted-store semantics and file locking; `policy.Workspace.AtomicWrite` remains separate because it pins untrusted workspace parents and supports caller-selected modes. Further safeio extraction from `daemon`/`policy` should preserve those distinct guarantees rather than collapsing them.
+
 Provider-specific key use belongs to its protected integration adapter. Application-secret delivery lives in `work/secrets`. No devtools adapter depends directly on either store; approved secret delivery is performed through the job boundary. The `control/credentials` path is not proof of protection unless the role's actual mount/identity and APIs enforce it.
 
 ## 5. Migration map for every current Go package
@@ -235,7 +237,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/execution` | Split environment/spec contracts into `work/jobs` and effective host config; it is not itself the new supervisor. |
 | `internal/fault` | Feature errors and narrow `control/operations` outcome categories; protocol presentation in transport. Low-level platform errors remain independent. |
 | `internal/githubapp` | `integrations/github` with private token/CLI adapters; platform key access through a narrow protected credential operation. |
-| `internal/gitops` | Repository behavior under `work/workspace`; Git adapter runs through jobs; snapshots use safe persistence, not vault APIs. |
+| `internal/gitops` | Repository behavior under `work/workspace`; Git adapter runs through jobs. **S02 completed for checkpoint persistence:** snapshots now publish through `platform/safeio`, not vault/state APIs. |
 | `internal/mcpserver` | `transport/mcp`; bind domain facades, reject unknown inputs, keep SDK and wire conventions out of feature cores. |
 | `internal/packaging` | `tests/acceptance/packaging` plus focused architecture checks; do not retain a production-looking package containing only packaging tests. |
 | `internal/policy` | Filesystem mechanisms to `platform/safeio`; workspace-specific validation to `work/workspace`. Do not simply rename it to authorization policy. |
@@ -246,10 +248,10 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/secret` | Application secret use cases to `work/secrets`; platform credentials to `control/credentials`; import/export helpers under the corresponding operator boundary. |
 | `internal/service` | Function-level split across `app`, `transport`, `work`, `control` and `integrations`; eliminate the umbrella. |
 | `internal/signing` | `integrations/signing` facade and private worker; SSH protocol implementation private; connection binding at transport edge. |
-| `internal/state` | Reuse encrypted persistence mechanics in `platform/securestore`; move atomic files/locks to safeio where semantics match; domain state/validation stays owned; offline migration is maintainer-only. |
+| `internal/state` | Reuse encrypted persistence mechanics in `platform/securestore`; **S02 completed for private atomic publication** via `platform/safeio`. File locking remains state-owned until a matching neutral contract is extracted; domain state/validation stays owned; offline migration is maintainer-only. |
 | `internal/toolchain` | `work/toolchains`; private providers/store/extractor adapters; approved host-native package setup belongs to `host/lifecycle`, not the project-facing resolver. |
 | `internal/toolchain/cmd/fetch` | `tools/toolchainfetch`, not a nested command hidden among runtime provider code. |
-| `internal/workspace` | `work/workspace` public contract; private filesystem/repository/revision implementation; serving/publishing belongs to sharing/transport. |
+| `internal/workspace` | `work/workspace` public contract; private filesystem/repository/revision implementation. **S02 completed for revision persistence:** revision backups use `platform/safeio` directly; serving/publishing belongs to sharing/transport. |
 
 ## 6. Assets, tests and non-Go boundaries
 

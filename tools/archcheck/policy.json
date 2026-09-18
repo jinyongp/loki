@@ -166,6 +166,10 @@
     },
     {
       "from": "loki/internal/gitops",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/gitops",
       "to": "loki/internal/policy"
     },
     {
@@ -258,6 +262,10 @@
     },
     {
       "from": "loki/internal/workspace",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/workspace",
       "to": "loki/internal/policy"
     },
     {
@@ -275,12 +283,6 @@
       "reason": "devtools adapter brokers secrets directly",
       "remove_unit": "A04/S04",
       "to": "loki/internal/secret"
-    },
-    {
-      "from": "loki/internal/gitops",
-      "reason": "Git checkpoint uses vault-oriented persistence",
-      "remove_unit": "S02/S04",
-      "to": "loki/internal/state"
     },
     {
       "from": "loki/internal/service",
@@ -419,12 +421,6 @@
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
       "to": "loki/internal/workspace"
-    },
-    {
-      "from": "loki/internal/workspace",
-      "reason": "workspace revisions use vault-oriented persistence",
-      "remove_unit": "S02/S04",
-      "to": "loki/internal/state"
     }
   ],
   "export_rules": [

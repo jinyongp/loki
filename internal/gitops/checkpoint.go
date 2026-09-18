@@ -11,7 +11,7 @@ import (
 
 	"loki/internal/daemon"
 	"loki/internal/fault"
-	"loki/internal/state"
+	"loki/internal/platform/safeio"
 )
 
 // Checkpoint preserves tracked patches and the untracked path inventory without
@@ -117,7 +117,7 @@ func (c *Controller) Checkpoint(ctx context.Context, cwd string) (*string, error
 		if suffix == ".json" {
 			data = metadata
 		}
-		if err = state.AtomicWrite(filepath.Join(directory, digest+suffix), data, false); err != nil && !errors.Is(err, os.ErrExist) {
+		if err = safeio.PublishPrivate(filepath.Join(directory, digest+suffix), data, false); err != nil && !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
 	}
