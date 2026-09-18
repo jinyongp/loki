@@ -8,10 +8,12 @@ import (
 	"net/http/httputil"
 	"strings"
 	"time"
+
+	"loki/internal/platform/netguard"
 )
 
 type Proxy struct {
-	Policy            Policy
+	Policy            netguard.Policy
 	IdleTimeout       time.Duration
 	TunnelErrorStatus int
 	ctx               context.Context
@@ -20,7 +22,7 @@ type Proxy struct {
 	slots             chan struct{}
 }
 
-func New(p Policy) *Proxy {
+func New(p netguard.Policy) *Proxy {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Proxy{Policy: p, ctx: ctx, cancel: cancel, slots: make(chan struct{}, 64), transport: &http.Transport{DialContext: p.Dial, DisableCompression: true, DisableKeepAlives: true, ResponseHeaderTimeout: 30 * time.Second}}
 }
@@ -46,7 +48,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid proxy target", 400)
 		return
 	}
-	if _, err := ValidateURL(r.URL.String()); err != nil {
+	if _, err := netguard.ValidateURL(r.URL.String()); err != nil {
 		http.Error(w, "destination is blocked", 403)
 		return
 	}

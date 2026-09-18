@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"loki/internal/browsernet"
+	"loki/internal/platform/netguard"
 )
 
 func TestFixedDownloadAllowlist(t *testing.T) {
@@ -70,7 +71,7 @@ func TestAllowedHostResolvingToPrivateAddressIsBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer proxy.Close()
-	network := browsernet.New(browsernet.Policy{Lookup: func(context.Context, string) ([]netip.Addr, error) {
+	network := browsernet.New(netguard.Policy{Lookup: func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
 	}})
 	network.TunnelErrorStatus = http.StatusBadGateway

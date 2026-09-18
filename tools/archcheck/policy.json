@@ -18,7 +18,7 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/browsernet"
+      "to": "loki/internal/platform/netguard"
     },
     {
       "from": "loki/cmd/loki",
@@ -101,8 +101,12 @@
       "to": "loki/internal/daemon"
     },
     {
+      "from": "loki/internal/auth",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
       "from": "loki/internal/browser",
-      "to": "loki/internal/browsernet"
+      "to": "loki/internal/platform/netguard"
     },
     {
       "from": "loki/internal/browser",
@@ -135,6 +139,10 @@
     {
       "from": "loki/internal/dockerproxy",
       "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/egress",
+      "to": "loki/internal/platform/netguard"
     },
     {
       "from": "loki/internal/githubapp",
@@ -213,6 +221,10 @@
       "to": "loki/internal/control/policy"
     },
     {
+      "from": "loki/internal/service",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
       "from": "loki/internal/secret",
       "to": "loki/internal/fault"
     },
@@ -255,16 +267,10 @@
   ],
   "edge_exceptions": [
     {
-      "from": "loki/internal/auth",
-      "reason": "safe dialing owned by browser package",
-      "remove_unit": "S02",
-      "to": "loki/internal/browsernet"
-    },
-    {
       "from": "loki/internal/browsernet",
-      "reason": "network mechanics depend on endpoint termination policy",
-      "remove_unit": "S02/S04",
-      "to": "loki/internal/portguard"
+      "reason": "legacy proxy consumes neutral policy until proxy moves",
+      "remove_unit": "WI-002",
+      "to": "loki/internal/platform/netguard"
     },
     {
       "from": "loki/internal/devtools",
@@ -627,6 +633,12 @@
         "test"
       ],
       "target": "tests/acceptance/packaging"
+    },
+    "loki/internal/platform/netguard": {
+      "kind": "platform",
+      "owner": "netguard",
+      "tags": [],
+      "target": "platform/netguard"
     },
     "loki/internal/policy": {
       "kind": "legacy-platform",

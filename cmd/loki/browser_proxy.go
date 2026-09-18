@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"loki/internal/browsernet"
 	"loki/internal/daemon"
+	"loki/internal/platform/netguard"
 	"loki/internal/rpc"
 	"loki/internal/service"
 )
@@ -39,7 +39,7 @@ func runBrowserProxy(args []string, stderr io.Writer) int {
 	}
 	expected := uint32(*uid)
 	client := rpc.Client{Socket: *socket, ExpectedUID: &expected}
-	policy := browsernet.Policy{ValidatePort: func(ctx context.Context, port int) bool {
+	policy := netguard.Policy{ValidatePort: func(ctx context.Context, port int) bool {
 		var result struct {
 			InUse     bool `json:"in_use"`
 			Listeners []map[string]any

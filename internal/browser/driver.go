@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"loki/internal/browsernet"
 	"loki/internal/cdp"
 	"loki/internal/daemon"
+	"loki/internal/platform/netguard"
 )
 
 // Options are supplied by the administrator. The browser service runs inside
@@ -325,7 +325,7 @@ func (d *Driver) waitPage(ctx context.Context, loader string) error {
 	}
 }
 func (d *Driver) navigate(ctx context.Context, address string, newTab bool) (map[string]any, error) {
-	address, err := browsernet.ValidateURL(address)
+	address, err := netguard.ValidateURL(address)
 	if err != nil {
 		return nil, err
 	}

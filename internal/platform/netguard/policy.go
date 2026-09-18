@@ -1,5 +1,5 @@
-// Package browsernet confines browser traffic to public web hosts and verified workspace ports.
-package browsernet
+// Package netguard provides shared outbound destination validation and bounded dialing.
+package netguard
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"loki/internal/portguard"
 )
 
 var blocked = func() []netip.Prefix {
@@ -22,6 +20,8 @@ var blocked = func() []netip.Prefix {
 	}
 	return result
 }()
+
+func validManagedPort(port int) bool { return port >= 1024 && port <= 65535 }
 
 func Public(address netip.Addr) bool {
 	address = address.Unmap()
@@ -60,7 +60,7 @@ func ValidateURL(value string) (string, error) {
 		}
 	}
 	if host == "127.0.0.1" {
-		if err := portguard.ValidateNumber(port); err != nil {
+		if !validManagedPort(port) {
 			return "", errors.New("local development port is not allowed")
 		}
 		return value, nil
@@ -85,7 +85,7 @@ type Policy struct {
 func (p Policy) Addresses(ctx context.Context, host string, port int) ([]netip.Addr, error) {
 	host = strings.ToLower(strings.TrimRight(host, "."))
 	if host == "127.0.0.1" {
-		if portguard.ValidateNumber(port) != nil || p.ValidatePort == nil || !p.ValidatePort(ctx, port) {
+		if !validManagedPort(port) || p.ValidatePort == nil || !p.ValidatePort(ctx, port) {
 			return nil, errors.New("workspace development port is not allowed")
 		}
 		return []netip.Addr{netip.MustParseAddr(host)}, nil

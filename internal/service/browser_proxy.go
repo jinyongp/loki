@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"loki/internal/browsernet"
+	"loki/internal/platform/netguard"
 )
 
-func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy browsernet.Policy, ready func() error) error {
+func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy netguard.Policy, ready func() error) error {
 	proxy := browsernet.New(policy)
 	return runHTTPProxy(ctx, listener, proxy, proxy.Close, ready, false)
 }

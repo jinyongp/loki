@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/browsernet"
+	"loki/internal/platform/netguard"
 )
 
 func TestBrowserProxyRoleClosesActiveTunnel(t *testing.T) {
@@ -31,7 +31,7 @@ func TestBrowserProxyRoleClosesActiveTunnel(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunBrowserProxy(ctx, listener, browsernet.Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }}, func() error { close(ready); return nil })
+		done <- RunBrowserProxy(ctx, listener, netguard.Policy{ValidatePort: func(_ context.Context, p int) bool { return p == port }}, func() error { close(ready); return nil })
 	}()
 	select {
 	case <-ready:

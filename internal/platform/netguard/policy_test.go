@@ -1,4 +1,4 @@
-package browsernet
+package netguard
 
 import (
 	"context"

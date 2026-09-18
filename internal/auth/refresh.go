@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"loki/internal/browsernet"
 	"loki/internal/config"
 	"loki/internal/daemon"
+	"loki/internal/platform/netguard"
 )
 
 // RefreshKeys preserves the last usable key file on fetch or validation failure.
@@ -24,7 +24,7 @@ func RefreshKeys(ctx context.Context, team, target string, gid int, client *http
 		return errors.New("invalid JWKS refresh configuration")
 	}
 	if client == nil {
-		transport := &http.Transport{DialContext: (browsernet.Policy{}).Dial, DisableKeepAlives: true, ResponseHeaderTimeout: 15 * time.Second}
+		transport := &http.Transport{DialContext: (netguard.Policy{}).Dial, DisableKeepAlives: true, ResponseHeaderTimeout: 15 * time.Second}
 		defer transport.CloseIdleConnections()
 		client = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
