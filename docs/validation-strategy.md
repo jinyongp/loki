@@ -32,6 +32,7 @@ Integration checks may require a disposable external executable, host identity, 
 | Locked project execution contract | `LOKI_E2E_DEVTOOLS=... LOKI_E2E_PNPM=... LOKI_E2E_NODE=... LOKI_E2E_CHROMIUM=... go test ./internal/e2e -run TestProjectExecutionContract` | Four absolute candidate executables plus its isolated fixture/cache directories. |
 | Runner/vault OS permissions | root-owned disposable Linux test environment running `go test ./internal/execution -run TestLinuxRunnerCanWriteStateButCannotReadVaultKey` | Effective UID 0 only to create/drop to the synthetic runner UID; never a production host. |
 | OCI archive contents/reproducibility | `LOKI_OCI_ARCHIVE=/absolute/archive [LOKI_OCI_ARCHIVE_REPEAT=/absolute/archive2] go test ./internal/packaging -run TestOCIArchiveContents` | Built OCI archive(s), not a mutable tag. |
+| Real OCI job lifecycle | `LOKI_REQUIRE_OCI_JOB_TESTS=1 LOKI_TEST_DOCKER_SOCKET=/absolute/docker.sock LOKI_TEST_DOCKER_IMAGE=registry/repo@sha256:... LOKI_TEST_DOCKER_WORKSPACE=/absolute/shared-workspace go test ./internal/platform/sandbox -run TestRealOCIJobLifecycle` | Disposable Linux Docker daemon over a Unix socket, an already-available digest-pinned image containing `/bin/sh`, and a workspace path visible to both the test process and daemon. `LOKI_TEST_DOCKER_PEER_UID`, `LOKI_TEST_WORKLOAD_UID`, and `LOKI_TEST_WORKLOAD_GID` override their documented defaults when the fixture uses different identities. |
 
 An integration test may skip only when run outside a gate that declares it required. A gate that requires the behavior must provide the fixture or convert its absence to failure. Do not add generic `CI` checks or silent fallback fixtures that make it unclear which environment was actually tested.
 
@@ -56,6 +57,6 @@ At the reviewed baseline, full normal and race runs failed in `internal/auth`, `
 - `internal/auth` and `internal/daemon`: deterministic test-fixture defects caused by ambient umask assumptions; keep in the default tier and fix the fixtures.
 - `internal/toolchain`: R9 product defect; keep in the default tier and do not skip or relax the expected executable mode.
 - Compose lifecycle tests in `internal/packaging`: explicit POSIX ACL integration prerequisite; developer runs may skip when `setfacl` is absent, while the release verifier requires it.
-- Chromium/CDP, real devtools, project execution, root permission, and OCI archive tests: explicit integration prerequisites listed above. Their absence remains visible and their required release/acceptance coverage is closed only when a later milestone supplies the fixture and records a pass.
+- Chromium/CDP, real devtools, project execution, root permission, OCI archive, and real OCI job-lifecycle tests: explicit integration prerequisites listed above. Their absence remains visible and their required release/acceptance coverage is closed only when a later milestone supplies the fixture and records a pass.
 
 This classification does not claim that the current Go candidate is release-ready. It prevents environment prerequisites from obscuring product regressions while the architecture remediation proceeds.

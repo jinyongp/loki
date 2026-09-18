@@ -65,19 +65,21 @@ type Plan struct {
 	valid        bool
 	name         string
 	policySHA256 string
+	resource     Resource
 	create       dockerCreateRequest
 }
 
 type dockerCreateRequest struct {
-	Image           string           `json:"Image"`
-	Cmd             []string         `json:"Cmd"`
-	Env             []string         `json:"Env"`
-	WorkingDir      string           `json:"WorkingDir"`
-	User            string           `json:"User"`
-	NetworkDisabled bool             `json:"NetworkDisabled"`
-	AttachStdout    bool             `json:"AttachStdout"`
-	AttachStderr    bool             `json:"AttachStderr"`
-	HostConfig      dockerHostConfig `json:"HostConfig"`
+	Image           string            `json:"Image"`
+	Cmd             []string          `json:"Cmd"`
+	Env             []string          `json:"Env"`
+	WorkingDir      string            `json:"WorkingDir"`
+	User            string            `json:"User"`
+	NetworkDisabled bool              `json:"NetworkDisabled"`
+	AttachStdout    bool              `json:"AttachStdout"`
+	AttachStderr    bool              `json:"AttachStderr"`
+	Labels          map[string]string `json:"Labels"`
+	HostConfig      dockerHostConfig  `json:"HostConfig"`
 }
 
 type dockerHostConfig struct {
@@ -207,6 +209,10 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	resource, err := NewResource(spec.ID, p.generationSHA256)
+	if err != nil {
+		return Plan{}, err
+	}
 	environment := append([]string(nil), p.environment...)
 	tmpfs := fmt.Sprintf("rw,noexec,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", p.tmpfsBytes, p.uid, p.gid)
 	create := dockerCreateRequest{
@@ -218,6 +224,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		NetworkDisabled: true,
 		AttachStdout:    true,
 		AttachStderr:    true,
+		Labels:          resource.labels(),
 		HostConfig: dockerHostConfig{
 			ReadonlyRootfs: true,
 			CapDrop:        []string{"ALL"},
@@ -240,8 +247,9 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	}
 	return Plan{
 		valid:        true,
-		name:         "loki-job-" + spec.ID,
+		name:         resource.Name(),
 		policySHA256: p.generationSHA256,
+		resource:     resource,
 		create:       create,
 	}, nil
 }
@@ -280,7 +288,8 @@ func workloadArgv(values []string) ([]string, error) {
 }
 
 func (p Plan) Valid() bool {
-	return p.valid && p.name != "" && digestPattern.MatchString(p.policySHA256) && p.create.Image != ""
+	return p.valid && p.resource.Valid() && p.name == p.resource.Name() &&
+		p.policySHA256 == p.resource.PolicySHA256() && p.create.Image != "" && p.resource.owns(p.create.Labels)
 }
 
 func (p Plan) Name() string {
@@ -295,4 +304,11 @@ func (p Plan) PolicySHA256() string {
 		return ""
 	}
 	return p.policySHA256
+}
+
+func (p Plan) Resource() Resource {
+	if !p.Valid() {
+		return Resource{}
+	}
+	return p.resource
 }

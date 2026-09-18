@@ -138,6 +138,9 @@ func TestPlanUsesOnlyFixedSecurityEnvelope(t *testing.T) {
 	if got := create.Env; len(got) != 2 || got[0] != "A=first" || got[1] != "Z=last" {
 		t.Fatalf("environment = %#v", got)
 	}
+	if resource := plan.Resource(); !resource.Valid() || !resource.owns(create.Labels) {
+		t.Fatalf("resource labels = %#v", create.Labels)
+	}
 	host := create.HostConfig
 	if !host.ReadonlyRootfs || host.NetworkMode != "none" || host.Memory != options.MemoryBytes ||
 		host.PidsLimit != options.PIDs || !host.Init {

@@ -93,14 +93,17 @@ func engineForSocket(t *testing.T, socket string, mutate func(*EngineOptions)) *
 func TestEngineFiniteLifecycle(t *testing.T) {
 	const version = "1.44"
 	containerID := strings.Repeat("d", 64)
+	plan := validPlan(t)
+	resource := plan.Resource()
 	recorder := &requestRecorder{}
+	removed := false
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorder.add(r)
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/version":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ApiVersion": version, "Version": "fixture"})
 		case r.Method == http.MethodPost && r.URL.Path == "/v"+version+"/containers/create":
-			if r.URL.Query().Get("name") != "loki-job-"+validWorkloadSpec().ID {
+			if r.URL.Query().Get("name") != resource.Name() {
 				t.Errorf("container name = %q", r.URL.Query().Get("name"))
 			}
 			var create dockerCreateRequest
@@ -109,16 +112,28 @@ func TestEngineFiniteLifecycle(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			if !create.HostConfig.ReadonlyRootfs || create.HostConfig.NetworkMode != "none" || create.Image == "" {
+			if !create.HostConfig.ReadonlyRootfs || create.HostConfig.NetworkMode != "none" || create.Image == "" ||
+				!resource.owns(create.Labels) {
 				t.Errorf("create security envelope = %#v", create)
 			}
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]any{"Id": containerID})
-		case r.Method == http.MethodPost && r.URL.Path == "/v"+version+"/containers/"+containerID+"/start":
+		case r.Method == http.MethodPost && r.URL.Path == "/v"+version+"/containers/"+resource.Name()+"/start":
 			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPost && r.URL.Path == "/v"+version+"/containers/"+containerID+"/wait":
+		case r.Method == http.MethodPost && r.URL.Path == "/v"+version+"/containers/"+resource.Name()+"/wait":
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
-		case r.Method == http.MethodDelete && r.URL.Path == "/v"+version+"/containers/"+containerID:
+		case r.Method == http.MethodGet && r.URL.Path == "/v"+version+"/containers/"+resource.Name()+"/json":
+			if removed {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"Id":     containerID,
+				"Config": map[string]any{"Labels": resource.labels()},
+				"State":  map[string]any{"Status": "exited", "Running": false, "OOMKilled": false, "ExitCode": 7},
+			})
+		case r.Method == http.MethodDelete && r.URL.Path == "/v"+version+"/containers/"+resource.Name():
+			removed = true
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			t.Errorf("unexpected Docker request: %s %s", r.Method, r.URL.RequestURI())
@@ -126,19 +141,22 @@ func TestEngineFiniteLifecycle(t *testing.T) {
 		}
 	})
 	socket := fakeDockerSocket(t, handler)
-	result, err := engineForSocket(t, socket, nil).Run(t.Context(), validPlan(t))
+	result, err := engineForSocket(t, socket, nil).Run(t.Context(), plan)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.ExitCode != 7 {
-		t.Fatalf("exit code = %d", result.ExitCode)
+	if result.ExitCode != 7 || result.Outcome != OutcomeExited || result.Cleanup != CleanupComplete {
+		t.Fatalf("result = %#v", result)
 	}
 	want := []string{
 		"GET /version",
-		"POST /v" + version + "/containers/create?name=loki-job-" + validWorkloadSpec().ID,
-		"POST /v" + version + "/containers/" + containerID + "/start",
-		"POST /v" + version + "/containers/" + containerID + "/wait?condition=not-running",
-		"DELETE /v" + version + "/containers/" + containerID + "?force=1&v=1",
+		"POST /v" + version + "/containers/create?name=" + resource.Name(),
+		"POST /v" + version + "/containers/" + resource.Name() + "/start",
+		"POST /v" + version + "/containers/" + resource.Name() + "/wait?condition=not-running",
+		"GET /v" + version + "/containers/" + resource.Name() + "/json",
+		"GET /v" + version + "/containers/" + resource.Name() + "/json",
+		"DELETE /v" + version + "/containers/" + resource.Name() + "?force=1&v=1",
+		"GET /v" + version + "/containers/" + resource.Name() + "/json",
 	}
 	if got := recorder.snapshot(); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Docker request sequence = %#v, want %#v", got, want)
@@ -178,35 +196,49 @@ func TestEngineVerifiesPeerAndBoundsResponses(t *testing.T) {
 		}
 	})
 	t.Run("invalid-container-id", func(t *testing.T) {
+		containerID := strings.Repeat("a", 64)
+		plan := validPlan(t)
+		resource := plan.Resource()
 		removed := false
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/version" {
+			switch {
+			case r.URL.Path == "/version":
 				_ = json.NewEncoder(w).Encode(map[string]any{"ApiVersion": "1.44"})
-				return
-			}
-			if r.URL.Path == "/v1.44/containers/create" {
+			case r.URL.Path == "/v1.44/containers/create":
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]any{"Id": "../../unsafe"})
-				return
-			}
-			if r.Method == http.MethodDelete && r.URL.Path == "/v1.44/containers/loki-job-"+validWorkloadSpec().ID {
+			case r.Method == http.MethodGet && r.URL.Path == "/v1.44/containers/"+resource.Name()+"/json":
+				if removed {
+					http.NotFound(w, r)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id":     containerID,
+					"Config": map[string]any{"Labels": resource.labels()},
+					"State":  map[string]any{"Status": "created", "Running": false, "OOMKilled": false, "ExitCode": 0},
+				})
+			case r.Method == http.MethodDelete && r.URL.Path == "/v1.44/containers/"+resource.Name():
 				removed = true
 				w.WriteHeader(http.StatusNoContent)
-				return
+			default:
+				http.NotFound(w, r)
 			}
-			http.NotFound(w, r)
 		})
 		socket := fakeDockerSocket(t, handler)
-		if _, err := engineForSocket(t, socket, nil).Run(t.Context(), validPlan(t)); err == nil || !strings.Contains(err.Error(), "invalid container ID") {
+		result, err := engineForSocket(t, socket, nil).Run(t.Context(), plan)
+		if err == nil || !strings.Contains(err.Error(), "invalid container ID") {
 			t.Fatalf("container ID error = %v", err)
 		}
-		if !removed {
-			t.Fatal("created container was not removed by its fixed job name")
+		if result.Outcome != OutcomeLaunchFailed || result.Cleanup != CleanupComplete || !removed {
+			t.Fatalf("result = %#v, removed = %v", result, removed)
 		}
 	})
 	t.Run("invalid-exit-code", func(t *testing.T) {
 		const version = "1.44"
 		containerID := strings.Repeat("f", 64)
+		plan := validPlan(t)
+		resource := plan.Resource()
+		removed := false
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case r.URL.Path == "/version":
@@ -218,38 +250,58 @@ func TestEngineVerifiesPeerAndBoundsResponses(t *testing.T) {
 				w.WriteHeader(http.StatusNoContent)
 			case strings.HasSuffix(r.URL.Path, "/wait"):
 				_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 999})
-			case strings.HasSuffix(r.URL.Path, "/kill"):
-				w.WriteHeader(http.StatusConflict)
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json"):
+				if removed {
+					http.NotFound(w, r)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id":     containerID,
+					"Config": map[string]any{"Labels": resource.labels()},
+					"State":  map[string]any{"Status": "exited", "Running": false, "OOMKilled": false, "ExitCode": 0},
+				})
 			case r.Method == http.MethodDelete:
+				removed = true
 				w.WriteHeader(http.StatusNoContent)
 			default:
 				http.NotFound(w, r)
 			}
 		})
 		socket := fakeDockerSocket(t, handler)
-		if _, err := engineForSocket(t, socket, nil).Run(t.Context(), validPlan(t)); err == nil || !strings.Contains(err.Error(), "invalid exit code") {
+		result, err := engineForSocket(t, socket, nil).Run(t.Context(), plan)
+		if err == nil || !strings.Contains(err.Error(), "invalid exit code") {
 			t.Fatalf("exit-code error = %v", err)
+		}
+		if result.Outcome != OutcomeUnknown || result.Cleanup != CleanupComplete || !removed {
+			t.Fatalf("result = %#v, removed = %v", result, removed)
 		}
 	})
 }
 
-func TestEngineCancellationKillsAndRemoves(t *testing.T) {
+func TestEngineCancellationUsesGracefulStopThenKillFallback(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
+		stopStatus      int
 		killStatus      int
-		blockKill       bool
+		wantKill        bool
+		wantCleanup     CleanupStatus
 		wantCleanupText string
 	}{
-		{name: "cleanup-success", killStatus: http.StatusNoContent},
-		{name: "cleanup-error", killStatus: http.StatusInternalServerError, wantCleanupText: "HTTP 500"},
-		{name: "cleanup-timeout", blockKill: true, wantCleanupText: "context deadline exceeded"},
+		{name: "graceful-stop", stopStatus: http.StatusNoContent, wantCleanup: CleanupComplete},
+		{name: "kill-fallback", stopStatus: http.StatusInternalServerError, killStatus: http.StatusNoContent, wantKill: true, wantCleanup: CleanupComplete},
+		{name: "kill-failure", stopStatus: http.StatusInternalServerError, killStatus: http.StatusInternalServerError, wantKill: true, wantCleanup: CleanupFailed, wantCleanupText: "HTTP 500"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const version = "1.44"
 			containerID := strings.Repeat("e", 64)
+			plan := validPlan(t)
+			resource := plan.Resource()
 			recorder := &requestRecorder{}
 			waitEntered := make(chan struct{})
 			var once sync.Once
+			var stateMu sync.Mutex
+			stopped := false
+			removed := false
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				recorder.add(r)
 				switch {
@@ -263,30 +315,61 @@ func TestEngineCancellationKillsAndRemoves(t *testing.T) {
 				case strings.HasSuffix(r.URL.Path, "/wait"):
 					once.Do(func() { close(waitEntered) })
 					<-r.Context().Done()
-				case strings.HasSuffix(r.URL.Path, "/kill"):
-					if tc.blockKill {
-						<-r.Context().Done()
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json"):
+					stateMu.Lock()
+					isStopped, isRemoved := stopped, removed
+					stateMu.Unlock()
+					if isRemoved {
+						http.NotFound(w, r)
 						return
+					}
+					status := "running"
+					running := true
+					exitCode := int64(0)
+					if isStopped {
+						status, running, exitCode = "exited", false, 143
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"Id":     containerID,
+						"Config": map[string]any{"Labels": resource.labels()},
+						"State":  map[string]any{"Status": status, "Running": running, "OOMKilled": false, "ExitCode": exitCode},
+					})
+				case strings.HasSuffix(r.URL.Path, "/stop"):
+					if tc.stopStatus == http.StatusNoContent {
+						stateMu.Lock()
+						stopped = true
+						stateMu.Unlock()
+					}
+					w.WriteHeader(tc.stopStatus)
+				case strings.HasSuffix(r.URL.Path, "/kill"):
+					if tc.killStatus == http.StatusNoContent {
+						stateMu.Lock()
+						stopped = true
+						stateMu.Unlock()
 					}
 					w.WriteHeader(tc.killStatus)
 				case r.Method == http.MethodDelete:
+					stateMu.Lock()
+					removed = true
+					stateMu.Unlock()
 					w.WriteHeader(http.StatusNoContent)
 				default:
 					http.NotFound(w, r)
 				}
 			})
-			socket := fakeDockerSocket(t, handler)
-			engine := engineForSocket(t, socket, func(options *EngineOptions) {
-				if tc.blockKill {
-					options.CleanupTimeout = time.Second
-				}
+			engine := engineForSocket(t, fakeDockerSocket(t, handler), func(options *EngineOptions) {
+				options.CleanupTimeout = time.Second
+				options.GracefulStopTimeout = time.Second
 			})
-			plan := validPlan(t)
 			ctx, cancel := context.WithCancel(t.Context())
-			result := make(chan error, 1)
+			type runResult struct {
+				result Result
+				err    error
+			}
+			done := make(chan runResult, 1)
 			go func() {
-				_, err := engine.Run(ctx, plan)
-				result <- err
+				result, err := engine.Run(ctx, plan)
+				done <- runResult{result: result, err: err}
 			}()
 			select {
 			case <-waitEntered:
@@ -294,21 +377,29 @@ func TestEngineCancellationKillsAndRemoves(t *testing.T) {
 				t.Fatal("wait request was not reached")
 			}
 			cancel()
-			var err error
+			var got runResult
 			select {
-			case err = <-result:
+			case got = <-done:
 			case <-time.After(3 * time.Second):
 				t.Fatal("canceled sandbox run did not finish")
 			}
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("cancellation error = %v", err)
+			if !errors.Is(got.err, context.Canceled) || got.result.Outcome != OutcomeCanceled || got.result.Cleanup != tc.wantCleanup {
+				t.Fatalf("run result = %#v, error = %v", got.result, got.err)
 			}
-			if tc.wantCleanupText != "" && !strings.Contains(err.Error(), tc.wantCleanupText) {
-				t.Fatalf("cleanup error = %v, want %q", err, tc.wantCleanupText)
+			if tc.wantCleanupText != "" && !strings.Contains(got.err.Error(), tc.wantCleanupText) {
+				t.Fatalf("cleanup error = %v, want %q", got.err, tc.wantCleanupText)
 			}
 			events := strings.Join(recorder.snapshot(), "\n")
-			if !strings.Contains(events, "/kill?signal=KILL") || !strings.Contains(events, "DELETE /v"+version+"/containers/"+containerID+"?force=1&v=1") {
-				t.Fatalf("cleanup sequence = %s", events)
+			if !strings.Contains(events, "/stop?t=1") {
+				t.Fatalf("cleanup sequence lacks graceful stop: %s", events)
+			}
+			if strings.Contains(events, "/kill?signal=KILL") != tc.wantKill {
+				t.Fatalf("kill fallback mismatch: %s", events)
+			}
+			if tc.wantCleanup == CleanupComplete {
+				if !strings.Contains(events, "DELETE /v"+version+"/containers/"+resource.Name()+"?force=1&v=1") {
+					t.Fatalf("cleanup sequence lacks removal: %s", events)
+				}
 			}
 		})
 	}
@@ -322,6 +413,7 @@ func TestEngineOptionsRejectUntrustedConfiguration(t *testing.T) {
 		{Socket: "/run/docker.sock", ExpectedUID: &uid, RequestBytes: 1024},
 		{Socket: "/run/docker.sock", ExpectedUID: &uid, ResponseBytes: 1024},
 		{Socket: "/run/docker.sock", ExpectedUID: &uid, ControlTimeout: time.Millisecond},
+		{Socket: "/run/docker.sock", ExpectedUID: &uid, GracefulStopTimeout: time.Millisecond},
 	} {
 		if _, err := NewEngine(options); err == nil {
 			t.Fatalf("invalid EngineOptions accepted: %#v", options)

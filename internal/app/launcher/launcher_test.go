@@ -173,6 +173,30 @@ func TestStartWaitReturnsExitCodeAndConsumesResult(t *testing.T) {
 	}
 }
 
+func TestWaitOperationKeepsSandboxOutcomeInternal(t *testing.T) {
+	id := strings.Repeat("c", 32)
+	runner := &fakeRunner{result: sandbox.Result{
+		ExitCode: 137,
+		Outcome:  sandbox.OutcomeOOMKilled,
+		Cleanup:  sandbox.CleanupComplete,
+	}}
+	l := lifecycleFixture(t, runner, time.Second, time.Second, 8)
+	if err := l.start(launcherSpec(id)); err != nil {
+		t.Fatal(err)
+	}
+	value, err := l.operations()["wait"].Handle(t.Context(), encodedRequest(t, map[string]any{
+		"operation": "wait",
+		"id":        id,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, ok := value.(waitResult)
+	if !ok || result.ExitCode != 137 {
+		t.Fatalf("wire result = %#v", value)
+	}
+}
+
 func TestWaitTimeoutDoesNotCancelJobButExplicitCancelDoes(t *testing.T) {
 	id := strings.Repeat("c", 32)
 	runner := &fakeRunner{wait: true, started: make(chan struct{}), canceled: make(chan struct{})}
