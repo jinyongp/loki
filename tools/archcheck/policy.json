@@ -1,6 +1,18 @@
 {
   "allowed_edges": [
     {
+      "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/app/launcher"
+    },
+    {
+      "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/platform/sandbox"
+    },
+    {
       "from": "loki/cmd/loki",
       "to": "loki/internal/admin"
     },
@@ -471,6 +483,12 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/cmd/loki-launcher": {
+      "kind": "role",
+      "owner": "launcher",
+      "tags": [],
+      "target": "cmd/loki-launcher"
+    },
     "loki/cmd/loki": {
       "kind": "legacy-composition",
       "owner": "app/roles",
@@ -799,7 +817,7 @@
         "devtools"
       ],
       "name": "launcher",
-      "optional": true,
+      "optional": false,
       "root": "loki/cmd/loki-launcher"
     }
   ],
