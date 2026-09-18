@@ -146,7 +146,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	// The configured host allowlist below replaces the SDK's localhost-only
 	// default, allowing the explicitly configured reverse-proxy public hosts.
-	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return app.Server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: 16777216, DisableLocalhostProtection: true})
+	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return app.Server }, mcpTransportOptions())
 	mcpRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/mcp" {
 			http.NotFound(w, r)
@@ -189,6 +189,7 @@ func (a *MCPApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	a.handler.ServeHTTP(w, r)
 }
+
 func (a *MCPApp) Close() {
 	a.once.Do(func() {
 		a.closed.Store(true)
@@ -208,4 +209,16 @@ func (a *MCPApp) Close() {
 			a.files.Close()
 		}
 	})
+}
+
+const mcpSessionTimeout = 24 * time.Hour
+
+func mcpTransportOptions() *mcp.StreamableHTTPOptions {
+	return &mcp.StreamableHTTPOptions{
+		Stateless:                  false,
+		JSONResponse:               true,
+		MaxRequestBodyBytes:        16777216,
+		SessionTimeout:             mcpSessionTimeout,
+		DisableLocalhostProtection: true,
+	}
 }

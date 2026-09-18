@@ -161,6 +161,9 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 		if err := resolved.ApplyDefaults(&input); err != nil {
 			return nil, errors.New("invalid server defaults")
 		}
+		if req.Session != nil {
+			ctx = withSessionID(ctx, req.Session.ID())
+		}
 		result, err = handler(ctx, input)
 		if err != nil {
 			return errorResult(fault.Public(err)), nil

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -148,5 +151,66 @@ func TestGitHubCommandRejectsCredentialAndScopeArguments(t *testing.T) {
 		if err != nil || !result.IsError {
 			t.Fatalf("accepted %s: %#v %v", key, result, err)
 		}
+	}
+}
+
+func TestHandlerContextCarriesStableServerSessionID(t *testing.T) {
+	handlers := testHandlers(t)
+	var mu sync.Mutex
+	seen := []string{}
+	handlers["system_inspect"] = func(ctx context.Context, _ map[string]any) (*mcp.CallToolResult, error) {
+		id, ok := SessionID(ctx)
+		if !ok {
+			id = ""
+		}
+		mu.Lock()
+		seen = append(seen, id)
+		mu.Unlock()
+		return Object(map[string]any{"ok": true})
+	}
+	server, err := New(handlers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpServer := httptest.NewServer(mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{
+			Stateless:    false,
+			JSONResponse: true,
+		},
+	))
+	defer httpServer.Close()
+
+	connectClient := func(name string) *mcp.ClientSession {
+		client, err := mcp.NewClient(&mcp.Implementation{Name: name, Version: "1"}, nil).Connect(
+			t.Context(),
+			&mcp.StreamableClientTransport{Endpoint: httpServer.URL, DisableStandaloneSSE: true},
+			nil,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { client.Close() })
+		return client
+	}
+	call := func(client *mcp.ClientSession) {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "system_inspect", Arguments: map[string]any{"action": "server"}})
+		if err != nil || result.IsError {
+			t.Fatalf("call failed: %#v %v", result, err)
+		}
+	}
+	first := connectClient("first")
+	call(first)
+	call(first)
+	second := connectClient("second")
+	call(second)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 3 || seen[0] == "" || seen[0] != seen[1] || seen[2] == "" || seen[2] == seen[0] {
+		t.Fatalf("session ids = %#v", seen)
+	}
+	if _, ok := SessionID(context.Background()); ok {
+		t.Fatal("session id appeared outside a server request context")
 	}
 }

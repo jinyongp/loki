@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
@@ -213,5 +214,18 @@ func TestNewMCPRequiresProtectedListenerPolicy(t *testing.T) {
 	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
 	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
 		t.Fatalf("missing listener protection error = %v", err)
+	}
+}
+
+func TestMCPTransportUsesBoundedStatefulSessions(t *testing.T) {
+	options := mcpTransportOptions()
+	if options.Stateless {
+		t.Fatal("MCP transport is stateless")
+	}
+	if !options.JSONResponse || options.SessionTimeout != 24*time.Hour || options.MaxRequestBodyBytes != 16777216 {
+		t.Fatalf("transport options = %#v", options)
+	}
+	if options.SessionTimeout <= 0 {
+		t.Fatal("MCP session timeout is not bounded")
 	}
 }
