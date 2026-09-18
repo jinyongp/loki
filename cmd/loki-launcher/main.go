@@ -17,24 +17,30 @@ import (
 	"loki/internal/platform/sandbox"
 )
 
-const maxLauncherRunTimeoutSeconds = 24 * 60 * 60
+const (
+	maxLauncherRunTimeoutSeconds      = 24 * 60 * 60
+	maxLauncherResultRetentionSeconds = 60 * 60
+	maxLauncherJobs                   = 1024
+)
 
 type launcherLayout struct {
-	Socket            string
-	SocketGID         int
-	ExecutorUID       uint32
-	DockerSocket      string
-	DockerPeerUID     uint32
-	PolicySHA256      string
-	Image             string
-	Workspace         string
-	Environment       []string
-	WorkloadUID       uint32
-	WorkloadGID       uint32
-	MemoryBytes       int64
-	PIDs              int64
-	TmpfsBytes        int64
-	RunTimeoutSeconds int
+	Socket                 string
+	SocketGID              int
+	ExecutorUID            uint32
+	DockerSocket           string
+	DockerPeerUID          uint32
+	PolicySHA256           string
+	Image                  string
+	Workspace              string
+	Environment            []string
+	WorkloadUID            uint32
+	WorkloadGID            uint32
+	MemoryBytes            int64
+	PIDs                   int64
+	TmpfsBytes             int64
+	RunTimeoutSeconds      int
+	ResultRetentionSeconds int
+	MaxJobs                int
 }
 
 func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
@@ -49,6 +55,12 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	}
 	if layout.RunTimeoutSeconds < 1 || layout.RunTimeoutSeconds > maxLauncherRunTimeoutSeconds {
 		return applauncher.Options{}, errors.New("launcher run timeout is outside the supported range")
+	}
+	if layout.ResultRetentionSeconds < 1 || layout.ResultRetentionSeconds > maxLauncherResultRetentionSeconds {
+		return applauncher.Options{}, errors.New("launcher result retention is outside the supported range")
+	}
+	if layout.MaxJobs < 1 || layout.MaxJobs > maxLauncherJobs {
+		return applauncher.Options{}, errors.New("launcher job capacity is outside the supported range")
 	}
 	policy, err := sandbox.NewPolicy(sandbox.PolicyOptions{
 		GenerationSHA256: layout.PolicySHA256,
@@ -73,12 +85,14 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		return applauncher.Options{}, err
 	}
 	return applauncher.Options{
-		Socket:      layout.Socket,
-		SocketGID:   layout.SocketGID,
-		ExecutorUID: layout.ExecutorUID,
-		Policy:      policy,
-		Runner:      engine,
-		RunTimeout:  time.Duration(layout.RunTimeoutSeconds) * time.Second,
+		Socket:          layout.Socket,
+		SocketGID:       layout.SocketGID,
+		ExecutorUID:     layout.ExecutorUID,
+		Policy:          policy,
+		Runner:          engine,
+		RunTimeout:      time.Duration(layout.RunTimeoutSeconds) * time.Second,
+		ResultRetention: time.Duration(layout.ResultRetentionSeconds) * time.Second,
+		MaxJobs:         layout.MaxJobs,
 	}, nil
 }
 

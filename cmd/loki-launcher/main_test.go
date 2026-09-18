@@ -15,21 +15,23 @@ import (
 func validLauncherLayout(t *testing.T) launcherLayout {
 	t.Helper()
 	return launcherLayout{
-		Socket:            filepath.Join(t.TempDir(), "launcher.sock"),
-		SocketGID:         os.Getgid(),
-		ExecutorUID:       1001,
-		DockerSocket:      filepath.Join(t.TempDir(), "docker.sock"),
-		DockerPeerUID:     0,
-		PolicySHA256:      strings.Repeat("a", 64),
-		Image:             "registry.example/loki@sha256:" + strings.Repeat("b", 64),
-		Workspace:         t.TempDir(),
-		Environment:       []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
-		WorkloadUID:       2001,
-		WorkloadGID:       2001,
-		MemoryBytes:       512 << 20,
-		PIDs:              128,
-		TmpfsBytes:        64 << 20,
-		RunTimeoutSeconds: 30,
+		Socket:                 filepath.Join(t.TempDir(), "launcher.sock"),
+		SocketGID:              os.Getgid(),
+		ExecutorUID:            1001,
+		DockerSocket:           filepath.Join(t.TempDir(), "docker.sock"),
+		DockerPeerUID:          0,
+		PolicySHA256:           strings.Repeat("a", 64),
+		Image:                  "registry.example/loki@sha256:" + strings.Repeat("b", 64),
+		Workspace:              t.TempDir(),
+		Environment:            []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
+		WorkloadUID:            2001,
+		WorkloadGID:            2001,
+		MemoryBytes:            512 << 20,
+		PIDs:                   128,
+		TmpfsBytes:             64 << 20,
+		RunTimeoutSeconds:      30,
+		ResultRetentionSeconds: 60,
+		MaxJobs:                64,
 	}
 }
 
@@ -40,7 +42,8 @@ func TestBuildLauncherConstructsNarrowRoleInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if options.Socket != layout.Socket || options.SocketGID != layout.SocketGID ||
-		options.ExecutorUID != layout.ExecutorUID || options.RunTimeout != 30*time.Second {
+		options.ExecutorUID != layout.ExecutorUID || options.RunTimeout != 30*time.Second ||
+		options.ResultRetention != 60*time.Second || options.MaxJobs != 64 {
 		t.Fatalf("launcher options = %#v", options)
 	}
 	if !options.Policy.Valid() {
@@ -75,6 +78,10 @@ func TestBuildLauncherRejectsUnsafeLayout(t *testing.T) {
 		{"tmpfs", func(l *launcherLayout) { l.TmpfsBytes = 1 }},
 		{"timeout-zero", func(l *launcherLayout) { l.RunTimeoutSeconds = 0 }},
 		{"timeout-high", func(l *launcherLayout) { l.RunTimeoutSeconds = maxLauncherRunTimeoutSeconds + 1 }},
+		{"retention-zero", func(l *launcherLayout) { l.ResultRetentionSeconds = 0 }},
+		{"retention-high", func(l *launcherLayout) { l.ResultRetentionSeconds = maxLauncherResultRetentionSeconds + 1 }},
+		{"jobs-zero", func(l *launcherLayout) { l.MaxJobs = 0 }},
+		{"jobs-high", func(l *launcherLayout) { l.MaxJobs = maxLauncherJobs + 1 }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
