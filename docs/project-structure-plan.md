@@ -231,7 +231,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/deployment` | `host/config`/`host/releases` validation used by actual prepare/startup; purely image assertions to tests/packaging tooling. |
 | `internal/devtools` | `integrations/devtools`; CLI execution through jobs; secret brokerage removed from this adapter. |
 | `internal/devtools/cmd/gencatalog` | `tools/cataloggen` or a devtools-specific generator beneath it; generated catalog stays with the owning adapter. |
-| `internal/dockerproxy` | Remove unused transparent forwarding; retain only the inspection/launch capability actually required by the finite `platform/sandbox` boundary, reached through role-specific transport. Never expose a raw daemon socket or generic forwarding API to jobs. |
+| `internal/dockerproxy` | **A03 foundation updated:** raw transparent forwarding has been removed. The remaining package is a legacy Docker-backed endpoint inspector targeted at `work/endpoints`; OCI launch mechanics now belong exclusively to `internal/platform/sandbox`. |
 | `internal/e2e` | `tests/acceptance` or `tests/integration`, explicitly classified by runtime prerequisites. |
 | `internal/egress` | `work/network` facade and enforcement adapters; share mechanics, not browser policy. |
 | `internal/execution` | Split environment/spec contracts into `work/jobs` and effective host config; it is not itself the new supervisor. |

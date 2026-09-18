@@ -141,10 +141,6 @@
       "to": "loki/internal/process"
     },
     {
-      "from": "loki/internal/dockerproxy",
-      "to": "loki/internal/rpc"
-    },
-    {
       "from": "loki/internal/egress",
       "to": "loki/internal/platform/netguard"
     },
@@ -561,12 +557,10 @@
       "target": "tools/cataloggen"
     },
     "loki/internal/dockerproxy": {
-      "kind": "legacy-platform",
-      "owner": "sandbox",
-      "tags": [
-        "launcher-implementation"
-      ],
-      "target": "platform/sandbox"
+      "kind": "legacy-work",
+      "owner": "endpoints",
+      "tags": [],
+      "target": "work/endpoints"
     },
     "loki/internal/e2e": {
       "kind": "test",
