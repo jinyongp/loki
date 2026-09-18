@@ -36,6 +36,7 @@ func TestPolicyValidation(t *testing.T) {
 	}{
 		{"digest", func(o *PolicyOptions) { o.GenerationSHA256 = "bad" }},
 		{"image-tag", func(o *PolicyOptions) { o.Image = "loki:latest" }},
+		{"image-scheme", func(o *PolicyOptions) { o.Image = "https://registry.example/loki@sha256:" + strings.Repeat("b", 64) }},
 		{"workspace-relative", func(o *PolicyOptions) { o.Workspace = "workspace" }},
 		{"workspace-root", func(o *PolicyOptions) { o.Workspace = "/" }},
 		{"workspace-dirty", func(o *PolicyOptions) { o.Workspace = "/srv/../workspace" }},

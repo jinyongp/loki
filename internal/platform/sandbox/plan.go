@@ -27,7 +27,7 @@ const (
 
 var (
 	digestPattern      = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	imageDigestPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[0-9a-f]{64}$`)
+	imageDigestPattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
 	jobIDPattern       = regexp.MustCompile(`^[0-9a-f]{32}$`)
 	envNamePattern     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
