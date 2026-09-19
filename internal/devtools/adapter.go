@@ -133,8 +133,46 @@ func (c *Client) Close() error {
 	return c.Workspace.Close()
 }
 
+type candidateCommandContract struct {
+	Name             string          `json:"name"`
+	AcceptsChildArgs bool            `json:"accepts_child_args"`
+	OutputMode       string          `json:"output_mode"`
+	Options          []Option        `json:"options"`
+	InputSchema      json.RawMessage `json:"input_schema"`
+	OutputSchema     json.RawMessage `json:"output_schema"`
+}
+
+func canonicalSchema(raw json.RawMessage) (json.RawMessage, error) {
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(encoded), nil
+}
+
 func candidateEvidence(version Version, commands []Command) (Candidate, error) {
-	raw, err := json.Marshal(commands)
+	contracts := make([]candidateCommandContract, 0, len(commands))
+	for _, command := range commands {
+		input, err := canonicalSchema(command.InputSchema)
+		if err != nil {
+			return Candidate{}, fmt.Errorf("canonicalize input schema for %q: %w", command.Name, err)
+		}
+		output, err := canonicalSchema(command.OutputSchema)
+		if err != nil {
+			return Candidate{}, fmt.Errorf("canonicalize output schema for %q: %w", command.Name, err)
+		}
+		contracts = append(contracts, candidateCommandContract{
+			Name: command.Name, AcceptsChildArgs: command.AcceptsChildArgs, OutputMode: command.OutputMode,
+			Options: append([]Option{}, command.Options...), InputSchema: input, OutputSchema: output,
+		})
+	}
+	raw, err := json.Marshal(contracts)
 	if err != nil {
 		return Candidate{}, err
 	}
@@ -185,13 +223,24 @@ func (c *Client) Verify(ctx context.Context) (Candidate, error) {
 	if err != nil {
 		return Candidate{}, err
 	}
-	compiled, err := compileCommands(commands)
-	if err != nil {
-		return Candidate{}, err
-	}
 	candidate, err := candidateEvidence(version, commands)
 	if err != nil {
 		return Candidate{}, errors.New("devtools candidate fingerprint failed")
+	}
+	baselineCommands, err := EmbeddedCatalog()
+	if err != nil {
+		return Candidate{}, errors.New("Loki devtools baseline is invalid")
+	}
+	baseline, err := candidateEvidence(Version{ProtocolVersion: ProtocolVersion}, baselineCommands)
+	if err != nil {
+		return Candidate{}, errors.New("Loki devtools baseline fingerprint failed")
+	}
+	if candidate.CatalogSHA256 != baseline.CatalogSHA256 {
+		return Candidate{}, errors.New("devtools approved contract does not match the Loki baseline")
+	}
+	compiled, err := compileCommands(commands)
+	if err != nil {
+		return Candidate{}, err
 	}
 	c.commands = compiled
 	c.candidate = candidate
@@ -205,7 +254,7 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-	if isMetadataCommand(name) || isAgentGuidanceCommand(name) || isCoordinationCommand(name) || isCoordinationMutation(name) {
+	if isMetadataCommand(name) || isCoordinationCommand(name) || isCoordinationMutation(name) {
 		return nil, errors.New("devtools typed command requires the typed adapter")
 	}
 	return c.call(ctx, name, raw, c.Env)
@@ -246,7 +295,7 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 			return nil, errors.New("devtools explicit profile lookup is unavailable through Loki")
 		}
 	}
-	if name == "process start" || isMetadataCommand(name) || isAgentGuidanceCommand(name) {
+	if name == "process start" || isMetadataCommand(name) {
 		requested, _ := input["dir"].(string)
 		if requested == "" {
 			requested = "."

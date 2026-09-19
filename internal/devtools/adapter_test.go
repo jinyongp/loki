@@ -186,7 +186,7 @@ func TestClientVerifyCachesAcceptedCandidate(t *testing.T) {
 	}
 }
 
-func TestCandidateFingerprintTracksApprovedContractOnly(t *testing.T) {
+func TestCandidateFingerprintTracksExecutableContractOnly(t *testing.T) {
 	commands, err := EmbeddedCatalog()
 	if err != nil {
 		t.Fatal(err)
@@ -196,13 +196,75 @@ func TestCandidateFingerprintTracksApprovedContractOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	copyCommands := append([]Command(nil), commands...)
-	copyCommands[0].Description += " changed"
-	second, err := candidateEvidence(version, copyCommands)
+	descriptionOnly := append([]Command(nil), commands...)
+	descriptionOnly[0].Description += " editorial change"
+	second, err := candidateEvidence(version, descriptionOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.CatalogSHA256 == second.CatalogSHA256 {
-		t.Fatal("approved contract change did not change candidate fingerprint")
+	if first.CatalogSHA256 != second.CatalogSHA256 {
+		t.Fatal("non-executable description text changed candidate fingerprint")
+	}
+
+	contractChange := append([]Command(nil), commands...)
+	contractChange[0].InputSchema = json.RawMessage(`{"type":"object","additionalProperties":true}`)
+	third, err := candidateEvidence(version, contractChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.CatalogSHA256 == third.CatalogSHA256 {
+		t.Fatal("approved executable contract change did not change candidate fingerprint")
+	}
+}
+
+func TestClientVerifyRejectsApprovedContractDrift(t *testing.T) {
+	var envelope map[string]any
+	if err := json.Unmarshal(embeddedCatalog, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	commands := data["commands"].([]any)
+	found := false
+	for _, raw := range commands {
+		command := raw.(map[string]any)
+		if command["name"] != "task checkpoint" {
+			continue
+		}
+		found = true
+		options := command["options"].([]any)
+		command["options"] = append(options, map[string]any{"name": "compaction-fingerprint"})
+		input := command["input_schema"].(map[string]any)
+		properties := input["properties"].(map[string]any)
+		properties["compaction-fingerprint"] = map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"}
+	}
+	if !found {
+		t.Fatal("task checkpoint fixture missing")
+	}
+	catalog, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	catalogPath := filepath.Join(dir, "catalog.json")
+	if err := os.WriteFile(catalogPath, catalog, 0600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "devtools")
+	body := "#!/bin/sh\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"drift-test\",\"protocol_version\":3}}'; exit 0; fi\n" +
+		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalogPath + "\"; exit 0; fi\n" +
+		"exit 2\n"
+	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient(script, dir, []string{"PATH=/usr/bin:/bin", "HOME=" + dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	if _, err := client.Verify(t.Context()); err == nil || !strings.Contains(err.Error(), "does not match the Loki baseline") {
+		t.Fatalf("approved contract drift was accepted: %v", err)
 	}
 }
