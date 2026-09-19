@@ -329,7 +329,7 @@ func (c *Controller) MutatePaths(ctx context.Context, operation, cwd string, pat
 		return nil, err
 	}
 	if expected != nil && *expected != before {
-		return nil, fault.Error("Git index changed; inspect it again before staging")
+		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before staging", false, "run git_inspect action=index and retry with the current index_sha256")
 	}
 	args := []string{"add", "--"}
 	if operation == "unstage" {
@@ -376,7 +376,7 @@ func (c *Controller) StagePatch(ctx context.Context, cwd, patch string, reverse 
 		return nil, err
 	}
 	if expected != nil && *expected != before {
-		return nil, fault.Error("Git index changed; inspect it again before staging")
+		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before staging", false, "run git_inspect action=index and retry with the current index_sha256")
 	}
 	data := []byte(patch)
 	stats, err := c.git(ctx, full, data, c.Config.MaxOutputBytes, "apply", "--numstat", "-z")

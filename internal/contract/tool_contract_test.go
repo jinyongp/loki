@@ -405,6 +405,73 @@ func TestWorkspaceRecoveryToolsRequireCASAndClosedResults(t *testing.T) {
 	}
 }
 
+func TestGitInspectUsesGeneratedActionContract(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := seenDefinition(definitions, "git_inspect")
+	if tool == nil {
+		t.Fatal("git_inspect definition missing")
+	}
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if err := json.Unmarshal(encoded, &input); err != nil {
+		t.Fatal(err)
+	}
+	if _, required := input["required"]; required {
+		t.Fatalf("default status unexpectedly requires action: %#v", input)
+	}
+	properties := input["properties"].(map[string]any)
+	if properties["action"].(map[string]any)["default"] != "status" {
+		t.Fatalf("git_inspect action = %#v", properties["action"])
+	}
+	for name, raw := range properties {
+		property := raw.(map[string]any)
+		if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+			t.Errorf("git_inspect property %s has no description", name)
+		}
+	}
+	branches := input["oneOf"].([]any)
+	if len(branches) != 4 {
+		t.Fatalf("git_inspect branches = %#v", branches)
+	}
+	for _, raw := range branches {
+		branch := raw.(map[string]any)
+		branchProperties := branch["properties"].(map[string]any)
+		action := branchProperties["action"].(map[string]any)["const"].(string)
+		if action != "diff" {
+			if _, exists := branchProperties["path"]; exists {
+				t.Fatalf("%s accepts diff path", action)
+			}
+			if _, exists := branchProperties["staged"]; exists {
+				t.Fatalf("%s accepts staged flag", action)
+			}
+		}
+	}
+	outputEncoded, err := json.Marshal(tool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(outputEncoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	outputBranches := output["oneOf"].([]any)
+	if len(outputBranches) != 4 {
+		t.Fatalf("git_inspect output branches = %#v", outputBranches)
+	}
+	for _, raw := range outputBranches {
+		branch := raw.(map[string]any)
+		if branch["additionalProperties"] != false {
+			t.Fatalf("git_inspect output branch is open: %#v", branch)
+		}
+	}
+}
+
 func TestGitStageUsesGeneratedActionContract(t *testing.T) {
 	definitions, err := CurrentDefinitions()
 	if err != nil {
@@ -449,6 +516,39 @@ func TestGitStageUsesGeneratedActionContract(t *testing.T) {
 		}
 		if !required["expected_index_sha256"] {
 			t.Errorf("%s does not require expected_index_sha256", action)
+		}
+	}
+	outputEncoded, err := json.Marshal(tool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(outputEncoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	outputBranches := output["oneOf"].([]any)
+	if len(outputBranches) != 2 {
+		t.Fatalf("git_stage output branches = %#v", outputBranches)
+	}
+	for _, raw := range outputBranches {
+		if raw.(map[string]any)["additionalProperties"] != false {
+			t.Fatalf("git_stage output branch is open: %#v", raw)
+		}
+	}
+	operations, ok := tool.Meta["loki/operations"].(map[string]any)
+	if !ok || len(operations) != 3 {
+		t.Fatalf("git_stage operation metadata = %#v", tool.Meta)
+	}
+	for _, action := range []string{"paths", "unstage", "patch"} {
+		semantics := operations[action].(map[string]any)
+		if semantics["replay"] != string(ReplayGuarded) ||
+			semantics["failure_atomicity"] != string(FailureSingleResource) ||
+			semantics["crash_recovery"] != string(CrashRecoveryInspect) {
+			t.Fatalf("%s semantics = %#v", action, semantics)
+		}
+		guards := semantics["concurrency_fields"].([]string)
+		if len(guards) != 1 || guards[0] != "expected_index_sha256" {
+			t.Fatalf("%s guards = %#v", action, guards)
 		}
 	}
 }

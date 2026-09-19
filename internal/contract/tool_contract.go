@@ -378,6 +378,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"workspace_edit":         overrideWorkspaceEdit,
 		"restore_workspace_file": overrideRestoreWorkspaceFile,
 		"remove_tracked_file":    overrideRemoveTrackedFile,
+		"git_inspect":            overrideGitInspect,
 		"git_stage":              overrideGitStage,
 	}
 }
@@ -935,6 +936,103 @@ func overrideWorkspaceEdit(tool *mcp.Tool) error {
 	})
 }
 
+func gitProcessResultSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"exit_code": map[string]any{"type": "integer"},
+			"output":    map[string]any{"type": "string"},
+			"truncated": map[string]any{"type": "boolean"},
+			"timed_out": map[string]any{"type": "boolean"},
+		},
+		"required": []string{"exit_code", "output", "truncated"},
+	}
+}
+
+func overrideGitInspect(tool *mcp.Tool) error {
+	input, err := (ActionInputContract{
+		Title:             "git_inspectArguments",
+		ActionDescription: "Git repository inspection operation to perform.",
+		DefaultAction:     "status",
+		Fields: []ActionField{
+			{Name: "cwd", Schema: map[string]any{
+				"type": "string", "minLength": 1, "default": ".",
+				"description": "Workspace-relative directory inside the target Git repository; /workspace absolute cwd is also accepted by the repository resolver.",
+			}},
+			{Name: "path", Schema: map[string]any{
+				"type": "string", "minLength": 1,
+				"description": "Optional repository-relative path filter for action=diff, including known deleted or renamed paths.",
+			}},
+			{Name: "staged", Schema: map[string]any{
+				"type": "boolean", "default": false,
+				"description": "Inspect the staged index diff instead of the worktree diff; valid only for action=diff.",
+			}},
+		},
+		Variants: []ActionVariant{
+			{Name: "status", Optional: []string{"cwd"}},
+			{Name: "diff", Optional: []string{"cwd", "path", "staged"}},
+			{Name: "index", Optional: []string{"cwd"}},
+			{Name: "commit_context", Optional: []string{"cwd"}},
+		},
+	}).Schema()
+	if err != nil {
+		return err
+	}
+	origin := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"source": map[string]any{"type": "string"},
+			"value":  map[string]any{"type": "string"},
+		},
+		"required": []string{"source", "value"},
+	}
+	unconfigured := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"configured": map[string]any{"const": false},
+			"origins":    map[string]any{"type": "array", "items": origin},
+			"template":   map[string]any{"type": "null"},
+		},
+		"required": []string{"configured", "origins", "template"},
+	}
+	configured := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"configured": map[string]any{"const": true},
+			"origins":    map[string]any{"type": "array", "items": origin},
+			"template": map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"path":    map[string]any{"type": "string"},
+					"content": map[string]any{"type": "string"},
+					"sha256":  map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				},
+				"required": []string{"path", "content", "sha256"},
+			},
+		},
+		"required": []string{"configured", "origins", "template"},
+	}
+	tool.Description = "Inspect Git status, bounded diff output, the complete index digest used for mutation CAS, or trusted commit-template context with action-specific inputs."
+	tool.InputSchema = input
+	tool.OutputSchema = map[string]any{
+		"type": "object",
+		"oneOf": []any{
+			gitProcessResultSchema(),
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"cwd":          map[string]any{"type": "string"},
+					"index_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				},
+				"required": []string{"cwd", "index_sha256"},
+			},
+			unconfigured,
+			configured,
+		},
+	}
+	return nil
+}
+
 func overrideGitStage(tool *mcp.Tool) error {
 	schema, err := (ActionInputContract{
 		Title:             "git_stageArguments",
@@ -996,9 +1094,62 @@ func overrideGitStage(tool *mcp.Tool) error {
 	if err != nil {
 		return err
 	}
-	tool.Description = "Modify only the Git index with action-specific preconditions. paths and unstage accept multiple paths in one call; patch accepts one multi-file partial-staging diff. Every mutation requires the index SHA-256 from git_inspect action=index."
+	digest := map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"}
+	pathResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"operation": map[string]any{"type": "string", "enum": []string{"stage", "unstage"}},
+			"paths": map[string]any{
+				"type": "array", "minItems": 1, "items": map[string]any{"type": "string"},
+			},
+			"previous_index_sha256": digest,
+			"index_sha256":          digest,
+			"output":                map[string]any{"type": "string"},
+		},
+		"required": []string{"operation", "paths", "previous_index_sha256", "index_sha256", "output"},
+	}
+	patchFile := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":    map[string]any{"type": "string"},
+			"added":   map[string]any{"type": "integer", "minimum": 0},
+			"deleted": map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "added", "deleted"},
+	}
+	patchResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"files":                 map[string]any{"type": "array", "minItems": 1, "items": patchFile},
+			"reverse":               map[string]any{"type": "boolean"},
+			"patch_sha256":          digest,
+			"previous_index_sha256": digest,
+			"index_sha256":          digest,
+		},
+		"required": []string{"files", "reverse", "patch_sha256", "previous_index_sha256", "index_sha256"},
+	}
+	tool.Description = "Modify only the Git index with action-specific preconditions. paths and unstage accept multiple paths in one call; patch accepts one multi-file partial-staging diff. Every mutation requires the complete index SHA-256 from git_inspect action=index and returns the resulting index digest."
 	tool.InputSchema = schema
-	return nil
+	tool.OutputSchema = map[string]any{
+		"type": "object", "oneOf": []any{pathResult, patchResult},
+	}
+	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
+		"paths": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_index_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1000, RecoveryReference: "git_inspect action=index",
+		},
+		"unstage": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_index_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1000, RecoveryReference: "git_inspect action=index",
+		},
+		"patch": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_index_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1000, RecoveryReference: "git_inspect action=index",
+		},
+	})
 }
 
 func applyGeneratedToolOverrides(definitions []*mcp.Tool) error {

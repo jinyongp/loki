@@ -607,6 +607,51 @@ func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testin
 	}
 }
 
+func TestGitInspectActionSchemaPreservesDefaultAndRejectsIrrelevantFields(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["git_inspect"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(map[string]any{"exit_code": 0, "output": "", "truncated": false})
+	}
+	client := connect(t, handlers)
+
+	valid := []map[string]any{
+		{},
+		{"action": "status", "cwd": "repo"},
+		{"action": "diff", "cwd": "repo", "path": "a.txt", "staged": true},
+		{"action": "index", "cwd": "repo"},
+		{"action": "commit_context", "cwd": "repo"},
+	}
+	for _, arguments := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "git_inspect", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("valid git_inspect rejected: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("valid git_inspect calls = %d, want %d", calls, len(valid))
+	}
+
+	invalid := []map[string]any{
+		{"action": "status", "path": "a.txt"},
+		{"action": "status", "staged": true},
+		{"action": "index", "path": "a.txt"},
+		{"action": "index", "staged": true},
+		{"action": "commit_context", "path": "a.txt"},
+		{"action": "commit_context", "staged": true},
+	}
+	for _, arguments := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "git_inspect", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid git_inspect accepted: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("invalid git_inspect reached handler: calls=%d want=%d", calls, len(valid))
+	}
+}
+
 func TestGitStageActionSchemaRequiresCASAndRejectsIrrelevantFields(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := 0

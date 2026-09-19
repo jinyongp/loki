@@ -24,7 +24,11 @@ type gitStage struct {
 func GitHandlers(git *gitops.Controller) map[string]mcpserver.Handler {
 	return map[string]mcpserver.Handler{
 		"git_inspect": mcpserver.Typed(func(ctx context.Context, r gitInspect) (*mcp.CallToolResult, error) {
-			switch r.Action {
+			action := r.Action
+			if action == "" {
+				action = "status"
+			}
+			switch action {
 			case "status":
 				return objectResult(git.Status(ctx, r.CWD))
 			case "diff":

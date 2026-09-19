@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
+	"loki/internal/fault"
 	"loki/internal/policy"
 )
 
@@ -179,13 +180,20 @@ func TestGitConcurrentCASAndWorktree(t *testing.T) {
 	wg.Wait()
 	close(results)
 	success := 0
+	conflicts := 0
 	for err := range results {
 		if err == nil {
 			success++
+			continue
 		}
+		if detail := fault.Describe(err); detail.Code == fault.CodeConflict {
+			conflicts++
+			continue
+		}
+		t.Fatalf("unexpected concurrent staging error: %v", err)
 	}
-	if success != 1 {
-		t.Fatalf("CAS successes=%d", success)
+	if success != 1 || conflicts != 1 {
+		t.Fatalf("CAS results: successes=%d conflicts=%d", success, conflicts)
 	}
 	external := filepath.Join(t.TempDir(), "metadata")
 	cmd := exec.CommandContext(t.Context(), "/usr/bin/git", "init", "-q", "--separate-git-dir", external, filepath.Join(c.Paths.Root(), "foreign"))
