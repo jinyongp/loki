@@ -95,16 +95,18 @@ func TestArtifactMCP(t *testing.T) {
 		t.Fatal(rows)
 	}
 	id := rows[0]["share_id"].(string)
-	if _, err = ArtifactRevoke(store, id); err != nil {
-		t.Fatal(err)
+	firstRevoke, err := ArtifactRevoke(store, id)
+	if err != nil || firstRevoke["kind"] != "artifact" || firstRevoke["share_id"] != id || firstRevoke["revoked"] != true {
+		t.Fatalf("first revoke = %#v, %v", firstRevoke, err)
 	}
 	w := httptest.NewRecorder()
 	store.ServeHTTP(w, httptest.NewRequest("GET", rows[0]["url"].(string), nil))
 	if w.Code != 404 {
 		t.Fatal(w.Code)
 	}
-	if _, err = ArtifactRevoke(store, id); err == nil {
-		t.Fatal("double revoke")
+	secondRevoke, err := ArtifactRevoke(store, id)
+	if err != nil || secondRevoke["kind"] != "artifact" || secondRevoke["share_id"] != id || secondRevoke["revoked"] != true {
+		t.Fatalf("second revoke = %#v, %v", secondRevoke, err)
 	}
 	r, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "artifact_publish", Arguments: map[string]any{"action": "file", "path": "hello.txt", "ttl_seconds": 1}})
 	if err != nil || !r.IsError {

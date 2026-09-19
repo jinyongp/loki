@@ -16,6 +16,8 @@ import (
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
+func ValidShareID(id string) bool { return tokenPattern.MatchString(id) }
+
 type Options struct {
 	BaseURL            string
 	AllowedHosts       []string

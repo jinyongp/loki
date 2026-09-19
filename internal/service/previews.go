@@ -145,11 +145,15 @@ func PreviewHandlers(c *PreviewController, artifactsStore *artifacts.Store) map[
 			return objectResult(c.Publish(ctx, r))
 		}),
 		"shared_resources": mcpserver.Typed(func(ctx context.Context, r struct{ Kind string }) (*mcp.CallToolResult, error) {
-			previewsResult := map[string]any{"previews": []any{}, "configured": false}
+			previewsResult := map[string]any{"previews": []any{}, "configured": false, "complete": true}
 			if c.Store != nil {
-				previewsResult = map[string]any{"previews": c.Store.List(), "configured": true}
+				previewsResult = map[string]any{"previews": c.Store.List(), "configured": true, "complete": true}
 			}
-			switch r.Kind {
+			kind := r.Kind
+			if kind == "" {
+				kind = "all"
+			}
+			switch kind {
 			case "previews":
 				return mcpserver.Object(previewsResult)
 			case "artifacts":
@@ -172,11 +176,11 @@ func PreviewHandlers(c *PreviewController, artifactsStore *artifacts.Store) map[
 			if c.Store == nil {
 				return nil, fault.Error("temporary live preview sharing is not configured")
 			}
-			revoked := c.Store.Revoke(r.ID)
-			if revoked == nil {
-				return nil, fault.Error("preview share was not found or has expired")
+			if !previews.ValidShareID(r.ID) {
+				return nil, fault.New(fault.CodeInvalidInput, "preview share_id is invalid", false, "use a share_id returned by preview publication or shared_resources")
 			}
-			return mcpserver.Object(map[string]any{"revoked": true, "share_id": r.ID, "port": revoked["port"]})
+			_ = c.Store.Revoke(r.ID)
+			return mcpserver.Object(map[string]any{"kind": "preview", "revoked": true, "share_id": r.ID})
 		}),
 	}
 }

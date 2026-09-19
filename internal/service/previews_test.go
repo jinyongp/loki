@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/previews"
 )
 
@@ -22,19 +23,28 @@ func TestPreviewServerAndSharedHandlers(t *testing.T) {
 	if value["cwd"] != "/workspace/repo" || !strings.HasPrefix(value["url"].(string), "https://loki-") {
 		t.Fatal(value)
 	}
-	listed, err := handlers["shared_resources"](t.Context(), map[string]any{"kind": "all"})
+	listed, err := handlers["shared_resources"](t.Context(), map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	all := listed.StructuredContent.(map[string]any)
-	if all["artifacts"].(map[string]any)["configured"] != false {
+	if all["artifacts"].(map[string]any)["configured"] != false ||
+		all["artifacts"].(map[string]any)["complete"] != true ||
+		all["previews"].(map[string]any)["complete"] != true {
 		t.Fatal(all)
 	}
-	_, err = handlers["revoke_share"](t.Context(), map[string]any{"kind": "preview", "share_id": value["share_id"]})
+	first, err := handlers["revoke_share"](t.Context(), map[string]any{"kind": "preview", "share_id": value["share_id"]})
 	if err != nil || len(store.List()) != 0 {
 		t.Fatal(err)
 	}
-	if _, err = handlers["revoke_share"](t.Context(), map[string]any{"kind": "preview", "share_id": value["share_id"]}); err == nil {
-		t.Fatal("double revoke")
+	second, err := handlers["revoke_share"](t.Context(), map[string]any{"kind": "preview", "share_id": value["share_id"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range []*mcp.CallToolResult{first, second} {
+		terminal := result.StructuredContent.(map[string]any)
+		if terminal["kind"] != "preview" || terminal["share_id"] != value["share_id"] || terminal["revoked"] != true {
+			t.Fatal(terminal)
+		}
 	}
 }

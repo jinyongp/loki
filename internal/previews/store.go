@@ -33,6 +33,8 @@ type Store struct {
 var idPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 var hostPattern = regexp.MustCompile(`^loki-([0-9a-f]{32})$`)
 
+func ValidShareID(id string) bool { return idPattern.MatchString(id) }
+
 func New(domain string, maximum int, clock func() time.Time) *Store {
 	if maximum == 0 {
 		maximum = 8

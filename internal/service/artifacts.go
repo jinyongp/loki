@@ -106,19 +106,18 @@ func ArtifactHandlers(files *workspace.Files, store *artifacts.Store) map[string
 
 func ArtifactList(store *artifacts.Store) map[string]any {
 	if store == nil {
-		return map[string]any{"artifacts": []any{}, "configured": false}
+		return map[string]any{"artifacts": []any{}, "configured": false, "complete": true}
 	}
-	return map[string]any{"artifacts": store.List(), "configured": true}
+	return map[string]any{"artifacts": store.List(), "configured": true, "complete": true}
 }
 
 func ArtifactRevoke(store *artifacts.Store, id string) (map[string]any, error) {
 	if store == nil {
 		return nil, fault.Error("temporary file sharing is not configured")
 	}
-	result := store.Revoke(id)
-	if result == nil {
-		return nil, fault.Error("artifact share was not found or has expired")
+	if !artifacts.ValidShareID(id) {
+		return nil, fault.New(fault.CodeInvalidInput, "artifact share_id is invalid", false, "use a share_id returned by artifact publication or shared_resources")
 	}
-	result["revoked"] = true
-	return result, nil
+	_ = store.Revoke(id)
+	return map[string]any{"kind": "artifact", "share_id": id, "revoked": true}, nil
 }

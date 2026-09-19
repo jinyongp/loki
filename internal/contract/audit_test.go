@@ -16,9 +16,9 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		ActionUnionCount:       19,
 		FlatActionUnionCount:   12,
 		InputPropertyCount:     160,
-		DescribedPropertyCount: 58,
+		DescribedPropertyCount: 61,
 		MissingOutputSchema:    3,
-		OpenOutputSchema:       15,
+		OpenOutputSchema:       13,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -33,7 +33,8 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	}
 
 	migrated := map[string]bool{
-		"system_inspect": true, "workspace_read": true, "workspace_edit": true,
+		"system_inspect": true, "shared_resources": true, "revoke_share": true,
+		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
 		"git_inspect": true, "git_stage": true,
 	}
@@ -42,7 +43,8 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
-			(issue.Code == "open_output_schema" && (issue.Tool == "workspace_read" || issue.Tool == "workspace_edit" ||
+			(issue.Code == "open_output_schema" && (issue.Tool == "shared_resources" || issue.Tool == "revoke_share" ||
+				issue.Tool == "workspace_read" || issue.Tool == "workspace_edit" ||
 				issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file" ||
 				issue.Tool == "git_inspect" || issue.Tool == "git_stage")) {
 			t.Errorf("migrated tool regressed: %#v", issue)
