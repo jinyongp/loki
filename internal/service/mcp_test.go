@@ -128,7 +128,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 28 {
+	if err != nil || len(tools.Tools) != 29 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)

@@ -171,7 +171,7 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-	if isMetadataCommand(name) || isCoordinationCommand(name) || isCoordinationMutation(name) {
+	if isMetadataCommand(name) || isAgentGuidanceCommand(name) || isCoordinationCommand(name) || isCoordinationMutation(name) {
 		return nil, errors.New("devtools typed command requires the typed adapter")
 	}
 	return c.call(ctx, name, raw, c.Env)
@@ -212,7 +212,7 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 			return nil, errors.New("devtools explicit profile lookup is unavailable through Loki")
 		}
 	}
-	if name == "process start" || isMetadataCommand(name) {
+	if name == "process start" || isMetadataCommand(name) || isAgentGuidanceCommand(name) {
 		requested, _ := input["dir"].(string)
 		if requested == "" {
 			requested = "."

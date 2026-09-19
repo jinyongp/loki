@@ -23,7 +23,8 @@ func TestEmbeddedCatalogContainsOnlyApprovedCommands(t *testing.T) {
 		}
 	}
 	if !slices.Equal(approvedNames, []string{
-		"command inspect", "command list", "process restart", "process start", "project inspect",
+		"command inspect", "command list", "guidance resolve", "process restart", "process start", "project inspect",
+		"skill inspect", "skill list",
 		"task checkpoint", "task checkpoint list", "task claim", "task context", "task current", "task done",
 		"task history", "task next", "task release", "task resume", "task show", "task takeover",
 		"task workstream context", "task workstream history", "task workstream list", "task workstream show",

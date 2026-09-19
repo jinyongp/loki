@@ -11,9 +11,9 @@ import (
 //go:embed testdata/mcp-go-v049.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-19.3"
+const CatalogRevision = "2026-09-19.4"
 
-const CurrentInstructions = `Operate inside the isolated Loki workspace. Use project_coordination for shared devtools-backed task, workstream, Run, history, and checkpoint reads, and project_coordination_write for claim, takeover, resume, checkpoint, release, and done transitions. When task_context returns context_basis and a compact handoff is useful, checkpoint with compaction_fingerprint and compaction_through from that read; canonical state and delta remain authoritative. Claim context and MCP session identifiers are server-private and must never be requested, stored, or echoed. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. Configured command and managed-process execution still follows the currently exposed runtime workflow until Loki Environment/Job delegation replaces it. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
+const CurrentInstructions = `Operate inside the isolated Loki workspace. Use agent_guidance before path-specific work: action=context returns the applicable AGENTS.md chain plus Skill metadata; choose relevant Skills from their descriptions and load only selected Skill bodies with action=skill. Refresh guidance after target or inventory revisions change. Use project_coordination for shared devtools-backed task, workstream, Run, history, and checkpoint reads, and project_coordination_write for claim, takeover, resume, checkpoint, release, and done transitions. When task_context returns context_basis and a compact handoff is useful, checkpoint with compaction_fingerprint and compaction_through from that read; canonical state and delta remain authoritative. Claim context and MCP session identifiers are server-private and must never be requested, stored, or echoed. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. Configured command and managed-process execution still follows the currently exposed runtime workflow until Loki Environment/Job delegation replaces it. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
 var currentToolNames = []string{
 	"system_inspect",
@@ -23,7 +23,7 @@ var currentToolNames = []string{
 	"restore_workspace_file", "remove_tracked_file",
 	"git_inspect", "git_stage", "developer_view",
 	"secret_inspect", "secret_write", "secret_delete", "github", "github_issue_fields",
-	"project_coordination", "project_coordination_write",
+	"project_coordination", "project_coordination_write", "agent_guidance",
 }
 
 // Current returns an independent copy; callers cannot mutate canonical data.

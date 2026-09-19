@@ -18,9 +18,12 @@ Review basis (2026-09-19): devtools commit
 `7ef0deb215ec7deca4c4c67248e3d18683c2e875`, including
 `internal/cli/processes.go`, `internal/cli/commands.go`, `internal/cli/schema.go`,
 `internal/cli/cli.go`, `internal/cli/tasks.go`, `internal/cli/task_schema.go`,
-`internal/tasks/context.go`, and `internal/project/project.go`. The latest tagged
-source basis remains v0.17.0; task compaction is reviewed from the commit above.
-The inspected source SHA-256 values include:
+`internal/tasks/context.go`, `internal/skills/skills.go`, `internal/guidance/guidance.go`,
+`internal/cli/skills.go`, `internal/cli/guidance.go`, and `internal/project/project.go`.
+Skill registry and guidance contracts are additionally reviewed from devtools commits
+`39905e76683137f193283619a01e99d66db299ec` and
+`1fe37ce729ba6a237bdb4f86d9fb818460930c48`. The latest tagged source basis
+remains v0.17.0. The inspected source SHA-256 values include:
 
 - processes.go: `ec8077fba6fd5d3072d816d5fb2b8354127788cba4f7d7d3588afd6d77aa9d1c`
 - schema.go: `dda61bc4475e98cc7c0fc12f8b417c1ca73c8fc30304f9743a9a081b60c0cced`
@@ -29,6 +32,10 @@ The inspected source SHA-256 values include:
 - tasks.go: `6690bf56a306d0fffc95130737ae304c00b81bff17bc07bdcccc836f8166e0f6`
 - task_schema.go: `a25c6c1ab4e7192f96d619c94289157ab5ffd6c0063f8daa5d890c6d8c50ee48`
 - tasks/context.go: `1249d3d887ead1386f5a5f13e5891ec05b14208ab82dab1d85f3644ca056a0f2`
+- skills/skills.go: `e0828498a601b98bfa66cf1519c844d464255846dabdf2c7ac680d8ce0fdf2ee`
+- guidance/guidance.go: `c966a02f58f6982b7e35d583a09114e3cd13afc817d8bf39f3b68d8ac6c1b496`
+- cli/skills.go: `26232b420b9ff7383d87b8b0177e8faef467f5202d37933db0e498ed98def637`
+- cli/guidance.go: `c18d5137b482cbfd0df923c6aaea192066f6660309e3b9a7a7db0268610dcc04`
 
 CLI protocol 3, response envelope 1 and devtools task journal 2 are separate
 contracts. This adapter checks CLI/transport versions and does not read or
