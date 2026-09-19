@@ -36,15 +36,30 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Errorf("browser_interact property %s has no description", name)
 		}
 	}
-	branches := input["oneOf"].([]any)
-	if len(branches) != 8 {
-		t.Fatalf("browser_interact branches = %#v", branches)
+	if _, exists := properties["scroll"]; exists {
+		t.Fatal("legacy scroll field unexpectedly exists")
 	}
-	clickBranches := 0
+	actionEnum := properties["action"].(map[string]any)["enum"].([]any)
+	for _, want := range []string{"hover", "drag", "wheel"} {
+		found := false
+		for _, raw := range actionEnum {
+			found = found || raw == want
+		}
+		if !found {
+			t.Errorf("browser_interact action enum omits %s", want)
+		}
+	}
+
+	branches := input["oneOf"].([]any)
+	if len(branches) != 16 {
+		t.Fatalf("browser_interact branches = %d, want 16", len(branches))
+	}
+	counts := map[string]int{}
 	for _, raw := range branches {
 		branch := raw.(map[string]any)
 		branchProperties := branch["properties"].(map[string]any)
 		action := branchProperties["action"].(map[string]any)["const"].(string)
+		counts[action]++
 		required := map[string]bool{}
 		for _, item := range branch["required"].([]any) {
 			required[item.(string)] = true
@@ -54,24 +69,33 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		}
 		switch action {
 		case "click":
-			clickBranches++
-			if required["index"] {
-				if !required["expected_state_generation"] {
-					t.Fatal("element click lacks state generation")
+			if required["index"] && !required["expected_state_generation"] {
+				t.Fatal("element click lacks state generation")
+			}
+			if required["new_tab"] {
+				for _, forbidden := range []string{"button", "click_count", "modifiers", "x", "y"} {
+					if _, exists := branchProperties[forbidden]; exists {
+						t.Fatalf("new_tab click accepts %s", forbidden)
+					}
 				}
-				if _, exists := branchProperties["x"]; exists {
-					t.Fatal("element click accepts coordinates")
-				}
-			} else {
-				if !required["x"] || !required["y"] {
-					t.Fatalf("coordinate click required = %#v", required)
-				}
-				if _, exists := branchProperties["expected_state_generation"]; exists {
-					t.Fatal("coordinate click accepts state generation")
-				}
-				if _, exists := branchProperties["index"]; exists {
-					t.Fatal("coordinate click accepts element index")
-				}
+			}
+		case "hover":
+			if required["index"] && !required["expected_state_generation"] {
+				t.Fatal("element hover lacks state generation")
+			}
+		case "drag":
+			if required["source_index"] && !required["expected_state_generation"] {
+				t.Fatal("element drag lacks state generation")
+			}
+			if required["target_index"] && !required["source_index"] {
+				t.Fatal("coordinate-to-element drag branch exists")
+			}
+		case "wheel":
+			if !required["delta_x"] || !required["delta_y"] {
+				t.Fatal("wheel does not require both deltas")
+			}
+			if required["index"] && !required["expected_state_generation"] {
+				t.Fatal("element wheel lacks state generation")
 			}
 		case "type":
 			for _, name := range []string{"expected_state_generation", "index", "text"} {
@@ -89,8 +113,16 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			}
 		}
 	}
-	if clickBranches != 2 {
-		t.Fatalf("click branches = %d", clickBranches)
+	for action, want := range map[string]int{
+		"click": 3, "hover": 2, "drag": 3, "wheel": 3,
+		"type": 1, "press": 1, "back": 1, "switch_tab": 1, "close_tab": 1,
+	} {
+		if counts[action] != want {
+			t.Errorf("%s branches = %d, want %d", action, counts[action], want)
+		}
+	}
+	if counts["scroll"] != 0 {
+		t.Fatal("legacy scroll action remains public")
 	}
 
 	encoded, err = json.Marshal(tool.OutputSchema)
@@ -102,7 +134,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 7 {
+	if len(outputBranches) != 9 {
 		t.Fatalf("browser_interact output branches = %#v", outputBranches)
 	}
 	for _, raw := range outputBranches {
@@ -116,16 +148,19 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	operations, ok := tool.Meta["loki/operations"].(map[string]any)
-	if !ok || len(operations) != 7 {
+	if !ok || len(operations) != 9 {
 		t.Fatalf("browser_interact operation metadata = %#v", tool.Meta)
 	}
-	for _, action := range []string{"click", "type", "press", "scroll", "back", "switch_tab", "close_tab"} {
+	for _, action := range []string{"click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab"} {
 		semantics := operations[action].(map[string]any)
 		if semantics["replay"] != string(ReplayGuarded) ||
 			semantics["failure_atomicity"] != string(FailureSingleResource) ||
 			semantics["crash_recovery"] != string(CrashRecoveryInspect) {
 			t.Fatalf("%s semantics = %#v", action, semantics)
 		}
+	}
+	if _, exists := operations["scroll"]; exists {
+		t.Fatal("legacy scroll operation metadata remains")
 	}
 	typeGuards := operations["type"].(map[string]any)["concurrency_fields"].([]string)
 	if len(typeGuards) != 2 || typeGuards[0] != "expected_browser_generation" || typeGuards[1] != "expected_state_generation" {

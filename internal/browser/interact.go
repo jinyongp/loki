@@ -122,6 +122,7 @@ func (d *Driver) finishInteraction(startGeneration uint64, result map[string]any
 	if d.generation == startGeneration {
 		d.generation++
 	}
+	d.stateGeneration++
 	result["browser_generation"] = d.generation
 	return result, nil
 }
@@ -142,12 +143,13 @@ func (d *Driver) state(ctx context.Context) (map[string]any, error) {
 	result["state_generation"] = d.stateGeneration
 	return result, nil
 }
-func (d *Driver) element(ctx context.Context, index int, typing bool) (map[string]any, error) {
-	// Integer interpolation is trusted; user text never becomes JavaScript.
+func (d *Driver) element(ctx context.Context, index int, typing, scroll bool) (map[string]any, error) {
+	// Integer interpolation and booleans are trusted; user text never becomes JavaScript.
 	script := fmt.Sprintf(`(() => {
  const element = globalThis.__lokiNodes?.[%d];
  if (!element || !element.isConnected) throw new Error('stale element');
- element.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
+ const shouldScroll = %t;
+ if (shouldScroll) element.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
  if (%t) {
    if (element.disabled || element.readOnly) throw new Error('read-only element');
    element.focus();
@@ -163,66 +165,16 @@ func (d *Driver) element(ctx context.Context, index int, typing bool) (map[strin
  while (view !== window) {
    const frame=view.frameElement;
    if (!frame) throw new Error('frame is unavailable');
-   frame.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
+   if (shouldScroll) frame.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
    const bounds=frame.getBoundingClientRect(); x+=bounds.x+frame.clientLeft; y+=bounds.y+frame.clientTop;
    view=frame.ownerDocument.defaultView;
  }
+ if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) throw new Error('element is outside viewport');
  return {x,y,href:element.href || null};
-})()`, index, typing)
+})()`, index, scroll, typing)
 	var result map[string]any
 	err := d.evaluate(ctx, script, &result)
 	return result, err
-}
-func (d *Driver) mouse(ctx context.Context, x, y float64) error {
-	for _, kind := range []string{"mouseMoved", "mousePressed", "mouseReleased"} {
-		args := map[string]any{"type": kind, "x": x, "y": y}
-		if kind != "mouseMoved" {
-			args["button"] = "left"
-			args["clickCount"] = 1
-		}
-		if err := d.client.Call(ctx, d.sessions[d.target], "Input.dispatchMouseEvent", args, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-func (d *Driver) click(ctx context.Context, args map[string]any) (map[string]any, error) {
-	if args["index"] != nil {
-		if args["x"] != nil || args["y"] != nil {
-			return nil, errors.New("provide an element index or coordinates, not both")
-		}
-		index, err := integer(args, "index", -1, 0, 1000000)
-		if err != nil {
-			return nil, err
-		}
-		element, err := d.element(ctx, index, false)
-		if err != nil {
-			return nil, err
-		}
-		if href, ok := element["href"].(string); args["new_tab"] == true && ok && href != "" {
-			if _, err = d.navigate(ctx, href, true); err != nil {
-				return nil, err
-			}
-		} else if err = d.mouse(ctx, element["x"].(float64), element["y"].(float64)); err != nil {
-			return nil, err
-		}
-		return map[string]any{"clicked": map[string]any{"index": index}, "new_tab": args["new_tab"] == true}, nil
-	}
-	if args["x"] == nil || args["y"] == nil {
-		return nil, errors.New("provide index or both x and y")
-	}
-	x, err := integer(args, "x", 0, 0, 16384)
-	if err != nil {
-		return nil, err
-	}
-	y, err := integer(args, "y", 0, 0, 16384)
-	if err != nil {
-		return nil, err
-	}
-	if err = d.mouse(ctx, float64(x), float64(y)); err != nil {
-		return nil, err
-	}
-	return map[string]any{"clicked": map[string]any{"x": x, "y": y}, "new_tab": false}, nil
 }
 func (d *Driver) typeText(ctx context.Context, args map[string]any) (map[string]any, error) {
 	index, err := integer(args, "index", -1, 0, 1000000)
@@ -233,7 +185,7 @@ func (d *Driver) typeText(ctx context.Context, args map[string]any) (map[string]
 	if !ok || utf8.RuneCountInString(text) > 65536 || strings.ContainsRune(text, 0) {
 		return nil, errors.New("text must be a string of at most 65536 characters")
 	}
-	if _, err = d.element(ctx, index, true); err != nil {
+	if _, err = d.element(ctx, index, true, true); err != nil {
 		return nil, err
 	}
 	// insertText alone does not delete the selection when text is empty.
@@ -265,24 +217,6 @@ func (d *Driver) press(ctx context.Context, key string) (map[string]any, error) 
 		}
 	}
 	return map[string]any{"pressed": key}, nil
-}
-func (d *Driver) scroll(ctx context.Context, args map[string]any) (map[string]any, error) {
-	direction := value(args, "direction", "down")
-	if direction != "up" && direction != "down" {
-		return nil, errors.New("direction must be up or down")
-	}
-	amount, err := integer(args, "amount", 500, 1, 10000)
-	if err != nil {
-		return nil, err
-	}
-	delta := amount
-	if direction == "up" {
-		delta = -delta
-	}
-	if err = d.evaluate(ctx, fmt.Sprintf(`window.scrollBy({top:%d,left:0,behavior:'instant'})`, delta), nil); err != nil {
-		return nil, err
-	}
-	return map[string]any{"direction": direction, "amount": amount}, nil
 }
 func (d *Driver) screenshot(ctx context.Context, full bool) (map[string]any, error) {
 	params := map[string]any{"format": "png", "captureBeyondViewport": full, "fromSurface": true}

@@ -101,13 +101,24 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 				"complete": true, "browser_generation": 3,
 			}, nil
 		case "click":
-			return map[string]any{"clicked": map[string]any{"index": 0}, "new_tab": false, "browser_generation": 4}, nil
+			return map[string]any{
+				"clicked": map[string]any{"index": 0}, "button": "left", "click_count": 1,
+				"modifiers": []any{}, "new_tab": false, "browser_generation": 4,
+			}, nil
+		case "hover":
+			return map[string]any{"hovered": map[string]any{"index": 0}, "browser_generation": 4}, nil
+		case "drag":
+			return map[string]any{"dragged": map[string]any{
+				"from_x": 10, "from_y": 20, "to_x": 30, "to_y": 40, "steps": 12, "duration_ms": 250,
+			}, "browser_generation": 4}, nil
+		case "wheel":
+			return map[string]any{"wheel": map[string]any{
+				"x": 640, "y": 400, "delta_x": 0, "delta_y": 500,
+			}, "browser_generation": 4}, nil
 		case "type":
 			return map[string]any{"typed": true, "index": 0, "characters": 4, "browser_generation": 4}, nil
 		case "press":
 			return map[string]any{"pressed": args["key"], "browser_generation": 4}, nil
-		case "scroll":
-			return map[string]any{"direction": "down", "amount": 500, "browser_generation": 4}, nil
 		case "back":
 			return map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 4}, nil
 		case "switch_tab":
@@ -176,7 +187,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			t.Fatalf("browser_session %s omitted generation: %#v", test.action, result)
 		}
 	}
-	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "type", "press", "scroll", "back", "switch_tab", "close_tab"}} {
+	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
 			args := map[string]any{"action": action}
 			switch tool {
@@ -194,14 +205,16 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			case "browser_interact":
 				args["expected_browser_generation"] = 3
 				switch action {
-				case "click":
+				case "click", "hover":
 					args["index"], args["expected_state_generation"] = 0, 1
+				case "drag":
+					args["from_x"], args["from_y"], args["to_x"], args["to_y"] = 10, 20, 30, 40
+				case "wheel":
+					args["delta_x"], args["delta_y"] = 0, 500
 				case "type":
 					args["index"], args["text"], args["expected_state_generation"] = 0, "test", 1
 				case "press":
 					args["key"] = "Enter"
-				case "scroll":
-					args["direction"], args["amount"] = "down", 500
 				case "switch_tab", "close_tab":
 					args["tab_id"] = "1234"
 				}

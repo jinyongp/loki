@@ -403,8 +403,10 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	interactionGeneration := d.generation
 	switch operation {
-	case "click", "type", "press", "scroll", "back", "switch_tab", "close_tab":
-		requireState := operation == "type" || operation == "click" && args["index"] != nil
+	case "click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab":
+		requireState := operation == "type" ||
+			(operation == "click" || operation == "hover" || operation == "wheel") && args["index"] != nil ||
+			operation == "drag" && (args["source_index"] != nil || args["target_index"] != nil)
 		if err := d.requireInteractionGeneration(args, requireState); err != nil {
 			return nil, err
 		}
@@ -421,15 +423,21 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	case "click":
 		result, err := d.click(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
+	case "hover":
+		result, err := d.hover(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "drag":
+		result, err := d.drag(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "wheel":
+		result, err := d.wheel(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "type":
 		result, err := d.typeText(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
 	case "press":
 		key, _ := args["key"].(string)
 		result, err := d.press(ctx, key)
-		return d.finishInteraction(interactionGeneration, result, err)
-	case "scroll":
-		result, err := d.scroll(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
 	case "screenshot":
 		return d.screenshot(ctx, args["full_page"] == true)

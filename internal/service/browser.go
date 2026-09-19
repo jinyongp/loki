@@ -53,7 +53,7 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 	for tool, actions := range map[string]map[string]string{
 		"browser_session":  {"start": "start", "navigate": "navigate", "stop": "stop"},
 		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics"},
-		"browser_interact": {"click": "click", "type": "type", "press": "press", "scroll": "scroll", "back": "back", "switch_tab": "switch_tab", "close_tab": "close_tab"},
+		"browser_interact": {"click": "click", "hover": "hover", "drag": "drag", "wheel": "wheel", "type": "type", "press": "press", "back": "back", "switch_tab": "switch_tab", "close_tab": "close_tab"},
 	} {
 		handlers[tool] = func(ctx context.Context, args map[string]any) (*mcp.CallToolResult, error) {
 			action, _ := args["action"].(string)
