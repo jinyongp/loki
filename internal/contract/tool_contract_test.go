@@ -207,6 +207,74 @@ func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRecoveryToolsRequireCASAndClosedResults(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"restore_workspace_file", "remove_tracked_file"} {
+		tool := seenDefinition(definitions, name)
+		if tool == nil {
+			t.Fatalf("%s definition missing", name)
+		}
+		encoded, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var input map[string]any
+		if err := json.Unmarshal(encoded, &input); err != nil {
+			t.Fatal(err)
+		}
+		properties := input["properties"].(map[string]any)
+		for propertyName, raw := range properties {
+			property := raw.(map[string]any)
+			if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+				t.Errorf("%s property %s has no description", name, propertyName)
+			}
+		}
+		required := map[string]bool{}
+		for _, raw := range input["required"].([]any) {
+			required[raw.(string)] = true
+		}
+		if !required["path"] || !required["expected_sha256"] {
+			t.Fatalf("%s required = %#v", name, required)
+		}
+		if name == "restore_workspace_file" && !required["revision"] {
+			t.Fatalf("%s does not require revision", name)
+		}
+
+		outputEncoded, err := json.Marshal(tool.OutputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var output map[string]any
+		if err := json.Unmarshal(outputEncoded, &output); err != nil {
+			t.Fatal(err)
+		}
+		if output["additionalProperties"] != false {
+			t.Fatalf("%s output remains open: %#v", name, output)
+		}
+		operations, ok := tool.Meta["loki/operations"].(map[string]any)
+		if !ok || len(operations) != 1 {
+			t.Fatalf("%s operation metadata = %#v", name, tool.Meta)
+		}
+		operationName := "restore"
+		if name == "remove_tracked_file" {
+			operationName = "remove"
+		}
+		semantics := operations[operationName].(map[string]any)
+		if semantics["replay"] != string(ReplayGuarded) ||
+			semantics["failure_atomicity"] != string(FailureSingleResource) ||
+			semantics["crash_recovery"] != string(CrashRecoveryInspect) {
+			t.Fatalf("%s semantics = %#v", name, semantics)
+		}
+		guards := semantics["concurrency_fields"].([]string)
+		if len(guards) != 1 || guards[0] != "expected_sha256" {
+			t.Fatalf("%s guards = %#v", name, guards)
+		}
+	}
+}
+
 func TestGitStageUsesGeneratedActionContract(t *testing.T) {
 	definitions, err := CurrentDefinitions()
 	if err != nil {

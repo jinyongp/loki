@@ -180,7 +180,7 @@ func (f *Files) Restore(path, revision, expected string) (map[string]any, error)
 	current, info, err := f.read(path, 64<<20)
 	if err == nil {
 		if Digest(current) != expected {
-			return nil, fault.Error("file changed since it was read; inspect it again before restoring")
+			return nil, fault.New(fault.CodeConflict, "file changed since it was read; inspect it again before restoring", false, "read the file again and use its current sha256")
 		}
 		undo, err = f.capture(path, "restore_file_revision", current, info.Mode())
 		if err != nil {
@@ -189,7 +189,7 @@ func (f *Files) Restore(path, revision, expected string) (map[string]any, error)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	} else if expected != "missing" {
-		return nil, fault.Error("restore target is missing; use expected_sha256='missing' after confirming")
+		return nil, fault.New(fault.CodeConflict, "restore target is missing; confirm the absence before restoring", false, "confirm the target is absent and retry with expected_sha256='missing'")
 	}
 	if err = f.Policy.AtomicWrite(path, previous, os.FileMode(metadata.Mode), undo != nil); err != nil {
 		return nil, err

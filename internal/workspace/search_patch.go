@@ -221,12 +221,16 @@ func (f *Files) Patch(ctx context.Context, patch string) (map[string]any, error)
 	return map[string]any{"files": files, "patch_sha256": Digest(encoded), "warnings": applied.Output, "previous_revisions": revisions}, nil
 }
 
-func (f *Files) RemoveTracked(ctx context.Context, path string) (map[string]any, error) {
+func (f *Files) RemoveTracked(ctx context.Context, path, expected string) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	data, info, err := f.read(path, 64<<20)
 	if err != nil {
 		return nil, err
+	}
+	digest := Digest(data)
+	if digest != expected {
+		return nil, fault.New(fault.CodeConflict, "file changed since it was read; read it again before removing", false, "read the file again and use its current sha256")
 	}
 	tracked, err := (&gitops.Controller{Paths: f.Policy, Config: f.Config}).TrackedFile(ctx, path)
 	if err != nil {
@@ -242,5 +246,5 @@ func (f *Files) RemoveTracked(ctx context.Context, path string) (map[string]any,
 	if err = f.Policy.RemoveFile(path); err != nil {
 		return nil, err
 	}
-	return map[string]any{"path": path, "removed": true, "previous_revision": revision}, nil
+	return map[string]any{"path": path, "removed": true, "previous_revision": revision, "previous_sha256": digest}, nil
 }

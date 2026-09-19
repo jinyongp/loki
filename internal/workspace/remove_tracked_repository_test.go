@@ -47,7 +47,7 @@ func TestRemoveTrackedUsesNearestNestedRepository(t *testing.T) {
 	gitIn(t, repository, "add", "--", "tracked.txt")
 
 	untracked := "projects/nested/untracked.txt"
-	if _, err := files.RemoveTracked(t.Context(), untracked); err == nil || !strings.Contains(err.Error(), "only Git-tracked files") {
+	if _, err := files.RemoveTracked(t.Context(), untracked, Digest([]byte("untracked\n"))); err == nil || !strings.Contains(err.Error(), "only Git-tracked files") {
 		t.Fatalf("untracked removal error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(files.Policy.Root(), untracked)); err != nil {
@@ -55,7 +55,8 @@ func TestRemoveTrackedUsesNearestNestedRepository(t *testing.T) {
 	}
 
 	tracked := "projects/nested/tracked.txt"
-	removed, err := files.RemoveTracked(t.Context(), tracked)
+	trackedDigest := Digest([]byte("tracked\n"))
+	removed, err := files.RemoveTracked(t.Context(), tracked, trackedDigest)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -175,6 +175,63 @@ func TestSystemInspectOperationSchemaPreservesDefaultAndRejectsIrrelevantFields(
 	}
 }
 
+func TestWorkspaceRecoverySchemasRejectMissingCASBeforeHandlers(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := map[string]int{}
+	handlers["remove_tracked_file"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls["remove"]++
+		return Object(map[string]any{
+			"path": input["path"], "removed": true,
+			"previous_revision": strings.Repeat("a", 64),
+			"previous_sha256":   input["expected_sha256"],
+		})
+	}
+	handlers["restore_workspace_file"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls["restore"]++
+		return Object(map[string]any{
+			"path": input["path"], "restored_revision": input["revision"],
+			"undo_revision": nil, "sha256": strings.Repeat("b", 64), "bytes": 7,
+		})
+	}
+	client := connect(t, handlers)
+
+	invalid := []struct {
+		tool string
+		args map[string]any
+	}{
+		{tool: "remove_tracked_file", args: map[string]any{"path": "tracked.txt"}},
+		{tool: "remove_tracked_file", args: map[string]any{"path": "tracked.txt", "expected_sha256": "stale"}},
+		{tool: "restore_workspace_file", args: map[string]any{"path": "tracked.txt", "revision": strings.Repeat("a", 64)}},
+		{tool: "restore_workspace_file", args: map[string]any{"path": "tracked.txt", "revision": strings.Repeat("a", 64), "expected_sha256": "stale"}},
+	}
+	for _, test := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: test.tool, Arguments: test.args})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid %s accepted: %#v %v", test.tool, result, err)
+		}
+	}
+	if calls["remove"] != 0 || calls["restore"] != 0 {
+		t.Fatalf("invalid recovery calls reached handlers: %#v", calls)
+	}
+
+	valid := []struct {
+		tool string
+		args map[string]any
+	}{
+		{tool: "remove_tracked_file", args: map[string]any{"path": "tracked.txt", "expected_sha256": strings.Repeat("c", 64)}},
+		{tool: "restore_workspace_file", args: map[string]any{"path": "tracked.txt", "revision": strings.Repeat("a", 64), "expected_sha256": "missing"}},
+	}
+	for _, test := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: test.tool, Arguments: test.args})
+		if err != nil || result.IsError {
+			t.Fatalf("valid %s rejected: %#v %v", test.tool, result, err)
+		}
+	}
+	if calls["remove"] != 1 || calls["restore"] != 1 {
+		t.Fatalf("valid recovery calls = %#v", calls)
+	}
+}
+
 func TestUnknownToolArgumentsNeverReachHandlers(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := 0

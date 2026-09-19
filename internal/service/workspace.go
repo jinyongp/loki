@@ -36,6 +36,10 @@ type fileRestore struct {
 	Path, Revision string
 	Expected       string `json:"expected_sha256"`
 }
+type fileRemove struct {
+	Path     string
+	Expected string `json:"expected_sha256"`
+}
 
 func objectResult(value map[string]any, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
@@ -132,8 +136,8 @@ func WorkspaceHandlers(files *workspace.Files) map[string]mcpserver.Handler {
 		"restore_workspace_file": mcpserver.Typed(func(_ context.Context, r fileRestore) (*mcp.CallToolResult, error) {
 			return objectResult(files.Restore(r.Path, r.Revision, r.Expected))
 		}),
-		"remove_tracked_file": mcpserver.Typed(func(ctx context.Context, r filePath) (*mcp.CallToolResult, error) {
-			return objectResult(files.RemoveTracked(ctx, r.Path))
+		"remove_tracked_file": mcpserver.Typed(func(ctx context.Context, r fileRemove) (*mcp.CallToolResult, error) {
+			return objectResult(files.RemoveTracked(ctx, r.Path, r.Expected))
 		}),
 	}
 }

@@ -373,9 +373,11 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
-		"system_inspect": overrideSystemInspect,
-		"workspace_edit": overrideWorkspaceEdit,
-		"git_stage":      overrideGitStage,
+		"system_inspect":         overrideSystemInspect,
+		"workspace_edit":         overrideWorkspaceEdit,
+		"restore_workspace_file": overrideRestoreWorkspaceFile,
+		"remove_tracked_file":    overrideRemoveTrackedFile,
+		"git_stage":              overrideGitStage,
 	}
 }
 
@@ -413,6 +415,93 @@ func overrideSystemInspect(tool *mcp.Tool) error {
 	tool.Description = "Inspect Loki server/workspace health, recent tool activity, one retained operation by correlation ID, or one workspace TCP port."
 	tool.InputSchema = schema
 	return nil
+}
+
+func overrideRestoreWorkspaceFile(tool *mcp.Tool) error {
+	tool.Description = "Restore one saved pre-mutation file revision after verifying the currently observed target digest or confirmed absence."
+	tool.InputSchema = map[string]any{
+		"type":                 "object",
+		"title":                "restore_workspace_fileArguments",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type": "string", "minLength": 1,
+				"description": "Workspace-relative file path that the saved revision belongs to.",
+			},
+			"revision": map[string]any{
+				"type": "string", "pattern": "^[0-9a-f]{64}$",
+				"description": "Saved pre-mutation revision identifier returned by a prior workspace mutation.",
+			},
+			"expected_sha256": map[string]any{
+				"anyOf": []any{
+					map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+					map[string]any{"const": "missing"},
+				},
+				"description": "Current target digest observed immediately before restore, or the literal missing after confirming the target is absent.",
+			},
+		},
+		"required": []string{"path", "revision", "expected_sha256"},
+	}
+	tool.OutputSchema = map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"path":              map[string]any{"type": "string"},
+			"restored_revision": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"undo_revision": map[string]any{"anyOf": []any{
+				map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				map[string]any{"type": "null"},
+			}},
+			"sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"bytes":  map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "restored_revision", "undo_revision", "sha256", "bytes"},
+	}
+	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
+		"restore": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "workspace_read action=revisions",
+		},
+	})
+}
+
+func overrideRemoveTrackedFile(tool *mcp.Tool) error {
+	tool.Description = "Remove one Git-tracked file only if its current SHA-256 still matches the caller's observed digest; returns a revision that can restore the removed content."
+	tool.InputSchema = map[string]any{
+		"type":                 "object",
+		"title":                "remove_tracked_fileArguments",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type": "string", "minLength": 1,
+				"description": "Workspace-relative Git-tracked regular file path to remove.",
+			},
+			"expected_sha256": map[string]any{
+				"type": "string", "pattern": "^[0-9a-f]{64}$",
+				"description": "SHA-256 digest observed when the file was read; removal fails if the content changed.",
+			},
+		},
+		"required": []string{"path", "expected_sha256"},
+	}
+	tool.OutputSchema = map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"path":              map[string]any{"type": "string"},
+			"removed":           map[string]any{"type": "boolean"},
+			"previous_revision": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"previous_sha256":   map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+		},
+		"required": []string{"path", "removed", "previous_revision", "previous_sha256"},
+	}
+	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
+		"remove": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "restore_workspace_file with previous_revision",
+		},
+	})
 }
 
 func overrideWorkspaceEdit(tool *mcp.Tool) error {

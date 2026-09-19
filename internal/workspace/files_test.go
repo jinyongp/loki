@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
+	"loki/internal/fault"
 )
 
 func fixture(t *testing.T) *Files {
@@ -104,6 +105,11 @@ func TestFileLifecycleAndDirtyRestore(t *testing.T) {
 	if info.Mode().Perm() != 0755 {
 		t.Fatal("replace lost mode")
 	}
+	if _, err = f.Restore("docs/note.txt", changed["previous_revision"].(string), before["sha256"].(string)); err == nil {
+		t.Fatal("accepted stale restore hash")
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+		t.Fatalf("stale restore detail = %#v", detail)
+	}
 	result, err := f.Restore("docs/note.txt", changed["previous_revision"].(string), changed["sha256"].(string))
 	if err != nil || result["undo_revision"] == nil {
 		t.Fatalf("restore %v %v", result, err)
@@ -182,7 +188,7 @@ func TestPatchTrackedDeleteAndRecovery(t *testing.T) {
 			t.Fatalf("accepted unsafe patch %q", invalid)
 		}
 	}
-	if _, err = f.RemoveTracked(ctx, "dirty.txt"); err == nil {
+	if _, err = f.RemoveTracked(ctx, "dirty.txt", Digest([]byte("after\n"))); err == nil {
 		t.Fatal("removed untracked file")
 	}
 	for _, args := range [][]string{{"init", "-q"}, {"add", "dirty.txt"}} {
@@ -192,8 +198,23 @@ func TestPatchTrackedDeleteAndRecovery(t *testing.T) {
 			t.Fatalf("git %v: %s %v", args, output, err)
 		}
 	}
-	removed, err := f.RemoveTracked(ctx, "dirty.txt")
-	if err != nil || removed["previous_revision"] == nil {
+	observed := Digest([]byte("after\n"))
+	if err = os.WriteFile(filepath.Join(f.Policy.Root(), "dirty.txt"), []byte("changed-after-read\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.RemoveTracked(ctx, "dirty.txt", observed); err == nil || !strings.Contains(err.Error(), "file changed since it was read") {
+		t.Fatalf("stale removal error = %v", err)
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+		t.Fatalf("stale removal detail = %#v", detail)
+	}
+	if _, err = os.Stat(filepath.Join(f.Policy.Root(), "dirty.txt")); err != nil {
+		t.Fatalf("stale removal changed file: %v", err)
+	}
+	if err = os.WriteFile(filepath.Join(f.Policy.Root(), "dirty.txt"), []byte("after\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := f.RemoveTracked(ctx, "dirty.txt", observed)
+	if err != nil || removed["previous_revision"] == nil || removed["previous_sha256"] != observed {
 		t.Fatalf("remove %v %v", removed, err)
 	}
 	if _, err = f.Restore("dirty.txt", revision, "missing"); err != nil {

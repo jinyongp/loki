@@ -15,10 +15,10 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		ToolCount:              32,
 		ActionUnionCount:       19,
 		FlatActionUnionCount:   14,
-		InputPropertyCount:     157,
-		DescribedPropertyCount: 38,
+		InputPropertyCount:     158,
+		DescribedPropertyCount: 43,
 		MissingOutputSchema:    3,
-		OpenOutputSchema:       21,
+		OpenOutputSchema:       19,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -32,11 +32,16 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		t.Fatalf("contract audit counts = %#v, want %#v", audit, want)
 	}
 
+	migrated := map[string]bool{
+		"system_inspect": true, "workspace_edit": true, "restore_workspace_file": true,
+		"remove_tracked_file": true, "git_stage": true,
+	}
 	for _, issue := range audit.Issues {
-		if issue.Tool != "system_inspect" && issue.Tool != "workspace_edit" && issue.Tool != "git_stage" {
+		if !migrated[issue.Tool] {
 			continue
 		}
-		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" {
+		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
+			(issue.Code == "open_output_schema" && (issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file")) {
 			t.Errorf("migrated tool regressed: %#v", issue)
 		}
 	}
