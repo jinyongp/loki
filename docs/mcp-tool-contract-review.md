@@ -133,9 +133,9 @@ Do not batch browser interactions merely to save calls: navigation and DOM mutat
 | System diagnostics | `system_inspect` multiplexes unrelated argument shapes; activity is recent-list only and invocation IDs are not normal result handles | Discriminated schema; operation lookup by ID; return operation IDs from mutating/long-running calls; typed health/activity results |
 | Runtime/commands (legacy) | `action`, `command_run`, `command_start`, `process_inspect`, and `runtime_stop` overlap and require the agent to choose among execution lifecycles | Do not port the monolith. Finish the single Job model and expose start/inspect/output/cancel with explicit detached/lifetime semantics; keep action/workflow registration separate |
 | Preview/shares | Publish/create-share operations are non-idempotent; retry after a lost response can create duplicates; `environment_routes` is currently accepted but unused in Go | Request IDs for creation; idempotent revoke; endpoint/job identity rather than raw-port lifetime; remove or implement every exposed field; action-specific schema |
-| Browser session | `start`, `navigate`, and `stop` need different inputs but share a flat schema | Discriminated variants; explicit state/tab generation in results; state-aware/idempotent lifecycle where possible |
-| Browser observation | Eight actions share filters that apply only to subsets; sequence/truncation semantics are under-described | Action-specific filter schemas and typed result variants with sequence/cursor/completeness |
-| Browser interaction | Click/type/press/scroll/tab operations have disjoint operands; stale element/index behavior is not represented by the public contract | Discriminated variants; bind element references to an observed page generation and return a stale-reference conflict; keep observation boundaries instead of generic batching |
+| Browser session | Lifecycle/navigation is typed, but ordinary browser-history controls still need complete desktop coverage | Keep discriminated generation-aware lifecycle; add `reload`, `forward`, and `stop_loading`; move history navigation authority here so navigation operations share one generation model |
+| Browser observation | Core state/event observation is typed, but user-driven browser workflows still lack public dialog/download state | Keep action-specific typed sequence/completeness semantics; add pending-dialog observation and bounded download status/history so interaction outcomes are observable without filesystem guessing |
+| Browser interaction | Current click/fill-like type/key/scroll/tab coverage omits common desktop user gestures such as hover, button/modifier clicks, drag, wheel, form controls, file upload, and dialogs; stale element/index behavior must remain guarded | Complete the desktop interaction surface with high-level discriminated gestures; retain browser/state generation preconditions; model full gestures in one call rather than exposing dangling pointer-down state; keep observation boundaries instead of generic batching |
 | Screenshot/image | Separate inspect/save/share intent is useful, but overwrite/CAS semantics are not described at field level and some results are open/untyped | Keep separate tools; describe overwrite preconditions; return typed metadata; request IDs only for share creation |
 | Workspace reads | List/file/search/history variants use different pagination and required fields; search can truncate without a continuation cursor | Discriminated variants; consistent `complete/has_more/next_*`; make search truncation impossible to mistake for exhaustive coverage |
 | Workspace edit | Multi-file patch exists but is undiscoverable; structured multi-file create/replace/move does not exist; irrelevant guards can be silently ignored | Keep precise single-file replace and unified-diff patch, document patch as bounded multi-file; add structured bounded batch with explicit transactional/recovery semantics; reject irrelevant fields |
@@ -153,6 +153,150 @@ Do not batch browser interactions merely to save calls: navigation and DOM mutat
 | Agent guidance | Context and Skill inspection still share one action-union schema, but native target-owned AGENTS.md/Skill resolution, provenance, precedence, completeness, and target-aware Skill inspection are implemented | Keep the native capability; finish discriminated action schemas and closed typed outputs without changing the ownership model. |
 | Legacy project/task/Skill MCP | The running server has large multi-action project/Skill surfaces and a separate Taskwarrior API; these are being replaced in the Go direction | Do not recreate these shapes during migration. Preserve only the necessary canonical coordination and Loki-native guidance/context ownership with narrower contracts |
 
+## Confirmed browser interaction completion design
+
+The Browser family should cover normal desktop browser interaction at the same abstraction level as a user, without exposing arbitrary CDP commands or JavaScript execution as public MCP authority. This confirmed scope extends the already-landed generation-aware session/observe/interact contracts.
+
+### Public capability model
+
+`browser_interact` remains the single high-level interaction surface. Its final desktop action set is:
+
+- `click`: element-index or viewport-coordinate target. Add `button` (`left|middle|right`), `click_count` (1..3), and bounded modifier keys (`Alt|Control|Meta|Shift`). This covers ordinary, double, right, middle, and modified clicks without separate overlapping tools.
+- `hover`: move the pointer to an element index or viewport coordinate without pressing a button.
+- `drag`: one complete left-button drag gesture. Support element -> element, element -> coordinate, and coordinate -> coordinate. Bound interpolation with `steps` and `duration_ms`; dispatch the full move/press/move/release sequence inside one call.
+- `fill`: replace the complete value/content of one editable element. This is the current selection-and-replace behavior and is distinct from real typing.
+- `type`: focus one editable element and insert text at the current caret/selection using browser input events without selecting the whole value first.
+- `key`: dispatch one supported key with optional modifiers.
+- `shortcut`: dispatch one bounded keyboard chord such as Control+A, Control+Z, Meta+K, or Shift+Tab. The complete key-down/key-up sequence stays inside one call.
+- `wheel`: dispatch a real wheel gesture with bounded `delta_x`/`delta_y`, optionally targeted by element index or coordinate. Replace JS-only page scrolling as the canonical user-wheel interaction so nested scroll containers and wheel listeners behave normally.
+- `select_option`: set one or more options on a `select` element using typed option selectors and dispatch the corresponding input/change behavior.
+- `set_checked`: set checkbox/radio state to an explicit boolean instead of blind toggling.
+- `focus`: focus one observed element.
+- `upload`: attach one or more workspace-owned regular files to a file input using the DOM/CDP file-input primitive. Resolve every path through workspace policy before the browser sees it; never read file contents into MCP arguments or logs.
+- `dialog`: accept or dismiss the currently observed JavaScript dialog, with optional prompt text only for prompt dialogs.
+
+Do not expose separate public `mouse_down`/`mouse_up` or key-down/key-up tools. A failed/interrupted MCP call must not leave a logical pointer button or modifier held down. Low-level sequences remain internal implementation details.
+
+### Session and observation completion
+
+Navigation/history belongs to `browser_session`, not `browser_interact`. Extend the generation-aware session surface with:
+
+- `reload`
+- `forward`
+- `stop_loading`
+- move the existing `back` behavior from interaction authority into the session/navigation family.
+
+Extend `browser_observe` with:
+
+- `dialog`: return the currently pending JavaScript dialog, including a monotonic `dialog_generation`, type, bounded message, and whether prompt text is accepted.
+- `downloads`: return bounded browser-download state/history with stable download IDs, state (`in_progress|completed|canceled`), safe suggested/final filename metadata, completeness/cursor information, and `browser_generation`. Reuse the existing download-event owner rather than guessing from filesystem contents.
+
+### Generation and stale-reference rules
+
+The existing browser generation model is mandatory for every interaction:
+
+1. Every `browser_interact` action requires `expected_browser_generation`.
+2. Any action that resolves an observed element index (`click`, `hover`, element-targeted `drag`, `fill`, `type`, element-targeted `wheel`, `select_option`, `set_checked`, `focus`, `upload`) also requires `expected_state_generation`.
+3. Dialog handling requires the current `dialog_generation` returned by `browser_observe action=dialog`.
+4. A stale generation fails with typed `conflict` before pointer, keyboard, DOM, dialog, or file-input side effects.
+5. Every successful interaction advances `browser_generation` exactly once, including interactions that internally cause navigation. The implementation must not double-increment nested navigation/target transitions.
+6. A fresh `browser_observe action=state` is required before reusing element indexes after any successful interaction.
+
+### Pointer/drag implementation
+
+Reuse `Input.dispatchMouseEvent` as the primary desktop pointer primitive.
+
+- Resolve element centers through the existing isolated-world element table and frame-coordinate translation.
+- Click variants dispatch move -> press -> release with the selected button/modifiers/click count.
+- Hover dispatches only pointer movement.
+- Drag resolves both endpoints before the first side effect, then dispatches move-to-source -> press -> interpolated mouse moves with the left button held -> release. Bounds on steps/duration prevent unbounded event floods.
+- The first implementation must cover sortable UI, sliders, resize handles, canvas/pointer handlers, and ordinary pointer-driven HTML drag behavior.
+- OS-level file dragging is not part of this surface; file-input interaction uses `upload`.
+
+### Keyboard/text implementation
+
+Split the current fill-like text behavior instead of overloading `type`.
+
+- `fill` may select existing value/content, replace it, and emit the normal editable-element events.
+- `type` preserves the current caret/selection and uses browser input events for incremental text insertion.
+- `key` and `shortcut` use bounded key definitions/modifier sets and always release pressed keys before returning.
+- Arbitrary raw key codes or arbitrary CDP input payloads are not public.
+
+### Forms, files, and dialogs
+
+- `select_option` accepts a bounded list of typed selectors (value, label, or option index); ambiguous/nonexistent selections fail before mutation.
+- `set_checked` is state-setting, making retry intent explicit.
+- `upload` accepts workspace-relative paths only. Resolve symlink/magic-link policy through the same workspace authority used by file tools, require regular files, and enforce config-backed count/aggregate-size bounds before calling the browser file-input primitive.
+- Dialog events are retained by the browser driver as explicit pending state. Handling a dialog consumes the matching `dialog_generation`; stale or already-closed dialogs return conflict/not-found style public errors rather than guessing.
+
+### Explicitly deferred from this confirmed scope
+
+The following were discussed as possible extensions but are not part of this confirmed implementation plan:
+
+- touch/mobile gestures (tap, swipe, pinch);
+- a raw/general `pointer_sequence` escape hatch;
+- arbitrary clipboard read/write or permission-management APIs;
+- arbitrary JavaScript/CDP command execution;
+- OS-level file drag/drop outside standard file inputs.
+
+These can be designed later if a concrete workflow requires them.
+
+### Bounded implementation sequence
+
+Implement this Browser completion in independent commits:
+
+1. **Pointer gestures**
+   - extend click with button/count/modifiers;
+   - add hover and drag;
+   - add real wheel dispatch;
+   - add parser/guard helpers shared by pointer actions;
+   - preserve one-generation-per-success semantics.
+
+2. **Keyboard and editable/form controls**
+   - rename/split the current fill-like text behavior into `fill` and real `type`;
+   - add `key` and `shortcut`;
+   - add `select_option`, `set_checked`, and `focus`;
+   - keep element/state generation guards mandatory.
+
+3. **File upload and dialog lifecycle**
+   - add policy-checked `upload`;
+   - retain pending dialog state from CDP events;
+   - add `browser_observe action=dialog` and guarded `browser_interact action=dialog`.
+
+4. **Navigation/download completion**
+   - move `back` to `browser_session`;
+   - add `forward`, `reload`, and `stop_loading`;
+   - expose bounded `browser_observe action=downloads` over the existing download owner.
+
+5. **Contract/scenario convergence**
+   - close every new input/output branch;
+   - describe every field and bound;
+   - add operation metadata and truthful replay/concurrency semantics;
+   - update catalog audit expectations only from measured results;
+   - run the desktop interaction scenario corpus before declaring Browser migration complete.
+
+### Browser completion acceptance scenarios
+
+At minimum, validation covers:
+
+- left/double/right/middle/modifier click;
+- hover-triggered UI;
+- drag for sortable item, slider/resize handle, and a pointer-driven drop target;
+- nested scroll container through wheel input;
+- fill versus caret-preserving type;
+- common key/shortcut chords with guaranteed key release;
+- select, checkbox/radio state setting, and focus;
+- policy-checked file input upload;
+- alert/confirm/prompt observation and accept/dismiss;
+- back/forward/reload/stop-loading navigation;
+- download initiation followed by observable completion/cancellation metadata;
+- stale browser/state/dialog generations rejected before side effects;
+- one generation increment per successful interaction even when a gesture causes navigation;
+- action-irrelevant fields rejected by MCP schema before handlers.
+
+Chromium-backed tests exercise real browser behavior when the repository browser fixture is enabled; deterministic schema/guard/parser tests remain runnable without Chromium.
+
+
 ## Per-tool disposition
 
 The following matrix accounts for every tool in the checked-in Go 0.49 contract.
@@ -163,9 +307,9 @@ The following matrix accounts for every tool in the checked-in Go 0.49 contract.
 | `preview_publish` | redesign | Action-specific server/stack inputs, request-ID replay safety, job/endpoint identity, and removal or implementation of the currently unused `environment_routes` field. |
 | `shared_resources` | refine | Keep bounded listing; type preview/artifact variants and completeness instead of an open nested object. |
 | `revoke_share` | fix semantics | Make repeated revoke replay-safe/idempotent and return a stable terminal result so a lost response does not require guessing. |
-| `browser_session` | redesign | Start/navigate/stop have different operands and state transitions; expose discriminated requests and returned browser/session state generation. |
-| `browser_observe` | redesign | Filters are action-specific; return typed sequence/cursor/completeness information for event-like views. |
-| `browser_interact` | redesign | Click/type/press/scroll/tab variants need distinct operands; bind element/index references to an observed page generation and fail stale references as conflicts. |
+| `browser_session` | redesign | Keep the landed generation-aware start/navigate/stop contract and complete desktop navigation with back/forward/reload/stop_loading under the same session authority. History/navigation transitions return the resulting browser generation. |
+| `browser_observe` | redesign | Keep the landed action-specific state/event contracts and add typed pending-dialog plus bounded download status/history views with completeness/cursor semantics. |
+| `browser_interact` | redesign | Complete normal desktop user interaction: guarded click variants, hover, drag, fill, real typing, key/shortcut input, wheel, select/check/focus, file upload, and dialog handling. Element references bind to browser/state generations and stale references fail as conflicts. Keep each pointer gesture self-contained so failed calls cannot leave a button logically held down. |
 | `browser_screenshot` | keep/refine | Single-purpose surface is good; document bounded image result and return consistent typed metadata where useful. |
 | `browser_save_screenshot` | refine | Preserve explicit save intent; describe overwrite/CAS requirements and reject irrelevant overwrite guards. |
 | `browser_share_screenshot` | refine | Preserve explicit share intent; add replay-safe share creation identity. |
