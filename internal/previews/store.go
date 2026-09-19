@@ -3,7 +3,9 @@ package previews
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"sort"
@@ -21,19 +23,31 @@ type Preview struct {
 	Routes                  []Route
 	Created, Expires        time.Time
 }
+type publishReplay struct {
+	Fingerprint string
+	Result      map[string]any
+	Expires     time.Time
+}
 type Store struct {
-	mu      sync.Mutex
-	domain  string
-	maximum int
-	clock   func() time.Time
-	items   map[string]Preview
-	order   []string
+	mu           sync.Mutex
+	domain       string
+	maximum      int
+	replayMax    int
+	clock        func() time.Time
+	items        map[string]Preview
+	order        []string
+	requests     map[string]publishReplay
+	requestOrder []string
 }
 
 var idPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 var hostPattern = regexp.MustCompile(`^loki-([0-9a-f]{32})$`)
+var requestIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-func ValidShareID(id string) bool { return idPattern.MatchString(id) }
+var ErrRequestConflict = errors.New("preview request_id was already used for a different publication")
+
+func ValidShareID(id string) bool   { return idPattern.MatchString(id) }
+func ValidRequestID(id string) bool { return requestIDPattern.MatchString(id) }
 
 func New(domain string, maximum int, clock func() time.Time) *Store {
 	if maximum == 0 {
@@ -42,7 +56,11 @@ func New(domain string, maximum int, clock func() time.Time) *Store {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Store{domain: strings.ToLower(strings.TrimRight(domain, ".")), maximum: maximum, clock: clock, items: map[string]Preview{}}
+	return &Store{
+		domain: strings.ToLower(strings.TrimRight(domain, ".")), maximum: maximum,
+		replayMax: max(64, maximum*16), clock: clock,
+		items: map[string]Preview{}, requests: map[string]publishReplay{},
+	}
 }
 
 func Normalize(routes map[string]int) ([]Route, error) {
@@ -104,6 +122,19 @@ func (s *Store) purge() {
 		}
 	}
 	s.order = order
+	requestOrder := s.requestOrder[:0]
+	for _, requestID := range s.requestOrder {
+		replay, ok := s.requests[requestID]
+		if !ok {
+			continue
+		}
+		if !replay.Expires.After(now) {
+			delete(s.requests, requestID)
+		} else {
+			requestOrder = append(requestOrder, requestID)
+		}
+	}
+	s.requestOrder = requestOrder
 }
 func date(t time.Time) string {
 	t = t.UTC().Truncate(time.Microsecond)
@@ -120,14 +151,60 @@ func (s *Store) serialize(p Preview) map[string]any {
 	}
 	return map[string]any{"share_id": p.ID, "url": u, "port": routes["/"], "routes": routes, "cwd": p.CWD, "command": p.Command, "created_at": date(p.Created), "expires_at": date(p.Expires), "display_markdown": "[Open live preview](" + u + ")"}
 }
-func (s *Store) Publish(routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
+func clonePreviewResult(value map[string]any) map[string]any {
+	copy := make(map[string]any, len(value))
+	for key, item := range value {
+		if routes, ok := item.(map[string]int); ok {
+			cloned := make(map[string]int, len(routes))
+			for prefix, port := range routes {
+				cloned[prefix] = port
+			}
+			copy[key] = cloned
+			continue
+		}
+		copy[key] = item
+	}
+	return copy
+}
+
+func publishFingerprint(routes []Route, ttl int) (string, error) {
+	encoded, err := json.Marshal(struct {
+		Routes []Route
+		TTL    int
+	}{routes, ttl})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func (s *Store) publish(requestID string, routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
 	normalized, err := Normalize(routes)
 	if err != nil {
 		return nil, err
 	}
+	fingerprint := ""
+	if requestID != "" {
+		fingerprint, err = publishFingerprint(normalized, ttl)
+		if err != nil {
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.purge()
+	if requestID != "" {
+		if replay, ok := s.requests[requestID]; ok {
+			if replay.Fingerprint != fingerprint {
+				return nil, ErrRequestConflict
+			}
+			return clonePreviewResult(replay.Result), nil
+		}
+		if len(s.requests) >= s.replayMax {
+			return nil, errors.New("temporary preview replay capacity is full; wait for preview requests to expire")
+		}
+	}
 	if len(s.items) >= s.maximum {
 		return nil, errors.New("temporary preview capacity is full; stop or wait for a preview to expire")
 	}
@@ -143,7 +220,49 @@ func (s *Store) Publish(routes map[string]int, cwd, command string, ttl int) (ma
 	p := Preview{id, token, cwd, command, normalized, now, now.Add(time.Duration(ttl) * time.Second)}
 	s.items[id] = p
 	s.order = append(s.order, id)
-	return s.serialize(p), nil
+	result := s.serialize(p)
+	if requestID != "" {
+		s.requests[requestID] = publishReplay{Fingerprint: fingerprint, Result: clonePreviewResult(result), Expires: p.Expires}
+		s.requestOrder = append(s.requestOrder, requestID)
+	}
+	return clonePreviewResult(result), nil
+}
+
+func (s *Store) Publish(routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
+	return s.publish("", routes, cwd, command, ttl)
+}
+
+func (s *Store) Replay(requestID string, routes map[string]int, ttl int) (map[string]any, bool, error) {
+	if !requestIDPattern.MatchString(requestID) {
+		return nil, false, errors.New("preview request_id must be a UUID")
+	}
+	normalized, err := Normalize(routes)
+	if err != nil {
+		return nil, false, err
+	}
+	fingerprint, err := publishFingerprint(normalized, ttl)
+	if err != nil {
+		return nil, false, err
+	}
+	requestID = strings.ToLower(requestID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.purge()
+	replay, ok := s.requests[requestID]
+	if !ok {
+		return nil, false, nil
+	}
+	if replay.Fingerprint != fingerprint {
+		return nil, false, ErrRequestConflict
+	}
+	return clonePreviewResult(replay.Result), true, nil
+}
+
+func (s *Store) PublishReplay(requestID string, routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
+	if !requestIDPattern.MatchString(requestID) {
+		return nil, errors.New("preview request_id must be a UUID")
+	}
+	return s.publish(strings.ToLower(requestID), routes, cwd, command, ttl)
 }
 func (s *Store) List() []map[string]any {
 	s.mu.Lock()
@@ -203,4 +322,6 @@ func (s *Store) Clear() {
 	defer s.mu.Unlock()
 	s.items = map[string]Preview{}
 	s.order = nil
+	s.requests = map[string]publishReplay{}
+	s.requestOrder = nil
 }

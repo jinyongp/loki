@@ -98,7 +98,9 @@ func TestSchemaValidationAndSafeErrors(t *testing.T) {
 	if calls != 0 {
 		t.Fatal("invalid input reached handler")
 	}
-	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "preview_publish", Arguments: map[string]any{"action": "server", "port": 43000}})
+	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "preview_publish", Arguments: map[string]any{
+		"action": "server", "port": 43000, "request_id": "71000000-0000-4000-8000-000000000001",
+	}})
 	if err != nil || !result.IsError {
 		t.Fatal(result, err)
 	}
@@ -115,7 +117,9 @@ func TestToolErrorsExposeTypedPublicEnvelope(t *testing.T) {
 	}
 	client := connect(t, handlers)
 	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
-		Name: "preview_publish", Arguments: map[string]any{"action": "server", "port": 43000},
+		Name: "preview_publish", Arguments: map[string]any{
+			"action": "server", "port": 43000, "request_id": "72000000-0000-4000-8000-000000000001",
+		},
 	})
 	if err != nil || !result.IsError {
 		t.Fatal(result, err)
@@ -524,8 +528,12 @@ func TestStreamableHTTPFailuresAreTerminalAndSessionReusable(t *testing.T) {
 	}
 
 	expectTerminalError("validation failure", map[string]any{})
-	expectTerminalError("handler failure", map[string]any{"action": "server", "port": 43001})
-	expectTerminalError("panic failure", map[string]any{"action": "server", "port": 43002})
+	expectTerminalError("handler failure", map[string]any{
+		"action": "server", "port": 43001, "request_id": "73000000-0000-4000-8000-000000000001",
+	})
+	expectTerminalError("panic failure", map[string]any{
+		"action": "server", "port": 43002, "request_id": "74000000-0000-4000-8000-000000000001",
+	})
 }
 
 func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) {

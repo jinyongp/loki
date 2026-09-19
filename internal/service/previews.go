@@ -26,11 +26,11 @@ type PreviewController struct {
 	Inspect func(context.Context, int) (map[string]any, error)
 }
 type previewRequest struct {
-	Action      string
-	Port        *int
-	Routes      *map[string]int
-	Environment map[string]string `json:"environment_routes"`
-	TTL         int               `json:"ttl_seconds"`
+	Action    string
+	Port      *int
+	Routes    *map[string]int
+	RequestID string `json:"request_id"`
+	TTL       int    `json:"ttl_seconds"`
 }
 
 func runtimeDecode(ctx context.Context, client RuntimeCaller, request any, out any) error {
@@ -88,12 +88,25 @@ func rejectLoopbacks(listener map[string]any) error {
 	}
 	return nil
 }
+func previewReplayError(err error) error {
+	if errors.Is(err, previews.ErrRequestConflict) {
+		return fault.New(fault.CodeConflict, "preview request_id was already used for a different publication", false, "generate a new request_id for changed preview inputs")
+	}
+	return err
+}
+
 func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[string]any, error) {
 	if c.Store == nil {
 		return nil, fault.Error("temporary live preview sharing is not configured")
 	}
+	if !previews.ValidRequestID(r.RequestID) {
+		return nil, fault.New(fault.CodeInvalidInput, "preview request_id must be a UUID", false, "generate a new UUID request_id")
+	}
+	if r.TTL == 0 {
+		r.TTL = 900
+	}
 	if r.TTL < 60 || r.TTL > 86400 {
-		return nil, fault.Error("preview lifetime must be between 60 and 86400 seconds")
+		return nil, fault.New(fault.CodeInvalidInput, "preview lifetime must be between 60 and 86400 seconds", false, "choose ttl_seconds between 60 and 86400")
 	}
 	var routes map[string]int
 	switch r.Action {
@@ -110,10 +123,13 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 			return nil, err
 		}
 	default:
-		return nil, fault.Error("preview_publish action must be server or stack")
+		return nil, fault.New(fault.CodeInvalidInput, "preview_publish action must be server or stack", false, "choose action=server or action=stack")
 	}
-	if _, err := previews.Normalize(routes); err != nil {
-		return nil, err
+	if replayed, ok, err := c.Store.Replay(r.RequestID, routes, r.TTL); err != nil {
+		return nil, previewReplayError(err)
+	} else if ok {
+		replayed["request_id"] = strings.ToLower(r.RequestID)
+		return replayed, nil
 	}
 	var root map[string]any
 	for prefix, port := range routes {
@@ -136,7 +152,12 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 	if command == "" {
 		command = "unknown"
 	}
-	return c.Store.Publish(routes, cwd, command, r.TTL)
+	published, err := c.Store.PublishReplay(r.RequestID, routes, cwd, command, r.TTL)
+	if err != nil {
+		return nil, previewReplayError(err)
+	}
+	published["request_id"] = strings.ToLower(r.RequestID)
+	return published, nil
 }
 
 func PreviewHandlers(c *PreviewController, artifactsStore *artifacts.Store) map[string]mcpserver.Handler {

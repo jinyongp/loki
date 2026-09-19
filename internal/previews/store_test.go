@@ -1,10 +1,51 @@
 package previews
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestPublishReplayIdentityAndConflict(t *testing.T) {
+	now := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	s := New("preview.test", 2, func() time.Time { return now })
+	requestID := "70000000-0000-4000-8000-000000000001"
+	routes := map[string]int{"/": 3000, "/api": 4000}
+
+	first, err := s.PublishReplay(requestID, routes, "/workspace/one", "node one", 900)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, ok, err := s.Replay(requestID, routes, 900)
+	if err != nil || !ok || replayed["share_id"] != first["share_id"] || replayed["url"] != first["url"] {
+		t.Fatalf("replay = %#v ok=%v err=%v", replayed, ok, err)
+	}
+	derivedChanged, err := s.PublishReplay(requestID, routes, "/workspace/two", "node two", 900)
+	if err != nil || derivedChanged["share_id"] != first["share_id"] {
+		t.Fatalf("derived metadata changed replay = %#v, %v", derivedChanged, err)
+	}
+	if _, _, err := s.Replay(requestID, map[string]int{"/": 3001}, 900); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("changed routes error = %v", err)
+	}
+	if _, err := s.PublishReplay(requestID, routes, "/workspace", "node", 901); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("changed ttl error = %v", err)
+	}
+	if s.Revoke(first["share_id"].(string)) == nil || len(s.List()) != 0 {
+		t.Fatal("revoke did not remove live share")
+	}
+	afterRevoke, ok, err := s.Replay(requestID, routes, 900)
+	if err != nil || !ok || afterRevoke["share_id"] != first["share_id"] || len(s.List()) != 0 {
+		t.Fatalf("replay after revoke = %#v ok=%v err=%v list=%#v", afterRevoke, ok, err, s.List())
+	}
+	now = now.Add(15 * time.Minute)
+	if replay, ok, err := s.Replay(requestID, routes, 900); err != nil || ok || replay != nil {
+		t.Fatalf("expired replay = %#v ok=%v err=%v", replay, ok, err)
+	}
+	if _, err := s.PublishReplay("not-a-uuid", routes, "", "", 900); err == nil {
+		t.Fatal("invalid request_id accepted")
+	}
+}
 
 func TestRoutesAndLifetime(t *testing.T) {
 	now := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)

@@ -6,21 +6,26 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"loki/internal/fault"
 	"loki/internal/previews"
 )
 
 func TestPreviewServerAndSharedHandlers(t *testing.T) {
 	store := previews.New("preview.test", 0, nil)
+	inspectCalls := 0
 	c := &PreviewController{Store: store, Inspect: func(context.Context, int) (map[string]any, error) {
+		inspectCalls++
 		return map[string]any{"in_use": true, "listeners": []map[string]any{{"cwd": "/workspace/repo", "command": "node"}}}, nil
 	}}
 	handlers := PreviewHandlers(c, nil)
-	result, err := handlers["preview_publish"](t.Context(), map[string]any{"action": "server", "port": 43000, "ttl_seconds": 900})
+	requestID := "70000000-0000-4000-8000-000000000001"
+	result, err := handlers["preview_publish"](t.Context(), map[string]any{"action": "server", "port": 43000, "request_id": requestID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	value := result.StructuredContent.(map[string]any)
-	if value["cwd"] != "/workspace/repo" || !strings.HasPrefix(value["url"].(string), "https://loki-") {
+	if value["cwd"] != "/workspace/repo" || value["request_id"] != requestID ||
+		!strings.HasPrefix(value["url"].(string), "https://loki-") || inspectCalls != 1 {
 		t.Fatal(value)
 	}
 	listed, err := handlers["shared_resources"](t.Context(), map[string]any{})
@@ -46,5 +51,21 @@ func TestPreviewServerAndSharedHandlers(t *testing.T) {
 		if terminal["kind"] != "preview" || terminal["share_id"] != value["share_id"] || terminal["revoked"] != true {
 			t.Fatal(terminal)
 		}
+	}
+	replayed, err := handlers["preview_publish"](t.Context(), map[string]any{"action": "server", "port": 43000, "request_id": requestID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayValue := replayed.StructuredContent.(map[string]any)
+	if replayValue["share_id"] != value["share_id"] || replayValue["url"] != value["url"] || inspectCalls != 1 || len(store.List()) != 0 {
+		t.Fatalf("replay = %#v calls=%d list=%#v", replayValue, inspectCalls, store.List())
+	}
+	if _, err = handlers["preview_publish"](t.Context(), map[string]any{"action": "server", "port": 43001, "request_id": requestID}); err == nil {
+		t.Fatal("changed preview request reused request_id")
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+		t.Fatalf("changed preview request error = %#v", detail)
+	}
+	if inspectCalls != 1 {
+		t.Fatalf("conflicting replay re-inspected listener: %d", inspectCalls)
 	}
 }

@@ -14,11 +14,11 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	want := ContractAudit{
 		ToolCount:              32,
 		ActionUnionCount:       19,
-		FlatActionUnionCount:   12,
+		FlatActionUnionCount:   11,
 		InputPropertyCount:     160,
-		DescribedPropertyCount: 61,
+		DescribedPropertyCount: 66,
 		MissingOutputSchema:    3,
-		OpenOutputSchema:       13,
+		OpenOutputSchema:       12,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -33,7 +33,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	}
 
 	migrated := map[string]bool{
-		"system_inspect": true, "shared_resources": true, "revoke_share": true,
+		"system_inspect": true, "preview_publish": true, "shared_resources": true, "revoke_share": true,
 		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
 		"git_inspect": true, "git_stage": true,
@@ -43,7 +43,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
-			(issue.Code == "open_output_schema" && (issue.Tool == "shared_resources" || issue.Tool == "revoke_share" ||
+			(issue.Code == "open_output_schema" && (issue.Tool == "preview_publish" || issue.Tool == "shared_resources" || issue.Tool == "revoke_share" ||
 				issue.Tool == "workspace_read" || issue.Tool == "workspace_edit" ||
 				issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file" ||
 				issue.Tool == "git_inspect" || issue.Tool == "git_stage")) {

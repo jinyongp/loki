@@ -374,6 +374,7 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
 		"system_inspect":         overrideSystemInspect,
+		"preview_publish":        overridePreviewPublish,
 		"shared_resources":       overrideSharedResources,
 		"revoke_share":           overrideRevokeShare,
 		"workspace_read":         overrideWorkspaceRead,
