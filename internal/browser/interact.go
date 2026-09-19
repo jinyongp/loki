@@ -61,6 +61,7 @@ func (d *Driver) state(ctx context.Context) (map[string]any, error) {
 	}
 	result["tabs"] = tabs["tabs"]
 	result["active_tab_id"] = shortID(d.target)
+	result["browser_generation"] = d.generation
 	return result, nil
 }
 func (d *Driver) element(ctx context.Context, index int, typing bool) (map[string]any, error) {

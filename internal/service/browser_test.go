@@ -40,11 +40,22 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	data := content.Bytes()
 	captureCount := 0
 	browser := browserFixture(func(_ context.Context, operation string, args map[string]any) (map[string]any, error) {
-		if operation == "screenshot" {
+		switch operation {
+		case "screenshot":
 			captureCount++
 			return map[string]any{"data_base64": base64.StdEncoding.EncodeToString(data)}, nil
+		case "start":
+			return map[string]any{"status": "running", "active_tab_id": "abcd", "browser_generation": 1}, nil
+		case "navigate":
+			return map[string]any{
+				"url": args["url"], "title": "fixture", "new_tab": args["new_tab"] == true,
+				"active_tab_id": "abcd", "browser_generation": 2,
+			}, nil
+		case "stop":
+			return map[string]any{"status": "stopped", "browser_generation": 3}, nil
+		default:
+			return map[string]any{"operation": operation, "arguments": args}, nil
 		}
-		return map[string]any{"operation": operation, "arguments": args}, nil
 	})
 	store := artifacts.New(artifacts.Options{BaseURL: "https://example.test/artifacts", AllowedHosts: []string{"example.test"}})
 	handlers := BrowserHandlers(browser, files, store)
@@ -91,12 +102,23 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 		}
 		return result
 	}
-	for tool, actions := range map[string][]string{"browser_session": {"start", "navigate", "stop"}, "browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "type", "press", "scroll", "back", "switch_tab", "close_tab"}} {
+	for _, test := range []struct {
+		action string
+		args   map[string]any
+	}{
+		{action: "start", args: map[string]any{"action": "start"}},
+		{action: "navigate", args: map[string]any{"action": "navigate", "url": "https://example.com", "new_tab": true}},
+		{action: "stop", args: map[string]any{"action": "stop"}},
+	} {
+		result := decode(call("browser_session", test.args))
+		if result["browser_generation"] == nil {
+			t.Fatalf("browser_session %s omitted generation: %#v", test.action, result)
+		}
+	}
+	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "type", "press", "scroll", "back", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
 			args := map[string]any{"action": action}
 			switch tool {
-			case "browser_session":
-				args["url"] = "https://example.com"
 			case "browser_observe":
 				args["request_id"] = "r1"
 			case "browser_interact":

@@ -25,16 +25,17 @@ type Options struct {
 	Binary, Profile, Downloads, Proxy, LibraryPath string
 }
 type Driver struct {
-	options   Options
-	gate      chan struct{}
-	client    *cdp.Client
-	command   *exec.Cmd
-	wait      chan error
-	target    string
-	sessions  map[string]string
-	closed    map[string]struct{}
-	debug     Debug
-	downloads *downloads
+	options    Options
+	gate       chan struct{}
+	client     *cdp.Client
+	command    *exec.Cmd
+	wait       chan error
+	target     string
+	generation uint64
+	sessions   map[string]string
+	closed     map[string]struct{}
+	debug      Debug
+	downloads  *downloads
 }
 
 func NewDriver(options Options) (*Driver, error) {
@@ -94,7 +95,11 @@ func (d *Driver) stop() {
 func (d *Driver) start(ctx context.Context) (err error) {
 	if d.client != nil {
 		if err = d.client.Call(ctx, "", "Browser.getVersion", nil, nil); err == nil {
-			return d.focus(ctx)
+			before := d.target
+			if err = d.focus(ctx); err == nil && d.target != before {
+				d.generation++
+			}
+			return err
 		}
 		d.stop()
 	}
@@ -168,7 +173,11 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	if err = d.client.Call(ctx, "", "Browser.setDownloadBehavior", map[string]any{"behavior": "allowAndName", "downloadPath": d.options.Downloads, "eventsEnabled": true}, nil); err != nil {
 		return err
 	}
-	return d.focus(ctx)
+	if err = d.focus(ctx); err != nil {
+		return err
+	}
+	d.generation++
+	return nil
 }
 
 type targetInfo struct{ TargetID, Type, URL, Title string }
@@ -242,7 +251,7 @@ func (d *Driver) tabList(ctx context.Context) (map[string]any, error) {
 	for _, t := range targets {
 		tabs = append(tabs, map[string]any{"tab_id": shortID(t.TargetID), "url": t.URL, "title": t.Title, "active": t.TargetID == d.target})
 	}
-	return map[string]any{"active_tab_id": shortID(d.target), "tabs": tabs}, nil
+	return map[string]any{"active_tab_id": shortID(d.target), "tabs": tabs, "browser_generation": d.generation}, nil
 }
 func (d *Driver) resolveTab(ctx context.Context, id string) (string, error) {
 	if len(id) != 4 {
@@ -329,6 +338,7 @@ func (d *Driver) navigate(ctx context.Context, address string, newTab bool) (map
 	if err != nil {
 		return nil, err
 	}
+	d.generation++
 	if newTab {
 		var created struct{ TargetID string }
 		if err = d.client.Call(ctx, "", "Target.createTarget", map[string]any{"url": "about:blank"}, &created); err != nil {
@@ -355,6 +365,7 @@ func (d *Driver) navigate(ctx context.Context, address string, newTab bool) (map
 	}
 	page["new_tab"] = newTab
 	page["active_tab_id"] = shortID(d.target)
+	page["browser_generation"] = d.generation
 	return page, nil
 }
 
@@ -367,14 +378,21 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	defer func() { <-d.gate }()
 	if operation == "stop" {
+		changed := d.client != nil || d.command != nil
 		d.stop()
-		return map[string]any{"status": "stopped"}, nil
+		if changed {
+			d.generation++
+		}
+		return map[string]any{"status": "stopped", "browser_generation": d.generation}, nil
 	}
 	if operation == "start" {
 		if err := d.start(ctx); err != nil {
 			return nil, err
 		}
-		return map[string]any{"status": "running", "active_tab_id": shortID(d.target)}, nil
+		return map[string]any{
+			"status": "running", "active_tab_id": shortID(d.target),
+			"browser_generation": d.generation,
+		}, nil
 	}
 	if d.client == nil {
 		return nil, errors.New("browser is not running; call browser_start first")

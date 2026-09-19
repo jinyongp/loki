@@ -54,6 +54,24 @@ func callBrowser(t *testing.T, d *Driver, operation string, args map[string]any)
 	}
 	return result
 }
+func browserGeneration(t *testing.T, result map[string]any) uint64 {
+	t.Helper()
+	generation, ok := result["browser_generation"].(uint64)
+	if !ok {
+		t.Fatalf("browser generation = %#v", result["browser_generation"])
+	}
+	return generation
+}
+
+func TestStoppedBrowserGenerationIsStable(t *testing.T) {
+	d := &Driver{gate: make(chan struct{}, 1)}
+	first := callBrowser(t, d, "stop", nil)
+	second := callBrowser(t, d, "stop", nil)
+	if browserGeneration(t, first) != 0 || browserGeneration(t, second) != 0 {
+		t.Fatalf("stopped generations = %#v %#v", first, second)
+	}
+}
+
 func TestChromiumLifecycle(t *testing.T) {
 	var visits atomic.Int32
 	d, address := chromeDriver(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,14 +82,20 @@ func TestChromiumLifecycle(t *testing.T) {
 	if _, err := d.Call(t.Context(), "list_tabs", nil); err == nil {
 		t.Fatal("accepted stopped browser")
 	}
-	first := callBrowser(t, d, "start", nil)["active_tab_id"]
+	started := callBrowser(t, d, "start", nil)
+	first := started["active_tab_id"]
 	if first == nil {
 		t.Fatal("missing tab")
 	}
-	if again := callBrowser(t, d, "start", nil)["active_tab_id"]; again != first {
-		t.Fatal("start replaced active tab")
+	startGeneration := browserGeneration(t, started)
+	again := callBrowser(t, d, "start", nil)
+	if again["active_tab_id"] != first || browserGeneration(t, again) != startGeneration {
+		t.Fatal("idempotent start changed browser state")
 	}
 	page := callBrowser(t, d, "navigate", map[string]any{"url": address + "/first"})
+	if browserGeneration(t, page) <= startGeneration {
+		t.Fatalf("navigation generation did not advance: %#v", page)
+	}
 	if page["title"] != "/first" || page["url"] != address+"/first" {
 		t.Fatal(page)
 	}
@@ -114,9 +138,20 @@ func TestChromiumLifecycle(t *testing.T) {
 	if visits.Load() < 2 {
 		t.Fatal("fixture not reached through proxy")
 	}
-	callBrowser(t, d, "stop", nil)
-	callBrowser(t, d, "start", nil)
-	callBrowser(t, d, "stop", nil)
+	beforeStop := browserGeneration(t, callBrowser(t, d, "state", nil))
+	stopped := callBrowser(t, d, "stop", nil)
+	stopGeneration := browserGeneration(t, stopped)
+	if stopGeneration <= beforeStop {
+		t.Fatalf("stop generation did not advance: before=%d stopped=%#v", beforeStop, stopped)
+	}
+	restarted := callBrowser(t, d, "start", nil)
+	if browserGeneration(t, restarted) <= stopGeneration {
+		t.Fatalf("restart generation did not advance: stopped=%d restarted=%#v", stopGeneration, restarted)
+	}
+	finalStop := callBrowser(t, d, "stop", nil)
+	if browserGeneration(t, finalStop) <= browserGeneration(t, restarted) {
+		t.Fatalf("final stop generation did not advance: %#v", finalStop)
+	}
 }
 func TestBrowserConfigurationAndQueueCancellation(t *testing.T) {
 	for _, proxy := range []string{"", "http://example.com:8767", "http://user@127.0.0.1:8767", "http://127.0.0.1:8767/path"} {
