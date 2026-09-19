@@ -661,6 +661,52 @@ func overrideRemoveTrackedFile(tool *mcp.Tool) error {
 	})
 }
 
+func workspaceBatchOperationSchema() map[string]any {
+	path := func(description string) map[string]any {
+		return map[string]any{"type": "string", "minLength": 1, "description": description}
+	}
+	digest := func(description string) map[string]any {
+		return map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$", "description": description}
+	}
+	return map[string]any{
+		"oneOf": []any{
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action":          map[string]any{"const": "create", "description": "Create one absent text file."},
+					"path":            path("Absent workspace-relative file path to create."),
+					"content":         map[string]any{"type": "string", "description": "Complete UTF-8 file content."},
+					"expected_sha256": map[string]any{"const": "missing", "description": "Explicit absence precondition; must be the literal missing."},
+				},
+				"required": []string{"action", "path", "content", "expected_sha256"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action":                map[string]any{"const": "replace", "description": "Replace exact text in one existing text file."},
+					"path":                  path("Existing workspace-relative text file path."),
+					"old":                   map[string]any{"type": "string", "minLength": 1, "description": "Exact non-empty text to replace."},
+					"new":                   map[string]any{"type": "string", "description": "Replacement text; may be empty."},
+					"expected_sha256":       digest("SHA-256 observed when the file was read."),
+					"expected_replacements": map[string]any{"type": "integer", "minimum": 1, "description": "Exact number of old-text matches required."},
+				},
+				"required": []string{"action", "path", "old", "new", "expected_sha256", "expected_replacements"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action":               map[string]any{"const": "move", "description": "Move one existing file to one absent destination."},
+					"source":               path("Existing workspace-relative source file path."),
+					"destination":          path("Absent workspace-relative destination path."),
+					"expected_sha256":      digest("SHA-256 observed for the source file."),
+					"expected_destination": map[string]any{"const": "missing", "description": "Explicit destination absence precondition; must be the literal missing."},
+				},
+				"required": []string{"action", "source", "destination", "expected_sha256", "expected_destination"},
+			},
+		},
+	}
+}
+
 func overrideWorkspaceEdit(tool *mcp.Tool) error {
 	schema, err := (ActionInputContract{
 		Title:             "workspace_editArguments",
@@ -736,20 +782,157 @@ func overrideWorkspaceEdit(tool *mcp.Tool) error {
 					"description": "Absent workspace-relative destination path for move.",
 				},
 			},
+			{
+				Name:   "request_id",
+				Schema: RequestIDSchema("Caller-owned UUID used to replay one structured workspace batch without applying it twice."),
+			},
+			{
+				Name: "operations",
+				Schema: map[string]any{
+					"type":        "array",
+					"minItems":    1,
+					"maxItems":    50,
+					"description": "Bounded create/replace/move operations. Every path may appear at most once across the complete batch.",
+					"items":       workspaceBatchOperationSchema(),
+				},
+			},
 		},
 		Variants: []ActionVariant{
 			{Name: "create", Required: []string{"path", "content"}},
 			{Name: "replace", Required: []string{"path", "old", "new", "expected_sha256", "expected_replacements"}},
 			{Name: "patch", Required: []string{"patch"}},
 			{Name: "move", Required: []string{"source", "destination"}},
+			{Name: "batch", Required: []string{"request_id", "operations"}},
 		},
 	}).Schema()
 	if err != nil {
 		return err
 	}
-	tool.Description = "Edit workspace text with action-specific preconditions. create, replace, and move operate on one path; patch applies one preflighted unified diff across multiple files up to the configured patch-file limit."
+	fileDigest := map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"}
+	revision := map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"}
+	createResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":  map[string]any{"type": "string"},
+			"bytes": map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "bytes"},
+	}
+	replaceResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":              map[string]any{"type": "string"},
+			"replacements":      map[string]any{"type": "integer", "minimum": 1},
+			"previous_revision": revision,
+			"sha256":            fileDigest,
+		},
+		"required": []string{"path", "replacements", "previous_revision", "sha256"},
+	}
+	patchFile := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":    map[string]any{"type": "string"},
+			"added":   map[string]any{"type": "integer", "minimum": 0},
+			"deleted": map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "added", "deleted"},
+	}
+	patchResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"files":        map[string]any{"type": "array", "items": patchFile},
+			"patch_sha256": fileDigest,
+			"warnings":     map[string]any{"type": "string"},
+			"previous_revisions": map[string]any{
+				"type": "object", "additionalProperties": revision,
+			},
+		},
+		"required": []string{"files", "patch_sha256", "warnings", "previous_revisions"},
+	}
+	moveResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"source":            map[string]any{"type": "string"},
+			"destination":       map[string]any{"type": "string"},
+			"previous_revision": revision,
+		},
+		"required": []string{"source", "destination", "previous_revision"},
+	}
+	batchFile := map[string]any{
+		"oneOf": []any{
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action": map[string]any{"const": "create"},
+					"path":   map[string]any{"type": "string"},
+					"sha256": fileDigest,
+				},
+				"required": []string{"action", "path", "sha256"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action":            map[string]any{"const": "replace"},
+					"path":              map[string]any{"type": "string"},
+					"sha256":            fileDigest,
+					"previous_revision": revision,
+				},
+				"required": []string{"action", "path", "sha256", "previous_revision"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{
+					"action":            map[string]any{"const": "move"},
+					"source":            map[string]any{"type": "string"},
+					"destination":       map[string]any{"type": "string"},
+					"sha256":            fileDigest,
+					"previous_revision": revision,
+				},
+				"required": []string{"action", "source", "destination", "sha256", "previous_revision"},
+			},
+		},
+	}
+	batchResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"request_id":   map[string]any{"type": "string", "pattern": RequestIDPattern},
+			"operation_id": fileDigest,
+			"state":        map[string]any{"const": "applied"},
+			"files":        map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": batchFile},
+		},
+		"required": []string{"request_id", "operation_id", "state", "files"},
+	}
+
+	tool.Description = "Edit workspace text with action-specific preconditions. create, replace, and move operate on one path; patch applies one preflighted unified diff across multiple files; batch applies up to 50 guarded create/replace/move operations with request-ID replay, rollback, and restart reconciliation."
 	tool.InputSchema = schema
-	return nil
+	tool.OutputSchema = map[string]any{
+		"type":  "object",
+		"oneOf": []any{createResult, replaceResult, patchResult, moveResult, batchResult},
+	}
+	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
+		"create": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "workspace_read action=file",
+		},
+		"replace": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_sha256"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "restore_workspace_file with previous_revision",
+		},
+		"patch": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailurePreflight, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1000, RecoveryReference: "workspace_read action=revisions",
+		},
+		"move": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "restore_workspace_file with previous_revision",
+		},
+		"batch": {
+			Replay: ReplayRequestID, RequestIDField: "request_id",
+			FailureAtomicity: FailureRollback, CrashRecovery: CrashRecoveryJournaled,
+			AffectedResourceLimit: 50, RecoveryReference: "replay the same workspace_edit batch request_id",
+		},
+	})
 }
 
 func overrideGitStage(tool *mcp.Tool) error {

@@ -163,6 +163,9 @@ func (f *Files) Patch(ctx context.Context, patch string) (map[string]any, error)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	encoded := []byte(patch)
 	numstat, err := f.git(ctx, []string{"apply", "--numstat", "-z"}, encoded, 15*time.Second)
 	if err != nil {
@@ -224,6 +227,9 @@ func (f *Files) Patch(ctx context.Context, patch string) (map[string]any, error)
 func (f *Files) RemoveTracked(ctx context.Context, path, expected string) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	data, info, err := f.read(path, 64<<20)
 	if err != nil {
 		return nil, err

@@ -168,6 +168,9 @@ func (f *Files) RevisionDiff(path, revision string) (map[string]any, error) {
 func (f *Files) Restore(path, revision, expected string) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	if _, err := f.Policy.Resolve(path, false); err != nil {
 		return nil, err
 	}

@@ -15,10 +15,10 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		ToolCount:              32,
 		ActionUnionCount:       19,
 		FlatActionUnionCount:   13,
-		InputPropertyCount:     158,
-		DescribedPropertyCount: 52,
+		InputPropertyCount:     160,
+		DescribedPropertyCount: 54,
 		MissingOutputSchema:    3,
-		OpenOutputSchema:       18,
+		OpenOutputSchema:       17,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -41,7 +41,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
-			(issue.Code == "open_output_schema" && (issue.Tool == "workspace_read" || issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file")) {
+			(issue.Code == "open_output_schema" && (issue.Tool == "workspace_read" || issue.Tool == "workspace_edit" || issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file")) {
 			t.Errorf("migrated tool regressed: %#v", issue)
 		}
 	}

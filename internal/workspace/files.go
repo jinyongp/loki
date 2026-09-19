@@ -26,6 +26,7 @@ type Files struct {
 	Policy          *policy.Workspace
 	mu              sync.Mutex
 	GitPath, RGPath string
+	batchFault      func(stage string, index int) error
 }
 
 func New(c config.Config) (*Files, error) {
@@ -228,6 +229,9 @@ func (f *Files) Create(path, content string) (map[string]any, error) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	if err := f.Policy.AtomicWrite(path, []byte(content), 0600, false); err != nil {
 		return nil, err
 	}
@@ -243,6 +247,9 @@ func (f *Files) Replace(path, old, new, expected string, count int) (map[string]
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	data, info, err := f.read(path, f.Config.MaxWriteBytes)
 	if err != nil {
 		return nil, err
@@ -274,6 +281,9 @@ func (f *Files) Replace(path, old, new, expected string, count int) (map[string]
 func (f *Files) Move(source, destination string) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	data, info, err := f.read(source, 64<<20)
 	if err != nil {
 		return nil, err

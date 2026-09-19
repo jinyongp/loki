@@ -23,6 +23,20 @@ type workspaceEdit struct {
 	Path, Content, Old, New, Patch, Source, Destination *string
 	ExpectedSHA256                                      *string `json:"expected_sha256"`
 	ExpectedReplacements                                int     `json:"expected_replacements"`
+	RequestID                                           *string `json:"request_id"`
+	Operations                                          []workspaceBatchOperation
+}
+type workspaceBatchOperation struct {
+	Action               string
+	Path                 string
+	Content              string
+	Old                  string
+	New                  string
+	ExpectedSHA256       string `json:"expected_sha256"`
+	ExpectedReplacements int    `json:"expected_replacements"`
+	Source               string
+	Destination          string
+	ExpectedDestination  string `json:"expected_destination"`
 }
 type imageWrite struct {
 	Path      string
@@ -120,6 +134,21 @@ func WorkspaceHandlers(files *workspace.Files) map[string]mcpserver.Handler {
 					return nil, err
 				}
 				return objectResult(files.Move(source, dest))
+			case "batch":
+				requestID, err := value(r.RequestID, "request_id")
+				if err != nil {
+					return nil, err
+				}
+				operations := make([]workspace.BatchOperation, len(r.Operations))
+				for index, operation := range r.Operations {
+					operations[index] = workspace.BatchOperation{
+						Action: operation.Action, Path: operation.Path, Content: operation.Content,
+						Old: operation.Old, New: operation.New, ExpectedSHA256: operation.ExpectedSHA256,
+						ExpectedReplacements: operation.ExpectedReplacements, Source: operation.Source,
+						Destination: operation.Destination, ExpectedDestination: operation.ExpectedDestination,
+					}
+				}
+				return objectResult(files.Batch(ctx, requestID, operations))
 			}
 			return nil, fault.Error("invalid workspace edit action")
 		}),

@@ -545,6 +545,20 @@ func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testin
 		},
 		{"action": "patch", "patch": "diff --git a/a.txt b/a.txt\n"},
 		{"action": "move", "source": "a.txt", "destination": "b.txt"},
+		{
+			"action": "batch", "request_id": "10000000-0000-4000-8000-000000000001",
+			"operations": []any{
+				map[string]any{"action": "create", "path": "a.txt", "content": "a", "expected_sha256": "missing"},
+				map[string]any{
+					"action": "replace", "path": "b.txt", "old": "before", "new": "after",
+					"expected_sha256": strings.Repeat("b", 64), "expected_replacements": 1,
+				},
+				map[string]any{
+					"action": "move", "source": "c.txt", "destination": "d.txt",
+					"expected_sha256": strings.Repeat("c", 64), "expected_destination": "missing",
+				},
+			},
+		},
 	}
 	for _, arguments := range valid {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_edit", Arguments: arguments})
@@ -565,6 +579,22 @@ func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testin
 		},
 		{"action": "patch", "patch": "diff --git a/a.txt b/a.txt\n", "path": "a.txt"},
 		{"action": "move", "source": "a.txt", "destination": "b.txt", "patch": "diff"},
+		{"action": "batch", "operations": []any{map[string]any{"action": "create", "path": "a.txt", "content": "a", "expected_sha256": "missing"}}},
+		{
+			"action": "batch", "request_id": "not-a-uuid",
+			"operations": []any{map[string]any{"action": "create", "path": "a.txt", "content": "a", "expected_sha256": "missing"}},
+		},
+		{
+			"action": "batch", "request_id": "20000000-0000-4000-8000-000000000001",
+			"operations": []any{map[string]any{"action": "create", "path": "a.txt", "content": "a"}},
+		},
+		{
+			"action": "batch", "request_id": "30000000-0000-4000-8000-000000000001",
+			"operations": []any{map[string]any{
+				"action": "move", "source": "a.txt", "destination": "b.txt",
+				"expected_sha256": strings.Repeat("a", 64), "expected_destination": "missing", "old": "irrelevant",
+			}},
+		},
 	}
 	for _, arguments := range invalid {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_edit", Arguments: arguments})

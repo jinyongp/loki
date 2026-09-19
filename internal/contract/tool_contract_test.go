@@ -231,7 +231,8 @@ func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 	if tool == nil {
 		t.Fatal("workspace_edit definition missing")
 	}
-	if !strings.Contains(tool.Description, "multiple files") || !strings.Contains(tool.Description, "patch-file limit") {
+	if !strings.Contains(tool.Description, "multiple files") || !strings.Contains(tool.Description, "request-ID replay") ||
+		!strings.Contains(tool.Description, "restart reconciliation") {
 		t.Fatalf("workspace_edit description = %q", tool.Description)
 	}
 
@@ -257,18 +258,21 @@ func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 		}
 	}
 	branches, ok := schema["oneOf"].([]any)
-	if !ok || len(branches) != 4 {
+	if !ok || len(branches) != 5 {
 		t.Fatalf("workspace_edit oneOf = %#v", schema["oneOf"])
 	}
 
 	var replace map[string]any
+	var batch map[string]any
 	for _, raw := range branches {
 		branch := raw.(map[string]any)
 		branchProperties := branch["properties"].(map[string]any)
 		action := branchProperties["action"].(map[string]any)
-		if action["const"] == "replace" {
+		switch action["const"] {
+		case "replace":
 			replace = branch
-			break
+		case "batch":
+			batch = branch
 		}
 	}
 	if replace == nil {
@@ -281,6 +285,54 @@ func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 	for _, name := range []string{"action", "path", "old", "new", "expected_sha256", "expected_replacements"} {
 		if !required[name] {
 			t.Errorf("replace action does not require %s", name)
+		}
+	}
+	if batch == nil {
+		t.Fatal("batch action branch missing")
+	}
+	batchRequired := map[string]bool{}
+	for _, raw := range batch["required"].([]any) {
+		batchRequired[raw.(string)] = true
+	}
+	for _, name := range []string{"action", "request_id", "operations"} {
+		if !batchRequired[name] {
+			t.Errorf("batch action does not require %s", name)
+		}
+	}
+	batchProperties := batch["properties"].(map[string]any)
+	if _, exists := batchProperties["path"]; exists {
+		t.Fatal("batch action accepts single-file path")
+	}
+	operations := batchProperties["operations"].(map[string]any)
+	if operations["maxItems"] != float64(50) && operations["maxItems"] != 50 {
+		t.Fatalf("batch operations limit = %#v", operations["maxItems"])
+	}
+	metadata, ok := tool.Meta["loki/operations"].(map[string]any)
+	if !ok {
+		t.Fatalf("workspace_edit operation metadata = %#v", tool.Meta)
+	}
+	batchMetadata := metadata["batch"].(map[string]any)
+	if batchMetadata["replay"] != string(ReplayRequestID) ||
+		batchMetadata["request_id_field"] != "request_id" ||
+		batchMetadata["failure_atomicity"] != string(FailureRollback) ||
+		batchMetadata["crash_recovery"] != string(CrashRecoveryJournaled) {
+		t.Fatalf("batch operation metadata = %#v", batchMetadata)
+	}
+	outputEncoded, err := json.Marshal(tool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(outputEncoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	if branches := output["oneOf"].([]any); len(branches) != 5 {
+		t.Fatalf("workspace_edit output branches = %#v", branches)
+	} else {
+		for _, raw := range branches {
+			if raw.(map[string]any)["additionalProperties"] != false {
+				t.Fatalf("workspace_edit output remains open: %#v", raw)
+			}
 		}
 	}
 }

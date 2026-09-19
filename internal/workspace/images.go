@@ -106,6 +106,9 @@ func (f *Files) writeImage(path, encoded, mime string, overwrite bool, expected,
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.reconcileBatchesLocked(); err != nil {
+		return nil, err
+	}
 	current, info, err := f.read(path, 64<<20)
 	var revision any
 	exists := err == nil
