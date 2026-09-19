@@ -38,17 +38,25 @@ func TestDebugRedactionAndRetention(t *testing.T) {
 	for i := 0; i < 1100; i++ {
 		event(d, "Runtime.consoleAPICalled", map[string]any{"type": "log", "args": []any{map[string]any{"value": fmt.Sprint(i)}}})
 	}
-	if d.Events("console", "log", 0, 10)["retained"] != 1000 {
-		t.Fatal("console cap")
+	console := d.Events("console", "log", 0, 10)
+	if console["retained"] != 1000 || console["complete"] != false || console["next_sequence"] != nil {
+		t.Fatalf("console cap metadata = %#v", console)
+	}
+	boundary := d.droppedThrough["console"]
+	completeConsole := d.Events("console", "log", boundary, 1000)
+	if completeConsole["complete"] != true || completeConsole["next_sequence"] != d.sequence {
+		t.Fatalf("console continuation metadata = %#v boundary=%d", completeConsole, boundary)
 	}
 	for i := 0; i < 2100; i++ {
 		event(d, "Network.requestWillBeSent", map[string]any{"requestId": fmt.Sprint(i), "request": map[string]any{}})
 	}
-	if d.Request("1") != nil || d.Network(nil, false, "", 0, 10)["retained"] != 2000 {
-		t.Fatal("request cap")
+	network := d.Network(nil, false, "", 0, 10)
+	if d.Request("1") != nil || network["retained"] != 2000 || network["complete"] != false || network["next_sequence"] != nil {
+		t.Fatalf("request cap metadata = %#v", network)
 	}
 	d.Reset()
-	if d.Events("console", "", 0, 10)["latest_sequence"] != int64(0) {
-		t.Fatal("reset")
+	reset := d.Events("console", "", 0, 10)
+	if reset["latest_sequence"] != int64(0) || reset["complete"] != true || reset["next_sequence"] != int64(0) {
+		t.Fatalf("reset = %#v", reset)
 	}
 }

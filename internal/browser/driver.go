@@ -25,17 +25,18 @@ type Options struct {
 	Binary, Profile, Downloads, Proxy, LibraryPath string
 }
 type Driver struct {
-	options    Options
-	gate       chan struct{}
-	client     *cdp.Client
-	command    *exec.Cmd
-	wait       chan error
-	target     string
-	generation uint64
-	sessions   map[string]string
-	closed     map[string]struct{}
-	debug      Debug
-	downloads  *downloads
+	options         Options
+	gate            chan struct{}
+	client          *cdp.Client
+	command         *exec.Cmd
+	wait            chan error
+	target          string
+	generation      uint64
+	stateGeneration uint64
+	sessions        map[string]string
+	closed          map[string]struct{}
+	debug           Debug
+	downloads       *downloads
 }
 
 func NewDriver(options Options) (*Driver, error) {
@@ -402,7 +403,11 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	switch operation {
 	case "console", "network", "request", "websockets", "page_errors", "debug_diagnostics":
-		return d.observe(ctx, operation, args)
+		result, err := d.observe(ctx, operation, args)
+		if err == nil {
+			result["browser_generation"] = d.generation
+		}
+		return result, err
 	case "state":
 		return d.state(ctx)
 	case "click":

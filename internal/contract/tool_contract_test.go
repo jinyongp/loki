@@ -88,6 +88,63 @@ func TestActionInputContractSupportsDefaultAction(t *testing.T) {
 	}
 }
 
+func TestActionInputContractSupportsVariantSchemaOverrides(t *testing.T) {
+	schema, err := (ActionInputContract{
+		Title:             "fixture",
+		ActionDescription: "Fixture action.",
+		Fields: []ActionField{{
+			Name: "limit", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 500, "default": 100,
+				"description": "Result limit.",
+			},
+		}},
+		Variants: []ActionVariant{
+			{Name: "events", Optional: []string{"limit"}},
+			{Name: "diagnostics", Optional: []string{"limit"}, Overrides: map[string]map[string]any{
+				"limit": {"maximum": 200, "default": 50},
+			}},
+		},
+	}).Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range schema["oneOf"].([]any) {
+		branch := raw.(map[string]any)
+		properties := branch["properties"].(map[string]any)
+		action := properties["action"].(map[string]any)["const"].(string)
+		limit := properties["limit"].(map[string]any)
+		switch action {
+		case "events":
+			if limit["maximum"] != float64(500) && limit["maximum"] != 500 {
+				t.Fatalf("events limit = %#v", limit)
+			}
+		case "diagnostics":
+			if limit["maximum"] != float64(200) && limit["maximum"] != 200 {
+				t.Fatalf("diagnostics limit = %#v", limit)
+			}
+			if limit["description"] != "Result limit." {
+				t.Fatalf("diagnostics override lost base description: %#v", limit)
+			}
+		}
+	}
+
+	_, err = (ActionInputContract{
+		Title:             "fixture",
+		ActionDescription: "Fixture action.",
+		Fields: []ActionField{{
+			Name: "limit", Schema: map[string]any{
+				"type": "integer", "description": "Result limit.",
+			},
+		}},
+		Variants: []ActionVariant{{
+			Name: "read", Overrides: map[string]map[string]any{"limit": {"maximum": 1}},
+		}},
+	}).Schema()
+	if err == nil || !strings.Contains(err.Error(), "overrides unavailable field") {
+		t.Fatalf("unavailable override error = %v", err)
+	}
+}
+
 func TestSystemInspectUsesGeneratedActionContract(t *testing.T) {
 	definitions, err := CurrentDefinitions()
 	if err != nil {

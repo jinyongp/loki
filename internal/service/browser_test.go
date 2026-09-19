@@ -39,7 +39,15 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	}
 	data := content.Bytes()
 	captureCount := 0
+	operations := []string{}
 	browser := browserFixture(func(_ context.Context, operation string, args map[string]any) (map[string]any, error) {
+		operations = append(operations, operation)
+		sequenceResult := func(key string) map[string]any {
+			return map[string]any{
+				key: []any{}, "latest_sequence": 0, "oldest_sequence": 0, "next_sequence": 0,
+				"retained": 0, "complete": true, "browser_generation": 3,
+			}
+		}
 		switch operation {
 		case "screenshot":
 			captureCount++
@@ -53,6 +61,45 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			}, nil
 		case "stop":
 			return map[string]any{"status": "stopped", "browser_generation": 3}, nil
+		case "state":
+			return map[string]any{
+				"url": "https://example.com", "title": "fixture",
+				"interactive_elements": []any{}, "pixels_above": 0, "pixels_below": 0,
+				"viewport": map[string]any{
+					"width": 1280, "height": 800, "scroll_x": 0, "scroll_y": 0,
+					"page_width": 1280, "page_height": 800,
+				},
+				"tabs": []any{}, "active_tab_id": "abcd",
+				"browser_generation": 3, "state_generation": 1,
+			}, nil
+		case "list_tabs":
+			return map[string]any{"active_tab_id": "abcd", "tabs": []any{}, "browser_generation": 3}, nil
+		case "console", "websockets":
+			return sequenceResult("events"), nil
+		case "page_errors":
+			return sequenceResult("errors"), nil
+		case "network":
+			return sequenceResult("requests"), nil
+		case "request":
+			return map[string]any{
+				"request_id": args["request_id"], "session_id": "session",
+				"url": "https://example.com", "method": "GET", "resource_type": "Fetch",
+				"request_headers": map[string]any{}, "status": nil, "mime_type": nil,
+				"failed": false, "finished": false, "encoded_bytes": nil,
+				"browser_generation": 3,
+			}, nil
+		case "debug_diagnostics":
+			return map[string]any{
+				"summary": map[string]any{
+					"console_events": 0, "page_errors": 0, "network_requests": 0,
+					"failed_requests": 0, "websocket_events": 0, "latest_sequence": 0,
+				},
+				"recent_console": []any{}, "recent_page_errors": []any{},
+				"recent_failed_requests": []any{}, "recent_websockets": []any{},
+				"page":            map[string]any{"url": "https://example.com", "title": "fixture"},
+				"latest_sequence": 0, "oldest_sequence": 0, "next_sequence": 0,
+				"complete": true, "browser_generation": 3,
+			}, nil
 		default:
 			return map[string]any{"operation": operation, "arguments": args}, nil
 		}
@@ -120,7 +167,16 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			args := map[string]any{"action": action}
 			switch tool {
 			case "browser_observe":
-				args["request_id"] = "r1"
+				switch action {
+				case "console":
+					args["level"] = "warning"
+				case "network":
+					args["failed_only"] = true
+				case "request":
+					args["request_id"] = "r1"
+				case "diagnostics":
+					args["limit"] = 50
+				}
 			case "browser_interact":
 				args["index"], args["text"], args["key"], args["tab_id"] = 0, "test", "Enter", "1234"
 			}
@@ -135,13 +191,21 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			if action == "diagnostics" {
 				want = "debug_diagnostics"
 			}
-			if result["operation"] != want {
+			if operations[len(operations)-1] != want {
+				t.Fatalf("%s %s operation = %q, want %q", tool, action, operations[len(operations)-1], want)
+			}
+			if tool == "browser_observe" {
+				if result["browser_generation"] == nil {
+					t.Fatalf("%s omitted browser_generation: %#v", action, result)
+				}
+			} else if result["operation"] != want {
 				t.Fatal(tool, action, result)
 			}
 		}
 	}
-	if result := decode(call("browser_observe", nil)); result["operation"] != "state" {
-		t.Fatal(result)
+	defaultState := decode(call("browser_observe", nil))
+	if operations[len(operations)-1] != "state" || defaultState["state_generation"] == nil {
+		t.Fatalf("default browser observe = %#v operation=%q", defaultState, operations[len(operations)-1])
 	}
 	shot := call("browser_screenshot", nil)
 	if image, ok := shot.Content[0].(*mcp.ImageContent); !ok || !bytes.Equal(image.Data, data) || image.MIMEType != "image/png" {

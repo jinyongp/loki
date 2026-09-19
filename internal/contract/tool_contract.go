@@ -16,9 +16,10 @@ type ActionField struct {
 }
 
 type ActionVariant struct {
-	Name     string
-	Required []string
-	Optional []string
+	Name      string
+	Required  []string
+	Optional  []string
+	Overrides map[string]map[string]any
 }
 
 type ActionInputContract struct {
@@ -107,7 +108,21 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 			if err != nil {
 				return nil, err
 			}
+			if override := variant.Overrides[name]; override != nil {
+				overrideClone, err := cloneSchema(override)
+				if err != nil {
+					return nil, err
+				}
+				for key, value := range overrideClone {
+					cloned[key] = value
+				}
+			}
 			properties[name] = cloned
+		}
+		for name := range variant.Overrides {
+			if !allowed[name] {
+				return nil, fmt.Errorf("action %q overrides unavailable field %q", variant.Name, name)
+			}
 		}
 		for _, name := range variant.Required {
 			required = append(required, name)
@@ -378,6 +393,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"shared_resources":       overrideSharedResources,
 		"revoke_share":           overrideRevokeShare,
 		"browser_session":        overrideBrowserSession,
+		"browser_observe":        overrideBrowserObserve,
 		"workspace_read":         overrideWorkspaceRead,
 		"workspace_edit":         overrideWorkspaceEdit,
 		"restore_workspace_file": overrideRestoreWorkspaceFile,

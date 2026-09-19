@@ -12,7 +12,7 @@ func browserTabIDSchema() map[string]any {
 func browserGenerationSchema() map[string]any {
 	return map[string]any{
 		"type": "integer", "minimum": 0,
-		"description": "Monotonic browser lifecycle/page generation. It increases when the browser starts, stops, or completes navigation.",
+		"description": "Monotonic browser lifecycle/page generation. It advances on browser start/stop and before each validated navigation attempt so earlier observations are conservatively invalidated.",
 	}
 }
 

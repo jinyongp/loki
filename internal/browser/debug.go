@@ -140,6 +140,7 @@ type Debug struct {
 	console, pageErrors, network, websockets []map[string]any
 	requests                                 map[string]map[string]any
 	order                                    []string
+	droppedThrough                           map[string]int64
 }
 
 func (d *Debug) Reset() {
@@ -152,8 +153,9 @@ func (d *Debug) Reset() {
 	d.websockets = nil
 	d.requests = map[string]map[string]any{}
 	d.order = nil
+	d.droppedThrough = map[string]int64{}
 }
-func (d *Debug) record(target *[]map[string]any, kind, session string, data map[string]any) {
+func (d *Debug) record(target *[]map[string]any, stream, kind, session string, data map[string]any) {
 	d.sequence++
 	data["sequence"] = d.sequence
 	data["captured_at"] = time.Now().UTC().Format("2006-01-02T15:04:05.000+00:00")
@@ -161,6 +163,12 @@ func (d *Debug) record(target *[]map[string]any, kind, session string, data map[
 	data["session_id"] = session
 	*target = append(*target, data)
 	if len(*target) > 1000 {
+		if d.droppedThrough == nil {
+			d.droppedThrough = map[string]int64{}
+		}
+		if sequence, ok := (*target)[0]["sequence"].(int64); ok && sequence > d.droppedThrough[stream] {
+			d.droppedThrough[stream] = sequence
+		}
 		copy(*target, (*target)[1:])
 		*target = (*target)[:1000]
 	}
@@ -203,10 +211,10 @@ func (d *Debug) Event(e cdp.Event) {
 				break
 			}
 		}
-		d.record(&d.console, "console", e.SessionID, map[string]any{"level": text(value(m, "type", "log"), 50), "text": cut(strings.Join(parts, " "), 2000), "stack": stack(m["stackTrace"])})
+		d.record(&d.console, "console", "console", e.SessionID, map[string]any{"level": text(value(m, "type", "log"), 50), "text": cut(strings.Join(parts, " "), 2000), "stack": stack(m["stackTrace"])})
 	case "Log.entryAdded":
 		entry := object(m["entry"])
-		d.record(&d.console, "browser_log", e.SessionID, map[string]any{"level": text(value(entry, "level", "info"), 50), "source": text(value(entry, "source", ""), 100), "text": text(value(entry, "text", ""), 2000), "url": SanitizeURL(value(entry, "url", "")), "line": entry["lineNumber"], "stack": stack(entry["stackTrace"])})
+		d.record(&d.console, "console", "browser_log", e.SessionID, map[string]any{"level": text(value(entry, "level", "info"), 50), "source": text(value(entry, "source", ""), 100), "text": text(value(entry, "text", ""), 2000), "url": SanitizeURL(value(entry, "url", "")), "line": entry["lineNumber"], "stack": stack(entry["stackTrace"])})
 	case "Runtime.exceptionThrown":
 		details := object(m["exceptionDetails"])
 		exception := object(details["exception"])
@@ -216,7 +224,7 @@ func (d *Debug) Event(e cdp.Event) {
 		} else if v := exception["value"]; v != nil {
 			message = v
 		}
-		d.record(&d.pageErrors, "exception", e.SessionID, map[string]any{"text": text(message, 2000), "url": SanitizeURL(value(details, "url", "")), "line": details["lineNumber"], "column": details["columnNumber"], "stack": stack(details["stackTrace"])})
+		d.record(&d.pageErrors, "page_errors", "exception", e.SessionID, map[string]any{"text": text(message, 2000), "url": SanitizeURL(value(details, "url", "")), "line": details["lineNumber"], "column": details["columnNumber"], "stack": stack(details["stackTrace"])})
 	case "Network.requestWillBeSent":
 		if id == "" {
 			return
@@ -224,30 +232,30 @@ func (d *Debug) Event(e cdp.Event) {
 		request := object(m["request"])
 		item = map[string]any{"request_id": id, "session_id": e.SessionID, "url": SanitizeURL(value(request, "url", "")), "method": text(value(request, "method", "GET"), 30), "resource_type": text(value(m, "type", "Other"), 50), "request_headers": SanitizeHeaders(request["headers"]), "status": nil, "failed": false, "finished": false, "encoded_bytes": nil, "mime_type": nil}
 		d.remember(id, item)
-		d.record(&d.network, "request", e.SessionID, map[string]any{"request_id": id, "url": item["url"], "method": item["method"], "resource_type": item["resource_type"]})
+		d.record(&d.network, "network", "request", e.SessionID, map[string]any{"request_id": id, "url": item["url"], "method": item["method"], "resource_type": item["resource_type"]})
 	case "Network.responseReceived":
 		r := object(m["response"])
 		for k, v := range map[string]any{"session_id": e.SessionID, "url": SanitizeURL(value(r, "url", value(item, "url", ""))), "status": r["status"], "status_text": text(value(r, "statusText", ""), 300), "mime_type": text(value(r, "mimeType", ""), 200), "protocol": text(value(r, "protocol", ""), 100), "remote_ip": text(value(r, "remoteIPAddress", ""), 100), "from_disk_cache": r["fromDiskCache"] == true, "response_headers": SanitizeHeaders(r["headers"])} {
 			item[k] = v
 		}
 		d.remember(id, item)
-		d.record(&d.network, "response", e.SessionID, map[string]any{"request_id": id, "url": item["url"], "status": item["status"], "mime_type": item["mime_type"], "resource_type": text(value(m, "type", value(item, "resource_type", "Other")), 50)})
+		d.record(&d.network, "network", "response", e.SessionID, map[string]any{"request_id": id, "url": item["url"], "status": item["status"], "mime_type": item["mime_type"], "resource_type": text(value(m, "type", value(item, "resource_type", "Other")), 50)})
 	case "Network.loadingFinished":
 		item["finished"], item["encoded_bytes"] = true, m["encodedDataLength"]
 		d.remember(id, item)
 	case "Network.loadingFailed":
 		item["failed"], item["finished"], item["error"], item["blocked_reason"], item["canceled"] = true, true, text(value(m, "errorText", "Network request failed"), 2000), text(value(m, "blockedReason", ""), 200), m["canceled"] == true
 		d.remember(id, item)
-		d.record(&d.network, "failure", e.SessionID, map[string]any{"request_id": id, "url": value(item, "url", ""), "resource_type": text(value(m, "type", value(item, "resource_type", "Other")), 50), "error": item["error"], "blocked_reason": item["blocked_reason"], "canceled": item["canceled"]})
+		d.record(&d.network, "network", "failure", e.SessionID, map[string]any{"request_id": id, "url": value(item, "url", ""), "resource_type": text(value(m, "type", value(item, "resource_type", "Other")), 50), "error": item["error"], "blocked_reason": item["blocked_reason"], "canceled": item["canceled"]})
 	case "Network.webSocketCreated":
-		d.record(&d.websockets, "created", e.SessionID, map[string]any{"request_id": id, "url": SanitizeURL(value(m, "url", ""))})
+		d.record(&d.websockets, "websockets", "created", e.SessionID, map[string]any{"request_id": id, "url": SanitizeURL(value(m, "url", ""))})
 	case "Network.webSocketWillSendHandshakeRequest", "Network.webSocketHandshakeResponseReceived":
 		direction := "request"
 		if e.Method == "Network.webSocketHandshakeResponseReceived" {
 			direction = "response"
 		}
 		detail := object(m[direction])
-		d.record(&d.websockets, "handshake_"+direction, e.SessionID, map[string]any{"request_id": id, "status": detail["status"], "headers": SanitizeHeaders(detail["headers"])})
+		d.record(&d.websockets, "websockets", "handshake_"+direction, e.SessionID, map[string]any{"request_id": id, "status": detail["status"], "headers": SanitizeHeaders(detail["headers"])})
 	case "Network.webSocketFrameSent", "Network.webSocketFrameReceived":
 		direction := "sent"
 		if e.Method == "Network.webSocketFrameReceived" {
@@ -255,18 +263,45 @@ func (d *Debug) Event(e cdp.Event) {
 		}
 		frame := object(m["response"])
 		payload := fmt.Sprint(value(frame, "payloadData", ""))
-		d.record(&d.websockets, "frame_"+direction, e.SessionID, map[string]any{"request_id": id, "opcode": frame["opcode"], "masked": frame["mask"] == true, "payload_bytes": len(payload)})
+		d.record(&d.websockets, "websockets", "frame_"+direction, e.SessionID, map[string]any{"request_id": id, "opcode": frame["opcode"], "masked": frame["mask"] == true, "payload_bytes": len(payload)})
 	case "Network.webSocketClosed":
-		d.record(&d.websockets, "closed", e.SessionID, map[string]any{"request_id": id})
+		d.record(&d.websockets, "websockets", "closed", e.SessionID, map[string]any{"request_id": id})
 	case "Network.webSocketFrameError":
-		d.record(&d.websockets, "error", e.SessionID, map[string]any{"request_id": id, "error": text(value(m, "errorMessage", "WebSocket error"), 2000)})
+		d.record(&d.websockets, "websockets", "error", e.SessionID, map[string]any{"request_id": id, "error": text(value(m, "errorMessage", "WebSocket error"), 2000)})
 	}
 }
+func eventSequence(item map[string]any) int64 {
+	switch value := item["sequence"].(type) {
+	case int64:
+		return value
+	case float64:
+		return int64(value)
+	default:
+		return 0
+	}
+}
+
+func oldestSequence(items []map[string]any) int64 {
+	if len(items) == 0 {
+		return 0
+	}
+	return eventSequence(items[0])
+}
+
+func minimumPositive(values ...int64) int64 {
+	var result int64
+	for _, value := range values {
+		if value > 0 && (result == 0 || value < result) {
+			result = value
+		}
+	}
+	return result
+}
+
 func page(items []map[string]any, since int64, limit int) []map[string]any {
 	out := []map[string]any{}
 	for _, item := range items {
-		sequence, _ := item["sequence"].(int64)
-		if sequence > since {
+		if eventSequence(item) > since {
 			out = append(out, clone(item))
 		}
 	}
@@ -274,6 +309,13 @@ func page(items []map[string]any, since int64, limit int) []map[string]any {
 		out = out[len(out)-limit:]
 	}
 	return out
+}
+
+func observationCursor(latest int64, complete bool) any {
+	if !complete {
+		return nil
+	}
+	return latest
 }
 func (d *Debug) Events(kind, level string, since int64, limit int) map[string]any {
 	d.mu.Lock()
@@ -295,10 +337,19 @@ func (d *Debug) Events(kind, level string, since int64, limit int) map[string]an
 		}
 		out = filtered
 	}
+	available := len(out)
 	if len(out) > limit {
 		out = out[len(out)-limit:]
 	}
-	return map[string]any{key: out, "latest_sequence": d.sequence, "retained": len(items)}
+	complete := d.droppedThrough[kind] <= since && available <= limit
+	return map[string]any{
+		key:               out,
+		"latest_sequence": d.sequence,
+		"oldest_sequence": oldestSequence(items),
+		"next_sequence":   observationCursor(d.sequence, complete),
+		"retained":        len(items),
+		"complete":        complete,
+	}
 }
 func failed(item map[string]any) bool {
 	status, _ := item["status"].(float64)
@@ -322,10 +373,19 @@ func (d *Debug) Network(statusMin *int, failedOnly bool, resource string, since 
 		}
 		out = append(out, clone(item))
 	}
+	available := len(out)
 	if len(out) > limit {
 		out = out[len(out)-limit:]
 	}
-	return map[string]any{"requests": out, "latest_sequence": d.sequence, "retained": len(d.requests)}
+	complete := d.droppedThrough["network"] <= since && available <= limit
+	return map[string]any{
+		"requests":        out,
+		"latest_sequence": d.sequence,
+		"oldest_sequence": oldestSequence(d.network),
+		"next_sequence":   observationCursor(d.sequence, complete),
+		"retained":        len(d.requests),
+		"complete":        complete,
+	}
 }
 func (d *Debug) Request(id string) map[string]any {
 	d.mu.Lock()
@@ -338,15 +398,52 @@ func (d *Debug) Request(id string) map[string]any {
 func (d *Debug) Diagnostics(since int64, limit int) map[string]any {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	changedRequests := map[string]bool{}
+	if since > 0 {
+		for _, item := range page(d.network, since, 1000) {
+			changedRequests[fmt.Sprint(item["request_id"])] = true
+		}
+	}
 	failures := []map[string]any{}
+	totalFailures := 0
 	for _, id := range d.order {
-		if item := d.requests[id]; failed(item) {
+		item := d.requests[id]
+		if !failed(item) {
+			continue
+		}
+		totalFailures++
+		if since == 0 || changedRequests[id] {
 			failures = append(failures, clone(item))
 		}
 	}
-	count := len(failures)
-	if count > limit {
-		failures = failures[count-limit:]
+	failureCount := len(failures)
+	if failureCount > limit {
+		failures = failures[failureCount-limit:]
 	}
-	return map[string]any{"summary": map[string]any{"console_events": len(d.console), "page_errors": len(d.pageErrors), "network_requests": len(d.requests), "failed_requests": count, "websocket_events": len(d.websockets), "latest_sequence": d.sequence}, "recent_console": page(d.console, since, limit), "recent_page_errors": page(d.pageErrors, since, limit), "recent_failed_requests": failures, "recent_websockets": page(d.websockets, since, limit)}
+	consoleCount := len(page(d.console, since, 1000))
+	errorCount := len(page(d.pageErrors, since, 1000))
+	websocketCount := len(page(d.websockets, since, 1000))
+	complete := d.droppedThrough["console"] <= since &&
+		d.droppedThrough["page_errors"] <= since &&
+		d.droppedThrough["network"] <= since &&
+		d.droppedThrough["websockets"] <= since &&
+		consoleCount <= limit && errorCount <= limit && failureCount <= limit && websocketCount <= limit
+	return map[string]any{
+		"summary": map[string]any{
+			"console_events": len(d.console), "page_errors": len(d.pageErrors),
+			"network_requests": len(d.requests), "failed_requests": totalFailures,
+			"websocket_events": len(d.websockets), "latest_sequence": d.sequence,
+		},
+		"recent_console":         page(d.console, since, limit),
+		"recent_page_errors":     page(d.pageErrors, since, limit),
+		"recent_failed_requests": failures,
+		"recent_websockets":      page(d.websockets, since, limit),
+		"latest_sequence":        d.sequence,
+		"oldest_sequence": minimumPositive(
+			oldestSequence(d.console), oldestSequence(d.pageErrors),
+			oldestSequence(d.network), oldestSequence(d.websockets),
+		),
+		"next_sequence": observationCursor(d.sequence, complete),
+		"complete":      complete,
+	}
 }

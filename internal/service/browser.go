@@ -57,6 +57,9 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 	} {
 		handlers[tool] = func(ctx context.Context, args map[string]any) (*mcp.CallToolResult, error) {
 			action, _ := args["action"].(string)
+			if tool == "browser_observe" && action == "" {
+				action = "state"
+			}
 			operation := actions[action]
 			if operation == "" {
 				return nil, fault.Error("invalid " + tool + " action")
