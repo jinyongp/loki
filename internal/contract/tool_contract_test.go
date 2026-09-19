@@ -96,3 +96,51 @@ func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 		}
 	}
 }
+
+func TestGitStageUsesGeneratedActionContract(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := seenDefinition(definitions, "git_stage")
+	if tool == nil {
+		t.Fatal("git_stage definition missing")
+	}
+	if !strings.Contains(tool.Description, "multiple paths") ||
+		!strings.Contains(tool.Description, "multi-file") ||
+		!strings.Contains(tool.Description, "git_inspect action=index") {
+		t.Fatalf("git_stage description = %q", tool.Description)
+	}
+
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties := schema["properties"].(map[string]any)
+	for name, raw := range properties {
+		property := raw.(map[string]any)
+		if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+			t.Errorf("git_stage property %s has no description", name)
+		}
+	}
+	branches := schema["oneOf"].([]any)
+	if len(branches) != 3 {
+		t.Fatalf("git_stage oneOf = %#v", branches)
+	}
+	for _, raw := range branches {
+		branch := raw.(map[string]any)
+		branchProperties := branch["properties"].(map[string]any)
+		action := branchProperties["action"].(map[string]any)["const"].(string)
+		required := map[string]bool{}
+		for _, rawRequired := range branch["required"].([]any) {
+			required[rawRequired.(string)] = true
+		}
+		if !required["expected_index_sha256"] {
+			t.Errorf("%s does not require expected_index_sha256", action)
+		}
+	}
+}

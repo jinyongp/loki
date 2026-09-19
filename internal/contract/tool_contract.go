@@ -148,6 +148,7 @@ type toolOverride func(*mcp.Tool) error
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
 		"workspace_edit": overrideWorkspaceEdit,
+		"git_stage":      overrideGitStage,
 	}
 }
 
@@ -238,6 +239,72 @@ func overrideWorkspaceEdit(tool *mcp.Tool) error {
 		return err
 	}
 	tool.Description = "Edit workspace text with action-specific preconditions. create, replace, and move operate on one path; patch applies one preflighted unified diff across multiple files up to the configured patch-file limit."
+	tool.InputSchema = schema
+	return nil
+}
+
+func overrideGitStage(tool *mcp.Tool) error {
+	schema, err := (ActionInputContract{
+		Title:             "git_stageArguments",
+		ActionDescription: "Git index mutation to perform.",
+		Fields: []ActionField{
+			{
+				Name: "cwd",
+				Schema: map[string]any{
+					"type":        "string",
+					"minLength":   1,
+					"default":     ".",
+					"description": "Workspace-relative directory inside the target Git repository.",
+				},
+			},
+			{
+				Name: "paths",
+				Schema: map[string]any{
+					"type":        "array",
+					"minItems":    1,
+					"uniqueItems": true,
+					"description": "One or more workspace-relative paths to stage or unstage in a single index mutation, bounded by the configured patch-file limit.",
+					"items": map[string]any{
+						"type":      "string",
+						"minLength": 1,
+					},
+				},
+			},
+			{
+				Name: "patch",
+				Schema: map[string]any{
+					"type":        "string",
+					"minLength":   1,
+					"description": "Unified text diff for partial staging. One patch may span multiple files up to the configured patch-file limit.",
+				},
+			},
+			{
+				Name: "reverse",
+				Schema: map[string]any{
+					"type":        "boolean",
+					"default":     false,
+					"description": "Apply the staging patch in reverse; valid only for action=patch.",
+				},
+			},
+			{
+				Name: "expected_index_sha256",
+				Schema: map[string]any{
+					"type":        "string",
+					"pattern":     "^[0-9a-f]{64}$",
+					"description": "SHA-256 digest returned by git_inspect action=index. The mutation fails if the Git index changed since inspection.",
+				},
+			},
+		},
+		Variants: []ActionVariant{
+			{Name: "paths", Required: []string{"paths", "expected_index_sha256"}, Optional: []string{"cwd"}},
+			{Name: "unstage", Required: []string{"paths", "expected_index_sha256"}, Optional: []string{"cwd"}},
+			{Name: "patch", Required: []string{"patch", "expected_index_sha256"}, Optional: []string{"cwd", "reverse"}},
+		},
+	}).Schema()
+	if err != nil {
+		return err
+	}
+	tool.Description = "Modify only the Git index with action-specific preconditions. paths and unstage accept multiple paths in one call; patch accepts one multi-file partial-staging diff. Every mutation requires the index SHA-256 from git_inspect action=index."
 	tool.InputSchema = schema
 	return nil
 }

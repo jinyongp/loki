@@ -332,3 +332,49 @@ func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testin
 		t.Fatalf("invalid workspace_edit reached handler: calls=%d want=%d", calls, len(valid))
 	}
 }
+
+func TestGitStageActionSchemaRequiresCASAndRejectsIrrelevantFields(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["git_stage"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(input)
+	}
+	client := connect(t, handlers)
+	expected := strings.Repeat("b", 64)
+
+	valid := []map[string]any{
+		{"action": "paths", "paths": []string{"a.txt", "b.txt"}, "expected_index_sha256": expected},
+		{"action": "unstage", "cwd": "repo", "paths": []string{"a.txt"}, "expected_index_sha256": expected},
+		{
+			"action": "patch", "patch": "diff --git a/a.txt b/a.txt\n",
+			"reverse": true, "expected_index_sha256": expected,
+		},
+	}
+	for _, arguments := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "git_stage", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("valid git_stage rejected: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("valid git_stage calls = %d, want %d", calls, len(valid))
+	}
+
+	invalid := []map[string]any{
+		{"action": "paths", "paths": []string{"a.txt"}},
+		{"action": "paths", "paths": []string{"a.txt"}, "reverse": true, "expected_index_sha256": expected},
+		{"action": "unstage", "paths": []string{"a.txt"}, "patch": "diff", "expected_index_sha256": expected},
+		{"action": "patch", "patch": "diff", "paths": []string{"a.txt"}, "expected_index_sha256": expected},
+		{"action": "patch", "patch": "diff", "expected_index_sha256": "not-a-digest"},
+	}
+	for _, arguments := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "git_stage", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid git_stage accepted: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("invalid git_stage reached handler: calls=%d want=%d", calls, len(valid))
+	}
+}

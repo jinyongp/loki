@@ -44,17 +44,25 @@ func GitHandlers(git *gitops.Controller) map[string]mcpserver.Handler {
 				if err != nil {
 					return nil, err
 				}
+				expected, err := mcpserver.Require(r.Expected, "expected_index_sha256")
+				if err != nil {
+					return nil, err
+				}
 				op := "stage"
 				if r.Action == "unstage" {
 					op = "unstage"
 				}
-				return objectResult(git.MutatePaths(ctx, op, r.CWD, paths, r.Expected))
+				return objectResult(git.MutatePaths(ctx, op, r.CWD, paths, &expected))
 			case "patch":
 				patch, err := mcpserver.Require(r.Patch, "patch")
 				if err != nil {
 					return nil, err
 				}
-				return objectResult(git.StagePatch(ctx, r.CWD, patch, r.Reverse, r.Expected))
+				expected, err := mcpserver.Require(r.Expected, "expected_index_sha256")
+				if err != nil {
+					return nil, err
+				}
+				return objectResult(git.StagePatch(ctx, r.CWD, patch, r.Reverse, &expected))
 			default:
 				return nil, fault.Error("git_stage action must be paths, unstage, or patch")
 			}
