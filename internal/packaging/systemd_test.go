@@ -149,6 +149,9 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if mcp["ExecutionContract"] != "/usr/share/doc/loki/execution-contract.json" {
 		t.Fatalf("MCP execution contract = %#v", mcp["ExecutionContract"])
 	}
+	if mcp["PackagedSkillRoot"] != "/opt/loki/share/skills" {
+		t.Fatalf("MCP packaged Skill root = %#v", mcp["PackagedSkillRoot"])
+	}
 	for _, name := range []string{"runtime.json", "mcp.json", "identity.env"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		if err != nil {
@@ -194,12 +197,39 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	}
 	for _, want := range []string{
 		"d /var/lib/loki-go/runner 0700 runner runner -",
+		"d /var/lib/loki-go/runner/agents 0700 runner runner -",
+		"d /var/lib/loki-go/runner/agents/skills 0700 runner runner -",
 		"d /var/cache/loki-go/runner 0700 runner runner -",
 		"d /var/tmp/loki-go/runner 0700 runner runner -",
 		"d /var/tmp/loki-go/github 0710 root workspace -",
 	} {
 		if !strings.Contains(string(tmpfiles), want) {
 			t.Fatalf("tmpfiles contract does not contain %q", want)
+		}
+	}
+}
+
+func TestMCPUnitMountsUserSkillsReadOnly(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-mcp.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(unit)
+	for _, want := range []string{
+		"ProtectHome=read-only\n",
+		"BindReadOnlyPaths=/var/lib/loki-go/runner/agents:/home/runner/.agents\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("MCP unit does not contain %q", want)
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "ReadWritePaths=") && strings.Contains(line, "/home/runner/.agents") {
+			t.Fatalf("MCP unit makes user Skill path writable: %q", line)
 		}
 	}
 }

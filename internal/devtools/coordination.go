@@ -35,41 +35,33 @@ type CoordinationRequest struct {
 }
 
 type CoordinationProjection struct {
-	Profile      string            `json:"profile"`
-	Revision     int               `json:"revision"`
-	Item         json.RawMessage   `json:"item,omitempty"`
-	Items        []json.RawMessage `json:"items,omitempty"`
-	NextCursor   *string           `json:"next_cursor,omitempty"`
-	Reason       string            `json:"reason,omitempty"`
-	Truncated    bool              `json:"truncated,omitempty"`
-	Documents    json.RawMessage   `json:"documents,omitempty"`
-	Tasks        []json.RawMessage `json:"tasks,omitempty"`
-	Validations  []json.RawMessage `json:"validations,omitempty"`
-	History      []json.RawMessage `json:"history,omitempty"`
-	OmittedIDs   []string          `json:"omitted_ids,omitempty"`
-	ContextBasis json.RawMessage   `json:"context_basis,omitempty"`
-	Compaction   json.RawMessage   `json:"compaction,omitempty"`
-	Delta        []json.RawMessage `json:"delta,omitempty"`
-	DeltaStatus  json.RawMessage   `json:"delta_status,omitempty"`
+	Profile     string            `json:"profile"`
+	Revision    int               `json:"revision"`
+	Item        json.RawMessage   `json:"item,omitempty"`
+	Items       []json.RawMessage `json:"items,omitempty"`
+	NextCursor  *string           `json:"next_cursor,omitempty"`
+	Reason      string            `json:"reason,omitempty"`
+	Truncated   bool              `json:"truncated,omitempty"`
+	Documents   json.RawMessage   `json:"documents,omitempty"`
+	Tasks       []json.RawMessage `json:"tasks,omitempty"`
+	Validations []json.RawMessage `json:"validations,omitempty"`
+	History     []json.RawMessage `json:"history,omitempty"`
+	OmittedIDs  []string          `json:"omitted_ids,omitempty"`
 }
 
 type coordinationWire struct {
-	Profile      string            `json:"profile"`
-	Revision     int               `json:"revision"`
-	Item         json.RawMessage   `json:"item"`
-	Items        []json.RawMessage `json:"items"`
-	NextCursor   *string           `json:"next_cursor"`
-	Reason       string            `json:"reason"`
-	Truncated    bool              `json:"truncated"`
-	Documents    json.RawMessage   `json:"documents"`
-	Tasks        []json.RawMessage `json:"tasks"`
-	Validations  []json.RawMessage `json:"validations"`
-	History      []json.RawMessage `json:"history"`
-	OmittedIDs   []string          `json:"omitted_ids"`
-	ContextBasis json.RawMessage   `json:"context_basis"`
-	Compaction   json.RawMessage   `json:"compaction"`
-	Delta        []json.RawMessage `json:"delta"`
-	DeltaStatus  json.RawMessage   `json:"delta_status"`
+	Profile     string            `json:"profile"`
+	Revision    int               `json:"revision"`
+	Item        json.RawMessage   `json:"item"`
+	Items       []json.RawMessage `json:"items"`
+	NextCursor  *string           `json:"next_cursor"`
+	Reason      string            `json:"reason"`
+	Truncated   bool              `json:"truncated"`
+	Documents   json.RawMessage   `json:"documents"`
+	Tasks       []json.RawMessage `json:"tasks"`
+	Validations []json.RawMessage `json:"validations"`
+	History     []json.RawMessage `json:"history"`
+	OmittedIDs  []string          `json:"omitted_ids"`
 }
 
 func (c *Client) QueryCoordination(ctx context.Context, directory string, query CoordinationQuery, request CoordinationRequest) (CoordinationProjection, error) {
@@ -131,15 +123,6 @@ func (c *Client) QueryCoordination(ctx context.Context, directory string, query 
 	if projection.Documents, err = c.sanitizeCoordinationRaw(wire.Documents); err != nil {
 		return CoordinationProjection{}, err
 	}
-	if projection.ContextBasis, err = c.sanitizeCoordinationRaw(wire.ContextBasis); err != nil {
-		return CoordinationProjection{}, err
-	}
-	if projection.Compaction, err = c.sanitizeCoordinationRaw(wire.Compaction); err != nil {
-		return CoordinationProjection{}, err
-	}
-	if projection.DeltaStatus, err = c.sanitizeCoordinationRaw(wire.DeltaStatus); err != nil {
-		return CoordinationProjection{}, err
-	}
 	groups := []struct {
 		source []json.RawMessage
 		target *[]json.RawMessage
@@ -148,7 +131,6 @@ func (c *Client) QueryCoordination(ctx context.Context, directory string, query 
 		{wire.Tasks, &projection.Tasks},
 		{wire.Validations, &projection.Validations},
 		{wire.History, &projection.History},
-		{wire.Delta, &projection.Delta},
 	}
 	for _, group := range groups {
 		for _, item := range group.source {

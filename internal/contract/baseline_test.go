@@ -13,7 +13,7 @@ func TestCurrentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != 29 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
+	if snapshot.Baseline != "go-0.49.0-dev" || len(snapshot.Tools) != 31 || len(snapshot.Resources) != 3 || len(snapshot.ResourceContents) != 3 {
 		t.Fatal("incomplete current contract")
 	}
 	definitions, err := CurrentDefinitions()
@@ -59,8 +59,8 @@ func TestCurrentContract(t *testing.T) {
 	}
 	writeProperties := writeSchema["properties"].(map[string]any)
 	for _, key := range []string{"compaction_fingerprint", "compaction_through"} {
-		if _, ok := writeProperties[key]; !ok {
-			t.Errorf("project_coordination_write missing %q", key)
+		if _, ok := writeProperties[key]; ok {
+			t.Errorf("project_coordination_write still exposes retired field %q", key)
 		}
 	}
 	data, err := json.Marshal(definitions)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"loki/internal/agentcontext"
 	"loki/internal/artifacts"
 	"loki/internal/audit"
 	"loki/internal/auth"
@@ -32,6 +33,7 @@ type MCPOptions struct {
 	Runtime, PortGuard                   RuntimeCaller
 	Browser                              BrowserCaller
 	RuntimeSocket, BrowserSocket, RGPath string
+	PackagedSkillRoot                    string
 	GitTemplateRoots                     []string
 	Environment                          map[string]string
 	Policy                               controlpolicy.Generation
@@ -98,6 +100,16 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		git.TemplateRoots = append(git.TemplateRoots, root)
 	}
 	git.Env = toolEnvironment(options.Environment)
+	userHome := options.Environment["HOME"]
+	if userHome != "" && !filepath.IsAbs(userHome) {
+		return nil, errors.New("MCP HOME must be absolute")
+	}
+	if options.PackagedSkillRoot != "" && !filepath.IsAbs(options.PackagedSkillRoot) {
+		return nil, errors.New("MCP packaged Skill root must be absolute")
+	}
+	agentProvider := &agentcontext.Provider{
+		Paths: app.files.Policy, Git: git, UserHome: userHome, PackagedSkills: options.PackagedSkillRoot,
+	}
 	if c.ArtifactBaseURL != "" {
 		hosts := append([]string{"127.0.0.1", "127.0.0.1:" + strconv.Itoa(c.Port), "localhost", "localhost:" + strconv.Itoa(c.Port)}, c.PublicHosts...)
 		app.Artifacts = artifacts.New(artifacts.Options{BaseURL: c.ArtifactBaseURL, AllowedHosts: hosts})
@@ -121,7 +133,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), AgentGuidanceHandlers(options.Runtime)} {
+	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: git, Claims: app.Claims}
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

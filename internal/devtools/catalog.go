@@ -42,12 +42,9 @@ type Command struct {
 var approvedNames = []string{
 	"command inspect",
 	"command list",
-	"guidance resolve",
 	"process restart",
 	"process start",
 	"project inspect",
-	"skill inspect",
-	"skill list",
 	"task checkpoint",
 	"task checkpoint list",
 	"task claim",

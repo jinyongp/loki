@@ -19,6 +19,7 @@ services:
         /var/lib/loki/runner/state /var/lib/loki/runner/config
         /var/lib/loki/runner/gh-config /var/lib/loki/runner/data
         /var/lib/loki/runner/xdg-state /var/lib/loki/runner/snapshots
+        /var/lib/loki/runner/agents/skills
         /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
         /var/cache/loki/playwright /var/cache/loki/go-build
         /var/cache/loki/go-mod /var/cache/loki/pip;
@@ -31,6 +32,7 @@ services:
     restart: "no"
     volumes:
       - runner-state:/var/lib/loki/runner
+      - user-skills:/var/lib/loki/runner/agents
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
     mem_limit: 32m
@@ -139,6 +141,7 @@ services:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runtime-state:/var/lib/loki/runtime
       - runner-state:/var/lib/loki/runner
+      - user-skills:/var/lib/loki/runner/agents
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
     configs:
@@ -172,6 +175,7 @@ services:
     volumes:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runner-state:/var/lib/loki/runner
+      - user-skills:/home/runner/.agents:ro
       - sockets:/run/loki
     configs:
       - source: github_config
@@ -197,6 +201,7 @@ volumes:
   browser-state: {}
   runtime-state: {}
   runner-state: {}
+  user-skills: {}
   runner-cache: {}
   signing-state: {}
   sockets: {}

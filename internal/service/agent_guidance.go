@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/devtools"
+	"loki/internal/agentcontext"
 	"loki/internal/mcpserver"
 )
 
@@ -16,9 +16,14 @@ type agentGuidanceRequest struct {
 	Name   string `json:"name"`
 }
 
-func AgentGuidanceHandlers(runtime RuntimeCaller) map[string]mcpserver.Handler {
+type AgentGuidanceProvider interface {
+	Context(context.Context, string, string) (agentcontext.ContextResult, error)
+	Skill(context.Context, string, string, string) (agentcontext.SkillInspection, error)
+}
+
+func AgentGuidanceHandlers(provider AgentGuidanceProvider) map[string]mcpserver.Handler {
 	handler := mcpserver.Typed(func(ctx context.Context, request agentGuidanceRequest) (*mcp.CallToolResult, error) {
-		if runtime == nil {
+		if provider == nil {
 			return nil, errors.New("agent guidance is unavailable")
 		}
 		if request.CWD == "" {
@@ -32,41 +37,26 @@ func AgentGuidanceHandlers(runtime RuntimeCaller) map[string]mcpserver.Handler {
 			if request.Target == "" {
 				request.Target = "."
 			}
-			var guidance devtools.GuidanceResult
-			if err := runtimeDecode(ctx, runtime, map[string]any{
-				"operation": "devtools_guidance_resolve",
-				"cwd":       request.CWD,
-				"target":    request.Target,
-			}, &guidance); err != nil {
-				return nil, err
-			}
-			var skills devtools.SkillCatalog
-			if err := runtimeDecode(ctx, runtime, map[string]any{
-				"operation": "devtools_skill_list",
-				"cwd":       request.CWD,
-			}, &skills); err != nil {
+			result, err := provider.Context(ctx, request.CWD, request.Target)
+			if err != nil {
 				return nil, err
 			}
 			return mcpserver.Object(map[string]any{
-				"guidance": guidance,
-				"skills":   skills,
+				"guidance": result.Guidance,
+				"skills":   result.Skills,
 			})
 		case "skill":
 			if request.Name == "" {
 				return nil, errors.New("agent guidance skill requires a name")
 			}
-			if request.Target != "" {
-				return nil, errors.New("agent guidance skill does not accept a target")
+			if request.Target == "" {
+				request.Target = "."
 			}
-			var skill devtools.SkillInspection
-			if err := runtimeDecode(ctx, runtime, map[string]any{
-				"operation": "devtools_skill_inspect",
-				"cwd":       request.CWD,
-				"name":      request.Name,
-			}, &skill); err != nil {
+			result, err := provider.Skill(ctx, request.CWD, request.Target, request.Name)
+			if err != nil {
 				return nil, err
 			}
-			return mcpserver.Object(map[string]any{"skill": skill})
+			return mcpserver.Object(map[string]any{"skill": result})
 		default:
 			return nil, errors.New("agent guidance action must be context or skill")
 		}

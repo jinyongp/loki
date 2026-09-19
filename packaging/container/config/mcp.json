@@ -3,6 +3,7 @@
   "PortGuardSocket": "/run/loki/runtime/control.sock",
   "BrowserSocket": "/run/loki/browser/control.sock",
   "ExecutionContract": "/usr/share/doc/loki/container-execution-contract.json",
+  "PackagedSkillRoot": "/opt/loki/share/skills",
   "RGPath": "/usr/bin/rg",
   "RuntimeUID": 0,
   "PortGuardUID": 0,

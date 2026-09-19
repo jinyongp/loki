@@ -22,7 +22,7 @@ import (
 
 type mcpLayout struct {
 	RuntimeSocket, PortGuardSocket, BrowserSocket, RGPath string
-	ExecutionContract                                     string
+	ExecutionContract, PackagedSkillRoot                  string
 	RuntimeUID, PortGuardUID, BrowserUID                  *uint32
 	GitTemplateRoots                                      []string
 	Environment                                           map[string]string
@@ -40,12 +40,15 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 	if !filepath.IsAbs(l.ExecutionContract) {
 		return service.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
 	}
-	for _, path := range append([]string{l.RGPath, l.ExecutionContract}, l.GitTemplateRoots...) {
+	if !filepath.IsAbs(l.PackagedSkillRoot) {
+		return service.MCPOptions{}, errors.New("MCP packaged Skill root must be absolute")
+	}
+	for _, path := range append([]string{l.RGPath, l.ExecutionContract, l.PackagedSkillRoot}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
 			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
 	}
-	return service.MCPOptions{Runtime: rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}, PortGuard: rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}, Browser: service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID), RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket, RGPath: l.RGPath, GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token}, nil
+	return service.MCPOptions{Runtime: rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}, PortGuard: rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}, Browser: service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID), RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket, RGPath: l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot, GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token}, nil
 }
 func runMCP(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)

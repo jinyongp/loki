@@ -76,3 +76,59 @@ func TestTrackedFileUsesNearestRepositoryAndWorkspaceMetadata(t *testing.T) {
 		t.Fatalf("external metadata error = %v", err)
 	}
 }
+
+func TestContextEvidenceSharesRepositoryIdentityAcrossWorktreesAndTracksCode(t *testing.T) {
+	c := fixture(t)
+	write(t, c, "tracked.txt", "base\n")
+	git(t, c, "add", "--", "tracked.txt")
+	git(t, c, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "base")
+
+	mainEvidence, err := c.ContextEvidence(t.Context(), "repo", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mainEvidence.RepositoryID) != 64 || len(mainEvidence.WorktreeID) != 64 || len(mainEvidence.CodeBasis) != 64 || len(mainEvidence.Gaps) != 0 {
+		t.Fatalf("main evidence = %#v", mainEvidence)
+	}
+
+	feature := filepath.Join(c.Paths.Root(), "feature-context")
+	runGitAt(t, c, filepath.Join(c.Paths.Root(), "repo"), "worktree", "add", "-q", "-b", "feature-context", feature)
+	featureEvidence, err := c.ContextEvidence(t.Context(), ".", "feature-context/new.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if featureEvidence.RepositoryID != mainEvidence.RepositoryID || featureEvidence.WorktreeID == mainEvidence.WorktreeID {
+		t.Fatalf("worktree identities main=%#v feature=%#v", mainEvidence, featureEvidence)
+	}
+
+	if err := os.WriteFile(filepath.Join(c.Paths.Root(), "repo", "tracked.txt"), []byte("changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := c.ContextEvidence(t.Context(), "repo", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.CodeBasis == mainEvidence.CodeBasis || len(changed.Gaps) != 0 {
+		t.Fatalf("tracked change evidence = %#v", changed)
+	}
+
+	if err := os.WriteFile(filepath.Join(c.Paths.Root(), "repo", "untracked.txt"), []byte("private content is not hashed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	untracked, err := c.ContextEvidence(t.Context(), "repo", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundGap := false
+	for _, gap := range untracked.Gaps {
+		if gap == "untracked_content_unobserved" {
+			foundGap = true
+		}
+	}
+	if len(untracked.CodeBasis) != 64 || !foundGap {
+		t.Fatalf("untracked evidence = %#v", untracked)
+	}
+	if untracked.RepositoryID != mainEvidence.RepositoryID || untracked.WorktreeID != mainEvidence.WorktreeID {
+		t.Fatalf("identity changed with worktree contents: %#v", untracked)
+	}
+}

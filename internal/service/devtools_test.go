@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	controlpolicy "loki/internal/control/policy"
@@ -212,62 +211,5 @@ func TestDevtoolsCoordinationOperationsRejectIrrelevantFieldsAndUnavailableReade
 	}
 	if _, err := DevtoolsCoordinationOperations(nil)["devtools_task_next"].Handle(t.Context(), json.RawMessage(`{"operation":"devtools_task_next"}`)); err == nil {
 		t.Fatal("unavailable coordination reader accepted")
-	}
-}
-
-type recordingAgentGuidanceReader struct {
-	cwd    string
-	name   string
-	target string
-}
-
-func (r *recordingAgentGuidanceReader) ListSkills(_ context.Context, cwd string) (devtools.SkillCatalog, error) {
-	r.cwd = cwd
-	return devtools.SkillCatalog{Items: []devtools.SkillSummary{{Name: "review-skill", Description: "Use for review.", Scope: "project", Revision: strings.Repeat("a", 64)}}, Diagnostics: []devtools.SkillDiagnostic{}, Shadowed: []devtools.SkillShadow{}}, nil
-}
-
-func (r *recordingAgentGuidanceReader) InspectSkill(_ context.Context, cwd, name string) (devtools.SkillInspection, error) {
-	r.cwd, r.name = cwd, name
-	return devtools.SkillInspection{Item: devtools.SkillDetail{SkillSummary: devtools.SkillSummary{Name: name, Description: "Use for review.", Scope: "project", Revision: strings.Repeat("a", 64)}, Content: "# Skill\n", Resources: []devtools.SkillResource{}}}, nil
-}
-
-func (r *recordingAgentGuidanceReader) ResolveGuidance(_ context.Context, cwd, target string) (devtools.GuidanceResult, error) {
-	r.cwd, r.target = cwd, target
-	return devtools.GuidanceResult{Target: target, TargetDir: ".", Revision: strings.Repeat("b", 64), Complete: true, Sources: []devtools.GuidanceSource{}, Diagnostics: []devtools.GuidanceDiagnostic{}}, nil
-}
-
-func TestDevtoolsAgentGuidanceOperationsUseFixedTypedMethods(t *testing.T) {
-	reader := &recordingAgentGuidanceReader{}
-	ops := DevtoolsAgentGuidanceOperations(reader)
-	if len(ops) != 3 {
-		t.Fatalf("operation count = %d", len(ops))
-	}
-	result, err := ops["devtools_skill_list"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_skill_list\",\"cwd\":\"repo\"}"))
-	if err != nil || reader.cwd != "repo" || len(result.(devtools.SkillCatalog).Items) != 1 {
-		t.Fatalf("list result=%#v reader=%#v err=%v", result, reader, err)
-	}
-	result, err = ops["devtools_skill_inspect"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_skill_inspect\",\"cwd\":\"repo\",\"name\":\"review-skill\"}"))
-	if err != nil || reader.name != "review-skill" || result.(devtools.SkillInspection).Item.Content == "" {
-		t.Fatalf("inspect result=%#v reader=%#v err=%v", result, reader, err)
-	}
-	result, err = ops["devtools_guidance_resolve"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_guidance_resolve\",\"cwd\":\"repo\",\"target\":\"src/new.go\"}"))
-	if err != nil || reader.target != "src/new.go" || result.(devtools.GuidanceResult).Target != "src/new.go" {
-		t.Fatalf("guidance result=%#v reader=%#v err=%v", result, reader, err)
-	}
-	for name, operation := range ops {
-		if operation.Grant != controlpolicy.Agent {
-			t.Fatalf("%s grant = %v", name, operation.Grant)
-		}
-	}
-}
-
-func TestDevtoolsAgentGuidanceOperationsRejectUnknownFields(t *testing.T) {
-	reader := &recordingAgentGuidanceReader{}
-	ops := DevtoolsAgentGuidanceOperations(reader)
-	if _, err := ops["devtools_skill_list"].Handle(t.Context(), json.RawMessage("{\"operation\":\"devtools_skill_list\",\"cwd\":\".\",\"command\":\"run\"}")); err == nil {
-		t.Fatal("unknown field accepted")
-	}
-	if reader.cwd != "" {
-		t.Fatal("reader ran for rejected request")
 	}
 }

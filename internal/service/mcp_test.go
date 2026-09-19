@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -128,7 +129,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 29 {
+	if err != nil || len(tools.Tools) != 31 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -256,5 +257,119 @@ func TestMCPTransportUsesBoundedStatefulSessions(t *testing.T) {
 	}
 	if options.SessionTimeout <= 0 {
 		t.Fatal("MCP session timeout is not bounded")
+	}
+}
+
+func TestNewMCPAgentGuidanceUsesNativeProvider(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	repo := filepath.Join(c.Root, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	gitInit := exec.CommandContext(t.Context(), "/usr/bin/git", "init", "-q", "--initial-branch=main")
+	gitInit.Dir = repo
+	gitInit.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	if output, err := gitInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "AGENTS.md"), []byte("native rules\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	skillDir := filepath.Join(repo, ".agents", "skills", "project-skill")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: project-skill\ndescription: Project skill.\n---\n\n# Project skill\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	packagedRoot := t.TempDir()
+	packagedSkill := filepath.Join(packagedRoot, "packaged-skill")
+	if err := os.MkdirAll(packagedSkill, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packagedSkill, "SKILL.md"), []byte("---\nname: packaged-skill\ndescription: Packaged skill.\n---\n\n# Packaged skill\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCalls := 0
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) {
+		runtimeCalls++
+		return json.RawMessage(`{}`), nil
+	})
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) {
+		return map[string]any{"status": "running"}, nil
+	})
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	app, err := NewMCP(c, MCPOptions{
+		Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports,
+		Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43),
+		PackagedSkillRoot: packagedRoot,
+		Environment: map[string]string{
+			"HOME": home, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := app.Server.Connect(t.Context(), serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverSession.Close()
+	client, err := mcp.NewClient(&mcp.Implementation{Name: "native-agent-guidance-test", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "agent_guidance",
+		Arguments: map[string]any{
+			"action": "context", "cwd": "repo", "target": "src/new.go",
+		},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("agent_guidance: result=%#v err=%v", result, err)
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	guidance, ok := payload["guidance"].(map[string]any)
+	if !ok || guidance["target"] != "src/new.go" {
+		t.Fatalf("guidance = %#v", payload["guidance"])
+	}
+	sources, ok := guidance["sources"].([]any)
+	if !ok || len(sources) != 1 || sources[0].(map[string]any)["content"] != "native rules\n" {
+		t.Fatalf("guidance sources = %#v", guidance["sources"])
+	}
+	skills, ok := payload["skills"].(map[string]any)
+	if !ok {
+		t.Fatalf("skills = %#v", payload["skills"])
+	}
+	items, ok := skills["items"].([]any)
+	if !ok || len(items) != 2 ||
+		items[0].(map[string]any)["name"] != "packaged-skill" || items[0].(map[string]any)["scope"] != "packaged" ||
+		items[1].(map[string]any)["name"] != "project-skill" || items[1].(map[string]any)["scope"] != "project" {
+		t.Fatalf("skill items = %#v", skills["items"])
+	}
+	if runtimeCalls != 0 {
+		t.Fatalf("native agent guidance called runtime %d times", runtimeCalls)
 	}
 }

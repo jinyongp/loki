@@ -166,7 +166,17 @@ func TestLifecycleActivatesAndRollsBackReleases(t *testing.T) {
 		t.Fatalf("current release = %q", got)
 	}
 	runLifecycle(t, environment, true, "activate", "v1")
+	userSkill := filepath.Join(root, "var/lib/loki-go/runner/agents/skills/user-skill/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(userSkill), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userSkill, []byte("user skill\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	runLifecycle(t, environment, true, "install", second, "v2", uid, gid, gid, uid)
+	if data, err := os.ReadFile(userSkill); err != nil || string(data) != "user skill\n" {
+		t.Fatalf("user Skill backing was not preserved across release update: data=%q err=%v", data, err)
+	}
 	if got, _ := os.Readlink(filepath.Join(root, "opt/loki-go/previous")); got != "releases/v1" {
 		t.Fatalf("previous release = %q", got)
 	}

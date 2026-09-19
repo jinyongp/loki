@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 )
 
 type CoordinationMutation string
@@ -19,19 +18,17 @@ const (
 )
 
 type CoordinationMutationRequest struct {
-	RequestID             string
-	Target                string
-	Workstream            string
-	ExpectedRun           string
-	Context               string
-	Summary               string
-	Decisions             []string
-	ValidationRecordIDs   []string
-	Remaining             []string
-	NextAction            string
-	Blockers              []string
-	CompactionFingerprint string
-	CompactionThrough     int
+	RequestID           string
+	Target              string
+	Workstream          string
+	ExpectedRun         string
+	Context             string
+	Summary             string
+	Decisions           []string
+	ValidationRecordIDs []string
+	Remaining           []string
+	NextAction          string
+	Blockers            []string
 }
 
 type CoordinationMutationResult struct {
@@ -151,16 +148,6 @@ func (c *Client) MutateCoordination(ctx context.Context, directory string, actio
 		}
 		if err := addProgress(true); err != nil {
 			return CoordinationMutationResult{}, err
-		}
-		if (request.CompactionFingerprint == "") != (request.CompactionThrough == 0) {
-			return CoordinationMutationResult{}, errors.New("devtools compaction fingerprint and through sequence are required together")
-		}
-		if request.CompactionFingerprint != "" {
-			if request.CompactionThrough < 1 {
-				return CoordinationMutationResult{}, errors.New("devtools compaction through sequence must be positive")
-			}
-			input["compaction-fingerprint"] = request.CompactionFingerprint
-			input["compaction-through"] = strconv.Itoa(request.CompactionThrough)
 		}
 	case CoordinationRelease:
 		if err := addTarget(true); err != nil {

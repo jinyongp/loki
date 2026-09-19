@@ -35,6 +35,7 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
+BindReadOnlyPaths=/var/lib/loki-go/runner/agents:/home/runner/.agents
 ReadWritePaths=/srv/workspace/loki /var/log/loki-go/mcp
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any

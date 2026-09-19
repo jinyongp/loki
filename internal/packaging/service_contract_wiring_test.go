@@ -35,6 +35,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(nativeLayout), `"ExecutionContract": "`+nativeContract+`"`) {
 		t.Fatal("native MCP layout does not bind the execution contract")
 	}
+	if !strings.Contains(string(nativeLayout), `"PackagedSkillRoot": "/opt/loki/share/skills"`) {
+		t.Fatal("native MCP layout does not bind the packaged Skill root")
+	}
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
 	raw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/mcp.json"))
@@ -47,6 +50,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if containerLayout["ExecutionContract"] != containerContract {
 		t.Fatalf("container MCP execution contract = %#v", containerLayout["ExecutionContract"])
 	}
+	if containerLayout["PackagedSkillRoot"] != "/opt/loki/share/skills" {
+		t.Fatalf("container MCP packaged Skill root = %#v", containerLayout["PackagedSkillRoot"])
+	}
 	composeRaw, err := os.ReadFile(filepath.Join(root, "compose.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +61,8 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 		"egress-proxy, --host, 0.0.0.0, --port, \"18766\", --execution-contract, " + containerContract,
 		"browser-proxy, --port, \"18767\", --execution-contract, " + containerContract,
 		"--downloads, /var/lib/loki/browser-downloads, --execution-contract, " + containerContract,
+		"user-skills:/var/lib/loki/runner/agents",
+		"user-skills:/home/runner/.agents:ro",
 	} {
 		if !strings.Contains(string(composeRaw), command) {
 			t.Fatalf("Compose service does not bind execution contract: %s", command)

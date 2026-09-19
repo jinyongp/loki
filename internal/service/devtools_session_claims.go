@@ -44,6 +44,11 @@ func (s *DevtoolsSessionClaims) bind(sessionID string, binding devtoolsClaimBind
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for id, existing := range s.bindings {
+		if id != sessionID && existing.RunID == binding.RunID {
+			delete(s.bindings, id)
+		}
+	}
 	if _, exists := s.bindings[sessionID]; !exists && len(s.bindings) >= maxDevtoolsSessionClaims {
 		return errors.New("devtools session claim capacity is exhausted")
 	}
@@ -81,19 +86,17 @@ func (s *DevtoolsSessionClaims) count() int {
 }
 
 type DevtoolsSessionMutationRequest struct {
-	CWD                   string
-	TargetID              string
-	WorkstreamID          string
-	ExpectedRunID         string
-	RequestID             string
-	Summary               string
-	Decisions             []string
-	ValidationRecordIDs   []string
-	Remaining             []string
-	NextAction            string
-	Blockers              []string
-	CompactionFingerprint string
-	CompactionThrough     int
+	CWD                 string
+	TargetID            string
+	WorkstreamID        string
+	ExpectedRunID       string
+	RequestID           string
+	Summary             string
+	Decisions           []string
+	ValidationRecordIDs []string
+	Remaining           []string
+	NextAction          string
+	Blockers            []string
 }
 
 type DevtoolsSessionCoordination struct {
@@ -135,7 +138,6 @@ func (c *DevtoolsSessionCoordination) Mutate(ctx context.Context, sessionID stri
 		"request_id": request.RequestID, "summary": request.Summary, "decisions": request.Decisions,
 		"validation_record_ids": request.ValidationRecordIDs, "remaining": request.Remaining,
 		"next_action": request.NextAction, "blockers": request.Blockers,
-		"compaction_fingerprint": request.CompactionFingerprint, "compaction_through": request.CompactionThrough,
 	}
 	needsOwnership := action == devtools.CoordinationResume || action == devtools.CoordinationCheckpoint || action == devtools.CoordinationRelease || action == devtools.CoordinationDone
 	if needsOwnership {

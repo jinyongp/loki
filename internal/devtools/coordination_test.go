@@ -168,43 +168,23 @@ func TestCoordinationCurrentConfinesRequestedDirectory(t *testing.T) {
 	}
 }
 
-func TestCoordinationContextPreservesCompactionProjection(t *testing.T) {
-	client, files := metadataClient(t)
-	setCoordinationResponse(t, client, files, map[string]any{
-		"profile": "fixture", "revision": 12,
-		"item":      map[string]any{"id": fixtureTaskID, "kind": "task"},
-		"documents": map[string]any{}, "tasks": []any{}, "validations": []any{}, "history": []any{},
-		"truncated": false, "omitted_ids": []string{},
-		"context_basis": map[string]any{"fingerprint": strings.Repeat("a", 64), "through_sequence": 10, "event_count": 4},
-		"compaction":    map[string]any{"summary": "compact", "run_id": fixtureRunID, "through_sequence": 10},
-		"delta":         []any{map[string]any{"action": "run.checkpointed", "data": map[string]any{"directory": client.CWD}}},
-		"delta_status":  map[string]any{"truncated": false, "omitted_count": 0},
-	})
-	got, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskContext, CoordinationRequest{Target: fixtureTaskID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, _ := json.Marshal(got)
-	for _, want := range []string{"context_basis", "compaction", "delta_status", "compact"} {
-		if !strings.Contains(string(encoded), want) {
-			t.Fatalf("projection missing %q: %s", want, encoded)
+func TestCoordinationContextRejectsRetiredCompactionProjection(t *testing.T) {
+	for _, field := range []string{"context_basis", "compaction", "delta", "delta_status"} {
+		client, files := metadataClient(t)
+		response := map[string]any{
+			"profile": "fixture", "revision": 12,
+			"item":      map[string]any{"id": fixtureTaskID, "kind": "task"},
+			"documents": map[string]any{}, "tasks": []any{}, "validations": []any{}, "history": []any{},
+			"truncated": false, "omitted_ids": []string{},
 		}
-	}
-	if strings.Contains(string(encoded), client.CWD) || !strings.Contains(string(encoded), `"directory":"."`) {
-		t.Fatalf("compaction projection path was not sanitized: %s", encoded)
-	}
-
-	client, files = metadataClient(t)
-	setCoordinationResponse(t, client, files, map[string]any{
-		"profile": "fixture", "revision": 13,
-		"item":      map[string]any{"id": fixtureTaskID, "kind": "task"},
-		"documents": map[string]any{}, "tasks": []any{}, "validations": []any{}, "history": []any{},
-		"truncated": false, "omitted_ids": []string{},
-		"context_basis": map[string]any{"fingerprint": strings.Repeat("b", 64), "through_sequence": 11},
-		"compaction":    map[string]any{"summary": "unsafe", "credential": "private-canary"},
-		"delta":         []any{}, "delta_status": map[string]any{"truncated": false},
-	})
-	if _, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskContext, CoordinationRequest{Target: fixtureTaskID}); err == nil || !strings.Contains(err.Error(), "private context") {
-		t.Fatalf("private compaction field error = %v", err)
+		response[field] = map[string]any{"retired": true}
+		if field == "delta" {
+			response[field] = []any{map[string]any{"retired": true}}
+		}
+		setCoordinationResponse(t, client, files, response)
+		if _, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskContext, CoordinationRequest{Target: fixtureTaskID}); err == nil ||
+			!strings.Contains(err.Error(), "invalid coordination data") {
+			t.Fatalf("retired field %q was accepted: %v", field, err)
+		}
 	}
 }

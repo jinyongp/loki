@@ -143,7 +143,7 @@ func TestCoordinationMutationRejectsUnsafeInputsAndPrivateNestedOutput(t *testin
 	}
 }
 
-func TestCoordinationCheckpointForwardsCompactionBasisOnlyForCheckpoint(t *testing.T) {
+func TestCoordinationCheckpointForwardsCanonicalProgressWithoutCompactionExtensions(t *testing.T) {
 	client, files := metadataClient(t)
 	data := mutationBase(client)
 	data["run"] = nil
@@ -151,11 +151,11 @@ func TestCoordinationCheckpointForwardsCompactionBasisOnlyForCheckpoint(t *testi
 	delete(data, "context")
 	setMutationResponse(t, client, files, data)
 
-	fingerprint := strings.Repeat("c", 64)
 	if _, err := client.MutateCoordination(t.Context(), ".", CoordinationCheckpoint, CoordinationMutationRequest{
 		RequestID: "abababab-abab-4bab-8bab-abababababab", Target: fixtureRunID,
-		Context: fixtureClaimContext, Summary: "compact",
-		CompactionFingerprint: fingerprint, CompactionThrough: 12,
+		Context: fixtureClaimContext, Summary: "progress",
+		Decisions: []string{"keep canonical state in devtools"},
+		Remaining: []string{"continue native context work"}, NextAction: "continue",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -163,16 +163,12 @@ func TestCoordinationCheckpointForwardsCompactionBasisOnlyForCheckpoint(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--compaction-fingerprint", fingerprint, "--compaction-through", "12"} {
+	for _, want := range []string{"--summary", "progress", "--decisions", "keep canonical state in devtools", "--remaining", "continue native context work", "--next-action", "continue"} {
 		if !strings.Contains(string(args), want) {
 			t.Fatalf("checkpoint args %q do not contain %q", args, want)
 		}
 	}
-
-	if _, err := client.MutateCoordination(t.Context(), ".", CoordinationCheckpoint, CoordinationMutationRequest{
-		RequestID: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd", Target: fixtureRunID,
-		Context: fixtureClaimContext, Summary: "bad", CompactionFingerprint: fingerprint,
-	}); err == nil || !strings.Contains(err.Error(), "required together") {
-		t.Fatalf("partial compaction basis error = %v", err)
+	if strings.Contains(string(args), "compaction-") {
+		t.Fatalf("checkpoint args retain retired compaction extension: %q", args)
 	}
 }

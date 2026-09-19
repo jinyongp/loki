@@ -162,7 +162,8 @@ prepare_state() {
   install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" "$(rooted /var/lib/loki-go/browser)"
   install -d -o "$runner_uid" -g "$runner_gid" -m 0700 \
     "$(rooted /var/lib/loki-go/runner)" "$(rooted /var/lib/loki-go/runner-config)" "$(rooted /var/lib/loki-go/runner-gh-config)" \
-    "$(rooted /var/lib/loki-go/runner-data)" "$(rooted /var/lib/loki-go/runner-xdg-state)" "$(rooted /var/lib/loki-go/snapshots)" \
+    "$(rooted /var/lib/loki-go/runner-data)" "$(rooted /var/lib/loki-go/runner-xdg-state)" "$(rooted /var/lib/loki-go/runner/agents)" \
+    "$(rooted /var/lib/loki-go/runner/agents/skills)" "$(rooted /var/lib/loki-go/snapshots)" \
     "$(rooted /var/cache/loki-go/runner)" "$(rooted /var/cache/loki-go/runner-npm)" "$(rooted /var/cache/loki-go/runner-pnpm)" \
     "$(rooted /var/cache/loki-go/runner-playwright)" "$(rooted /var/cache/loki-go/runner-go-build)" "$(rooted /var/cache/loki-go/runner-go-mod)" \
     "$(rooted /var/cache/loki-go/runner-pip)" "$(rooted /var/tmp/loki-go/runner)"

@@ -126,6 +126,14 @@ func (c *Controller) repositoryRoot(ctx context.Context, cwd string) (string, er
 	return root, nil
 }
 
+func (c *Controller) RepositoryRoot(ctx context.Context, cwd string) (string, error) {
+	full, err := c.Paths.ResolveCWD(cwd)
+	if err != nil {
+		return "", err
+	}
+	return c.repositoryRoot(ctx, full)
+}
+
 // TrackedFile reports whether an existing confined file is tracked by its
 // nearest owning repository. Repository metadata must remain inside the
 // workspace; absence of a repository is reported as untracked rather than

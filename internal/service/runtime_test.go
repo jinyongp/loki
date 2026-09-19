@@ -6,11 +6,13 @@ import (
 	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
 	"loki/internal/devtools"
 	"loki/internal/execution"
@@ -66,12 +68,48 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
-	o.verifyDevtools = func(context.Context, *devtools.Client) (devtools.Candidate, error) {
-		return devtools.Candidate{
-			Version: "0.17.0", Commit: "runtime-test", ProtocolVersion: devtools.ProtocolVersion,
-			ApprovedCommands: len(devtools.ApprovedNames()), CatalogSHA256: strings.Repeat("a", 64),
-		}, nil
+	catalogRaw, err := os.ReadFile(filepath.Join("..", "devtools", "testdata", "catalog-protocol-v3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".loki-test-devtools-catalog.json"), catalogRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	projectConfig := filepath.Join(workspace, "devtools.toml")
+	if err := os.WriteFile(projectConfig, []byte("profile = \"fixture\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("runtime candidate rules\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gitInit := exec.CommandContext(t.Context(), "/usr/bin/git", "init", "-q", "--initial-branch=main")
+	gitInit.Dir = workspace
+	gitInit.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	if output, err := gitInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, output)
+	}
+	responses := map[string]any{
+		".loki-test-devtools-project.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"item": map[string]any{"profile": "fixture", "source": "file", "config_path": projectConfig, "root": workspace}, "paths": map[string]any{"config": "/private/config", "data": "/private/data", "cache": "/private/cache"}}},
+		".loki-test-devtools-current.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"profile": "fixture", "revision": 1, "items": []any{}}},
+		".loki-test-devtools-next.json":    map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"profile": "fixture", "revision": 1}},
+	}
+	for name, value := range responses {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(workspace, name), append(raw, '\n'), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	devtoolsBinary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: devtoolsBinary, Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	o.verifyDevtools = func(ctx context.Context, client *devtools.Client) (devtools.Candidate, error) {
+		client.Identity = nil
+		return client.Verify(ctx)
 	}
 	c, err := config.Parse(nil)
 	if err != nil {
@@ -138,6 +176,9 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if _, err := os.Lstat(badOptions.Socket); !os.IsNotExist(err) {
 		t.Fatalf("incompatible runtime socket exists: %v", err)
 	}
+	if _, err := os.Lstat(filepath.Join(o.StateDirectory, "context")); !os.IsNotExist(err) {
+		t.Fatalf("incompatible candidate created context journal state: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -181,6 +222,100 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		devtoolsStatus["protocol_version"] != float64(3) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||
 		len(devtoolsStatus["catalog_sha256"].(string)) != 64 {
 		t.Fatal(status)
+	}
+	if info, err := os.Stat(filepath.Join(o.StateDirectory, "context", "records")); err != nil || !info.IsDir() {
+		t.Fatalf("runtime context journal directory = %v, %v", info, err)
+	}
+	mcpConfig := c
+	mcpConfig.AuditLog = filepath.Join(root, "audit", "mcp.jsonl")
+	mcpPorts, err := ProtectedPortPolicy(mcpConfig.Port, contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpApp, err := NewMCP(mcpConfig, MCPOptions{
+		Runtime: client, PortGuard: client,
+		Browser: browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) {
+			return map[string]any{"status": "running"}, nil
+		}),
+		Ports: mcpPorts, Policy: generation, Token: strings.Repeat("m", 43),
+		RuntimeSocket: socket,
+		Environment: map[string]string{
+			"HOME": t.TempDir(), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mcpApp.Close()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := mcpApp.Server.Connect(t.Context(), serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverSession.Close()
+	mcpClient, err := mcp.NewClient(&mcp.Implementation{Name: "runtime-candidate-acceptance", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mcpClient.Close()
+	invoke := func(name string, arguments map[string]any) map[string]any {
+		t.Helper()
+		result, err := mcpClient.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: arguments})
+		if err != nil {
+			t.Fatalf("%s transport: %v", name, err)
+		}
+		if result.IsError {
+			t.Fatalf("%s failed: %#v", name, result)
+		}
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value map[string]any
+		if err := json.Unmarshal(encoded, &value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	guidance := invoke("agent_guidance", map[string]any{"action": "context", "cwd": ".", "target": "."})
+	guidanceValue := guidance["guidance"].(map[string]any)
+	sources := guidanceValue["sources"].([]any)
+	if len(sources) != 1 || sources[0].(map[string]any)["content"] != "runtime candidate rules\n" {
+		t.Fatalf("native guidance = %#v", guidance)
+	}
+	current := invoke("project_coordination", map[string]any{"action": "current", "cwd": "."})
+	if current["profile"] != "fixture" || current["revision"] != float64(1) {
+		t.Fatalf("baseline project coordination = %#v", current)
+	}
+	resume := invoke("project_context", map[string]any{"cwd": ".", "target": "."})
+	if resume["transition"].(map[string]any)["action"] != "none" ||
+		resume["checkpoint"].(map[string]any)["found"] != false {
+		t.Fatalf("baseline project context = %#v", resume)
+	}
+	resumeBasis := resume["basis"].(map[string]any)
+	if len(resumeBasis["repository_id"].(string)) != 64 || len(resumeBasis["worktree_id"].(string)) != 64 {
+		t.Fatalf("baseline project context basis = %#v", resumeBasis)
+	}
+	draft := serviceContextDraft()
+	put := call(map[string]any{
+		"operation":         "context_checkpoint_put",
+		"request_id":        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		"expected_previous": "missing",
+		"draft":             draft,
+	})
+	record := put["record"].(map[string]any)
+	if put["replayed"] != false || len(record["id"].(string)) != 64 {
+		t.Fatalf("context put = %#v", put)
+	}
+	latest := call(map[string]any{
+		"operation":     "context_checkpoint_latest",
+		"repository_id": draft.Basis.RepositoryID,
+		"worktree_id":   draft.Basis.WorktreeID,
+		"workstream_id": draft.Basis.WorkstreamID,
+	})
+	latestRecord := latest["record"].(map[string]any)
+	if latest["found"] != true || latestRecord["id"] != record["id"] {
+		t.Fatalf("context latest = %#v", latest)
 	}
 	for _, protected := range []int{18765, 18766, 18767} {
 		if _, err := client.Call(t.Context(), map[string]any{"operation": "inspect", "port": protected}); err == nil {

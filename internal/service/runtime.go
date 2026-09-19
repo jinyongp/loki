@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"loki/internal/agentcontext"
 	"loki/internal/audit"
 	"loki/internal/config"
 	"loki/internal/control/identity"
@@ -121,6 +122,10 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	if err != nil {
 		return fmt.Errorf("verify devtools candidate: %w", err)
 	}
+	contextJournal, err := agentcontext.NewContextJournal(filepath.Join(o.StateDirectory, "context"), agentcontext.ContextJournalLimits{})
+	if err != nil {
+		return fmt.Errorf("initialize context journal: %w", err)
+	}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	var issueFields IssueFieldsClient
 	var githubCommands GitHubCommandRunner
@@ -212,8 +217,8 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		}, nil
 	}}
 	for _, group := range []map[string]rpc.Operation{
+		ContextJournalOperations(contextJournal),
 		DevtoolsMetadataOperations(devtoolsClient),
-		DevtoolsAgentGuidanceOperations(devtoolsClient),
 		DevtoolsCoordinationOperations(devtoolsClient),
 		DevtoolsCoordinationMutationOperations(devtoolsClient),
 		DevtoolsOperations(devtoolsBroker),

@@ -219,6 +219,27 @@ func TestDevtoolsSessionTakeoverReplacesBindingOnlyOnSuccess(t *testing.T) {
 	}
 }
 
+func TestDevtoolsSessionClaimBindingTransfersRunOwnership(t *testing.T) {
+	claims := NewDevtoolsSessionClaims()
+	first := devtoolsClaimBinding{Profile: "fixture", TaskID: sessionTaskID, RunID: sessionRunID, context: "first-context"}
+	second := devtoolsClaimBinding{Profile: "fixture", TaskID: sessionTaskID, RunID: sessionRunID, context: "second-context"}
+	if err := claims.bind("session-a", first); err != nil {
+		t.Fatal(err)
+	}
+	if err := claims.bind("session-b", second); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := claims.get("session-a"); ok {
+		t.Fatal("previous session retained Run ownership after transfer")
+	}
+	if got, ok := claims.get("session-b"); !ok || got.context != "second-context" {
+		t.Fatalf("transferred binding = %#v, %v", got, ok)
+	}
+	if claims.count() != 1 {
+		t.Fatalf("claim count after transfer = %d", claims.count())
+	}
+}
+
 func TestDevtoolsSessionClaimsAreBoundedAndMCPEntryRequiresSession(t *testing.T) {
 	claims := NewDevtoolsSessionClaims()
 	for i := 0; i < maxDevtoolsSessionClaims; i++ {

@@ -33,7 +33,7 @@ func TestSystemInformation(t *testing.T) {
 		switch action {
 		case "server":
 			metadata := value["policy_generation"].(controlpolicy.GenerationMetadata)
-			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 29 || metadata.SHA256 != generation.Digest() {
+			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 31 || metadata.SHA256 != generation.Digest() {
 				t.Fatal(value)
 			}
 		case "workspace":
