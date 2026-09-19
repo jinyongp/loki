@@ -36,6 +36,7 @@ type RuntimeOptions struct {
 	GitHubProxy, GitHubBinary, GitHubPrivateKeyFile   string
 	GitHubTempDirectory                               string
 	RunnerUID, RunnerGID                              uint32
+	verifyDevtools                                    func(context.Context, *devtools.Client) (devtools.Candidate, error)
 }
 
 func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract execution.Contract, generation controlpolicy.Generation, ready func() error, onAuditError func(error)) error {
@@ -111,6 +112,15 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		groups = append(groups, workspaceGroup)
 	}
 	devtoolsClient.Identity = &process.Identity{UID: o.RunnerUID, GID: o.RunnerGID, Groups: groups}
+	var devtoolsCandidate devtools.Candidate
+	if o.verifyDevtools != nil {
+		devtoolsCandidate, err = o.verifyDevtools(ctx, devtoolsClient)
+	} else {
+		devtoolsCandidate, err = devtoolsClient.Verify(ctx)
+	}
+	if err != nil {
+		return fmt.Errorf("verify devtools candidate: %w", err)
+	}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	var issueFields IssueFieldsClient
 	var githubCommands GitHubCommandRunner
@@ -193,6 +203,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		}
 		return map[string]any{
 			"initialized": true, "profiles": len(items), "policy_generation": generation.Metadata(),
+			"devtools": devtoolsCandidate,
 			"github": map[string]any{
 				"configured": c.GitHubAppID != 0, "installation_count": len(c.GitHubInstallations),
 				"target_count": len(c.GitHubTargets), "credential_source": credentialSource,

@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"loki/internal/config"
+	"loki/internal/devtools"
 	"loki/internal/execution"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
@@ -64,6 +67,12 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
 	o := RuntimeOptions{Socket: socket, StateDirectory: filepath.Join(root, "state"), InboxDirectory: filepath.Join(root, "inbox"), AuditPath: filepath.Join(root, "audit", "runtime.jsonl"), AgentUID: uid, SocketGID: os.Getgid(), DevtoolsBinary: "/usr/bin/false", Workspace: workspace, DockerSocket: "/run/docker.sock", SnapshotDirectory: snapshotDirectory, GitHubProxy: "http://127.0.0.1:18766", GitHubBinary: "/usr/bin/false", GitHubTempDirectory: githubTemp, RunnerUID: uid, RunnerGID: uint32(os.Getgid())}
+	o.verifyDevtools = func(context.Context, *devtools.Client) (devtools.Candidate, error) {
+		return devtools.Candidate{
+			Version: "0.17.0", Commit: "runtime-test", ProtocolVersion: devtools.ProtocolVersion,
+			ApprovedCommands: len(devtools.ApprovedNames()), CatalogSHA256: strings.Repeat("a", 64),
+		}, nil
+	}
 	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +122,23 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if _, err := controller.ManagedCredentials().Set(t.Context(), secret.ManagedGitHubAppPrivateKey, "synthetic-platform"); err != nil {
 		t.Fatal(err)
 	}
+
+	badOptions := o
+	badOptions.Socket = filepath.Join(root, "bad-socket", "control.sock")
+	badOptions.verifyDevtools = func(context.Context, *devtools.Client) (devtools.Candidate, error) {
+		return devtools.Candidate{}, errors.New("synthetic incompatible candidate")
+	}
+	readyCalled := false
+	if err := RunRuntime(t.Context(), badOptions, c, contract, generation, func() error { readyCalled = true; return nil }, func(err error) { t.Error(err) }); err == nil || !strings.Contains(err.Error(), "verify devtools candidate") {
+		t.Fatalf("incompatible candidate error = %v", err)
+	}
+	if readyCalled {
+		t.Fatal("runtime became ready before devtools candidate acceptance")
+	}
+	if _, err := os.Lstat(badOptions.Socket); !os.IsNotExist(err) {
+		t.Fatalf("incompatible runtime socket exists: %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	ready := make(chan struct{})
@@ -143,13 +169,17 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	status := call(map[string]any{"operation": "status"})
 	policyStatus := status["policy_generation"].(map[string]any)
 	githubStatus := status["github"].(map[string]any)
+	devtoolsStatus := status["devtools"].(map[string]any)
 	if policyStatus["sha256"] != generation.Digest() || policyStatus["schema"] != float64(1) {
 		t.Fatalf("policy generation status = %#v", policyStatus)
 	}
 	if status["initialized"] != true || status["profiles"] != float64(0) ||
 		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
 		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||
-		githubStatus["credential_available"] != true {
+		githubStatus["credential_available"] != true ||
+		devtoolsStatus["version"] != "0.17.0" || devtoolsStatus["commit"] != "runtime-test" ||
+		devtoolsStatus["protocol_version"] != float64(3) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||
+		len(devtoolsStatus["catalog_sha256"].(string)) != 64 {
 		t.Fatal(status)
 	}
 	for _, protected := range []int{18765, 18766, 18767} {

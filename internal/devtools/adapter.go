@@ -2,6 +2,8 @@ package devtools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,14 @@ type Option struct {
 	Repeatable bool   `json:"repeatable"`
 }
 
+type Candidate struct {
+	Version          string `json:"version"`
+	Commit           string `json:"commit"`
+	ProtocolVersion  int    `json:"protocol_version"`
+	ApprovedCommands int    `json:"approved_commands"`
+	CatalogSHA256    string `json:"catalog_sha256"`
+}
+
 type Client struct {
 	Binary    string
 	CWD       string
@@ -33,9 +43,10 @@ type Client struct {
 	Identity  *process.Identity
 	Workspace *policy.Workspace
 
-	mu       sync.Mutex
-	verified bool
-	commands map[string]compiledCommand
+	mu        sync.Mutex
+	verified  bool
+	candidate Candidate
+	commands  map[string]compiledCommand
 }
 
 type compiledCommand struct {
@@ -122,52 +133,75 @@ func (c *Client) Close() error {
 	return c.Workspace.Close()
 }
 
-func (c *Client) verify(ctx context.Context) error {
+func candidateEvidence(version Version, commands []Command) (Candidate, error) {
+	raw, err := json.Marshal(commands)
+	if err != nil {
+		return Candidate{}, err
+	}
+	sum := sha256.Sum256(raw)
+	return Candidate{
+		Version: version.Version, Commit: version.Commit, ProtocolVersion: version.ProtocolVersion,
+		ApprovedCommands: len(commands), CatalogSHA256: hex.EncodeToString(sum[:]),
+	}, nil
+}
+
+func (c *Client) Verify(ctx context.Context) (Candidate, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.verified {
-		return nil
+		return c.candidate, nil
 	}
 	result, err := process.Run(ctx, process.Spec{
 		Argv: []string{c.Binary, "version"}, CWD: c.CWD, Env: c.Env,
 		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: 64 << 10,
 	})
 	if err != nil {
-		return fmt.Errorf("execute devtools version: %w", err)
+		return Candidate{}, fmt.Errorf("execute devtools version: %w", err)
 	}
 	if result.TimedOut {
-		return errors.New("devtools version check timed out")
+		return Candidate{}, errors.New("devtools version check timed out")
 	}
 	if result.Truncated || result.ExitCode != 0 {
-		return errors.New("devtools version check failed")
+		return Candidate{}, errors.New("devtools version check failed")
 	}
-	if _, err = ParseVersion(result.Raw); err != nil {
-		return err
+	version, err := ParseVersion(result.Raw)
+	if err != nil {
+		return Candidate{}, err
 	}
 	result, err = process.Run(ctx, process.Spec{
 		Argv: []string{c.Binary, "schema", "--all"}, CWD: c.CWD, Env: c.Env,
 		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: c.maxOutput(),
 	})
 	if err != nil {
-		return fmt.Errorf("execute devtools schema --all: %w", err)
+		return Candidate{}, fmt.Errorf("execute devtools schema --all: %w", err)
 	}
 	if result.TimedOut {
-		return errors.New("devtools schema check timed out")
+		return Candidate{}, errors.New("devtools schema check timed out")
 	}
 	if result.Truncated || result.ExitCode != 0 {
-		return errors.New("devtools schema check failed")
+		return Candidate{}, errors.New("devtools schema check failed")
 	}
 	commands, err := ParseCatalog(result.Raw)
 	if err != nil {
-		return err
+		return Candidate{}, err
 	}
 	compiled, err := compileCommands(commands)
 	if err != nil {
-		return err
+		return Candidate{}, err
+	}
+	candidate, err := candidateEvidence(version, commands)
+	if err != nil {
+		return Candidate{}, errors.New("devtools candidate fingerprint failed")
 	}
 	c.commands = compiled
+	c.candidate = candidate
 	c.verified = true
-	return nil
+	return candidate, nil
+}
+
+func (c *Client) verify(ctx context.Context) error {
+	_, err := c.Verify(ctx)
+	return err
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {

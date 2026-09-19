@@ -138,3 +138,71 @@ func TestClientRejectsPrivilegedDelegatedIdentity(t *testing.T) {
 		t.Fatalf("identity error = %v", err)
 	}
 }
+
+func TestClientVerifyCachesAcceptedCandidate(t *testing.T) {
+	dir := t.TempDir()
+	catalog := filepath.Join(dir, "catalog.json")
+	if err := os.WriteFile(catalog, embeddedCatalog, 0600); err != nil {
+		t.Fatal(err)
+	}
+	calls := filepath.Join(dir, "calls.log")
+	script := filepath.Join(dir, "devtools")
+	body := "#!/bin/sh\n" +
+		"printf '%s %s\\n' \"$1\" \"$2\" >> \"" + calls + "\"\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"candidate-test\",\"protocol_version\":3}}'; exit 0; fi\n" +
+		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalog + "\"; exit 0; fi\n" +
+		"exit 2\n"
+	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewClient(script, dir, []string{"PATH=/usr/bin:/bin", "HOME=" + dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	first, err := client.Verify(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := client.Verify(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatalf("candidate changed across cached verify: %#v %#v", first, second)
+	}
+	if first.Version != "0.17.0" || first.Commit != "candidate-test" || first.ProtocolVersion != ProtocolVersion ||
+		first.ApprovedCommands != len(approvedNames) || len(first.CatalogSHA256) != 64 {
+		t.Fatalf("candidate = %#v", first)
+	}
+	raw, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Fields(string(raw))
+	if len(lines) != 3 || strings.Count(string(raw), "version") != 1 || strings.Count(string(raw), "schema --all") != 1 {
+		t.Fatalf("candidate verification was rerun: %q", raw)
+	}
+}
+
+func TestCandidateFingerprintTracksApprovedContractOnly(t *testing.T) {
+	commands, err := EmbeddedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := Version{Version: "0.17.0", Commit: "test", ProtocolVersion: ProtocolVersion}
+	first, err := candidateEvidence(version, commands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyCommands := append([]Command(nil), commands...)
+	copyCommands[0].Description += " changed"
+	second, err := candidateEvidence(version, copyCommands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.CatalogSHA256 == second.CatalogSHA256 {
+		t.Fatal("approved contract change did not change candidate fingerprint")
+	}
+}
