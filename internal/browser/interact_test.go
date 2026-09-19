@@ -7,7 +7,81 @@ import (
 	"image/png"
 	"net/http"
 	"testing"
+
+	"loki/internal/fault"
 )
+
+func TestInteractionGenerationGuards(t *testing.T) {
+	d := &Driver{generation: 7, stateGeneration: 3}
+
+	if err := d.requireInteractionGeneration(map[string]any{
+		"expected_browser_generation": 7,
+	}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.requireInteractionGeneration(map[string]any{
+		"expected_browser_generation": 7,
+		"expected_state_generation":   3,
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name         string
+		args         map[string]any
+		requireState bool
+		code         fault.Code
+	}{
+		{
+			name: "missing browser generation",
+			args: map[string]any{},
+			code: fault.CodeInvalidInput,
+		},
+		{
+			name: "stale browser generation",
+			args: map[string]any{"expected_browser_generation": 6},
+			code: fault.CodeConflict,
+		},
+		{
+			name:         "missing state generation",
+			args:         map[string]any{"expected_browser_generation": 7},
+			requireState: true,
+			code:         fault.CodeInvalidInput,
+		},
+		{
+			name: "stale state generation",
+			args: map[string]any{
+				"expected_browser_generation": 7,
+				"expected_state_generation":   2,
+			},
+			requireState: true,
+			code:         fault.CodeConflict,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := d.requireInteractionGeneration(test.args, test.requireState)
+			if err == nil {
+				t.Fatal("expected generation error")
+			}
+			if detail := fault.Describe(err); detail.Code != test.code {
+				t.Fatalf("generation error = %#v", detail)
+			}
+		})
+	}
+}
+
+func TestFinishInteractionAdvancesAtMostOnce(t *testing.T) {
+	d := &Driver{generation: 10}
+	result, err := d.finishInteraction(10, map[string]any{"ok": true}, nil)
+	if err != nil || d.generation != 11 || result["browser_generation"] != uint64(11) {
+		t.Fatalf("ordinary interaction = %#v generation=%d err=%v", result, d.generation, err)
+	}
+	d.generation = 12
+	result, err = d.finishInteraction(11, map[string]any{"ok": true}, nil)
+	if err != nil || d.generation != 12 || result["browser_generation"] != uint64(12) {
+		t.Fatalf("pre-advanced interaction = %#v generation=%d err=%v", result, d.generation, err)
+	}
+}
 
 func elementIndex(t *testing.T, state map[string]any, name string) int {
 	t.Helper()
@@ -40,6 +114,21 @@ host.attachShadow({mode:'open'}).innerHTML='<button name="shadow" onclick="docum
 	callBrowser(t, d, "start", nil)
 	callBrowser(t, d, "navigate", map[string]any{"url": address})
 	state := callBrowser(t, d, "state", nil)
+	browserGeneration := state["browser_generation"].(uint64)
+	stateGeneration := state["state_generation"].(uint64)
+	interact := func(operation string, args map[string]any, requiresState bool) map[string]any {
+		t.Helper()
+		if args == nil {
+			args = map[string]any{}
+		}
+		args["expected_browser_generation"] = browserGeneration
+		if requiresState {
+			args["expected_state_generation"] = stateGeneration
+		}
+		result := callBrowser(t, d, operation, args)
+		browserGeneration = result["browser_generation"].(uint64)
+		return result
+	}
 	for _, raw := range state["interactive_elements"].([]any) {
 		e := raw.(map[string]any)
 		if e["name"] == "hidden" || e["name"] == "disabled" {
@@ -48,7 +137,7 @@ host.attachShadow({mode:'open'}).innerHTML='<button name="shadow" onclick="docum
 	}
 	for _, name := range []string{"text", "area", "editable"} {
 		index := elementIndex(t, state, name)
-		result := callBrowser(t, d, "type", map[string]any{"index": index, "text": "안녕 '); throw 1; // 😀"})
+		result := interact("type", map[string]any{"index": index, "text": "안녕 '); throw 1; // 😀"}, true)
 		if result["typed"] != true {
 			t.Fatal(result)
 		}
@@ -56,13 +145,13 @@ host.attachShadow({mode:'open'}).innerHTML='<button name="shadow" onclick="docum
 		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "안녕 '); throw 1; // 😀" {
 			t.Fatal(contents, err)
 		}
-		callBrowser(t, d, "type", map[string]any{"index": index, "text": ""})
+		interact("type", map[string]any{"index": index, "text": ""}, true)
 		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "" {
 			t.Fatal(contents, err)
 		}
 	}
 	for _, name := range []string{"click", "shadow", "framed"} {
-		callBrowser(t, d, "click", map[string]any{"index": elementIndex(t, state, name)})
+		interact("click", map[string]any{"index": elementIndex(t, state, name)}, true)
 		page, err := d.page(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -72,11 +161,13 @@ host.attachShadow({mode:'open'}).innerHTML='<button name="shadow" onclick="docum
 			t.Fatal(name, page)
 		}
 	}
-	callBrowser(t, d, "scroll", map[string]any{"direction": "down", "amount": 500})
+	interact("scroll", map[string]any{"direction": "down", "amount": 500}, false)
 	if state = callBrowser(t, d, "state", nil); state["pixels_above"].(float64) <= 0 {
 		t.Fatal(state)
 	}
-	callBrowser(t, d, "press", map[string]any{"key": "Home"})
+	browserGeneration = state["browser_generation"].(uint64)
+	stateGeneration = state["state_generation"].(uint64)
+	interact("press", map[string]any{"key": "Home"}, false)
 	for _, full := range []bool{false, true} {
 		shot := callBrowser(t, d, "screenshot", map[string]any{"full_page": full})
 		data, err := base64.StdEncoding.DecodeString(shot["data_base64"].(string))
@@ -92,14 +183,24 @@ host.attachShadow({mode:'open'}).innerHTML='<button name="shadow" onclick="docum
 		}
 	}
 	link := elementIndex(t, state, "link")
-	callBrowser(t, d, "click", map[string]any{"index": link, "new_tab": true})
+	beforeLinkGeneration := browserGeneration
+	interact("click", map[string]any{"index": link, "new_tab": true}, true)
 	if tabs := callBrowser(t, d, "list_tabs", nil)["tabs"].([]map[string]any); len(tabs) != 2 {
 		t.Fatal(tabs)
 	}
-	if _, err := d.Call(t.Context(), "click", map[string]any{"index": link}); err == nil {
-		t.Fatal("accepted index from previous document")
+	if _, err := d.Call(t.Context(), "click", map[string]any{
+		"index": link, "expected_browser_generation": beforeLinkGeneration, "expected_state_generation": stateGeneration,
+	}); err == nil {
+		t.Fatal("accepted index from previous browser generation")
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+		t.Fatalf("stale index error = %#v", detail)
 	}
-	for _, args := range []map[string]any{{"index": -1}, {"index": 1.5}, {"index": 0, "x": 0}, {"x": -1, "y": 0}} {
+	for _, args := range []map[string]any{
+		{"index": -1, "expected_browser_generation": browserGeneration, "expected_state_generation": stateGeneration},
+		{"index": 1.5, "expected_browser_generation": browserGeneration, "expected_state_generation": stateGeneration},
+		{"index": 0, "x": 0, "expected_browser_generation": browserGeneration, "expected_state_generation": stateGeneration},
+		{"x": -1, "y": 0, "expected_browser_generation": browserGeneration},
+	} {
 		if _, err := d.Call(t.Context(), "click", args); err == nil {
 			t.Fatal(args)
 		}

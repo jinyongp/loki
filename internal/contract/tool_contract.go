@@ -394,6 +394,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"revoke_share":           overrideRevokeShare,
 		"browser_session":        overrideBrowserSession,
 		"browser_observe":        overrideBrowserObserve,
+		"browser_interact":       overrideBrowserInteract,
 		"workspace_read":         overrideWorkspaceRead,
 		"workspace_edit":         overrideWorkspaceEdit,
 		"restore_workspace_file": overrideRestoreWorkspaceFile,

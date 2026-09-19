@@ -12,6 +12,8 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
+
+	"loki/internal/fault"
 )
 
 //go:embed state.js
@@ -50,6 +52,80 @@ func integer(args map[string]any, key string, fallback, min, max int) (int, erro
 	}
 	return n, nil
 }
+
+const maxBrowserGeneration = uint64(1<<53 - 1)
+
+func generationValue(args map[string]any, key string) (uint64, error) {
+	value, ok := args[key]
+	if !ok || value == nil {
+		return 0, fault.New(fault.CodeInvalidInput, key+" is required for this browser interaction", false, "observe the browser again and supply the returned generation")
+	}
+	var generation uint64
+	switch typed := value.(type) {
+	case int:
+		if typed < 0 {
+			return 0, fault.New(fault.CodeInvalidInput, key+" must be a non-negative integer", false, "use the generation returned by browser_observe")
+		}
+		generation = uint64(typed)
+	case int64:
+		if typed < 0 {
+			return 0, fault.New(fault.CodeInvalidInput, key+" must be a non-negative integer", false, "use the generation returned by browser_observe")
+		}
+		generation = uint64(typed)
+	case uint64:
+		generation = typed
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed != math.Trunc(typed) || typed < 0 || typed > float64(maxBrowserGeneration) {
+			return 0, fault.New(fault.CodeInvalidInput, key+" must be a safe non-negative integer", false, "use the generation returned by browser_observe")
+		}
+		generation = uint64(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil || parsed < 0 {
+			return 0, fault.New(fault.CodeInvalidInput, key+" must be a non-negative integer", false, "use the generation returned by browser_observe")
+		}
+		generation = uint64(parsed)
+	default:
+		return 0, fault.New(fault.CodeInvalidInput, key+" must be a non-negative integer", false, "use the generation returned by browser_observe")
+	}
+	if generation > maxBrowserGeneration {
+		return 0, fault.New(fault.CodeInvalidInput, key+" exceeds the supported generation range", false, "use the generation returned by browser_observe")
+	}
+	return generation, nil
+}
+
+func (d *Driver) requireInteractionGeneration(args map[string]any, requireState bool) error {
+	expected, err := generationValue(args, "expected_browser_generation")
+	if err != nil {
+		return err
+	}
+	if expected != d.generation {
+		return fault.New(fault.CodeConflict, "browser generation is stale", false, "call browser_observe action=state or action=tabs and retry with the current browser_generation")
+	}
+	if !requireState {
+		return nil
+	}
+	expectedState, err := generationValue(args, "expected_state_generation")
+	if err != nil {
+		return err
+	}
+	if expectedState != d.stateGeneration {
+		return fault.New(fault.CodeConflict, "browser state snapshot is stale", false, "call browser_observe action=state and retry with its current state_generation")
+	}
+	return nil
+}
+
+func (d *Driver) finishInteraction(startGeneration uint64, result map[string]any, err error) (map[string]any, error) {
+	if err != nil {
+		return nil, err
+	}
+	if d.generation == startGeneration {
+		d.generation++
+	}
+	result["browser_generation"] = d.generation
+	return result, nil
+}
+
 func (d *Driver) state(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := d.evaluate(ctx, stateScript, &result); err != nil {

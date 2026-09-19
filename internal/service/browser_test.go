@@ -100,6 +100,20 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 				"latest_sequence": 0, "oldest_sequence": 0, "next_sequence": 0,
 				"complete": true, "browser_generation": 3,
 			}, nil
+		case "click":
+			return map[string]any{"clicked": map[string]any{"index": 0}, "new_tab": false, "browser_generation": 4}, nil
+		case "type":
+			return map[string]any{"typed": true, "index": 0, "characters": 4, "browser_generation": 4}, nil
+		case "press":
+			return map[string]any{"pressed": args["key"], "browser_generation": 4}, nil
+		case "scroll":
+			return map[string]any{"direction": "down", "amount": 500, "browser_generation": 4}, nil
+		case "back":
+			return map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 4}, nil
+		case "switch_tab":
+			return map[string]any{"url": "https://example.com", "title": "fixture", "tab_id": args["tab_id"], "browser_generation": 4}, nil
+		case "close_tab":
+			return map[string]any{"closed": args["tab_id"], "active_tab_id": "abcd", "browser_generation": 4}, nil
 		default:
 			return map[string]any{"operation": operation, "arguments": args}, nil
 		}
@@ -178,7 +192,19 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 					args["limit"] = 50
 				}
 			case "browser_interact":
-				args["index"], args["text"], args["key"], args["tab_id"] = 0, "test", "Enter", "1234"
+				args["expected_browser_generation"] = 3
+				switch action {
+				case "click":
+					args["index"], args["expected_state_generation"] = 0, 1
+				case "type":
+					args["index"], args["text"], args["expected_state_generation"] = 0, "test", 1
+				case "press":
+					args["key"] = "Enter"
+				case "scroll":
+					args["direction"], args["amount"] = "down", 500
+				case "switch_tab", "close_tab":
+					args["tab_id"] = "1234"
+				}
 			}
 			result := decode(call(tool, args))
 			want := action
@@ -198,8 +224,8 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 				if result["browser_generation"] == nil {
 					t.Fatalf("%s omitted browser_generation: %#v", action, result)
 				}
-			} else if result["operation"] != want {
-				t.Fatal(tool, action, result)
+			} else if result["browser_generation"] == nil {
+				t.Fatalf("%s omitted browser_generation: %#v", action, result)
 			}
 		}
 	}

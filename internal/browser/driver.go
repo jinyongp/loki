@@ -401,6 +401,14 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	if err := d.focus(ctx); err != nil {
 		return nil, err
 	}
+	interactionGeneration := d.generation
+	switch operation {
+	case "click", "type", "press", "scroll", "back", "switch_tab", "close_tab":
+		requireState := operation == "type" || operation == "click" && args["index"] != nil
+		if err := d.requireInteractionGeneration(args, requireState); err != nil {
+			return nil, err
+		}
+	}
 	switch operation {
 	case "console", "network", "request", "websockets", "page_errors", "debug_diagnostics":
 		result, err := d.observe(ctx, operation, args)
@@ -411,14 +419,18 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	case "state":
 		return d.state(ctx)
 	case "click":
-		return d.click(ctx, args)
+		result, err := d.click(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "type":
-		return d.typeText(ctx, args)
+		result, err := d.typeText(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "press":
 		key, _ := args["key"].(string)
-		return d.press(ctx, key)
+		result, err := d.press(ctx, key)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "scroll":
-		return d.scroll(ctx, args)
+		result, err := d.scroll(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "screenshot":
 		return d.screenshot(ctx, args["full_page"] == true)
 	case "navigate":
@@ -434,6 +446,7 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		}
 		if operation == "switch_tab" {
 			d.target = target
+			d.generation++
 			if err = d.focus(ctx); err != nil {
 				return nil, err
 			}
@@ -441,11 +454,12 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 			if err == nil {
 				result["tab_id"] = id
 			}
-			return result, err
+			return d.finishInteraction(interactionGeneration, result, err)
 		}
 		if err = d.client.Call(ctx, "", "Target.closeTarget", map[string]any{"targetId": target}, nil); err != nil {
 			return nil, err
 		}
+		d.generation++
 		d.closed[target] = struct{}{}
 		delete(d.sessions, target)
 		if target == d.target {
@@ -461,7 +475,7 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 				}
 			}
 		}
-		return map[string]any{"closed": id, "active_tab_id": shortID(d.target)}, nil
+		return d.finishInteraction(interactionGeneration, map[string]any{"closed": id, "active_tab_id": shortID(d.target)}, nil)
 	case "back":
 		var history struct {
 			CurrentIndex int
@@ -474,6 +488,7 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 			return nil, err
 		}
 		if history.CurrentIndex > 0 && history.CurrentIndex < len(history.Entries) {
+			d.generation++
 			if err := d.client.Call(ctx, d.sessions[d.target], "Page.navigateToHistoryEntry", map[string]any{"entryId": history.Entries[history.CurrentIndex-1].ID}, nil); err != nil {
 				return nil, err
 			}
@@ -494,7 +509,8 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 				return nil, err
 			}
 		}
-		return d.page(ctx)
+		result, err := d.page(ctx)
+		return d.finishInteraction(interactionGeneration, result, err)
 	default:
 		return nil, fmt.Errorf("unknown browser operation: %s", strings.TrimSpace(operation))
 	}
