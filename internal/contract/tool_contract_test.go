@@ -144,6 +144,84 @@ func TestSystemInspectUsesGeneratedActionContract(t *testing.T) {
 	}
 }
 
+func TestWorkspaceReadUsesGeneratedActionContract(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := seenDefinition(definitions, "workspace_read")
+	if tool == nil {
+		t.Fatal("workspace_read definition missing")
+	}
+	if !strings.Contains(tool.Description, "has_more") || !strings.Contains(tool.Description, "eof") || !strings.Contains(tool.Description, "truncated") {
+		t.Fatalf("workspace_read description = %q", tool.Description)
+	}
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if err := json.Unmarshal(encoded, &input); err != nil {
+		t.Fatal(err)
+	}
+	properties := input["properties"].(map[string]any)
+	for name, raw := range properties {
+		property := raw.(map[string]any)
+		if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+			t.Errorf("workspace_read property %s has no description", name)
+		}
+	}
+	branches := input["oneOf"].([]any)
+	if len(branches) != 5 {
+		t.Fatalf("workspace_read branches = %#v", branches)
+	}
+	for _, raw := range branches {
+		branch := raw.(map[string]any)
+		branchProperties := branch["properties"].(map[string]any)
+		action := branchProperties["action"].(map[string]any)["const"].(string)
+		required := map[string]bool{}
+		for _, item := range branch["required"].([]any) {
+			required[item.(string)] = true
+		}
+		switch action {
+		case "list":
+			if _, exists := branchProperties["query"]; exists {
+				t.Fatal("list accepts search query")
+			}
+		case "file", "revisions":
+			if !required["path"] {
+				t.Fatalf("%s does not require path", action)
+			}
+		case "search":
+			if !required["query"] {
+				t.Fatal("search does not require query")
+			}
+		case "revision_diff":
+			if !required["path"] || !required["revision"] {
+				t.Fatalf("revision_diff required = %#v", required)
+			}
+		}
+	}
+	outputEncoded, err := json.Marshal(tool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(outputEncoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	outputBranches := output["oneOf"].([]any)
+	if len(outputBranches) != 6 {
+		t.Fatalf("workspace_read output branches = %#v", outputBranches)
+	}
+	for _, raw := range outputBranches {
+		branch := raw.(map[string]any)
+		if branch["additionalProperties"] != false {
+			t.Fatalf("workspace_read output branch is open: %#v", branch)
+		}
+	}
+}
+
 func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 	definitions, err := CurrentDefinitions()
 	if err != nil {

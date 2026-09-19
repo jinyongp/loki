@@ -175,6 +175,53 @@ func TestSystemInspectOperationSchemaPreservesDefaultAndRejectsIrrelevantFields(
 	}
 }
 
+func TestWorkspaceReadActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["workspace_read"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(map[string]any{"entries": []any{}, "offset": 0, "next_offset": 0, "has_more": false})
+	}
+	client := connect(t, handlers)
+
+	valid := []map[string]any{
+		{"action": "list"},
+		{"action": "file", "path": "README.md", "offset": 0, "limit": 20},
+		{"action": "search", "query": "needle", "path": ".", "max_results": 20, "regex": false},
+		{"action": "revisions", "path": "README.md", "limit": 10},
+		{"action": "revision_diff", "path": "README.md", "revision": strings.Repeat("a", 64)},
+	}
+	for _, arguments := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_read", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("valid workspace_read rejected: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("valid workspace_read calls = %d, want %d", calls, len(valid))
+	}
+
+	invalid := []map[string]any{
+		{"action": "list", "query": "needle"},
+		{"action": "file"},
+		{"action": "file", "path": "README.md", "regex": true},
+		{"action": "search", "path": "."},
+		{"action": "search", "query": "needle", "revision": strings.Repeat("a", 64)},
+		{"action": "revisions"},
+		{"action": "revision_diff", "path": "README.md"},
+		{"action": "revision_diff", "path": "README.md", "revision": strings.Repeat("a", 64), "limit": 10},
+	}
+	for _, arguments := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_read", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid workspace_read accepted: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("invalid workspace_read reached handler: calls=%d want=%d", calls, len(valid))
+	}
+}
+
 func TestWorkspaceRecoverySchemasRejectMissingCASBeforeHandlers(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := map[string]int{}

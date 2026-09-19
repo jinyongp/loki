@@ -14,11 +14,11 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	want := ContractAudit{
 		ToolCount:              32,
 		ActionUnionCount:       19,
-		FlatActionUnionCount:   14,
+		FlatActionUnionCount:   13,
 		InputPropertyCount:     158,
-		DescribedPropertyCount: 43,
+		DescribedPropertyCount: 52,
 		MissingOutputSchema:    3,
-		OpenOutputSchema:       19,
+		OpenOutputSchema:       18,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -33,15 +33,15 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	}
 
 	migrated := map[string]bool{
-		"system_inspect": true, "workspace_edit": true, "restore_workspace_file": true,
-		"remove_tracked_file": true, "git_stage": true,
+		"system_inspect": true, "workspace_read": true, "workspace_edit": true,
+		"restore_workspace_file": true, "remove_tracked_file": true, "git_stage": true,
 	}
 	for _, issue := range audit.Issues {
 		if !migrated[issue.Tool] {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
-			(issue.Code == "open_output_schema" && (issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file")) {
+			(issue.Code == "open_output_schema" && (issue.Tool == "workspace_read" || issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file")) {
 			t.Errorf("migrated tool regressed: %#v", issue)
 		}
 	}

@@ -374,6 +374,7 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
 		"system_inspect":         overrideSystemInspect,
+		"workspace_read":         overrideWorkspaceRead,
 		"workspace_edit":         overrideWorkspaceEdit,
 		"restore_workspace_file": overrideRestoreWorkspaceFile,
 		"remove_tracked_file":    overrideRemoveTrackedFile,
@@ -414,6 +415,162 @@ func overrideSystemInspect(tool *mcp.Tool) error {
 	}
 	tool.Description = "Inspect Loki server/workspace health, recent tool activity, one retained operation by correlation ID, or one workspace TCP port."
 	tool.InputSchema = schema
+	return nil
+}
+
+func overrideWorkspaceRead(tool *mcp.Tool) error {
+	input, err := (ActionInputContract{
+		Title:             "workspace_readArguments",
+		ActionDescription: "Workspace read/history operation to perform.",
+		Fields: []ActionField{
+			{Name: "path", Schema: map[string]any{
+				"type": "string", "minLength": 1, "default": ".",
+				"description": "Workspace-relative path. list/search default to the workspace root; file/history actions require an explicit target path.",
+			}},
+			{Name: "max_depth", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 10, "default": 3,
+				"description": "Maximum recursive directory depth for action=list.",
+			}},
+			{Name: "offset", Schema: map[string]any{
+				"type": "integer", "minimum": 0, "default": 0,
+				"description": "Zero-based entry or line offset for action=list or action=file.",
+			}},
+			{Name: "limit", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 100000, "default": 200,
+				"description": "Requested entry, line, or revision count. Loki clamps it to the action-specific configured bound.",
+			}},
+			{Name: "query", Schema: map[string]any{
+				"type": "string", "minLength": 1, "maxLength": 500,
+				"description": "Literal or regular-expression search text for action=search.",
+			}},
+			{Name: "max_results", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 10000, "default": 100,
+				"description": "Maximum search matches requested for action=search; the configured server bound may be lower.",
+			}},
+			{Name: "regex", Schema: map[string]any{
+				"type": "boolean", "default": false,
+				"description": "Interpret query as a regular expression for action=search; false performs literal search.",
+			}},
+			{Name: "revision", Schema: map[string]any{
+				"type": "string", "pattern": "^[0-9a-f]{64}$",
+				"description": "Saved file revision identifier for action=revision_diff.",
+			}},
+		},
+		Variants: []ActionVariant{
+			{Name: "list", Optional: []string{"path", "max_depth", "offset", "limit"}},
+			{Name: "file", Required: []string{"path"}, Optional: []string{"offset", "limit"}},
+			{Name: "search", Required: []string{"query"}, Optional: []string{"path", "max_results", "regex"}},
+			{Name: "revisions", Required: []string{"path"}, Optional: []string{"limit"}},
+			{Name: "revision_diff", Required: []string{"path", "revision"}},
+		},
+	}).Schema()
+	if err != nil {
+		return err
+	}
+
+	entry := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path": map[string]any{"type": "string"},
+			"type": map[string]any{"type": "string", "enum": []string{"file", "directory"}},
+			"size": map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "type"},
+	}
+	match := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":   map[string]any{"type": "string"},
+			"line":   map[string]any{"type": "integer", "minimum": 1},
+			"column": map[string]any{"type": "integer", "minimum": 1},
+			"text":   map[string]any{"type": "string"},
+		},
+		"required": []string{"path", "line", "column", "text"},
+	}
+	revision := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"revision":   map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"path":       map[string]any{"type": "string"},
+			"operation":  map[string]any{"type": "string"},
+			"created_at": map[string]any{"type": "string"},
+			"bytes":      map[string]any{"type": "integer", "minimum": 0},
+			"sha256":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"mode":       map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"revision", "path", "operation", "created_at", "bytes", "sha256", "mode"},
+	}
+	listResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"entries":     map[string]any{"type": "array", "items": entry},
+			"offset":      map[string]any{"type": "integer", "minimum": 0},
+			"next_offset": map[string]any{"type": "integer", "minimum": 0},
+			"has_more":    map[string]any{"type": "boolean"},
+		},
+		"required": []string{"entries", "offset", "next_offset", "has_more"},
+	}
+	fileResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":        map[string]any{"type": "string"},
+			"offset":      map[string]any{"type": "integer", "minimum": 0},
+			"next_offset": map[string]any{"type": "integer", "minimum": 0},
+			"start_line":  map[string]any{"type": "integer", "minimum": 1},
+			"end_line":    map[string]any{"type": "integer", "minimum": 0},
+			"content":     map[string]any{"type": "string"},
+			"eof":         map[string]any{"type": "boolean"},
+			"size":        map[string]any{"type": "integer", "minimum": 0},
+			"sha256":      map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+		},
+		"required": []string{"path", "offset", "next_offset", "start_line", "end_line", "content", "eof", "size", "sha256"},
+	}
+	searchResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"matches":   map[string]any{"type": "array", "items": match},
+			"truncated": map[string]any{"type": "boolean"},
+		},
+		"required": []string{"matches", "truncated"},
+	}
+	revisionsResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":      map[string]any{"type": "string"},
+			"revisions": map[string]any{"type": "array", "items": revision},
+		},
+		"required": []string{"path", "revisions"},
+	}
+	binaryDiff := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":     map[string]any{"type": "string"},
+			"revision": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"binary":   map[string]any{"const": true},
+			"diff":     map[string]any{"type": "null"},
+		},
+		"required": []string{"path", "revision", "binary", "diff"},
+	}
+	textDiff := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":            map[string]any{"type": "string"},
+			"revision":        map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"binary":          map[string]any{"const": false},
+			"diff":            map[string]any{"type": "string"},
+			"truncated":       map[string]any{"type": "boolean"},
+			"previous_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"current_sha256":  map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+		},
+		"required": []string{"path", "revision", "binary", "diff", "truncated", "previous_sha256", "current_sha256"},
+	}
+
+	tool.Description = "Read workspace text and recoverable history with action-specific inputs. list exposes has_more/next_offset, file exposes eof/next_offset, and search exposes truncated so incomplete results cannot be mistaken for exhaustive coverage."
+	tool.InputSchema = input
+	tool.OutputSchema = map[string]any{
+		"type":  "object",
+		"oneOf": []any{listResult, fileResult, searchResult, revisionsResult, binaryDiff, textDiff},
+	}
 	return nil
 }
 
