@@ -22,8 +22,19 @@ func TestBrowserOperationEnvelope(t *testing.T) {
 		return map[string]any{"operation": op, "arguments": args}, nil
 	})
 	ops := BrowserOperations(caller)
-	if len(ops) != 19 {
-		t.Fatal(len(ops))
+	expected := []string{"start", "navigate", "state", "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "list_tabs", "switch_tab", "close_tab", "screenshot", "console", "network", "request", "websockets", "page_errors", "debug_diagnostics", "stop"}
+	if len(ops) != len(expected) {
+		t.Fatalf("browser operations = %d, want %d", len(ops), len(expected))
+	}
+	for _, name := range expected {
+		if _, ok := ops[name]; !ok {
+			t.Errorf("browser operation %s missing", name)
+		}
+	}
+	for _, removed := range []string{"press", "scroll"} {
+		if _, ok := ops[removed]; ok {
+			t.Errorf("legacy browser operation %s remains", removed)
+		}
 	}
 	for name, op := range ops {
 		result, err := op.Handle(t.Context(), json.RawMessage(`{"arguments":{"index":12}}`))

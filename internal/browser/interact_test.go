@@ -103,6 +103,8 @@ func TestChromiumInteractions(t *testing.T) {
 		}
 		fmt.Fprint(w, `<!doctype html><title>Fixture</title>
 <input name="text" value="old"><textarea name="area">old</textarea><div name="editable" contenteditable="true">old</div>
+<input name="keyboard" id="keyboard" value="abc"><select name="select" id="select"><option value="one">One</option><option value="two">Two</option></select>
+<input name="check" id="check" type="checkbox"><button name="focus-target" id="focus-target">Focus target</button>
 <button name="click" onclick="document.title='clicked'">Click</button><button name="hover" onmouseenter="document.title='hovered'">Hover</button>
 <button name="pointer" id="pointer">Pointer</button><button name="drag-source" id="drag-source">Drag</button><button name="drag-target" id="drag-target">Drop</button>
 <div id="scroller" style="height:80px;width:240px;overflow:auto"><button name="wheel-target">Wheel</button><div style="height:1000px">Tall nested</div></div>
@@ -126,6 +128,13 @@ document.getElementById('drag-target').addEventListener('mouseup', () => {
   if (dragging) document.title='dragged';
   dragging=false;
 });
+keyboard.addEventListener('keydown', event => {
+  if (event.key==='Enter') document.title='key-enter';
+  if (event.ctrlKey && event.key.toLowerCase()==='k') document.title='shortcut-k';
+});
+select.addEventListener('change', () => document.title='select:'+select.value);
+check.addEventListener('change', () => document.title='checked:'+check.checked);
+document.getElementById('focus-target').addEventListener('focus', () => document.title='focused');
 </script>`)
 	}))
 	callBrowser(t, d, "start", nil)
@@ -207,20 +216,82 @@ document.getElementById('drag-target').addEventListener('mouseup', () => {
 	for _, name := range []string{"text", "area", "editable"} {
 		observe()
 		index := elementIndex(t, state, name)
-		result := interact("type", map[string]any{"index": index, "text": "안녕 '); throw 1; // 😀"}, true)
-		if result["typed"] != true {
+		result := interact("fill", map[string]any{"index": index, "text": "filled"}, true)
+		if result["filled"] != true {
 			t.Fatal(result)
 		}
 		var contents string
-		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "안녕 '); throw 1; // 😀" {
-			t.Fatal(contents, err)
+		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "filled" {
+			t.Fatalf("%s fill = %q %v", name, contents, err)
 		}
 		observe()
 		index = elementIndex(t, state, name)
-		interact("type", map[string]any{"index": index, "text": ""}, true)
-		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "" {
-			t.Fatal(contents, err)
+		result = interact("type", map[string]any{"index": index, "text": "+"}, true)
+		if result["typed"] != true {
+			t.Fatal(result)
 		}
+		if err := d.evaluate(t.Context(), fmt.Sprintf(`(() => {const e=globalThis.__lokiNodes[%d];return e.value ?? e.textContent})()`, index), &contents); err != nil || contents != "filled+" {
+			t.Fatalf("%s type = %q %v", name, contents, err)
+		}
+	}
+
+	observe()
+	keyboardIndex := elementIndex(t, state, "keyboard")
+	interact("focus", map[string]any{"index": keyboardIndex}, true)
+	interact("key", map[string]any{"key": "End"}, false)
+	observe()
+	keyboardIndex = elementIndex(t, state, "keyboard")
+	interact("type", map[string]any{"index": keyboardIndex, "text": "Z"}, true)
+	var keyboardValue string
+	if err := d.evaluate(t.Context(), "document.getElementById('keyboard').value", &keyboardValue); err != nil || keyboardValue != "abcZ" {
+		t.Fatalf("caret-preserving type = %q %v", keyboardValue, err)
+	}
+	interact("shortcut", map[string]any{"key": "A", "modifiers": []any{"Control"}}, false)
+	observe()
+	keyboardIndex = elementIndex(t, state, "keyboard")
+	interact("type", map[string]any{"index": keyboardIndex, "text": "Q"}, true)
+	if err := d.evaluate(t.Context(), "document.getElementById('keyboard').value", &keyboardValue); err != nil || keyboardValue != "Q" {
+		t.Fatalf("shortcut selection + type = %q %v", keyboardValue, err)
+	}
+	interact("key", map[string]any{"key": "Enter"}, false)
+	if page, err := d.page(t.Context()); err != nil || page["title"] != "key-enter" {
+		t.Fatalf("key event => %#v %v", page, err)
+	}
+	interact("shortcut", map[string]any{"key": "K", "modifiers": []any{"Control"}}, false)
+	if page, err := d.page(t.Context()); err != nil || page["title"] != "shortcut-k" {
+		t.Fatalf("shortcut event => %#v %v", page, err)
+	}
+
+	observe()
+	selectResult := interact("select_option", map[string]any{
+		"index":   elementIndex(t, state, "select"),
+		"options": []any{map[string]any{"value": "two"}},
+	}, true)
+	if selectResult["changed"] != true {
+		t.Fatal(selectResult)
+	}
+	if page, err := d.page(t.Context()); err != nil || page["title"] != "select:two" {
+		t.Fatalf("select event => %#v %v", page, err)
+	}
+
+	observe()
+	checkedResult := interact("set_checked", map[string]any{
+		"index": elementIndex(t, state, "check"), "checked": true,
+	}, true)
+	if checkedResult["checked"] != true || checkedResult["changed"] != true {
+		t.Fatal(checkedResult)
+	}
+	if page, err := d.page(t.Context()); err != nil || page["title"] != "checked:true" {
+		t.Fatalf("check event => %#v %v", page, err)
+	}
+
+	observe()
+	focusResult := interact("focus", map[string]any{"index": elementIndex(t, state, "focus-target")}, true)
+	if focusResult["focused"] != true {
+		t.Fatal(focusResult)
+	}
+	if page, err := d.page(t.Context()); err != nil || page["title"] != "focused" {
+		t.Fatalf("focus event => %#v %v", page, err)
 	}
 
 	for _, name := range []string{"click", "shadow", "framed"} {
@@ -237,7 +308,7 @@ document.getElementById('drag-target').addEventListener('mouseup', () => {
 	}
 
 	observe()
-	interact("press", map[string]any{"key": "Home"}, false)
+	interact("key", map[string]any{"key": "Home"}, false)
 	for _, full := range []bool{false, true} {
 		shot := callBrowser(t, d, "screenshot", map[string]any{"full_page": full})
 		data, err := base64.StdEncoding.DecodeString(shot["data_base64"].(string))

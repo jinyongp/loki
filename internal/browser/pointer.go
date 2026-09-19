@@ -20,7 +20,7 @@ type pointerPoint struct {
 	Href  string
 }
 
-var pointerModifierBits = map[string]int{
+var inputModifierBits = map[string]int{
 	"Alt":     1,
 	"Control": 2,
 	"Meta":    4,
@@ -33,7 +33,7 @@ var pointerButtonBits = map[string]int{
 	"middle": 4,
 }
 
-func pointerModifiers(args map[string]any) (int, []string, error) {
+func inputModifiers(args map[string]any) (int, []string, error) {
 	raw, ok := args["modifiers"]
 	if !ok || raw == nil {
 		return 0, []string{}, nil
@@ -58,7 +58,7 @@ func pointerModifiers(args map[string]any) (int, []string, error) {
 	}
 	seen := map[string]bool{}
 	for _, value := range values {
-		if pointerModifierBits[value] == 0 {
+		if inputModifierBits[value] == 0 {
 			return 0, nil, errors.New("unsupported pointer modifier")
 		}
 		if seen[value] {
@@ -70,7 +70,7 @@ func pointerModifiers(args map[string]any) (int, []string, error) {
 	canonical := []string{}
 	for _, value := range []string{"Alt", "Control", "Meta", "Shift"} {
 		if seen[value] {
-			mask |= pointerModifierBits[value]
+			mask |= inputModifierBits[value]
 			canonical = append(canonical, value)
 		}
 	}
@@ -113,7 +113,7 @@ func (d *Driver) pointerElement(ctx context.Context, args map[string]any, key st
 	if err != nil || index < 0 {
 		return pointerPoint{}, fmt.Errorf("%s must identify an element from browser_observe action=state", key)
 	}
-	element, err := d.element(ctx, index, false, scroll)
+	element, err := d.element(ctx, index, scroll)
 	if err != nil {
 		return pointerPoint{}, err
 	}
@@ -184,7 +184,7 @@ func (d *Driver) click(ctx context.Context, args map[string]any) (result map[str
 	if err != nil {
 		return nil, err
 	}
-	modifierMask, modifiers, err := pointerModifiers(args)
+	modifierMask, modifiers, err := inputModifiers(args)
 	if err != nil {
 		return nil, err
 	}

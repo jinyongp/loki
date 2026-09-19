@@ -7,7 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestBrowserInteractSchemaRejectsInvalidPointerShapesBeforeHandler(t *testing.T) {
+func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := 0
 	handlers["browser_interact"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
@@ -58,10 +58,28 @@ func TestBrowserInteractSchemaRejectsInvalidPointerShapesBeforeHandler(t *testin
 				wheel["index"] = index
 			}
 			return Object(map[string]any{"wheel": wheel, "browser_generation": 8})
+		case "fill":
+			return Object(map[string]any{"filled": true, "index": input["index"], "characters": 4, "browser_generation": 8})
 		case "type":
 			return Object(map[string]any{"typed": true, "index": input["index"], "characters": 4, "browser_generation": 8})
-		case "press":
-			return Object(map[string]any{"pressed": input["key"], "browser_generation": 8})
+		case "key":
+			modifiers := []any{}
+			if value, ok := input["modifiers"].([]any); ok {
+				modifiers = value
+			}
+			return Object(map[string]any{"key": input["key"], "modifiers": modifiers, "browser_generation": 8})
+		case "shortcut":
+			return Object(map[string]any{"shortcut": map[string]any{"key": input["key"], "modifiers": input["modifiers"]}, "browser_generation": 8})
+		case "select_option":
+			return Object(map[string]any{
+				"index": input["index"], "multiple": false, "changed": true,
+				"selected":           []any{map[string]any{"index": 0, "value": "one", "label": "One"}},
+				"browser_generation": 8,
+			})
+		case "set_checked":
+			return Object(map[string]any{"index": input["index"], "checked": input["checked"], "changed": true, "browser_generation": 8})
+		case "focus":
+			return Object(map[string]any{"focused": true, "index": input["index"], "browser_generation": 8})
 		case "back":
 			return Object(map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 8})
 		case "switch_tab":
@@ -86,8 +104,14 @@ func TestBrowserInteractSchemaRejectsInvalidPointerShapesBeforeHandler(t *testin
 		{"action": "wheel", "delta_x": 0, "delta_y": 500, "expected_browser_generation": 7},
 		{"action": "wheel", "index": 1, "delta_x": 0, "delta_y": 500, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "wheel", "x": 10, "y": 20, "delta_x": 100, "delta_y": 0, "expected_browser_generation": 7},
+		{"action": "fill", "index": 1, "text": "test", "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "type", "index": 1, "text": "test", "expected_browser_generation": 7, "expected_state_generation": 3},
-		{"action": "press", "key": "Enter", "expected_browser_generation": 7},
+		{"action": "key", "key": "Enter", "expected_browser_generation": 7},
+		{"action": "key", "key": "A", "modifiers": []any{"Shift"}, "expected_browser_generation": 7},
+		{"action": "shortcut", "key": "K", "modifiers": []any{"Control"}, "expected_browser_generation": 7},
+		{"action": "select_option", "index": 1, "options": []any{map[string]any{"value": "one"}}, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "set_checked", "index": 1, "checked": true, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "focus", "index": 1, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "back", "expected_browser_generation": 7},
 		{"action": "switch_tab", "tab_id": "abcd", "expected_browser_generation": 7},
 		{"action": "close_tab", "tab_id": "abcd", "expected_browser_generation": 7},
@@ -104,6 +128,7 @@ func TestBrowserInteractSchemaRejectsInvalidPointerShapesBeforeHandler(t *testin
 
 	invalid := []map[string]any{
 		{"action": "scroll", "expected_browser_generation": 7},
+		{"action": "press", "key": "Enter", "expected_browser_generation": 7},
 		{"action": "click", "index": 1, "expected_browser_generation": 7},
 		{"action": "click", "index": 1, "new_tab": true, "button": "right", "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "click", "x": 10, "y": 20, "expected_browser_generation": 7, "expected_state_generation": 3},
@@ -115,8 +140,14 @@ func TestBrowserInteractSchemaRejectsInvalidPointerShapesBeforeHandler(t *testin
 		{"action": "wheel", "index": 1, "delta_x": 0, "delta_y": 500, "expected_browser_generation": 7},
 		{"action": "wheel", "x": 10, "y": 20, "delta_x": 0, "delta_y": 500, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "wheel", "delta_y": 500, "expected_browser_generation": 7},
+		{"action": "fill", "index": 1, "text": "test", "expected_browser_generation": 7},
 		{"action": "type", "index": 1, "text": "test", "expected_browser_generation": 7},
-		{"action": "press", "key": "Enter"},
+		{"action": "key", "key": "Enter", "index": 1, "expected_browser_generation": 7},
+		{"action": "shortcut", "key": "K", "modifiers": []any{}, "expected_browser_generation": 7},
+		{"action": "select_option", "index": 1, "options": []any{}, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "select_option", "index": 1, "options": []any{map[string]any{"value": "x", "label": "X"}}, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "set_checked", "index": 1, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "focus", "index": 1, "text": "x", "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "switch_tab", "expected_browser_generation": 7},
 		{"action": "close_tab", "tab_id": "abcd"},
 	}

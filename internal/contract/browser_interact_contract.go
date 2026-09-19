@@ -83,23 +83,54 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 	}
 	text := map[string]any{
 		"type": "string", "maxLength": 65536,
-		"description": "Text to replace the selected editable element content with; may be empty.",
+		"description": "Text used by fill or type; may be empty.",
 	}
 	key := map[string]any{
 		"type": "string",
-		"enum": []string{
-			"Enter", "Tab", "Escape", "Backspace", "Delete",
-			"ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-			"PageUp", "PageDown", "Home", "End", "Space",
+		"anyOf": []any{
+			map[string]any{"enum": []string{
+				"Enter", "Tab", "Escape", "Backspace", "Delete", "Insert",
+				"ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+				"PageUp", "PageDown", "Home", "End", "Space",
+				"F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+			}},
+			map[string]any{"pattern": "^[A-Za-z0-9]$"},
 		},
-		"description": "Supported browser key to press on the active page.",
+		"description": "Supported named browser key or one ASCII letter/digit; letters are normalized to uppercase in results.",
+	}
+	optionSelector := map[string]any{
+		"oneOf": []any{
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{"value": map[string]any{"type": "string", "maxLength": 500}},
+				"required":   []string{"value"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{"label": map[string]any{"type": "string", "maxLength": 500}},
+				"required":   []string{"label"},
+			},
+			map[string]any{
+				"type": "object", "additionalProperties": false,
+				"properties": map[string]any{"index": map[string]any{"type": "integer", "minimum": 0, "maximum": 100000}},
+				"required":   []string{"index"},
+			},
+		},
+	}
+	options := map[string]any{
+		"type": "array", "minItems": 1, "maxItems": 50, "items": optionSelector,
+		"description": "Options to select, each identified by exactly one value, label, or option index; duplicate/ambiguous matches are resolved before mutation.",
+	}
+	checked := map[string]any{
+		"type":        "boolean",
+		"description": "Desired checked state for a native checkbox or radio input.",
 	}
 	tabID := browserTabIDSchema()
 
 	rootProperties := map[string]any{
 		"action": map[string]any{
 			"type":        "string",
-			"enum":        []string{"click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab"},
+			"enum":        []string{"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "switch_tab", "close_tab"},
 			"description": "Browser interaction to perform.",
 		},
 		"expected_browser_generation": expectedBrowser,
@@ -123,6 +154,8 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"delta_y":                     delta("vertical"),
 		"text":                        text,
 		"key":                         key,
+		"options":                     options,
+		"checked":                     checked,
 		"tab_id":                      tabID,
 	}
 
@@ -133,6 +166,8 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		}
 		return result
 	}
+	shortcutModifiers := clone(modifiers)
+	shortcutModifiers["minItems"] = 1
 	branches := []any{
 		browserInteractBranch("click", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser),
@@ -181,13 +216,32 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 			"expected_browser_generation": clone(expectedBrowser), "x": clone(x), "y": clone(y),
 			"delta_x": clone(rootProperties["delta_x"].(map[string]any)), "delta_y": clone(rootProperties["delta_y"].(map[string]any)),
 		}, "expected_browser_generation", "x", "y", "delta_x", "delta_y"),
+		browserInteractBranch("fill", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
+			"index": clone(index), "text": clone(text),
+		}, "expected_browser_generation", "expected_state_generation", "index", "text"),
 		browserInteractBranch("type", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
 			"index": clone(index), "text": clone(text),
 		}, "expected_browser_generation", "expected_state_generation", "index", "text"),
-		browserInteractBranch("press", map[string]any{
-			"expected_browser_generation": clone(expectedBrowser), "key": clone(key),
+		browserInteractBranch("key", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "key": clone(key), "modifiers": clone(modifiers),
 		}, "expected_browser_generation", "key"),
+		browserInteractBranch("shortcut", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "key": clone(key), "modifiers": shortcutModifiers,
+		}, "expected_browser_generation", "key", "modifiers"),
+		browserInteractBranch("select_option", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
+			"index": clone(index), "options": clone(options),
+		}, "expected_browser_generation", "expected_state_generation", "index", "options"),
+		browserInteractBranch("set_checked", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
+			"index": clone(index), "checked": clone(checked),
+		}, "expected_browser_generation", "expected_state_generation", "index", "checked"),
+		browserInteractBranch("focus", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
+			"index": clone(index),
+		}, "expected_browser_generation", "expected_state_generation", "index"),
 		browserInteractBranch("back", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser),
 		}, "expected_browser_generation"),
@@ -267,6 +321,14 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		},
 		"required": []string{"wheel", "browser_generation"},
 	}
+	fillResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"filled": map[string]any{"const": true}, "index": map[string]any{"type": "integer", "minimum": 0},
+			"characters": map[string]any{"type": "integer", "minimum": 0}, "browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"filled", "index", "characters", "browser_generation"},
+	}
 	typeResult := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
@@ -275,10 +337,66 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		},
 		"required": []string{"typed", "index", "characters", "browser_generation"},
 	}
-	pressResult := map[string]any{
+	keyResult := map[string]any{
 		"type": "object", "additionalProperties": false,
-		"properties": map[string]any{"pressed": map[string]any{"type": "string"}, "browser_generation": browserGenerationSchema()},
-		"required":   []string{"pressed", "browser_generation"},
+		"properties": map[string]any{
+			"key":                map[string]any{"type": "string"},
+			"modifiers":          map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"Alt", "Control", "Meta", "Shift"}}},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"key", "modifiers", "browser_generation"},
+	}
+	shortcutDetail := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"key":       map[string]any{"type": "string"},
+			"modifiers": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "enum": []string{"Alt", "Control", "Meta", "Shift"}}},
+		},
+		"required": []string{"key", "modifiers"},
+	}
+	shortcutResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{"shortcut": shortcutDetail, "browser_generation": browserGenerationSchema()},
+		"required":   []string{"shortcut", "browser_generation"},
+	}
+	selectedOption := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"index": map[string]any{"type": "integer", "minimum": 0},
+			"value": map[string]any{"type": "string"},
+			"label": map[string]any{"type": "string"},
+		},
+		"required": []string{"index", "value", "label"},
+	}
+	selectResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"index":              map[string]any{"type": "integer", "minimum": 0},
+			"multiple":           map[string]any{"type": "boolean"},
+			"changed":            map[string]any{"type": "boolean"},
+			"selected":           map[string]any{"type": "array", "items": selectedOption},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"index", "multiple", "changed", "selected", "browser_generation"},
+	}
+	checkedResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"index":              map[string]any{"type": "integer", "minimum": 0},
+			"checked":            map[string]any{"type": "boolean"},
+			"changed":            map[string]any{"type": "boolean"},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"index", "checked", "changed", "browser_generation"},
+	}
+	focusResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"focused":            map[string]any{"const": true},
+			"index":              map[string]any{"type": "integer", "minimum": 0},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"focused", "index", "browser_generation"},
 	}
 	backResult := map[string]any{
 		"type": "object", "additionalProperties": false,
@@ -305,14 +423,14 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"required": []string{"closed", "active_tab_id", "browser_generation"},
 	}
 
-	tool.Description = "Interact with the active desktop browser using expected_browser_generation. Pointer actions support guarded click, hover, drag, and real wheel events; element-index actions additionally require expected_state_generation. Stale references fail as conflicts before side effects."
+	tool.Description = "Interact with the active desktop browser using expected_browser_generation. Pointer, editable, keyboard, and form actions use action-specific operands; every element-index action additionally requires expected_state_generation. fill replaces complete editable content while type preserves the current caret/selection. Stale references fail as conflicts before side effects."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_interactArguments", "additionalProperties": false,
 		"properties": rootProperties, "required": []string{"action"}, "oneOf": branches,
 	}
 	tool.OutputSchema = map[string]any{
 		"type":  "object",
-		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, typeResult, pressResult, backResult, switchResult, closeResult},
+		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, fillResult, typeResult, keyResult, shortcutResult, selectResult, checkedResult, focusResult, backResult, switchResult, closeResult},
 	}
 	guarded := func(reference string) OperationSemantics {
 		return OperationSemantics{
@@ -321,20 +439,28 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 			AffectedResourceLimit: 1, RecoveryReference: reference,
 		}
 	}
-	operations := map[string]OperationSemantics{
-		"click":      guarded("browser_observe action=state"),
-		"hover":      guarded("browser_observe action=state"),
-		"drag":       guarded("browser_observe action=state"),
-		"wheel":      guarded("browser_observe action=state"),
-		"press":      guarded("browser_observe action=state"),
-		"back":       guarded("browser_observe action=state"),
-		"switch_tab": guarded("browser_observe action=tabs"),
-		"close_tab":  guarded("browser_observe action=tabs"),
+	elementGuarded := func() OperationSemantics {
+		return OperationSemantics{
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_browser_generation", "expected_state_generation"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=state",
+		}
 	}
-	operations["type"] = OperationSemantics{
-		Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_browser_generation", "expected_state_generation"},
-		FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
-		AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=state",
+	operations := map[string]OperationSemantics{
+		"click":         guarded("browser_observe action=state"),
+		"hover":         guarded("browser_observe action=state"),
+		"drag":          guarded("browser_observe action=state"),
+		"wheel":         guarded("browser_observe action=state"),
+		"fill":          elementGuarded(),
+		"type":          elementGuarded(),
+		"key":           guarded("browser_observe action=state"),
+		"shortcut":      guarded("browser_observe action=state"),
+		"select_option": elementGuarded(),
+		"set_checked":   elementGuarded(),
+		"focus":         elementGuarded(),
+		"back":          guarded("browser_observe action=state"),
+		"switch_tab":    guarded("browser_observe action=tabs"),
+		"close_tab":     guarded("browser_observe action=tabs"),
 	}
 	return ApplyOperationMetadata(tool, operations)
 }

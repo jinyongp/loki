@@ -15,10 +15,10 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	if tool == nil {
 		t.Fatal("browser_interact definition missing")
 	}
-	if !strings.Contains(tool.Description, "expected_browser_generation") ||
-		!strings.Contains(tool.Description, "expected_state_generation") ||
-		!strings.Contains(tool.Description, "Stale") {
-		t.Fatalf("browser_interact description = %q", tool.Description)
+	for _, phrase := range []string{"expected_browser_generation", "expected_state_generation", "fill", "type", "Stale"} {
+		if !strings.Contains(tool.Description, phrase) {
+			t.Fatalf("browser_interact description lacks %q: %q", phrase, tool.Description)
+		}
 	}
 
 	encoded, err := json.Marshal(tool.InputSchema)
@@ -36,11 +36,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Errorf("browser_interact property %s has no description", name)
 		}
 	}
-	if _, exists := properties["scroll"]; exists {
-		t.Fatal("legacy scroll field unexpectedly exists")
-	}
 	actionEnum := properties["action"].(map[string]any)["enum"].([]any)
-	for _, want := range []string{"hover", "drag", "wheel"} {
+	for _, want := range []string{"hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus"} {
 		found := false
 		for _, raw := range actionEnum {
 			found = found || raw == want
@@ -49,10 +46,17 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Errorf("browser_interact action enum omits %s", want)
 		}
 	}
+	for _, removed := range []string{"scroll", "press"} {
+		for _, raw := range actionEnum {
+			if raw == removed {
+				t.Errorf("legacy action %s remains public", removed)
+			}
+		}
+	}
 
 	branches := input["oneOf"].([]any)
-	if len(branches) != 16 {
-		t.Fatalf("browser_interact branches = %d, want 16", len(branches))
+	if len(branches) != 21 {
+		t.Fatalf("browser_interact branches = %d, want 21", len(branches))
 	}
 	counts := map[string]int{}
 	for _, raw := range branches {
@@ -97,15 +101,38 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			if required["index"] && !required["expected_state_generation"] {
 				t.Fatal("element wheel lacks state generation")
 			}
-		case "type":
+		case "fill", "type":
 			for _, name := range []string{"expected_state_generation", "index", "text"} {
 				if !required[name] {
-					t.Errorf("type does not require %s", name)
+					t.Errorf("%s does not require %s", action, name)
 				}
 			}
-		case "press":
-			if !required["key"] {
-				t.Fatal("press does not require key")
+		case "key":
+			if !required["key"] || required["modifiers"] {
+				t.Fatalf("key required = %#v", required)
+			}
+		case "shortcut":
+			if !required["key"] || !required["modifiers"] {
+				t.Fatalf("shortcut required = %#v", required)
+			}
+			if minimum, _ := branchProperties["modifiers"].(map[string]any)["minItems"].(float64); minimum != 1 {
+				t.Fatalf("shortcut modifiers = %#v", branchProperties["modifiers"])
+			}
+		case "select_option":
+			for _, name := range []string{"expected_state_generation", "index", "options"} {
+				if !required[name] {
+					t.Errorf("select_option does not require %s", name)
+				}
+			}
+		case "set_checked":
+			for _, name := range []string{"expected_state_generation", "index", "checked"} {
+				if !required[name] {
+					t.Errorf("set_checked does not require %s", name)
+				}
+			}
+		case "focus":
+			if !required["expected_state_generation"] || !required["index"] {
+				t.Fatalf("focus required = %#v", required)
 			}
 		case "switch_tab", "close_tab":
 			if !required["tab_id"] {
@@ -115,14 +142,13 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 	for action, want := range map[string]int{
 		"click": 3, "hover": 2, "drag": 3, "wheel": 3,
-		"type": 1, "press": 1, "back": 1, "switch_tab": 1, "close_tab": 1,
+		"fill": 1, "type": 1, "key": 1, "shortcut": 1,
+		"select_option": 1, "set_checked": 1, "focus": 1,
+		"back": 1, "switch_tab": 1, "close_tab": 1,
 	} {
 		if counts[action] != want {
 			t.Errorf("%s branches = %d, want %d", action, counts[action], want)
 		}
-	}
-	if counts["scroll"] != 0 {
-		t.Fatal("legacy scroll action remains public")
 	}
 
 	encoded, err = json.Marshal(tool.OutputSchema)
@@ -134,8 +160,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 9 {
-		t.Fatalf("browser_interact output branches = %#v", outputBranches)
+	if len(outputBranches) != 14 {
+		t.Fatalf("browser_interact output branches = %d, want 14", len(outputBranches))
 	}
 	for _, raw := range outputBranches {
 		branch := raw.(map[string]any)
@@ -148,10 +174,13 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	operations, ok := tool.Meta["loki/operations"].(map[string]any)
-	if !ok || len(operations) != 9 {
+	if !ok || len(operations) != 14 {
 		t.Fatalf("browser_interact operation metadata = %#v", tool.Meta)
 	}
-	for _, action := range []string{"click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab"} {
+	for _, action := range []string{
+		"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut",
+		"select_option", "set_checked", "focus", "back", "switch_tab", "close_tab",
+	} {
 		semantics := operations[action].(map[string]any)
 		if semantics["replay"] != string(ReplayGuarded) ||
 			semantics["failure_atomicity"] != string(FailureSingleResource) ||
@@ -159,11 +188,15 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Fatalf("%s semantics = %#v", action, semantics)
 		}
 	}
-	if _, exists := operations["scroll"]; exists {
-		t.Fatal("legacy scroll operation metadata remains")
+	for _, action := range []string{"fill", "type", "select_option", "set_checked", "focus"} {
+		guards := operations[action].(map[string]any)["concurrency_fields"].([]string)
+		if len(guards) != 2 || guards[0] != "expected_browser_generation" || guards[1] != "expected_state_generation" {
+			t.Fatalf("%s guards = %#v", action, guards)
+		}
 	}
-	typeGuards := operations["type"].(map[string]any)["concurrency_fields"].([]string)
-	if len(typeGuards) != 2 || typeGuards[0] != "expected_browser_generation" || typeGuards[1] != "expected_state_generation" {
-		t.Fatalf("type guards = %#v", typeGuards)
+	for _, removed := range []string{"scroll", "press"} {
+		if _, exists := operations[removed]; exists {
+			t.Errorf("legacy operation metadata remains for %s", removed)
+		}
 	}
 }

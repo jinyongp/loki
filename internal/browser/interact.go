@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"image/png"
 	"math"
-	"strings"
-	"unicode/utf8"
 
 	"loki/internal/fault"
 )
@@ -143,22 +141,13 @@ func (d *Driver) state(ctx context.Context) (map[string]any, error) {
 	result["state_generation"] = d.stateGeneration
 	return result, nil
 }
-func (d *Driver) element(ctx context.Context, index int, typing, scroll bool) (map[string]any, error) {
-	// Integer interpolation and booleans are trusted; user text never becomes JavaScript.
+func (d *Driver) element(ctx context.Context, index int, scroll bool) (map[string]any, error) {
+	// Integer interpolation and the boolean are trusted; user text never becomes JavaScript.
 	script := fmt.Sprintf(`(() => {
  const element = globalThis.__lokiNodes?.[%d];
  if (!element || !element.isConnected) throw new Error('stale element');
  const shouldScroll = %t;
  if (shouldScroll) element.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
- if (%t) {
-   if (element.disabled || element.readOnly) throw new Error('read-only element');
-   element.focus();
-   if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') element.select();
-   else if (element.isContentEditable) {
-     const selection=element.ownerDocument.getSelection(), range=element.ownerDocument.createRange();
-     range.selectNodeContents(element); selection.removeAllRanges(); selection.addRange(range);
-   } else throw new Error('element is not editable');
- }
  const rect=element.getBoundingClientRect();
  if (!rect.width || !rect.height) throw new Error('element is hidden');
  let x=rect.x+rect.width/2,y=rect.y+rect.height/2,view=element.ownerDocument.defaultView;
@@ -171,52 +160,10 @@ func (d *Driver) element(ctx context.Context, index int, typing, scroll bool) (m
  }
  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) throw new Error('element is outside viewport');
  return {x,y,href:element.href || null};
-})()`, index, scroll, typing)
+})()`, index, scroll)
 	var result map[string]any
 	err := d.evaluate(ctx, script, &result)
 	return result, err
-}
-func (d *Driver) typeText(ctx context.Context, args map[string]any) (map[string]any, error) {
-	index, err := integer(args, "index", -1, 0, 1000000)
-	if err != nil || index < 0 {
-		return nil, errors.New("index must identify an element from browser_state")
-	}
-	text, ok := args["text"].(string)
-	if !ok || utf8.RuneCountInString(text) > 65536 || strings.ContainsRune(text, 0) {
-		return nil, errors.New("text must be a string of at most 65536 characters")
-	}
-	if _, err = d.element(ctx, index, true, true); err != nil {
-		return nil, err
-	}
-	// insertText alone does not delete the selection when text is empty.
-	if text == "" {
-		if _, err = d.press(ctx, "Backspace"); err != nil {
-			return nil, err
-		}
-	} else if err = d.client.Call(ctx, d.sessions[d.target], "Input.insertText", map[string]any{"text": text}, nil); err != nil {
-		return nil, err
-	}
-	return map[string]any{"typed": true, "index": index, "characters": utf8.RuneCountInString(text)}, nil
-}
-
-var keys = map[string]int{"Enter": 13, "Tab": 9, "Escape": 27, "Backspace": 8, "Delete": 46, "ArrowUp": 38, "ArrowDown": 40, "ArrowLeft": 37, "ArrowRight": 39, "PageUp": 33, "PageDown": 34, "Home": 36, "End": 35, "Space": 32}
-
-func (d *Driver) press(ctx context.Context, key string) (map[string]any, error) {
-	code, ok := keys[key]
-	if !ok {
-		return nil, errors.New("unsupported key")
-	}
-	for _, kind := range []string{"keyDown", "keyUp"} {
-		keyValue := key
-		if key == "Space" {
-			keyValue = " "
-		}
-		params := map[string]any{"type": kind, "key": keyValue, "code": key, "windowsVirtualKeyCode": code}
-		if err := d.client.Call(ctx, d.sessions[d.target], "Input.dispatchKeyEvent", params, nil); err != nil {
-			return nil, err
-		}
-	}
-	return map[string]any{"pressed": key}, nil
 }
 func (d *Driver) screenshot(ctx context.Context, full bool) (map[string]any, error) {
 	params := map[string]any{"format": "png", "captureBeyondViewport": full, "fromSurface": true}

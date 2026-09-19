@@ -403,8 +403,8 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	interactionGeneration := d.generation
 	switch operation {
-	case "click", "hover", "drag", "wheel", "type", "press", "back", "switch_tab", "close_tab":
-		requireState := operation == "type" ||
+	case "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "switch_tab", "close_tab":
+		requireState := operation == "fill" || operation == "type" || operation == "select_option" || operation == "set_checked" || operation == "focus" ||
 			(operation == "click" || operation == "hover" || operation == "wheel") && args["index"] != nil ||
 			operation == "drag" && (args["source_index"] != nil || args["target_index"] != nil)
 		if err := d.requireInteractionGeneration(args, requireState); err != nil {
@@ -432,12 +432,26 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	case "wheel":
 		result, err := d.wheel(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
+	case "fill":
+		result, err := d.fillText(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "type":
 		result, err := d.typeText(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
-	case "press":
-		key, _ := args["key"].(string)
-		result, err := d.press(ctx, key)
+	case "key":
+		result, err := d.keyInput(ctx, args, false)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "shortcut":
+		result, err := d.keyInput(ctx, args, true)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "select_option":
+		result, err := d.selectOptions(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "set_checked":
+		result, err := d.setChecked(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "focus":
+		result, err := d.focusElement(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
 	case "screenshot":
 		return d.screenshot(ctx, args["full_page"] == true)

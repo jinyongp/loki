@@ -7,8 +7,8 @@ import (
 )
 
 func TestPointerOptionParsing(t *testing.T) {
-	mask, modifiers, err := pointerModifiers(map[string]any{"modifiers": []any{"Shift", "Control"}})
-	if err != nil || mask != pointerModifierBits["Shift"]|pointerModifierBits["Control"] {
+	mask, modifiers, err := inputModifiers(map[string]any{"modifiers": []any{"Shift", "Control"}})
+	if err != nil || mask != inputModifierBits["Shift"]|inputModifierBits["Control"] {
 		t.Fatalf("modifiers = %d %#v %v", mask, modifiers, err)
 	}
 	if len(modifiers) != 2 || modifiers[0] != "Control" || modifiers[1] != "Shift" {
@@ -19,7 +19,7 @@ func TestPointerOptionParsing(t *testing.T) {
 		{"modifiers": []any{"Unsupported"}},
 		{"modifiers": "Control"},
 	} {
-		if _, _, err := pointerModifiers(args); err == nil {
+		if _, _, err := inputModifiers(args); err == nil {
 			t.Fatalf("accepted modifiers %#v", args)
 		}
 	}
