@@ -12,14 +12,14 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ContractAudit{
-		ToolCount:              31,
-		ActionUnionCount:       18,
-		FlatActionUnionCount:   16,
-		InputPropertyCount:     153,
-		DescribedPropertyCount: 26,
-		MissingOutputSchema:    4,
+		ToolCount:              32,
+		ActionUnionCount:       19,
+		FlatActionUnionCount:   15,
+		InputPropertyCount:     156,
+		DescribedPropertyCount: 34,
+		MissingOutputSchema:    3,
 		OpenOutputSchema:       21,
-		MissingAnnotations:     2,
+		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
 		audit.ActionUnionCount != want.ActionUnionCount ||

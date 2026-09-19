@@ -56,7 +56,7 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	}
 	client := connect(t, testHandlers(t))
 	listed, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(listed.Tools) != 31 {
+	if err != nil || len(listed.Tools) != 32 {
 		t.Fatal(listed, err)
 	}
 	wanted := map[string]json.RawMessage{}
@@ -133,11 +133,83 @@ func TestUnknownToolArgumentsNeverReachHandlers(t *testing.T) {
 
 func TestGitHubIssueFieldsRejectsCredentialAndTransportArguments(t *testing.T) {
 	client := connect(t, testHandlers(t))
-	for _, key := range []string{"token", "url", "headers", "method"} {
-		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "github_issue_fields", Arguments: map[string]any{"action": "list_fields", "target": "owner/repo", key: "private"}})
-		if err != nil || !result.IsError {
-			t.Fatalf("accepted %s: %#v %v", key, result, err)
+	cases := []struct {
+		tool      string
+		arguments map[string]any
+	}{
+		{tool: "github_issue_fields_read", arguments: map[string]any{"action": "list_fields", "target": "owner/repo"}},
+		{tool: "github_issue_fields_write", arguments: map[string]any{"action": "clear_value", "target": "owner/repo", "issue": 1, "field_id": 2}},
+	}
+	for _, test := range cases {
+		for _, key := range []string{"token", "url", "headers", "method"} {
+			arguments := make(map[string]any, len(test.arguments)+1)
+			for name, value := range test.arguments {
+				arguments[name] = value
+			}
+			arguments[key] = "private"
+			result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: test.tool, Arguments: arguments})
+			if err != nil || !result.IsError {
+				t.Fatalf("%s accepted %s: %#v %v", test.tool, key, result, err)
+			}
 		}
+	}
+}
+
+func TestGitHubIssueFieldsReadWriteSchemasAreDisjoint(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := map[string]int{}
+	for _, name := range []string{"github_issue_fields_read", "github_issue_fields_write"} {
+		toolName := name
+		handlers[toolName] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+			calls[toolName]++
+			return Object(input)
+		}
+	}
+	client := connect(t, handlers)
+
+	valid := []struct {
+		tool string
+		args map[string]any
+	}{
+		{tool: "github_issue_fields_read", args: map[string]any{"action": "list_fields", "target": "owner/repo"}},
+		{tool: "github_issue_fields_read", args: map[string]any{"action": "list_values", "target": "owner/repo", "issue": 3}},
+		{
+			tool: "github_issue_fields_write",
+			args: map[string]any{
+				"action": "add_values", "target": "owner/repo", "issue": 3,
+				"values": []any{map[string]any{"field_id": 1, "data_type": "text", "text": "x"}},
+			},
+		},
+		{tool: "github_issue_fields_write", args: map[string]any{"action": "clear_value", "target": "owner/repo", "issue": 3, "field_id": 1}},
+	}
+	for _, test := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: test.tool, Arguments: test.args})
+		if err != nil || result.IsError {
+			t.Fatalf("valid %s rejected: args=%#v result=%#v err=%v", test.tool, test.args, result, err)
+		}
+	}
+
+	invalid := []struct {
+		tool string
+		args map[string]any
+	}{
+		{tool: "github_issue_fields_read", args: map[string]any{"action": "add_values", "target": "owner/repo", "issue": 3}},
+		{tool: "github_issue_fields_read", args: map[string]any{"action": "list_fields", "target": "owner/repo", "issue": 3}},
+		{tool: "github_issue_fields_read", args: map[string]any{"action": "list_values", "target": "owner/repo"}},
+		{tool: "github_issue_fields_write", args: map[string]any{"action": "list_fields", "target": "owner/repo"}},
+		{
+			tool: "github_issue_fields_write",
+			args: map[string]any{"action": "clear_value", "target": "owner/repo", "issue": 3, "field_id": 1, "values": []any{}},
+		},
+	}
+	for _, test := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: test.tool, Arguments: test.args})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid %s accepted: args=%#v result=%#v err=%v", test.tool, test.args, result, err)
+		}
+	}
+	if calls["github_issue_fields_read"] != 2 || calls["github_issue_fields_write"] != 2 {
+		t.Fatalf("invalid Issue Fields calls reached handlers: %#v", calls)
 	}
 }
 

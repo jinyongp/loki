@@ -77,21 +77,40 @@ type githubMCPRequest struct {
 }
 
 func GitHubIssueFieldsHandlers(runtime RuntimeCaller) map[string]mcpserver.Handler {
-	return map[string]mcpserver.Handler{"github_issue_fields": mcpserver.Typed(func(ctx context.Context, r githubMCPRequest) (*mcp.CallToolResult, error) {
-		operations := map[string]string{"list_fields": "github_fields_list", "list_values": "github_values_list", "add_values": "github_values_add", "set_values": "github_values_set", "clear_value": "github_values_clear"}
-		operation, ok := operations[r.Action]
-		if !ok {
-			return nil, errors.New("GitHub Issue Fields action is invalid")
+	read := mcpserver.Typed(func(ctx context.Context, r githubMCPRequest) (*mcp.CallToolResult, error) {
+		operation := map[string]string{
+			"list_fields": "github_fields_list",
+			"list_values": "github_values_list",
+		}[r.Action]
+		if operation == "" {
+			return nil, errors.New("GitHub Issue Fields read action is invalid")
 		}
 		request := map[string]any{"operation": operation, "target": r.Target}
-		switch r.Action {
-		case "list_values":
+		if r.Action == "list_values" {
 			request["issue"] = r.Issue
-		case "add_values", "set_values":
-			request["issue"], request["values"] = r.Issue, r.Values
-		case "clear_value":
-			request["issue"], request["field_id"] = r.Issue, r.FieldID
 		}
 		return runtimeObject(ctx, runtime, request)
-	})}
+	})
+	write := mcpserver.Typed(func(ctx context.Context, r githubMCPRequest) (*mcp.CallToolResult, error) {
+		operation := map[string]string{
+			"add_values":  "github_values_add",
+			"set_values":  "github_values_set",
+			"clear_value": "github_values_clear",
+		}[r.Action]
+		if operation == "" {
+			return nil, errors.New("GitHub Issue Fields write action is invalid")
+		}
+		request := map[string]any{"operation": operation, "target": r.Target, "issue": r.Issue}
+		switch r.Action {
+		case "add_values", "set_values":
+			request["values"] = r.Values
+		case "clear_value":
+			request["field_id"] = r.FieldID
+		}
+		return runtimeObject(ctx, runtime, request)
+	})
+	return map[string]mcpserver.Handler{
+		"github_issue_fields_read":  read,
+		"github_issue_fields_write": write,
+	}
 }

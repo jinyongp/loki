@@ -64,16 +64,48 @@ type captureRuntime struct{ request map[string]any }
 
 func (c *captureRuntime) Call(_ context.Context, value any) (json.RawMessage, error) {
 	c.request = value.(map[string]any)
-	return json.RawMessage(`{"fields":[]}`), nil
+	switch c.request["operation"] {
+	case "github_fields_list":
+		return json.RawMessage(`{"fields":[]}`), nil
+	case "github_values_clear":
+		return json.RawMessage(`{"cleared":true}`), nil
+	default:
+		return json.RawMessage(`{"values":[]}`), nil
+	}
 }
-func TestGitHubIssueFieldsMCPBuildsNarrowRequest(t *testing.T) {
+
+func TestGitHubIssueFieldsMCPBuildsNarrowReadAndWriteRequests(t *testing.T) {
 	runtime := &captureRuntime{}
-	handler := GitHubIssueFieldsHandlers(runtime)["github_issue_fields"]
-	result, err := handler(t.Context(), map[string]any{"action": "list_fields", "target": "owner/repo"})
+	handlers := GitHubIssueFieldsHandlers(runtime)
+	read := handlers["github_issue_fields_read"]
+	write := handlers["github_issue_fields_write"]
+
+	result, err := read(t.Context(), map[string]any{"action": "list_fields", "target": "owner/repo"})
 	if err != nil || result == nil || runtime.request["operation"] != "github_fields_list" {
 		t.Fatal(result, err, runtime.request)
 	}
-	if _, err = handler(t.Context(), map[string]any{"action": "request", "target": "owner/repo"}); err == nil {
-		t.Fatal("arbitrary method accepted")
+	result, err = read(t.Context(), map[string]any{"action": "list_values", "target": "owner/repo", "issue": 7})
+	if err != nil || result == nil || runtime.request["operation"] != "github_values_list" || runtime.request["issue"] != int64(7) {
+		t.Fatal(result, err, runtime.request)
+	}
+	result, err = write(t.Context(), map[string]any{
+		"action": "add_values", "target": "owner/repo", "issue": 8,
+		"values": []map[string]any{{"field_id": 1, "data_type": "text", "text": "x"}},
+	})
+	if err != nil || result == nil || runtime.request["operation"] != "github_values_add" || runtime.request["issue"] != int64(8) {
+		t.Fatal(result, err, runtime.request)
+	}
+	result, err = write(t.Context(), map[string]any{
+		"action": "clear_value", "target": "owner/repo", "issue": 9, "field_id": 3,
+	})
+	if err != nil || result == nil || runtime.request["operation"] != "github_values_clear" || runtime.request["field_id"] != int64(3) {
+		t.Fatal(result, err, runtime.request)
+	}
+
+	if _, err = read(t.Context(), map[string]any{"action": "add_values", "target": "owner/repo"}); err == nil {
+		t.Fatal("read handler accepted mutation action")
+	}
+	if _, err = write(t.Context(), map[string]any{"action": "list_fields", "target": "owner/repo"}); err == nil {
+		t.Fatal("write handler accepted read action")
 	}
 }

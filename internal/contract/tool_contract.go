@@ -145,6 +145,195 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 
 type toolOverride func(*mcp.Tool) error
 
+type toolFactory func() (*mcp.Tool, error)
+
+func boolPointer(value bool) *bool { return &value }
+
+func retiredSnapshotTools() map[string]bool {
+	return map[string]bool{"github_issue_fields": true}
+}
+
+func generatedStandaloneTools() map[string]toolFactory {
+	return map[string]toolFactory{
+		"github_issue_fields_read":  githubIssueFieldsReadTool,
+		"github_issue_fields_write": githubIssueFieldsWriteTool,
+	}
+}
+
+func issueFieldOptionSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"id":    map[string]any{"type": "integer"},
+			"name":  map[string]any{"type": "string"},
+			"color": map[string]any{"type": "string"},
+		},
+		"required": []string{"id", "name", "color"},
+	}
+}
+
+func issueFieldSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"id":          map[string]any{"type": "integer"},
+			"node_id":     map[string]any{"type": "string"},
+			"name":        map[string]any{"type": "string"},
+			"description": map[string]any{"type": "string"},
+			"data_type":   map[string]any{"type": "string"},
+			"options": map[string]any{
+				"type": "array", "items": issueFieldOptionSchema(),
+			},
+		},
+		"required": []string{"id", "node_id", "name", "description", "data_type"},
+	}
+}
+
+func issueFieldValueSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"issue_field_id":   map[string]any{"type": "integer"},
+			"issue_field_name": map[string]any{"type": "string"},
+			"node_id":          map[string]any{"type": "string"},
+			"data_type":        map[string]any{"type": "string"},
+			"value":            map[string]any{},
+			"single_select_option": map[string]any{
+				"anyOf": []any{issueFieldOptionSchema(), map[string]any{"type": "null"}},
+			},
+			"multi_select_options": map[string]any{
+				"type": "array", "items": issueFieldOptionSchema(),
+			},
+		},
+		"required": []string{"issue_field_id", "issue_field_name", "node_id", "data_type", "value"},
+	}
+}
+
+func issueFieldValueInputSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"field_id":  map[string]any{"type": "integer", "minimum": 1},
+			"data_type": map[string]any{"type": "string", "enum": []string{"text", "single_select", "number", "date", "multi_select"}},
+			"text":      map[string]any{"type": "string"},
+			"number":    map[string]any{"type": "number"},
+			"options": map[string]any{
+				"type": "array", "maxItems": 25, "items": map[string]any{"type": "string"},
+			},
+		},
+		"required": []string{"field_id", "data_type"},
+	}
+}
+
+func githubIssueFieldsReadTool() (*mcp.Tool, error) {
+	input, err := (ActionInputContract{
+		Title:             "github_issue_fields_readArguments",
+		ActionDescription: "GitHub Issue Fields read operation to perform.",
+		Fields: []ActionField{
+			{Name: "target", Schema: map[string]any{
+				"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
+				"description": "Configured owner/repository target.",
+			}},
+			{Name: "issue", Schema: map[string]any{
+				"type": "integer", "minimum": 1,
+				"description": "Positive issue number whose Issue Field values should be listed.",
+			}},
+		},
+		Variants: []ActionVariant{
+			{Name: "list_fields", Required: []string{"target"}},
+			{Name: "list_values", Required: []string{"target", "issue"}},
+		},
+	}).Schema()
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Tool{
+		Name:        "github_issue_fields_read",
+		Description: "Read configured GitHub organization Issue Fields or the typed Issue Field values attached to one issue.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: boolPointer(false), IdempotentHint: true,
+			OpenWorldHint: boolPointer(true), ReadOnlyHint: true,
+		},
+		InputSchema: input,
+		OutputSchema: map[string]any{
+			"type": "object",
+			"oneOf": []any{
+				map[string]any{
+					"additionalProperties": false,
+					"properties":           map[string]any{"fields": map[string]any{"type": "array", "items": issueFieldSchema()}},
+					"required":             []string{"fields"},
+				},
+				map[string]any{
+					"additionalProperties": false,
+					"properties":           map[string]any{"values": map[string]any{"type": "array", "items": issueFieldValueSchema()}},
+					"required":             []string{"values"},
+				},
+			},
+		},
+	}, nil
+}
+
+func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
+	input, err := (ActionInputContract{
+		Title:             "github_issue_fields_writeArguments",
+		ActionDescription: "GitHub Issue Fields mutation to perform.",
+		Fields: []ActionField{
+			{Name: "target", Schema: map[string]any{
+				"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
+				"description": "Configured owner/repository target.",
+			}},
+			{Name: "issue", Schema: map[string]any{
+				"type": "integer", "minimum": 1,
+				"description": "Positive issue number whose Issue Field values should be changed.",
+			}},
+			{Name: "field_id", Schema: map[string]any{
+				"type": "integer", "minimum": 1,
+				"description": "Positive Issue Field identifier to clear.",
+			}},
+			{Name: "values", Schema: map[string]any{
+				"type": "array", "minItems": 1, "maxItems": 25, "items": issueFieldValueInputSchema(),
+				"description": "Typed Issue Field values to add or replace. Each item identifies its field and data type.",
+			}},
+		},
+		Variants: []ActionVariant{
+			{Name: "add_values", Required: []string{"target", "issue", "values"}},
+			{Name: "set_values", Required: []string{"target", "issue", "values"}},
+			{Name: "clear_value", Required: []string{"target", "issue", "field_id"}},
+		},
+	}).Schema()
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.Tool{
+		Name:        "github_issue_fields_write",
+		Description: "Mutate configured GitHub Issue Field values by adding typed values, replacing the complete typed value set, or clearing one field value.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: boolPointer(true), IdempotentHint: false,
+			OpenWorldHint: boolPointer(true), ReadOnlyHint: false,
+		},
+		InputSchema: input,
+		OutputSchema: map[string]any{
+			"type": "object",
+			"oneOf": []any{
+				map[string]any{
+					"additionalProperties": false,
+					"properties":           map[string]any{"values": map[string]any{"type": "array", "items": issueFieldValueSchema()}},
+					"required":             []string{"values"},
+				},
+				map[string]any{
+					"additionalProperties": false,
+					"properties":           map[string]any{"cleared": map[string]any{"type": "boolean"}},
+					"required":             []string{"cleared"},
+				},
+			},
+		},
+	}, nil
+}
+
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
 		"workspace_edit": overrideWorkspaceEdit,

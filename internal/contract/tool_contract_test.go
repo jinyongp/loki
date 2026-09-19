@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestActionInputContractRequiresDescribedFields(t *testing.T) {
@@ -142,5 +144,46 @@ func TestGitStageUsesGeneratedActionContract(t *testing.T) {
 		if !required["expected_index_sha256"] {
 			t.Errorf("%s does not require expected_index_sha256", action)
 		}
+	}
+}
+
+func TestGitHubIssueFieldsToolsSeparateReadAndWriteAuthority(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := seenDefinition(definitions, "github_issue_fields_read")
+	write := seenDefinition(definitions, "github_issue_fields_write")
+	if read == nil || write == nil {
+		t.Fatalf("Issue Fields split definitions missing: read=%#v write=%#v", read, write)
+	}
+	if seenDefinition(definitions, "github_issue_fields") != nil {
+		t.Fatal("retired mixed GitHub Issue Fields tool remains public")
+	}
+	if read.Annotations == nil || !read.Annotations.ReadOnlyHint || read.Annotations.DestructiveHint == nil || *read.Annotations.DestructiveHint {
+		t.Fatalf("read annotations = %#v", read.Annotations)
+	}
+	if write.Annotations == nil || write.Annotations.ReadOnlyHint || write.Annotations.DestructiveHint == nil || !*write.Annotations.DestructiveHint {
+		t.Fatalf("write annotations = %#v", write.Annotations)
+	}
+	for _, tool := range []*mcp.Tool{read, write} {
+		encoded, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(encoded, &schema); err != nil {
+			t.Fatal(err)
+		}
+		properties := schema["properties"].(map[string]any)
+		for name, raw := range properties {
+			property := raw.(map[string]any)
+			if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+				t.Errorf("%s property %s has no description", tool.Name, name)
+			}
+		}
+	}
+	if read.OutputSchema == nil || write.OutputSchema == nil {
+		t.Fatal("split GitHub Issue Fields tools require output schemas")
 	}
 }
