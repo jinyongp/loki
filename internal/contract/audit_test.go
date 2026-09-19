@@ -14,9 +14,9 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	want := ContractAudit{
 		ToolCount:              32,
 		ActionUnionCount:       19,
-		FlatActionUnionCount:   15,
-		InputPropertyCount:     156,
-		DescribedPropertyCount: 34,
+		FlatActionUnionCount:   14,
+		InputPropertyCount:     157,
+		DescribedPropertyCount: 38,
 		MissingOutputSchema:    3,
 		OpenOutputSchema:       21,
 		MissingAnnotations:     1,
@@ -33,7 +33,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	}
 
 	for _, issue := range audit.Issues {
-		if issue.Tool != "workspace_edit" && issue.Tool != "git_stage" {
+		if issue.Tool != "system_inspect" && issue.Tool != "workspace_edit" && issue.Tool != "git_stage" {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" {

@@ -122,11 +122,13 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 		"browser": map[string]any{"socket_available": exists(c.BrowserSocket), "catalog_revision": "2026-09-03.1", "expected_tool_count": len(browserTools), "expected_tools": browserTools}}
 }
 func SystemHandler(c *SystemController) mcpserver.Handler {
-	return mcpserver.Typed(func(ctx context.Context, r struct {
-		Action string
-		Port   *int
-		Limit  *int
-	}) (*mcp.CallToolResult, error) {
+	type request struct {
+		Action        string  `json:"action"`
+		Port          *int    `json:"port"`
+		Limit         *int    `json:"limit"`
+		CorrelationID *string `json:"correlation_id"`
+	}
+	return mcpserver.Typed(func(ctx context.Context, r request) (*mcp.CallToolResult, error) {
 		switch r.Action {
 		case "server":
 			return mcpserver.Object(c.Info())
@@ -147,6 +149,19 @@ func SystemHandler(c *SystemController) mcpserver.Handler {
 				"server_time": time.Now().UTC().Format(time.RFC3339Nano),
 				"items":       items,
 			})
+		case "operation":
+			correlationID, err := mcpserver.Require(r.CorrelationID, "correlation_id")
+			if err != nil {
+				return nil, err
+			}
+			item, err := toolActivityByCorrelationID(c.Audit, correlationID, time.Now().UTC())
+			if err != nil {
+				return nil, fault.New(fault.CodeInvalidInput, "tool activity correlation is not retained", false, "use system_inspect action=activity to inspect retained operations")
+			}
+			return mcpserver.Object(map[string]any{
+				"server_time": time.Now().UTC().Format(time.RFC3339Nano),
+				"item":        item,
+			})
 		case "port":
 			port, err := mcpserver.Require(r.Port, "port")
 			if err != nil {
@@ -157,6 +172,6 @@ func SystemHandler(c *SystemController) mcpserver.Handler {
 			}
 			return objectResult(c.InspectPort(ctx, port))
 		}
-		return nil, fault.Error("system_inspect action must be server, diagnostics, workspace, activity, or port")
+		return nil, fault.Error("system_inspect action must be server, diagnostics, workspace, activity, operation, or port")
 	})
 }

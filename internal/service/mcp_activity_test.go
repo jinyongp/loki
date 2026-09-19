@@ -64,6 +64,32 @@ func TestRecentToolActivityPairsTerminalAndUnmatchedStarts(t *testing.T) {
 	}
 }
 
+func TestToolActivityLookupByCorrelationID(t *testing.T) {
+	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
+	now := time.Date(2026, 9, 19, 0, 30, 10, 0, time.UTC)
+	appendActivityRecord(t, log, map[string]any{
+		"timestamp": "2026-09-19T00:30:00.000000+00:00", "phase": "start",
+		"invocation_id": "0123456789abcdef-0000000000000001", "tool": "git_stage",
+		"metadata": map[string]any{"action": "paths"},
+	})
+	appendActivityRecord(t, log, map[string]any{
+		"timestamp": "2026-09-19T00:30:00.125000+00:00", "phase": "terminal",
+		"invocation_id": "0123456789abcdef-0000000000000001", "tool": "git_stage",
+		"success": true, "outcome": "success", "duration_ms": 125.0,
+		"metadata": map[string]any{"action": "paths"},
+	})
+	item, err := toolActivityByCorrelationID(log, "0123456789abcdef-0000000000000001", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.InvocationID != "0123456789abcdef-0000000000000001" || item.State != "terminal" || item.Success == nil || !*item.Success {
+		t.Fatalf("item = %#v", item)
+	}
+	if _, err := toolActivityByCorrelationID(log, "fedcba9876543210-0000000000000002", now); err == nil {
+		t.Fatal("lookup accepted non-retained correlation")
+	}
+}
+
 func TestRecentToolActivityContainsOnlyBoundedSafeMetadata(t *testing.T) {
 	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
 	handler := auditHandler(log, "github", func(_ context.Context, _ map[string]any) (*mcp.CallToolResult, error) {

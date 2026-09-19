@@ -17,7 +17,7 @@ func Typed[T any](handler func(context.Context, T) (*mcp.CallToolResult, error))
 		}
 		var request T
 		if err = json.Unmarshal(encoded, &request); err != nil {
-			return nil, fault.Error("invalid arguments: request; inspect the tool schema and retry")
+			return nil, fault.New(fault.CodeInvalidInput, "invalid arguments: request; inspect the tool schema and retry", false, "inspect the tool schema and correct the request")
 		}
 		return handler(ctx, request)
 	}
@@ -26,7 +26,7 @@ func Typed[T any](handler func(context.Context, T) (*mcp.CallToolResult, error))
 func Require[T any](value *T, name string) (T, error) {
 	if value == nil {
 		var zero T
-		return zero, fault.Error(name + " is required for this action")
+		return zero, fault.New(fault.CodeInvalidInput, name+" is required for this action", false, "supply the required field for the selected action")
 	}
 	return *value, nil
 }

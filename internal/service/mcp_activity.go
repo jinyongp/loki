@@ -42,15 +42,16 @@ func activityTimestamp(value string) time.Time {
 }
 
 func isActivitySelfRecord(record toolActivityRecord) bool {
-	return record.Tool == "system_inspect" && record.Metadata != nil && record.Metadata["action"] == "activity"
+	if record.Tool != "system_inspect" || record.Metadata == nil {
+		return false
+	}
+	action := record.Metadata["action"]
+	return action == "activity" || action == "operation"
 }
 
-func recentToolActivity(log *audit.Log, limit int, now time.Time) ([]toolActivityItem, error) {
+func retainedToolActivity(log *audit.Log, now time.Time) ([]toolActivityItem, error) {
 	if log == nil {
 		return nil, errors.New("tool activity log is unavailable")
-	}
-	if limit < 1 || limit > 50 {
-		return nil, errors.New("tool activity limit must be between 1 and 50")
 	}
 	raw, err := log.Read(200)
 	if err != nil {
@@ -122,11 +123,35 @@ func recentToolActivity(log *audit.Log, limit int, now time.Time) ([]toolActivit
 		}
 		return items[i].sortTime.After(items[j].sortTime)
 	})
-	if len(items) > limit {
-		items = items[:limit]
-	}
 	for index := range items {
 		items[index].sortTime = time.Time{}
 	}
 	return items, nil
+}
+
+func recentToolActivity(log *audit.Log, limit int, now time.Time) ([]toolActivityItem, error) {
+	if limit < 1 || limit > 50 {
+		return nil, errors.New("tool activity limit must be between 1 and 50")
+	}
+	items, err := retainedToolActivity(log, now)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func toolActivityByCorrelationID(log *audit.Log, correlationID string, now time.Time) (toolActivityItem, error) {
+	items, err := retainedToolActivity(log, now)
+	if err != nil {
+		return toolActivityItem{}, err
+	}
+	for _, item := range items {
+		if item.InvocationID == correlationID {
+			return item, nil
+		}
+	}
+	return toolActivityItem{}, errors.New("tool activity correlation is not retained")
 }

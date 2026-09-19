@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/audit"
+	"loki/internal/fault"
 	"loki/internal/mcpserver"
 )
 
@@ -136,6 +137,36 @@ func TestMCPAuditStartIsDurableBeforeHandlerCompletes(t *testing.T) {
 	rows = readAuditLines(t, log.Path)
 	if len(rows) != 2 || rows[1]["phase"] != "terminal" || rows[1]["invocation_id"] != invocationID {
 		t.Fatalf("terminal audit = %#v", rows)
+	}
+}
+
+func TestMCPAuditPublishesCorrelationOnResultsAndErrors(t *testing.T) {
+	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
+	success := auditHandler(log, "workspace_edit", func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return mcpserver.Object(map[string]any{"ok": true})
+	}, func(err error) { t.Error(err) })
+	result, err := success(t.Context(), map[string]any{"action": "create", "path": "fixture.txt"})
+	if err != nil || result == nil {
+		t.Fatal(result, err)
+	}
+	correlationID, _ := result.Meta["loki/correlation_id"].(string)
+	if correlationID == "" {
+		t.Fatalf("result metadata = %#v", result.Meta)
+	}
+
+	failed := auditHandler(log, "workspace_edit", func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return nil, fault.New(fault.CodeConflict, "workspace changed", true, "read the current file revision")
+	}, func(err error) { t.Error(err) })
+	_, err = failed(t.Context(), map[string]any{"action": "replace", "path": "fixture.txt"})
+	if err == nil {
+		t.Fatal("expected typed error")
+	}
+	detail := fault.Describe(err)
+	if detail.Code != fault.CodeConflict || detail.CorrelationID == "" || detail.CorrelationID == correlationID {
+		t.Fatalf("error detail = %#v", detail)
+	}
+	if detail.NextAction != "read the current file revision" {
+		t.Fatalf("error next action = %#v", detail)
 	}
 }
 

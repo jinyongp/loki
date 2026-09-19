@@ -36,6 +36,114 @@ func TestActionInputContractRequiresDescribedFields(t *testing.T) {
 	}
 }
 
+func TestActionInputContractSupportsDefaultAction(t *testing.T) {
+	schema, err := (ActionInputContract{
+		Title:             "fixture",
+		ActionDescription: "Fixture action.",
+		DefaultAction:     "read",
+		Fields: []ActionField{{
+			Name: "path", Schema: map[string]any{"type": "string", "description": "Path."},
+		}},
+		Variants: []ActionVariant{
+			{Name: "read"},
+			{Name: "write", Required: []string{"path"}},
+		},
+	}).Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, required := schema["required"]; required {
+		t.Fatalf("defaulted root unexpectedly requires action: %#v", schema)
+	}
+	properties := schema["properties"].(map[string]any)
+	action := properties["action"].(map[string]any)
+	if action["default"] != "read" {
+		t.Fatalf("action default = %#v", action)
+	}
+	branches := schema["oneOf"].([]any)
+	for _, raw := range branches {
+		branch := raw.(map[string]any)
+		branchProperties := branch["properties"].(map[string]any)
+		name := branchProperties["action"].(map[string]any)["const"].(string)
+		required := map[string]bool{}
+		for _, item := range branch["required"].([]string) {
+			required[item] = true
+		}
+		if name == "read" && required["action"] {
+			t.Fatal("default action branch requires action")
+		}
+		if name == "write" && (!required["action"] || !required["path"]) {
+			t.Fatalf("write required = %#v", required)
+		}
+	}
+
+	_, err = (ActionInputContract{
+		Title:             "fixture",
+		ActionDescription: "Fixture action.",
+		DefaultAction:     "missing",
+		Variants:          []ActionVariant{{Name: "read"}},
+	}).Schema()
+	if err == nil || !strings.Contains(err.Error(), "default action") {
+		t.Fatalf("invalid default action error = %v", err)
+	}
+}
+
+func TestSystemInspectUsesGeneratedActionContract(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := seenDefinition(definitions, "system_inspect")
+	if tool == nil {
+		t.Fatal("system_inspect definition missing")
+	}
+	encoded, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties := schema["properties"].(map[string]any)
+	if properties["action"].(map[string]any)["default"] != "server" {
+		t.Fatalf("system_inspect action = %#v", properties["action"])
+	}
+	for _, name := range []string{"action", "port", "limit", "correlation_id"} {
+		property := properties[name].(map[string]any)
+		if description, _ := property["description"].(string); strings.TrimSpace(description) == "" {
+			t.Errorf("system_inspect property %s has no description", name)
+		}
+	}
+	branches := schema["oneOf"].([]any)
+	if len(branches) != 6 {
+		t.Fatalf("system_inspect branches = %#v", branches)
+	}
+	foundOperation := false
+	for _, raw := range branches {
+		branch := raw.(map[string]any)
+		branchProperties := branch["properties"].(map[string]any)
+		action := branchProperties["action"].(map[string]any)["const"].(string)
+		if action != "operation" {
+			continue
+		}
+		foundOperation = true
+		required := map[string]bool{}
+		for _, item := range branch["required"].([]any) {
+			required[item.(string)] = true
+		}
+		if !required["action"] || !required["correlation_id"] {
+			t.Fatalf("operation required = %#v", required)
+		}
+		if _, exists := branchProperties["limit"]; exists {
+			t.Fatal("operation accepts irrelevant activity limit")
+		}
+	}
+	if !foundOperation {
+		t.Fatal("system_inspect operation branch missing")
+	}
+}
+
 func TestWorkspaceEditUsesGeneratedActionContract(t *testing.T) {
 	definitions, err := CurrentDefinitions()
 	if err != nil {

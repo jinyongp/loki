@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/audit"
+	"loki/internal/fault"
 	"loki/internal/mcpserver"
 )
 
@@ -135,11 +136,23 @@ func auditHandler(log *audit.Log, name string, next mcpserver.Handler, onError f
 			}
 			appendAudit(log, record, onError)
 			if recovered != nil {
-				panic(recovered)
+				panic(fault.WithCorrelation(
+					fault.New(fault.CodeFailed, "unexpected server failure; run diagnostics and retry", false, "inspect system_inspect action=operation with this correlation_id before retrying"),
+					invocationID,
+				))
 			}
 		}()
 
 		result, err = next(ctx, args)
+		if result != nil {
+			if result.Meta == nil {
+				result.Meta = mcp.Meta{}
+			}
+			result.Meta["loki/correlation_id"] = invocationID
+		}
+		if err != nil {
+			err = fault.WithCorrelation(err, invocationID)
+		}
 		completed = true
 		return result, err
 	}

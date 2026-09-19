@@ -13,6 +13,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/contract"
+	"loki/internal/fault"
 )
 
 func testHandlers(t *testing.T) map[string]Handler {
@@ -104,6 +105,73 @@ func TestSchemaValidationAndSafeErrors(t *testing.T) {
 	data, _ := json.Marshal(result)
 	if strings.Contains(string(data), "private-credential") {
 		t.Fatal("private error leaked")
+	}
+}
+
+func TestToolErrorsExposeTypedPublicEnvelope(t *testing.T) {
+	handlers := testHandlers(t)
+	handlers["preview_publish"] = func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return nil, fault.New(fault.CodeConflict, "preview state changed", true, "inspect current preview state before retrying")
+	}
+	client := connect(t, handlers)
+	result, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "preview_publish", Arguments: map[string]any{"action": "server", "port": 43000},
+	})
+	if err != nil || !result.IsError {
+		t.Fatal(result, err)
+	}
+	if result.StructuredContent != nil {
+		t.Fatalf("error structured content must not bypass the tool output schema: %#v", result.StructuredContent)
+	}
+	public, ok := result.Meta["loki/error"].(map[string]any)
+	if !ok {
+		t.Fatalf("public error metadata = %#v", result.Meta)
+	}
+	if public["code"] != string(fault.CodeConflict) || public["message"] != "preview state changed" || public["retryable"] != true {
+		t.Fatalf("public error = %#v", public)
+	}
+	if public["next_action"] != "inspect current preview state before retrying" {
+		t.Fatalf("next action = %#v", public)
+	}
+}
+
+func TestSystemInspectOperationSchemaPreservesDefaultAndRejectsIrrelevantFields(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["system_inspect"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(input)
+	}
+	client := connect(t, handlers)
+
+	for _, arguments := range []map[string]any{
+		{},
+		{"action": "activity", "limit": 3},
+		{"action": "operation", "correlation_id": "0123456789abcdef-0000000000000001"},
+		{"action": "port", "port": 43000},
+	} {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "system_inspect", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("valid system_inspect call failed: %#v %v", result, err)
+		}
+	}
+	if calls != 4 {
+		t.Fatalf("valid calls = %d", calls)
+	}
+
+	for _, arguments := range []map[string]any{
+		{"action": "server", "port": 43000},
+		{"action": "activity", "correlation_id": "0123456789abcdef-0000000000000001"},
+		{"action": "operation", "correlation_id": "0123456789abcdef-0000000000000001", "limit": 3},
+		{"action": "port", "port": 43000, "limit": 3},
+	} {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "system_inspect", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("irrelevant system_inspect field was accepted: %#v %v", result, err)
+		}
+	}
+	if calls != 4 {
+		t.Fatal("invalid system_inspect input reached handler")
 	}
 }
 

@@ -24,6 +24,7 @@ type ActionVariant struct {
 type ActionInputContract struct {
 	Title             string
 	ActionDescription string
+	DefaultAction     string
 	Fields            []ActionField
 	Variants          []ActionVariant
 }
@@ -69,6 +70,7 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 
 	actionNames := make([]string, 0, len(c.Variants))
 	seenActions := map[string]bool{}
+	defaultSeen := c.DefaultAction == ""
 	branches := make([]any, 0, len(c.Variants))
 	for _, variant := range c.Variants {
 		if variant.Name == "" || seenActions[variant.Name] {
@@ -76,9 +78,15 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 		}
 		seenActions[variant.Name] = true
 		actionNames = append(actionNames, variant.Name)
+		if variant.Name == c.DefaultAction {
+			defaultSeen = true
+		}
 
 		allowed := make(map[string]bool, len(variant.Required)+len(variant.Optional))
-		required := []string{"action"}
+		required := []string{}
+		if variant.Name != c.DefaultAction {
+			required = append(required, "action")
+		}
 		properties := map[string]any{
 			"action": map[string]any{
 				"type":        "string",
@@ -111,14 +119,23 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 			"required":             required,
 		})
 	}
+	if !defaultSeen {
+		return nil, fmt.Errorf("default action %q is not a declared variant", c.DefaultAction)
+	}
 	sort.Strings(actionNames)
 
+	actionSchema := map[string]any{
+		"type":        "string",
+		"enum":        actionNames,
+		"description": c.ActionDescription,
+	}
+	rootRequired := []string{"action"}
+	if c.DefaultAction != "" {
+		actionSchema["default"] = c.DefaultAction
+		rootRequired = nil
+	}
 	rootProperties := map[string]any{
-		"action": map[string]any{
-			"type":        "string",
-			"enum":        actionNames,
-			"description": c.ActionDescription,
-		},
+		"action": actionSchema,
 	}
 	fieldNames := make([]string, 0, len(fieldSchemas))
 	for name := range fieldSchemas {
@@ -133,14 +150,17 @@ func (c ActionInputContract) Schema() (map[string]any, error) {
 		rootProperties[name] = cloned
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"type":                 "object",
 		"title":                c.Title,
 		"additionalProperties": false,
 		"properties":           rootProperties,
-		"required":             []string{"action"},
 		"oneOf":                branches,
-	}, nil
+	}
+	if len(rootRequired) > 0 {
+		result["required"] = rootRequired
+	}
+	return result, nil
 }
 
 type toolOverride func(*mcp.Tool) error
@@ -308,7 +328,7 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &mcp.Tool{
+	tool := &mcp.Tool{
 		Name:        "github_issue_fields_write",
 		Description: "Mutate configured GitHub Issue Field values by adding typed values, replacing the complete typed value set, or clearing one field value.",
 		Annotations: &mcp.ToolAnnotations{
@@ -331,14 +351,68 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 				},
 			},
 		},
-	}, nil
+	}
+	if err := ApplyOperationMetadata(tool, map[string]OperationSemantics{
+		"add_values": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailureUpstream, CrashRecovery: CrashRecoveryUpstream,
+			AffectedResourceLimit: 25, RecoveryReference: "system_inspect action=operation",
+		},
+		"set_values": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailureUpstream, CrashRecovery: CrashRecoveryUpstream,
+			AffectedResourceLimit: 25, RecoveryReference: "system_inspect action=operation",
+		},
+		"clear_value": {
+			Replay: ReplayUnsafe, FailureAtomicity: FailureUpstream, CrashRecovery: CrashRecoveryUpstream,
+			AffectedResourceLimit: 1, RecoveryReference: "system_inspect action=operation",
+		},
+	}); err != nil {
+		return nil, err
+	}
+	return tool, nil
 }
 
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
+		"system_inspect": overrideSystemInspect,
 		"workspace_edit": overrideWorkspaceEdit,
 		"git_stage":      overrideGitStage,
 	}
+}
+
+func overrideSystemInspect(tool *mcp.Tool) error {
+	schema, err := (ActionInputContract{
+		Title:             "system_inspectArguments",
+		ActionDescription: "Loki system inspection operation to perform.",
+		DefaultAction:     "server",
+		Fields: []ActionField{
+			{Name: "port", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 65535,
+				"description": "TCP port to inspect for workspace-owned listener information.",
+			}},
+			{Name: "limit", Schema: map[string]any{
+				"type": "integer", "minimum": 1, "maximum": 50, "default": 20,
+				"description": "Maximum number of recent retained tool operations to return.",
+			}},
+			{Name: "correlation_id", Schema: map[string]any{
+				"type": "string", "pattern": "^[0-9a-f]{16}-[0-9a-f]{16}$",
+				"description": "Correlation identifier returned in Loki tool result metadata or a typed tool error.",
+			}},
+		},
+		Variants: []ActionVariant{
+			{Name: "server"},
+			{Name: "diagnostics"},
+			{Name: "workspace"},
+			{Name: "activity", Optional: []string{"limit"}},
+			{Name: "operation", Required: []string{"correlation_id"}},
+			{Name: "port", Required: []string{"port"}},
+		},
+	}).Schema()
+	if err != nil {
+		return err
+	}
+	tool.Description = "Inspect Loki server/workspace health, recent tool activity, one retained operation by correlation ID, or one workspace TCP port."
+	tool.InputSchema = schema
+	return nil
 }
 
 func overrideWorkspaceEdit(tool *mcp.Tool) error {

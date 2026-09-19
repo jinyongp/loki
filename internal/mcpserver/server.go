@@ -121,8 +121,12 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 	}
 	return func(ctx context.Context, req *mcp.CallToolRequest) (result *mcp.CallToolResult, err error) {
 		defer func() {
-			if recover() != nil {
-				result = errorResult("unexpected server failure; run diagnostics and retry")
+			if recovered := recover(); recovered != nil {
+				recoveredErr, ok := recovered.(error)
+				if !ok {
+					recoveredErr = errors.New("panic")
+				}
+				result = errorResult(fault.Describe(recoveredErr))
 				err = nil
 			}
 		}()
@@ -132,11 +136,11 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 			args = json.RawMessage(`{}`)
 		}
 		if json.Unmarshal(args, &input) != nil || input == nil {
-			return errorResult("invalid arguments: request; inspect the tool schema and retry"), nil
+			return errorResult(fault.Describe(fault.New(fault.CodeInvalidInput, "invalid arguments: request; inspect the tool schema and retry", false, "inspect the tool schema and correct the request"))), nil
 		}
 		for key := range input {
 			if _, known := schema.Properties[key]; !known {
-				return errorResult("invalid arguments: unknown field; inspect the tool schema and retry"), nil
+				return errorResult(fault.Describe(fault.New(fault.CodeInvalidInput, "invalid arguments: unknown field; inspect the tool schema and retry", false, "remove unknown fields and retry"))), nil
 			}
 		}
 		if err := resolved.Validate(input); err != nil {
@@ -157,7 +161,7 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 			if name == "" {
 				name = "request"
 			}
-			return errorResult("invalid arguments: " + name + "; inspect the tool schema and retry"), nil
+			return errorResult(fault.Describe(fault.New(fault.CodeInvalidInput, "invalid arguments: "+name+"; inspect the tool schema and retry", false, "correct the invalid fields and retry"))), nil
 		}
 		if err := resolved.ApplyDefaults(&input); err != nil {
 			return nil, errors.New("invalid server defaults")
@@ -167,17 +171,34 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 		}
 		result, err = handler(ctx, input)
 		if err != nil {
-			return errorResult(fault.Public(err)), nil
+			return errorResult(fault.Describe(err)), nil
 		}
 		if result == nil {
-			return errorResult("unexpected server failure; run diagnostics and retry"), nil
+			return errorResult(fault.Describe(errors.New("nil tool result"))), nil
 		}
 		return result, nil
 	}, nil
 }
 
-func errorResult(message string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: message}}}
+func errorResult(detail fault.Detail) *mcp.CallToolResult {
+	public := map[string]any{
+		"code":      string(detail.Code),
+		"message":   detail.Message,
+		"retryable": detail.Retryable,
+	}
+	meta := mcp.Meta{"loki/error": public}
+	if detail.CorrelationID != "" {
+		public["correlation_id"] = detail.CorrelationID
+		meta["loki/correlation_id"] = detail.CorrelationID
+	}
+	if detail.NextAction != "" {
+		public["next_action"] = detail.NextAction
+	}
+	return &mcp.CallToolResult{
+		Meta:    meta,
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: detail.Message}},
+	}
 }
 
 // Object returns matching text and structured JSON payloads.
