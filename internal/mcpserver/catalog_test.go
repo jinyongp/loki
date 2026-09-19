@@ -59,9 +59,8 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	if err != nil || len(listed.Tools) != 31 {
 		t.Fatal(listed, err)
 	}
-	current, _ := contract.Current()
 	wanted := map[string]json.RawMessage{}
-	definitions, _ := current.Definitions()
+	definitions, _ := contract.CurrentDefinitions()
 	for _, definition := range definitions {
 		raw, _ := json.Marshal(definition)
 		wanted[definition.Name] = raw
@@ -283,4 +282,53 @@ func TestStreamableHTTPFailuresAreTerminalAndSessionReusable(t *testing.T) {
 	expectTerminalError("validation failure", map[string]any{})
 	expectTerminalError("handler failure", map[string]any{"action": "server", "port": 43001})
 	expectTerminalError("panic failure", map[string]any{"action": "server", "port": 43002})
+}
+
+func TestWorkspaceEditActionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) {
+	handlers := testHandlers(t)
+	calls := 0
+	handlers["workspace_edit"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+		calls++
+		return Object(input)
+	}
+	client := connect(t, handlers)
+
+	valid := []map[string]any{
+		{"action": "create", "path": "new.txt", "content": ""},
+		{
+			"action": "replace", "path": "file.txt", "old": "before", "new": "after",
+			"expected_sha256": strings.Repeat("a", 64), "expected_replacements": 1,
+		},
+		{"action": "patch", "patch": "diff --git a/a.txt b/a.txt\n"},
+		{"action": "move", "source": "a.txt", "destination": "b.txt"},
+	}
+	for _, arguments := range valid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_edit", Arguments: arguments})
+		if err != nil || result.IsError {
+			t.Fatalf("valid workspace_edit rejected: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("valid workspace_edit calls = %d, want %d", calls, len(valid))
+	}
+
+	invalid := []map[string]any{
+		{"action": "create", "path": "new.txt", "content": "", "expected_sha256": strings.Repeat("a", 64)},
+		{"action": "replace", "path": "file.txt", "old": "before", "new": "after", "expected_replacements": 1},
+		{
+			"action": "replace", "path": "file.txt", "old": "before", "new": "after",
+			"expected_sha256": strings.Repeat("a", 64), "expected_replacements": 0,
+		},
+		{"action": "patch", "patch": "diff --git a/a.txt b/a.txt\n", "path": "a.txt"},
+		{"action": "move", "source": "a.txt", "destination": "b.txt", "patch": "diff"},
+	}
+	for _, arguments := range invalid {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "workspace_edit", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("invalid workspace_edit accepted: args=%#v result=%#v err=%v", arguments, result, err)
+		}
+	}
+	if calls != len(valid) {
+		t.Fatalf("invalid workspace_edit reached handler: calls=%d want=%d", calls, len(valid))
+	}
 }

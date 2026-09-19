@@ -19,13 +19,14 @@ import (
 type Handler func(context.Context, map[string]any) (*mcp.CallToolResult, error)
 
 // New refuses incomplete or misspelled registrations before accepting requests.
-// The captured catalog is the single source for public schemas and metadata.
+// Snapshot metadata remains the compatibility artifact while migrated tool
+// definitions are overlaid from Loki's Go-authored contract registry.
 func New(handlers map[string]Handler) (*mcp.Server, error) {
 	current, err := contract.Current()
 	if err != nil {
 		return nil, err
 	}
-	definitions, err := current.Definitions()
+	definitions, err := contract.CurrentDefinitions()
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +42,7 @@ func NewConfigured(handlers map[string]Handler, origins ResourceOrigins) (*mcp.S
 	if err != nil {
 		return nil, err
 	}
-	definitions, err := current.Definitions()
+	definitions, err := contract.CurrentDefinitions()
 	if err != nil {
 		return nil, err
 	}

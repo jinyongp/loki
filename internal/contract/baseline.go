@@ -11,7 +11,7 @@ import (
 //go:embed testdata/mcp-go-v049.json
 var currentJSON []byte
 
-const CatalogRevision = "2026-09-19.8"
+const CatalogRevision = "2026-09-19.9"
 
 const CurrentInstructions = `Operate inside the isolated Loki workspace. Use agent_guidance before path-specific work: action=context returns the applicable AGENTS.md chain plus Skill metadata; choose relevant Skills from their descriptions and load only selected Skill bodies with action=skill, passing the same target when the Skill came from a target-scoped context. Refresh guidance after target or inventory revisions change. At project entry or after an interrupted session, use project_context with the actual target and any selected Skill names to reconstruct current guidance, Git/worktree evidence, canonical work identity, the latest semantic checkpoint, staleness, and the safe next coordination transition. Use project_context_write for bounded semantic handoff checkpoints only after re-reading project_context and supplying its expected basis and previous checkpoint preconditions. Use project_coordination for detailed devtools-backed task, workstream, Run, history, and checkpoint reads, and project_coordination_write for claim, takeover, resume, checkpoint, release, and done transitions. Semantic handoff and cross-session recovery use project_context and project_context_write; canonical devtools state and current repository evidence remain authoritative. Claim context and MCP session identifiers are server-private and must never be requested, stored, or echoed. If an operation appears stalled or a turn ends without a clear terminal result, use system_inspect action=activity to inspect correlated server-side start/terminal evidence and UTC timestamps. Use Loki MCP tools for workspace and image access, browser control, previews and artifact sharing, Git operations, encrypted secret metadata, and repository-scoped GitHub CLI commands. Keep active secret values in Loki's AES-GCM vault. Configured command and managed-process execution still follows the currently exposed runtime workflow until Loki Environment/Job delegation replaces it. Never place secret values in arguments, conversation, logs, devtools state, or workspace files.`
 
@@ -92,6 +92,9 @@ func CurrentDefinitions() ([]*mcp.Tool, error) {
 			return nil, fmt.Errorf("current tool %q is missing at %d", name, index)
 		}
 		selected = append(selected, definition)
+	}
+	if err := applyGeneratedToolOverrides(selected); err != nil {
+		return nil, err
 	}
 	return selected, nil
 }
