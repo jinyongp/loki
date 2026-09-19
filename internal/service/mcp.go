@@ -139,6 +139,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if _, err = log.Read(1); err != nil {
 		return nil, err
 	}
+	system.Audit = log
 	for name, handler := range handlers {
 		handlers[name] = auditHandler(log, name, handler, options.OnAuditError)
 	}

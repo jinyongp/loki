@@ -13,6 +13,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/sys/unix"
+	"loki/internal/audit"
 	"loki/internal/buildinfo"
 	"loki/internal/config"
 	"loki/internal/contract"
@@ -35,6 +36,7 @@ type SystemController struct {
 	Artifacts, Previews          bool
 	InspectPort                  func(context.Context, int) (map[string]any, error)
 	GitEnvironment               []string
+	Audit                        *audit.Log
 }
 
 func catalogInfo() map[string]any {
@@ -63,7 +65,7 @@ func (c *SystemController) Info() map[string]any {
 	if !c.Started.IsZero() {
 		uptime = math.Round(time.Since(c.Started).Seconds()*1000) / 1000
 	}
-	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-15.2", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "workspace": "/workspace", "policy_generation": c.Policy.Metadata(), "tool_catalog": catalogInfo(),
+	return map[string]any{"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-15.2", "mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(), "uptime_seconds": uptime, "server_time": time.Now().UTC().Format(time.RFC3339Nano), "workspace": "/workspace", "policy_generation": c.Policy.Metadata(), "tool_catalog": catalogInfo(),
 		"capabilities": map[string]any{
 			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"}, "temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts, "workspace_bundles": c.Artifacts, "developer_output_viewer": true, "temporary_live_previews": c.Previews, "git_checkpoints": true, "file_revisions": true, "git_partial_staging": true, "signed_git_commits": true, "secret_profiles": socketExists(c.RuntimeSocket),
 			"devtools":          map[string]any{"direct_cli": true, "project_state": true, "task_queues": true, "configured_commands": true, "managed_processes": true, "workspace_ports": true},
@@ -123,6 +125,7 @@ func SystemHandler(c *SystemController) mcpserver.Handler {
 	return mcpserver.Typed(func(ctx context.Context, r struct {
 		Action string
 		Port   *int
+		Limit  *int
 	}) (*mcp.CallToolResult, error) {
 		switch r.Action {
 		case "server":
@@ -131,6 +134,19 @@ func SystemHandler(c *SystemController) mcpserver.Handler {
 			return mcpserver.Object(c.Workspace(ctx))
 		case "diagnostics":
 			return mcpserver.Object(c.Diagnostics(ctx))
+		case "activity":
+			limit := 20
+			if r.Limit != nil {
+				limit = *r.Limit
+			}
+			items, err := recentToolActivity(c.Audit, limit, time.Now().UTC())
+			if err != nil {
+				return nil, fault.Error("tool activity is unavailable")
+			}
+			return mcpserver.Object(map[string]any{
+				"server_time": time.Now().UTC().Format(time.RFC3339Nano),
+				"items":       items,
+			})
 		case "port":
 			port, err := mcpserver.Require(r.Port, "port")
 			if err != nil {
@@ -141,6 +157,6 @@ func SystemHandler(c *SystemController) mcpserver.Handler {
 			}
 			return objectResult(c.InspectPort(ctx, port))
 		}
-		return nil, fault.Error("system_inspect action must be server, diagnostics, workspace, or port")
+		return nil, fault.Error("system_inspect action must be server, diagnostics, workspace, activity, or port")
 	})
 }

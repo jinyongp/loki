@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"loki/internal/audit"
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
 )
@@ -19,11 +20,11 @@ func TestSystemInformation(t *testing.T) {
 	c.Root = paths.Root()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
 	generation := policyGenerationFixture(t)
-	system := &SystemController{Config: c, Policy: generation, Paths: paths, Started: time.Now(), Artifacts: true, Previews: true, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+	system := &SystemController{Config: c, Policy: generation, Paths: paths, Started: time.Now(), Artifacts: true, Previews: true, Audit: &audit.Log{Path: c.AuditLog}, GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return map[string]any{"port": port, "in_use": false, "listeners": []any{}}, nil
 	}}
 	h := SystemHandler(system)
-	for _, action := range []string{"server", "workspace", "diagnostics", "port"} {
+	for _, action := range []string{"server", "workspace", "diagnostics", "activity", "port"} {
 		r, err := h(t.Context(), map[string]any{"action": action, "port": 43000})
 		if err != nil {
 			t.Fatal(action, err)
@@ -41,6 +42,10 @@ func TestSystemInformation(t *testing.T) {
 			}
 		case "diagnostics":
 			if value["healthy"] != false || len(value["repositories"].([]string)) != 2 {
+				t.Fatal(value)
+			}
+		case "activity":
+			if value["server_time"] == "" || len(value["items"].([]toolActivityItem)) != 0 {
 				t.Fatal(value)
 			}
 		case "port":

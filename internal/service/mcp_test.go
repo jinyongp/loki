@@ -158,6 +158,35 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if policyInfo["sha256"] != generation.Digest() || policyInfo["schema"] != float64(1) {
 		t.Fatalf("policy generation info = %#v", policyInfo)
 	}
+	if serverInfo["server_time"] == nil {
+		t.Fatal("server time missing")
+	}
+
+	second, err := mcp.NewClient(&mcp.Implementation{Name: "assembled-test-second", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	secondResult, err := second.CallTool(t.Context(), &mcp.CallToolParams{Name: "system_inspect", Arguments: map[string]any{"action": "workspace"}})
+	if err != nil || secondResult.IsError {
+		t.Fatalf("second session call: %#v %v", secondResult, err)
+	}
+
+	activity := call("system_inspect", map[string]any{"action": "activity", "limit": 50})
+	refs := map[string]bool{}
+	for _, raw := range activity["items"].([]any) {
+		item := raw.(map[string]any)
+		if ref, _ := item["session_ref"].(string); ref != "" {
+			if len(ref) != 16 {
+				t.Fatalf("invalid session_ref %q", ref)
+			}
+			refs[ref] = true
+		}
+	}
+	if len(refs) < 2 {
+		t.Fatalf("activity did not distinguish MCP sessions: %#v", activity)
+	}
+
 	call("browser_session", map[string]any{"action": "start"})
 	call("secret_inspect", map[string]any{"action": "status"})
 	shared := call("artifact_publish", map[string]any{"action": "file", "path": "hello.txt"})
