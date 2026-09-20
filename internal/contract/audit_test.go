@@ -18,7 +18,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		InputPropertyCount:     192,
 		DescribedPropertyCount: 181,
 		MissingOutputSchema:    0,
-		OpenOutputSchema:       1,
+		OpenOutputSchema:       0,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||

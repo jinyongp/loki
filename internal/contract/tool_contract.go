@@ -451,6 +451,13 @@ func overrideSystemInspect(tool *mcp.Tool) error {
 	}
 	tool.Description = "Inspect Loki server/workspace health, recent tool activity, one retained operation by correlation ID, or one workspace TCP port."
 	tool.InputSchema = schema
+	tool.OutputSchema = systemInspectOutputSchema()
+	if tool.Annotations != nil {
+		tool.Annotations.ReadOnlyHint = true
+		tool.Annotations.DestructiveHint = boolPointer(false)
+		tool.Annotations.IdempotentHint = true
+		tool.Annotations.OpenWorldHint = boolPointer(false)
+	}
 	return nil
 }
 

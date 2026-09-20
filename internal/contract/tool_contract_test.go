@@ -199,6 +199,24 @@ func TestSystemInspectUsesGeneratedActionContract(t *testing.T) {
 	if !foundOperation {
 		t.Fatal("system_inspect operation branch missing")
 	}
+	encoded, err = json.Marshal(tool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(encoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	outputBranches := output["oneOf"].([]any)
+	if len(outputBranches) != 6 {
+		t.Fatalf("system_inspect output branches = %d, want 6", len(outputBranches))
+	}
+	for _, raw := range outputBranches {
+		branch := raw.(map[string]any)
+		if branch["additionalProperties"] != false {
+			t.Fatalf("system_inspect output remains open: %#v", branch)
+		}
+	}
 }
 
 func TestWorkspaceReadUsesGeneratedActionContract(t *testing.T) {

@@ -142,9 +142,9 @@ func TestToolErrorsExposeTypedPublicEnvelope(t *testing.T) {
 func TestSystemInspectOperationSchemaPreservesDefaultAndRejectsIrrelevantFields(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := 0
-	handlers["system_inspect"] = func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+	handlers["system_inspect"] = func(_ context.Context, _ map[string]any) (*mcp.CallToolResult, error) {
 		calls++
-		return Object(input)
+		return Object(map[string]any{"port": 43000, "in_use": false, "listeners": []any{}})
 	}
 	client := connect(t, handlers)
 
