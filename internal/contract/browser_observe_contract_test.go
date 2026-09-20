@@ -41,7 +41,7 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		}
 	}
 	branches := input["oneOf"].([]any)
-	if len(branches) != 8 {
+	if len(branches) != 9 {
 		t.Fatalf("browser_observe branches = %#v", branches)
 	}
 	for _, raw := range branches {
@@ -49,7 +49,7 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		branchProperties := branch["properties"].(map[string]any)
 		action := branchProperties["action"].(map[string]any)["const"].(string)
 		switch action {
-		case "state", "tabs":
+		case "state", "tabs", "dialog":
 			if len(branchProperties) != 1 {
 				t.Fatalf("%s accepts filters: %#v", action, branchProperties)
 			}
@@ -89,13 +89,34 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 7 {
+	if len(outputBranches) != 8 {
 		t.Fatalf("browser_observe output branches = %#v", outputBranches)
 	}
 	foundState := false
 	foundEvent := false
+	foundDialog := false
 	for _, raw := range outputBranches {
 		branch := raw.(map[string]any)
+		if nested, ok := branch["oneOf"].([]any); ok {
+			foundDialog = true
+			if len(nested) != 3 {
+				t.Fatalf("dialog output variants = %#v", nested)
+			}
+			for _, dialogRaw := range nested {
+				dialogBranch := dialogRaw.(map[string]any)
+				if dialogBranch["additionalProperties"] != false {
+					t.Fatalf("dialog output branch is open: %#v", dialogBranch)
+				}
+				properties := dialogBranch["properties"].(map[string]any)
+				if _, ok := properties["dialog_generation"]; !ok {
+					t.Fatalf("dialog output lacks dialog_generation: %#v", dialogBranch)
+				}
+				if _, ok := properties["browser_generation"]; !ok {
+					t.Fatalf("dialog output lacks browser_generation: %#v", dialogBranch)
+				}
+			}
+			continue
+		}
 		if branch["additionalProperties"] != false {
 			t.Fatalf("browser_observe output branch is open: %#v", branch)
 		}
@@ -113,7 +134,7 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 			}
 		}
 	}
-	if !foundState || !foundEvent {
-		t.Fatalf("browser observe outputs missing state/event semantics: state=%v event=%v", foundState, foundEvent)
+	if !foundState || !foundEvent || !foundDialog {
+		t.Fatalf("browser observe outputs missing semantics: state=%v event=%v dialog=%v", foundState, foundEvent, foundDialog)
 	}
 }

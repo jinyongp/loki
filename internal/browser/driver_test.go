@@ -37,7 +37,16 @@ func chromeDriver(t *testing.T, handler http.Handler) (*Driver, string) {
 	proxyServer := httptest.NewServer(proxy)
 	t.Cleanup(func() { proxy.Close(); proxyServer.Close() })
 	root := t.TempDir()
-	driver, err := NewDriver(Options{Binary: binary, Profile: filepath.Join(root, "profile"), Downloads: filepath.Join(root, "downloads"), Proxy: proxyServer.URL, LibraryPath: os.Getenv("LOKI_TEST_CHROME_LIBS")})
+	runtimeDir := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	driver, err := NewDriver(Options{
+		Binary: binary, Profile: filepath.Join(root, "profile"), Downloads: filepath.Join(root, "downloads"),
+		Proxy: proxyServer.URL, LibraryPath: os.Getenv("LOKI_TEST_CHROME_LIBS"),
+		UploadInbox: filepath.Join(runtimeDir, "uploads"), UploadOwnerUID: uint32(os.Getuid()),
+		MaxUploadFiles: 20, MaxUploadBytes: 1 << 20,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

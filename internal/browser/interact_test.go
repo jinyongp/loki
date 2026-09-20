@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"image/png"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"loki/internal/fault"
 )
@@ -105,6 +108,10 @@ func TestChromiumInteractions(t *testing.T) {
 <input name="text" value="old"><textarea name="area">old</textarea><div name="editable" contenteditable="true">old</div>
 <input name="keyboard" id="keyboard" value="abc"><select name="select" id="select"><option value="one">One</option><option value="two">Two</option></select>
 <input name="check" id="check" type="checkbox"><button name="focus-target" id="focus-target">Focus target</button>
+<input name="upload" id="upload" type="file">
+<button name="alert-dialog" onclick="setTimeout(()=>{alert('notice');document.title='alert-done'},0)">Alert</button>
+<button name="confirm-dialog" onclick="setTimeout(()=>{document.title='confirm:'+confirm('continue?')},0)">Confirm</button>
+<button name="prompt-dialog" onclick="setTimeout(()=>{document.title='prompt:'+prompt('name?','default')},0)">Prompt</button>
 <button name="click" onclick="document.title='clicked'">Click</button><button name="hover" onmouseenter="document.title='hovered'">Hover</button>
 <button name="pointer" id="pointer">Pointer</button><button name="drag-source" id="drag-source">Drag</button><button name="drag-target" id="drag-target">Drop</button>
 <div id="scroller" style="height:80px;width:240px;overflow:auto"><button name="wheel-target">Wheel</button><div style="height:1000px">Tall nested</div></div>
@@ -135,6 +142,7 @@ keyboard.addEventListener('keydown', event => {
 select.addEventListener('change', () => document.title='select:'+select.value);
 check.addEventListener('change', () => document.title='checked:'+check.checked);
 document.getElementById('focus-target').addEventListener('focus', () => document.title='focused');
+upload.addEventListener('change', () => document.title='upload:'+(upload.files[0]?.name || ''));
 </script>`)
 	}))
 	callBrowser(t, d, "start", nil)
@@ -161,6 +169,34 @@ document.getElementById('focus-target').addEventListener('focus', () => document
 		result := callBrowser(t, d, operation, args)
 		browserGeneration = result["browser_generation"].(uint64)
 		return result
+	}
+	waitDialog := func() map[string]any {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			result := callBrowser(t, d, "dialog_state", nil)
+			if result["pending"] == true {
+				return result
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("dialog did not open")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitTitle := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			page, err := d.page(t.Context())
+			if err == nil && page["title"] == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("page title did not become %q: %#v %v", want, page, err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	observe()
 	for _, raw := range state["interactive_elements"].([]any) {
@@ -292,6 +328,69 @@ document.getElementById('focus-target').addEventListener('focus', () => document
 	}
 	if page, err := d.page(t.Context()); err != nil || page["title"] != "focused" {
 		t.Fatalf("focus event => %#v %v", page, err)
+	}
+
+	observe()
+	uploadIndex := elementIndex(t, state, "upload")
+	uploadToken := "0123456789abcdef0123456789abcdef"
+	if err := os.WriteFile(filepath.Join(d.options.UploadInbox, uploadToken), []byte("data"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	uploadResult := interact("upload", map[string]any{
+		"index":        uploadIndex,
+		"staged_files": []any{map[string]any{"token": uploadToken, "name": "hello.txt"}},
+	}, true)
+	if uploadResult["uploaded"] != true || uploadResult["file_count"] != 1 || uploadResult["total_bytes"] != int64(4) {
+		t.Fatalf("upload result = %#v", uploadResult)
+	}
+	var uploadedName string
+	if err := d.evaluate(t.Context(), "document.getElementById('upload').files[0]?.name || ''", &uploadedName); err != nil || uploadedName != "hello.txt" {
+		t.Fatalf("uploaded filename = %q %v", uploadedName, err)
+	}
+	if _, err := os.Stat(filepath.Join(d.options.UploadInbox, uploadToken)); !os.IsNotExist(err) {
+		t.Fatalf("consumed upload token survived: %v", err)
+	}
+
+	dialogCases := []struct {
+		name       string
+		typeName   string
+		accept     bool
+		promptText string
+		wantTitle  string
+	}{
+		{name: "alert-dialog", typeName: "alert", accept: true, wantTitle: "alert-done"},
+		{name: "confirm-dialog", typeName: "confirm", accept: false, wantTitle: "confirm:false"},
+		{name: "prompt-dialog", typeName: "prompt", accept: true, promptText: "loki", wantTitle: "prompt:loki"},
+	}
+	for _, dialogCase := range dialogCases {
+		observe()
+		interact("click", map[string]any{"index": elementIndex(t, state, dialogCase.name)}, true)
+		dialog := waitDialog()
+		if dialog["type"] != dialogCase.typeName || dialog["pending"] != true {
+			t.Fatalf("%s dialog = %#v", dialogCase.name, dialog)
+		}
+		dialogGeneration := dialog["dialog_generation"].(uint64)
+		args := map[string]any{
+			"expected_dialog_generation": dialogGeneration,
+			"accept":                     dialogCase.accept,
+		}
+		if dialogCase.typeName == "prompt" {
+			args["prompt_text"] = dialogCase.promptText
+		}
+		handled := interact("handle_dialog", args, false)
+		if handled["dialog_handled"] != true || handled["type"] != dialogCase.typeName {
+			t.Fatalf("%s handled = %#v", dialogCase.name, handled)
+		}
+		waitTitle(dialogCase.wantTitle)
+		if _, err := d.Call(t.Context(), "handle_dialog", map[string]any{
+			"expected_browser_generation": browserGeneration,
+			"expected_dialog_generation":  dialogGeneration,
+			"accept":                      true,
+		}); err == nil {
+			t.Fatalf("%s accepted stale dialog generation", dialogCase.name)
+		} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+			t.Fatalf("%s stale dialog error = %#v", dialogCase.name, detail)
+		}
 	}
 
 	for _, name := range []string{"click", "shadow", "framed"} {

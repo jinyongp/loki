@@ -125,12 +125,26 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"type":        "boolean",
 		"description": "Desired checked state for a native checkbox or radio input.",
 	}
+	uploadPaths := map[string]any{
+		"type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true,
+		"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 4096},
+		"description": "Workspace-relative regular files to attach. Runtime configuration may impose a lower retained file-count and aggregate-byte limit; sensitive/symlink paths are rejected by workspace policy.",
+	}
+	expectedDialog := browserExpectedGenerationSchema("Dialog generation returned by browser_observe action=dialog. Stale or already-closed dialogs fail as conflicts.")
+	acceptDialog := map[string]any{
+		"type":        "boolean",
+		"description": "Accept the pending dialog when true or dismiss it when false.",
+	}
+	promptText := map[string]any{
+		"type": "string", "maxLength": 4096,
+		"description": "Prompt response text. Valid only when the pending dialog type is prompt.",
+	}
 	tabID := browserTabIDSchema()
 
 	rootProperties := map[string]any{
 		"action": map[string]any{
 			"type":        "string",
-			"enum":        []string{"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "switch_tab", "close_tab"},
+			"enum":        []string{"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab"},
 			"description": "Browser interaction to perform.",
 		},
 		"expected_browser_generation": expectedBrowser,
@@ -156,6 +170,10 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"key":                         key,
 		"options":                     options,
 		"checked":                     checked,
+		"paths":                       uploadPaths,
+		"expected_dialog_generation":  expectedDialog,
+		"accept":                      acceptDialog,
+		"prompt_text":                 promptText,
 		"tab_id":                      tabID,
 	}
 
@@ -168,6 +186,8 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 	}
 	shortcutModifiers := clone(modifiers)
 	shortcutModifiers["minItems"] = 1
+	promptAccept := clone(acceptDialog)
+	promptAccept["const"] = true
 	branches := []any{
 		browserInteractBranch("click", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser),
@@ -242,6 +262,18 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
 			"index": clone(index),
 		}, "expected_browser_generation", "expected_state_generation", "index"),
+		browserInteractBranch("upload", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_state_generation": clone(expectedState),
+			"index": clone(index), "paths": clone(uploadPaths),
+		}, "expected_browser_generation", "expected_state_generation", "index", "paths"),
+		browserInteractBranch("dialog", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_dialog_generation": clone(expectedDialog),
+			"accept": clone(acceptDialog),
+		}, "expected_browser_generation", "expected_dialog_generation", "accept"),
+		browserInteractBranch("dialog", map[string]any{
+			"expected_browser_generation": clone(expectedBrowser), "expected_dialog_generation": clone(expectedDialog),
+			"accept": promptAccept, "prompt_text": clone(promptText),
+		}, "expected_browser_generation", "expected_dialog_generation", "accept", "prompt_text"),
 		browserInteractBranch("back", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser),
 		}, "expected_browser_generation"),
@@ -398,6 +430,37 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		},
 		"required": []string{"focused", "index", "browser_generation"},
 	}
+	uploadFile := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"path":  map[string]any{"type": "string"},
+			"name":  map[string]any{"type": "string"},
+			"bytes": map[string]any{"type": "integer", "minimum": 0},
+		},
+		"required": []string{"path", "name", "bytes"},
+	}
+	uploadResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"uploaded":           map[string]any{"const": true},
+			"index":              map[string]any{"type": "integer", "minimum": 0},
+			"files":              map[string]any{"type": "array", "minItems": 1, "maxItems": 100, "items": uploadFile},
+			"total_bytes":        map[string]any{"type": "integer", "minimum": 0},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"uploaded", "index", "files", "total_bytes", "browser_generation"},
+	}
+	dialogResult := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"dialog_handled":     map[string]any{"const": true},
+			"accepted":           map[string]any{"type": "boolean"},
+			"type":               map[string]any{"type": "string", "enum": []string{"alert", "confirm", "prompt", "beforeunload"}},
+			"dialog_generation":  map[string]any{"type": "integer", "minimum": 1},
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"dialog_handled", "accepted", "type", "dialog_generation", "browser_generation"},
+	}
 	backResult := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
@@ -423,14 +486,14 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"required": []string{"closed", "active_tab_id", "browser_generation"},
 	}
 
-	tool.Description = "Interact with the active desktop browser using expected_browser_generation. Pointer, editable, keyboard, and form actions use action-specific operands; every element-index action additionally requires expected_state_generation. fill replaces complete editable content while type preserves the current caret/selection. Stale references fail as conflicts before side effects."
+	tool.Description = "Interact with the active desktop browser using expected_browser_generation. Pointer, editable, keyboard, form, upload, and dialog actions use action-specific operands; every element-index action additionally requires expected_state_generation and dialog handling requires expected_dialog_generation. fill replaces complete editable content while type preserves the current caret/selection. Uploads use policy-checked workspace files staged privately by the browser service. Stale references fail as conflicts before side effects."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_interactArguments", "additionalProperties": false,
 		"properties": rootProperties, "required": []string{"action"}, "oneOf": branches,
 	}
 	tool.OutputSchema = map[string]any{
 		"type":  "object",
-		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, fillResult, typeResult, keyResult, shortcutResult, selectResult, checkedResult, focusResult, backResult, switchResult, closeResult},
+		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, fillResult, typeResult, keyResult, shortcutResult, selectResult, checkedResult, focusResult, uploadResult, dialogResult, backResult, switchResult, closeResult},
 	}
 	guarded := func(reference string) OperationSemantics {
 		return OperationSemantics{
@@ -458,9 +521,15 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"select_option": elementGuarded(),
 		"set_checked":   elementGuarded(),
 		"focus":         elementGuarded(),
-		"back":          guarded("browser_observe action=state"),
-		"switch_tab":    guarded("browser_observe action=tabs"),
-		"close_tab":     guarded("browser_observe action=tabs"),
+		"upload":        elementGuarded(),
+		"dialog": {
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_browser_generation", "expected_dialog_generation"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=dialog",
+		},
+		"back":       guarded("browser_observe action=state"),
+		"switch_tab": guarded("browser_observe action=tabs"),
+		"close_tab":  guarded("browser_observe action=tabs"),
 	}
 	return ApplyOperationMetadata(tool, operations)
 }

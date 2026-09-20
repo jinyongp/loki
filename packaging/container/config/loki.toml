@@ -11,3 +11,5 @@ max_search_results = 500
 max_read_lines = 2000
 max_patch_bytes = 524288
 max_patch_files = 50
+browser_max_upload_files = 20
+browser_max_upload_bytes = 67108864

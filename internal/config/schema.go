@@ -7,6 +7,7 @@ var allowedKeys = map[string]struct{}{
 	"max_file_bytes": {}, "max_write_bytes": {}, "max_output_bytes": {},
 	"max_list_entries": {}, "max_search_results": {}, "max_read_lines": {},
 	"max_patch_bytes": {}, "max_patch_files": {},
+	"browser_max_upload_files": {}, "browser_max_upload_bytes": {},
 	"github_app_id": {}, "github_installations": {}, "github_api_version": {},
 	"github_max_response_bytes": {}, "github_max_pages": {},
 	"github_command_timeout_seconds": {}, "github_max_input_bytes": {},

@@ -214,6 +214,46 @@ func browserDiagnosticsSchema() map[string]any {
 	}
 }
 
+func browserDialogSchema() map[string]any {
+	generation := map[string]any{"type": "integer", "minimum": 0}
+	notPending := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"pending":            map[string]any{"const": false},
+			"dialog_generation":  generation,
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"pending", "dialog_generation", "browser_generation"},
+	}
+	pendingBase := func(types []string, accepts bool, prompt bool) map[string]any {
+		properties := map[string]any{
+			"pending":            map[string]any{"const": true},
+			"type":               map[string]any{"type": "string", "enum": types},
+			"message":            map[string]any{"type": "string", "maxLength": 4096},
+			"accepts_prompt":     map[string]any{"const": accepts},
+			"dialog_generation":  map[string]any{"type": "integer", "minimum": 1},
+			"browser_generation": browserGenerationSchema(),
+		}
+		required := []string{"pending", "type", "message", "accepts_prompt", "dialog_generation", "browser_generation"}
+		if prompt {
+			properties["default_prompt"] = map[string]any{"type": "string", "maxLength": 4096}
+			required = append(required, "default_prompt")
+		}
+		return map[string]any{
+			"type": "object", "additionalProperties": false,
+			"properties": properties, "required": required,
+		}
+	}
+	return map[string]any{
+		"type": "object",
+		"oneOf": []any{
+			notPending,
+			pendingBase([]string{"prompt"}, true, true),
+			pendingBase([]string{"alert", "confirm", "beforeunload"}, false, false),
+		},
+	}
+}
+
 func overrideBrowserObserve(tool *mcp.Tool) error {
 	input, err := (ActionInputContract{
 		Title:             "browser_observeArguments",
@@ -268,12 +308,13 @@ func overrideBrowserObserve(tool *mcp.Tool) error {
 			{Name: "diagnostics", Optional: []string{"since_sequence", "limit"}, Overrides: map[string]map[string]any{
 				"limit": {"maximum": 200, "default": 50},
 			}},
+			{Name: "dialog"},
 		},
 	}).Schema()
 	if err != nil {
 		return err
 	}
-	tool.Description = "Observe current browser/page state or retained browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; event-like results report sequence retention and complete/next_sequence truthfully."
+	tool.Description = "Observe current browser/page state, pending JavaScript dialogs, or retained browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; dialog returns a monotonic dialog_generation; event-like results report sequence retention and complete/next_sequence truthfully."
 	tool.InputSchema = input
 	tool.OutputSchema = map[string]any{
 		"type": "object",
@@ -285,6 +326,7 @@ func overrideBrowserObserve(tool *mcp.Tool) error {
 			browserNetworkSchema(),
 			browserRequestSchema(),
 			browserDiagnosticsSchema(),
+			browserDialogSchema(),
 		},
 	}
 	return nil

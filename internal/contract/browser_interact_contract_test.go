@@ -37,7 +37,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		}
 	}
 	actionEnum := properties["action"].(map[string]any)["enum"].([]any)
-	for _, want := range []string{"hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus"} {
+	for _, want := range []string{"hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog"} {
 		found := false
 		for _, raw := range actionEnum {
 			found = found || raw == want
@@ -55,8 +55,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	branches := input["oneOf"].([]any)
-	if len(branches) != 21 {
-		t.Fatalf("browser_interact branches = %d, want 21", len(branches))
+	if len(branches) != 24 {
+		t.Fatalf("browser_interact branches = %d, want 24", len(branches))
 	}
 	counts := map[string]int{}
 	for _, raw := range branches {
@@ -134,6 +134,23 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			if !required["expected_state_generation"] || !required["index"] {
 				t.Fatalf("focus required = %#v", required)
 			}
+		case "upload":
+			for _, name := range []string{"expected_state_generation", "index", "paths"} {
+				if !required[name] {
+					t.Errorf("upload does not require %s", name)
+				}
+			}
+		case "dialog":
+			for _, name := range []string{"expected_dialog_generation", "accept"} {
+				if !required[name] {
+					t.Errorf("dialog does not require %s", name)
+				}
+			}
+			if _, hasPrompt := branchProperties["prompt_text"]; hasPrompt {
+				if branchProperties["accept"].(map[string]any)["const"] != true {
+					t.Fatalf("dialog prompt branch does not require accept=true: %#v", branchProperties["accept"])
+				}
+			}
 		case "switch_tab", "close_tab":
 			if !required["tab_id"] {
 				t.Fatalf("%s does not require tab_id", action)
@@ -143,7 +160,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	for action, want := range map[string]int{
 		"click": 3, "hover": 2, "drag": 3, "wheel": 3,
 		"fill": 1, "type": 1, "key": 1, "shortcut": 1,
-		"select_option": 1, "set_checked": 1, "focus": 1,
+		"select_option": 1, "set_checked": 1, "focus": 1, "upload": 1, "dialog": 2,
 		"back": 1, "switch_tab": 1, "close_tab": 1,
 	} {
 		if counts[action] != want {
@@ -160,8 +177,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 14 {
-		t.Fatalf("browser_interact output branches = %d, want 14", len(outputBranches))
+	if len(outputBranches) != 16 {
+		t.Fatalf("browser_interact output branches = %d, want 16", len(outputBranches))
 	}
 	for _, raw := range outputBranches {
 		branch := raw.(map[string]any)
@@ -174,12 +191,12 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	operations, ok := tool.Meta["loki/operations"].(map[string]any)
-	if !ok || len(operations) != 14 {
+	if !ok || len(operations) != 16 {
 		t.Fatalf("browser_interact operation metadata = %#v", tool.Meta)
 	}
 	for _, action := range []string{
 		"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut",
-		"select_option", "set_checked", "focus", "back", "switch_tab", "close_tab",
+		"select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab",
 	} {
 		semantics := operations[action].(map[string]any)
 		if semantics["replay"] != string(ReplayGuarded) ||
@@ -188,11 +205,15 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Fatalf("%s semantics = %#v", action, semantics)
 		}
 	}
-	for _, action := range []string{"fill", "type", "select_option", "set_checked", "focus"} {
+	for _, action := range []string{"fill", "type", "select_option", "set_checked", "focus", "upload"} {
 		guards := operations[action].(map[string]any)["concurrency_fields"].([]string)
 		if len(guards) != 2 || guards[0] != "expected_browser_generation" || guards[1] != "expected_state_generation" {
 			t.Fatalf("%s guards = %#v", action, guards)
 		}
+	}
+	dialogGuards := operations["dialog"].(map[string]any)["concurrency_fields"].([]string)
+	if len(dialogGuards) != 2 || dialogGuards[0] != "expected_browser_generation" || dialogGuards[1] != "expected_dialog_generation" {
+		t.Fatalf("dialog guards = %#v", dialogGuards)
 	}
 	for _, removed := range []string{"scroll", "press"} {
 		if _, exists := operations[removed]; exists {

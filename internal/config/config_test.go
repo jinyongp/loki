@@ -13,7 +13,8 @@ func TestDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Root != "." || c.Port != 18765 || c.MaxFileBytes != 16777216 || c.MaxOutputBytes != 262144 {
+	if c.Root != "." || c.Port != 18765 || c.MaxFileBytes != 16777216 || c.MaxOutputBytes != 262144 ||
+		c.BrowserMaxUploadFiles != 20 || c.BrowserMaxUploadBytes != 67108864 {
 		t.Fatalf("config: %#v", c)
 	}
 }
@@ -43,7 +44,7 @@ func TestInvalidConfiguration(t *testing.T) {
 		`cloudflare_access_team_domain="example.cloudflareaccess.com"`, `cloudflare_access_audience="` + strings.Repeat("a", 64) + `"`,
 		`preview_access_audience="` + strings.Repeat("b", 64) + `"`, `preview_base_domain="localhost"`,
 		`artifact_base_url="http://mcp.example.com/artifacts"`, `artifact_base_url="https://other.example.com/artifacts"`,
-		`max_file_bytes=2`, `max_patch_files=true`, `max_read_lines="many"`,
+		`max_file_bytes=2`, `max_patch_files=true`, `max_read_lines="many"`, `browser_max_upload_files=0`, `browser_max_upload_bytes=1024`,
 	} {
 		t.Run(text, func(t *testing.T) {
 			if _, err := Parse([]byte(text)); err == nil {

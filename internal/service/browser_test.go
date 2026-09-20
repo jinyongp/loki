@@ -21,6 +21,21 @@ import (
 	"loki/internal/workspace"
 )
 
+type browserMCPFixture struct{ browserFixture }
+
+func (browserMCPFixture) StageBrowserUpload(_ context.Context, _ *workspace.Files, paths []string) (*stagedBrowserUpload, error) {
+	if len(paths) != 1 || paths[0] != "fixtures/input.txt" {
+		return nil, errors.New("unexpected browser upload paths")
+	}
+	return &stagedBrowserUpload{
+		Tokens: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		Files: []map[string]any{{
+			"path": "fixtures/input.txt", "name": "input.txt", "bytes": int64(4),
+		}},
+		TotalBytes: 4,
+	}, nil
+}
+
 func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
@@ -40,7 +55,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	data := content.Bytes()
 	captureCount := 0
 	operations := []string{}
-	browser := browserFixture(func(_ context.Context, operation string, args map[string]any) (map[string]any, error) {
+	browser := browserMCPFixture{browserFixture: browserFixture(func(_ context.Context, operation string, args map[string]any) (map[string]any, error) {
 		operations = append(operations, operation)
 		sequenceResult := func(key string) map[string]any {
 			return map[string]any{
@@ -133,6 +148,19 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			return map[string]any{"index": 0, "checked": args["checked"], "changed": true, "browser_generation": 4}, nil
 		case "focus":
 			return map[string]any{"focused": true, "index": 0, "browser_generation": 4}, nil
+		case "upload":
+			return map[string]any{
+				"uploaded": true, "index": 0,
+				"files":       []any{map[string]any{"path": "fixtures/input.txt", "name": "input.txt", "bytes": 4}},
+				"total_bytes": 4, "browser_generation": 4,
+			}, nil
+		case "dialog_state":
+			return map[string]any{"pending": false, "dialog_generation": 2, "browser_generation": 3}, nil
+		case "handle_dialog":
+			return map[string]any{
+				"dialog_handled": true, "accepted": args["accept"], "type": "confirm",
+				"dialog_generation": 3, "browser_generation": 4,
+			}, nil
 		case "back":
 			return map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 4}, nil
 		case "switch_tab":
@@ -142,7 +170,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 		default:
 			return map[string]any{"operation": operation, "arguments": args}, nil
 		}
-	})
+	})}
 	store := artifacts.New(artifacts.Options{BaseURL: "https://example.test/artifacts", AllowedHosts: []string{"example.test"}})
 	handlers := BrowserHandlers(browser, files, store)
 	definitions, _ := contract.CurrentDefinitions()
@@ -201,7 +229,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			t.Fatalf("browser_session %s omitted generation: %#v", test.action, result)
 		}
 	}
-	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "switch_tab", "close_tab"}} {
+	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics", "dialog"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
 			args := map[string]any{"action": action}
 			switch tool {
@@ -237,6 +265,10 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 					args["index"], args["checked"], args["expected_state_generation"] = 0, true, 1
 				case "focus":
 					args["index"], args["expected_state_generation"] = 0, 1
+				case "upload":
+					args["index"], args["paths"], args["expected_state_generation"] = 0, []any{"fixtures/input.txt"}, 1
+				case "dialog":
+					args["expected_dialog_generation"], args["accept"] = 2, true
 				case "switch_tab", "close_tab":
 					args["tab_id"] = "1234"
 				}
@@ -251,6 +283,13 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			}
 			if action == "diagnostics" {
 				want = "debug_diagnostics"
+			}
+			if action == "dialog" {
+				if tool == "browser_observe" {
+					want = "dialog_state"
+				} else {
+					want = "handle_dialog"
+				}
 			}
 			if operations[len(operations)-1] != want {
 				t.Fatalf("%s %s operation = %q, want %q", tool, action, operations[len(operations)-1], want)

@@ -23,6 +23,9 @@ import (
 // the installed filesystem/network sandbox; Chrome has no user-supplied flags.
 type Options struct {
 	Binary, Profile, Downloads, Proxy, LibraryPath string
+	UploadInbox                                    string
+	UploadOwnerUID                                 uint32
+	MaxUploadFiles, MaxUploadBytes                 int
 }
 type Driver struct {
 	options         Options
@@ -37,6 +40,8 @@ type Driver struct {
 	closed          map[string]struct{}
 	debug           Debug
 	downloads       *downloads
+	uploads         *uploadStore
+	dialogs         dialogTracker
 }
 
 func NewDriver(options Options) (*Driver, error) {
@@ -59,7 +64,21 @@ func NewDriver(options Options) (*Driver, error) {
 	if err != nil || port < 1 || port > 65535 {
 		return nil, errors.New("invalid browser proxy port")
 	}
-	return &Driver{options: options, gate: make(chan struct{}, 1)}, nil
+	driver := &Driver{options: options, gate: make(chan struct{}, 1)}
+	if options.UploadInbox != "" {
+		if !filepath.IsAbs(options.UploadInbox) || options.MaxUploadFiles < 1 || options.MaxUploadBytes < 1 {
+			return nil, errors.New("browser upload staging policy is invalid")
+		}
+		driver.uploads, err = newUploadStore(
+			filepath.Join(filepath.Dir(options.Profile), "uploads"),
+			options.UploadInbox, options.UploadOwnerUID,
+			options.MaxUploadFiles, options.MaxUploadBytes,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return driver, nil
 }
 func (d *Driver) lock(ctx context.Context) error {
 	select {
@@ -92,6 +111,10 @@ func (d *Driver) stop() {
 	d.sessions = nil
 	d.closed = nil
 	d.debug.Reset()
+	d.dialogs.Reset()
+	if d.uploads != nil {
+		d.uploads.Clear()
+	}
 }
 func (d *Driver) start(ctx context.Context) (err error) {
 	if d.client != nil {
@@ -156,6 +179,7 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	inRead.Close()
 	outWrite.Close()
 	d.debug.Reset()
+	d.dialogs.Reset()
 	d.sessions = map[string]string{}
 	d.closed = map[string]struct{}{}
 	defer func() {
@@ -167,7 +191,11 @@ func (d *Driver) start(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	d.client = cdp.New(outRead, inWrite, func(e cdp.Event) { d.debug.Event(e); d.downloads.Event(e) })
+	d.client = cdp.New(outRead, inWrite, func(e cdp.Event) {
+		d.debug.Event(e)
+		d.downloads.Event(e)
+		d.dialogs.Event(e)
+	})
 	if err = d.client.Call(ctx, "", "Browser.getVersion", nil, nil); err != nil {
 		return err
 	}
@@ -276,22 +304,33 @@ func (d *Driver) resolveTab(ctx context.Context, id string) (string, error) {
 	}
 	return match, nil
 }
-func (d *Driver) evaluate(ctx context.Context, expression string, out any) error {
+func (d *Driver) isolatedContext(ctx context.Context) (int, error) {
 	var tree struct {
 		FrameTree struct{ Frame struct{ ID string } }
 	}
 	if err := d.client.Call(ctx, d.sessions[d.target], "Page.getFrameTree", nil, &tree); err != nil {
-		return err
+		return 0, err
 	}
 	var world struct{ ExecutionContextID int }
 	if err := d.client.Call(ctx, d.sessions[d.target], "Page.createIsolatedWorld", map[string]any{"frameId": tree.FrameTree.Frame.ID, "worldName": "loki-private"}, &world); err != nil {
+		return 0, err
+	}
+	if world.ExecutionContextID == 0 {
+		return 0, errors.New("browser isolated execution context is unavailable")
+	}
+	return world.ExecutionContextID, nil
+}
+
+func (d *Driver) evaluate(ctx context.Context, expression string, out any) error {
+	contextID, err := d.isolatedContext(ctx)
+	if err != nil {
 		return err
 	}
 	var result struct {
 		Result           struct{ Value json.RawMessage }
 		ExceptionDetails json.RawMessage
 	}
-	if err := d.client.Call(ctx, d.sessions[d.target], "Runtime.evaluate", map[string]any{"expression": expression, "contextId": world.ExecutionContextID, "returnByValue": true, "awaitPromise": true, "timeout": 10000}, &result); err != nil {
+	if err := d.client.Call(ctx, d.sessions[d.target], "Runtime.evaluate", map[string]any{"expression": expression, "contextId": contextID, "returnByValue": true, "awaitPromise": true, "timeout": 10000}, &result); err != nil {
 		return err
 	}
 	if len(result.ExceptionDetails) > 0 {
@@ -403,8 +442,8 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	interactionGeneration := d.generation
 	switch operation {
-	case "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "back", "switch_tab", "close_tab":
-		requireState := operation == "fill" || operation == "type" || operation == "select_option" || operation == "set_checked" || operation == "focus" ||
+	case "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "handle_dialog", "back", "switch_tab", "close_tab":
+		requireState := operation == "fill" || operation == "type" || operation == "select_option" || operation == "set_checked" || operation == "focus" || operation == "upload" ||
 			(operation == "click" || operation == "hover" || operation == "wheel") && args["index"] != nil ||
 			operation == "drag" && (args["source_index"] != nil || args["target_index"] != nil)
 		if err := d.requireInteractionGeneration(args, requireState); err != nil {
@@ -420,6 +459,13 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		return result, err
 	case "state":
 		return d.state(ctx)
+	case "dialog_state":
+		result := d.observeDialog()
+		result["browser_generation"] = d.generation
+		return result, nil
+	case "handle_dialog":
+		result, err := d.handleDialog(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
 	case "click":
 		result, err := d.click(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
@@ -452,6 +498,9 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		return d.finishInteraction(interactionGeneration, result, err)
 	case "focus":
 		result, err := d.focusElement(ctx, args)
+		return d.finishInteraction(interactionGeneration, result, err)
+	case "upload":
+		result, err := d.uploadFiles(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
 	case "screenshot":
 		return d.screenshot(ctx, args["full_page"] == true)

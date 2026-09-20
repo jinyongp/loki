@@ -81,7 +81,7 @@ services:
     <<: *loki-service
     image: ${LOKI_BROWSER_IMAGE:-loki-browser:local}
     profiles: [browser]
-    command: [browser, --socket, /run/loki/browser/control.sock, --agent-uid, "10000", --socket-gid, "10001", --chrome, /usr/bin/chromium-browser, --profile, /var/lib/loki/browser/profile, --downloads, /var/lib/loki/browser-downloads, --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --proxy, "http://browser-proxy:18767"]
+    command: [browser, --socket, /run/loki/browser/control.sock, --agent-uid, "10000", --socket-gid, "10001", --chrome, /usr/bin/chromium-browser, --profile, /var/lib/loki/browser/profile, --downloads, /var/lib/loki/browser-downloads, --config, /etc/loki/loki.toml, --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --proxy, "http://browser-proxy:18767"]
     user: "10003:10003"
     group_add: ["10001"]
     networks: [private]

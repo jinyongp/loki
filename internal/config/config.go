@@ -33,6 +33,7 @@ type Config struct {
 	ArtifactBaseURL, PreviewBaseDomain, PreviewAccessAudience    string
 	MaxFileBytes, MaxWriteBytes, MaxOutputBytes, MaxListEntries  int
 	MaxSearchResults, MaxReadLines, MaxPatchBytes, MaxPatchFiles int
+	BrowserMaxUploadFiles, BrowserMaxUploadBytes                 int
 	GitHubAppID                                                  int64
 	GitHubAPIVersion                                             string
 	GitHubInstallations                                          []GitHubInstallation
@@ -144,6 +145,7 @@ func Parse(data []byte) (Config, error) {
 		{"port", 18765, 1024, 65535, &c.Port}, {"max_file_bytes", 16777216, 4096, 268435456, &c.MaxFileBytes}, {"max_write_bytes", 2097152, 4096, 67108864, &c.MaxWriteBytes},
 		{"max_output_bytes", 262144, 4096, 16777216, &c.MaxOutputBytes}, {"max_list_entries", 2000, 10, 100000, &c.MaxListEntries}, {"max_search_results", 500, 1, 10000, &c.MaxSearchResults},
 		{"max_read_lines", 2000, 1, 20000, &c.MaxReadLines}, {"max_patch_bytes", 524288, 1024, 16777216, &c.MaxPatchBytes}, {"max_patch_files", 50, 1, 1000, &c.MaxPatchFiles},
+		{"browser_max_upload_files", 20, 1, 100, &c.BrowserMaxUploadFiles}, {"browser_max_upload_bytes", 67108864, 1048576, 536870912, &c.BrowserMaxUploadBytes},
 	} {
 		value, err := bounded(raw, f.key, f.def, f.min, f.max)
 		if err != nil {

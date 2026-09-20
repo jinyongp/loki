@@ -80,6 +80,17 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 			return Object(map[string]any{"index": input["index"], "checked": input["checked"], "changed": true, "browser_generation": 8})
 		case "focus":
 			return Object(map[string]any{"focused": true, "index": input["index"], "browser_generation": 8})
+		case "upload":
+			return Object(map[string]any{
+				"uploaded": true, "index": input["index"],
+				"files":       []any{map[string]any{"path": "fixtures/input.txt", "name": "input.txt", "bytes": 4}},
+				"total_bytes": 4, "browser_generation": 8,
+			})
+		case "dialog":
+			return Object(map[string]any{
+				"dialog_handled": true, "accepted": input["accept"], "type": "confirm",
+				"dialog_generation": 4, "browser_generation": 8,
+			})
 		case "back":
 			return Object(map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 8})
 		case "switch_tab":
@@ -112,6 +123,9 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 		{"action": "select_option", "index": 1, "options": []any{map[string]any{"value": "one"}}, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "set_checked", "index": 1, "checked": true, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "focus", "index": 1, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "upload", "index": 1, "paths": []any{"fixtures/input.txt"}, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "dialog", "accept": true, "expected_browser_generation": 7, "expected_dialog_generation": 3},
+		{"action": "dialog", "accept": true, "prompt_text": "answer", "expected_browser_generation": 7, "expected_dialog_generation": 3},
 		{"action": "back", "expected_browser_generation": 7},
 		{"action": "switch_tab", "tab_id": "abcd", "expected_browser_generation": 7},
 		{"action": "close_tab", "tab_id": "abcd", "expected_browser_generation": 7},
@@ -148,6 +162,12 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 		{"action": "select_option", "index": 1, "options": []any{map[string]any{"value": "x", "label": "X"}}, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "set_checked", "index": 1, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "focus", "index": 1, "text": "x", "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "upload", "index": 1, "paths": []any{"fixtures/input.txt"}, "expected_browser_generation": 7},
+		{"action": "upload", "index": 1, "paths": []any{}, "expected_browser_generation": 7, "expected_state_generation": 3},
+		{"action": "dialog", "accept": true, "expected_browser_generation": 7},
+		{"action": "dialog", "accept": true, "expected_dialog_generation": 3},
+		{"action": "dialog", "expected_browser_generation": 7, "expected_dialog_generation": 3},
+		{"action": "dialog", "accept": false, "prompt_text": "ignored", "expected_browser_generation": 7, "expected_dialog_generation": 3},
 		{"action": "switch_tab", "expected_browser_generation": 7},
 		{"action": "close_tab", "tab_id": "abcd"},
 	}

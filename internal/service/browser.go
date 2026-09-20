@@ -52,8 +52,8 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 	handlers := map[string]mcpserver.Handler{}
 	for tool, actions := range map[string]map[string]string{
 		"browser_session":  {"start": "start", "navigate": "navigate", "stop": "stop"},
-		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics"},
-		"browser_interact": {"click": "click", "hover": "hover", "drag": "drag", "wheel": "wheel", "fill": "fill", "type": "type", "key": "key", "shortcut": "shortcut", "select_option": "select_option", "set_checked": "set_checked", "focus": "focus", "back": "back", "switch_tab": "switch_tab", "close_tab": "close_tab"},
+		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics", "dialog": "dialog_state"},
+		"browser_interact": {"click": "click", "hover": "hover", "drag": "drag", "wheel": "wheel", "fill": "fill", "type": "type", "key": "key", "shortcut": "shortcut", "select_option": "select_option", "set_checked": "set_checked", "focus": "focus", "upload": "upload", "dialog": "handle_dialog", "back": "back", "switch_tab": "switch_tab", "close_tab": "close_tab"},
 	} {
 		handlers[tool] = func(ctx context.Context, args map[string]any) (*mcp.CallToolResult, error) {
 			action, _ := args["action"].(string)
@@ -63,6 +63,35 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 			operation := actions[action]
 			if operation == "" {
 				return nil, fault.Error("invalid " + tool + " action")
+			}
+			if tool == "browser_interact" && action == "upload" {
+				paths, err := browserUploadPaths(args)
+				if err != nil {
+					return nil, err
+				}
+				stager, ok := client.(BrowserUploadStager)
+				if !ok {
+					return nil, fault.Error("browser upload staging is unavailable")
+				}
+				staged, err := stager.StageBrowserUpload(ctx, files, paths)
+				if err != nil {
+					return nil, err
+				}
+				defer staged.Cleanup()
+				internalArgs := make(map[string]any, len(args))
+				for key, value := range args {
+					if key != "paths" {
+						internalArgs[key] = value
+					}
+				}
+				internalArgs["staged_files"] = browserUploadReferences(staged)
+				result, err := browserCall(ctx, client, operation, internalArgs)
+				if err != nil {
+					return nil, err
+				}
+				delete(result, "file_count")
+				result["files"] = staged.Files
+				return mcpserver.Object(result)
 			}
 			return objectResult(browserCall(ctx, client, operation, args))
 		}

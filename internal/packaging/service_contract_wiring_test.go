@@ -60,7 +60,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	for _, command := range []string{
 		"egress-proxy, --host, 0.0.0.0, --port, \"18766\", --execution-contract, " + containerContract,
 		"browser-proxy, --port, \"18767\", --execution-contract, " + containerContract,
-		"--downloads, /var/lib/loki/browser-downloads, --execution-contract, " + containerContract,
+		"--downloads, /var/lib/loki/browser-downloads, --config, /etc/loki/loki.toml, --execution-contract, " + containerContract,
 		"user-skills:/var/lib/loki/runner/agents",
 		"user-skills:/home/runner/.agents:ro",
 	} {
