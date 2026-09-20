@@ -24,22 +24,23 @@ type RunRequest struct {
 }
 
 type Workload struct {
-	ID   string
-	CWD  string
-	Argv []string
-}
-
-type LaunchResult struct {
-	ExitCode int64
+	ID             string
+	RequestID      string
+	RequestSHA256  string
+	CWD            string
+	Argv           []string
+	TimeoutSeconds int
+	Network        NetworkProfile
+	Endpoints      []EndpointRequest
 }
 
 type RunResult struct {
-	JobID    string `json:"job_id"`
-	ExitCode int64  `json:"exit_code"`
-}
-
-type Launcher interface {
-	Run(context.Context, Workload) (LaunchResult, error)
+	JobID     string        `json:"job_id"`
+	ExitCode  *int64        `json:"exit_code,omitempty"`
+	Outcome   Outcome       `json:"outcome"`
+	Output    string        `json:"output"`
+	Truncated bool          `json:"truncated"`
+	Cleanup   CleanupStatus `json:"cleanup"`
 }
 
 type IDSource func() (string, error)
@@ -67,6 +68,62 @@ func RandomID() (string, error) {
 	return hex.EncodeToString(raw[:]), nil
 }
 
+func (s *Service) Start(ctx context.Context, request StartRequest) (StartResult, error) {
+	if s == nil || s.launcher == nil {
+		return StartResult{}, errors.New("jobs service is not configured")
+	}
+	normalized, fingerprint, err := normalizeStartRequest(request)
+	if err != nil {
+		return StartResult{}, err
+	}
+	id, err := JobIDForRequestID(normalized.RequestID)
+	if err != nil {
+		return StartResult{}, err
+	}
+	result, err := s.launcher.Start(ctx, Workload{
+		ID: id, RequestID: normalized.RequestID, RequestSHA256: fingerprint, CWD: normalized.CWD,
+		Argv: append([]string(nil), normalized.Argv...), TimeoutSeconds: normalized.TimeoutSeconds,
+		Network: normalized.Network, Endpoints: append([]EndpointRequest(nil), normalized.Endpoints...),
+	})
+	if err != nil {
+		return StartResult{}, err
+	}
+	if !validStartResult(result, normalized.RequestID, id) {
+		return StartResult{}, errors.New("launcher returned an invalid start result")
+	}
+	return result, nil
+}
+
+func (s *Service) Inspect(ctx context.Context, id string) (Status, error) {
+	if s == nil || s.launcher == nil {
+		return Status{}, errors.New("jobs service is not configured")
+	}
+	if err := ValidateJobID(id); err != nil {
+		return Status{}, err
+	}
+	return s.launcher.Inspect(ctx, id)
+}
+
+func (s *Service) Output(ctx context.Context, id string) (OutputSnapshot, error) {
+	if s == nil || s.launcher == nil {
+		return OutputSnapshot{}, errors.New("jobs service is not configured")
+	}
+	if err := ValidateJobID(id); err != nil {
+		return OutputSnapshot{}, err
+	}
+	return s.launcher.Output(ctx, id)
+}
+
+func (s *Service) Cancel(ctx context.Context, id string) (CancelResult, error) {
+	if s == nil || s.launcher == nil {
+		return CancelResult{}, errors.New("jobs service is not configured")
+	}
+	if err := ValidateJobID(id); err != nil {
+		return CancelResult{}, err
+	}
+	return s.launcher.Cancel(ctx, id)
+}
+
 func (s *Service) Run(ctx context.Context, request RunRequest) (RunResult, error) {
 	if s == nil || s.launcher == nil || s.newID == nil {
 		return RunResult{}, errors.New("jobs service is not configured")
@@ -90,10 +147,13 @@ func (s *Service) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if err != nil {
 		return RunResult{}, err
 	}
-	if result.ExitCode < 0 || result.ExitCode > 255 {
-		return RunResult{}, errors.New("launcher returned an invalid exit code")
+	if !result.Valid(MaxOutputBytes) {
+		return RunResult{}, errors.New("launcher returned an invalid job result")
 	}
-	return RunResult{JobID: id, ExitCode: result.ExitCode}, nil
+	return RunResult{
+		JobID: id, ExitCode: result.ExitCode, Outcome: result.Outcome,
+		Output: result.Output.Text, Truncated: result.Output.Truncated, Cleanup: result.Cleanup,
+	}, nil
 }
 
 func validateCWD(value string) (string, error) {

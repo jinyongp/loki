@@ -25,15 +25,25 @@ func (e *Engine) joinCleanup(version string, resource Resource, containerID stri
 }
 
 func (e *Engine) cleanupResource(version string, resource Resource, containerID string) (CleanupStatus, error) {
+	return e.cleanupComponentResource(version, resource, containerID, resourceComponentWorkload)
+}
+
+func (e *Engine) cleanupComponentResource(
+	version string, resource Resource, containerID, component string,
+) (CleanupStatus, error) {
 	if e == nil || !resource.Valid() {
 		return CleanupFailed, errors.New("sandbox cleanup is not configured")
 	}
-	owned, err := e.inspectRef(context.Background(), version, resource.Name(), resource)
+	name := componentContainerName(resource, component)
+	if name == "" {
+		return CleanupFailed, errors.New("sandbox cleanup component is invalid")
+	}
+	owned, err := e.inspectComponentRef(context.Background(), version, name, resource, component)
 	if err != nil {
 		return CleanupFailed, err
 	}
 	if !owned.state.Exists {
-		if err := e.verifyAbsent(version, resource); err != nil {
+		if err := e.verifyComponentAbsent(version, resource, component); err != nil {
 			return CleanupFailed, err
 		}
 		return CleanupComplete, nil
@@ -45,15 +55,15 @@ func (e *Engine) cleanupResource(version string, resource Resource, containerID 
 
 	if owned.state.Running {
 		stopCtx, cancel := context.WithTimeout(context.Background(), e.gracefulStopTimeout+e.controlTimeout)
-		stopErr := e.stop(stopCtx, version, resource)
+		stopErr := e.stopRef(stopCtx, version, ownedID, resource)
 		cancel()
 
-		postStop, inspectErr := e.inspectRef(context.Background(), version, resource.Name(), resource)
+		postStop, inspectErr := e.inspectComponentRef(context.Background(), version, ownedID, resource, component)
 		if inspectErr != nil {
 			return CleanupFailed, errors.Join(stopErr, inspectErr)
 		}
 		if !postStop.state.Exists {
-			if err := e.verifyAbsent(version, resource); err != nil {
+			if err := e.verifyComponentAbsent(version, resource, component); err != nil {
 				return CleanupFailed, err
 			}
 			return CleanupComplete, nil
@@ -63,17 +73,17 @@ func (e *Engine) cleanupResource(version string, resource Resource, containerID 
 		}
 		if postStop.state.Running {
 			killCtx, killCancel := context.WithTimeout(context.Background(), e.cleanupTimeout)
-			killErr := e.kill(killCtx, version, resource)
+			killErr := e.killRef(killCtx, version, ownedID, resource)
 			killCancel()
 			if killErr != nil {
 				return CleanupFailed, errors.Join(stopErr, killErr)
 			}
-			postKill, inspectErr := e.inspectRef(context.Background(), version, resource.Name(), resource)
+			postKill, inspectErr := e.inspectComponentRef(context.Background(), version, ownedID, resource, component)
 			if inspectErr != nil {
 				return CleanupFailed, inspectErr
 			}
 			if !postKill.state.Exists {
-				if err := e.verifyAbsent(version, resource); err != nil {
+				if err := e.verifyComponentAbsent(version, resource, component); err != nil {
 					return CleanupFailed, err
 				}
 				return CleanupComplete, nil
@@ -85,26 +95,34 @@ func (e *Engine) cleanupResource(version string, resource Resource, containerID 
 	}
 
 	removeCtx, cancel := context.WithTimeout(context.Background(), e.cleanupTimeout)
-	removeErr := e.remove(removeCtx, version, resource)
+	removeErr := e.removeRef(removeCtx, version, ownedID, resource)
 	cancel()
 	if removeErr != nil {
 		return CleanupFailed, removeErr
 	}
-	if err := e.verifyAbsent(version, resource); err != nil {
+	if err := e.verifyComponentAbsent(version, resource, component); err != nil {
 		return CleanupFailed, err
 	}
 	return CleanupComplete, nil
 }
 
 func (e *Engine) verifyAbsent(version string, resource Resource) error {
+	return e.verifyComponentAbsent(version, resource, resourceComponentWorkload)
+}
+
+func (e *Engine) verifyComponentAbsent(version string, resource Resource, component string) error {
+	name := componentContainerName(resource, component)
+	if name == "" {
+		return errors.New("sandbox cleanup component is invalid")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), e.cleanupTimeout)
 	defer cancel()
 	for {
-		state, err := e.inspect(ctx, version, resource)
+		inspected, err := e.inspectComponentRef(ctx, version, name, resource, component)
 		if err != nil {
 			return err
 		}
-		if !state.Exists {
+		if !inspected.state.Exists {
 			return nil
 		}
 		select {

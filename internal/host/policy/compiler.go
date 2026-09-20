@@ -5,6 +5,7 @@ package policy
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -106,6 +107,26 @@ func Compile(c config.Config, contract execution.Contract) (controlpolicy.Genera
 		return controlpolicy.Generation{}, err
 	}
 	return controlpolicy.NewGeneration(document)
+}
+
+func CompileFiles(configPath, githubConfigPath, executionContractPath string) (controlpolicy.Generation, execution.Contract, error) {
+	c, err := config.LoadWithGitHub(configPath, githubConfigPath)
+	if err != nil {
+		return controlpolicy.Generation{}, execution.Contract{}, err
+	}
+	raw, err := os.ReadFile(executionContractPath)
+	if err != nil {
+		return controlpolicy.Generation{}, execution.Contract{}, err
+	}
+	contract, err := execution.Load(raw)
+	if err != nil {
+		return controlpolicy.Generation{}, execution.Contract{}, err
+	}
+	generation, err := Compile(c, contract)
+	if err != nil {
+		return controlpolicy.Generation{}, execution.Contract{}, err
+	}
+	return generation, contract, nil
 }
 
 func compileDocument(c config.Config, contract execution.Contract) (Document, error) {

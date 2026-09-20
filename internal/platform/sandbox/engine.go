@@ -20,6 +20,7 @@ import (
 const (
 	defaultRequestBytes        = 256 << 10
 	defaultResponseBytes       = 1 << 20
+	defaultOutputBytes         = 256 << 10
 	defaultControlTimeout      = 15 * time.Second
 	defaultCleanupTimeout      = 10 * time.Second
 	defaultGracefulStopTimeout = 5 * time.Second
@@ -35,6 +36,7 @@ type EngineOptions struct {
 	ExpectedUID         *uint32
 	RequestBytes        int
 	ResponseBytes       int
+	OutputBytes         int
 	ControlTimeout      time.Duration
 	CleanupTimeout      time.Duration
 	GracefulStopTimeout time.Duration
@@ -45,6 +47,7 @@ type Engine struct {
 	expectedUID         uint32
 	requestBytes        int
 	responseBytes       int
+	outputBytes         int
 	controlTimeout      time.Duration
 	cleanupTimeout      time.Duration
 	gracefulStopTimeout time.Duration
@@ -52,9 +55,12 @@ type Engine struct {
 }
 
 type Result struct {
-	ExitCode int64
-	Outcome  Outcome
-	Cleanup  CleanupStatus
+	ExitCode        int64
+	ExitCodeKnown   bool
+	Outcome         Outcome
+	Output          []byte
+	OutputTruncated bool
+	Cleanup         CleanupStatus
 }
 
 func NewEngine(options EngineOptions) (*Engine, error) {
@@ -72,7 +78,12 @@ func NewEngine(options EngineOptions) (*Engine, error) {
 	if responseBytes <= 0 {
 		responseBytes = defaultResponseBytes
 	}
-	if requestBytes < 4096 || requestBytes > 4<<20 || responseBytes < 4096 || responseBytes > 16<<20 {
+	outputBytes := options.OutputBytes
+	if outputBytes <= 0 {
+		outputBytes = defaultOutputBytes
+	}
+	if requestBytes < 4096 || requestBytes > 4<<20 || responseBytes < 4096 || responseBytes > 16<<20 ||
+		outputBytes < 1 || outputBytes > 16<<20 {
 		return nil, errors.New("sandbox Docker protocol limits are outside the supported range")
 	}
 	controlTimeout := options.ControlTimeout
@@ -96,6 +107,7 @@ func NewEngine(options EngineOptions) (*Engine, error) {
 		expectedUID:         *options.ExpectedUID,
 		requestBytes:        requestBytes,
 		responseBytes:       responseBytes,
+		outputBytes:         outputBytes,
 		controlTimeout:      controlTimeout,
 		cleanupTimeout:      cleanupTimeout,
 		gracefulStopTimeout: gracefulStopTimeout,
@@ -143,6 +155,9 @@ func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
 	if e == nil || !plan.Valid() {
 		return Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}, errors.New("sandbox workload plan is invalid")
 	}
+	if plan.NeedsGateway() {
+		return Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}, errors.New("networked sandbox workloads require the durable Job lifecycle")
+	}
 	resource := plan.Resource()
 	version, err := e.apiVersion(ctx)
 	if err != nil {
@@ -175,7 +190,7 @@ func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
 		if inspectErr == nil {
 			inspectErr = errors.New("sandbox Docker daemon returned contradictory terminal state")
 		}
-		result := Result{ExitCode: exitCode, Outcome: OutcomeUnknown}
+		result := Result{ExitCode: exitCode, ExitCodeKnown: true, Outcome: OutcomeUnknown}
 		result.Cleanup, err = e.joinCleanup(version, resource, containerID, inspectErr)
 		return result, err
 	}
@@ -184,7 +199,7 @@ func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
 	if state.OOMKilled {
 		outcome = OutcomeOOMKilled
 	}
-	result := Result{ExitCode: exitCode, Outcome: outcome}
+	result := Result{ExitCode: exitCode, ExitCodeKnown: true, Outcome: outcome}
 	result.Cleanup, err = e.joinCleanup(version, resource, containerID, nil)
 	if err != nil {
 		return result, err
@@ -192,7 +207,9 @@ func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
 	return result, nil
 }
 
-// Inspect returns a bounded Docker-independent view of a Loki-owned resource.
+// Inspect returns a bounded Docker-independent view of any Loki-owned resource
+// in the deterministic Job domain. A subordinate gateway/network without a
+// workload is reported as Exists so unbound crash recovery cannot discard it.
 func (e *Engine) Inspect(ctx context.Context, resource Resource) (ResourceState, error) {
 	if e == nil || !resource.Valid() {
 		return ResourceState{}, errors.New("sandbox resource inspection is not configured")
@@ -201,12 +218,49 @@ func (e *Engine) Inspect(ctx context.Context, resource Resource) (ResourceState,
 	if err != nil {
 		return ResourceState{}, err
 	}
-	return e.inspect(ctx, version, resource)
+	workload, err := e.inspectRef(ctx, version, resource.Name(), resource)
+	if err != nil {
+		return ResourceState{}, err
+	}
+	if workload.state.Exists {
+		return workload.state, nil
+	}
+	gateway, err := e.inspectComponentRef(
+		ctx, version, resource.GatewayName(), resource, resourceComponentGateway,
+	)
+	if err != nil {
+		return ResourceState{}, err
+	}
+	if gateway.state.Exists {
+		return ResourceState{Exists: true}, nil
+	}
+	internal, err := e.inspectNetwork(
+		ctx, version, resource.InternalNetworkName(), resource.InternalNetworkName(),
+		resource, resourceComponentInternalNetwork,
+	)
+	if err != nil {
+		return ResourceState{}, err
+	}
+	if internal.exists {
+		return ResourceState{Exists: true}, nil
+	}
+	outbound, err := e.inspectNetwork(
+		ctx, version, resource.OutboundNetworkName(), resource.OutboundNetworkName(),
+		resource, resourceComponentOutboundNetwork,
+	)
+	if err != nil {
+		return ResourceState{}, err
+	}
+	if outbound.exists {
+		return ResourceState{Exists: true}, nil
+	}
+	return ResourceState{}, nil
 }
 
 type inspectedResource struct {
-	id    string
-	state ResourceState
+	id             string
+	state          ResourceState
+	publishedPorts map[string][]dockerPortBinding
 }
 
 func (e *Engine) inspect(ctx context.Context, version string, resource Resource) (ResourceState, error) {
@@ -214,8 +268,26 @@ func (e *Engine) inspect(ctx context.Context, version string, resource Resource)
 	return inspected.state, err
 }
 
+func componentContainerName(resource Resource, component string) string {
+	switch component {
+	case resourceComponentWorkload:
+		return resource.Name()
+	case resourceComponentGateway:
+		return resource.GatewayName()
+	default:
+		return ""
+	}
+}
+
 func (e *Engine) inspectRef(ctx context.Context, version, ref string, resource Resource) (inspectedResource, error) {
-	if !resource.Valid() || ref == "" || ref != resource.Name() && !containerIDPattern.MatchString(ref) {
+	return e.inspectComponentRef(ctx, version, ref, resource, resourceComponentWorkload)
+}
+
+func (e *Engine) inspectComponentRef(
+	ctx context.Context, version, ref string, resource Resource, component string,
+) (inspectedResource, error) {
+	name := componentContainerName(resource, component)
+	if !resource.Valid() || name == "" || ref == "" || ref != name && !containerIDPattern.MatchString(ref) {
 		return inspectedResource{}, errors.New("sandbox resource identity is invalid")
 	}
 	controlCtx, cancel := context.WithTimeout(ctx, e.controlTimeout)
@@ -244,6 +316,9 @@ func (e *Engine) inspectRef(ctx context.Context, version, ref string, resource R
 		Config struct {
 			Labels map[string]string `json:"Labels"`
 		} `json:"Config"`
+		NetworkSettings struct {
+			Ports map[string][]dockerPortBinding `json:"Ports"`
+		} `json:"NetworkSettings"`
 		State struct {
 			Status    string `json:"Status"`
 			Running   bool   `json:"Running"`
@@ -262,7 +337,7 @@ func (e *Engine) inspectRef(ctx context.Context, version, ref string, resource R
 	if !containerIDPattern.MatchString(decoded.ID) {
 		return inspectedResource{}, errors.New("sandbox Docker daemon returned an invalid container ID")
 	}
-	if !resource.owns(decoded.Config.Labels) {
+	if !resource.ownsComponent(decoded.Config.Labels, component) {
 		return inspectedResource{}, errors.New("sandbox resource ownership does not match")
 	}
 	state := ResourceState{Exists: true, Running: decoded.State.Running, OOMKilled: decoded.State.OOMKilled, ExitCode: decoded.State.ExitCode}
@@ -280,7 +355,12 @@ func (e *Engine) inspectRef(ctx context.Context, version, ref string, resource R
 	if !state.valid() {
 		return inspectedResource{}, errors.New("sandbox Docker daemon returned contradictory resource state")
 	}
-	return inspectedResource{id: decoded.ID, state: state}, nil
+	ports := make(map[string][]dockerPortBinding, len(decoded.NetworkSettings.Ports))
+	for key, bindings := range decoded.NetworkSettings.Ports {
+		copyBindings := append([]dockerPortBinding(nil), bindings...)
+		ports[key] = copyBindings
+	}
+	return inspectedResource{id: decoded.ID, state: state, publishedPorts: ports}, nil
 }
 
 func (e *Engine) apiVersion(ctx context.Context) (string, error) {
@@ -321,10 +401,27 @@ func (e *Engine) create(ctx context.Context, version string, plan Plan) (string,
 	if !resource.Valid() {
 		return "", false, errors.New("sandbox resource identity is invalid")
 	}
+	return e.createContainer(ctx, version, resource.Name(), plan.create)
+}
+
+func (e *Engine) createContainer(
+	ctx context.Context, version, name string, request dockerCreateRequest,
+) (string, bool, error) {
+	if name == "" || strings.ContainsAny(name, "/?&#\r\n") {
+		return "", false, errors.New("sandbox container name is invalid")
+	}
 	controlCtx, cancel := context.WithTimeout(ctx, e.controlTimeout)
 	defer cancel()
-	endpoint := "/v" + version + "/containers/create?name=" + url.QueryEscape(resource.Name())
-	response, err := e.call(controlCtx, http.MethodPost, endpoint, plan.create)
+	logBytes := max(e.outputBytes, 64<<10)
+	request.HostConfig.LogConfig = dockerLogConfig{
+		Type: "local",
+		Config: map[string]string{
+			"max-size": strconv.Itoa(logBytes),
+			"max-file": "2",
+		},
+	}
+	endpoint := "/v" + version + "/containers/create?name=" + url.QueryEscape(name)
+	response, err := e.call(controlCtx, http.MethodPost, endpoint, request)
 	if err != nil {
 		return "", false, err
 	}
@@ -353,15 +450,27 @@ func (e *Engine) create(ctx context.Context, version string, plan Plan) (string,
 	return decoded.ID, true, nil
 }
 
+func validContainerRef(ref string, resource Resource) bool {
+	return resource.Valid() && (ref == resource.Name() || containerIDPattern.MatchString(ref))
+}
+
 func (e *Engine) start(ctx context.Context, version string, resource Resource) error {
-	if !resource.Valid() {
+	return e.startRef(ctx, version, resource.Name(), resource)
+}
+
+func (e *Engine) startRef(ctx context.Context, version, ref string, resource Resource) error {
+	if !validContainerRef(ref, resource) {
 		return errors.New("sandbox resource identity is invalid")
 	}
-	return e.controlJSON(ctx, http.MethodPost, "/v"+version+"/containers/"+resource.Name()+"/start", nil, http.StatusNoContent, nil)
+	return e.controlJSON(ctx, http.MethodPost, "/v"+version+"/containers/"+url.PathEscape(ref)+"/start", nil, http.StatusNoContent, nil)
 }
 
 func (e *Engine) wait(ctx context.Context, version string, resource Resource) (int64, error) {
-	if !resource.Valid() {
+	return e.waitRef(ctx, version, resource.Name(), resource)
+}
+
+func (e *Engine) waitRef(ctx context.Context, version, ref string, resource Resource) (int64, error) {
+	if !validContainerRef(ref, resource) {
 		return 0, errors.New("sandbox resource identity is invalid")
 	}
 	var response struct {
@@ -370,7 +479,7 @@ func (e *Engine) wait(ctx context.Context, version string, resource Resource) (i
 			Message string `json:"Message"`
 		} `json:"Error,omitempty"`
 	}
-	if err := e.callJSON(ctx, http.MethodPost, "/v"+version+"/containers/"+resource.Name()+"/wait?condition=not-running", nil, http.StatusOK, &response); err != nil {
+	if err := e.callJSON(ctx, http.MethodPost, "/v"+version+"/containers/"+url.PathEscape(ref)+"/wait?condition=not-running", nil, http.StatusOK, &response); err != nil {
 		return 0, err
 	}
 	if response.Error != nil && response.Error.Message != "" {
@@ -383,11 +492,15 @@ func (e *Engine) wait(ctx context.Context, version string, resource Resource) (i
 }
 
 func (e *Engine) stop(ctx context.Context, version string, resource Resource) error {
-	if !resource.Valid() {
+	return e.stopRef(ctx, version, resource.Name(), resource)
+}
+
+func (e *Engine) stopRef(ctx context.Context, version, ref string, resource Resource) error {
+	if !validContainerRef(ref, resource) {
 		return errors.New("sandbox resource identity is invalid")
 	}
 	seconds := int((e.gracefulStopTimeout + time.Second - 1) / time.Second)
-	status, err := e.call(ctx, http.MethodPost, "/v"+version+"/containers/"+resource.Name()+"/stop?t="+strconv.Itoa(seconds), nil)
+	status, err := e.call(ctx, http.MethodPost, "/v"+version+"/containers/"+url.PathEscape(ref)+"/stop?t="+strconv.Itoa(seconds), nil)
 	if err != nil {
 		return err
 	}
@@ -400,10 +513,14 @@ func (e *Engine) stop(ctx context.Context, version string, resource Resource) er
 }
 
 func (e *Engine) kill(ctx context.Context, version string, resource Resource) error {
-	if !resource.Valid() {
+	return e.killRef(ctx, version, resource.Name(), resource)
+}
+
+func (e *Engine) killRef(ctx context.Context, version, ref string, resource Resource) error {
+	if !validContainerRef(ref, resource) {
 		return errors.New("sandbox resource identity is invalid")
 	}
-	status, err := e.call(ctx, http.MethodPost, "/v"+version+"/containers/"+resource.Name()+"/kill?signal=KILL", nil)
+	status, err := e.call(ctx, http.MethodPost, "/v"+version+"/containers/"+url.PathEscape(ref)+"/kill?signal=KILL", nil)
 	if err != nil {
 		return err
 	}
@@ -416,10 +533,14 @@ func (e *Engine) kill(ctx context.Context, version string, resource Resource) er
 }
 
 func (e *Engine) remove(ctx context.Context, version string, resource Resource) error {
-	if !resource.Valid() {
+	return e.removeRef(ctx, version, resource.Name(), resource)
+}
+
+func (e *Engine) removeRef(ctx context.Context, version, ref string, resource Resource) error {
+	if !validContainerRef(ref, resource) {
 		return errors.New("sandbox resource identity is invalid")
 	}
-	status, err := e.call(ctx, http.MethodDelete, "/v"+version+"/containers/"+resource.Name()+"?force=1&v=1", nil)
+	status, err := e.call(ctx, http.MethodDelete, "/v"+version+"/containers/"+url.PathEscape(ref)+"?force=1&v=1", nil)
 	if err != nil {
 		return err
 	}

@@ -9,8 +9,25 @@ import (
 	"loki/internal/egress"
 )
 
-func RunEgressProxy(ctx context.Context, listener *net.TCPListener, policy egress.Policy, profile string, log *audit.Log, ready func() error, onAuditError func(error)) error {
-	proxy, err := egress.New(policy, profile, func(decision egress.Decision) {
+func RunEgressProxy(
+	ctx context.Context, listener *net.TCPListener, policy egress.Policy, profile string,
+	log *audit.Log, ready func() error, onAuditError func(error),
+) error {
+	return runEgressProxy(ctx, listener, policy, profile, "", log, ready, onAuditError)
+}
+
+func RunAuthenticatedEgressProxy(
+	ctx context.Context, listener *net.TCPListener, policy egress.Policy, profile, authToken string,
+	log *audit.Log, ready func() error, onAuditError func(error),
+) error {
+	return runEgressProxy(ctx, listener, policy, profile, authToken, log, ready, onAuditError)
+}
+
+func runEgressProxy(
+	ctx context.Context, listener *net.TCPListener, policy egress.Policy, profile, authToken string,
+	log *audit.Log, ready func() error, onAuditError func(error),
+) error {
+	proxy, err := egress.NewAuthenticated(policy, profile, authToken, func(decision egress.Decision) {
 		if log == nil {
 			return
 		}

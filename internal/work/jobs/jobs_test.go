@@ -8,16 +8,47 @@ import (
 )
 
 type fakeLauncher struct {
-	workload Workload
-	result   LaunchResult
-	err      error
-	calls    int
+	workload    Workload
+	result      Result
+	startResult StartResult
+	status      Status
+	output      OutputSnapshot
+	cancel      CancelResult
+	err         error
+	calls       int
 }
 
-func (f *fakeLauncher) Run(_ context.Context, workload Workload) (LaunchResult, error) {
+func (f *fakeLauncher) Run(_ context.Context, workload Workload) (Result, error) {
 	f.calls++
-	f.workload = Workload{ID: workload.ID, CWD: workload.CWD, Argv: append([]string(nil), workload.Argv...)}
+	f.workload = cloneWorkload(workload)
 	return f.result, f.err
+}
+
+func (f *fakeLauncher) Start(_ context.Context, workload Workload) (StartResult, error) {
+	f.calls++
+	f.workload = cloneWorkload(workload)
+	return f.startResult, f.err
+}
+
+func (f *fakeLauncher) Inspect(_ context.Context, _ string) (Status, error) {
+	f.calls++
+	return f.status, f.err
+}
+
+func (f *fakeLauncher) Output(_ context.Context, _ string) (OutputSnapshot, error) {
+	f.calls++
+	return f.output, f.err
+}
+
+func (f *fakeLauncher) Cancel(_ context.Context, _ string) (CancelResult, error) {
+	f.calls++
+	return f.cancel, f.err
+}
+
+func cloneWorkload(workload Workload) Workload {
+	workload.Argv = append([]string(nil), workload.Argv...)
+	workload.Endpoints = append([]EndpointRequest(nil), workload.Endpoints...)
+	return workload
 }
 
 func fixedID(value string) IDSource {
@@ -28,8 +59,15 @@ func validRequest() RunRequest {
 	return RunRequest{CWD: ".", Argv: []string{"/usr/bin/git", "status", "--short"}}
 }
 
+func exitCode(value int64) *int64 {
+	return &value
+}
+
 func TestServiceGeneratesJobIdentityAndCopiesRequest(t *testing.T) {
-	launcher := &fakeLauncher{result: LaunchResult{ExitCode: 7}}
+	launcher := &fakeLauncher{result: Result{
+		ExitCode: exitCode(7), Outcome: OutcomeExited,
+		Output: Output{Text: "hello"}, Cleanup: CleanupComplete,
+	}}
 	id := strings.Repeat("a", 32)
 	service, err := NewService(launcher, fixedID(id))
 	if err != nil {
@@ -41,7 +79,9 @@ func TestServiceGeneratesJobIdentityAndCopiesRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.Argv[1] = "mutated"
-	if result.JobID != id || result.ExitCode != 7 {
+	if result.JobID != id || result.ExitCode == nil || *result.ExitCode != 7 ||
+		result.Outcome != OutcomeExited || result.Output != "hello" || result.Truncated ||
+		result.Cleanup != CleanupComplete {
 		t.Fatalf("result = %#v", result)
 	}
 	if launcher.workload.ID != id || launcher.workload.CWD != "." ||
@@ -98,7 +138,7 @@ func TestServiceRejectsInvalidRequestBeforeLauncher(t *testing.T) {
 	}
 }
 
-func TestServiceFailsClosedOnDependenciesAndLauncherErrors(t *testing.T) {
+func TestServiceFailsClosedOnDependenciesLauncherErrorsAndInvalidResults(t *testing.T) {
 	if _, err := NewService(nil, RandomID); err == nil {
 		t.Fatal("nil launcher was accepted")
 	}
@@ -128,13 +168,19 @@ func TestServiceFailsClosedOnDependenciesAndLauncherErrors(t *testing.T) {
 		t.Fatalf("launcher error = %v", err)
 	}
 
-	launcher = &fakeLauncher{result: LaunchResult{ExitCode: 999}}
-	service, err = NewService(launcher, fixedID(strings.Repeat("c", 32)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = service.Run(t.Context(), validRequest()); err == nil {
-		t.Fatal("invalid exit code was accepted")
+	for _, invalid := range []Result{
+		{ExitCode: exitCode(999), Outcome: OutcomeExited, Cleanup: CleanupComplete},
+		{Outcome: OutcomeExited, Cleanup: CleanupComplete},
+		{Outcome: Outcome("invalid"), Cleanup: CleanupComplete},
+	} {
+		launcher = &fakeLauncher{result: invalid}
+		service, err = NewService(launcher, fixedID(strings.Repeat("c", 32)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = service.Run(t.Context(), validRequest()); err == nil {
+			t.Fatalf("invalid launcher result was accepted: %#v", invalid)
+		}
 	}
 }
 

@@ -2,6 +2,9 @@
 package sandbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -23,18 +26,59 @@ const (
 	maxArgBytes    = 64 << 10
 	maxEnv         = 256
 	maxEnvBytes    = 64 << 10
+	maxEndpoints   = 8
 )
 
 var (
-	digestPattern      = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	imageDigestPattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
-	jobIDPattern       = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	envNamePattern     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	digestPattern       = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	imageDigestPattern  = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
+	jobIDPattern        = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	envNamePattern      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	endpointNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 )
+
+type NetworkProfile string
+
+const (
+	NetworkNone              NetworkProfile = "none"
+	NetworkDependencyInstall NetworkProfile = "dependency-install"
+)
+
+func (p NetworkProfile) Valid() bool {
+	return p == NetworkNone || p == NetworkDependencyInstall
+}
+
+type EndpointSpec struct {
+	Name string `json:"name"`
+	Port int    `json:"port"`
+}
+
+type GatewayPolicyOptions struct {
+	Image             string
+	Binary            string
+	ExecutionContract string
+	EgressPolicy      string
+	ProxyPort         int
+	MemoryBytes       int64
+	PIDs              int64
+	TmpfsBytes        int64
+}
+
+type GatewayPolicy struct {
+	image             string
+	binary            string
+	executionContract string
+	egressPolicy      string
+	proxyPort         int
+	memoryBytes       int64
+	pids              int64
+	tmpfsBytes        int64
+}
 
 type PolicyOptions struct {
 	GenerationSHA256 string
 	Image            string
+	Gateway          GatewayPolicyOptions
 	Workspace        string
 	UID, GID         uint32
 	Environment      []string
@@ -45,7 +89,9 @@ type PolicyOptions struct {
 
 type Policy struct {
 	generationSHA256 string
+	sandboxSHA256    string
 	image            string
+	gateway          GatewayPolicy
 	workspace        string
 	uid, gid         uint32
 	environment      []string
@@ -55,43 +101,62 @@ type Policy struct {
 }
 
 type WorkloadSpec struct {
-	ID           string   `json:"id"`
-	PolicySHA256 string   `json:"policy_sha256"`
-	CWD          string   `json:"cwd"`
-	Argv         []string `json:"argv"`
+	ID           string         `json:"id"`
+	PolicySHA256 string         `json:"policy_sha256"`
+	CWD          string         `json:"cwd"`
+	Argv         []string       `json:"argv"`
+	Network      NetworkProfile `json:"network"`
+	Endpoints    []EndpointSpec `json:"endpoints,omitempty"`
 }
 
 type Plan struct {
-	valid        bool
-	name         string
-	policySHA256 string
-	resource     Resource
-	create       dockerCreateRequest
+	valid         bool
+	name          string
+	policySHA256  string
+	sandboxSHA256 string
+	resource      Resource
+	network       NetworkProfile
+	endpoints     []EndpointSpec
+	gateway       GatewayPolicy
+	create        dockerCreateRequest
 }
 
 type dockerCreateRequest struct {
-	Image           string            `json:"Image"`
-	Cmd             []string          `json:"Cmd"`
-	Env             []string          `json:"Env"`
-	WorkingDir      string            `json:"WorkingDir"`
-	User            string            `json:"User"`
-	NetworkDisabled bool              `json:"NetworkDisabled"`
-	AttachStdout    bool              `json:"AttachStdout"`
-	AttachStderr    bool              `json:"AttachStderr"`
-	Labels          map[string]string `json:"Labels"`
-	HostConfig      dockerHostConfig  `json:"HostConfig"`
+	Image           string              `json:"Image"`
+	Cmd             []string            `json:"Cmd"`
+	Env             []string            `json:"Env"`
+	WorkingDir      string              `json:"WorkingDir"`
+	User            string              `json:"User"`
+	NetworkDisabled bool                `json:"NetworkDisabled"`
+	AttachStdout    bool                `json:"AttachStdout"`
+	AttachStderr    bool                `json:"AttachStderr"`
+	ExposedPorts    map[string]struct{} `json:"ExposedPorts,omitempty"`
+	Labels          map[string]string   `json:"Labels"`
+	HostConfig      dockerHostConfig    `json:"HostConfig"`
 }
 
 type dockerHostConfig struct {
-	ReadonlyRootfs bool              `json:"ReadonlyRootfs"`
-	CapDrop        []string          `json:"CapDrop"`
-	SecurityOpt    []string          `json:"SecurityOpt"`
-	NetworkMode    string            `json:"NetworkMode"`
-	Memory         int64             `json:"Memory"`
-	PidsLimit      int64             `json:"PidsLimit"`
-	Mounts         []dockerMount     `json:"Mounts"`
-	Tmpfs          map[string]string `json:"Tmpfs"`
-	Init           bool              `json:"Init"`
+	ReadonlyRootfs bool                           `json:"ReadonlyRootfs"`
+	CapDrop        []string                       `json:"CapDrop"`
+	SecurityOpt    []string                       `json:"SecurityOpt"`
+	NetworkMode    string                         `json:"NetworkMode"`
+	Memory         int64                          `json:"Memory"`
+	PidsLimit      int64                          `json:"PidsLimit"`
+	Mounts         []dockerMount                  `json:"Mounts"`
+	Tmpfs          map[string]string              `json:"Tmpfs"`
+	LogConfig      dockerLogConfig                `json:"LogConfig"`
+	PortBindings   map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
+	Init           bool                           `json:"Init"`
+}
+
+type dockerPortBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
+
+type dockerLogConfig struct {
+	Type   string            `json:"Type"`
+	Config map[string]string `json:"Config"`
 }
 
 type dockerMount struct {
@@ -106,6 +171,98 @@ type dockerBindOptions struct {
 	Propagation string `json:"Propagation"`
 }
 
+func cleanAbsoluteNonRoot(value string) bool {
+	return filepath.IsAbs(value) && filepath.Clean(value) == value &&
+		value != string(filepath.Separator) && !strings.ContainsRune(value, 0)
+}
+
+func normalizeGateway(options GatewayPolicyOptions) (GatewayPolicy, error) {
+	if !imageDigestPattern.MatchString(options.Image) {
+		return GatewayPolicy{}, errors.New("sandbox gateway image must be pinned by sha256 digest")
+	}
+	if !cleanAbsoluteNonRoot(options.Binary) || !cleanAbsoluteNonRoot(options.ExecutionContract) ||
+		!cleanAbsoluteNonRoot(options.EgressPolicy) {
+		return GatewayPolicy{}, errors.New("sandbox gateway paths must be absolute clean non-root paths")
+	}
+	if options.ProxyPort < 1024 || options.ProxyPort > 65535 {
+		return GatewayPolicy{}, errors.New("sandbox gateway proxy port is outside the supported range")
+	}
+	if options.MemoryBytes < minMemoryBytes || options.MemoryBytes > maxMemoryBytes {
+		return GatewayPolicy{}, errors.New("sandbox gateway memory limit is outside the supported range")
+	}
+	if options.PIDs < minPIDs || options.PIDs > maxPIDs {
+		return GatewayPolicy{}, errors.New("sandbox gateway PID limit is outside the supported range")
+	}
+	if options.TmpfsBytes < minTmpfsBytes || options.TmpfsBytes > maxTmpfsBytes ||
+		options.TmpfsBytes > options.MemoryBytes {
+		return GatewayPolicy{}, errors.New("sandbox gateway temporary-storage limit is outside the supported range")
+	}
+	return GatewayPolicy{
+		image: options.Image, binary: options.Binary,
+		executionContract: options.ExecutionContract, egressPolicy: options.EgressPolicy,
+		proxyPort: options.ProxyPort, memoryBytes: options.MemoryBytes,
+		pids: options.PIDs, tmpfsBytes: options.TmpfsBytes,
+	}, nil
+}
+
+func (g GatewayPolicy) valid() bool {
+	return imageDigestPattern.MatchString(g.image) &&
+		cleanAbsoluteNonRoot(g.binary) && cleanAbsoluteNonRoot(g.executionContract) &&
+		cleanAbsoluteNonRoot(g.egressPolicy) && g.proxyPort >= 1024 && g.proxyPort <= 65535 &&
+		g.memoryBytes >= minMemoryBytes && g.memoryBytes <= maxMemoryBytes &&
+		g.pids >= minPIDs && g.pids <= maxPIDs &&
+		g.tmpfsBytes >= minTmpfsBytes && g.tmpfsBytes <= maxTmpfsBytes &&
+		g.tmpfsBytes <= g.memoryBytes
+}
+
+func sandboxPolicyFingerprint(
+	generationSHA256, image, workspace string,
+	uid, gid uint32,
+	environment []string,
+	memoryBytes, pids, tmpfsBytes int64,
+	gateway GatewayPolicy,
+) (string, error) {
+	payload := struct {
+		GenerationSHA256 string   `json:"generation_sha256"`
+		Image            string   `json:"image"`
+		Workspace        string   `json:"workspace"`
+		UID              uint32   `json:"uid"`
+		GID              uint32   `json:"gid"`
+		Environment      []string `json:"environment"`
+		MemoryBytes      int64    `json:"memory_bytes"`
+		PIDs             int64    `json:"pids"`
+		TmpfsBytes       int64    `json:"tmpfs_bytes"`
+		Gateway          struct {
+			Image             string `json:"image"`
+			Binary            string `json:"binary"`
+			ExecutionContract string `json:"execution_contract"`
+			EgressPolicy      string `json:"egress_policy"`
+			ProxyPort         int    `json:"proxy_port"`
+			MemoryBytes       int64  `json:"memory_bytes"`
+			PIDs              int64  `json:"pids"`
+			TmpfsBytes        int64  `json:"tmpfs_bytes"`
+		} `json:"gateway"`
+	}{
+		GenerationSHA256: generationSHA256, Image: image, Workspace: workspace,
+		UID: uid, GID: gid, Environment: append([]string(nil), environment...),
+		MemoryBytes: memoryBytes, PIDs: pids, TmpfsBytes: tmpfsBytes,
+	}
+	payload.Gateway.Image = gateway.image
+	payload.Gateway.Binary = gateway.binary
+	payload.Gateway.ExecutionContract = gateway.executionContract
+	payload.Gateway.EgressPolicy = gateway.egressPolicy
+	payload.Gateway.ProxyPort = gateway.proxyPort
+	payload.Gateway.MemoryBytes = gateway.memoryBytes
+	payload.Gateway.PIDs = gateway.pids
+	payload.Gateway.TmpfsBytes = gateway.tmpfsBytes
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 func NewPolicy(options PolicyOptions) (Policy, error) {
 	if !digestPattern.MatchString(options.GenerationSHA256) {
 		return Policy{}, errors.New("sandbox policy requires a valid effective-policy digest")
@@ -113,7 +270,7 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if !imageDigestPattern.MatchString(options.Image) {
 		return Policy{}, errors.New("sandbox image must be pinned by sha256 digest")
 	}
-	if !filepath.IsAbs(options.Workspace) || filepath.Clean(options.Workspace) != options.Workspace || options.Workspace == string(filepath.Separator) || strings.ContainsRune(options.Workspace, 0) {
+	if !cleanAbsoluteNonRoot(options.Workspace) {
 		return Policy{}, errors.New("sandbox workspace must be an absolute clean non-root path")
 	}
 	if options.UID == 0 || options.GID == 0 {
@@ -132,22 +289,29 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if err != nil {
 		return Policy{}, err
 	}
+	gateway, err := normalizeGateway(options.Gateway)
+	if err != nil {
+		return Policy{}, err
+	}
+	sandboxSHA256, err := sandboxPolicyFingerprint(
+		options.GenerationSHA256, options.Image, options.Workspace,
+		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway,
+	)
+	if err != nil {
+		return Policy{}, err
+	}
 	return Policy{
-		generationSHA256: options.GenerationSHA256,
-		image:            options.Image,
-		workspace:        options.Workspace,
-		uid:              options.UID,
-		gid:              options.GID,
-		environment:      environment,
-		memoryBytes:      options.MemoryBytes,
-		pids:             options.PIDs,
-		tmpfsBytes:       options.TmpfsBytes,
+		generationSHA256: options.GenerationSHA256, sandboxSHA256: sandboxSHA256,
+		image: options.Image, gateway: gateway, workspace: options.Workspace,
+		uid: options.UID, gid: options.GID, environment: environment,
+		memoryBytes: options.MemoryBytes, pids: options.PIDs, tmpfsBytes: options.TmpfsBytes,
 	}, nil
 }
 
 func (p Policy) Valid() bool {
-	if !digestPattern.MatchString(p.generationSHA256) || !imageDigestPattern.MatchString(p.image) ||
-		!filepath.IsAbs(p.workspace) || filepath.Clean(p.workspace) != p.workspace || p.workspace == string(filepath.Separator) ||
+	if !digestPattern.MatchString(p.generationSHA256) || !digestPattern.MatchString(p.sandboxSHA256) ||
+		!imageDigestPattern.MatchString(p.image) || !p.gateway.valid() ||
+		!cleanAbsoluteNonRoot(p.workspace) ||
 		p.uid == 0 || p.gid == 0 || p.memoryBytes < minMemoryBytes || p.memoryBytes > maxMemoryBytes ||
 		p.pids < minPIDs || p.pids > maxPIDs || p.tmpfsBytes < minTmpfsBytes || p.tmpfsBytes > maxTmpfsBytes ||
 		p.tmpfsBytes > p.memoryBytes {
@@ -162,7 +326,11 @@ func (p Policy) Valid() bool {
 			return false
 		}
 	}
-	return true
+	fingerprint, err := sandboxPolicyFingerprint(
+		p.generationSHA256, p.image, p.workspace, p.uid, p.gid, p.environment,
+		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway,
+	)
+	return err == nil && fingerprint == p.sandboxSHA256
 }
 
 func normalizeEnvironment(values []string) ([]string, error) {
@@ -194,8 +362,45 @@ func normalizeEnvironment(values []string) ([]string, error) {
 	return result, nil
 }
 
+func normalizeNetworkProfile(value NetworkProfile) (NetworkProfile, error) {
+	if value == "" {
+		return NetworkNone, nil
+	}
+	if !value.Valid() {
+		return "", errors.New("sandbox workload network profile is invalid")
+	}
+	return value, nil
+}
+
+func normalizeEndpointSpecs(values []EndpointSpec, reservedPort int) ([]EndpointSpec, error) {
+	if len(values) > maxEndpoints {
+		return nil, errors.New("sandbox endpoint count exceeds its limit")
+	}
+	result := append([]EndpointSpec(nil), values...)
+	for _, endpoint := range result {
+		if !endpointNamePattern.MatchString(endpoint.Name) ||
+			endpoint.Port < 1024 || endpoint.Port > 65535 || endpoint.Port == reservedPort {
+			return nil, errors.New("sandbox endpoint is invalid")
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Name == result[j].Name {
+			return result[i].Port < result[j].Port
+		}
+		return result[i].Name < result[j].Name
+	})
+	ports := map[int]bool{}
+	for index, endpoint := range result {
+		if index > 0 && result[index-1].Name == endpoint.Name || ports[endpoint.Port] {
+			return nil, errors.New("sandbox endpoints must use unique names and ports")
+		}
+		ports[endpoint.Port] = true
+	}
+	return result, nil
+}
+
 func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
-	if p.generationSHA256 == "" || !digestPattern.MatchString(p.generationSHA256) || spec.PolicySHA256 != p.generationSHA256 {
+	if !p.Valid() || spec.PolicySHA256 != p.generationSHA256 {
 		return Plan{}, errors.New("workload policy generation does not match the launcher")
 	}
 	if !jobIDPattern.MatchString(spec.ID) {
@@ -209,19 +414,28 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	resource, err := NewResource(spec.ID, p.generationSHA256)
+	network, err := normalizeNetworkProfile(spec.Network)
+	if err != nil {
+		return Plan{}, err
+	}
+	endpoints, err := normalizeEndpointSpecs(spec.Endpoints, p.gateway.proxyPort)
+	if err != nil {
+		return Plan{}, err
+	}
+	resource, err := NewResource(spec.ID, p.generationSHA256, p.sandboxSHA256)
 	if err != nil {
 		return Plan{}, err
 	}
 	environment := append([]string(nil), p.environment...)
 	tmpfs := fmt.Sprintf("rw,noexec,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", p.tmpfsBytes, p.uid, p.gid)
+	needsGateway := network == NetworkDependencyInstall || len(endpoints) > 0
 	create := dockerCreateRequest{
 		Image:           p.image,
 		Cmd:             argv,
 		Env:             environment,
 		WorkingDir:      cwd,
 		User:            strconv.FormatUint(uint64(p.uid), 10) + ":" + strconv.FormatUint(uint64(p.gid), 10),
-		NetworkDisabled: true,
+		NetworkDisabled: !needsGateway,
 		AttachStdout:    true,
 		AttachStderr:    true,
 		Labels:          resource.labels(),
@@ -246,11 +460,9 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		},
 	}
 	return Plan{
-		valid:        true,
-		name:         resource.Name(),
-		policySHA256: p.generationSHA256,
-		resource:     resource,
-		create:       create,
+		valid: true, name: resource.Name(), policySHA256: p.generationSHA256,
+		sandboxSHA256: p.sandboxSHA256, resource: resource, network: network,
+		endpoints: endpoints, gateway: p.gateway, create: create,
 	}, nil
 }
 
@@ -288,8 +500,23 @@ func workloadArgv(values []string) ([]string, error) {
 }
 
 func (p Plan) Valid() bool {
-	return p.valid && p.resource.Valid() && p.name == p.resource.Name() &&
-		p.policySHA256 == p.resource.PolicySHA256() && p.create.Image != "" && p.resource.owns(p.create.Labels)
+	if !p.valid || !p.resource.Valid() || p.name != p.resource.Name() ||
+		p.policySHA256 != p.resource.PolicySHA256() ||
+		p.sandboxSHA256 != p.resource.SandboxSHA256() ||
+		!digestPattern.MatchString(p.sandboxSHA256) || !p.network.Valid() ||
+		!p.gateway.valid() || p.create.Image == "" || !p.resource.owns(p.create.Labels) {
+		return false
+	}
+	normalized, err := normalizeEndpointSpecs(p.endpoints, p.gateway.proxyPort)
+	if err != nil || len(normalized) != len(p.endpoints) {
+		return false
+	}
+	for index := range normalized {
+		if normalized[index] != p.endpoints[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (p Plan) Name() string {
@@ -304,6 +531,56 @@ func (p Plan) PolicySHA256() string {
 		return ""
 	}
 	return p.policySHA256
+}
+
+func (p Plan) SandboxSHA256() string {
+	if !p.Valid() {
+		return ""
+	}
+	return p.sandboxSHA256
+}
+
+func (p Plan) NetworkProfile() NetworkProfile {
+	if !p.Valid() {
+		return ""
+	}
+	return p.network
+}
+
+func (p Plan) Endpoints() []EndpointSpec {
+	if !p.Valid() {
+		return nil
+	}
+	return append([]EndpointSpec(nil), p.endpoints...)
+}
+
+func (p Plan) NeedsGateway() bool {
+	return p.Valid() && (p.network == NetworkDependencyInstall || len(p.endpoints) > 0)
+}
+
+func (p Plan) NeedsOutboundNetwork() bool {
+	return p.Valid() && p.network == NetworkDependencyInstall
+}
+
+func (p Plan) GatewayName() string {
+	if !p.NeedsGateway() {
+		return ""
+	}
+	return p.resource.GatewayName()
+}
+
+func (p Plan) InternalNetworkName() string {
+	if !p.NeedsGateway() {
+		return ""
+	}
+	return p.resource.InternalNetworkName()
+}
+
+func (p Plan) OutboundNetworkName() string {
+	if !p.NeedsOutboundNetwork() {
+		return ""
+	}
+	return p.resource.OutboundNetworkName()
 }
 
 func (p Plan) Resource() Resource {

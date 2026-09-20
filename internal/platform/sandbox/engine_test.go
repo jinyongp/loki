@@ -132,7 +132,7 @@ func TestEngineFiniteLifecycle(t *testing.T) {
 				"Config": map[string]any{"Labels": resource.labels()},
 				"State":  map[string]any{"Status": "exited", "Running": false, "OOMKilled": false, "ExitCode": 7},
 			})
-		case r.Method == http.MethodDelete && r.URL.Path == "/v"+version+"/containers/"+resource.Name():
+		case r.Method == http.MethodDelete && r.URL.Path == "/v"+version+"/containers/"+containerID:
 			removed = true
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -155,7 +155,7 @@ func TestEngineFiniteLifecycle(t *testing.T) {
 		"POST /v" + version + "/containers/" + resource.Name() + "/wait?condition=not-running",
 		"GET /v" + version + "/containers/" + resource.Name() + "/json",
 		"GET /v" + version + "/containers/" + resource.Name() + "/json",
-		"DELETE /v" + version + "/containers/" + resource.Name() + "?force=1&v=1",
+		"DELETE /v" + version + "/containers/" + containerID + "?force=1&v=1",
 		"GET /v" + version + "/containers/" + resource.Name() + "/json",
 	}
 	if got := recorder.snapshot(); strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -217,7 +217,7 @@ func TestEngineVerifiesPeerAndBoundsResponses(t *testing.T) {
 					"Config": map[string]any{"Labels": resource.labels()},
 					"State":  map[string]any{"Status": "created", "Running": false, "OOMKilled": false, "ExitCode": 0},
 				})
-			case r.Method == http.MethodDelete && r.URL.Path == "/v1.44/containers/"+resource.Name():
+			case r.Method == http.MethodDelete && r.URL.Path == "/v1.44/containers/"+containerID:
 				removed = true
 				w.WriteHeader(http.StatusNoContent)
 			default:
@@ -397,7 +397,7 @@ func TestEngineCancellationUsesGracefulStopThenKillFallback(t *testing.T) {
 				t.Fatalf("kill fallback mismatch: %s", events)
 			}
 			if tc.wantCleanup == CleanupComplete {
-				if !strings.Contains(events, "DELETE /v"+version+"/containers/"+resource.Name()+"?force=1&v=1") {
+				if !strings.Contains(events, "DELETE /v"+version+"/containers/"+containerID+"?force=1&v=1") {
 					t.Fatalf("cleanup sequence lacks removal: %s", events)
 				}
 			}

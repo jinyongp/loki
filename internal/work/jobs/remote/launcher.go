@@ -38,16 +38,12 @@ type Launcher struct {
 	cleanupTimeout time.Duration
 }
 
-type startResult struct {
-	ID string `json:"id"`
-}
-
 type waitResult struct {
-	ExitCode int64 `json:"exit_code"`
-}
-
-type cancelResult struct {
-	Canceled bool `json:"canceled"`
+	ExitCode  *int64             `json:"exit_code,omitempty"`
+	Outcome   jobs.Outcome       `json:"outcome"`
+	Output    string             `json:"output"`
+	Truncated bool               `json:"truncated"`
+	Cleanup   jobs.CleanupStatus `json:"cleanup"`
 }
 
 func New(options Options) (*Launcher, error) {
@@ -77,61 +73,136 @@ func New(options Options) (*Launcher, error) {
 	}, nil
 }
 
-func (l *Launcher) Run(ctx context.Context, workload jobs.Workload) (jobs.LaunchResult, error) {
-	if l == nil || !digestPattern.MatchString(l.policySHA256) || !jobIDPattern.MatchString(workload.ID) {
-		return jobs.LaunchResult{}, errors.New("remote launcher is not configured")
-	}
-	if err := l.start(ctx, workload); err != nil {
-		return jobs.LaunchResult{}, joinCleanup(err, l.cleanup(workload.ID))
+func (l *Launcher) Run(ctx context.Context, workload jobs.Workload) (jobs.Result, error) {
+	if _, err := l.Start(ctx, workload); err != nil {
+		return jobs.Result{}, joinCleanup(err, l.cleanup(workload.ID))
 	}
 	result, err := l.wait(ctx, workload.ID)
 	if err != nil {
-		return jobs.LaunchResult{}, joinCleanup(err, l.cleanup(workload.ID))
+		return jobs.Result{}, joinCleanup(err, l.cleanup(workload.ID))
 	}
 	return result, nil
 }
 
-func (l *Launcher) start(ctx context.Context, workload jobs.Workload) error {
+func (l *Launcher) Start(ctx context.Context, workload jobs.Workload) (jobs.StartResult, error) {
+	if l == nil || !digestPattern.MatchString(l.policySHA256) || !jobIDPattern.MatchString(workload.ID) {
+		return jobs.StartResult{}, errors.New("remote launcher is not configured")
+	}
 	request := struct {
-		Operation    string   `json:"operation"`
-		ID           string   `json:"id"`
-		PolicySHA256 string   `json:"policy_sha256"`
-		CWD          string   `json:"cwd"`
-		Argv         []string `json:"argv"`
+		Operation      string                 `json:"operation"`
+		ID             string                 `json:"id"`
+		RequestID      string                 `json:"request_id,omitempty"`
+		RequestSHA256  string                 `json:"request_sha256,omitempty"`
+		PolicySHA256   string                 `json:"policy_sha256"`
+		CWD            string                 `json:"cwd"`
+		Argv           []string               `json:"argv"`
+		TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
+		Network        jobs.NetworkProfile    `json:"network,omitempty"`
+		Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
 	}{
-		Operation:    "start",
-		ID:           workload.ID,
-		PolicySHA256: l.policySHA256,
-		CWD:          workload.CWD,
-		Argv:         append([]string(nil), workload.Argv...),
+		Operation:      "start",
+		ID:             workload.ID,
+		RequestID:      workload.RequestID,
+		RequestSHA256:  workload.RequestSHA256,
+		PolicySHA256:   l.policySHA256,
+		CWD:            workload.CWD,
+		Argv:           append([]string(nil), workload.Argv...),
+		TimeoutSeconds: workload.TimeoutSeconds,
+		Network:        workload.Network,
+		Endpoints:      append([]jobs.EndpointRequest(nil), workload.Endpoints...),
 	}
 	raw, err := l.client.Call(ctx, request)
 	if err != nil {
-		return err
+		return jobs.StartResult{}, err
 	}
-	var result startResult
-	if err = decodeStrict(raw, &result); err != nil || result.ID != workload.ID {
-		return errors.New("launcher returned an invalid start result")
+	var result jobs.StartResult
+	if err = decodeStrict(raw, &result); err != nil ||
+		result.JobID != workload.ID || result.RequestID != workload.RequestID ||
+		!result.State.Valid() || !result.Detached {
+		return jobs.StartResult{}, errors.New("launcher returned an invalid start result")
 	}
-	return nil
+	if deadline, parseErr := time.Parse(time.RFC3339Nano, result.DeadlineAt); parseErr != nil || deadline.Location() != time.UTC {
+		return jobs.StartResult{}, errors.New("launcher returned an invalid start deadline")
+	}
+	return result, nil
 }
 
-func (l *Launcher) wait(ctx context.Context, id string) (jobs.LaunchResult, error) {
+func (l *Launcher) Inspect(ctx context.Context, id string) (jobs.Status, error) {
+	if l == nil || !jobIDPattern.MatchString(id) {
+		return jobs.Status{}, errors.New("remote launcher is not configured")
+	}
+	raw, err := l.client.Call(ctx, struct {
+		Operation string `json:"operation"`
+		ID        string `json:"id"`
+	}{Operation: "inspect", ID: id})
+	if err != nil {
+		return jobs.Status{}, err
+	}
+	var result jobs.Status
+	if err = decodeStrict(raw, &result); err != nil || result.JobID != id || !result.State.Valid() {
+		return jobs.Status{}, errors.New("launcher returned an invalid inspect result")
+	}
+	return result, nil
+}
+
+func (l *Launcher) Output(ctx context.Context, id string) (jobs.OutputSnapshot, error) {
+	if l == nil || !jobIDPattern.MatchString(id) {
+		return jobs.OutputSnapshot{}, errors.New("remote launcher is not configured")
+	}
+	raw, err := l.client.Call(ctx, struct {
+		Operation string `json:"operation"`
+		ID        string `json:"id"`
+	}{Operation: "output", ID: id})
+	if err != nil {
+		return jobs.OutputSnapshot{}, err
+	}
+	var result jobs.OutputSnapshot
+	if err = decodeStrict(raw, &result); err != nil || result.JobID != id || !result.State.Valid() ||
+		len(result.Output) > jobs.MaxOutputBytes {
+		return jobs.OutputSnapshot{}, errors.New("launcher returned an invalid output result")
+	}
+	return result, nil
+}
+
+func (l *Launcher) Cancel(ctx context.Context, id string) (jobs.CancelResult, error) {
+	if l == nil || !jobIDPattern.MatchString(id) {
+		return jobs.CancelResult{}, errors.New("remote launcher is not configured")
+	}
+	raw, err := l.client.Call(ctx, struct {
+		Operation string `json:"operation"`
+		ID        string `json:"id"`
+	}{Operation: "cancel", ID: id})
+	if err != nil {
+		return jobs.CancelResult{}, err
+	}
+	var result jobs.CancelResult
+	if err = decodeStrict(raw, &result); err != nil || result.JobID != id ||
+		result.Status.JobID != id || !result.Status.State.Valid() {
+		return jobs.CancelResult{}, errors.New("launcher returned an invalid cancel result")
+	}
+	return result, nil
+}
+
+func (l *Launcher) wait(ctx context.Context, id string) (jobs.Result, error) {
 	raw, err := l.client.Call(ctx, struct {
 		Operation string `json:"operation"`
 		ID        string `json:"id"`
 	}{Operation: "wait", ID: id})
 	if err != nil {
-		return jobs.LaunchResult{}, err
+		return jobs.Result{}, err
 	}
 	var result waitResult
 	if err = decodeStrict(raw, &result); err != nil {
-		return jobs.LaunchResult{}, errors.New("launcher returned an invalid wait result")
+		return jobs.Result{}, errors.New("launcher returned an invalid wait result")
 	}
-	if result.ExitCode < 0 || result.ExitCode > 255 {
-		return jobs.LaunchResult{}, errors.New("launcher returned an invalid exit code")
+	jobResult := jobs.Result{
+		ExitCode: result.ExitCode, Outcome: result.Outcome,
+		Output: jobs.Output{Text: result.Output, Truncated: result.Truncated}, Cleanup: result.Cleanup,
 	}
-	return jobs.LaunchResult{ExitCode: result.ExitCode}, nil
+	if !jobResult.Valid(jobs.MaxOutputBytes) {
+		return jobs.Result{}, errors.New("launcher returned an invalid job result")
+	}
+	return jobResult, nil
 }
 
 func (l *Launcher) cleanup(id string) error {
@@ -140,16 +211,12 @@ func (l *Launcher) cleanup(id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), l.cleanupTimeout)
 	defer cancel()
-	raw, err := l.client.Call(ctx, struct {
-		Operation string `json:"operation"`
-		ID        string `json:"id"`
-	}{Operation: "cancel", ID: id})
+	result, err := l.Cancel(ctx, id)
 	if err != nil {
 		return err
 	}
-	var result cancelResult
-	if err = decodeStrict(raw, &result); err != nil {
-		return errors.New("launcher returned an invalid cancel result")
+	if result.Status.Cleanup == jobs.CleanupFailed {
+		return errors.New("launcher reported incomplete cleanup")
 	}
 	return nil
 }

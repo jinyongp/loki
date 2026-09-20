@@ -14,6 +14,7 @@ import (
 
 	appexecutor "loki/internal/app/executor"
 	"loki/internal/daemon"
+	hostpolicy "loki/internal/host/policy"
 	"loki/internal/work/jobs"
 	"loki/internal/work/jobs/remote"
 )
@@ -80,15 +81,30 @@ func requireExecutorIdentity(euid int, configured uint32) error {
 	return nil
 }
 
+func resolveExecutorPolicy(layout *executorLayout, configPath, githubConfigPath, executionContractPath string) error {
+	generation, _, err := hostpolicy.CompileFiles(configPath, githubConfigPath, executionContractPath)
+	if err != nil {
+		return err
+	}
+	layout.PolicySHA256 = generation.Digest()
+	return nil
+}
+
 func run(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki-executor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	layoutPath := flags.String("layout", "", "administrator-owned executor JSON layout")
+	configPath := flags.String("config", "", "public Loki TOML configuration")
+	githubConfigPath := flags.String("github-config", "", "deployment-provided public GitHub TOML configuration")
+	executionContractPath := flags.String("execution-contract", "", "administrator-owned execution contract")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if flags.NArg() != 0 || *layoutPath == "" || !filepath.IsAbs(*layoutPath) {
-		fmt.Fprintln(stderr, "loki-executor requires --layout ABSOLUTE_PATH")
+	if flags.NArg() != 0 || *layoutPath == "" || !filepath.IsAbs(*layoutPath) ||
+		*configPath == "" || !filepath.IsAbs(*configPath) ||
+		*executionContractPath == "" || !filepath.IsAbs(*executionContractPath) ||
+		*githubConfigPath != "" && !filepath.IsAbs(*githubConfigPath) {
+		fmt.Fprintln(stderr, "loki-executor requires absolute --layout, --config, and --execution-contract paths")
 		return 2
 	}
 	var layout executorLayout
@@ -99,6 +115,10 @@ func run(args []string, stderr io.Writer) int {
 	if err := requireExecutorIdentity(os.Geteuid(), layout.ExecutorUID); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if err := resolveExecutorPolicy(&layout, *configPath, *githubConfigPath, *executionContractPath); err != nil {
+		fmt.Fprintln(stderr, "invalid executor effective policy")
+		return 2
 	}
 	options, err := buildExecutor(layout)
 	if err != nil {

@@ -7,6 +7,36 @@ import (
 	"testing"
 )
 
+func TestEngineInspectDetectsOrphanedSubordinateDomain(t *testing.T) {
+	const version = "1.44"
+	resource := validPlan(t).Resource()
+	gatewayID := strings.Repeat("e", 64)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/version":
+			_ = json.NewEncoder(w).Encode(map[string]any{"ApiVersion": version})
+		case "/v" + version + "/containers/" + resource.Name() + "/json":
+			http.NotFound(w, r)
+		case "/v" + version + "/containers/" + resource.GatewayName() + "/json":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"Id":     gatewayID,
+				"Config": map[string]any{"Labels": resource.labelsFor(resourceComponentGateway)},
+				"State":  map[string]any{"Status": "running", "Running": true, "OOMKilled": false, "ExitCode": 0},
+			})
+		default:
+			t.Errorf("unexpected Docker request: %s %s", r.Method, r.URL.RequestURI())
+			http.NotFound(w, r)
+		}
+	})
+	state, err := engineForSocket(t, fakeDockerSocket(t, handler), nil).Inspect(t.Context(), resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Exists || state.Running || state.Terminal {
+		t.Fatalf("orphan domain state = %#v", state)
+	}
+}
+
 func TestEngineInspectOwnsOnlyLokiResources(t *testing.T) {
 	const version = "1.44"
 	resource := validPlan(t).Resource()
@@ -91,6 +121,10 @@ func TestEngineInspectOwnsOnlyLokiResources(t *testing.T) {
 							},
 						})
 					}
+				case "/v" + version + "/containers/" + resource.GatewayName() + "/json",
+					"/v" + version + "/networks/" + resource.InternalNetworkName(),
+					"/v" + version + "/networks/" + resource.OutboundNetworkName():
+					http.NotFound(w, r)
 				default:
 					t.Errorf("unexpected Docker request: %s %s", r.Method, r.URL.RequestURI())
 					http.NotFound(w, r)

@@ -2,6 +2,8 @@
 package egress
 
 import (
+	"crypto/subtle"
+	"encoding/base64"
 	"errors"
 	"net"
 	"net/http"
@@ -13,11 +15,12 @@ import (
 )
 
 type Proxy struct {
-	handler http.Handler
-	close   func()
-	policy  Policy
-	profile string
-	audit   func(Decision)
+	handler   http.Handler
+	close     func()
+	policy    Policy
+	profile   string
+	audit     func(Decision)
+	authToken string
 }
 
 type Decision struct {
@@ -29,17 +32,47 @@ type Decision struct {
 }
 
 func New(policy Policy, profile string, audit func(Decision)) (*Proxy, error) {
+	return NewAuthenticated(policy, profile, "", audit)
+}
+
+func NewAuthenticated(policy Policy, profile, authToken string, audit func(Decision)) (*Proxy, error) {
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
 	if _, ok := policy.Profiles[profile]; !ok {
 		return nil, errors.New("unknown egress profile")
 	}
+	if strings.ContainsAny(authToken, "\r\n\x00") || len(authToken) > 512 {
+		return nil, errors.New("egress proxy authentication token is invalid")
+	}
 	proxy := netguard.New(netguard.Policy{})
 	proxy.IdleTimeout = 300 * time.Second
 	proxy.TunnelErrorStatus = http.StatusBadGateway
-	return &Proxy{handler: proxy, close: proxy.Close, policy: policy, profile: profile, audit: audit}, nil
+	return &Proxy{
+		handler: proxy, close: proxy.Close, policy: policy,
+		profile: profile, audit: audit, authToken: authToken,
+	}, nil
 }
+
+func proxyAuthorizationValid(header, token string) bool {
+	if token == "" {
+		return true
+	}
+	scheme, encoded, ok := strings.Cut(strings.TrimSpace(header), " ")
+	if !ok || !strings.EqualFold(scheme, "Basic") || encoded == "" {
+		return false
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return false
+	}
+	user, password, ok := strings.Cut(string(raw), ":")
+	if !ok || user != "loki" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(password), []byte(token)) == 1
+}
+
 func (p *Proxy) Close() { p.close() }
 func response(w http.ResponseWriter, status int) {
 	w.Header().Set("Connection", "close")
@@ -57,6 +90,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if line > 8192 || total > 65536 {
 		p.record(Decision{Profile: p.profile, Allowed: false, Reason: "request-too-large"})
 		response(w, 431)
+		return
+	}
+	if !proxyAuthorizationValid(r.Header.Get("Proxy-Authorization"), p.authToken) {
+		p.record(Decision{Profile: p.profile, Allowed: false, Reason: "unauthorized"})
+		w.Header().Set("Proxy-Authenticate", `Basic realm="loki-job"`)
+		response(w, http.StatusProxyAuthRequired)
 		return
 	}
 	host, port, err := net.SplitHostPort(r.RequestURI)
@@ -79,6 +118,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Only the parsed and allowlisted authority reaches the common tunnel code.
 	request := r.Clone(r.Context())
+	request.Header = r.Header.Clone()
+	request.Header.Del("Proxy-Authorization")
 	request.Host = net.JoinHostPort(host, "443")
 	request.URL.Host = request.Host
 	p.record(Decision{Profile: p.profile, Host: host, Port: number, Allowed: true, Reason: "allowlisted"})

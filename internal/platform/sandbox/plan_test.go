@@ -10,13 +10,23 @@ func validPolicyOptions() PolicyOptions {
 	return PolicyOptions{
 		GenerationSHA256: strings.Repeat("a", 64),
 		Image:            "registry.example/loki@sha256:" + strings.Repeat("b", 64),
-		Workspace:        "/srv/loki-workspace",
-		UID:              10000,
-		GID:              10000,
-		Environment:      []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
-		MemoryBytes:      512 << 20,
-		PIDs:             128,
-		TmpfsBytes:       64 << 20,
+		Gateway: GatewayPolicyOptions{
+			Image:             "registry.example/loki-gateway@sha256:" + strings.Repeat("c", 64),
+			Binary:            "/opt/loki/bin/loki",
+			ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
+			EgressPolicy:      "/usr/share/doc/loki/egress-policy.json",
+			ProxyPort:         18766,
+			MemoryBytes:       128 << 20,
+			PIDs:              64,
+			TmpfsBytes:        32 << 20,
+		},
+		Workspace:   "/srv/loki-workspace",
+		UID:         10000,
+		GID:         10000,
+		Environment: []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
+		MemoryBytes: 512 << 20,
+		PIDs:        128,
+		TmpfsBytes:  64 << 20,
 	}
 }
 
@@ -37,6 +47,14 @@ func TestPolicyValidation(t *testing.T) {
 		{"digest", func(o *PolicyOptions) { o.GenerationSHA256 = "bad" }},
 		{"image-tag", func(o *PolicyOptions) { o.Image = "loki:latest" }},
 		{"image-scheme", func(o *PolicyOptions) { o.Image = "https://registry.example/loki@sha256:" + strings.Repeat("b", 64) }},
+		{"gateway-image", func(o *PolicyOptions) { o.Gateway.Image = "loki:latest" }},
+		{"gateway-binary", func(o *PolicyOptions) { o.Gateway.Binary = "loki" }},
+		{"gateway-contract", func(o *PolicyOptions) { o.Gateway.ExecutionContract = "contract.json" }},
+		{"gateway-egress-policy", func(o *PolicyOptions) { o.Gateway.EgressPolicy = "policy.json" }},
+		{"gateway-port", func(o *PolicyOptions) { o.Gateway.ProxyPort = 80 }},
+		{"gateway-memory", func(o *PolicyOptions) { o.Gateway.MemoryBytes = minMemoryBytes - 1 }},
+		{"gateway-pids", func(o *PolicyOptions) { o.Gateway.PIDs = minPIDs - 1 }},
+		{"gateway-tmpfs", func(o *PolicyOptions) { o.Gateway.TmpfsBytes = minTmpfsBytes - 1 }},
 		{"workspace-relative", func(o *PolicyOptions) { o.Workspace = "workspace" }},
 		{"workspace-root", func(o *PolicyOptions) { o.Workspace = "/" }},
 		{"workspace-dirty", func(o *PolicyOptions) { o.Workspace = "/srv/../workspace" }},
@@ -92,6 +110,13 @@ func TestWorkloadSpecValidation(t *testing.T) {
 		{"argv-relative", func(s *WorkloadSpec) { s.Argv[0] = "git" }},
 		{"argv-root", func(s *WorkloadSpec) { s.Argv[0] = "/" }},
 		{"argv-nul", func(s *WorkloadSpec) { s.Argv[1] = "bad\x00arg" }},
+		{"network", func(s *WorkloadSpec) { s.Network = NetworkProfile("host") }},
+		{"endpoint-name", func(s *WorkloadSpec) { s.Endpoints = []EndpointSpec{{Name: "Web", Port: 5173}} }},
+		{"endpoint-port", func(s *WorkloadSpec) { s.Endpoints = []EndpointSpec{{Name: "web", Port: 80}} }},
+		{"endpoint-proxy-port", func(s *WorkloadSpec) { s.Endpoints = []EndpointSpec{{Name: "web", Port: 18766}} }},
+		{"endpoint-duplicate", func(s *WorkloadSpec) {
+			s.Endpoints = []EndpointSpec{{Name: "web", Port: 5173}, {Name: "api", Port: 5173}}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -127,7 +152,9 @@ func TestPlanUsesOnlyFixedSecurityEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !plan.Valid() || plan.Name() != "loki-job-"+spec.ID || plan.PolicySHA256() != options.GenerationSHA256 {
+	if !plan.Valid() || plan.Name() != "loki-job-"+spec.ID || plan.PolicySHA256() != options.GenerationSHA256 ||
+		len(plan.SandboxSHA256()) != 64 || plan.NetworkProfile() != NetworkNone ||
+		plan.NeedsGateway() || plan.NeedsOutboundNetwork() {
 		t.Fatalf("plan metadata = %#v", plan)
 	}
 	create := plan.create
@@ -181,6 +208,72 @@ func TestPlanUsesOnlyFixedSecurityEnvelope(t *testing.T) {
 	}
 }
 
+func TestPlanDefinesPolicyBoundNetworkDomain(t *testing.T) {
+	options := validPolicyOptions()
+	policy, err := NewPolicy(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := validWorkloadSpec()
+	spec.Network = NetworkDependencyInstall
+	spec.Endpoints = []EndpointSpec{{Name: "web", Port: 5173}, {Name: "api", Port: 3000}}
+	plan, err := policy.Plan(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.NeedsGateway() || !plan.NeedsOutboundNetwork() ||
+		plan.GatewayName() != "loki-job-gateway-"+spec.ID ||
+		plan.InternalNetworkName() != "loki-job-net-"+spec.ID ||
+		plan.OutboundNetworkName() != "loki-job-egress-"+spec.ID ||
+		plan.create.NetworkDisabled || plan.create.HostConfig.NetworkMode != "none" {
+		t.Fatalf("network plan = %#v", plan)
+	}
+	endpoints := plan.Endpoints()
+	if len(endpoints) != 2 || endpoints[0].Name != "api" || endpoints[1].Name != "web" {
+		t.Fatalf("endpoints = %#v", endpoints)
+	}
+	endpoints[0].Name = "mutated"
+	if plan.Endpoints()[0].Name != "api" {
+		t.Fatal("plan endpoint projection retained caller alias")
+	}
+	resource := plan.Resource()
+	if !resource.owns(plan.create.Labels) ||
+		plan.create.Labels[resourceSandboxLabel] != plan.SandboxSHA256() {
+		t.Fatalf("workload labels = %#v", plan.create.Labels)
+	}
+	if !resource.ownsComponent(resource.labelsFor(resourceComponentGateway), resourceComponentGateway) ||
+		!resource.ownsComponent(resource.labelsFor(resourceComponentInternalNetwork), resourceComponentInternalNetwork) ||
+		!resource.ownsComponent(resource.labelsFor(resourceComponentOutboundNetwork), resourceComponentOutboundNetwork) {
+		t.Fatal("subordinate resource labels are not policy-bound")
+	}
+
+	changed := options
+	changed.Gateway.Image = "registry.example/loki-gateway@sha256:" + strings.Repeat("d", 64)
+	changedPolicy, err := NewPolicy(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedPlan, err := changedPolicy.Plan(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedPlan.PolicySHA256() != plan.PolicySHA256() ||
+		changedPlan.SandboxSHA256() == plan.SandboxSHA256() {
+		t.Fatalf("private policy fingerprint did not track gateway authority: %q %q", plan.SandboxSHA256(), changedPlan.SandboxSHA256())
+	}
+
+	endpointOnly := validWorkloadSpec()
+	endpointOnly.Endpoints = []EndpointSpec{{Name: "web", Port: 5173}}
+	endpointPlan, err := policy.Plan(endpointOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !endpointPlan.NeedsGateway() || endpointPlan.NeedsOutboundNetwork() ||
+		endpointPlan.OutboundNetworkName() != "" {
+		t.Fatalf("endpoint-only network plan = %#v", endpointPlan)
+	}
+}
+
 func TestPolicyAndPlanCopyCallerData(t *testing.T) {
 	options := validPolicyOptions()
 	options.Environment = []string{"A=one"}
@@ -201,7 +294,8 @@ func TestPolicyAndPlanCopyCallerData(t *testing.T) {
 	if plan.create.Env[0] != "A=one" || plan.create.Cmd[1] != "original" {
 		t.Fatalf("plan retained caller aliases: env=%#v argv=%#v", plan.create.Env, plan.create.Cmd)
 	}
-	if (Plan{}).Valid() || (Plan{}).Name() != "" || (Plan{}).PolicySHA256() != "" {
+	if (Plan{}).Valid() || (Plan{}).Name() != "" || (Plan{}).PolicySHA256() != "" ||
+		(Plan{}).SandboxSHA256() != "" || (Plan{}).NeedsGateway() {
 		t.Fatal("zero plan became valid")
 	}
 }

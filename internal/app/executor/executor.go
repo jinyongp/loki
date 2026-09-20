@@ -18,6 +18,7 @@ import (
 const maxRunTimeout = 24 * time.Hour
 
 type Runner interface {
+	jobs.Controller
 	Run(context.Context, jobs.RunRequest) (jobs.RunResult, error)
 }
 
@@ -30,6 +31,10 @@ type Options struct {
 	Ready      func() error
 }
 
+type jobRequest struct {
+	JobID string `json:"job_id"`
+}
+
 func Operations(runner Runner, timeout time.Duration) (map[string]rpc.Operation, error) {
 	if runner == nil {
 		return nil, errors.New("executor requires a job runner")
@@ -37,6 +42,7 @@ func Operations(runner Runner, timeout time.Duration) (map[string]rpc.Operation,
 	if timeout < time.Second || timeout > maxRunTimeout {
 		return nil, errors.New("executor run timeout is outside the supported range")
 	}
+	controlTimeout := min(timeout, 30*time.Second)
 	return map[string]rpc.Operation{
 		"run": {
 			Grant:   controlpolicy.Agent,
@@ -47,6 +53,50 @@ func Operations(runner Runner, timeout time.Duration) (map[string]rpc.Operation,
 					return nil, err
 				}
 				return runner.Run(ctx, request)
+			},
+		},
+		"start": {
+			Grant:   controlpolicy.Agent,
+			Timeout: controlTimeout,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				request, err := rpc.Decode[jobs.StartRequest](raw)
+				if err != nil {
+					return nil, err
+				}
+				return runner.Start(ctx, request)
+			},
+		},
+		"inspect": {
+			Grant:   controlpolicy.Agent,
+			Timeout: controlTimeout,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				request, err := rpc.Decode[jobRequest](raw)
+				if err != nil {
+					return nil, err
+				}
+				return runner.Inspect(ctx, request.JobID)
+			},
+		},
+		"output": {
+			Grant:   controlpolicy.Agent,
+			Timeout: controlTimeout,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				request, err := rpc.Decode[jobRequest](raw)
+				if err != nil {
+					return nil, err
+				}
+				return runner.Output(ctx, request.JobID)
+			},
+		},
+		"cancel": {
+			Grant:   controlpolicy.Agent,
+			Timeout: controlTimeout,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				request, err := rpc.Decode[jobRequest](raw)
+				if err != nil {
+					return nil, err
+				}
+				return runner.Cancel(ctx, request.JobID)
 			},
 		},
 	}, nil
