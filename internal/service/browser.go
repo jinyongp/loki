@@ -52,7 +52,7 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 	handlers := map[string]mcpserver.Handler{}
 	for tool, actions := range map[string]map[string]string{
 		"browser_session":  {"start": "start", "navigate": "navigate", "back": "back", "forward": "forward", "reload": "reload", "stop_loading": "stop_loading", "stop": "stop"},
-		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics", "dialog": "dialog_state"},
+		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics", "dialog": "dialog_state", "downloads": "downloads"},
 		"browser_interact": {"click": "click", "hover": "hover", "drag": "drag", "wheel": "wheel", "fill": "fill", "type": "type", "key": "key", "shortcut": "shortcut", "select_option": "select_option", "set_checked": "set_checked", "focus": "focus", "upload": "upload", "dialog": "handle_dialog", "switch_tab": "switch_tab", "close_tab": "close_tab"},
 	} {
 		handlers[tool] = func(ctx context.Context, args map[string]any) (*mcp.CallToolResult, error) {

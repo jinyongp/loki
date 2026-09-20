@@ -103,6 +103,8 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 				"failed": false, "finished": false, "encoded_bytes": nil,
 				"browser_generation": 3,
 			}, nil
+		case "downloads":
+			return sequenceResult("downloads"), nil
 		case "debug_diagnostics":
 			return map[string]any{
 				"summary": map[string]any{
@@ -236,7 +238,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			t.Fatalf("browser_session %s omitted generation: %#v", test.action, result)
 		}
 	}
-	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics", "dialog"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "switch_tab", "close_tab"}} {
+	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics", "dialog", "downloads"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
 			args := map[string]any{"action": action}
 			switch tool {
@@ -290,6 +292,9 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			}
 			if action == "diagnostics" {
 				want = "debug_diagnostics"
+			}
+			if action == "downloads" {
+				want = "downloads"
 			}
 			if action == "dialog" {
 				if tool == "browser_observe" {

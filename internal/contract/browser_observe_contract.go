@@ -214,6 +214,35 @@ func browserDiagnosticsSchema() map[string]any {
 	}
 }
 
+func browserDownloadsSchema() map[string]any {
+	item := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"download_id":        map[string]any{"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+			"state":              map[string]any{"type": "string", "enum": []string{"in_progress", "completed", "canceled"}},
+			"suggested_filename": map[string]any{"type": "string", "maxLength": 200},
+			"final_filename":     map[string]any{"anyOf": []any{map[string]any{"type": "string", "maxLength": 220}, map[string]any{"type": "null"}}},
+			"received_bytes":     map[string]any{"type": "number", "minimum": 0},
+			"total_bytes":        map[string]any{"type": "number", "minimum": 0},
+			"sequence":           map[string]any{"type": "integer", "minimum": 1},
+			"updated_at":         map[string]any{"type": "string"},
+		},
+		"required": []string{
+			"download_id", "state", "suggested_filename", "final_filename",
+			"received_bytes", "total_bytes", "sequence", "updated_at",
+		},
+	}
+	properties := browserObservationSequenceProperties("downloads", item)
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": properties,
+		"required": []string{
+			"downloads", "latest_sequence", "oldest_sequence", "next_sequence",
+			"retained", "complete", "browser_generation",
+		},
+	}
+}
+
 func browserDialogSchema() map[string]any {
 	generation := map[string]any{"type": "integer", "minimum": 0}
 	notPending := map[string]any{
@@ -309,12 +338,13 @@ func overrideBrowserObserve(tool *mcp.Tool) error {
 				"limit": {"maximum": 200, "default": 50},
 			}},
 			{Name: "dialog"},
+			{Name: "downloads", Optional: []string{"since_sequence", "limit"}},
 		},
 	}).Schema()
 	if err != nil {
 		return err
 	}
-	tool.Description = "Observe current browser/page state, pending JavaScript dialogs, or retained browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; dialog returns a monotonic dialog_generation; event-like results report sequence retention and complete/next_sequence truthfully."
+	tool.Description = "Observe current browser/page state, pending JavaScript dialogs, retained download status/history, or browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; dialog returns a monotonic dialog_generation; download/event-like results report sequence retention and complete/next_sequence truthfully."
 	tool.InputSchema = input
 	tool.OutputSchema = map[string]any{
 		"type": "object",
@@ -327,6 +357,7 @@ func overrideBrowserObserve(tool *mcp.Tool) error {
 			browserRequestSchema(),
 			browserDiagnosticsSchema(),
 			browserDialogSchema(),
+			browserDownloadsSchema(),
 		},
 	}
 	return nil

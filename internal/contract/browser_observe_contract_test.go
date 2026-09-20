@@ -41,7 +41,7 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		}
 	}
 	branches := input["oneOf"].([]any)
-	if len(branches) != 9 {
+	if len(branches) != 10 {
 		t.Fatalf("browser_observe branches = %#v", branches)
 	}
 	for _, raw := range branches {
@@ -52,6 +52,12 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		case "state", "tabs", "dialog":
 			if len(branchProperties) != 1 {
 				t.Fatalf("%s accepts filters: %#v", action, branchProperties)
+			}
+		case "downloads":
+			for name := range branchProperties {
+				if name != "action" && name != "since_sequence" && name != "limit" {
+					t.Fatalf("downloads accepts irrelevant filter %s", name)
+				}
 			}
 		case "console":
 			if _, exists := branchProperties["status_min"]; exists {
@@ -89,12 +95,13 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 8 {
+	if len(outputBranches) != 9 {
 		t.Fatalf("browser_observe output branches = %#v", outputBranches)
 	}
 	foundState := false
 	foundEvent := false
 	foundDialog := false
+	foundDownloads := false
 	for _, raw := range outputBranches {
 		branch := raw.(map[string]any)
 		if nested, ok := branch["oneOf"].([]any); ok {
@@ -127,6 +134,13 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 				t.Fatal("state output lacks browser_generation")
 			}
 		}
+		if _, ok := branchProperties["downloads"]; ok {
+			foundDownloads = true
+			downloadSchema := branchProperties["downloads"].(map[string]any)["items"].(map[string]any)
+			if downloadSchema["additionalProperties"] != false {
+				t.Fatalf("download item schema is open: %#v", downloadSchema)
+			}
+		}
 		if _, ok := branchProperties["complete"]; ok {
 			foundEvent = true
 			if _, ok := branchProperties["next_sequence"]; !ok {
@@ -134,7 +148,7 @@ func TestBrowserObserveUsesGenerationAndCompletenessAwareContract(t *testing.T) 
 			}
 		}
 	}
-	if !foundState || !foundEvent || !foundDialog {
-		t.Fatalf("browser observe outputs missing semantics: state=%v event=%v dialog=%v", foundState, foundEvent, foundDialog)
+	if !foundState || !foundEvent || !foundDialog || !foundDownloads {
+		t.Fatalf("browser observe outputs missing semantics: state=%v event=%v dialog=%v downloads=%v", foundState, foundEvent, foundDialog, foundDownloads)
 	}
 }

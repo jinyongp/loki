@@ -57,6 +57,8 @@ func TestBrowserObserveSchemaRejectsActionIrrelevantFilters(t *testing.T) {
 			return Object(map[string]any{
 				"pending": false, "dialog_generation": 0, "browser_generation": 1,
 			})
+		case "downloads":
+			return Object(observeEventResult("downloads"))
 		case "diagnostics":
 			return Object(map[string]any{
 				"summary": map[string]any{
@@ -84,6 +86,7 @@ func TestBrowserObserveSchemaRejectsActionIrrelevantFilters(t *testing.T) {
 		{"action": "errors", "since_sequence": 2, "limit": 500},
 		{"action": "diagnostics", "since_sequence": 2, "limit": 200},
 		{"action": "dialog"},
+		{"action": "downloads", "since_sequence": 2, "limit": 500},
 	}
 	for _, arguments := range valid {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_observe", Arguments: arguments})
@@ -106,6 +109,8 @@ func TestBrowserObserveSchemaRejectsActionIrrelevantFilters(t *testing.T) {
 		{"action": "errors", "failed_only": true},
 		{"action": "diagnostics", "limit": 201},
 		{"action": "dialog", "limit": 1},
+		{"action": "downloads", "level": "warning"},
+		{"action": "downloads", "limit": 501},
 	}
 	for _, arguments := range invalid {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_observe", Arguments: arguments})

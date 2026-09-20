@@ -467,6 +467,21 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 		result := d.observeDialog()
 		result["browser_generation"] = d.generation
 		return result, nil
+	case "downloads":
+		if d.downloads == nil {
+			return nil, errors.New("browser downloads are unavailable")
+		}
+		since, err := integer(args, "since_sequence", 0, 0, 2147483647)
+		if err != nil {
+			return nil, err
+		}
+		limit, err := integer(args, "limit", 100, 1, 500)
+		if err != nil {
+			return nil, err
+		}
+		result := d.downloads.Observe(int64(since), limit)
+		result["browser_generation"] = d.generation
+		return result, nil
 	case "handle_dialog":
 		result, err := d.handleDialog(ctx, args)
 		return d.finishInteraction(interactionGeneration, result, err)
