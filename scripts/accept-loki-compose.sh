@@ -91,6 +91,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 command -v "$docker" >/dev/null || die "Docker is required"
+"$docker" buildx version >/dev/null 2>&1 || die "Docker Buildx with BuildKit is required"
 command -v setfacl >/dev/null || die "setfacl is required"
 case $(uname -s) in Linux) ;; *) die "current acceptance target must be Linux or WSL2" ;; esac
 if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then host=wsl2; else host=linux; fi
@@ -141,7 +142,7 @@ life rollback
 test "$(cat "$state/current-image")" = "$image" || die "rollback image was not restored"
 
 base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
-"$docker" build --quiet \
+"$docker" buildx build --quiet --load \
   --build-arg "LOKI_BASE=$image" \
   --build-arg "LOKI_BASE_ID=$base_id" \
   --file "$repo/packaging/container/derived/Dockerfile" \

@@ -24,7 +24,8 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-docker build --quiet --tag "$IMAGE" "$SOURCE_DIR/packaging/go/acceptance"
+docker buildx version >/dev/null 2>&1 || { echo "Docker Buildx with BuildKit is required" >&2; exit 1; }
+docker buildx build --quiet --load --tag "$IMAGE" "$SOURCE_DIR/packaging/go/acceptance"
 
 pass=1
 passes=${LOKI_ACCEPTANCE_PASSES:-2}

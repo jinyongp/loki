@@ -35,6 +35,17 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 		}
 	}
 
+	candidateAcceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "accept-loki-go-candidate.sh"))
+	for _, required := range []string{"buildx version", "buildx build --quiet --load"} {
+		if !strings.Contains(candidateAcceptance, required) {
+			t.Errorf("Go candidate acceptance lacks %q", required)
+		}
+	}
+	acceptanceImage := readPortabilityFile(t, filepath.Join(root, "packaging", "go", "acceptance", "Dockerfile"))
+	if !strings.Contains(acceptanceImage, "FROM ubuntu:24.04@sha256:") {
+		t.Fatal("Go candidate acceptance image is not digest-pinned")
+	}
+
 	acceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "accept-loki-compose.sh"))
 	if !strings.Contains(acceptance, "current acceptance target must be Linux or WSL2") {
 		t.Fatal("current acceptance target is not explicit")

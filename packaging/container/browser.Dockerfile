@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+# syntax=docker/dockerfile:1.27.0@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e
 
 FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 ARG TARGETOS
@@ -18,10 +18,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags="-s -w -X loki/internal/buildinfo.Version=$LOKI_VERSION -X loki/internal/buildinfo.Commit=$LOKI_REVISION -X loki/internal/buildinfo.Date=$LOKI_DATE" \
       -o /out/loki ./cmd/loki
 
-FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+FROM alpine:3.24.2@sha256:31b6477333eb8257db9e5d7c3a7264fd0467928756f0bbcc27d35bea5d28cdbd
 ARG LOKI_VERSION
 ARG LOKI_REVISION
-ARG CHROMIUM_VERSION=142.0.7444.59-r0
+ARG CHROMIUM_VERSION=152.0.7977.82-r0
 LABEL org.opencontainers.image.title="Loki Browser" \
       org.opencontainers.image.version="$LOKI_VERSION" \
       org.opencontainers.image.revision="$LOKI_REVISION" \

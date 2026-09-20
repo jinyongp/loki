@@ -18,6 +18,26 @@ func TestRepositoryManifest(t *testing.T) {
 	if len(manifest.AptPackages) < 20 || len(manifest.Artifacts) != 6 {
 		t.Fatalf("manifest contents = %d packages, %d artifacts", len(manifest.AptPackages), len(manifest.Artifacts))
 	}
+	artifacts := make(map[string]Artifact, len(manifest.Artifacts))
+	for _, artifact := range manifest.Artifacts {
+		artifacts[artifact.Name] = artifact
+	}
+	for name, version := range map[string]string{
+		"gh":   "2.101.0",
+		"go":   "1.27.1",
+		"node": "26.9.0",
+		"pnpm": "12.5.1",
+	} {
+		if got := artifacts[name].Version; got != version {
+			t.Errorf("%s version = %q, want %q", name, got, version)
+		}
+	}
+	if _, ok := artifacts["node"].Links["corepack"]; ok {
+		t.Fatal("Node 26 manifest must not depend on removed bundled Corepack")
+	}
+	if pnpm := artifacts["pnpm"]; pnpm.Format != "tar.gz" || pnpm.Links["pnpm"] != "pnpm" {
+		t.Fatalf("pnpm 12 artifact contract = %#v", pnpm)
+	}
 }
 
 func TestManifestRejectsUnsafeInputs(t *testing.T) {
