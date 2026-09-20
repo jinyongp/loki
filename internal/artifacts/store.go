@@ -32,12 +32,16 @@ type item struct {
 }
 
 type Store struct {
-	mu      sync.Mutex
-	options Options
-	hosts   map[string]bool
-	items   map[string]item
-	order   []string
-	bytes   int
+	mu           sync.Mutex
+	replayMu     sync.Mutex
+	options      Options
+	hosts        map[string]bool
+	items        map[string]item
+	order        []string
+	bytes        int
+	requests     map[string]publishReplay
+	requestOrder []string
+	replayMax    int
 }
 
 func New(o Options) *Store {
@@ -51,7 +55,10 @@ func New(o Options) *Store {
 		o.Clock = time.Now
 	}
 	o.BaseURL = strings.TrimRight(o.BaseURL, "/")
-	s := &Store{options: o, hosts: map[string]bool{}, items: map[string]item{}}
+	s := &Store{
+		options: o, hosts: map[string]bool{}, items: map[string]item{},
+		requests: map[string]publishReplay{}, replayMax: max(64, o.MaxItems*16),
+	}
 	for _, h := range o.AllowedHosts {
 		s.hosts[strings.ToLower(h)] = true
 	}
@@ -154,11 +161,15 @@ func (s *Store) Revoke(token string) map[string]any {
 }
 
 func (s *Store) Clear() {
+	s.replayMu.Lock()
+	defer s.replayMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.items = map[string]item{}
 	s.order = nil
 	s.bytes = 0
+	s.requests = map[string]publishReplay{}
+	s.requestOrder = nil
 }
 
 func respond(w http.ResponseWriter, code int, message string) {

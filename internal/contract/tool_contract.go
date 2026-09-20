@@ -388,19 +388,22 @@ func githubIssueFieldsWriteTool() (*mcp.Tool, error) {
 
 func generatedToolOverrides() map[string]toolOverride {
 	return map[string]toolOverride{
-		"system_inspect":         overrideSystemInspect,
-		"preview_publish":        overridePreviewPublish,
-		"shared_resources":       overrideSharedResources,
-		"revoke_share":           overrideRevokeShare,
-		"browser_session":        overrideBrowserSession,
-		"browser_observe":        overrideBrowserObserve,
-		"browser_interact":       overrideBrowserInteract,
-		"workspace_read":         overrideWorkspaceRead,
-		"workspace_edit":         overrideWorkspaceEdit,
-		"restore_workspace_file": overrideRestoreWorkspaceFile,
-		"remove_tracked_file":    overrideRemoveTrackedFile,
-		"git_inspect":            overrideGitInspect,
-		"git_stage":              overrideGitStage,
+		"system_inspect":           overrideSystemInspect,
+		"preview_publish":          overridePreviewPublish,
+		"shared_resources":         overrideSharedResources,
+		"revoke_share":             overrideRevokeShare,
+		"browser_session":          overrideBrowserSession,
+		"browser_observe":          overrideBrowserObserve,
+		"browser_interact":         overrideBrowserInteract,
+		"browser_screenshot":       overrideBrowserScreenshot,
+		"browser_save_screenshot":  overrideBrowserSaveScreenshot,
+		"browser_share_screenshot": overrideBrowserShareScreenshot,
+		"workspace_read":           overrideWorkspaceRead,
+		"workspace_edit":           overrideWorkspaceEdit,
+		"restore_workspace_file":   overrideRestoreWorkspaceFile,
+		"remove_tracked_file":      overrideRemoveTrackedFile,
+		"git_inspect":              overrideGitInspect,
+		"git_stage":                overrideGitStage,
 	}
 }
 

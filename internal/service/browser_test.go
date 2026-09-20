@@ -323,6 +323,11 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	if image, ok := shot.Content[0].(*mcp.ImageContent); !ok || !bytes.Equal(image.Data, data) || image.MIMEType != "image/png" {
 		t.Fatal(shot)
 	}
+	shotMetadata := decode(shot)
+	if shotMetadata["path"] != "browser://active-tab" || shotMetadata["mime_type"] != "image/png" ||
+		shotMetadata["sha256"] != workspace.Digest(data) || shotMetadata["full_page"] != false {
+		t.Fatalf("browser screenshot metadata = %#v", shotMetadata)
+	}
 	saved := decode(call("browser_save_screenshot", map[string]any{"path": "shots/current.png", "full_page": true}))
 	if saved["full_page"] != true || saved["sha256"] != workspace.Digest(data) || saved["previous_revision"] != nil {
 		t.Fatal(saved)
@@ -348,14 +353,35 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	if !bytes.Contains(encoded, []byte("browser_save_screenshot")) {
 		t.Fatal(string(encoded))
 	}
-	shared := decode(call("browser_share_screenshot", map[string]any{"full_page": true}))
+	shareRequestID := "77000000-0000-4000-8000-000000000001"
+	beforeShare := captureCount
+	shared := decode(call("browser_share_screenshot", map[string]any{"request_id": shareRequestID, "full_page": true}))
+	if captureCount != beforeShare+1 || shared["share_id"] == nil {
+		t.Fatalf("share capture/result = count %d -> %d, %#v", beforeShare, captureCount, shared)
+	}
 	w := httptest.NewRecorder()
 	store.ServeHTTP(w, httptest.NewRequest("GET", shared["url"].(string), nil))
 	if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), data) || shared["path"] != "browser://active-tab" || shared["full_page"] != true {
 		t.Fatal(w.Code, shared)
 	}
-	before := captureCount
-	if result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_share_screenshot", Arguments: map[string]any{"ttl_seconds": 1}}); err != nil || !result.IsError || captureCount != before {
+	replayed := decode(call("browser_share_screenshot", map[string]any{"request_id": shareRequestID, "full_page": true}))
+	if captureCount != beforeShare+1 || replayed["share_id"] != shared["share_id"] || replayed["url"] != shared["url"] {
+		t.Fatalf("share replay = count=%d first=%#v replay=%#v", captureCount, shared, replayed)
+	}
+	beforeConflict := captureCount
+	conflict, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_share_screenshot", Arguments: map[string]any{
+		"request_id": shareRequestID, "full_page": false,
+	}})
+	if err != nil || !conflict.IsError || captureCount != beforeConflict {
+		t.Fatalf("changed request_id inputs did not conflict before capture: result=%#v err=%v count=%d", conflict, err, captureCount)
+	}
+	if detail := conflict.Meta["loki/error"].(map[string]any); detail["code"] != "conflict" {
+		t.Fatalf("share replay conflict = %#v", detail)
+	}
+	beforeInvalid := captureCount
+	if result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_share_screenshot", Arguments: map[string]any{
+		"request_id": "77000000-0000-4000-8000-000000000002", "ttl_seconds": 1,
+	}}); err != nil || !result.IsError || captureCount != beforeInvalid {
 		t.Fatal("invalid TTL captured screenshot", err)
 	}
 }
