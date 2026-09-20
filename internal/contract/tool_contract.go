@@ -409,6 +409,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"agent_guidance":             overrideAgentGuidance,
 		"project_coordination":       overrideProjectCoordination,
 		"project_coordination_write": overrideProjectCoordinationWrite,
+		"github":                     overrideGitHub,
 		"workspace_read":             overrideWorkspaceRead,
 		"workspace_edit":             overrideWorkspaceEdit,
 		"restore_workspace_file":     overrideRestoreWorkspaceFile,

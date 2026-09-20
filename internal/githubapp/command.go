@@ -40,6 +40,24 @@ type CommandRunner struct {
 	Supervisor process.Supervisor
 }
 
+const (
+	MaxCommandArguments          = 128
+	MaxCommandArgumentBytes      = 8192
+	MaxCommandArgumentTotalBytes = 65536
+	MaxCommandInputBytes         = 16 << 20
+)
+
+type CommandCapabilities struct {
+	CommandGroups       []string
+	SearchSubcommands   []string
+	ProhibitedFlags     []string
+	MaxArguments        int
+	MaxArgumentBytes    int
+	MaxArgumentTotal    int
+	MaxInputBytes       int
+	RepositoryTokenOnly bool
+}
+
 var repositoryCommandGroups = map[string]bool{
 	"api": true, "attestation": true, "cache": true, "issue": true, "label": true,
 	"pr": true, "release": true, "repo": true, "ruleset": true, "run": true,
@@ -49,6 +67,34 @@ var repositoryCommandGroups = map[string]bool{
 var prohibitedCommandFlags = map[string]bool{
 	"-R": true, "--repo": true, "--hostname": true, "--org": true,
 	"--web": true, "--editor": true, "--browser": true,
+}
+
+var repositorySearchSubcommands = map[string]bool{
+	"code": true, "commits": true, "issues": true, "prs": true,
+}
+
+func RepositoryCommandCapabilities() CommandCapabilities {
+	groups := make([]string, 0, len(repositoryCommandGroups))
+	for name := range repositoryCommandGroups {
+		groups = append(groups, name)
+	}
+	sort.Strings(groups)
+	search := make([]string, 0, len(repositorySearchSubcommands))
+	for name := range repositorySearchSubcommands {
+		search = append(search, name)
+	}
+	sort.Strings(search)
+	flags := make([]string, 0, len(prohibitedCommandFlags))
+	for name := range prohibitedCommandFlags {
+		flags = append(flags, name)
+	}
+	sort.Strings(flags)
+	return CommandCapabilities{
+		CommandGroups: groups, SearchSubcommands: search, ProhibitedFlags: flags,
+		MaxArguments: MaxCommandArguments, MaxArgumentBytes: MaxCommandArgumentBytes,
+		MaxArgumentTotal: MaxCommandArgumentTotalBytes, MaxInputBytes: MaxCommandInputBytes,
+		RepositoryTokenOnly: true,
+	}
 }
 
 func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (process.Result, error) {
@@ -99,7 +145,7 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 func (r *CommandRunner) validate(request CommandRequest) error {
 	if r == nil || r.Tokens == nil || !filepath.IsAbs(r.Config.Binary) || !filepath.IsAbs(r.Config.CWD) ||
 		r.Config.Timeout <= 0 || r.Config.Timeout > 10*time.Minute ||
-		r.Config.MaxInputBytes <= 0 || r.Config.MaxInputBytes > 16<<20 ||
+		r.Config.MaxInputBytes <= 0 || r.Config.MaxInputBytes > MaxCommandInputBytes ||
 		r.Config.MaxOutputBytes <= 0 || r.Config.MaxOutputBytes > 16<<20 {
 		return errors.New("GitHub command runner is not configured")
 	}
@@ -109,13 +155,13 @@ func (r *CommandRunner) validate(request CommandRequest) error {
 	if len(request.Input) > r.Config.MaxInputBytes {
 		return errors.New("GitHub command input is too large")
 	}
-	if len(request.Args) == 0 || len(request.Args) > 128 || !repositoryCommandGroups[request.Args[0]] {
+	if len(request.Args) == 0 || len(request.Args) > MaxCommandArguments || !repositoryCommandGroups[request.Args[0]] {
 		return errors.New("GitHub command is not allowed")
 	}
 	total := 0
 	for index, argument := range request.Args {
 		total += len(argument)
-		if argument == "" || strings.IndexByte(argument, 0) >= 0 || len(argument) > 8192 || total > 65536 {
+		if argument == "" || strings.IndexByte(argument, 0) >= 0 || len(argument) > MaxCommandArgumentBytes || total > MaxCommandArgumentTotalBytes {
 			return errors.New("GitHub command arguments are invalid")
 		}
 		if index == 0 {
@@ -140,7 +186,7 @@ func scopedCommandArguments(target string, arguments []string) ([]string, error)
 	if len(result) == 0 || result[0] != "search" {
 		return result, nil
 	}
-	if len(result) < 2 || !map[string]bool{"code": true, "commits": true, "issues": true, "prs": true}[result[1]] {
+	if len(result) < 2 || !repositorySearchSubcommands[result[1]] {
 		return nil, errors.New("GitHub search command is not repository-scoped")
 	}
 	return append(result, "--repo", target), nil

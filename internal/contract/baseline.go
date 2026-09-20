@@ -12,7 +12,7 @@ import (
 var currentJSON []byte
 
 const (
-	CatalogRevision   = "2026-09-20.24"
+	CatalogRevision   = "2026-09-20.25"
 	snapshotToolCount = 31
 )
 

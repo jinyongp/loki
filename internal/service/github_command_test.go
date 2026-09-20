@@ -48,11 +48,15 @@ func TestGitHubCommandMCPBuildsNarrowRequest(t *testing.T) {
 	runtime := &captureRuntime{}
 	handler := GitHubCommandHandlers(runtime)["github"]
 	result, err := handler(t.Context(), map[string]any{
-		"target": "owner/repo", "args": []any{"issue", "list"}, "input": "body",
+		"target": "owner/repo", "command": "issue", "args": []any{"list"}, "input": "body",
 	})
 	if err != nil || result == nil || runtime.request["operation"] != "github_command" ||
 		runtime.request["target"] != "owner/repo" || runtime.request["input"] != "body" {
 		t.Fatal(result, err, runtime.request)
+	}
+	arguments, ok := runtime.request["args"].([]string)
+	if !ok || len(arguments) != 2 || arguments[0] != "issue" || arguments[1] != "list" {
+		t.Fatalf("runtime GitHub arguments = %#v", runtime.request["args"])
 	}
 	if _, exists := runtime.request["token"]; exists {
 		t.Fatal("credential field forwarded")
