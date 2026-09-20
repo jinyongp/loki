@@ -10,6 +10,10 @@
     },
     {
       "from": "loki/cmd/loki-executor",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/cmd/loki-executor",
       "to": "loki/internal/work/jobs"
     },
     {
@@ -26,7 +30,15 @@
     },
     {
       "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/cmd/loki-launcher",
       "to": "loki/internal/platform/sandbox"
+    },
+    {
+      "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/work/jobs"
     },
     {
       "from": "loki/cmd/loki",
@@ -117,6 +129,10 @@
       "to": "loki/internal/toolchain"
     },
     {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/work/jobs/remote"
+    },
+    {
       "from": "loki/internal/app/executor",
       "to": "loki/internal/control/identity"
     },
@@ -161,12 +177,28 @@
       "to": "loki/internal/rpc"
     },
     {
+      "from": "loki/internal/app/launcher",
+      "to": "loki/internal/work/jobs"
+    },
+    {
       "from": "loki/internal/admin",
       "to": "loki/internal/fault"
     },
     {
       "from": "loki/internal/admin",
       "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/internal/agentcontext",
+      "to": "loki/internal/gitops"
+    },
+    {
+      "from": "loki/internal/agentcontext",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/agentcontext",
+      "to": "loki/internal/policy"
     },
     {
       "from": "loki/internal/auth",
@@ -191,6 +223,14 @@
     {
       "from": "loki/internal/browser",
       "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/browser",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/contract",
+      "to": "loki/internal/githubapp"
     },
     {
       "from": "loki/internal/devtools",
@@ -301,6 +341,10 @@
       "to": "loki/internal/fault"
     },
     {
+      "from": "loki/internal/work/jobs",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
       "from": "loki/internal/work/jobs/remote",
       "to": "loki/internal/rpc"
     },
@@ -375,6 +419,12 @@
       "reason": "devtools adapter brokers secrets directly",
       "remove_unit": "A04/S04",
       "to": "loki/internal/secret"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/agentcontext"
     },
     {
       "from": "loki/internal/service",
@@ -512,6 +562,12 @@
       "from": "loki/internal/service",
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
+      "to": "loki/internal/work/jobs"
+    },
+    {
+      "from": "loki/internal/service",
+      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
+      "remove_unit": "S03/S04/S05",
       "to": "loki/internal/workspace"
     }
   ],
@@ -552,6 +608,12 @@
       "owner": "host-control",
       "tags": [],
       "target": "host + control/credentials + transport/cli"
+    },
+    "loki/internal/agentcontext": {
+      "kind": "work",
+      "owner": "agent-context",
+      "tags": [],
+      "target": "work/agentcontext"
     },
     "loki/internal/artifacts": {
       "kind": "integration",
@@ -836,7 +898,7 @@
     "loki/internal/work/jobs/remote": {
       "kind": "work-adapter",
       "owner": "jobs",
-      "tags": ["project-execution-local"],
+      "tags": [],
       "target": "work/jobs/remote"
     },
     "loki/internal/workspace": {
