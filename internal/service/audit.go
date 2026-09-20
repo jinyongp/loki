@@ -9,12 +9,8 @@ import (
 )
 
 func AuditOperations(log *audit.Log) map[string]rpc.Operation {
-	return map[string]rpc.Operation{"audit": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r struct{ Limit *int }) (map[string]any, error) {
-		limit := 50
-		if r.Limit != nil {
-			limit = *r.Limit
-		}
-		return log.Read(limit)
+	return map[string]rpc.Operation{"audit": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(_ context.Context, r pageInput) (map[string]any, error) {
+		return log.ReadPage(r.Offset, r.Limit)
 	})}}
 }
 

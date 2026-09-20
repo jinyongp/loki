@@ -138,7 +138,12 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		t.Fatal("schema default byte count changed")
 	}
 	call("secret_write", map[string]any{"action": "set", "profile": "web", "secret": "PUBLIC_API", "value": "http://127.0.0.1:41280"}, "")
+	profiles := call("secret_inspect", map[string]any{"action": "profiles", "offset": 0, "limit": 1}, "")
 	profile := call("secret_inspect", map[string]any{"action": "profile", "profile": "web"}, "")
+	if profiles["revision"] != profile["revision"] || profiles["total"] != float64(1) ||
+		profiles["has_more"] != false || profiles["next_offset"] != nil || profiles["complete"] != true {
+		t.Fatalf("secret metadata pagination/revision = profiles=%#v profile=%#v", profiles, profile)
+	}
 	foundToken := false
 	for _, name := range profile["secret_names"].([]any) {
 		foundToken = foundToken || name == "TOKEN"

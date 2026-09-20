@@ -19,6 +19,7 @@ type secretRequest struct {
 	ImportID *string `json:"import_id"`
 	Value    *string `json:"value"`
 	Bytes    int     `json:"bytes"`
+	Offset   int     `json:"offset"`
 	Limit    int     `json:"limit"`
 }
 
@@ -29,8 +30,10 @@ func SecretHandlers(client RuntimeCaller) map[string]mcpserver.Handler {
 			switch r.Action {
 			case "profiles":
 				request["operation"] = "list_profiles"
+				request["offset"], request["limit"] = r.Offset, r.Limit
 			case "imports":
 				request["operation"] = "list_imports"
+				request["offset"], request["limit"] = r.Offset, r.Limit
 			case "profile":
 				name, err := mcpserver.Require(r.Profile, "profile")
 				if err != nil {
@@ -42,7 +45,7 @@ func SecretHandlers(client RuntimeCaller) map[string]mcpserver.Handler {
 				request["operation"] = "status"
 			case "audit":
 				request["operation"] = "audit"
-				request["limit"] = r.Limit
+				request["offset"], request["limit"] = r.Offset, r.Limit
 			default:
 				return nil, fault.Error("secret_inspect action must be profiles, imports, profile, status, or audit")
 			}
@@ -123,6 +126,10 @@ func runtimeTyped[T any](handler func(context.Context, T) (map[string]any, error
 type profileInput struct {
 	Profile string `json:"profile"`
 }
+type pageInput struct {
+	Offset int `json:"offset"`
+	Limit  int `json:"limit"`
+}
 type secretInput struct {
 	Profile string  `json:"profile"`
 	Secret  string  `json:"secret"`
@@ -154,10 +161,14 @@ func SecretOperations(c secret.Controller) map[string]rpc.Operation {
 		})
 	}
 	ops := map[string]rpc.Operation{
-		"init":          {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Initialize(ctx) }},
-		"list_profiles": {Grant: controlpolicy.Agent, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Profiles(ctx) }},
-		"list_imports":  {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return c.ListImports() }},
-		"get_profile":   {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) { return c.Profile(ctx, r.Profile) })},
+		"init": {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, _ json.RawMessage) (any, error) { return c.Initialize(ctx) }},
+		"list_profiles": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r pageInput) (map[string]any, error) {
+			return c.ProfilesPage(ctx, r.Offset, r.Limit)
+		})},
+		"list_imports": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(_ context.Context, r pageInput) (map[string]any, error) {
+			return c.ListImportsPage(r.Offset, r.Limit)
+		})},
+		"get_profile": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) { return c.Profile(ctx, r.Profile) })},
 		"profile_create": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r profileInput) (map[string]any, error) {
 			return c.CreateProfile(ctx, r.Profile)
 		})},

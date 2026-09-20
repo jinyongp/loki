@@ -91,11 +91,18 @@ func (c Controller) checkInbox() error {
 	}
 	return nil
 }
-func (c Controller) ListImports() (map[string]any, error) {
+func (c Controller) ListImportsPage(offset, limit int) (map[string]any, error) {
 	items := []map[string]any{}
 	if err := c.checkInbox(); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return map[string]any{"imports": items}, nil
+			_, _, pageLimit, _, _, pageErr := pageRange(0, offset, limit, 200)
+			if pageErr != nil {
+				return nil, pageErr
+			}
+			return map[string]any{
+				"imports": items, "offset": 0, "limit": pageLimit, "has_more": false,
+				"next_offset": nil, "total": 0, "complete": true,
+			}, nil
 		}
 		return nil, err
 	}
@@ -114,8 +121,25 @@ func (c Controller) ListImports() (map[string]any, error) {
 		}
 		items = append(items, map[string]any{"import_id": strings.TrimSuffix(name, ".env"), "bytes": info.Size(), "created_at": float64(info.ModTime().UnixNano()) / 1e9})
 	}
-	sort.SliceStable(items, func(i, j int) bool { return items[i]["created_at"].(float64) < items[j]["created_at"].(float64) })
-	return map[string]any{"imports": items}, nil
+	sort.SliceStable(items, func(i, j int) bool {
+		left, right := items[i]["created_at"].(float64), items[j]["created_at"].(float64)
+		if left == right {
+			return items[i]["import_id"].(string) < items[j]["import_id"].(string)
+		}
+		return left < right
+	})
+	start, end, pageLimit, hasMore, nextOffset, err := pageRange(len(items), offset, limit, 200)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"imports": items[start:end], "offset": start, "limit": pageLimit,
+		"has_more": hasMore, "next_offset": nextOffset, "total": len(items), "complete": true,
+	}, nil
+}
+
+func (c Controller) ListImports() (map[string]any, error) {
+	return c.ListImportsPage(0, 200)
 }
 func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[string]any, error) {
 	if err := applicationProfileName(name); err != nil {

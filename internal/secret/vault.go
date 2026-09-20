@@ -33,12 +33,41 @@ func (c Controller) Initialize(ctx context.Context) (map[string]any, error) {
 	}
 	return map[string]any{"initialized": true, "created": created}, nil
 }
-func (c Controller) load(ctx context.Context) (document, error) {
+func (c Controller) loadSnapshot(ctx context.Context) (document, uint64, error) {
 	snapshot, err := c.backend().Load(ctx)
 	if err != nil {
-		return nil, publicStateError(err)
+		return nil, 0, publicStateError(err)
 	}
-	return decode(snapshot.Data)
+	document, err := decode(snapshot.Data)
+	if err != nil {
+		return nil, 0, err
+	}
+	return document, snapshot.Revision, nil
+}
+
+func (c Controller) load(ctx context.Context) (document, error) {
+	document, _, err := c.loadSnapshot(ctx)
+	return document, err
+}
+
+func pageRange(total, offset, limit, maxLimit int) (int, int, int, bool, any, error) {
+	if offset < 0 {
+		return 0, 0, 0, false, nil, fault.Error("offset must be non-negative")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > maxLimit {
+		return 0, 0, 0, false, nil, fault.Error("limit exceeds maximum")
+	}
+	start := min(offset, total)
+	end := min(start+limit, total)
+	hasMore := end < total
+	var next any
+	if hasMore {
+		next = end
+	}
+	return start, end, limit, hasMore, next, nil
 }
 func (c Controller) mutate(ctx context.Context, change func(document) (map[string]any, error)) (map[string]any, error) {
 	var result map[string]any
@@ -75,8 +104,8 @@ func profileMetadata(name string, value map[string]any) map[string]any {
 	}
 	return map[string]any{"name": name, "secret_names": keys(secrets), "secret_count": len(secrets), "configured_secret_count": len(secrets) - len(empty), "empty_secret_names": empty}
 }
-func (c Controller) Profiles(ctx context.Context) (map[string]any, error) {
-	document, err := c.load(ctx)
+func (c Controller) ProfilesPage(ctx context.Context, offset, limit int) (map[string]any, error) {
+	document, revision, err := c.loadSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +117,26 @@ func (c Controller) Profiles(ctx context.Context) (map[string]any, error) {
 		}
 		items = append(items, profileMetadata(name, object(profiles[name])))
 	}
-	return map[string]any{"profiles": items}, nil
+	start, end, pageLimit, hasMore, nextOffset, err := pageRange(len(items), offset, limit, MaxProfiles)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"profiles": items[start:end], "revision": revision,
+		"offset": start, "limit": pageLimit, "has_more": hasMore,
+		"next_offset": nextOffset, "total": len(items), "complete": true,
+	}, nil
 }
+
+func (c Controller) Profiles(ctx context.Context) (map[string]any, error) {
+	return c.ProfilesPage(ctx, 0, MaxProfiles)
+}
+
 func (c Controller) Profile(ctx context.Context, name string) (map[string]any, error) {
 	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
-	document, err := c.load(ctx)
+	document, revision, err := c.loadSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +144,9 @@ func (c Controller) Profile(ctx context.Context, name string) (map[string]any, e
 	if err != nil {
 		return nil, err
 	}
-	return profileMetadata(name, value), nil
+	result := profileMetadata(name, value)
+	result["revision"] = revision
+	return result, nil
 }
 func (c Controller) CreateProfile(ctx context.Context, name string) (map[string]any, error) {
 	if err := applicationProfileName(name); err != nil {

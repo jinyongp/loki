@@ -206,8 +206,12 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 				}
 			}
 		}
+		revision, ok := profiles["revision"].(uint64)
+		if !ok {
+			return nil, errors.New("invalid vault revision response")
+		}
 		return map[string]any{
-			"initialized": true, "profiles": len(items), "policy_generation": generation.Metadata(),
+			"initialized": true, "profiles": len(items), "revision": revision, "policy_generation": generation.Metadata(),
 			"devtools": devtoolsCandidate,
 			"github": map[string]any{
 				"configured": c.GitHubAppID != 0, "installation_count": len(c.GitHubInstallations),
