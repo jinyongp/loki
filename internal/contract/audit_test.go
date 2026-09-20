@@ -14,11 +14,11 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	want := ContractAudit{
 		ToolCount:              32,
 		ActionUnionCount:       19,
-		FlatActionUnionCount:   6,
-		InputPropertyCount:     184,
-		DescribedPropertyCount: 136,
+		FlatActionUnionCount:   4,
+		InputPropertyCount:     189,
+		DescribedPropertyCount: 150,
 		MissingOutputSchema:    1,
-		OpenOutputSchema:       6,
+		OpenOutputSchema:       4,
 		MissingAnnotations:     1,
 	}
 	if audit.ToolCount != want.ToolCount ||
@@ -37,7 +37,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		"browser_session": true, "browser_observe": true, "browser_interact": true,
 		"browser_screenshot": true, "browser_save_screenshot": true, "browser_share_screenshot": true,
 		"read_image": true, "share_image": true, "artifact_publish": true, "write_image": true,
-		"secret_inspect": true,
+		"secret_inspect": true, "secret_write": true, "secret_delete": true,
 		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
 		"git_inspect": true, "git_stage": true,
@@ -52,7 +52,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 				issue.Tool == "browser_session" || issue.Tool == "browser_observe" || issue.Tool == "browser_interact" ||
 				issue.Tool == "browser_screenshot" || issue.Tool == "browser_save_screenshot" || issue.Tool == "browser_share_screenshot" ||
 				issue.Tool == "read_image" || issue.Tool == "share_image" || issue.Tool == "write_image" ||
-				issue.Tool == "secret_inspect" ||
+				issue.Tool == "secret_inspect" || issue.Tool == "secret_write" || issue.Tool == "secret_delete" ||
 				issue.Tool == "workspace_read" || issue.Tool == "workspace_edit" ||
 				issue.Tool == "restore_workspace_file" || issue.Tool == "remove_tracked_file" ||
 				issue.Tool == "git_inspect" || issue.Tool == "git_stage")) {

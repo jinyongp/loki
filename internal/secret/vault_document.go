@@ -19,15 +19,19 @@ func faultSecrets() error  { return fault.Error("secret collection is invalid") 
 func faultSecret() error   { return fault.Error("secret value is invalid") }
 
 const (
-	MaxProfiles    = 128
-	MaxSecrets     = 512
-	MaxSecretBytes = 1_048_576
+	MaxProfiles          = 128
+	MaxSecrets           = 512
+	MaxSecretBytes       = 1_048_576
+	MaxReplayRequests    = 256
+	MaxReplayResultBytes = 16 * 1024
 )
 
 var (
-	profilePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
-	secretPattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,127}$`)
-	idPattern      = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	profilePattern     = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	secretPattern      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,127}$`)
+	idPattern          = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	requestIDPattern   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	fingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 type document map[string]any
@@ -66,10 +70,55 @@ func decode(data json.RawMessage) (document, error) {
 	return value, nil
 }
 func Validate(data json.RawMessage) error { _, err := decode(data); return err }
+
+func validateReplayRequests(value document) error {
+	raw, exists := value["requests"]
+	if !exists {
+		return nil
+	}
+	requests := object(raw)
+	if requests == nil || len(requests) > MaxReplayRequests {
+		return faultSchema()
+	}
+	for requestID, rawRecord := range requests {
+		if !requestIDPattern.MatchString(requestID) {
+			return faultSchema()
+		}
+		record := object(rawRecord)
+		if record == nil || len(record) != 3 {
+			return faultSchema()
+		}
+		fingerprint, ok := record["fingerprint"].(string)
+		if !ok || !fingerprintPattern.MatchString(fingerprint) {
+			return faultSchema()
+		}
+		revision, ok := record["revision"].(json.Number)
+		if !ok {
+			return faultSchema()
+		}
+		revisionValue, err := revision.Int64()
+		if err != nil || revisionValue < 1 {
+			return faultSchema()
+		}
+		resultJSON, ok := record["result_json"].(string)
+		if !ok || len(resultJSON) > MaxReplayResultBytes || !utf8.ValidString(resultJSON) || !json.Valid([]byte(resultJSON)) {
+			return faultSchema()
+		}
+		var result map[string]any
+		if json.Unmarshal([]byte(resultJSON), &result) != nil || result == nil {
+			return faultSchema()
+		}
+	}
+	return nil
+}
+
 func validateDocument(value document) error {
 	version, ok := value["version"].(json.Number)
-	if !ok || version.String() != "1" || len(value) != 2 {
+	if !ok || version.String() != "1" || (len(value) != 2 && len(value) != 3) {
 		return faultSchema()
+	}
+	if err := validateReplayRequests(value); err != nil {
+		return err
 	}
 	profiles := object(value["profiles"])
 	if profiles == nil || len(profiles) > MaxProfiles {

@@ -57,11 +57,26 @@ func TestSecretMCPRejectsManagedProfile(t *testing.T) {
 		args map[string]any
 	}{
 		{"secret_inspect", map[string]any{"action": "profile", "profile": "github-app"}},
-		{"secret_write", map[string]any{"action": "create_profile", "profile": "github-app"}},
-		{"secret_write", map[string]any{"action": "set", "profile": "github-app", "secret": "PRIVATE_KEY", "value": "replacement"}},
-		{"secret_write", map[string]any{"action": "generate", "profile": "github-app", "secret": "OTHER"}},
-		{"secret_delete", map[string]any{"action": "secret", "profile": "github-app", "secret": "PRIVATE_KEY"}},
-		{"secret_delete", map[string]any{"action": "profile", "profile": "github-app"}},
+		{"secret_write", map[string]any{
+			"action": "create_profile", "profile": "github-app", "expected_revision": 2,
+			"request_id": "84000000-0000-4000-8000-000000000001",
+		}},
+		{"secret_write", map[string]any{
+			"action": "set_public", "profile": "github-app", "name": "PUBLIC_KEY", "value": "replacement",
+			"expected_revision": 2, "request_id": "84000000-0000-4000-8000-000000000002",
+		}},
+		{"secret_write", map[string]any{
+			"action": "generate", "profile": "github-app", "secret": "OTHER",
+			"expected_revision": 2, "request_id": "84000000-0000-4000-8000-000000000003",
+		}},
+		{"secret_delete", map[string]any{
+			"action": "secret", "profile": "github-app", "secret": "PRIVATE_KEY",
+			"expected_revision": 2, "request_id": "84000000-0000-4000-8000-000000000004",
+		}},
+		{"secret_delete", map[string]any{
+			"action": "profile", "profile": "github-app", "expected_revision": 2,
+			"request_id": "84000000-0000-4000-8000-000000000005",
+		}},
 	} {
 		result, callErr := clientSession.CallTool(t.Context(), &mcp.CallToolParams{Name: request.name, Arguments: request.args})
 		if callErr != nil {

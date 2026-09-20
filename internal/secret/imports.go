@@ -141,7 +141,7 @@ func (c Controller) ListImportsPage(offset, limit int) (map[string]any, error) {
 func (c Controller) ListImports() (map[string]any, error) {
 	return c.ListImportsPage(0, 200)
 }
-func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[string]any, error) {
+func (c Controller) importStagedExpected(ctx context.Context, name, id string, expected *uint64) (map[string]any, error) {
 	if err := applicationProfileName(name); err != nil {
 		return nil, err
 	}
@@ -190,7 +190,12 @@ func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	result, err := c.ImportValues(ctx, name, values)
+	var result map[string]any
+	if expected == nil {
+		result, err = c.ImportValues(ctx, name, values)
+	} else {
+		result, err = c.ImportValuesExpected(ctx, name, values, *expected)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -215,5 +220,134 @@ func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[stri
 	}
 	result["import_id"] = id
 	result["source_deleted"] = true
+	return result, nil
+}
+
+func (c Controller) ImportStaged(ctx context.Context, name, id string) (map[string]any, error) {
+	return c.importStagedExpected(ctx, name, id, nil)
+}
+
+func (c Controller) ImportStagedExpected(ctx context.Context, name, id string, expectedRevision uint64) (map[string]any, error) {
+	return c.importStagedExpected(ctx, name, id, &expectedRevision)
+}
+
+func (c Controller) ImportStagedRequest(ctx context.Context, name, id, requestID string, expectedRevision uint64) (map[string]any, error) {
+	if err := applicationProfileName(name); err != nil {
+		return nil, err
+	}
+	if !idPattern.MatchString(id) {
+		return nil, fault.Error("invalid secret import ID")
+	}
+	requestID, err := normalizeMutationRequestID(requestID)
+	if err != nil {
+		return nil, err
+	}
+	fingerprint := mutationFingerprint("import_staged_env", expectedRevision, name, id)
+
+	current, revision, err := c.loadSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if replay, ok, replayErr := replayMutation(current, requestID, fingerprint); ok || replayErr != nil {
+		return replay, replayErr
+	}
+	if revision != expectedRevision {
+		return nil, secretMutationConflict("secret vault revision changed")
+	}
+	if err = c.checkInbox(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fault.Error("unknown secret import")
+		}
+		return nil, err
+	}
+	release, err := state.LockFile(ctx, filepath.Join(c.inbox(), "imports.lock"))
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	current, revision, err = c.loadSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if replay, ok, replayErr := replayMutation(current, requestID, fingerprint); ok || replayErr != nil {
+		return replay, replayErr
+	}
+	if revision != expectedRevision {
+		return nil, secretMutationConflict("secret vault revision changed")
+	}
+
+	path := filepath.Join(c.inbox(), id+".env")
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fault.Error("unknown secret import")
+		}
+		return nil, err
+	}
+	f := os.NewFile(uintptr(fd), path)
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Geteuid()) || info.Size() < 1 || info.Size() > MaxInboxBytes {
+		return nil, fault.Error("staged dotenv file has unsafe ownership or permissions")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, MaxInboxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > MaxInboxBytes {
+		return nil, fault.Error("staged dotenv file is too large")
+	}
+	if !utf8.Valid(raw) {
+		return nil, fault.Error("staged dotenv file must be UTF-8")
+	}
+	values, err := ParseDotenv(string(raw))
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(values))
+	for key := range values {
+		names = append(names, key)
+	}
+	sort.Strings(names)
+
+	result, err := c.mutateRequest(ctx, requestID, fingerprint, expectedRevision, func(document document) (map[string]any, error) {
+		valueProfile, profileErr := profile(document, name)
+		if profileErr != nil {
+			return nil, profileErr
+		}
+		secrets := object(valueProfile["secrets"])
+		for key, value := range values {
+			secrets[key] = value
+		}
+		return map[string]any{
+			"profile": name, "import_id": id, "imported": names, "count": len(names),
+		}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	currentInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, currentInfo) {
+		return nil, fault.Error("staged dotenv source changed during import")
+	}
+	if err = os.Remove(path); err != nil {
+		return nil, err
+	}
+	dir, err := os.Open(c.inbox())
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	if err = dir.Sync(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }

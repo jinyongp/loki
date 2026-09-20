@@ -21,10 +21,14 @@ func (c Controller) backend() state.Store {
 	return state.Store{Dir: c.StateDirectory, Validate: Validate}
 }
 func publicStateError(err error) error {
-	if errors.Is(err, state.ErrUninitialized) || errors.Is(err, state.ErrDecrypt) || errors.Is(err, state.ErrConflict) {
+	switch {
+	case errors.Is(err, state.ErrConflict):
+		return secretMutationConflict("secret vault revision changed")
+	case errors.Is(err, state.ErrUninitialized), errors.Is(err, state.ErrDecrypt):
 		return fault.Error(err.Error())
+	default:
+		return err
 	}
-	return err
 }
 func (c Controller) Initialize(ctx context.Context) (map[string]any, error) {
 	created, err := c.backend().Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{}}`))
@@ -69,9 +73,9 @@ func pageRange(total, offset, limit, maxLimit int) (int, int, int, bool, any, er
 	}
 	return start, end, limit, hasMore, next, nil
 }
-func (c Controller) mutate(ctx context.Context, change func(document) (map[string]any, error)) (map[string]any, error) {
+func (c Controller) mutateExpected(ctx context.Context, expected *uint64, change func(document) (map[string]any, error)) (map[string]any, error) {
 	var result map[string]any
-	_, err := c.backend().Update(ctx, nil, func(data json.RawMessage) (json.RawMessage, error) {
+	snapshot, err := c.backend().Update(ctx, expected, func(data json.RawMessage) (json.RawMessage, error) {
 		document, err := decode(data)
 		if err != nil {
 			return nil, err
@@ -85,7 +89,12 @@ func (c Controller) mutate(ctx context.Context, change func(document) (map[strin
 	if err != nil {
 		return nil, publicStateError(err)
 	}
+	result["revision"] = snapshot.Revision
 	return result, nil
+}
+
+func (c Controller) mutate(ctx context.Context, change func(document) (map[string]any, error)) (map[string]any, error) {
+	return c.mutateExpected(ctx, nil, change)
 }
 func profile(value document, name string) (map[string]any, error) {
 	result := object(object(value["profiles"])[name])
@@ -173,32 +182,51 @@ func (c Controller) RemoveProfile(ctx context.Context, name string) (map[string]
 		return map[string]any{"profile": name, "removed": true}, nil
 	})
 }
-func (c Controller) ImportValues(ctx context.Context, name string, values map[string]string) (map[string]any, error) {
+func validateImportValues(name string, values map[string]string) error {
 	if err := applicationProfileName(name); err != nil {
-		return nil, err
+		return err
 	}
 	if len(values) == 0 {
-		return nil, fault.Error("dotenv import must contain secrets")
+		return fault.Error("dotenv import must contain secrets")
 	}
 	for key := range values {
 		if err := SecretName(key); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return c.mutate(ctx, func(document document) (map[string]any, error) {
-		value, err := profile(document, name)
-		if err != nil {
-			return nil, err
-		}
-		secrets := object(value["secrets"])
-		names := make([]string, 0, len(values))
-		for key, text := range values {
-			secrets[key] = text
-			names = append(names, key)
-		}
-		slices.Sort(names)
-		return map[string]any{"profile": name, "imported": names, "count": len(names)}, nil
+	return nil
+}
+
+func applyImportValues(document document, name string, values map[string]string) (map[string]any, error) {
+	value, err := profile(document, name)
+	if err != nil {
+		return nil, err
+	}
+	secrets := object(value["secrets"])
+	names := make([]string, 0, len(values))
+	for key, text := range values {
+		secrets[key] = text
+		names = append(names, key)
+	}
+	slices.Sort(names)
+	return map[string]any{"profile": name, "imported": names, "count": len(names)}, nil
+}
+
+func (c Controller) importValuesExpected(ctx context.Context, name string, values map[string]string, expected *uint64) (map[string]any, error) {
+	if err := validateImportValues(name, values); err != nil {
+		return nil, err
+	}
+	return c.mutateExpected(ctx, expected, func(document document) (map[string]any, error) {
+		return applyImportValues(document, name, values)
 	})
+}
+
+func (c Controller) ImportValues(ctx context.Context, name string, values map[string]string) (map[string]any, error) {
+	return c.importValuesExpected(ctx, name, values, nil)
+}
+
+func (c Controller) ImportValuesExpected(ctx context.Context, name string, values map[string]string, expectedRevision uint64) (map[string]any, error) {
+	return c.importValuesExpected(ctx, name, values, &expectedRevision)
 }
 func (c Controller) SetSecret(ctx context.Context, name, key, value string, public bool) (map[string]any, error) {
 	if err := applicationProfileName(name); err != nil {

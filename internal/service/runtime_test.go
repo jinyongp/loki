@@ -335,7 +335,12 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if ports["in_use"] != false {
 		t.Fatal(ports)
 	}
-	call(map[string]any{"operation": "profile_create", "profile": "fixture"})
+	beforeProfiles := call(map[string]any{"operation": "list_profiles"})
+	call(map[string]any{
+		"operation": "profile_create_request", "profile": "fixture",
+		"expected_revision": beforeProfiles["revision"],
+		"request_id":        "85000000-0000-4000-8000-000000000001",
+	})
 	profiles := call(map[string]any{"operation": "list_profiles"})
 	if len(profiles["profiles"].([]any)) != 1 {
 		t.Fatal(profiles)

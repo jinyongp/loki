@@ -403,6 +403,8 @@ func generatedToolOverrides() map[string]toolOverride {
 		"artifact_publish":         overrideArtifactPublish,
 		"write_image":              overrideWriteImage,
 		"secret_inspect":           overrideSecretInspect,
+		"secret_write":             overrideSecretWrite,
+		"secret_delete":            overrideSecretDelete,
 		"workspace_read":           overrideWorkspaceRead,
 		"workspace_edit":           overrideWorkspaceEdit,
 		"restore_workspace_file":   overrideRestoreWorkspaceFile,

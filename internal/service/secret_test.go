@@ -50,8 +50,8 @@ func TestRuntimeTypedRejectsUnknownFieldsBeforeMutation(t *testing.T) {
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	op := SecretOperations(controller)["profile_create"]
-	if _, err := op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create","profile":"web","profiel":"typo"}`)); err == nil {
+	op := SecretOperations(controller)["profile_create_request"]
+	if _, err := op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create_request","profile":"web","expected_revision":1,"request_id":"86000000-0000-4000-8000-000000000001","profiel":"typo"}`)); err == nil {
 		t.Fatal("unknown runtime field reached profile mutation")
 	}
 	profiles, err := controller.Profiles(t.Context())
@@ -61,7 +61,7 @@ func TestRuntimeTypedRejectsUnknownFieldsBeforeMutation(t *testing.T) {
 	if len(profiles["profiles"].([]map[string]any)) != 0 {
 		t.Fatal("invalid runtime request mutated the vault")
 	}
-	if _, err = op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create","profile":"web"}`)); err != nil {
+	if _, err = op.Handle(t.Context(), json.RawMessage(`{"operation":"profile_create_request","profile":"web","expected_revision":1,"request_id":"86000000-0000-4000-8000-000000000002"}`)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,14 +73,20 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 	}
 	ops := SecretOperations(c)
 	client := secretSocket(t, ops)
-	for _, name := range []string{"init", "import_env", "secret_set"} {
+	for _, name := range []string{
+		"init", "import_env", "secret_set", "profile_create", "profile_remove",
+		"import_staged_env", "public_value_set", "secret_generate", "secret_remove",
+	} {
 		if ops[name].Grant != controlpolicy.HostAdministration {
 			t.Fatalf("administrative operation exposed: %s", name)
 		}
 	}
-	for _, name := range []string{"public_value_set", "secret_generate", "import_staged_env"} {
+	for _, name := range []string{
+		"profile_create_request", "profile_remove_request", "import_staged_request",
+		"public_value_set_request", "secret_generate_request", "secret_remove_request",
+	} {
 		if ops[name].Grant != controlpolicy.Agent {
-			t.Fatalf("delegated operation changed: %s", name)
+			t.Fatalf("guarded delegated operation changed: %s", name)
 		}
 	}
 	handlers := SecretHandlers(client)
@@ -132,21 +138,42 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		}
 		return out
 	}
-	call("secret_write", map[string]any{"action": "create_profile", "profile": "web"}, "")
-	generated := call("secret_write", map[string]any{"action": "generate", "profile": "web", "secret": "TOKEN"}, "")
+	initial := call("secret_inspect", map[string]any{"action": "profiles"}, "")
+	created := call("secret_write", map[string]any{
+		"action": "create_profile", "profile": "web",
+		"expected_revision": initial["revision"],
+		"request_id":        "87000000-0000-4000-8000-000000000001",
+	}, "")
+	generatedArgs := map[string]any{
+		"action": "generate", "profile": "web", "secret": "SESSION_KEY",
+		"expected_revision": created["revision"],
+		"request_id":        "87000000-0000-4000-8000-000000000002",
+	}
+	generated := call("secret_write", generatedArgs, "")
 	if generated["bytes"] != float64(32) {
 		t.Fatal("schema default byte count changed")
 	}
-	call("secret_write", map[string]any{"action": "set", "profile": "web", "secret": "PUBLIC_API", "value": "http://127.0.0.1:41280"}, "")
+	generatedReplay := call("secret_write", generatedArgs, "")
+	if generatedReplay["revision"] != generated["revision"] || generatedReplay["request_id"] != generated["request_id"] {
+		t.Fatalf("secret generation replay = first=%#v replay=%#v", generated, generatedReplay)
+	}
+	stored := call("secret_write", map[string]any{
+		"action": "set_public", "profile": "web", "name": "PUBLIC_API", "value": "http://127.0.0.1:41280",
+		"expected_revision": generated["revision"],
+		"request_id":        "87000000-0000-4000-8000-000000000003",
+	}, "")
 	profiles := call("secret_inspect", map[string]any{"action": "profiles", "offset": 0, "limit": 1}, "")
 	profile := call("secret_inspect", map[string]any{"action": "profile", "profile": "web"}, "")
+	if stored["revision"] != profile["revision"] {
+		t.Fatalf("stored revision = %#v profile=%#v", stored, profile)
+	}
 	if profiles["revision"] != profile["revision"] || profiles["total"] != float64(1) ||
 		profiles["has_more"] != false || profiles["next_offset"] != nil || profiles["complete"] != true {
 		t.Fatalf("secret metadata pagination/revision = profiles=%#v profile=%#v", profiles, profile)
 	}
 	foundToken := false
 	for _, name := range profile["secret_names"].([]any) {
-		foundToken = foundToken || name == "TOKEN"
+		foundToken = foundToken || name == "SESSION_KEY"
 	}
 	if !foundToken {
 		t.Fatal("generated secret missing from profile")
@@ -160,9 +187,30 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 	if err = os.WriteFile(source, []byte("IMPORTED=synthetic-private-import\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	call("secret_inspect", map[string]any{"action": "imports"}, "")
-	call("secret_write", map[string]any{"action": "import_env", "profile": "web", "import_id": id}, "")
-	call("secret_inspect", map[string]any{"action": "profile", "profile": "web"}, "")
+	imports := call("secret_inspect", map[string]any{"action": "imports"}, "")
+	if imports["total"] != float64(1) || imports["complete"] != true {
+		t.Fatalf("staged imports = %#v", imports)
+	}
+	importArgs := map[string]any{
+		"action": "import_staged", "profile": "web", "import_id": id,
+		"expected_revision": profile["revision"],
+		"request_id":        "87000000-0000-4000-8000-000000000004",
+	}
+	imported := call("secret_write", importArgs, "")
+	if imported["count"] != float64(1) || imported["import_id"] != id || imported["request_id"] != importArgs["request_id"] {
+		t.Fatalf("staged import result = %#v", imported)
+	}
+	if _, statErr := os.Stat(source); !os.IsNotExist(statErr) {
+		t.Fatalf("staged source survived import: %v", statErr)
+	}
+	importReplay := call("secret_write", importArgs, "")
+	if importReplay["revision"] != imported["revision"] || importReplay["request_id"] != imported["request_id"] {
+		t.Fatalf("staged import replay = first=%#v replay=%#v", imported, importReplay)
+	}
+	afterImport := call("secret_inspect", map[string]any{"action": "profile", "profile": "web"}, "")
+	if imported["revision"] != afterImport["revision"] {
+		t.Fatalf("staged import = result=%#v profile=%#v", imported, afterImport)
+	}
 	snapshot, err := (state.Store{Dir: c.StateDirectory, Validate: secret.Validate}).Load(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +224,7 @@ func TestSecretAndWorkflowMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, data := range responses {
-		if bytes.Contains(data, []byte(private.Profiles["web"].Secrets["TOKEN"])) || bytes.Contains(data, []byte("synthetic-private-import")) {
+		if bytes.Contains(data, []byte(private.Profiles["web"].Secrets["SESSION_KEY"])) || bytes.Contains(data, []byte("synthetic-private-import")) {
 			t.Fatal("secret value crossed MCP response boundary")
 		}
 	}
