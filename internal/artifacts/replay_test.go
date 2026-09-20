@@ -50,6 +50,45 @@ func TestPublishReplayIdentity(t *testing.T) {
 	}
 }
 
+func TestPublishReplayRetainsBoundedExtraMetadata(t *testing.T) {
+	s := New(Options{BaseURL: "https://example.test/artifacts", MaxItems: 4, MaxBytes: 1024})
+	requestID := "70000000-0000-4000-8000-000000000020"
+	fingerprint := strings.Repeat("a", 64)
+	result, err := s.PublishReplay(
+		requestID, fingerprint, []byte("zip"), "bundle.zip", "application/zip",
+		strings.Repeat("b", 64), 60, "attachment",
+		map[string]any{"kind": "bundle", "file_count": 2, "paths": []string{"a.txt", "b.txt"}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["kind"] != "bundle" || result["file_count"] != 2 {
+		t.Fatalf("publication extras = %#v", result)
+	}
+	replay, ok, err := s.Replay(requestID, fingerprint)
+	if err != nil || !ok || replay["kind"] != "bundle" || replay["file_count"] != 2 {
+		t.Fatalf("replayed extras = %#v ok=%v err=%v", replay, ok, err)
+	}
+	before := len(s.List())
+	if _, err := s.PublishReplay(
+		"70000000-0000-4000-8000-000000000021", strings.Repeat("c", 64),
+		[]byte("x"), "x.txt", "text/plain", strings.Repeat("d", 64), 60, "attachment",
+		map[string]any{"url": "https://evil.invalid"},
+	); err == nil {
+		t.Fatal("reserved replay metadata accepted")
+	}
+	if len(s.List()) != before {
+		t.Fatalf("reserved replay metadata published before validation: %#v", s.List())
+	}
+	if _, err := s.PublishReplay(
+		"70000000-0000-4000-8000-000000000022", strings.Repeat("e", 64),
+		[]byte("x"), "x.txt", "text/plain", strings.Repeat("f", 64), 60, "attachment",
+		map[string]any{"kind": "file"}, map[string]any{"path": "x.txt"},
+	); err == nil {
+		t.Fatal("multiple replay metadata maps accepted")
+	}
+}
+
 func TestPublishReplayValidationAndClear(t *testing.T) {
 	s := New(Options{})
 	fingerprint := strings.Repeat("a", 64)

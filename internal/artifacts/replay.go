@@ -90,10 +90,26 @@ func (s *Store) Replay(requestID, fingerprint string) (map[string]any, bool, err
 	return s.replayLocked(requestID, fingerprint)
 }
 
-func (s *Store) PublishReplay(requestID, fingerprint string, data []byte, filename, mime, digest string, ttl int, disposition string) (map[string]any, error) {
+func (s *Store) PublishReplay(requestID, fingerprint string, data []byte, filename, mime, digest string, ttl int, disposition string, extras ...map[string]any) (map[string]any, error) {
 	requestID, err := validateReplayIdentity(requestID, fingerprint)
 	if err != nil {
 		return nil, err
+	}
+	if len(extras) > 1 {
+		return nil, errors.New("artifact replay metadata accepts at most one map")
+	}
+	var extra map[string]any
+	if len(extras) == 1 {
+		reserved := map[string]bool{
+			"share_id": true, "url": true, "expires_at": true, "filename": true,
+			"mime_type": true, "bytes": true, "sha256": true, "disposition": true,
+		}
+		extra = extras[0]
+		for key := range extra {
+			if reserved[key] {
+				return nil, errors.New("artifact replay metadata uses a reserved publication field")
+			}
+		}
 	}
 	s.replayMu.Lock()
 	defer s.replayMu.Unlock()
@@ -110,6 +126,9 @@ func (s *Store) PublishReplay(requestID, fingerprint string, data []byte, filena
 		return nil, err
 	}
 	result := fullPublication(link, data, filename, mime, digest, disposition)
+	for key, value := range extra {
+		result[key] = value
+	}
 	s.requests[requestID] = publishReplay{
 		Fingerprint: fingerprint,
 		Result:      clonePublication(result),

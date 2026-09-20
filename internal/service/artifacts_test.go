@@ -62,8 +62,8 @@ func TestArtifactMCP(t *testing.T) {
 		name string
 		args map[string]any
 	}{
-		{"artifact_publish", map[string]any{"action": "file", "path": "hello.txt"}},
-		{"artifact_publish", map[string]any{"action": "bundle", "paths": []string{"hello.txt"}}},
+		{"artifact_publish", map[string]any{"action": "file", "path": "hello.txt", "request_id": "79000000-0000-4000-8000-000000000001"}},
+		{"artifact_publish", map[string]any{"action": "bundle", "paths": []string{"hello.txt"}, "request_id": "79000000-0000-4000-8000-000000000002"}},
 		{"share_image", map[string]any{"path": "image.png", "request_id": "78000000-0000-4000-8000-000000000001"}},
 	} {
 		r, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
@@ -88,8 +88,67 @@ func TestArtifactMCP(t *testing.T) {
 			if _, ok := r.Content[1].(*mcp.ResourceLink); !ok {
 				t.Fatalf("%T", r.Content[1])
 			}
+			if value["kind"] != tc.args["action"] {
+				t.Fatalf("artifact kind = %#v, want %#v", value["kind"], tc.args["action"])
+			}
+			if tc.args["action"] == "bundle" {
+				if value["mime_type"] != "application/zip" || value["file_count"] != float64(1) ||
+					value["input_bytes"] != float64(5) || value["excluded_entries"] != float64(0) {
+					t.Fatalf("bundle metadata = %#v", value)
+				}
+			}
 		}
 	}
+
+	if err = os.Remove(filepath.Join(c.Root, "hello.txt")); err != nil {
+		t.Fatal(err)
+	}
+	artifactRows := ArtifactList(store)["artifacts"].([]map[string]any)
+	if len(artifactRows) != 3 {
+		t.Fatal(artifactRows)
+	}
+	for _, test := range []struct {
+		args     map[string]any
+		filename string
+		kind     string
+	}{
+		{args: map[string]any{"action": "file", "path": "hello.txt", "request_id": "79000000-0000-4000-8000-000000000001"}, filename: "hello.txt", kind: "file"},
+		{args: map[string]any{"action": "bundle", "paths": []string{"hello.txt"}, "request_id": "79000000-0000-4000-8000-000000000002"}, filename: "loki-workspace.zip", kind: "bundle"},
+	} {
+		replayedArtifact, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "artifact_publish", Arguments: test.args})
+		if err != nil || replayedArtifact.IsError {
+			t.Fatalf("artifact replay %s: %v %+v", test.kind, err, replayedArtifact)
+		}
+		var value map[string]any
+		encoded, _ := json.Marshal(replayedArtifact.StructuredContent)
+		if err = json.Unmarshal(encoded, &value); err != nil {
+			t.Fatal(err)
+		}
+		var original map[string]any
+		for _, row := range artifactRows {
+			if row["filename"] == test.filename {
+				original = row
+				break
+			}
+		}
+		if original == nil || value["share_id"] != original["share_id"] || value["url"] != original["url"] || value["kind"] != test.kind {
+			t.Fatalf("artifact replay identity %s = replay=%#v original=%#v", test.kind, value, original)
+		}
+		if test.kind == "bundle" && (value["file_count"] != float64(1) || value["input_bytes"] != float64(5)) {
+			t.Fatalf("bundle replay metadata = %#v", value)
+		}
+	}
+	artifactConflict, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "artifact_publish", Arguments: map[string]any{
+		"action": "bundle", "paths": []string{"hello.txt"}, "filename": "changed.zip",
+		"request_id": "79000000-0000-4000-8000-000000000002",
+	}})
+	if err != nil || !artifactConflict.IsError || len(ArtifactList(store)["artifacts"].([]map[string]any)) != 3 {
+		t.Fatalf("changed artifact replay did not conflict: result=%#v err=%v", artifactConflict, err)
+	}
+	if detail := artifactConflict.Meta["loki/error"].(map[string]any); detail["code"] != "conflict" {
+		t.Fatalf("changed artifact replay error = %#v", detail)
+	}
+
 	if err = os.Remove(filepath.Join(c.Root, "image.png")); err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +200,10 @@ func TestArtifactMCP(t *testing.T) {
 	if err != nil || secondRevoke["kind"] != "artifact" || secondRevoke["share_id"] != id || secondRevoke["revoked"] != true {
 		t.Fatalf("second revoke = %#v, %v", secondRevoke, err)
 	}
-	r, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "artifact_publish", Arguments: map[string]any{"action": "file", "path": "hello.txt", "ttl_seconds": 1}})
+	r, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "artifact_publish", Arguments: map[string]any{
+		"action": "file", "path": "hello.txt", "ttl_seconds": 1,
+		"request_id": "79000000-0000-4000-8000-000000000003",
+	}})
 	if err != nil || !r.IsError {
 		t.Fatalf("TTL: %v %+v", err, r)
 	}

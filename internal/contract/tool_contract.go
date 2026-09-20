@@ -400,6 +400,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"browser_share_screenshot": overrideBrowserShareScreenshot,
 		"read_image":               overrideReadImage,
 		"share_image":              overrideShareImage,
+		"artifact_publish":         overrideArtifactPublish,
 		"write_image":              overrideWriteImage,
 		"workspace_read":           overrideWorkspaceRead,
 		"workspace_edit":           overrideWorkspaceEdit,

@@ -190,7 +190,10 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 
 	call("browser_session", map[string]any{"action": "start"})
 	call("secret_inspect", map[string]any{"action": "status"})
-	shared := call("artifact_publish", map[string]any{"action": "file", "path": "hello.txt"})
+	shared := call("artifact_publish", map[string]any{
+		"action": "file", "path": "hello.txt",
+		"request_id": "79000000-0000-4000-8000-000000000010",
+	})
 	response, err := http.Get(shared["url"].(string))
 	if err != nil {
 		t.Fatal(err)

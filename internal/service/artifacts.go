@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"mime"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,11 +19,12 @@ import (
 )
 
 type artifactRequest struct {
-	Action   string
-	Path     *string
-	Paths    *[]string
-	Filename string
-	TTL      int `json:"ttl_seconds"`
+	Action    string
+	Path      *string
+	Paths     *[]string
+	Filename  string
+	TTL       int    `json:"ttl_seconds"`
+	RequestID string `json:"request_id"`
 }
 type shareImageRequest struct {
 	Path      string
@@ -49,6 +51,51 @@ func shareImageReplayError(err error) error {
 		return fault.New(fault.CodeConflict, "share_image request_id was already used for different share inputs", false, "generate a new request_id when path or ttl_seconds changes")
 	}
 	return err
+}
+
+func normalizeArtifactPaths(paths []string) ([]string, error) {
+	if len(paths) == 0 || len(paths) > 64 {
+		return nil, fault.Error("paths must contain between 1 and 64 entries")
+	}
+	seen := map[string]bool{}
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		relative, err := policy.Relative(path)
+		if err != nil {
+			return nil, err
+		}
+		if seen[relative] {
+			continue
+		}
+		seen[relative] = true
+		result = append(result, relative)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func artifactPublishFingerprint(action, path string, paths []string, filename string, ttl int) string {
+	payload := "artifact-publish:v1\n" + action + "\n" + path + "\n" + strings.Join(paths, "\n") + "\n" + filename + "\n" + strconv.Itoa(ttl)
+	return workspace.Digest([]byte(payload))
+}
+
+func artifactPublishReplayError(err error) error {
+	if errors.Is(err, artifacts.ErrRequestConflict) {
+		return fault.New(fault.CodeConflict, "artifact_publish request_id was already used for different publication inputs", false, "generate a new request_id when action, path(s), filename, or ttl_seconds changes")
+	}
+	return err
+}
+
+func artifactResult(result map[string]any) (*mcp.CallToolResult, error) {
+	url, _ := result["url"].(string)
+	filename, _ := result["filename"].(string)
+	mimeType, _ := result["mime_type"].(string)
+	sizeValue, _ := result["bytes"].(int)
+	size := int64(sizeValue)
+	return &mcp.CallToolResult{Content: []mcp.Content{
+		&mcp.TextContent{Text: "Temporary download: " + url},
+		&mcp.ResourceLink{Name: filename, URI: url, Description: fmt.Sprintf("Temporary Loki workspace artifact (%d bytes)", sizeValue), MIMEType: mimeType, Size: &size},
+	}, StructuredContent: result}, nil
 }
 
 func ArtifactHandlers(files *workspace.Files, store *artifacts.Store) map[string]mcpserver.Handler {
@@ -91,58 +138,86 @@ func ArtifactHandlers(files *workspace.Files, store *artifacts.Store) map[string
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: result}, nil
 		}),
 		"artifact_publish": mcpserver.Typed(func(ctx context.Context, r artifactRequest) (*mcp.CallToolResult, error) {
-			var data []byte
-			var path, filename, mimeType string
-			var err error
-			var extra map[string]any
+			if store == nil {
+				return nil, fault.Error("temporary file sharing is not configured")
+			}
+			if !artifacts.ValidRequestID(r.RequestID) {
+				return nil, fault.New(fault.CodeInvalidInput, "artifact_publish request_id must be a UUID", false, "generate a new UUID request_id")
+			}
+			if r.TTL < 60 || r.TTL > 3600 {
+				return nil, fault.Error("file link lifetime must be between 60 and 3600 seconds")
+			}
+
+			var (
+				data               []byte
+				filename, mimeType string
+				fingerprint        string
+				extras             map[string]any
+				err                error
+			)
 			switch r.Action {
 			case "file":
-				path, err = mcpserver.Require(r.Path, "path")
-				if err != nil {
-					return nil, err
+				requested, requireErr := mcpserver.Require(r.Path, "path")
+				if requireErr != nil {
+					return nil, requireErr
+				}
+				path, pathErr := policy.Relative(requested)
+				if pathErr != nil {
+					return nil, pathErr
+				}
+				filename = filepath.Base(path)
+				fingerprint = artifactPublishFingerprint("file", path, nil, "", r.TTL)
+				if replay, ok, replayErr := store.Replay(r.RequestID, fingerprint); replayErr != nil {
+					return nil, artifactPublishReplayError(replayErr)
+				} else if ok {
+					return artifactResult(replay)
 				}
 				data, err = files.Attachment(path)
-				filename = filepath.Base(path)
 				mimeType = strings.Split(mime.TypeByExtension(filepath.Ext(filename)), ";")[0]
 				if mimeType == "" {
 					mimeType = "application/octet-stream"
 				}
+				extras = map[string]any{"kind": "file", "path": path}
 			case "bundle":
-				paths, e := mcpserver.Require(r.Paths, "paths")
-				if e != nil {
-					return nil, e
+				requested, requireErr := mcpserver.Require(r.Paths, "paths")
+				if requireErr != nil {
+					return nil, requireErr
+				}
+				paths, pathErr := normalizeArtifactPaths(requested)
+				if pathErr != nil {
+					return nil, pathErr
 				}
 				filename = r.Filename
-				path = strings.Join(paths, ",")
+				if filename == "" {
+					filename = "loki-workspace.zip"
+				}
+				fingerprint = artifactPublishFingerprint("bundle", "", paths, filename, r.TTL)
+				if replay, ok, replayErr := store.Replay(r.RequestID, fingerprint); replayErr != nil {
+					return nil, artifactPublishReplayError(replayErr)
+				} else if ok {
+					return artifactResult(replay)
+				}
 				mimeType = "application/zip"
-				data, extra, err = files.Bundle(ctx, paths, filename)
+				var bundleMeta map[string]any
+				data, bundleMeta, err = files.Bundle(ctx, paths, filename)
+				extras = map[string]any{"kind": "bundle", "paths": paths}
+				for key, value := range bundleMeta {
+					extras[key] = value
+				}
 			default:
 				return nil, fault.Error("artifact_publish action must be file or bundle")
 			}
 			if err != nil {
 				return nil, err
 			}
-			if store == nil {
-				return nil, fault.Error("temporary file sharing is not configured")
-			}
-			if r.TTL < 60 || r.TTL > 3600 {
-				return nil, fault.Error("file link lifetime must be between 60 and 3600 seconds")
-			}
 			digest := workspace.Digest(data)
-			result, err := store.Publish(data, filename, mimeType, digest, r.TTL, "attachment")
+			result, err := store.PublishReplay(
+				r.RequestID, fingerprint, data, filename, mimeType, digest, r.TTL, "attachment", extras,
+			)
 			if err != nil {
-				return nil, err
+				return nil, artifactPublishReplayError(err)
 			}
-			result["path"], result["filename"], result["mime_type"], result["bytes"], result["sha256"] = path, filename, mimeType, len(data), digest
-			for k, v := range extra {
-				result[k] = v
-			}
-			url := result["url"].(string)
-			size := int64(len(data))
-			return &mcp.CallToolResult{Content: []mcp.Content{
-				&mcp.TextContent{Text: "Temporary download: " + url},
-				&mcp.ResourceLink{Name: filename, URI: url, Description: fmt.Sprintf("Temporary Loki workspace artifact (%d bytes)", len(data)), MIMEType: mimeType, Size: &size},
-			}, StructuredContent: result}, nil
+			return artifactResult(result)
 		}),
 	}
 }
