@@ -405,6 +405,7 @@ func generatedToolOverrides() map[string]toolOverride {
 		"secret_inspect":           overrideSecretInspect,
 		"secret_write":             overrideSecretWrite,
 		"secret_delete":            overrideSecretDelete,
+		"developer_view":           overrideDeveloperView,
 		"workspace_read":           overrideWorkspaceRead,
 		"workspace_edit":           overrideWorkspaceEdit,
 		"restore_workspace_file":   overrideRestoreWorkspaceFile,

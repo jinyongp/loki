@@ -130,7 +130,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		return InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
 	}}
 	handlers := map[string]mcpserver.Handler{
-		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files, git),
+		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files),
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
 	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: git, Claims: app.Claims}

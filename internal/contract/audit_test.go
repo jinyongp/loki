@@ -14,10 +14,10 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 	want := ContractAudit{
 		ToolCount:              32,
 		ActionUnionCount:       19,
-		FlatActionUnionCount:   4,
-		InputPropertyCount:     189,
-		DescribedPropertyCount: 150,
-		MissingOutputSchema:    1,
+		FlatActionUnionCount:   3,
+		InputPropertyCount:     192,
+		DescribedPropertyCount: 157,
+		MissingOutputSchema:    0,
 		OpenOutputSchema:       4,
 		MissingAnnotations:     1,
 	}
@@ -38,6 +38,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		"browser_screenshot": true, "browser_save_screenshot": true, "browser_share_screenshot": true,
 		"read_image": true, "share_image": true, "artifact_publish": true, "write_image": true,
 		"secret_inspect": true, "secret_write": true, "secret_delete": true,
+		"developer_view": true,
 		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
 		"git_inspect": true, "git_stage": true,
@@ -47,7 +48,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 			continue
 		}
 		if issue.Code == "flat_action_union" || issue.Code == "missing_field_description" ||
-			(issue.Code == "missing_output_schema" && (issue.Tool == "browser_screenshot" || issue.Tool == "browser_save_screenshot" || issue.Tool == "browser_share_screenshot" || issue.Tool == "artifact_publish")) ||
+			(issue.Code == "missing_output_schema" && (issue.Tool == "browser_screenshot" || issue.Tool == "browser_save_screenshot" || issue.Tool == "browser_share_screenshot" || issue.Tool == "artifact_publish" || issue.Tool == "developer_view")) ||
 			(issue.Code == "open_output_schema" && (issue.Tool == "preview_publish" || issue.Tool == "shared_resources" || issue.Tool == "revoke_share" ||
 				issue.Tool == "browser_session" || issue.Tool == "browser_observe" || issue.Tool == "browser_interact" ||
 				issue.Tool == "browser_screenshot" || issue.Tool == "browser_save_screenshot" || issue.Tool == "browser_share_screenshot" ||

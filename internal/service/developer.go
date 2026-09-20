@@ -6,33 +6,52 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
-	"loki/internal/gitops"
 	"loki/internal/mcpserver"
 	"loki/internal/workspace"
 )
 
 type developerRequest struct {
-	Action, CWD string
-	Staged      bool
-	Path        *string
+	Action     string
+	CWD        string
+	Staged     bool
+	Path       *string
+	ReportPath *string `json:"report_path"`
+	Content    *string
+	Truncated  *bool
 }
 
-func DeveloperHandler(files *workspace.Files, git *gitops.Controller) mcpserver.Handler {
-	return mcpserver.Typed(func(ctx context.Context, r developerRequest) (*mcp.CallToolResult, error) {
+func diffStats(content string) map[string]any {
+	files, added, removed := 0, 0, 0
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "diff --git ") {
+			files++
+		}
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added++
+		}
+		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			removed++
+		}
+	}
+	return map[string]any{"files": files, "additions": added, "deletions": removed}
+}
+
+func DeveloperHandler(files *workspace.Files) mcpserver.Handler {
+	return mcpserver.Typed(func(_ context.Context, r developerRequest) (*mcp.CallToolResult, error) {
 		var kind, title, subtitle, content string
 		var truncated bool
 		var stats map[string]any
 		switch r.Action {
 		case "git_diff":
-			diff, err := git.Diff(ctx, r.CWD, r.Staged, r.Path)
+			captured, err := mcpserver.Require(r.Content, "content")
 			if err != nil {
 				return nil, err
 			}
-			if diff["exit_code"] != 0 {
-				return nil, fault.Error("git diff failed")
+			wasTruncated, err := mcpserver.Require(r.Truncated, "truncated")
+			if err != nil {
+				return nil, err
 			}
-			content, _ = diff["output"].(string)
-			truncated, _ = diff["truncated"].(bool)
+			content, truncated = captured, wasTruncated
 			kind, title, subtitle = "diff", "Worktree changes", r.CWD
 			if r.Staged {
 				title = "Staged changes"
@@ -40,21 +59,9 @@ func DeveloperHandler(files *workspace.Files, git *gitops.Controller) mcpserver.
 			if r.Path != nil && *r.Path != "" {
 				subtitle += " · " + *r.Path
 			}
-			files, added, removed := 0, 0, 0
-			for _, line := range strings.Split(content, "\n") {
-				if strings.HasPrefix(line, "diff --git ") {
-					files++
-				}
-				if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
-					added++
-				}
-				if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
-					removed++
-				}
-			}
-			stats = map[string]any{"files": files, "additions": added, "deletions": removed}
+			stats = diffStats(content)
 		case "test_report":
-			path, err := mcpserver.Require(r.Path, "path")
+			path, err := mcpserver.Require(r.ReportPath, "report_path")
 			if err != nil {
 				return nil, err
 			}
