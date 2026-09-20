@@ -85,6 +85,30 @@ func projectCoordinationReadResult(action string, projection devtools.Coordinati
 	return base
 }
 
+func projectCoordinationWriteResult(action, requestID string, public map[string]any) map[string]any {
+	result := map[string]any{"action": action, "request_id": requestID, "details": map[string]any{}}
+	known := map[string]bool{
+		"profile": true, "revision": true, "previous_revision": true, "current_revision": true,
+		"affected_count": true, "affected_ids": true, "replayed": true, "changed": true,
+		"action_ids": true, "item": true, "run": true, "claimed": true, "record_id": true,
+	}
+	details := result["details"].(map[string]any)
+	for key, value := range public {
+		if key == "request_id" {
+			if text, ok := value.(string); ok && text != "" {
+				result["request_id"] = text
+			}
+			continue
+		}
+		if known[key] {
+			result[key] = value
+			continue
+		}
+		details[key] = value
+	}
+	return result
+}
+
 func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessionCoordination) map[string]mcpserver.Handler {
 	read := mcpserver.Typed(func(ctx context.Context, request projectCoordinationRequest) (*mcp.CallToolResult, error) {
 		operation := map[string]string{
@@ -142,7 +166,7 @@ func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessio
 		if err != nil {
 			return nil, err
 		}
-		return mcpserver.Object(result)
+		return mcpserver.Object(projectCoordinationWriteResult(request.Action, request.RequestID, result))
 	})
 	return map[string]mcpserver.Handler{"project_coordination": read, "project_coordination_write": write}
 }
