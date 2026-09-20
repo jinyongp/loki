@@ -1,49 +1,31 @@
 # MCP Tool Contract Review
 
 Date: 2026-09-19
-Status: design review for the Go migration; no compatibility constraint requires preserving the current Python or Go public tool shapes.
+Status: design review with Go implementation convergence through the A06/A07 Job/network slice; no compatibility constraint requires preserving the Python or earlier Go public tool shapes.
 
 ## Scope and evidence
 
-This review examines two surfaces:
+This review originated from two 2026-09-19 baselines: the running Python Loki 0.47.1 catalog with 37 MCP tools and the then-checked-in Go 0.49 development contract with 31 tools. Those counts remain historical evidence for why the redesign was needed; they are not the current Go contract state.
 
-- the running Python Loki 0.47.1 catalog, which currently exposes 37 MCP tools;
-- the checked-in Go 0.49 development contract, which currently defines 31 MCP tools.
+As of 2026-09-21, the checked-in Go contract defines 33 tools. The Go direction still intentionally excludes the legacy project/task/Skill/command/process MCP wrappers and exposes narrower coordination/context surfaces plus the public `job` lifecycle. Agent Context, durable semantic checkpoints, fresh-session resume, generated action-specific schemas, Job execution and Job-owned preview endpoint identity are now source-implemented. Remaining work in this document should be read as family-specific semantic/acceptance follow-up rather than evidence that the original flat-schema baseline still exists.
 
-The Go contract intentionally removes the legacy project/task/Skill/command/process MCP wrappers and now exposes `project_coordination`, `project_coordination_write`, `agent_guidance`, `project_context`, and `project_context_write`. The Agent Context slice has landed, including durable semantic checkpoints and fresh-session resume, while the remaining file, browser, sharing, Git, secret, and system tools still retain much of the current public shape.
+Initial review baseline facts were: 18 of 31 tools multiplexed operations through flat `action` supersets; the catalog had 153 public input properties with only 10 descriptions; 21 output objects were open, four tools lacked output schemas, and two lacked MCP annotations. `preview_publish.environment_routes` was accepted but unused, and several action-irrelevant guards were schema-accepted. Those defects motivated the generated action-contract migration and remain useful historical reproducers, but they no longer describe the current Go catalog.
 
-Verified contract facts for the Go candidate:
-
-- 18 of 31 tools multiplex operations through an `action` field.
-- All 18 action-multiplexed schemas expose a flat superset of fields rather than action-specific required/forbidden shapes.
-- 153 input properties are present in the captured catalog and only 10 currently have a JSON Schema `description`.
-- 21 tools use an open `additionalProperties: true` output object, four have no output schema, and two have no MCP annotations.
-- `internal/mcpserver` validates the captured JSON Schema before calling a handler, but action-specific requirements are commonly deferred to handler-time `Require` checks. The public schema therefore cannot tell an agent which arguments are required for a selected action.
-- `workspace_edit(action=patch)` is already multi-file in both implementations. Python defaults to `max_patch_files = 50`; Python and Go both parse the entire diff, validate every target path, run `git apply --check`, capture pre-mutation revisions, and then issue one `git apply` under the workspace mutation lock. The public description only says “patch” and the Python server guidance only says “multi-hunk”, so this capability is not discoverable from the contract.
-- The Go `preview_publish` schema exposes `environment_routes`, but the current Go handler stores that field in the request struct and never consumes it. There is no corresponding test. This is concrete schema/handler drift.
-- `workspace_edit` accepts fields such as `expected_sha256` for every action at schema level, although the guard is consumed only by `replace`. Supplying that guard with `patch`, `create`, or `move` does not protect those operations. This is exactly the class of silently ineffective precondition that the architecture plan says to reject.
-- `mcpserver.Object` currently serializes the same result into both structured content and JSON text content. This conflicts with the architecture goal of avoiding duplicate large output.
-- `system_inspect(action=activity)` now records server-side start/terminal evidence with invocation IDs and pseudonymous session references, but the running 0.47.1 server predates that action and a normal tool result does not yet return the audit invocation ID to the caller.
-
-The baseline contract tests protect catalog presence, unknown top-level fields, credentials, and selected legacy removals. They do not currently assert action-specific field legality, semantic use of accepted concurrency guards, closed output variants, or model-facing tool-choice behavior.
+One baseline observation remains independently relevant: `workspace_edit(action=patch)` was already bounded multi-file behavior in both implementations. The contract work must keep that capability discoverable without weakening its path validation, `git apply --check`, revision capture or mutation-lock semantics. Likewise, operation/correlation identity and model-facing tool-choice evidence remain broader follow-up concerns even after schema closure.
 
 ## Verification evidence
 
-The review was rechecked against the repository after the inventory was written.
+The current worktree was rechecked after the A06/A07 implementation batch.
 
-- Go contract census: 31 tools total; 18 expose an `action` property; all 18 still use a flat superset schema rather than top-level `oneOf`/`anyOf` action variants.
-- Input-schema census: 153 public properties; 10 property-level JSON Schema descriptions.
-- Output/annotation census: four tools have no output schema; 21 use an open `additionalProperties: true` output object; two have no MCP annotations.
-- Per-tool accounting: all 31 Go tools have an explicit disposition in this document.
-- Running-server accounting: all 13 tools present in Python 0.47.1 but absent from the Go 0.49 contract have an explicit migration disposition.
-- Running Python server evidence: version 0.47.1, catalog revision 2026-09-04.4, 37 exposed tools.
-- Multi-file edit evidence: both `legacy/python/src/loki_mcp/tools.py` and `internal/workspace/search_patch.go` parse the complete patch file list, validate bounded paths, run `git apply --check`, capture existing-file revisions and apply the diff under the workspace mutation lock. Python configuration defaults `max_patch_files` to 50.
-- Schema/handler drift evidence: `environment_routes` appears in the Go `preview_publish` contract/request struct but has no consumer elsewhere in `internal/`.
-- Ownership-drift check after this review: the stale phrases assigning Skill inventory, AGENTS.md resolution, or semantic handoff state to the devtools integration no longer remain in the active architecture/project-structure plans.
-- Agent Context implementation evidence: `project_context` and `project_context_write` now compose target-owned guidance, selected Skill revisions, Git/worktree evidence, canonical devtools coordination, runtime-owned semantic checkpoints, staleness/completeness, and legal claim/takeover guidance. Fresh-session restart and uncertain semantic-checkpoint response replay are covered by Go integration tests.
-- Devtools candidate convergence evidence: the active source-reviewed fixture no longer contains Skill/guidance/compaction extensions, and runtime startup fingerprints the executable approved contract and rejects drift before readiness.
-
-These counts are baseline evidence, not permanent target numbers. Contract generation work is expected to change them.
+- Current Go contract census: 33 tools total and 20 action unions.
+- Contract-audit census: zero flat action unions, 203 public input properties and 203 property descriptions, zero missing output schemas, zero open output schemas and zero missing MCP annotations.
+- `job` is now a generated action-specific public surface with start/inspect/output/cancel. Start accepts only request identity, command/lifetime inputs, reviewed logical network selection and bounded logical endpoint declarations; inspect/cancel status returns neutral endpoint leases without Docker/resource authority.
+- `preview_publish` now has distinct server, stack and job branches. `environment_routes` has been removed; every publication requires `request_id`; changed inputs conflict; `action=job` resolves Job ID plus logical endpoint name to the exact active endpoint lease and does not accept a caller-chosen host port.
+- Job preview proxying revalidates Job ID, lease ID, host port and active lease state for every request. Replacing a lease while reusing the numeric host port invalidates the old share.
+- The MCP deployment path is MCP -> executor -> launcher. Native and container packaging give MCP only the executor socket and reserve the launcher/Docker boundary for the dedicated privileged role.
+- Multi-file edit evidence remains unchanged: `workspace_edit(action=patch)` parses the complete bounded patch target set, validates paths, runs `git apply --check`, captures revisions and applies under the workspace mutation lock.
+- Agent Context implementation evidence remains current: `project_context` and `project_context_write` compose target-owned guidance, selected Skill revisions, Git/worktree evidence, canonical coordination, runtime-owned semantic checkpoints, staleness/completeness and legal claim/takeover guidance.
+- Focused `cmd/loki`, launcher/executor, contract, service, preview, deployment and packaging tests pass for this slice, `go run ./tools/archcheck` passes, and the batch-closeout `go test ./...`, `go test -race ./...`, `go vet ./...`, and `go build ./...` gates pass. The real A06/A07 OCI/network fixture is now implemented, including authenticated egress, endpoint publication/recovery and Job preview HTTP/WebSocket, but it remains unexecuted without its explicit supported-host Docker/image/workspace/allowlisted-authority inputs. Release readiness therefore remains open.
 
 ## Root cause
 
@@ -131,8 +113,8 @@ Do not batch browser interactions merely to save calls: navigation and DOM mutat
 | Family | Verified issue | Target direction |
 | --- | --- | --- |
 | System diagnostics | `system_inspect` multiplexes unrelated argument shapes; activity is recent-list only and invocation IDs are not normal result handles | Discriminated schema; operation lookup by ID; return operation IDs from mutating/long-running calls; typed health/activity results |
-| Runtime/commands (legacy) | `action`, `command_run`, `command_start`, `process_inspect`, and `runtime_stop` overlap and require the agent to choose among execution lifecycles | Do not port the monolith. Finish the single Job model and expose start/inspect/output/cancel with explicit detached/lifetime semantics; keep action/workflow registration separate |
-| Preview/shares | Publish/create-share operations are non-idempotent; retry after a lost response can create duplicates; `environment_routes` is currently accepted but unused in Go | Request IDs for creation; idempotent revoke; endpoint/job identity rather than raw-port lifetime; remove or implement every exposed field; action-specific schema |
+| Runtime/commands (legacy) | The Python `action`/command/process surfaces still overlap, while the Go replacement now has one generated `job` lifecycle | Keep the landed start/inspect/output/cancel Job model with explicit detached/lifetime semantics and separate action/workflow registration; retire legacy execution paths only after deterministic and real OCI/network acceptance |
+| Preview/shares | The original duplicate-share and unused-field defects are corrected for Go preview publication; acceptance still needs the real Job network path | Keep request-ID replay, idempotent revoke and the server/stack/job discriminated contract. Job shares bind exact endpoint leases rather than raw-port lifetime; prove HTTP/WebSocket plus stale/reused-port denial in the supported-host fixture |
 | Browser session | Lifecycle/navigation is typed, but ordinary browser-history controls still need complete desktop coverage | Keep discriminated generation-aware lifecycle; add `reload`, `forward`, and `stop_loading`; move history navigation authority here so navigation operations share one generation model |
 | Browser observation | Core state/event observation is typed, but user-driven browser workflows still lack public dialog/download state | Keep action-specific typed sequence/completeness semantics; add pending-dialog observation and bounded download status/history so interaction outcomes are observable without filesystem guessing |
 | Browser interaction | Current click/fill-like type/key/scroll/tab coverage omits common desktop user gestures such as hover, button/modifier clicks, drag, wheel, form controls, file upload, and dialogs; stale element/index behavior must remain guarded | Complete the desktop interaction surface with high-level discriminated gestures; retain browser/state generation preconditions; model full gestures in one call rather than exposing dangling pointer-down state; keep observation boundaries instead of generic batching |
@@ -299,12 +281,13 @@ Chromium-backed tests exercise real browser behavior when the repository browser
 
 ## Per-tool disposition
 
-The following matrix accounts for every tool in the checked-in Go 0.49 contract.
+The following matrix accounts for the current checked-in Go contract, including the newly exposed `job` tool. It originated as the 2026-09-19 disposition matrix, so rows not explicitly status-updated may still preserve the original issue wording. The current audit census above supersedes generic claims about flat action unions, missing descriptions, missing annotations or open/missing outputs; use each row for its remaining domain semantics and acceptance direction rather than as a fresh schema census.
 
 | Tool | Disposition | Contract issue / required change |
 | --- | --- | --- |
-| `system_inspect` | refine | Keep diagnostics, but make action variants explicit and add direct operation/invocation lookup rather than recent-list-only recovery. |
-| `preview_publish` | redesign | Action-specific server/stack inputs, request-ID replay safety, job/endpoint identity, and removal or implementation of the currently unused `environment_routes` field. |
+| `system_inspect` | refine | Keep diagnostics and the landed discriminated action contract; add direct operation/invocation lookup rather than recent-list-only recovery. |
+| `job` | implemented; acceptance pending | Generated start/inspect/output/cancel branches are replay-safe and expose only logical network/endpoint input plus neutral lease metadata. Backend policy/image/mount/network IDs, proxy credentials, host-port selection and instance refs stay internal. Remaining blocker is real supported-host OCI/network/endpoint acceptance. |
+| `preview_publish` | implemented/refine | Server/stack/job are action-specific, creation is request-ID replay-safe, `environment_routes` is removed, and Job publication binds exact endpoint leases without caller-chosen host ports. Keep runner-owned server/stack validation for non-Job servers; prove Job HTTP/WebSocket and stale/reused-port denial in the real fixture. |
 | `shared_resources` | refine | Keep bounded listing; type preview/artifact variants and completeness instead of an open nested object. |
 | `revoke_share` | fix semantics | Make repeated revoke replay-safe/idempotent and return a stable terminal result so a lost response does not require guessing. |
 | `browser_session` | redesign | Keep the landed generation-aware start/navigate/stop contract and complete desktop navigation with back/forward/reload/stop_loading under the same session authority. History/navigation transitions return the resulting browser generation. |
@@ -331,9 +314,9 @@ The following matrix accounts for every tool in the checked-in Go 0.49 contract.
 | `github_issue_fields` | split | Read and mutation actions cannot share truthful tool-level side-effect annotations; expose typed read/write operations separately. |
 | `project_coordination` | redesign | Ten canonical reads have different identifiers; use discriminated requests and provide state/allowed-transition data needed by resume. |
 | `project_coordination_write` | redesign | Claim/takeover/resume/checkpoint/release/done require different target/precondition shapes; keep request-ID replay safety but express each transition in schema. |
-| `project_context` | keep/refine, implemented | Loki recomputes target-owned guidance, selected Skill revisions, repository/worktree/code evidence, canonical coordination, checkpoint staleness/completeness, and legal claim/takeover guidance. Keep this ownership model; tighten nested output schemas and integrate live Job evidence when the unified Job surface lands. |
+| `project_context` | keep/refine, implemented | Loki recomputes target-owned guidance, selected Skill revisions, repository/worktree/code evidence, canonical coordination, checkpoint staleness/completeness, and legal claim/takeover guidance. Keep this ownership model; the unified Job surface has landed, while composed live-Job evidence remains a separate follow-up if the context workflow needs it. |
 | `project_context_write` | keep/refine, implemented | The public caller supplies request ID, expected basis, expected previous checkpoint, and bounded explanatory fields only. Loki recomputes authoritative basis, requires active Run ownership, and writes through the runtime-owned journal. Keep this CAS/replay model; move to generated typed schemas with the wider contract redesign. |
-| `agent_guidance` | redesign contract, keep capability | Native source/revision/completeness and target-aware Skill loading are implemented; context/Skill request variants still need discriminated schemas and tighter outputs. |
+| `agent_guidance` | keep/refine, implemented | Native source/revision/completeness, target-aware Skill loading and the generated action-specific contract are implemented. Keep the capability and refine only product-driven nested/completeness semantics rather than reopening the ownership model. |
 
 ## Running Python-only tool disposition
 
@@ -349,7 +332,7 @@ The currently connected Python 0.47.1 server exposes 13 additional tools that ar
 | `agent_context` | Replaced by Loki-native `agent_guidance`/composed project context, with target-scoped AGENTS.md and Skill provenance. |
 | `skill_read` | Replaced by Loki-native Agent Skill discovery/inspection under the standard portable Skill format. |
 | `skill_write` | Replace with a guarded Loki-native Skill lifecycle API only after Repository Scope and user-scope storage authority are complete. |
-| `bootstrap_project` | Express setup as a registered workflow/job entry point after the unified Job model is exposed; do not keep a special execution lifecycle. |
+| `bootstrap_project` | The unified Job model is now exposed; express setup as a registered workflow/Job entry point when this capability is reintroduced, and do not keep a special execution lifecycle. |
 | `action` | Split configuration from execution and process state; do not port the configure/run/process/stop monolith. |
 | `command_run` | Replace with unified finite Job start/wait/result behavior. |
 | `command_start` | Replace with the same Job start API plus explicit lifetime/deadline semantics. |
@@ -402,7 +385,7 @@ A new-session bootstrap should be deterministic:
 resolve agent guidance for target
   -> resolve current project/workstream/task/run
   -> call project_context for composed resume state
-  -> inspect current Git/workspace evidence and relevant live jobs when the unified Job API is available
+  -> inspect current Git/workspace evidence and relevant live jobs when live execution state matters
   -> reconcile checkpoint + current canonical/actual state
   -> choose one legal claim/resume/takeover transition
   -> continue from the recorded/reconciled next action
@@ -412,12 +395,12 @@ The user should be able to say only “continue the interrupted work”. They sh
 
 ### Abrupt-loss acceptance scenarios
 
-The recovery harness covers the Loki-native cases below; the live-Job case remains blocked on the separate unified Job service/API:
+The public unified Job service/API has landed. The recovery harness still needs a composed live-Job scenario before Job state can be treated as normal resume evidence, and the real OCI/network fixture remains the acceptance blocker for the underlying execution path:
 
 - clean checkpoint, then immediate new MCP session;
 - file mutation after checkpoint, response received, then conversation ends before a new checkpoint;
 - mutation request reaches the server but the client loses the terminal response;
-- validation evidence is rehydrated after restart; live Job state remains an external Job-workstream gap;
+- validation evidence is rehydrated after restart; a composed live-Job resume scenario is still required even though the public Job API now exists;
 - checkpoint becomes stale because task definition, Git basis, AGENTS.md, or selected Skill revision changed;
 - no semantic checkpoint exists at all;
 - prior session disappears while a devtools Run is still active;
@@ -473,7 +456,7 @@ Do not rewrite every tool in one catalog-sized patch. Apply one common contract 
    - Move public request/result definitions out of the frozen JSON fixture as the authoring source.
    - Generate or construct MCP schemas, field descriptions, annotations, examples, and snapshot artifacts from reviewed typed operation definitions.
    - Add action-discriminated required/forbidden-field tests and a handler/catalog drift check.
-   - Fix confirmed zero-risk drift such as `preview_publish.environment_routes` by either implementing it with tests or removing it from the public contract.
+   - The confirmed `preview_publish.environment_routes` drift is resolved: the field is removed, contract/handler drift tests cover it, and Job publication uses explicit `job_id` plus logical `endpoint` instead.
 
 2. **Operation and error envelope**
    - Define stable operation/correlation IDs, request-ID replay rules, typed public error categories, retryability, and `outcome_unknown`.
@@ -489,14 +472,14 @@ Do not rewrite every tool in one catalog-sized patch. Apply one common contract 
    - Use this family to prove the generated contract, typed output, operation-ID, and recovery model before copying it elsewhere.
 
 4. **Unified Job surface**
-   - Complete durable Job start/inspect/output/cancel before removing the legacy execution/process tools.
-   - Ensure finite commands and long-running services differ by requested lifetime, not by unrelated MCP APIs.
-   - Make disconnect/restart semantics observable and independent from an MCP turn.
+   - Durable Job start/inspect/output/cancel is source-implemented with request-ID replay, disconnect-independent lifetime, bounded output, restart reconciliation, logical network profiles and Job-owned endpoint leases.
+   - MCP reaches the unprivileged executor only; the executor reaches the privileged launcher; launcher/backend authority is absent from the public request/result contract.
+   - Remaining work for this step is acceptance: run the accumulated deterministic gate and the real supported-host OCI/network fixture before retiring legacy execution paths or treating the surface as release-enabled.
 
 5. **Stateful UI and sharing families**
-   - Migrate browser session/observe/interact with page-generation or equivalent stale-reference protection.
-   - Make preview/image/artifact share creation replay-safe and revoke idempotent.
-   - Bind previews to owned endpoint/job identity rather than treating a numeric port as durable service identity.
+   - Browser session/observe/interact keeps its generation/stale-reference model and continues its separate desktop-interaction completion work.
+   - Preview creation is request-ID replay-safe and Job publication now binds exact endpoint leases; image/artifact sharing retains its own family-specific follow-up.
+   - Real preview HTTP/WebSocket, restart, stale lease and numeric host-port reuse must still pass through the supported-host Job fixture before the endpoint-identity correction is acceptance-closed.
 
 6. **Secrets and provider integrations**
    - Separate public configuration from secret lifecycle at the contract level.
@@ -506,14 +489,14 @@ Do not rewrite every tool in one catalog-sized patch. Apply one common contract 
 7. **Coordination, guidance, and resume**
    - Loki-native `agent_guidance`, runtime-owned semantic checkpoints, `project_context`, expected-basis checkpoint writes, fresh-session restart recovery, and devtools compaction decoupling are implemented.
    - The reduced devtools candidate contract is fingerprint-gated before runtime readiness and has passed runtime+MCP integration acceptance.
-   - Remaining work is the broader action-specific schema cleanup and unified Job evidence integration; do not reopen context ownership or restore devtools compaction extensions.
+   - Action-specific schema generation and the public Job surface have landed. Remaining context work is limited to product-driven composed evidence needs; do not reopen context ownership or restore devtools compaction extensions.
 
 8. **Client-neutral scenario gate**
    - Run the scenario corpus against each declared client integration and release artifact.
    - Reject releases where a valid user intent still predictably leads to an unsupported call shape, ignored safety guard, unsafe retry, false completeness, or stale-resource action.
    - Retire old tools only after their named replacement passes the same user capability scenario.
 
-Each migrated family gets contract snapshots, semantic unit tests, fault/retry tests where applicable, and at least one agent-use scenario. Tool-count reduction is not itself a success metric; predictable safe selection is.
+Each migrated family gets contract snapshots, semantic unit tests, fault/retry tests where applicable, and at least one agent-use scenario. These checks are authored with the family but follow the repository validation cadence: narrow execution only when later implementation depends on the result, with broad contract and repository gates deferred until the coherent implementation batch is complete. Tool-count reduction is not itself a success metric; predictable safe selection is.
 
 ## Implementation placement
 

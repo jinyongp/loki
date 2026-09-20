@@ -4,7 +4,7 @@ The current verified host targets are Linux and WSL2. The repository `compose.ya
 
 ## Requirements
 
-Install Docker with Compose v2 and build or load a Loki image whose `org.opencontainers.image.title` label is `Loki`. Choose an absolute workspace path. On Linux and WSL2, a newly created empty workspace receives an ACL for container UID 10000 plus an inheritable default. Existing workspaces are never modified and must already be readable, writable, and searchable by UID 10000. Service health confirms bind-mount access during install. The lifecycle script keeps operator state under `${XDG_STATE_HOME:-$HOME/.local/state}/loki-compose` by default. Override it with `LOKI_COMPOSE_STATE_DIR` when multiple installations are needed.
+Install current Docker with Compose v2 and Buildx/BuildKit, then build or load a Loki image whose `org.opencontainers.image.title` label is `Loki`. Choose an absolute workspace path. On Linux and WSL2, a newly created empty workspace receives an ACL for container UID 10000 plus an inheritable default. Existing workspaces are never modified and must already be readable, writable, and searchable by UID 10000. Service health confirms bind-mount access during install. The lifecycle script keeps operator state under `${XDG_STATE_HOME:-$HOME/.local/state}/loki-compose` by default. Override it with `LOKI_COMPOSE_STATE_DIR` when multiple installations are needed.
 
 The state directory is mode `0700`. Its `mcp-token` is the single Compose client-token file. The file is mode `0444` because the non-root MCP container must read the bind-mounted Compose secret; the private parent directory prevents other host users from opening it. The token must contain at least 43 characters (256 bits of encoded entropy). It is never accepted as an argument or printed.
 
@@ -86,7 +86,7 @@ Loki ships one multi-role image. Add project-specific language runtimes in a der
 BASE_REF=registry.example/loki@sha256:...
 docker pull "$BASE_REF"
 BASE_ID=$(docker image inspect --format '{{.Id}}' "$BASE_REF")
-docker build \
+docker buildx build --load \
   --build-arg LOKI_BASE="$BASE_REF" \
   --build-arg LOKI_BASE_ID="$BASE_ID" \
   --file packaging/container/derived/Dockerfile \

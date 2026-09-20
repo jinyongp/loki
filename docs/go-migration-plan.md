@@ -23,7 +23,7 @@
 
 ## 책임 경계
 
-`devtools`는 프로젝트 탐색, 작업 큐, 설정된 명령, 진단, 포트, 일반 프로세스와 공개 상태를 맡는다. 프로젝트 의존성 설치와 테스트도 runner가 `devtools run` 또는 잠금 파일 기반 명령으로 실행한다. Go MCP는 이를 도구로 복제하지 않는다. 번들에는 devtools와 Git 커밋, 검증, 계획, 조사 등 일반 에이전트 스킬을 함께 둔다.
+`devtools`는 프로젝트 탐색, 작업 큐, 등록된 workflow/action, 진단과 공개 상태를 맡는다. 프로젝트 제어 명령의 실행 수명주기는 Go MCP의 통합 `job` 도구가 담당하며, MCP는 비권한 executor에만 연결되고 executor가 별도의 privileged launcher를 통해 격리된 Job을 시작한다. 프로젝트 의존성 설치는 `dependency-install` 네트워크 프로필을 선택한 Job에서 수행한다. 번들에는 devtools와 Git 커밋, 검증, 계획, 조사 등 일반 에이전트 스킬을 함께 둔다.
 
 Loki는 AES-GCM 비밀 저장·선택적 주입, Unix peer 인증, 감사, 비밀 누출 차단, workspace 경로 제한, Git 서명 키, CDP 브라우저, preview/artifact, 포트 소유권과 제한된 Docker 검사를 유지한다.
 
@@ -36,7 +36,7 @@ Loki 자체 브라우저 조작 검증은 Browser Plugin으로 수행한다. 이
 - Go 바이너리, 빌드 시 선택한 devtools, 고정 toolchain, Chromium, 전체 번들 스킬, unit과 설정을 checksum이 있는 후보 아티팩트로 만든다.
 - root 비밀 상태와 runner의 설정·캐시·snapshot 경로가 분리되어 있으며 서비스 시작 시 소유권, 모드와 symlink 부재를 검사한다.
 - 직접 devtools, MCP 도구와 비밀 주입 프로세스가 같은 폐쇄형 runner 환경과 관리자 Git 서명 정책을 사용한다.
-- MCP는 runtime, port guard, browser, signing socket을 기다리며 Docker socket 생성 순서와 무관하게 재부팅 후 기동한다.
+- MCP는 runtime, port guard, browser, signing, executor socket을 기다린다. MCP는 launcher나 Docker socket에 직접 접근하지 않으며, executor가 privileged launcher에만 연결된다. native launcher unit은 Docker Unix socket 경로가 있어야 시작하지만 일반 lifecycle health는 Docker daemon의 실제 Job 실행 가능성을 증명하지 않는다. OCI 실행·network/endpoint 동작은 별도 supported-host acceptance fixture에서 검증한다.
 - Python v1 vault 복사본을 반복 가능하게 가져오고 fingerprint, readback, backup과 원본 불변성을 검사한다.
 - installer는 release 링크를 원자적으로 전환하고 health 실패 시 이전 release로 복귀한다.
 - 격리 acceptance는 같은 후보로 두 번 clean install, upgrade, Chromium RPC, Git signing, reboot, rollback과 vault restore를 검증한다.

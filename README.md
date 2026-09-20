@@ -71,21 +71,27 @@ rollback acceptance before considering a cutover:
 See [the Go candidate runbook](docs/go-candidate-runbook.md) for installation,
 health checks, migration, and recovery commands.
 
-Stage the candidate into a new root with the target service identities:
+Stage the candidate into a new root with the target service identities and
+the digest-pinned OCI image used for isolated Jobs and their trusted gateway:
 
 ```sh
 /tmp/loki-go-candidate/stage.sh \
   /tmp/loki-go-root \
-  RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID
+  RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID EXECUTOR_UID \
+  registry.example/loki@sha256:...
 ```
 
-Staging verifies all checksums, refuses an existing target, renders service
-layouts, and generates a fresh MCP token and SSH signing key inside the new
-root. It does not install or start services on the host.
+Staging verifies all checksums, refuses an existing target, renders runtime,
+MCP, executor, and launcher layouts, and generates a fresh MCP token and SSH
+signing key inside the new root. It does not install or start services on the
+host.
 
-The MCP unit requires the runtime, port guard, browser, and signing agent. Its
-startup helper waits up to 30 seconds for their Unix sockets, so a socket that
-appears after systemd starts the MCP unit is handled without a manual restart.
+The MCP unit requires the runtime, port guard, browser, signing agent, and
+unprivileged executor. The executor requires the privileged launcher, while
+MCP has no direct launcher or Docker-socket path. The MCP startup helper waits
+up to 30 seconds for its required Unix sockets, including the executor socket,
+so a dependency that becomes ready after systemd starts MCP does not require a
+manual restart.
 
 ## Production separation
 

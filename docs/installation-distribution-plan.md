@@ -161,13 +161,13 @@ Projects use ecosystem-standard version declarations where practical. Examples i
 
 Version declarations are selectors rather than authorization grants. Resolution follows these rules:
 
-- An exact selector such as `22.23.2` selects that exact version.
+- An exact selector such as `26.9.0` selects that exact version.
 - A partial selector such as `22` or `22.23` selects the highest installed matching version.
 - If no installed version matches, Loki resolves the latest matching version from its trusted toolchain index, verifies it, installs it into the managed store, and then executes it.
 - The existence of a newer matching version does not replace an already-installed matching version during ordinary command execution. Toolchain updates are explicit operations.
 - A selector cannot escape the administrator-owned provisioning and version policy for that toolchain family.
 
-For example, a project that declares Node.js `22` uses the highest installed `22.x` release. If no `22.x` release is installed, Loki installs the latest trusted `22.x` release. Updating an existing `22.x` installation to a newer matching release is a separate explicit toolchain update rather than a side effect of running `node`.
+For example, a project that declares Node.js `26` uses the highest installed `26.x` release. If no `26.x` release is installed, Loki installs the latest trusted `26.x` release. Updating an existing `26.x` installation to a newer matching release is a separate explicit toolchain update rather than a side effect of running `node`.
 
 Project dependencies remain project state rather than host toolchains. Once a runtime family and its package manager are provisioned for the workload, operations such as `pnpm install`, `uv sync`, `cargo update`, and their project-local executables run under that job's filesystem, credential, resource and network grants. Project packages such as ESLint, Ruff, pytest, or individual crates do not become host-managed toolchains merely because a project uses them, and command names are not treated as a substitute for the underlying sandbox policy.
 

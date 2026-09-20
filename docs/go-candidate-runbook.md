@@ -6,7 +6,7 @@
 
 ## 사전 조건
 
-- Ubuntu 24.04 amd64, systemd, Docker
+- Ubuntu 24.04 amd64, systemd, current Docker with Compose v2 and Buildx/BuildKit
 - Go 1.27.1
 - CLI 프로토콜 3, JSON envelope 1, JSON 출력 방식의 `process start`·`process restart` schema를 제공하는 `devtools` 후보 실행 파일
 - `runner`의 전역 Git `user.name`과 `user.email`
@@ -47,6 +47,18 @@
 
 실패하면 harness는 failed unit과 `loki-go*` journal을 출력한다. 생성한 컨테이너와 acceptance image는 종료 trap이 해당 실행 ID만 정리한다.
 
+## 실제 OCI Job 승인
+
+Docker 가능한 disposable Linux host에서는 별도 fixture 값을 조합하지 않고 다음 한 명령으로 실제 Job lifecycle/network/endpoint 승인을 실행한다.
+
+```sh
+./scripts/accept-loki-oci-jobs.sh
+```
+
+runner는 현재 Docker Buildx/BuildKit이 준비되어 있는지 먼저 확인한다. 기본 `/var/run/docker.sock`의 peer UID를 확인하고, 임시 shared workspace와 loopback-only Registry 3.1.1을 만든 뒤 현재 checkout에서 gateway 실행 파일과 execution/egress contract만 포함한 최소 fixture 이미지를 BuildKit으로 빌드한다. 이미지를 임시 registry에 push해 immutable `repo@sha256` 참조를 얻은 다음 모든 `TestRealOCIJob*` 케이스를 required mode로 실행하고 자신이 만든 registry/container/workspace/image reference를 정리한다. deprecated legacy Docker builder로의 fallback은 제공하지 않는다. 기본 허용 대상은 committed egress policy에 포함된 `registry.npmjs.org:443`이다.
+
+Docker socket, workspace, allowlisted authority, daemon peer UID 또는 registry helper가 비표준인 호스트에서는 기존 `LOKI_TEST_*`와 `LOKI_OCI_ACCEPTANCE_REGISTRY_IMAGE` 환경변수로 해당 값만 override할 수 있다. 정상적인 local-Docker Linux 경로에서는 수동 image digest나 workspace 준비가 필요하지 않다.
+
 ## 릴리스 통합 검증
 
 systemd 후보와 self-hosting 이미지를 함께 승인할 때는 빌드가 끝난 동일 소스 리비전의 산출물 세 개를 전달한다.
@@ -76,7 +88,8 @@ sudo -u runner env HOME=/home/runner git config --global --includes user.email
 ```sh
 sudo /tmp/loki-go-candidate/install.sh install \
   /tmp/loki-go-candidate RELEASE_ID \
-  RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID \
+  RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID EXECUTOR_UID \
+  registry.example/loki@sha256:... \
   /root/loki-python-vault-copy
 
 sudo /usr/local/sbin/loki-go-lifecycle health
@@ -85,7 +98,7 @@ sudo systemctl --no-pager --full status loki-go.target 'loki-go-*.service'
 sudo /usr/local/bin/loki secret status
 ```
 
-마이그레이션 인자를 생략하면 기존 Go vault를 그대로 사용한다. 설치기는 checksum과 identity 충돌을 검사하고, toolchain과 vault migration을 완료한 뒤에만 `current` 링크를 전환한다. health 실패 시 이전 릴리스로 자동 복귀한다.
+마지막 vault 복사본 인자를 생략하면 기존 Go vault를 그대로 사용한다. Job image 인자는 mutable tag가 아니라 `registry/repository@sha256:...` 형식의 immutable digest reference여야 한다. 설치기는 checksum과 runner/browser/executor identity 충돌을 검사하고, toolchain과 vault migration을 완료한 뒤에만 `current` 링크를 전환한다. health 실패 시 이전 릴리스로 자동 복귀한다.
 
 ## Rollback과 vault 복원
 
@@ -108,4 +121,4 @@ sudo journalctl -b --no-pager -u 'loki-go*' -n 300
 sudo /usr/local/sbin/loki-go-lifecycle health
 ```
 
-MCP unit은 runtime, port guard, browser, signing socket을 기다린다. runtime은 Docker socket이 늦게 생성되어도 기동하며, 실제 Docker 검사 시점에 socket 오류를 반환한다.
+MCP unit은 runtime, port guard, browser, signing, executor socket을 기다린다. executor는 별도의 privileged launcher에만 연결되고 MCP에는 launcher socket이나 Docker socket이 노출되지 않는다. native launcher unit은 `/run/docker.sock` 경로가 있어야 시작하지만, 빈 Job journal에서의 lifecycle health는 Docker daemon의 실제 OCI 실행 가능성까지 검사하지 않는다. 그 기능은 위 `./scripts/accept-loki-oci-jobs.sh` real OCI/network acceptance가 통과해야 증명된다.
