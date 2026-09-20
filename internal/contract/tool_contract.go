@@ -192,6 +192,7 @@ func generatedStandaloneTools() map[string]toolFactory {
 	return map[string]toolFactory{
 		"github_issue_fields_read":  githubIssueFieldsReadTool,
 		"github_issue_fields_write": githubIssueFieldsWriteTool,
+		"job":                       jobTool,
 	}
 }
 

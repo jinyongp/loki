@@ -86,7 +86,7 @@ func TestProjectCoordinationMCPKeepsClaimContextSessionPrivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	app, err := NewMCP(c, MCPOptions{
-		Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports,
+		Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Ports: ports,
 		Policy: policyGenerationFixture(t), Token: token,
 		Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"},
 	})

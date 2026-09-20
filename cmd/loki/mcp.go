@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"loki/internal/auth"
 	"loki/internal/config"
@@ -18,14 +19,15 @@ import (
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
 	"loki/internal/service"
+	jobsremote "loki/internal/work/jobs/remote"
 )
 
 type mcpLayout struct {
-	RuntimeSocket, PortGuardSocket, BrowserSocket, RGPath string
-	ExecutionContract, PackagedSkillRoot                  string
-	RuntimeUID, PortGuardUID, BrowserUID                  *uint32
-	GitTemplateRoots                                      []string
-	Environment                                           map[string]string
+	RuntimeSocket, PortGuardSocket, BrowserSocket, ExecutorSocket, RGPath string
+	ExecutionContract, PackagedSkillRoot                                  string
+	RuntimeUID, PortGuardUID, BrowserUID, ExecutorUID                     *uint32
+	GitTemplateRoots                                                      []string
+	Environment                                                           map[string]string
 }
 
 func (l mcpLayout) options(token string) (service.MCPOptions, error) {
@@ -48,8 +50,37 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
 	}
-	return service.MCPOptions{Runtime: rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}, PortGuard: rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}, Browser: service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID), RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket, RGPath: l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot, GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token}, nil
+
+	options := service.MCPOptions{
+		Runtime:       rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID},
+		PortGuard:     rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID},
+		Browser:       service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID),
+		RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket,
+		RGPath: l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot,
+		GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token,
+	}
+	hasExecutorSocket := l.ExecutorSocket != ""
+	hasExecutorUID := l.ExecutorUID != nil
+	if hasExecutorSocket != hasExecutorUID {
+		return service.MCPOptions{}, errors.New("MCP executor socket and UID must be configured together")
+	}
+	if hasExecutorSocket {
+		if !filepath.IsAbs(l.ExecutorSocket) || filepath.Clean(l.ExecutorSocket) != l.ExecutorSocket ||
+			l.ExecutorSocket == string(filepath.Separator) || *l.ExecutorUID == 0 {
+			return service.MCPOptions{}, errors.New("MCP executor peer configuration is invalid")
+		}
+		executor, err := jobsremote.NewExecutor(jobsremote.ExecutorOptions{
+			Socket: l.ExecutorSocket, ExpectedUID: l.ExecutorUID, Timeout: 30 * time.Second,
+		})
+		if err != nil {
+			return service.MCPOptions{}, err
+		}
+		options.Jobs = executor
+		options.ExecutorSocket = l.ExecutorSocket
+	}
+	return options, nil
 }
+
 func runMCP(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	flags.SetOutput(stderr)

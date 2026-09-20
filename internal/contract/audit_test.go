@@ -12,11 +12,11 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ContractAudit{
-		ToolCount:              32,
-		ActionUnionCount:       19,
+		ToolCount:              33,
+		ActionUnionCount:       20,
 		FlatActionUnionCount:   0,
-		InputPropertyCount:     193,
-		DescribedPropertyCount: 193,
+		InputPropertyCount:     203,
+		DescribedPropertyCount: 203,
 		MissingOutputSchema:    0,
 		OpenOutputSchema:       0,
 		MissingAnnotations:     0,
@@ -42,7 +42,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		"project_context": true, "project_context_write": true, "github": true,
 		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
-		"git_inspect": true, "git_stage": true,
+		"git_inspect": true, "git_stage": true, "job": true,
 	}
 	for _, issue := range audit.Issues {
 		if !migrated[issue.Tool] {

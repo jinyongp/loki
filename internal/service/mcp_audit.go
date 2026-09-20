@@ -22,7 +22,7 @@ var mcpInvocationCounter atomic.Uint64
 func auditMetadata(args map[string]any) map[string]any {
 	metadata := map[string]any{}
 	budget := 8192
-	for _, key := range []string{"action", "operation", "cwd", "path", "source", "destination", "profile", "action_name", "name", "scope", "session_id", "share_id", "kind", "request_id", "port", "full_page", "ttl_seconds", "overwrite", "index", "staged", "reverse", "regex", "target", "issue", "field_id"} {
+	for _, key := range []string{"action", "operation", "cwd", "path", "source", "destination", "profile", "action_name", "name", "scope", "session_id", "share_id", "kind", "request_id", "job_id", "timeout_seconds", "port", "full_page", "ttl_seconds", "overwrite", "index", "staged", "reverse", "regex", "target", "issue", "field_id"} {
 		v, exists := args[key]
 		if !exists {
 			continue
@@ -97,16 +97,17 @@ func auditHandler(log *audit.Log, name string, next mcpserver.Handler, onError f
 			if result != nil {
 				if value, ok := result.StructuredContent.(map[string]any); ok {
 					if code, ok := value["exit_code"]; ok {
+						observationalExit := name == "job" && args["action"] == "inspect"
 						switch code := code.(type) {
 						case int:
 							metadata["exit_code"] = code
-							if code != 0 {
+							if code != 0 && !observationalExit {
 								success = false
 								outcome = "nonzero_exit"
 							}
 						case float64:
 							metadata["exit_code"] = code
-							if code != 0 {
+							if code != 0 && !observationalExit {
 								success = false
 								outcome = "nonzero_exit"
 							}

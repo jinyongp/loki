@@ -15,8 +15,10 @@ import (
 )
 
 type Route struct {
-	Prefix string
-	Port   int
+	Prefix  string
+	Port    int
+	JobID   string
+	LeaseID string
 }
 type Preview struct {
 	ID, Token, CWD, Command string
@@ -43,6 +45,7 @@ type Store struct {
 var idPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 var hostPattern = regexp.MustCompile(`^loki-([0-9a-f]{32})$`)
 var requestIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var routeAuthorityPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 var ErrRequestConflict = errors.New("preview request_id was already used for a different publication")
 
@@ -64,12 +67,24 @@ func New(domain string, maximum int, clock func() time.Time) *Store {
 }
 
 func Normalize(routes map[string]int) ([]Route, error) {
-	if _, ok := routes["/"]; !ok || len(routes) < 1 || len(routes) > 8 {
-		return nil, errors.New("preview routes must include a root route")
-	}
 	result := make([]Route, 0, len(routes))
 	for prefix, port := range routes {
-		if !strings.HasPrefix(prefix, "/") || prefix != "/" && strings.HasSuffix(prefix, "/") || strings.Contains(prefix, "//") || port < 1 || port > 65535 {
+		result = append(result, Route{Prefix: prefix, Port: port})
+	}
+	return NormalizeRoutes(result)
+}
+
+func NormalizeRoutes(routes []Route) ([]Route, error) {
+	if len(routes) < 1 || len(routes) > 8 {
+		return nil, errors.New("preview routes must include a root route")
+	}
+	result := append([]Route(nil), routes...)
+	seenPrefixes := make(map[string]bool, len(result))
+	hasRoot := false
+	for _, route := range result {
+		prefix := route.Prefix
+		if !strings.HasPrefix(prefix, "/") || prefix != "/" && strings.HasSuffix(prefix, "/") ||
+			strings.Contains(prefix, "//") || route.Port < 1 || route.Port > 65535 || seenPrefixes[prefix] {
 			return nil, errors.New("preview route is invalid")
 		}
 		for _, part := range strings.Split(prefix, "/") {
@@ -77,7 +92,15 @@ func Normalize(routes map[string]int) ([]Route, error) {
 				return nil, errors.New("preview route is invalid")
 			}
 		}
-		result = append(result, Route{prefix, port})
+		hasAuthority := route.JobID != "" || route.LeaseID != ""
+		if hasAuthority && (!routeAuthorityPattern.MatchString(route.JobID) || !routeAuthorityPattern.MatchString(route.LeaseID)) {
+			return nil, errors.New("preview route authority is invalid")
+		}
+		seenPrefixes[prefix] = true
+		hasRoot = hasRoot || prefix == "/"
+	}
+	if !hasRoot {
+		return nil, errors.New("preview routes must include a root route")
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if len(result[i].Prefix) != len(result[j].Prefix) {
@@ -179,8 +202,8 @@ func publishFingerprint(routes []Route, ttl int) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (s *Store) publish(requestID string, routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
-	normalized, err := Normalize(routes)
+func (s *Store) publishRoutes(requestID string, routes []Route, cwd, command string, ttl int) (map[string]any, error) {
+	normalized, err := NormalizeRoutes(routes)
 	if err != nil {
 		return nil, err
 	}
@@ -229,14 +252,18 @@ func (s *Store) publish(requestID string, routes map[string]int, cwd, command st
 }
 
 func (s *Store) Publish(routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
-	return s.publish("", routes, cwd, command, ttl)
+	normalized, err := Normalize(routes)
+	if err != nil {
+		return nil, err
+	}
+	return s.publishRoutes("", normalized, cwd, command, ttl)
 }
 
-func (s *Store) Replay(requestID string, routes map[string]int, ttl int) (map[string]any, bool, error) {
+func (s *Store) replayRoutes(requestID string, routes []Route, ttl int) (map[string]any, bool, error) {
 	if !requestIDPattern.MatchString(requestID) {
 		return nil, false, errors.New("preview request_id must be a UUID")
 	}
-	normalized, err := Normalize(routes)
+	normalized, err := NormalizeRoutes(routes)
 	if err != nil {
 		return nil, false, err
 	}
@@ -258,11 +285,31 @@ func (s *Store) Replay(requestID string, routes map[string]int, ttl int) (map[st
 	return clonePreviewResult(replay.Result), true, nil
 }
 
+func (s *Store) Replay(requestID string, routes map[string]int, ttl int) (map[string]any, bool, error) {
+	normalized, err := Normalize(routes)
+	if err != nil {
+		return nil, false, err
+	}
+	return s.replayRoutes(requestID, normalized, ttl)
+}
+
+func (s *Store) ReplayRoutes(requestID string, routes []Route, ttl int) (map[string]any, bool, error) {
+	return s.replayRoutes(requestID, routes, ttl)
+}
+
 func (s *Store) PublishReplay(requestID string, routes map[string]int, cwd, command string, ttl int) (map[string]any, error) {
+	normalized, err := Normalize(routes)
+	if err != nil {
+		return nil, err
+	}
+	return s.PublishRoutesReplay(requestID, normalized, cwd, command, ttl)
+}
+
+func (s *Store) PublishRoutesReplay(requestID string, routes []Route, cwd, command string, ttl int) (map[string]any, error) {
 	if !requestIDPattern.MatchString(requestID) {
 		return nil, errors.New("preview request_id must be a UUID")
 	}
-	return s.publish(strings.ToLower(requestID), routes, cwd, command, ttl)
+	return s.publishRoutes(strings.ToLower(requestID), routes, cwd, command, ttl)
 }
 func (s *Store) List() []map[string]any {
 	s.mu.Lock()

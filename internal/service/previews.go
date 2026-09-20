@@ -17,6 +17,7 @@ import (
 	"loki/internal/mcpserver"
 	"loki/internal/portguard"
 	"loki/internal/previews"
+	"loki/internal/work/jobs"
 )
 
 type PreviewController struct {
@@ -24,11 +25,14 @@ type PreviewController struct {
 	Runtime RuntimeCaller
 	Ports   portguard.Policy
 	Inspect func(context.Context, int) (map[string]any, error)
+	Jobs    jobs.Controller
 }
 type previewRequest struct {
 	Action    string
 	Port      *int
 	Routes    *map[string]int
+	JobID     string `json:"job_id"`
+	Endpoint  string `json:"endpoint"`
 	RequestID string `json:"request_id"`
 	TTL       int    `json:"ttl_seconds"`
 }
@@ -60,6 +64,56 @@ func (c *PreviewController) PortAllowed(ctx context.Context, port int) bool {
 	_, err := c.listener(ctx, port)
 	return err == nil
 }
+
+func (c *PreviewController) jobRoute(ctx context.Context, jobID, endpoint string) (previews.Route, error) {
+	if c.Jobs == nil {
+		return previews.Route{}, fault.New(
+			fault.CodeUnavailable, "Job endpoint previews are not configured",
+			false, "configure the executor peer before publishing a Job endpoint",
+		)
+	}
+	if err := jobs.ValidateJobID(jobID); err != nil || endpoint == "" {
+		return previews.Route{}, fault.New(
+			fault.CodeInvalidInput, "Job endpoint preview identity is invalid",
+			false, "use a job_id from job start and an endpoint name declared for that Job",
+		)
+	}
+	status, err := c.Jobs.Inspect(ctx, jobID)
+	if err != nil {
+		return previews.Route{}, err
+	}
+	if status.State != jobs.StateRunning {
+		return previews.Route{}, fault.Error("Job endpoint is not active")
+	}
+	for _, lease := range status.Endpoints {
+		if lease.JobID == jobID && lease.Name == endpoint && lease.State == jobs.EndpointLeaseActive &&
+			lease.ID != "" && lease.HostPort >= 1024 && lease.HostPort <= 65535 {
+			return previews.Route{Prefix: "/", Port: lease.HostPort, JobID: jobID, LeaseID: lease.ID}, nil
+		}
+	}
+	return previews.Route{}, fault.Error("Job endpoint lease is not active")
+}
+
+func (c *PreviewController) RouteAllowed(ctx context.Context, route previews.Route) bool {
+	if route.JobID == "" && route.LeaseID == "" {
+		return c.PortAllowed(ctx, route.Port)
+	}
+	if c.Jobs == nil || route.JobID == "" || route.LeaseID == "" {
+		return false
+	}
+	status, err := c.Jobs.Inspect(ctx, route.JobID)
+	if err != nil || status.State != jobs.StateRunning {
+		return false
+	}
+	for _, lease := range status.Endpoints {
+		if lease.JobID == route.JobID && lease.ID == route.LeaseID &&
+			lease.HostPort == route.Port && lease.State == jobs.EndpointLeaseActive {
+			return true
+		}
+	}
+	return false
+}
+
 func rejectLoopbacks(listener map[string]any) error {
 	pid, ok := listener["pid"].(float64)
 	if !ok || pid <= 0 {
@@ -95,6 +149,28 @@ func previewReplayError(err error) error {
 	return err
 }
 
+func (c *PreviewController) publishJob(ctx context.Context, r previewRequest) (map[string]any, error) {
+	route, err := c.jobRoute(ctx, r.JobID, r.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	routes := []previews.Route{route}
+	if replayed, ok, err := c.Store.ReplayRoutes(r.RequestID, routes, r.TTL); err != nil {
+		return nil, previewReplayError(err)
+	} else if ok {
+		replayed["request_id"] = strings.ToLower(r.RequestID)
+		return replayed, nil
+	}
+	published, err := c.Store.PublishRoutesReplay(
+		r.RequestID, routes, "/workspace", "job:"+r.JobID+"/"+r.Endpoint, r.TTL,
+	)
+	if err != nil {
+		return nil, previewReplayError(err)
+	}
+	published["request_id"] = strings.ToLower(r.RequestID)
+	return published, nil
+}
+
 func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[string]any, error) {
 	if c.Store == nil {
 		return nil, fault.Error("temporary live preview sharing is not configured")
@@ -107,6 +183,9 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 	}
 	if r.TTL < 60 || r.TTL > 86400 {
 		return nil, fault.New(fault.CodeInvalidInput, "preview lifetime must be between 60 and 86400 seconds", false, "choose ttl_seconds between 60 and 86400")
+	}
+	if r.Action == "job" {
+		return c.publishJob(ctx, r)
 	}
 	var routes map[string]int
 	switch r.Action {
@@ -123,7 +202,7 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 			return nil, err
 		}
 	default:
-		return nil, fault.New(fault.CodeInvalidInput, "preview_publish action must be server or stack", false, "choose action=server or action=stack")
+		return nil, fault.New(fault.CodeInvalidInput, "preview_publish action must be server, stack, or job", false, "choose action=server, action=stack, or action=job")
 	}
 	if replayed, ok, err := c.Store.Replay(r.RequestID, routes, r.TTL); err != nil {
 		return nil, previewReplayError(err)

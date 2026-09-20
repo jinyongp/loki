@@ -24,10 +24,10 @@ func TestCurrentContract(t *testing.T) {
 	for _, definition := range definitions {
 		seen[definition.Name] = true
 	}
-	if len(definitions) != 32 {
-		t.Fatalf("current public definitions = %d, want 32", len(definitions))
+	if len(definitions) != 33 {
+		t.Fatalf("current public definitions = %d, want 33", len(definitions))
 	}
-	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github", "github_issue_fields_read", "github_issue_fields_write", "project_coordination", "project_coordination_write", "agent_guidance"} {
+	for _, required := range []string{"system_inspect", "browser_session", "workspace_edit", "secret_write", "github", "github_issue_fields_read", "github_issue_fields_write", "project_coordination", "project_coordination_write", "agent_guidance", "job"} {
 		if !seen[required] {
 			t.Errorf("missing Loki tool %q", required)
 		}

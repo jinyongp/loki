@@ -38,7 +38,7 @@ func TestPreviewPublishUsesReplaySafeDiscriminatedContract(t *testing.T) {
 		}
 	}
 	branches := input["oneOf"].([]any)
-	if len(branches) != 2 {
+	if len(branches) != 3 {
 		t.Fatalf("preview_publish branches = %#v", branches)
 	}
 	for _, raw := range branches {
@@ -67,6 +67,16 @@ func TestPreviewPublishUsesReplaySafeDiscriminatedContract(t *testing.T) {
 			if _, exists := branchProperties["port"]; exists {
 				t.Fatal("stack accepts port")
 			}
+		case "job":
+			if !required["job_id"] || !required["endpoint"] {
+				t.Fatalf("job required = %#v", required)
+			}
+			if _, exists := branchProperties["port"]; exists {
+				t.Fatal("job accepts caller-chosen host port")
+			}
+			if _, exists := branchProperties["routes"]; exists {
+				t.Fatal("job accepts caller-chosen routes")
+			}
 		}
 	}
 
@@ -87,10 +97,10 @@ func TestPreviewPublishUsesReplaySafeDiscriminatedContract(t *testing.T) {
 	}
 
 	operations, ok := tool.Meta["loki/operations"].(map[string]any)
-	if !ok || len(operations) != 2 {
+	if !ok || len(operations) != 3 {
 		t.Fatalf("preview_publish operations = %#v", tool.Meta)
 	}
-	for _, action := range []string{"server", "stack"} {
+	for _, action := range []string{"server", "stack", "job"} {
 		semantics := operations[action].(map[string]any)
 		if semantics["replay"] != string(ReplayRequestID) ||
 			semantics["request_id_field"] != "request_id" ||

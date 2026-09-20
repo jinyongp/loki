@@ -109,6 +109,73 @@ func TestMCPAuditRecordsCorrelatedStartAndTerminalMetadata(t *testing.T) {
 	}
 }
 
+func TestJobMCPAuditKeepsOnlySafeLifecycleMetadata(t *testing.T) {
+	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
+	handler := auditHandler(log, "job", func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return mcpserver.Object(map[string]any{
+			"action": "start", "job_id": strings.Repeat("a", 32),
+			"output": "private-job-output", "backend_ref": "private-backend",
+		})
+	}, func(err error) { t.Error(err) })
+	_, err := handler(t.Context(), map[string]any{
+		"action": "start", "request_id": "123e4567-e89b-12d3-a456-426614174301",
+		"cwd": "repo", "argv": []string{"/bin/sh", "-c", "private-job-command"},
+		"timeout_seconds": 30, "job_id": strings.Repeat("a", 32),
+		"policy_sha256": "private-policy",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(log.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, private := range []string{"private-job-output", "private-backend", "private-job-command", "private-policy"} {
+		if strings.Contains(text, private) {
+			t.Fatalf("job audit leaked %q: %s", private, text)
+		}
+	}
+	for _, safe := range []string{
+		`"action":"start"`,
+		`"request_id":"123e4567-e89b-12d3-a456-426614174301"`,
+		`"job_id":"` + strings.Repeat("a", 32) + `"`,
+		`"timeout_seconds":30`,
+	} {
+		if !strings.Contains(text, safe) {
+			t.Fatalf("job audit missing safe metadata %s: %s", safe, text)
+		}
+	}
+}
+
+func TestJobInspectNonzeroExitRemainsAuditSuccess(t *testing.T) {
+	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
+	handler := auditHandler(log, "job", func(context.Context, map[string]any) (*mcp.CallToolResult, error) {
+		return mcpserver.Object(map[string]any{
+			"action": "inspect", "job_id": strings.Repeat("a", 32),
+			"state": "terminal", "exit_code": 7, "outcome": "exited",
+		})
+	}, func(err error) { t.Error(err) })
+	result, err := handler(t.Context(), map[string]any{
+		"action": "inspect", "job_id": strings.Repeat("a", 32),
+	})
+	if err != nil || result.IsError {
+		t.Fatal(result, err)
+	}
+	rows := readAuditLines(t, log.Path)
+	if len(rows) != 2 {
+		t.Fatalf("audit rows = %#v", rows)
+	}
+	terminal := rows[1]
+	if terminal["success"] != true || terminal["outcome"] != "success" {
+		t.Fatalf("inspect audit terminal = %#v", terminal)
+	}
+	metadata := terminal["metadata"].(map[string]any)
+	if metadata["exit_code"] != float64(7) || metadata["job_id"] != strings.Repeat("a", 32) {
+		t.Fatalf("inspect audit metadata = %#v", metadata)
+	}
+}
+
 func TestMCPAuditStartIsDurableBeforeHandlerCompletes(t *testing.T) {
 	log := &audit.Log{Path: filepath.Join(t.TempDir(), "audit.jsonl")}
 	entered := make(chan struct{})

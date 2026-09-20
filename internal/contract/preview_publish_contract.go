@@ -26,6 +26,13 @@ func overridePreviewPublish(tool *mcp.Tool) error {
 				"additionalProperties": map[string]any{"type": "integer", "minimum": 1, "maximum": 65535},
 				"description":          "Public route-prefix to runner-owned workspace port map for action=stack. A root '/' route is required by the preview service.",
 			}},
+			{Name: "job_id", Schema: jobIDSchema(
+				"Job that owns the development endpoint for action=job.",
+			)},
+			{Name: "endpoint", Schema: map[string]any{
+				"type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$",
+				"description": "Logical endpoint name declared by the Job at start time for action=job.",
+			}},
 			{Name: "ttl_seconds", Schema: map[string]any{
 				"type": "integer", "minimum": 60, "maximum": 86400, "default": 900,
 				"description": "Preview lifetime in seconds. Request-ID replay is retained through this share lifetime.",
@@ -34,12 +41,13 @@ func overridePreviewPublish(tool *mcp.Tool) error {
 		Variants: []ActionVariant{
 			{Name: "server", Required: []string{"request_id", "port"}, Optional: []string{"ttl_seconds"}},
 			{Name: "stack", Required: []string{"request_id", "routes"}, Optional: []string{"ttl_seconds"}},
+			{Name: "job", Required: []string{"request_id", "job_id", "endpoint"}, Optional: []string{"ttl_seconds"}},
 		},
 	}).Schema()
 	if err != nil {
 		return err
 	}
-	tool.Description = "Publish one temporary live preview for a server or explicit route stack. Every creation requires a request_id, retries with the same inputs replay the original share while it is retained, and changed inputs with the same request_id conflict."
+	tool.Description = "Publish one temporary live preview for a runner-owned server, an explicit route stack, or a Job-owned development endpoint. Job previews bind the share to the active endpoint lease rather than a bare host port. Every creation requires a request_id, retries with the same inputs replay the original share while it is retained, and changed inputs with the same request_id conflict."
 	tool.InputSchema = input
 	tool.OutputSchema = previewPublishResultSchema()
 	if tool.Annotations != nil {
@@ -55,6 +63,11 @@ func overridePreviewPublish(tool *mcp.Tool) error {
 			Replay: ReplayRequestID, RequestIDField: "request_id",
 			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryNone,
 			AffectedResourceLimit: 1, RecoveryReference: "replay the same request_id while retained or inspect shared_resources kind=previews",
+		},
+		"job": {
+			Replay: ReplayRequestID, RequestIDField: "request_id",
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryNone,
+			AffectedResourceLimit: 1, RecoveryReference: "inspect the Job endpoint lease and shared_resources kind=previews",
 		},
 	})
 }

@@ -38,7 +38,7 @@ func TestHTTPProxy(t *testing.T) {
 	}
 	var allowed atomic.Bool
 	allowed.Store(true)
-	p := NewProxy(s, func(context.Context, int) bool { return allowed.Load() })
+	p := NewProxy(s, func(context.Context, Route) bool { return allowed.Load() })
 	defer p.Close()
 	r := httptest.NewRequest("POST", share["url"].(string)+"/api/hello?x=1", strings.NewReader("body"))
 	r.Header.Set("Cf-Access-Jwt-Assertion", "secret")
@@ -92,7 +92,7 @@ func TestWebsocketUpgradeTunnel(t *testing.T) {
 	port, _ := strconv.Atoi(portText)
 	s := New("preview.test", 0, nil)
 	share, _ := s.Publish(map[string]int{"/": port, "/api": port}, "", "", 60)
-	p := NewProxy(s, func(context.Context, int) bool { return true })
+	p := NewProxy(s, func(context.Context, Route) bool { return true })
 	defer p.Close()
 	server := httptest.NewServer(p)
 	defer server.Close()

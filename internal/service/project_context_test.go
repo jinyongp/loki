@@ -163,7 +163,7 @@ func TestProjectContextResumesAndWritesSessionOwnedCheckpoint(t *testing.T) {
 	}
 	token := strings.Repeat("p", 43)
 	app, err := NewMCP(c, MCPOptions{
-		Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports,
+		Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Ports: ports,
 		Policy: policyGenerationFixture(t), Token: token,
 		Environment: map[string]string{
 			"HOME": t.TempDir(), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",

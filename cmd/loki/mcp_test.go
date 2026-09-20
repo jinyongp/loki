@@ -6,19 +6,82 @@ import (
 	"testing"
 
 	"loki/internal/daemon"
+	jobsremote "loki/internal/work/jobs/remote"
 )
 
 func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	uid := uint32(1000)
-	valid := mcpLayout{RuntimeSocket: "/run/runtime.sock", PortGuardSocket: "/run/ports.sock", BrowserSocket: "/run/browser.sock", ExecutionContract: "/usr/share/doc/loki/execution-contract.json", PackagedSkillRoot: "/opt/loki/share/skills", RuntimeUID: &uid, PortGuardUID: &uid, BrowserUID: &uid}
-	if _, err := valid.options("token"); err != nil {
+	executorUID := uint32(1002)
+	valid := mcpLayout{
+		RuntimeSocket: "/run/runtime.sock", PortGuardSocket: "/run/ports.sock",
+		BrowserSocket: "/run/browser.sock", ExecutorSocket: "/run/executor.sock",
+		ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
+		PackagedSkillRoot: "/opt/loki/share/skills",
+		RuntimeUID:        &uid, PortGuardUID: &uid, BrowserUID: &uid, ExecutorUID: &executorUID,
+	}
+	options, err := valid.options("token")
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mutate := range []func(*mcpLayout){func(l *mcpLayout) { l.RuntimeUID = nil }, func(l *mcpLayout) { l.PortGuardUID = nil }, func(l *mcpLayout) { l.BrowserUID = nil }, func(l *mcpLayout) { l.RuntimeSocket = "relative" }, func(l *mcpLayout) { l.RGPath = "relative" }, func(l *mcpLayout) { l.ExecutionContract = "relative" }, func(l *mcpLayout) { l.PackagedSkillRoot = "relative" }} {
+	if options.Jobs == nil || options.ExecutorSocket != valid.ExecutorSocket {
+		t.Fatalf("executor options = %#v", options)
+	}
+	if _, ok := options.Jobs.(*jobsremote.Executor); !ok {
+		t.Fatalf("jobs client type = %T", options.Jobs)
+	}
+
+	for _, mutate := range []func(*mcpLayout){
+		func(l *mcpLayout) { l.RuntimeUID = nil },
+		func(l *mcpLayout) { l.PortGuardUID = nil },
+		func(l *mcpLayout) { l.BrowserUID = nil },
+		func(l *mcpLayout) { l.RuntimeSocket = "relative" },
+		func(l *mcpLayout) { l.RGPath = "relative" },
+		func(l *mcpLayout) { l.ExecutionContract = "relative" },
+		func(l *mcpLayout) { l.PackagedSkillRoot = "relative" },
+		func(l *mcpLayout) { l.ExecutorUID = nil },
+		func(l *mcpLayout) { l.ExecutorSocket = "" },
+		func(l *mcpLayout) { l.ExecutorSocket = "relative" },
+		func(l *mcpLayout) {
+			root := uint32(0)
+			l.ExecutorUID = &root
+		},
+	} {
 		layout := valid
 		mutate(&layout)
 		if _, err := layout.options("token"); err == nil {
 			t.Fatal("invalid peer/resource configuration accepted")
+		}
+	}
+}
+
+func TestMCPLayoutAllowsExecutorToRemainUnconfiguredBeforeJobSurfaceBinding(t *testing.T) {
+	uid := uint32(1000)
+	layout := mcpLayout{
+		RuntimeSocket: "/run/runtime.sock", PortGuardSocket: "/run/ports.sock", BrowserSocket: "/run/browser.sock",
+		ExecutionContract: "/usr/share/doc/loki/execution-contract.json", PackagedSkillRoot: "/opt/loki/share/skills",
+		RuntimeUID: &uid, PortGuardUID: &uid, BrowserUID: &uid,
+	}
+	options, err := layout.options("token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Jobs != nil || options.ExecutorSocket != "" {
+		t.Fatalf("unexpected executor configuration = %#v", options)
+	}
+}
+
+func TestMCPLayoutRejectsLauncherAuthority(t *testing.T) {
+	for _, raw := range []string{
+		`{"LauncherSocket":"/run/loki/launcher.sock"}`,
+		`{"PolicySHA256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
+	} {
+		path := filepath.Join(t.TempDir(), "mcp.json")
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var layout mcpLayout
+		if err := daemon.ReadJSON(path, &layout); err == nil {
+			t.Fatalf("launcher authority field was accepted: %s", raw)
 		}
 	}
 }

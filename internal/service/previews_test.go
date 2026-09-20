@@ -69,3 +69,45 @@ func TestPreviewServerAndSharedHandlers(t *testing.T) {
 		t.Fatalf("conflicting replay re-inspected listener: %d", inspectCalls)
 	}
 }
+
+func TestPreviewJobPublicationBindsExactEndpointLease(t *testing.T) {
+	store := previews.New("preview.test", 0, nil)
+	controller := jobControllerFixture()
+	jobID := controller.startResult.JobID
+	controller.status.JobID = jobID
+	c := &PreviewController{Store: store, Jobs: controller}
+	requestID := "70000000-0000-4000-8000-000000000002"
+
+	published, err := c.Publish(t.Context(), previewRequest{
+		Action: "job", RequestID: requestID, JobID: jobID, Endpoint: "web",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.TrimPrefix(published["url"].(string), "https://")
+	preview, ok := store.ResolveHost(host)
+	if !ok {
+		t.Fatal("published Job preview was not retained")
+	}
+	route, _, ok := previews.ResolveRoute(preview, "/")
+	if !ok || route.JobID != jobID || route.LeaseID != strings.Repeat("a", 32) || route.Port != 43001 {
+		t.Fatalf("Job preview route = %#v", route)
+	}
+	if !c.RouteAllowed(t.Context(), route) {
+		t.Fatal("active endpoint lease was rejected")
+	}
+
+	controller.mu.Lock()
+	controller.status.Endpoints[0].ID = strings.Repeat("b", 32)
+	controller.mu.Unlock()
+	if c.RouteAllowed(t.Context(), route) {
+		t.Fatal("stale endpoint lease survived exact-lease replacement")
+	}
+	if _, err = c.Publish(t.Context(), previewRequest{
+		Action: "job", RequestID: requestID, JobID: jobID, Endpoint: "web",
+	}); err == nil {
+		t.Fatal("reused host port with a different endpoint lease replayed the old preview")
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeConflict {
+		t.Fatalf("reused endpoint lease error = %#v", detail)
+	}
+}

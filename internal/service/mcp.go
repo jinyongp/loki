@@ -25,21 +25,23 @@ import (
 	"loki/internal/policy"
 	"loki/internal/portguard"
 	"loki/internal/previews"
+	"loki/internal/work/jobs"
 	"loki/internal/workspace"
 )
 
 type MCPOptions struct {
-	OnAuditError                         func(error)
-	Runtime, PortGuard                   RuntimeCaller
-	Browser                              BrowserCaller
-	RuntimeSocket, BrowserSocket, RGPath string
-	PackagedSkillRoot                    string
-	GitTemplateRoots                     []string
-	Environment                          map[string]string
-	Policy                               controlpolicy.Generation
-	Ports                                portguard.Policy
-	Token                                string
-	Access, PreviewAccess                auth.Verifier
+	OnAuditError                                         func(error)
+	Runtime, PortGuard                                   RuntimeCaller
+	Browser                                              BrowserCaller
+	Jobs                                                 jobs.Controller
+	RuntimeSocket, BrowserSocket, ExecutorSocket, RGPath string
+	PackagedSkillRoot                                    string
+	GitTemplateRoots                                     []string
+	Environment                                          map[string]string
+	Policy                                               controlpolicy.Generation
+	Ports                                                portguard.Policy
+	Token                                                string
+	Access, PreviewAccess                                auth.Verifier
 }
 
 // MCPApp owns local command sessions, share stores and pinned workspace roots.
@@ -61,8 +63,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if len(options.Token) < 43 || strings.ContainsAny(options.Token, "\r\n") {
 		return nil, errors.New("MCP requires a valid bearer token")
 	}
-	if options.Runtime == nil || options.PortGuard == nil || options.Browser == nil {
-		return nil, errors.New("MCP requires runtime, port-guard and browser clients")
+	if options.Runtime == nil || options.PortGuard == nil || options.Browser == nil || options.Jobs == nil {
+		return nil, errors.New("MCP requires runtime, port-guard, browser and executor Job clients")
 	}
 	if !options.Policy.Valid() {
 		return nil, errors.New("MCP requires a valid effective policy generation")
@@ -122,9 +124,11 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		err := runtimeDecode(ctx, options.PortGuard, map[string]any{"operation": "inspect", "port": port}, &result)
 		return result, err
 	}
-	preview := &PreviewController{Store: app.Previews, Runtime: options.Runtime, Ports: options.Ports, Inspect: inspect}
+	preview := &PreviewController{
+		Store: app.Previews, Runtime: options.Runtime, Ports: options.Ports, Inspect: inspect, Jobs: options.Jobs,
+	}
 	if app.Previews != nil {
-		app.preview = previews.NewProxy(app.Previews, preview.PortAllowed)
+		app.preview = previews.NewProxy(app.Previews, preview.RouteAllowed)
 	}
 	system := &SystemController{Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
@@ -134,7 +138,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
 	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: git, Claims: app.Claims}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider)} {
+	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

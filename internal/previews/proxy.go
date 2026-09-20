@@ -19,13 +19,13 @@ var privateHeaders = []string{"Cf-Access-Jwt-Assertion", "Cf-Access-Authenticate
 
 type Proxy struct {
 	Store     *Store
-	Validate  func(context.Context, int) bool
+	Validate  func(context.Context, Route) bool
 	transport *http.Transport
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
 
-func NewProxy(store *Store, validate func(context.Context, int) bool) *Proxy {
+func NewProxy(store *Store, validate func(context.Context, Route) bool) *Proxy {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Proxy{Store: store, Validate: validate, ctx: ctx, cancel: cancel, transport: &http.Transport{
 		DialContext:        (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
@@ -62,7 +62,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reject(w, 404, "preview route not found")
 		return
 	}
-	if p.Validate == nil || !p.Validate(ctx, route.Port) {
+	if p.Validate == nil || !p.Validate(ctx, route) {
 		reject(w, 410, "preview server is no longer available")
 		return
 	}

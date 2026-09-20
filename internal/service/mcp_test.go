@@ -20,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
 	"loki/internal/portguard"
+	"loki/internal/work/jobs"
 )
 
 type bearerTransport struct{ token string }
@@ -69,7 +70,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	generation := policyGenerationFixture(t)
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,11 +126,13 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	if instructions := client.InitializeResult().Instructions; !strings.Contains(instructions, "project_coordination") || !strings.Contains(instructions, "project_coordination_write") || strings.Contains(instructions, "task queues") {
+	if instructions := client.InitializeResult().Instructions; !strings.Contains(instructions, "project_coordination") ||
+		!strings.Contains(instructions, "project_coordination_write") || !strings.Contains(instructions, "job action=start") ||
+		strings.Contains(instructions, "task queues") {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 32 {
+	if err != nil || len(tools.Tools) != 33 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -188,6 +191,24 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatalf("activity did not distinguish MCP sessions: %#v", activity)
 	}
 
+	jobStart := call("job", map[string]any{
+		"action": "start", "request_id": "123e4567-e89b-12d3-a456-426614174300",
+		"argv": []string{"/bin/true"}, "timeout_seconds": 30,
+	})
+	jobID := jobStart["job_id"].(string)
+	if jobStart["detached"] != true || jobStart["replayed"] != false {
+		t.Fatalf("job start = %#v", jobStart)
+	}
+	if jobInspect := call("job", map[string]any{"action": "inspect", "job_id": jobID}); jobInspect["state"] != string(jobs.StateRunning) {
+		t.Fatalf("job inspect = %#v", jobInspect)
+	}
+	if jobOutput := call("job", map[string]any{"action": "output", "job_id": jobID}); jobOutput["output"] != "live" {
+		t.Fatalf("job output = %#v", jobOutput)
+	}
+	if jobCancel := call("job", map[string]any{"action": "cancel", "job_id": jobID}); jobCancel["canceled"] != true {
+		t.Fatalf("job cancel = %#v", jobCancel)
+	}
+
 	call("browser_session", map[string]any{"action": "start"})
 	call("secret_inspect", map[string]any{"action": "status"})
 	shared := call("artifact_publish", map[string]any{
@@ -218,6 +239,27 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 }
 
+func TestNewMCPRequiresExecutorJobClient(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
+	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = NewMCP(c, MCPOptions{
+		Runtime: runtime, PortGuard: runtime, Browser: browser,
+		Ports: ports, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43),
+	}); err == nil || !strings.Contains(err.Error(), "executor Job clients") {
+		t.Fatalf("missing executor Job client error = %v", err)
+	}
+}
+
 func TestNewMCPRequiresEffectivePolicyGeneration(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
@@ -231,7 +273,7 @@ func TestNewMCPRequiresEffectivePolicyGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports, Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "effective policy generation") {
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Ports: ports, Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "effective policy generation") {
 		t.Fatalf("missing policy generation error = %v", err)
 	}
 }
@@ -245,7 +287,7 @@ func TestNewMCPRequiresProtectedListenerPolicy(t *testing.T) {
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
 	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil })
 	browser := browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) { return map[string]any{}, nil })
-	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
+	if _, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}); err == nil || !strings.Contains(err.Error(), "protected-port policy") {
 		t.Fatalf("missing listener protection error = %v", err)
 	}
 }
@@ -313,7 +355,7 @@ func TestNewMCPAgentGuidanceUsesNativeProvider(t *testing.T) {
 	}
 	home := t.TempDir()
 	app, err := NewMCP(c, MCPOptions{
-		Runtime: runtime, PortGuard: runtime, Browser: browser, Ports: ports,
+		Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Ports: ports,
 		Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43),
 		PackagedSkillRoot: packagedRoot,
 		Environment: map[string]string{
