@@ -64,7 +64,7 @@ func TestArtifactMCP(t *testing.T) {
 	}{
 		{"artifact_publish", map[string]any{"action": "file", "path": "hello.txt"}},
 		{"artifact_publish", map[string]any{"action": "bundle", "paths": []string{"hello.txt"}}},
-		{"share_image", map[string]any{"path": "image.png"}},
+		{"share_image", map[string]any{"path": "image.png", "request_id": "78000000-0000-4000-8000-000000000001"}},
 	} {
 		r, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
 		if err != nil || r.IsError {
@@ -90,9 +90,42 @@ func TestArtifactMCP(t *testing.T) {
 			}
 		}
 	}
+	if err = os.Remove(filepath.Join(c.Root, "image.png")); err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "share_image", Arguments: map[string]any{
+		"path": "image.png", "request_id": "78000000-0000-4000-8000-000000000001",
+	}})
+	if err != nil || replayed.IsError {
+		t.Fatalf("share image replay: %v %+v", err, replayed)
+	}
+	var replayValue map[string]any
+	replayEncoded, _ := json.Marshal(replayed.StructuredContent)
+	if err = json.Unmarshal(replayEncoded, &replayValue); err != nil {
+		t.Fatal(err)
+	}
 	rows := ArtifactList(store)["artifacts"].([]map[string]any)
 	if len(rows) != 3 {
 		t.Fatal(rows)
+	}
+	shareRows := []map[string]any{}
+	for _, row := range rows {
+		if row["filename"] == "image.png" {
+			shareRows = append(shareRows, row)
+		}
+	}
+	if len(shareRows) != 1 || replayValue["share_id"] != shareRows[0]["share_id"] || replayValue["url"] != shareRows[0]["url"] {
+		t.Fatalf("share replay identity = replay=%#v rows=%#v", replayValue, shareRows)
+	}
+	beforeConflict := len(rows)
+	conflict, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: "share_image", Arguments: map[string]any{
+		"path": "image.png", "request_id": "78000000-0000-4000-8000-000000000001", "ttl_seconds": 1200,
+	}})
+	if err != nil || !conflict.IsError || len(ArtifactList(store)["artifacts"].([]map[string]any)) != beforeConflict {
+		t.Fatalf("changed share replay did not conflict: result=%#v err=%v", conflict, err)
+	}
+	if detail := conflict.Meta["loki/error"].(map[string]any); detail["code"] != "conflict" {
+		t.Fatalf("changed share replay error = %#v", detail)
 	}
 	id := rows[0]["share_id"].(string)
 	firstRevoke, err := ArtifactRevoke(store, id)

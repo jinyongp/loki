@@ -2,15 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/artifacts"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
+	"loki/internal/policy"
 	"loki/internal/workspace"
 )
 
@@ -22,30 +25,70 @@ type artifactRequest struct {
 	TTL      int `json:"ttl_seconds"`
 }
 type shareImageRequest struct {
-	Path string
-	TTL  int `json:"ttl_seconds"`
+	Path      string
+	TTL       int    `json:"ttl_seconds"`
+	RequestID string `json:"request_id"`
+}
+
+func shareImageFingerprint(path string, ttl int) string {
+	return workspace.Digest([]byte("share-image:v1\n" + path + "\n" + strconv.Itoa(ttl)))
+}
+
+func shareImageMetadata(publication map[string]any, path string) map[string]any {
+	url, _ := publication["url"].(string)
+	return map[string]any{
+		"path": path, "mime_type": publication["mime_type"], "bytes": publication["bytes"],
+		"sha256": publication["sha256"], "share_id": publication["share_id"],
+		"url": url, "expires_at": publication["expires_at"],
+		"display_markdown": "![Loki image](" + url + ")",
+	}
+}
+
+func shareImageReplayError(err error) error {
+	if errors.Is(err, artifacts.ErrRequestConflict) {
+		return fault.New(fault.CodeConflict, "share_image request_id was already used for different share inputs", false, "generate a new request_id when path or ttl_seconds changes")
+	}
+	return err
 }
 
 func ArtifactHandlers(files *workspace.Files, store *artifacts.Store) map[string]mcpserver.Handler {
 	return map[string]mcpserver.Handler{
 		"share_image": mcpserver.Typed(func(ctx context.Context, r shareImageRequest) (*mcp.CallToolResult, error) {
-			data, metadata, err := files.Image(r.Path)
-			if err != nil {
-				return nil, err
-			}
 			if store == nil {
 				return nil, fault.Error("temporary image sharing is not configured")
+			}
+			if !artifacts.ValidRequestID(r.RequestID) {
+				return nil, fault.New(fault.CodeInvalidInput, "share_image request_id must be a UUID", false, "generate a new UUID request_id")
 			}
 			if r.TTL < 60 || r.TTL > 3600 {
 				return nil, fault.Error("image link lifetime must be between 60 and 3600 seconds")
 			}
-			published, err := store.Publish(data, filepath.Base(r.Path), metadata["mime_type"].(string), metadata["sha256"].(string), r.TTL, "inline")
+			relative, err := policy.Relative(r.Path)
 			if err != nil {
 				return nil, err
 			}
-			url := published["url"].(string)
-			metadata["url"], metadata["expires_at"], metadata["display_markdown"] = url, published["expires_at"], "![Loki image]("+url+")"
-			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: metadata}, nil
+			fingerprint := shareImageFingerprint(relative, r.TTL)
+			if replay, ok, err := store.Replay(r.RequestID, fingerprint); err != nil {
+				return nil, shareImageReplayError(err)
+			} else if ok {
+				metadata := shareImageMetadata(replay, relative)
+				url := metadata["url"].(string)
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: metadata}, nil
+			}
+			data, metadata, err := files.Image(relative)
+			if err != nil {
+				return nil, err
+			}
+			published, err := store.PublishReplay(
+				r.RequestID, fingerprint, data, filepath.Base(relative),
+				metadata["mime_type"].(string), metadata["sha256"].(string), r.TTL, "inline",
+			)
+			if err != nil {
+				return nil, shareImageReplayError(err)
+			}
+			result := shareImageMetadata(published, relative)
+			url := result["url"].(string)
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: result}, nil
 		}),
 		"artifact_publish": mcpserver.Typed(func(ctx context.Context, r artifactRequest) (*mcp.CallToolResult, error) {
 			var data []byte
