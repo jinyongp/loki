@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,6 +36,55 @@ type projectCoordinationWriteRequest struct {
 	Blockers            []string `json:"blockers"`
 }
 
+func coordinationRawValue(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.RawMessage(append([]byte(nil), raw...))
+}
+
+func coordinationRawList(values []json.RawMessage) []json.RawMessage {
+	if len(values) == 0 {
+		return []json.RawMessage{}
+	}
+	return append([]json.RawMessage(nil), values...)
+}
+
+func coordinationCursor(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func projectCoordinationReadResult(action string, projection devtools.CoordinationProjection) map[string]any {
+	base := map[string]any{"profile": projection.Profile, "revision": projection.Revision}
+	switch action {
+	case "next":
+		base["item"] = coordinationRawValue(projection.Item)
+		base["reason"] = projection.Reason
+		base["truncated"] = projection.Truncated
+		base["complete"] = !projection.Truncated
+	case "task_show", "workstream_show":
+		base["item"] = coordinationRawValue(projection.Item)
+	case "current", "task_history", "checkpoint_list", "workstream_list", "workstream_history":
+		base["items"] = coordinationRawList(projection.Items)
+		base["next_cursor"] = coordinationCursor(projection.NextCursor)
+		base["truncated"] = projection.Truncated
+		base["complete"] = projection.NextCursor == nil && !projection.Truncated
+	case "task_context", "workstream_context":
+		base["item"] = coordinationRawValue(projection.Item)
+		base["documents"] = coordinationRawValue(projection.Documents)
+		base["tasks"] = coordinationRawList(projection.Tasks)
+		base["validations"] = coordinationRawList(projection.Validations)
+		base["history"] = coordinationRawList(projection.History)
+		base["truncated"] = projection.Truncated
+		base["omitted_ids"] = append([]string{}, projection.OmittedIDs...)
+		base["complete"] = !projection.Truncated && len(projection.OmittedIDs) == 0
+	}
+	return base
+}
+
 func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessionCoordination) map[string]mcpserver.Handler {
 	read := mcpserver.Typed(func(ctx context.Context, request projectCoordinationRequest) (*mcp.CallToolResult, error) {
 		operation := map[string]string{
@@ -55,10 +105,14 @@ func ProjectCoordinationHandlers(runtime RuntimeCaller, sessions *DevtoolsSessio
 		if request.CWD == "" {
 			request.CWD = "."
 		}
-		return runtimeObject(ctx, runtime, map[string]any{
+		var projection devtools.CoordinationProjection
+		if err := runtimeDecode(ctx, runtime, map[string]any{
 			"operation": operation, "cwd": request.CWD, "task_id": request.TaskID, "run_id": request.RunID,
 			"workstream_id": request.WorkstreamID, "cursor": request.Cursor, "limit": request.Limit,
-		})
+		}, &projection); err != nil {
+			return nil, err
+		}
+		return mcpserver.Object(projectCoordinationReadResult(request.Action, projection))
 	})
 
 	write := mcpserver.Typed(func(ctx context.Context, request projectCoordinationWriteRequest) (*mcp.CallToolResult, error) {
