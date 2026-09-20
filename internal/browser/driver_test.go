@@ -108,8 +108,31 @@ func TestChromiumLifecycle(t *testing.T) {
 	if page["title"] != "/first" || page["url"] != address+"/first" {
 		t.Fatal(page)
 	}
-	callBrowser(t, d, "navigate", map[string]any{"url": address + "/next"})
-	if page = callBrowser(t, d, "back", nil); page["title"] != "/first" {
+	next := callBrowser(t, d, "navigate", map[string]any{"url": address + "/next"})
+	nextGeneration := browserGeneration(t, next)
+	if page = callBrowser(t, d, "back", map[string]any{"expected_browser_generation": nextGeneration}); page["title"] != "/first" || page["navigation"] != "back" || page["performed"] != true {
+		t.Fatal(page)
+	}
+	backGeneration := browserGeneration(t, page)
+	if backGeneration <= nextGeneration {
+		t.Fatalf("back generation did not advance: next=%d back=%#v", nextGeneration, page)
+	}
+	if page = callBrowser(t, d, "forward", map[string]any{"expected_browser_generation": backGeneration}); page["title"] != "/next" || page["navigation"] != "forward" || page["performed"] != true {
+		t.Fatal(page)
+	}
+	forwardGeneration := browserGeneration(t, page)
+	if page = callBrowser(t, d, "forward", map[string]any{"expected_browser_generation": forwardGeneration}); page["performed"] != false || browserGeneration(t, page) != forwardGeneration {
+		t.Fatalf("history no-op changed generation: %#v", page)
+	}
+	beforeReloadVisits := visits.Load()
+	if page = callBrowser(t, d, "reload", map[string]any{"expected_browser_generation": forwardGeneration}); page["navigation"] != "reload" || page["performed"] != true {
+		t.Fatal(page)
+	}
+	reloadGeneration := browserGeneration(t, page)
+	if reloadGeneration <= forwardGeneration || visits.Load() <= beforeReloadVisits {
+		t.Fatalf("reload did not advance state: forward=%d reload=%#v visits=%d->%d", forwardGeneration, page, beforeReloadVisits, visits.Load())
+	}
+	if page = callBrowser(t, d, "stop_loading", map[string]any{"expected_browser_generation": reloadGeneration}); page["navigation"] != "stop_loading" || page["performed"] != true || browserGeneration(t, page) <= reloadGeneration {
 		t.Fatal(page)
 	}
 	var blockedVisits atomic.Int32

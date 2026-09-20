@@ -29,10 +29,17 @@ func overrideBrowserSession(tool *mcp.Tool) error {
 				"type": "boolean", "default": false,
 				"description": "Open the navigation in a new browser tab instead of the active tab; valid only for action=navigate.",
 			}},
+			{Name: "expected_browser_generation", Schema: browserExpectedGenerationSchema(
+				"Browser generation that back/forward/reload/stop_loading is based on. Stale generations fail before the navigation command.",
+			)},
 		},
 		Variants: []ActionVariant{
 			{Name: "start"},
 			{Name: "navigate", Required: []string{"url"}, Optional: []string{"new_tab"}},
+			{Name: "back", Required: []string{"expected_browser_generation"}},
+			{Name: "forward", Required: []string{"expected_browser_generation"}},
+			{Name: "reload", Required: []string{"expected_browser_generation"}},
+			{Name: "stop_loading", Required: []string{"expected_browser_generation"}},
 			{Name: "stop"},
 		},
 	}).Schema()
@@ -60,6 +67,18 @@ func overrideBrowserSession(tool *mcp.Tool) error {
 		},
 		"required": []string{"url", "title", "new_tab", "active_tab_id", "browser_generation"},
 	}
+	historyNavigation := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"navigation":         map[string]any{"type": "string", "enum": []string{"back", "forward", "reload", "stop_loading"}},
+			"performed":          map[string]any{"type": "boolean"},
+			"url":                map[string]any{"type": "string"},
+			"title":              map[string]any{"type": "string"},
+			"active_tab_id":      browserTabIDSchema(),
+			"browser_generation": browserGenerationSchema(),
+		},
+		"required": []string{"navigation", "performed", "url", "title", "active_tab_id", "browser_generation"},
+	}
 	stopped := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
@@ -69,11 +88,18 @@ func overrideBrowserSession(tool *mcp.Tool) error {
 		"required": []string{"status", "browser_generation"},
 	}
 
-	tool.Description = "Control browser lifecycle and navigation with action-specific inputs. Results expose browser_generation so later observations and interactions can identify the browser/page generation they belong to."
+	tool.Description = "Control browser lifecycle and navigation with action-specific inputs. back, forward, reload, and stop_loading are generation-guarded session operations; history no-ops return performed=false without advancing browser_generation."
 	tool.InputSchema = input
 	tool.OutputSchema = map[string]any{
 		"type":  "object",
-		"oneOf": []any{running, navigated, stopped},
+		"oneOf": []any{running, navigated, historyNavigation, stopped},
+	}
+	guardedNavigation := func() OperationSemantics {
+		return OperationSemantics{
+			Replay: ReplayGuarded, ConcurrencyFields: []string{"expected_browser_generation"},
+			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
+			AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=state",
+		}
 	}
 	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
 		"start": {
@@ -84,6 +110,10 @@ func overrideBrowserSession(tool *mcp.Tool) error {
 			Replay: ReplayUnsafe, FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
 			AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=state",
 		},
+		"back":         guardedNavigation(),
+		"forward":      guardedNavigation(),
+		"reload":       guardedNavigation(),
+		"stop_loading": guardedNavigation(),
 		"stop": {
 			Replay: ReplayIdempotent, FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryNone,
 			AffectedResourceLimit: 1, RecoveryReference: "repeat browser_session action=stop",

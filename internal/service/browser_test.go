@@ -161,8 +161,11 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 				"dialog_handled": true, "accepted": args["accept"], "type": "confirm",
 				"dialog_generation": 3, "browser_generation": 4,
 			}, nil
-		case "back":
-			return map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 4}, nil
+		case "back", "forward", "reload", "stop_loading":
+			return map[string]any{
+				"navigation": operation, "performed": true, "url": "https://example.com", "title": "fixture",
+				"active_tab_id": "abcd", "browser_generation": 4,
+			}, nil
 		case "switch_tab":
 			return map[string]any{"url": "https://example.com", "title": "fixture", "tab_id": args["tab_id"], "browser_generation": 4}, nil
 		case "close_tab":
@@ -222,6 +225,10 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 	}{
 		{action: "start", args: map[string]any{"action": "start"}},
 		{action: "navigate", args: map[string]any{"action": "navigate", "url": "https://example.com", "new_tab": true}},
+		{action: "back", args: map[string]any{"action": "back", "expected_browser_generation": 3}},
+		{action: "forward", args: map[string]any{"action": "forward", "expected_browser_generation": 3}},
+		{action: "reload", args: map[string]any{"action": "reload", "expected_browser_generation": 3}},
+		{action: "stop_loading", args: map[string]any{"action": "stop_loading", "expected_browser_generation": 3}},
 		{action: "stop", args: map[string]any{"action": "stop"}},
 	} {
 		result := decode(call("browser_session", test.args))
@@ -229,7 +236,7 @@ func TestBrowserMCPAndScreenshotHistory(t *testing.T) {
 			t.Fatalf("browser_session %s omitted generation: %#v", test.action, result)
 		}
 	}
-	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics", "dialog"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab"}} {
+	for tool, actions := range map[string][]string{"browser_observe": {"state", "tabs", "console", "network", "request", "websockets", "errors", "diagnostics", "dialog"}, "browser_interact": {"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "switch_tab", "close_tab"}} {
 		for _, action := range actions {
 			args := map[string]any{"action": action}
 			switch tool {

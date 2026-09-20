@@ -442,7 +442,11 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	}
 	interactionGeneration := d.generation
 	switch operation {
-	case "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "handle_dialog", "back", "switch_tab", "close_tab":
+	case "back", "forward", "reload", "stop_loading":
+		if err := d.requireInteractionGeneration(args, false); err != nil {
+			return nil, err
+		}
+	case "click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "handle_dialog", "switch_tab", "close_tab":
 		requireState := operation == "fill" || operation == "type" || operation == "select_option" || operation == "set_checked" || operation == "focus" || operation == "upload" ||
 			(operation == "click" || operation == "hover" || operation == "wheel") && args["index"] != nil ||
 			operation == "drag" && (args["source_index"] != nil || args["target_index"] != nil)
@@ -507,6 +511,19 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 	case "navigate":
 		address, _ := args["url"].(string)
 		return d.navigate(ctx, address, args["new_tab"] == true)
+	case "back", "forward":
+		direction := -1
+		if operation == "forward" {
+			direction = 1
+		}
+		result, performed, err := d.historyNavigation(ctx, direction)
+		return d.finishSessionNavigation(interactionGeneration, performed, operation, result, err)
+	case "reload":
+		result, err := d.reloadPage(ctx)
+		return d.finishSessionNavigation(interactionGeneration, true, operation, result, err)
+	case "stop_loading":
+		result, err := d.stopLoading(ctx)
+		return d.finishSessionNavigation(interactionGeneration, true, operation, result, err)
 	case "list_tabs":
 		return d.tabList(ctx)
 	case "switch_tab", "close_tab":
@@ -547,41 +564,6 @@ func (d *Driver) Call(ctx context.Context, operation string, args map[string]any
 			}
 		}
 		return d.finishInteraction(interactionGeneration, map[string]any{"closed": id, "active_tab_id": shortID(d.target)}, nil)
-	case "back":
-		var history struct {
-			CurrentIndex int
-			Entries      []struct {
-				ID  int
-				URL string
-			}
-		}
-		if err := d.client.Call(ctx, d.sessions[d.target], "Page.getNavigationHistory", nil, &history); err != nil {
-			return nil, err
-		}
-		if history.CurrentIndex > 0 && history.CurrentIndex < len(history.Entries) {
-			d.generation++
-			if err := d.client.Call(ctx, d.sessions[d.target], "Page.navigateToHistoryEntry", map[string]any{"entryId": history.Entries[history.CurrentIndex-1].ID}, nil); err != nil {
-				return nil, err
-			}
-			ticker := time.NewTicker(25 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				page, err := d.page(ctx)
-				if err == nil && page["url"] == history.Entries[history.CurrentIndex-1].URL {
-					break
-				}
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-ticker.C:
-				}
-			}
-			if err := d.waitPage(ctx, ""); err != nil {
-				return nil, err
-			}
-		}
-		result, err := d.page(ctx)
-		return d.finishInteraction(interactionGeneration, result, err)
 	default:
 		return nil, fmt.Errorf("unknown browser operation: %s", strings.TrimSpace(operation))
 	}

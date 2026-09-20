@@ -46,7 +46,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 			t.Errorf("browser_interact action enum omits %s", want)
 		}
 	}
-	for _, removed := range []string{"scroll", "press"} {
+	for _, removed := range []string{"scroll", "press", "back"} {
 		for _, raw := range actionEnum {
 			if raw == removed {
 				t.Errorf("legacy action %s remains public", removed)
@@ -55,8 +55,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	branches := input["oneOf"].([]any)
-	if len(branches) != 24 {
-		t.Fatalf("browser_interact branches = %d, want 24", len(branches))
+	if len(branches) != 23 {
+		t.Fatalf("browser_interact branches = %d, want 23", len(branches))
 	}
 	counts := map[string]int{}
 	for _, raw := range branches {
@@ -161,7 +161,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		"click": 3, "hover": 2, "drag": 3, "wheel": 3,
 		"fill": 1, "type": 1, "key": 1, "shortcut": 1,
 		"select_option": 1, "set_checked": 1, "focus": 1, "upload": 1, "dialog": 2,
-		"back": 1, "switch_tab": 1, "close_tab": 1,
+		"switch_tab": 1, "close_tab": 1,
 	} {
 		if counts[action] != want {
 			t.Errorf("%s branches = %d, want %d", action, counts[action], want)
@@ -177,8 +177,8 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 		t.Fatal(err)
 	}
 	outputBranches := output["oneOf"].([]any)
-	if len(outputBranches) != 16 {
-		t.Fatalf("browser_interact output branches = %d, want 16", len(outputBranches))
+	if len(outputBranches) != 15 {
+		t.Fatalf("browser_interact output branches = %d, want 15", len(outputBranches))
 	}
 	for _, raw := range outputBranches {
 		branch := raw.(map[string]any)
@@ -191,12 +191,12 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	}
 
 	operations, ok := tool.Meta["loki/operations"].(map[string]any)
-	if !ok || len(operations) != 16 {
+	if !ok || len(operations) != 15 {
 		t.Fatalf("browser_interact operation metadata = %#v", tool.Meta)
 	}
 	for _, action := range []string{
 		"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut",
-		"select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab",
+		"select_option", "set_checked", "focus", "upload", "dialog", "switch_tab", "close_tab",
 	} {
 		semantics := operations[action].(map[string]any)
 		if semantics["replay"] != string(ReplayGuarded) ||
@@ -215,7 +215,7 @@ func TestBrowserInteractUsesGenerationGuardedDiscriminatedContract(t *testing.T)
 	if len(dialogGuards) != 2 || dialogGuards[0] != "expected_browser_generation" || dialogGuards[1] != "expected_dialog_generation" {
 		t.Fatalf("dialog guards = %#v", dialogGuards)
 	}
-	for _, removed := range []string{"scroll", "press"} {
+	for _, removed := range []string{"scroll", "press", "back"} {
 		if _, exists := operations[removed]; exists {
 			t.Errorf("legacy operation metadata remains for %s", removed)
 		}

@@ -20,8 +20,14 @@ func TestBrowserSessionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) 
 				"url": input["url"], "title": "fixture", "new_tab": input["new_tab"] == true,
 				"active_tab_id": "abcd", "browser_generation": 2,
 			})
+		case "back", "forward", "reload", "stop_loading":
+			return Object(map[string]any{
+				"navigation": input["action"], "performed": true,
+				"url": "https://example.com", "title": "fixture",
+				"active_tab_id": "abcd", "browser_generation": 3,
+			})
 		case "stop":
-			return Object(map[string]any{"status": "stopped", "browser_generation": 3})
+			return Object(map[string]any{"status": "stopped", "browser_generation": 4})
 		}
 		panic("unexpected browser_session action")
 	}
@@ -31,6 +37,10 @@ func TestBrowserSessionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) 
 		{"action": "start"},
 		{"action": "navigate", "url": "https://example.com"},
 		{"action": "navigate", "url": "https://example.com", "new_tab": true},
+		{"action": "back", "expected_browser_generation": 2},
+		{"action": "forward", "expected_browser_generation": 2},
+		{"action": "reload", "expected_browser_generation": 2},
+		{"action": "stop_loading", "expected_browser_generation": 2},
 		{"action": "stop"},
 	}
 	for _, arguments := range valid {
@@ -46,10 +56,16 @@ func TestBrowserSessionSchemaRejectsIrrelevantFieldsBeforeHandler(t *testing.T) 
 	invalid := []map[string]any{
 		{},
 		{"action": "start", "url": "https://example.com"},
-		{"action": "start", "new_tab": true},
+		{"action": "start", "expected_browser_generation": 1},
 		{"action": "navigate"},
+		{"action": "navigate", "url": "https://example.com", "expected_browser_generation": 1},
+		{"action": "back"},
+		{"action": "back", "expected_browser_generation": 1, "url": "https://example.com"},
+		{"action": "forward"},
+		{"action": "reload", "new_tab": true, "expected_browser_generation": 1},
+		{"action": "stop_loading"},
 		{"action": "stop", "url": "https://example.com"},
-		{"action": "stop", "new_tab": true},
+		{"action": "stop", "expected_browser_generation": 1},
 	}
 	for _, arguments := range invalid {
 		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser_session", Arguments: arguments})

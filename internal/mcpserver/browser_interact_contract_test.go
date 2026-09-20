@@ -91,8 +91,6 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 				"dialog_handled": true, "accepted": input["accept"], "type": "confirm",
 				"dialog_generation": 4, "browser_generation": 8,
 			})
-		case "back":
-			return Object(map[string]any{"url": "https://example.com", "title": "fixture", "browser_generation": 8})
 		case "switch_tab":
 			return Object(map[string]any{"url": "https://example.com", "title": "fixture", "tab_id": input["tab_id"], "browser_generation": 8})
 		case "close_tab":
@@ -126,7 +124,6 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 		{"action": "upload", "index": 1, "paths": []any{"fixtures/input.txt"}, "expected_browser_generation": 7, "expected_state_generation": 3},
 		{"action": "dialog", "accept": true, "expected_browser_generation": 7, "expected_dialog_generation": 3},
 		{"action": "dialog", "accept": true, "prompt_text": "answer", "expected_browser_generation": 7, "expected_dialog_generation": 3},
-		{"action": "back", "expected_browser_generation": 7},
 		{"action": "switch_tab", "tab_id": "abcd", "expected_browser_generation": 7},
 		{"action": "close_tab", "tab_id": "abcd", "expected_browser_generation": 7},
 	}
@@ -142,6 +139,7 @@ func TestBrowserInteractSchemaRejectsInvalidActionShapesBeforeHandler(t *testing
 
 	invalid := []map[string]any{
 		{"action": "scroll", "expected_browser_generation": 7},
+		{"action": "back", "expected_browser_generation": 7},
 		{"action": "press", "key": "Enter", "expected_browser_generation": 7},
 		{"action": "click", "index": 1, "expected_browser_generation": 7},
 		{"action": "click", "index": 1, "new_tab": true, "button": "right", "expected_browser_generation": 7, "expected_state_generation": 3},

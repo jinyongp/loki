@@ -144,7 +144,7 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 	rootProperties := map[string]any{
 		"action": map[string]any{
 			"type":        "string",
-			"enum":        []string{"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "back", "switch_tab", "close_tab"},
+			"enum":        []string{"click", "hover", "drag", "wheel", "fill", "type", "key", "shortcut", "select_option", "set_checked", "focus", "upload", "dialog", "switch_tab", "close_tab"},
 			"description": "Browser interaction to perform.",
 		},
 		"expected_browser_generation": expectedBrowser,
@@ -274,9 +274,6 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 			"expected_browser_generation": clone(expectedBrowser), "expected_dialog_generation": clone(expectedDialog),
 			"accept": promptAccept, "prompt_text": clone(promptText),
 		}, "expected_browser_generation", "expected_dialog_generation", "accept", "prompt_text"),
-		browserInteractBranch("back", map[string]any{
-			"expected_browser_generation": clone(expectedBrowser),
-		}, "expected_browser_generation"),
 		browserInteractBranch("switch_tab", map[string]any{
 			"expected_browser_generation": clone(expectedBrowser), "tab_id": clone(tabID),
 		}, "expected_browser_generation", "tab_id"),
@@ -461,13 +458,6 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		},
 		"required": []string{"dialog_handled", "accepted", "type", "dialog_generation", "browser_generation"},
 	}
-	backResult := map[string]any{
-		"type": "object", "additionalProperties": false,
-		"properties": map[string]any{
-			"url": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "browser_generation": browserGenerationSchema(),
-		},
-		"required": []string{"url", "title", "browser_generation"},
-	}
 	switchResult := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
@@ -493,7 +483,7 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 	}
 	tool.OutputSchema = map[string]any{
 		"type":  "object",
-		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, fillResult, typeResult, keyResult, shortcutResult, selectResult, checkedResult, focusResult, uploadResult, dialogResult, backResult, switchResult, closeResult},
+		"oneOf": []any{clickResult, hoverResult, dragResult, wheelResult, fillResult, typeResult, keyResult, shortcutResult, selectResult, checkedResult, focusResult, uploadResult, dialogResult, switchResult, closeResult},
 	}
 	guarded := func(reference string) OperationSemantics {
 		return OperationSemantics{
@@ -527,7 +517,6 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 			FailureAtomicity: FailureSingleResource, CrashRecovery: CrashRecoveryInspect,
 			AffectedResourceLimit: 1, RecoveryReference: "browser_observe action=dialog",
 		},
-		"back":       guarded("browser_observe action=state"),
 		"switch_tab": guarded("browser_observe action=tabs"),
 		"close_tab":  guarded("browser_observe action=tabs"),
 	}
