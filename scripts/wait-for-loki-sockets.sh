@@ -16,7 +16,8 @@ while test "$attempt" -lt "$ATTEMPTS"; do
   if test -S "$ROOT/runtime/control.sock" &&
      test -S "$ROOT/port-guard/control.sock" &&
      test -S "$ROOT/browser/control.sock" &&
-     test -S "$ROOT/signing/agent.sock"; then
+     test -S "$ROOT/signing/agent.sock" &&
+     test -S "$ROOT/executor/control.sock"; then
     exit 0
   fi
   attempt=$((attempt + 1))

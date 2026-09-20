@@ -19,6 +19,8 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 		"packaging/go/systemd/loki-go-egress-proxy.service",
 		"packaging/go/systemd/loki-go-browser-proxy.service",
 		"packaging/go/systemd/loki-go-browser.service",
+		"packaging/go/systemd/loki-go-launcher.service",
+		"packaging/go/systemd/loki-go-executor.service",
 	} {
 		raw, err := os.ReadFile(filepath.Join(root, relative))
 		if err != nil {
@@ -38,6 +40,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(nativeLayout), `"PackagedSkillRoot": "/opt/loki/share/skills"`) {
 		t.Fatal("native MCP layout does not bind the packaged Skill root")
 	}
+	if !strings.Contains(string(nativeLayout), `"ExecutorSocket": "/run/loki-go/executor/control.sock"`) {
+		t.Fatal("native MCP layout does not bind the executor socket")
+	}
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
 	raw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/mcp.json"))
@@ -53,6 +58,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if containerLayout["PackagedSkillRoot"] != "/opt/loki/share/skills" {
 		t.Fatalf("container MCP packaged Skill root = %#v", containerLayout["PackagedSkillRoot"])
 	}
+	if containerLayout["ExecutorSocket"] != "/run/loki/executor/control.sock" {
+		t.Fatalf("container MCP executor socket = %#v", containerLayout["ExecutorSocket"])
+	}
 	composeRaw, err := os.ReadFile(filepath.Join(root, "compose.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -61,8 +69,12 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 		"egress-proxy, --host, 0.0.0.0, --port, \"18766\", --execution-contract, " + containerContract,
 		"browser-proxy, --port, \"18767\", --execution-contract, " + containerContract,
 		"--downloads, /var/lib/loki/browser-downloads, --config, /etc/loki/loki.toml, --execution-contract, " + containerContract,
+		"--layout, /etc/loki/launcher.json, --execution-contract, " + containerContract,
+		"--layout, /etc/loki/executor.json, --execution-contract, " + containerContract,
 		"user-skills:/var/lib/loki/runner/agents",
 		"user-skills:/home/runner/.agents:ro",
+		"launcher-socket:/run/loki/launcher",
+		"executor-socket:/run/loki/executor",
 	} {
 		if !strings.Contains(string(composeRaw), command) {
 			t.Fatalf("Compose service does not bind execution contract: %s", command)

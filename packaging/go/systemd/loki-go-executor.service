@@ -1,0 +1,42 @@
+[Unit]
+Description=Loki Go unprivileged Job executor
+PartOf=loki-go.target
+Requires=loki-go-launcher.service
+After=loki-go-launcher.service
+Before=loki-go-mcp.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=loki-executor
+Group=workspace
+EnvironmentFile=/etc/loki-go/identity.env
+RuntimeDirectory=loki-go/executor
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+LogsDirectory=loki-go/executor
+LogsDirectoryMode=0700
+ExecStart=/opt/loki/bin/loki-executor --config /etc/loki-go/config.toml --layout /etc/loki-go/executor.json --execution-contract /usr/share/doc/loki/execution-contract.json
+Restart=on-failure
+RestartSec=2
+UMask=0007
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+InaccessiblePaths=/srv/workspace /var/lib/loki-go/runtime /var/lib/loki-go/launcher /var/lib/loki-go/signing /etc/loki-go/token -/run/docker.sock
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=64
+MemoryMax=256M
+TimeoutStopSec=10

@@ -1,0 +1,45 @@
+[Unit]
+Description=Loki Go privileged Job launcher
+PartOf=loki-go.target
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=loki-go-executor.service
+ConditionPathExists=/run/docker.sock
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=root
+Group=workspace
+EnvironmentFile=/etc/loki-go/identity.env
+RuntimeDirectory=loki-go/launcher
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+StateDirectory=loki-go/launcher
+StateDirectoryMode=0700
+LogsDirectory=loki-go/launcher
+LogsDirectoryMode=0700
+ExecStart=/opt/loki/bin/loki-launcher --config /etc/loki-go/config.toml --layout /etc/loki-go/launcher.json --execution-contract /usr/share/doc/loki/execution-contract.json
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/loki-go/launcher /run/loki-go/launcher -/run/docker.sock
+InaccessiblePaths=/var/lib/loki-go/runtime /var/lib/loki-go/signing /etc/loki-go/token
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictRealtime=yes
+TasksMax=128
+MemoryMax=512M
+TimeoutStopSec=15

@@ -105,7 +105,8 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(script, templates, root, "1001", "1002", "1003", "1004")
+	jobImage := "registry.example/loki@sha256:" + strings.Repeat("a", 64)
+	command := exec.Command(script, templates, root, "1001", "1002", "1003", "1004", "1005", jobImage)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("render layouts: %v %s", err, output)
 	}
@@ -140,10 +141,10 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if err = json.Unmarshal(data, &mcp); err != nil {
 		t.Fatal(err)
 	}
-	if mcp["PortGuardUID"] != float64(1001) || mcp["BrowserUID"] != float64(1004) {
+	if mcp["PortGuardUID"] != float64(1001) || mcp["BrowserUID"] != float64(1004) || mcp["ExecutorUID"] != float64(1005) {
 		t.Fatalf("MCP identities = %#v", mcp)
 	}
-	if mcp["RuntimeSocket"] != "/run/loki-go/runtime/control.sock" {
+	if mcp["RuntimeSocket"] != "/run/loki-go/runtime/control.sock" || mcp["ExecutorSocket"] != "/run/loki-go/executor/control.sock" {
 		t.Fatalf("MCP runtime socket = %#v", mcp["RuntimeSocket"])
 	}
 	if mcp["ExecutionContract"] != "/usr/share/doc/loki/execution-contract.json" {
@@ -152,7 +153,45 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if mcp["PackagedSkillRoot"] != "/opt/loki/share/skills" {
 		t.Fatalf("MCP packaged Skill root = %#v", mcp["PackagedSkillRoot"])
 	}
-	for _, name := range []string{"runtime.json", "mcp.json", "identity.env"} {
+	data, err = os.ReadFile(filepath.Join(root, "launcher.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launcher map[string]any
+	if err = json.Unmarshal(data, &launcher); err != nil {
+		t.Fatal(err)
+	}
+	if launcher["Socket"] != "/run/loki-go/launcher/control.sock" ||
+		launcher["ExecutorUID"] != float64(1005) ||
+		launcher["WorkloadUID"] != float64(1001) ||
+		launcher["WorkloadGID"] != float64(1002) ||
+		launcher["Image"] != jobImage || launcher["GatewayImage"] != jobImage ||
+		launcher["Workspace"] != "/srv/workspace/loki" {
+		t.Fatalf("launcher layout = %#v", launcher)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "executor.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var executor map[string]any
+	if err = json.Unmarshal(data, &executor); err != nil {
+		t.Fatal(err)
+	}
+	if executor["Socket"] != "/run/loki-go/executor/control.sock" ||
+		executor["AgentUID"] != float64(1001) ||
+		executor["ExecutorUID"] != float64(1005) ||
+		executor["LauncherSocket"] != "/run/loki-go/launcher/control.sock" ||
+		executor["LauncherUID"] != float64(0) {
+		t.Fatalf("executor layout = %#v", executor)
+	}
+	identity, err := os.ReadFile(filepath.Join(root, "identity.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(identity), "EXECUTOR_UID=1005\n") {
+		t.Fatalf("identity environment = %q", identity)
+	}
+	for _, name := range []string{"runtime.json", "mcp.json", "launcher.json", "executor.json", "identity.env"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		if err != nil {
 			t.Fatal(name, err)
@@ -234,6 +273,55 @@ func TestMCPUnitMountsUserSkillsReadOnly(t *testing.T) {
 	}
 }
 
+func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "systemd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(name string) string {
+		t.Helper()
+		data, readErr := os.ReadFile(filepath.Join(root, name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return string(data)
+	}
+	launcher := read("loki-go-launcher.service")
+	for _, want := range []string{
+		"User=root\n",
+		"ConditionPathExists=/run/docker.sock\n",
+		"ExecStart=/opt/loki/bin/loki-launcher ",
+		"ReadWritePaths=/var/lib/loki-go/launcher /run/loki-go/launcher -/run/docker.sock\n",
+		"RestrictAddressFamilies=AF_UNIX\n",
+	} {
+		if !strings.Contains(launcher, want) {
+			t.Fatalf("launcher unit does not contain %q", want)
+		}
+	}
+	executor := read("loki-go-executor.service")
+	for _, want := range []string{
+		"Requires=loki-go-launcher.service\n",
+		"User=loki-executor\n",
+		"ExecStart=/opt/loki/bin/loki-executor ",
+		"InaccessiblePaths=/srv/workspace /var/lib/loki-go/runtime /var/lib/loki-go/launcher /var/lib/loki-go/signing /etc/loki-go/token -/run/docker.sock\n",
+		"RestrictAddressFamilies=AF_UNIX\n",
+	} {
+		if !strings.Contains(executor, want) {
+			t.Fatalf("executor unit does not contain %q", want)
+		}
+	}
+	if strings.Contains(executor, "ConditionPathExists=/run/docker.sock") ||
+		strings.Contains(executor, "ReadWritePaths=-/run/docker.sock") {
+		t.Fatal("executor received Docker authority")
+	}
+	mcp := read("loki-go-mcp.service")
+	if !strings.Contains(mcp, "loki-go-executor.service") ||
+		!strings.Contains(mcp, "InaccessiblePaths=/run/loki-go/launcher -/run/docker.sock /var/lib/loki-go/launcher") ||
+		strings.Contains(mcp, "Requires=loki-go-launcher.service") {
+		t.Fatal("MCP does not preserve the executor-only launcher boundary")
+	}
+}
+
 func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "systemd"))
 	if err != nil {
@@ -302,14 +390,26 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(stage), "cp -a --no-preserve=ownership \"$ARTIFACT/rootfs/.\" \"$TARGET/\"") {
+	text := string(stage)
+	if !strings.Contains(text, "cp -a --no-preserve=ownership \"$ARTIFACT/rootfs/.\" \"$TARGET/\"") {
 		t.Fatal("candidate stage preserves untrusted builder ownership")
+	}
+	for _, want := range []string{
+		"EXECUTOR_UID JOB_IMAGE",
+		"test \"$EXECUTOR_UID\" -ne \"$RUNNER_UID\"",
+		"@sha256:[0-9a-f]{64}",
+		"\"$RUNNER_UID\" \"$RUNNER_GID\" \"$WORKSPACE_GID\" \"$BROWSER_UID\" \"$EXECUTOR_UID\" \"$JOB_IMAGE\"",
+		"$TARGET/var/lib/loki-go/launcher",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("candidate stage does not contain %q", want)
+		}
 	}
 }
 
 func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	root := t.TempDir()
-	for _, directory := range []string{"runtime", "port-guard", "browser", "signing"} {
+	for _, directory := range []string{"runtime", "port-guard", "browser", "signing", "executor"} {
 		if err := os.Mkdir(filepath.Join(root, directory), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -321,7 +421,7 @@ func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	listeners := []net.Listener{}
-	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "browser/control.sock", "signing/agent.sock"} {
+	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "browser/control.sock", "signing/agent.sock", "executor/control.sock"} {
 		listener, err := net.Listen("unix", filepath.Join(root, socket))
 		if err != nil {
 			t.Fatal(err)

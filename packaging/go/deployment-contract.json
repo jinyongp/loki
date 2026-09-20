@@ -13,6 +13,8 @@
       "roles": [
         "browser-proxy",
         "egress",
+        "executor",
+        "launcher",
         "mcp",
         "runtime",
         "signing"
@@ -58,6 +60,32 @@
       "no_new_privileges": true,
       "memory_mb": 128,
       "pids": 64
+    },
+    "executor": {
+      "image": "loki",
+      "role": "executor",
+      "user": "executor",
+      "required": true,
+      "vault_access": false,
+      "workspace_access": "none",
+      "networks": [],
+      "read_only_root": true,
+      "no_new_privileges": true,
+      "memory_mb": 256,
+      "pids": 64
+    },
+    "launcher": {
+      "image": "loki",
+      "role": "launcher",
+      "user": "root",
+      "required": true,
+      "vault_access": false,
+      "workspace_access": "none",
+      "networks": [],
+      "read_only_root": true,
+      "no_new_privileges": true,
+      "memory_mb": 512,
+      "pids": 128
     },
     "mcp": {
       "image": "loki",
@@ -195,6 +223,20 @@
         "mcp"
       ]
     },
+    "executor": {
+      "path": "/run/loki/executor/control.sock",
+      "owner": "executor",
+      "clients": [
+        "mcp"
+      ]
+    },
+    "launcher": {
+      "path": "/run/loki/launcher/control.sock",
+      "owner": "launcher",
+      "clients": [
+        "executor"
+      ]
+    },
     "runtime": {
       "path": "/run/loki/runtime/control.sock",
       "owner": "runtime",
@@ -242,7 +284,9 @@
     "docker": {
       "activation": "config",
       "default": false,
-      "services": []
+      "services": [
+        "launcher"
+      ]
     },
     "github": {
       "activation": "config",

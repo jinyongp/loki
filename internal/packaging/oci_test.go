@@ -39,13 +39,18 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"io.loki.ripgrep.arm64.sha256",
 		"io.loki.gh.amd64.sha256",
 		"io.loki.gh.arm64.sha256",
-		"dockerfile:1.7@sha256:",
+		"dockerfile:1.27.0@sha256:",
 		"golang:1.27.1-bookworm@sha256:",
-		"alpine:3.22@sha256:",
-		"alpine/git@sha256:",
+		"alpine:3.24.2@sha256:",
+		"alpine/git:2.54.0@sha256:",
 		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",
+		"-o /out/loki-launcher ./cmd/loki-launcher",
+		"-o /out/loki-executor ./cmd/loki-executor",
+		"COPY --from=build /out/loki-launcher /opt/loki/bin/loki-launcher",
+		"COPY --from=build /out/loki-executor /opt/loki/bin/loki-executor",
 		"runner:x:10000:10000",
 		"egress:x:10002:10002",
+		"executor:x:10004:10001",
 	} {
 		if !strings.Contains(dockerfile, required) {
 			t.Errorf("Dockerfile is missing %q", required)
@@ -65,9 +70,9 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 		"ARG TARGETARCH",
 		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
 		"chromium=$CHROMIUM_VERSION",
-		"CHROMIUM_VERSION=142.0.7444.59-r0",
+		"CHROMIUM_VERSION=152.0.7977.82-r0",
 		"golang:1.27.1-bookworm@sha256:",
-		"alpine:3.22@sha256:",
+		"alpine:3.24.2@sha256:",
 		"USER 10003:10003",
 		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",
 	} {

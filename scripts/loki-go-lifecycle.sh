@@ -6,7 +6,7 @@ SYSTEMCTL=${LOKI_SYSTEMCTL:-systemctl}
 HEALTH_ATTEMPTS=${LOKI_HEALTH_ATTEMPTS:-100}
 HEALTH_INTERVAL=${LOKI_HEALTH_INTERVAL:-0.2}
 SUITE=loki-go.target
-SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-browser-proxy.service loki-go-browser.service loki-go-mcp.service"
+SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-browser-proxy.service loki-go-browser.service loki-go-launcher.service loki-go-executor.service loki-go-mcp.service"
 
 case "$ROOT" in /*) ;; *) echo "LOKI_INSTALL_ROOT must be absolute" >&2; exit 2 ;; esac
 test "$(realpath -m "$ROOT")" = "$ROOT" || {
@@ -90,21 +90,24 @@ check_id_available() {
 }
 
 ensure_identities() {
-  runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4
+  runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4 executor_uid=$5
   test "$ROOT" = / || return 0
   check_identity workspace "$workspace_gid" group
   check_identity runner "$runner_gid" group
   check_identity runner "$runner_uid" user
   check_identity loki-browser "$browser_uid" user
+  check_identity loki-executor "$executor_uid" user
   check_id_available workspace "$workspace_gid" group
   check_id_available runner "$runner_gid" group
   check_id_available runner "$runner_uid" user
   check_id_available loki-browser "$browser_uid" user
+  check_id_available loki-executor "$executor_uid" user
   getent group workspace >/dev/null || groupadd --gid "$workspace_gid" workspace
   getent group runner >/dev/null || groupadd --gid "$runner_gid" runner
   getent passwd runner >/dev/null || useradd --uid "$runner_uid" --gid runner --groups workspace --home-dir /home/runner --create-home --shell /bin/bash runner
   if ! id -nG runner | tr ' ' '\n' | grep -qx workspace; then usermod -a -G workspace runner; fi
   getent passwd loki-browser >/dev/null || useradd --uid "$browser_uid" --gid workspace --home-dir /var/lib/loki-go/browser --no-create-home --shell /usr/sbin/nologin loki-browser
+  getent passwd loki-executor >/dev/null || useradd --uid "$executor_uid" --gid workspace --home-dir /var/lib/loki-go/executor --no-create-home --shell /usr/sbin/nologin loki-executor
 }
 
 release_path() {
@@ -151,15 +154,18 @@ activate_release() {
 prepare_state() {
   release=$1
   set -- $(cat "$release/opt/loki-go-identities")
-  runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4
-  ensure_identities "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid"
+  runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4 executor_uid=$5
+  job_image=$(cat "$release/opt/loki-go-job-image")
+  ensure_identities "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid" "$executor_uid"
   config=$(rooted /etc/loki-go)
   install -d -g "$workspace_gid" -m 0750 "$config"
   test -f "$config/config.toml" || install -m 0640 "$release/usr/share/doc/loki/config.toml" "$config/config.toml"
   test -f "$config/gitconfig" || install -m 0644 "$release/usr/share/doc/loki/gitconfig" "$config/gitconfig"
   chgrp "$workspace_gid" "$config/config.toml"
-  "$release/opt/loki/libexec/render-layouts" "$release/usr/share/doc/loki" "$config" "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid"
-  install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" "$(rooted /var/lib/loki-go/browser)"
+  "$release/opt/loki/libexec/render-layouts" "$release/usr/share/doc/loki" "$config" \
+    "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid" "$executor_uid" "$job_image"
+  install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" \
+    "$(rooted /var/lib/loki-go/browser)" "$(rooted /var/lib/loki-go/launcher)"
   install -d -o "$runner_uid" -g "$runner_gid" -m 0700 \
     "$(rooted /var/lib/loki-go/runner)" "$(rooted /var/lib/loki-go/runner-config)" "$(rooted /var/lib/loki-go/runner-gh-config)" \
     "$(rooted /var/lib/loki-go/runner-data)" "$(rooted /var/lib/loki-go/runner-xdg-state)" "$(rooted /var/lib/loki-go/runner/agents)" \
@@ -168,7 +174,8 @@ prepare_state() {
     "$(rooted /var/cache/loki-go/runner-playwright)" "$(rooted /var/cache/loki-go/runner-go-build)" "$(rooted /var/cache/loki-go/runner-go-mod)" \
     "$(rooted /var/cache/loki-go/runner-pip)" "$(rooted /var/tmp/loki-go/runner)"
   install -d -o 0 -g "$workspace_gid" -m 0710 "$(rooted /var/tmp/loki-go/github)"
-  install -d -m 0700 "$(rooted /var/log/loki-go/runtime)" "$(rooted /var/log/loki-go/mcp)"
+  install -d -m 0700 "$(rooted /var/log/loki-go/runtime)" "$(rooted /var/log/loki-go/mcp)" \
+    "$(rooted /var/log/loki-go/launcher)" "$(rooted /var/log/loki-go/executor)"
   install -d -o "$runner_uid" -g "$workspace_gid" -m 2770 "$(rooted /srv/workspace/loki)"
   install -d -o "$browser_uid" -g "$workspace_gid" -m 0770 "$(rooted /srv/workspace/loki/.loki-go/browser-downloads)"
   install -d -g "$workspace_gid" -m 0755 "$(rooted /srv/workspace/loki/.agents/skills)"
@@ -214,7 +221,9 @@ health() {
        test -S "$(rooted /run/loki-go/runtime/control.sock)" && \
        test -S "$(rooted /run/loki-go/port-guard/control.sock)" && \
        test -S "$(rooted /run/loki-go/browser/control.sock)" && \
-       test -S "$(rooted /run/loki-go/signing/agent.sock)"; then
+       test -S "$(rooted /run/loki-go/signing/agent.sock)" && \
+       test -S "$(rooted /run/loki-go/launcher/control.sock)" && \
+       test -S "$(rooted /run/loki-go/executor/control.sock)"; then
       return 0
     fi
     attempt=$((attempt + 1))
@@ -250,14 +259,18 @@ switch_to() {
 }
 
 install_release() {
-  test "$#" -eq 6 -o "$#" -eq 7 || fail "usage: $0 install ARTIFACT RELEASE RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID [PYTHON_VAULT_COPY]"
+  test "$#" -eq 8 -o "$#" -eq 9 || fail "usage: $0 install ARTIFACT RELEASE RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID EXECUTOR_UID JOB_IMAGE [PYTHON_VAULT_COPY]"
   artifact=$1 release_id=$2
   valid_release "$release_id" || fail "invalid release id"
   case "$artifact" in /*) ;; *) fail "candidate artifact path must be absolute" ;; esac
   test "$(realpath -m "$artifact")" = "$artifact" || fail "candidate artifact path must be clean"
-  for identity in "$3" "$4" "$5" "$6"; do
+  for identity in "$3" "$4" "$5" "$6" "$7"; do
     case "$identity" in ''|*[!0-9]*) fail "service identities must be numeric" ;; esac
   done
+  test "$7" -gt 0 || fail "executor identity must be non-root"
+  test "$7" -ne "$3" -a "$7" -ne "$6" || fail "executor identity must be distinct from runner and browser"
+  printf '%s\n' "$8" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$' ||
+    fail "Job image must be pinned by sha256 digest"
   test -d "$artifact/rootfs" -a -f "$artifact/SHA256SUMS" || fail "candidate artifact is incomplete"
   if test "$ROOT" = /; then test "$(id -u)" -eq 0 || fail "installation requires root"; fi
   releases=$(rooted /opt/loki-go/releases)
@@ -275,13 +288,14 @@ install_release() {
   install_args=""
   if test "$ROOT" != / || test "${LOKI_SKIP_APT:-0}" = 1; then install_args=--skip-apt; fi
   "$temporary/opt/loki/bin/loki" toolchain install --bundle "$temporary/usr/share/loki/toolchain" --root "$temporary" $install_args
-  printf '%s %s %s %s\n' "$3" "$4" "$5" "$6" > "$temporary/opt/loki-go-identities"
+  printf '%s %s %s %s %s\n' "$3" "$4" "$5" "$6" "$7" > "$temporary/opt/loki-go-identities"
+  printf '%s\n' "$8" > "$temporary/opt/loki-go-job-image"
   mv "$temporary" "$destination"
   trap - EXIT HUP INT TERM
-  if test "$#" -eq 7; then
+  if test "$#" -eq 9; then
     trap 'rm -rf "$destination"' EXIT HUP INT TERM
     install -d -m 0755 "$(rooted /var/lib/loki-go)"
-    "$destination/opt/loki/bin/loki" migrate-vault import --source-copy "$7" --destination "$(rooted /var/lib/loki-go/runtime)"
+    "$destination/opt/loki/bin/loki" migrate-vault import --source-copy "$9" --destination "$(rooted /var/lib/loki-go/runtime)"
     trap - EXIT HUP INT TERM
   fi
   switch_to "$release_id"

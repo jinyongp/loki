@@ -109,7 +109,7 @@ func (c Contract) Validate() error {
 			return fmt.Errorf("invalid image %q", name)
 		}
 	}
-	for _, name := range []string{"egress", "mcp", "runtime"} {
+	for _, name := range []string{"egress", "executor", "launcher", "mcp", "runtime"} {
 		if service, ok := c.Services[name]; !ok || !service.Required {
 			return fmt.Errorf("required service %q is missing", name)
 		}
@@ -201,7 +201,7 @@ func (c Contract) Validate() error {
 	if c.Features["browser"].Activation != "profile" || !slices.Equal(c.Features["browser"].Services, []string{"browser", "browser-proxy"}) ||
 		c.Features["signing"].Activation != "profile" || !slices.Equal(c.Features["signing"].Services, []string{"signing"}) ||
 		c.Features["github"].Activation != "config" || !slices.Equal(c.Features["github"].Services, []string{"egress", "runtime"}) ||
-		len(c.Features["docker"].Services) != 0 {
+		c.Features["docker"].Activation != "config" || !slices.Equal(c.Features["docker"].Services, []string{"launcher"}) {
 		return errors.New("optional feature topology is invalid")
 	}
 	return nil

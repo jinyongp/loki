@@ -1,0 +1,9 @@
+{
+  "Socket": "/run/loki/executor/control.sock",
+  "SocketGID": 10001,
+  "AgentUID": 10000,
+  "ExecutorUID": 10004,
+  "LauncherSocket": "/run/loki/launcher/control.sock",
+  "LauncherUID": 0,
+  "RunTimeoutSeconds": 86400
+}

@@ -64,8 +64,9 @@ PY
     useradd --uid 21001 --gid workspace --home-dir /var/lib/loki-go/browser --no-create-home --shell /usr/sbin/nologin loki-browser
     runuser -u runner -- env HOME=/home/runner git config --global user.name "Loki Acceptance"
     runuser -u runner -- env HOME=/home/runner git config --global user.email "loki-acceptance@example.test"
-    "$candidate/install.sh" install "$candidate" acceptance-v1 21000 21000 21001 21001 "$source"
-    LOKI_SKIP_APT=1 "$candidate/install.sh" install "$candidate" acceptance-v2 21000 21000 21001 21001
+    job_image=registry.example/loki@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    "$candidate/install.sh" install "$candidate" acceptance-v1 21000 21000 21001 21001 21002 "$job_image" "$source"
+    LOKI_SKIP_APT=1 "$candidate/install.sh" install "$candidate" acceptance-v2 21000 21000 21001 21001 21002 "$job_image"
     echo "acceptance: health"
     /usr/local/sbin/loki-go-lifecycle health
     echo "acceptance: enabled/current"
@@ -80,6 +81,8 @@ PY
     echo "acceptance: sockets/browser"
     test -S /run/loki-go/browser/control.sock
     test -S /run/loki-go/runtime/control.sock
+    test -S /run/loki-go/launcher/control.sock
+    test -S /run/loki-go/executor/control.sock
     runuser -u runner -- python3 - <<'PY'
 import json
 import socket

@@ -25,7 +25,10 @@ services:
         /var/cache/loki/go-mod /var/cache/loki/pip;
         do install -d -o 10000 -g 10000 -m 0700 "$$path"; done;
         install -d -o 0 -g 10001 -m 0750 /run/loki/signing;
-        install -d -o 10003 -g 10001 -m 0750 /run/loki/browser
+        install -d -o 10003 -g 10001 -m 0750 /run/loki/browser;
+        install -d -o 0 -g 10001 -m 0750 /run/loki/launcher;
+        install -d -o 10004 -g 10001 -m 0750 /run/loki/executor;
+        install -d -o 0 -g 0 -m 0700 /var/lib/loki/launcher
     user: "0:0"
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
     network_mode: none
@@ -35,6 +38,9 @@ services:
       - user-skills:/var/lib/loki/runner/agents
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
+      - launcher-state:/var/lib/loki/launcher
+      - launcher-socket:/run/loki/launcher
+      - executor-socket:/run/loki/executor
     mem_limit: 32m
     pids_limit: 16
 
@@ -127,6 +133,58 @@ services:
     mem_limit: 64m
     pids_limit: 32
 
+  launcher:
+    <<: *loki-service
+    entrypoint: [/opt/loki/bin/loki-launcher]
+    command: [--config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/launcher.json, --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --image, "${LOKI_JOB_IMAGE:?set LOKI_JOB_IMAGE to an immutable OCI digest reference}", --gateway-image, "${LOKI_JOB_IMAGE:?set LOKI_JOB_IMAGE to an immutable OCI digest reference}", --workspace-source, "${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}"]
+    user: "0:0"
+    group_add: ["10001"]
+    network_mode: none
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+    volumes:
+      - launcher-state:/var/lib/loki/launcher
+      - launcher-socket:/run/loki/launcher
+      - /run/docker.sock:/run/docker.sock
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/launcher/control.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    pids_limit: 128
+
+  executor:
+    <<: *loki-service
+    entrypoint: [/opt/loki/bin/loki-executor]
+    command: [--config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/executor.json, --execution-contract, /usr/share/doc/loki/container-execution-contract.json]
+    user: "10004:10001"
+    network_mode: none
+    depends_on:
+      launcher: {condition: service_healthy}
+    volumes:
+      - launcher-socket:/run/loki/launcher
+      - executor-socket:/run/loki/executor
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    tmpfs:
+      - /tmp:uid=10004,gid=10001,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/executor/control.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 10s
+    mem_limit: 256m
+    pids_limit: 64
+
   runtime:
     <<: *loki-service
     command: [runtime, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --github-private-key-file, /run/loki-private/github-app-private-key, --layout, /etc/loki/runtime.json]
@@ -172,11 +230,13 @@ services:
     networks: [private]
     depends_on:
       runtime: {condition: service_healthy}
+      executor: {condition: service_healthy}
     volumes:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runner-state:/var/lib/loki/runner
       - user-skills:/home/runner/.agents:ro
       - sockets:/run/loki
+      - executor-socket:/run/loki/executor
     configs:
       - source: github_config
         target: /etc/loki/github.toml
@@ -199,6 +259,9 @@ networks:
 volumes:
   browser-downloads: {}
   browser-state: {}
+  executor-socket: {}
+  launcher-socket: {}
+  launcher-state: {}
   runtime-state: {}
   runner-state: {}
   user-skills: {}

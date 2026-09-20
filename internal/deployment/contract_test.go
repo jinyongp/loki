@@ -39,6 +39,21 @@ func TestRepositoryContractDefinesPortableTopology(t *testing.T) {
 		!slices.Equal(c.Services["browser-proxy"].Networks, []string{"outbound", "private"}) {
 		t.Fatal("browser egress boundary is invalid")
 	}
+	if got := c.Features["docker"].Services; !slices.Equal(got, []string{"launcher"}) {
+		t.Fatalf("Docker feature services = %v", got)
+	}
+	if !c.Services["launcher"].Required || c.Services["launcher"].VaultAccess ||
+		c.Services["launcher"].WorkspaceAccess != "none" ||
+		!c.Services["executor"].Required || c.Services["executor"].VaultAccess ||
+		c.Services["executor"].WorkspaceAccess != "none" {
+		t.Fatal("Job control role authority is invalid")
+	}
+	if socket := c.Sockets["launcher"]; socket.Owner != "launcher" || !slices.Equal(socket.Clients, []string{"executor"}) {
+		t.Fatalf("launcher socket = %#v", socket)
+	}
+	if socket := c.Sockets["executor"]; socket.Owner != "executor" || !slices.Equal(socket.Clients, []string{"mcp"}) {
+		t.Fatalf("executor socket = %#v", socket)
+	}
 	if !c.Volumes["workspace"].External || c.Volumes["sockets"].Persistent {
 		t.Fatal("volume lifecycle is invalid")
 	}

@@ -12,6 +12,15 @@ import (
 	"testing"
 )
 
+const lifecycleJobImage = "registry.example/loki@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+func lifecycleExecutorUID(runnerUID string) string {
+	if runnerUID == "60000" {
+		return "60001"
+	}
+	return "60000"
+}
+
 func writeExecutable(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -37,13 +46,15 @@ func candidateArtifact(t *testing.T, name string) string {
 	writeExecutable(t, filepath.Join(root, "opt/loki/bin/loki"), "#!/bin/sh\nset -eu\ncase \"$1\" in\n  toolchain) exit 0 ;;\n  migrate-vault) test \"${TEST_MIGRATE_FAIL:-0}\" != 1 || exit 1; while test \"$#\" -gt 0; do if test \"$1\" = --destination; then mkdir -p \"$2\"; : > \"$2/imported-by-candidate\"; exit 0; fi; shift; done ;;\nesac\nexit 1\n")
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/lifecycle"), string(lifecycle))
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/devtools"), "#!/bin/sh\nexit 0\n")
-	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/render-layouts"), "#!/bin/sh\nset -eu\nmkdir -p \"$2\"\nfor f in runtime.json mcp.json identity.env; do : > \"$2/$f\"; chmod 0640 \"$2/$f\"; done\n")
+	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/render-layouts"), "#!/bin/sh\nset -eu\nmkdir -p \"$2\"\nfor f in runtime.json mcp.json launcher.json executor.json identity.env; do : > \"$2/$f\"; chmod 0640 \"$2/$f\"; done\n")
 	files := map[string]string{
 		"usr/share/doc/loki/config.toml":                       "version = 1\n",
 		"usr/share/doc/loki/gitconfig":                         "[user]\n",
 		"usr/lib/tmpfiles.d/loki-go.conf":                      "d /run/loki-go 0750 root workspace -\n",
 		"usr/lib/systemd/system/loki-go.target":                "[Unit]\nDescription=test\n",
 		"usr/lib/systemd/system/loki-go-runtime.service":       "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-launcher.service":      "[Service]\nExecStart=/opt/loki/bin/loki-launcher\n",
+		"usr/lib/systemd/system/loki-go-executor.service":      "[Service]\nExecStart=/opt/loki/bin/loki-executor\n",
 		"usr/lib/systemd/system/loki-go-mcp.service":           "[Service]\nExecStart=/opt/loki/bin/loki\n",
 		"usr/lib/systemd/system/loki-go-port-guard.service":    "[Service]\nExecStart=/opt/loki/bin/loki\n",
 		"usr/lib/systemd/system/loki-go-signing-agent.service": "[Service]\nExecStart=/opt/loki/bin/loki\n",
@@ -92,14 +103,20 @@ func candidateArtifact(t *testing.T, name string) string {
 
 func lifecycleEnvironment(t *testing.T, root string) ([]string, func()) {
 	t.Helper()
-	for _, relative := range []string{"runtime/control.sock", "port-guard/control.sock", "browser/control.sock", "signing/agent.sock"} {
+	for _, relative := range []string{
+		"runtime/control.sock", "port-guard/control.sock", "browser/control.sock",
+		"signing/agent.sock", "launcher/control.sock", "executor/control.sock",
+	} {
 		path := filepath.Join(root, "run/loki-go", relative)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	listeners := make([]net.Listener, 0, 4)
-	for _, relative := range []string{"runtime/control.sock", "port-guard/control.sock", "browser/control.sock", "signing/agent.sock"} {
+	listeners := make([]net.Listener, 0, 6)
+	for _, relative := range []string{
+		"runtime/control.sock", "port-guard/control.sock", "browser/control.sock",
+		"signing/agent.sock", "launcher/control.sock", "executor/control.sock",
+	} {
 		listener, err := net.Listen("unix", filepath.Join(root, "run/loki-go", relative))
 		if err != nil {
 			t.Fatal(err)
@@ -161,7 +178,7 @@ func TestLifecycleActivatesAndRollsBackReleases(t *testing.T) {
 	first := candidateArtifact(t, "first")
 	second := candidateArtifact(t, "second")
 	bad := candidateArtifact(t, "bad")
-	runLifecycle(t, environment, true, "install", first, "v1", uid, gid, gid, uid)
+	runLifecycle(t, environment, true, "install", first, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
 	if got, _ := os.Readlink(filepath.Join(root, "opt/loki-go/current")); got != "releases/v1" {
 		t.Fatalf("current release = %q", got)
 	}
@@ -173,14 +190,14 @@ func TestLifecycleActivatesAndRollsBackReleases(t *testing.T) {
 	if err := os.WriteFile(userSkill, []byte("user skill\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	runLifecycle(t, environment, true, "install", second, "v2", uid, gid, gid, uid)
+	runLifecycle(t, environment, true, "install", second, "v2", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
 	if data, err := os.ReadFile(userSkill); err != nil || string(data) != "user skill\n" {
 		t.Fatalf("user Skill backing was not preserved across release update: data=%q err=%v", data, err)
 	}
 	if got, _ := os.Readlink(filepath.Join(root, "opt/loki-go/previous")); got != "releases/v1" {
 		t.Fatalf("previous release = %q", got)
 	}
-	runLifecycle(t, environment, false, "install", bad, "bad", uid, gid, gid, uid)
+	runLifecycle(t, environment, false, "install", bad, "bad", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
 	if got, _ := os.Readlink(filepath.Join(root, "opt/loki-go/current")); got != "releases/v2" {
 		t.Fatalf("failed activation left current at %q", got)
 	}
@@ -198,8 +215,8 @@ func TestLifecycleRejectsUnsafeInputs(t *testing.T) {
 	environment, closeSockets := lifecycleEnvironment(t, root)
 	defer closeSockets()
 	artifact := candidateArtifact(t, "candidate")
-	runLifecycle(t, environment, false, "install", artifact, "../escape", "1", "1", "1", "1")
-	runLifecycle(t, environment, false, "install", artifact, "v1", "runner", "1", "1", "1")
+	runLifecycle(t, environment, false, "install", artifact, "../escape", "1", "1", "1", "1", "2", lifecycleJobImage)
+	runLifecycle(t, environment, false, "install", artifact, "v1", "runner", "1", "1", "1", "2", lifecycleJobImage)
 }
 
 func TestLifecycleCanMigrateCopiedVaultBeforeActivation(t *testing.T) {
@@ -213,7 +230,7 @@ func TestLifecycleCanMigrateCopiedVaultBeforeActivation(t *testing.T) {
 	if err := os.Mkdir(source, 0700); err != nil {
 		t.Fatal(err)
 	}
-	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, source)
+	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage, source)
 	if _, err := os.Stat(filepath.Join(root, "var/lib/loki-go/runtime/imported-by-candidate")); err != nil {
 		t.Fatal("candidate migration did not run before activation:", err)
 	}
@@ -231,11 +248,11 @@ func TestLifecycleCanRetryInterruptedMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	failing := append(append([]string(nil), environment...), "TEST_MIGRATE_FAIL=1")
-	runLifecycle(t, failing, false, "install", artifact, "v1", uid, gid, gid, uid, source)
+	runLifecycle(t, failing, false, "install", artifact, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage, source)
 	if _, err := os.Lstat(filepath.Join(root, "opt/loki-go/releases/v1")); !os.IsNotExist(err) {
 		t.Fatal("failed migration retained a partial release")
 	}
-	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, source)
+	runLifecycle(t, environment, true, "install", artifact, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage, source)
 }
 
 func TestLifecycleRejectsUnmanagedPathAndCanRetryActivation(t *testing.T) {
@@ -248,7 +265,7 @@ func TestLifecycleRejectsUnmanagedPathAndCanRetryActivation(t *testing.T) {
 	uid := fmt.Sprint(os.Getuid())
 	gid := fmt.Sprint(os.Getgid())
 	artifact := candidateArtifact(t, "candidate")
-	runLifecycle(t, environment, false, "install", artifact, "v1", uid, gid, gid, uid)
+	runLifecycle(t, environment, false, "install", artifact, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
 	if err := os.Remove(filepath.Join(root, "opt/loki")); err != nil {
 		t.Fatal(err)
 	}

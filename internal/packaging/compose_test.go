@@ -56,7 +56,7 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if err = yaml.Unmarshal(raw, &compose); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"prepare", "egress", "runtime", "mcp"} {
+	for _, name := range []string{"prepare", "egress", "launcher", "executor", "runtime", "mcp"} {
 		service, ok := compose.Services[name]
 		if !ok {
 			t.Fatalf("missing service %q", name)
@@ -70,6 +70,38 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	}
 	if compose.Services["prepare"].NetworkMode != "none" {
 		t.Fatal("prepare service has network access")
+	}
+	launcher := compose.Services["launcher"]
+	executor := compose.Services["executor"]
+	if launcher.NetworkMode != "none" || executor.NetworkMode != "none" ||
+		len(launcher.Networks) != 0 || len(executor.Networks) != 0 ||
+		len(launcher.Ports) != 0 || len(executor.Ports) != 0 {
+		t.Fatal("Job control roles received network or published-port authority")
+	}
+	for _, destination := range []string{"/var/lib/loki/launcher", "/run/loki/launcher", "/run/docker.sock"} {
+		if !hasMount(launcher.Volumes, destination) {
+			t.Errorf("launcher missing mount %s", destination)
+		}
+	}
+	for _, destination := range []string{"/run/loki/launcher", "/run/loki/executor"} {
+		if !hasMount(executor.Volumes, destination) {
+			t.Errorf("executor missing socket mount %s", destination)
+		}
+	}
+	for _, destination := range []string{"/run/docker.sock", "/workspace", "/var/lib/loki/runtime"} {
+		if hasMount(executor.Volumes, destination) {
+			t.Errorf("executor received forbidden mount %s", destination)
+		}
+	}
+	if !hasMount(compose.Services["mcp"].Volumes, "/run/loki/executor") ||
+		hasMount(compose.Services["mcp"].Volumes, "/run/loki/launcher") ||
+		hasMount(compose.Services["mcp"].Volumes, "/run/docker.sock") {
+		t.Fatal("MCP does not preserve the executor-only Job authority boundary")
+	}
+	for name, service := range compose.Services {
+		if hasMount(service.Volumes, "/run/docker.sock") != (name == "launcher") {
+			t.Errorf("%s Docker socket authority = %v", name, hasMount(service.Volumes, "/run/docker.sock"))
+		}
 	}
 	if got := compose.Services["egress"].Networks; !slices.Equal(got, []string{"private", "outbound"}) {
 		t.Fatalf("egress networks = %v", got)
@@ -91,6 +123,8 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	}
 	if !slices.Equal(secretNames(compose.Services["runtime"].Secrets), []string{"github_app_private_key"}) ||
 		!slices.Equal(secretNames(compose.Services["runtime"].Configs), []string{"github_config"}) ||
+		!slices.Equal(secretNames(compose.Services["launcher"].Configs), []string{"github_config"}) ||
+		!slices.Equal(secretNames(compose.Services["executor"].Configs), []string{"github_config"}) ||
 		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{"github_config"}) {
 		t.Fatal("GitHub config and private key injection boundary is invalid")
 	}
@@ -117,7 +151,9 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		t.Fatal("runtime vault mount is not isolated")
 	}
 	if compose.Services["runtime"].DependsOn["egress"].Condition != "service_healthy" ||
-		compose.Services["mcp"].DependsOn["runtime"].Condition != "service_healthy" {
+		compose.Services["executor"].DependsOn["launcher"].Condition != "service_healthy" ||
+		compose.Services["mcp"].DependsOn["runtime"].Condition != "service_healthy" ||
+		compose.Services["mcp"].DependsOn["executor"].Condition != "service_healthy" {
 		t.Fatal("core readiness order is incomplete")
 	}
 	for _, name := range []string{"runtime", "mcp"} {

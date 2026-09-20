@@ -1,0 +1,9 @@
+{
+  "Socket": "/run/loki-go/executor/control.sock",
+  "SocketGID": @WORKSPACE_GID@,
+  "AgentUID": @RUNNER_UID@,
+  "ExecutorUID": @EXECUTOR_UID@,
+  "LauncherSocket": "/run/loki-go/launcher/control.sock",
+  "LauncherUID": 0,
+  "RunTimeoutSeconds": 86400
+}

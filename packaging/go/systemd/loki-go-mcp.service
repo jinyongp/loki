@@ -1,9 +1,9 @@
 [Unit]
 Description=Loki Go MCP server
 PartOf=loki-go.target
-Requires=loki-go-runtime.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service
+Requires=loki-go-runtime.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-executor.service
 Wants=loki-go-egress-proxy.service
-After=network.target loki-go-egress-proxy.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-runtime.service
+After=network.target loki-go-egress-proxy.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-runtime.service loki-go-executor.service
 ConditionPathExists=/etc/loki-go/config.toml
 ConditionPathExists=/etc/loki-go/token
 StartLimitIntervalSec=0
@@ -37,6 +37,7 @@ ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
 BindReadOnlyPaths=/var/lib/loki-go/runner/agents:/home/runner/.agents
 ReadWritePaths=/srv/workspace/loki /var/log/loki-go/mcp
+InaccessiblePaths=/run/loki-go/launcher -/run/docker.sock /var/lib/loki-go/launcher
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost
