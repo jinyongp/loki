@@ -56,7 +56,7 @@ func AgentGuidanceHandlers(provider AgentGuidanceProvider) map[string]mcpserver.
 			if err != nil {
 				return nil, err
 			}
-			return mcpserver.Object(map[string]any{"skill": result})
+			return mcpserver.Object(map[string]any{"skill": result, "complete": true})
 		default:
 			return nil, errors.New("agent guidance action must be context or skill")
 		}
