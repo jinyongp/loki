@@ -106,9 +106,11 @@ func validOptions(t *testing.T, socket string) Options {
 
 func validWorkload() jobs.Workload {
 	return jobs.Workload{
-		ID:   strings.Repeat("b", 32),
-		CWD:  ".",
-		Argv: []string{"/bin/true", "argument"},
+		ID:             strings.Repeat("b", 32),
+		CWD:            ".",
+		Argv:           []string{"/bin/true", "argument"},
+		Input:          []byte("input"),
+		MaxOutputBytes: 4096,
 	}
 }
 
@@ -162,6 +164,8 @@ func startResult(workload jobs.Workload) jobs.StartResult {
 	}
 }
 
+func exitCode(value int64) *int64 { return &value }
+
 func completedCancel(id string, canceled bool) jobs.CancelResult {
 	return jobs.CancelResult{
 		JobID:    id,
@@ -173,42 +177,38 @@ func completedCancel(id string, canceled bool) jobs.CancelResult {
 	}
 }
 
-func TestLauncherUsesStartThenWaitWithTrustedPolicy(t *testing.T) {
+func TestLauncherRunUsesTrustedPolicyAndRawPayload(t *testing.T) {
 	log := &requestLog{}
 	workload := validWorkload()
 	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
 		log.add(request)
 		var operation string
 		_ = json.Unmarshal(request["operation"], &operation)
-		switch operation {
-		case "start":
-			if len(request) != 5 {
-				t.Fatalf("start request keys = %#v", request)
-			}
-			var id, policy, cwd string
-			var argv []string
-			for key, target := range map[string]any{
-				"id": &id, "policy_sha256": &policy, "cwd": &cwd, "argv": &argv,
-			} {
-				raw, ok := request[key]
-				if !ok || json.Unmarshal(raw, target) != nil {
-					t.Fatalf("start request[%q] = %s", key, raw)
-				}
-			}
-			if id != workload.ID || policy != strings.Repeat("a", 64) ||
-				cwd != "." || len(argv) != 2 || argv[0] != "/bin/true" || argv[1] != "argument" {
-				t.Fatalf("start request = %#v", request)
-			}
-			return response(t, startResult(workload))
-		case "wait":
-			return response(t, map[string]any{
-				"exit_code": 9, "outcome": "exited", "output": "hello",
-				"truncated": false, "cleanup": "complete",
-			})
-		default:
+		if operation != "run" {
 			t.Fatalf("unexpected operation %q", operation)
-			return nil
 		}
+		var id, policy, cwd string
+		var argv []string
+		var input []byte
+		var maximum int
+		for key, target := range map[string]any{
+			"id": &id, "policy_sha256": &policy, "cwd": &cwd, "argv": &argv,
+			"input": &input, "max_output_bytes": &maximum,
+		} {
+			raw, ok := request[key]
+			if !ok || json.Unmarshal(raw, target) != nil {
+				t.Fatalf("run request[%q] = %s", key, raw)
+			}
+		}
+		if id != workload.ID || policy != strings.Repeat("a", 64) || cwd != "." ||
+			len(argv) != 2 || argv[0] != "/bin/true" || argv[1] != "argument" ||
+			string(input) != "input" || maximum != workload.MaxOutputBytes {
+			t.Fatalf("run request = %#v", request)
+		}
+		return response(t, jobs.RunExecutionResult{
+			ExitCode: exitCode(9), Outcome: jobs.OutcomeExited, Output: []byte("hello"),
+			Cleanup: jobs.CleanupComplete,
+		})
 	})
 	launcher, err := New(validOptions(t, socket))
 	if err != nil {
@@ -220,10 +220,10 @@ func TestLauncherUsesStartThenWaitWithTrustedPolicy(t *testing.T) {
 	}
 	workload.Argv[1] = "mutated"
 	if result.ExitCode == nil || *result.ExitCode != 9 || result.Outcome != jobs.OutcomeExited ||
-		result.Output.Text != "hello" || result.Output.Truncated || result.Cleanup != jobs.CleanupComplete {
+		string(result.Output) != "hello" || result.Truncated || result.Cleanup != jobs.CleanupComplete {
 		t.Fatalf("result = %#v", result)
 	}
-	if got := strings.Join(log.snapshot(), ","); got != "start,wait" {
+	if got := strings.Join(log.snapshot(), ","); got != "run" {
 		t.Fatalf("operations = %q", got)
 	}
 }
@@ -320,64 +320,50 @@ func TestLauncherPreservesReplayConflictAcrossRPC(t *testing.T) {
 	}
 }
 
-func TestLauncherCancelsAfterWaitFailure(t *testing.T) {
+func TestLauncherRunReturnsServerErrorWithoutClientSideCleanup(t *testing.T) {
 	log := &requestLog{}
 	workload := validWorkload()
 	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
 		log.add(request)
 		var operation string
 		_ = json.Unmarshal(request["operation"], &operation)
-		switch operation {
-		case "start":
-			return response(t, startResult(workload))
-		case "wait":
-			return errorResponse(t, "synthetic wait failure")
-		case "cancel":
-			return response(t, completedCancel(workload.ID, true))
-		default:
+		if operation != "run" {
 			return errorResponse(t, "unexpected")
 		}
+		return errorResponse(t, "synthetic run failure")
 	})
 	launcher, err := New(validOptions(t, socket))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = launcher.Run(t.Context(), workload); err == nil || !strings.Contains(err.Error(), "synthetic wait failure") {
-		t.Fatalf("wait failure = %v", err)
+	if _, err = launcher.Run(t.Context(), workload); err == nil || !strings.Contains(err.Error(), "synthetic run failure") {
+		t.Fatalf("run failure = %v", err)
 	}
-	if got := strings.Join(log.snapshot(), ","); got != "start,wait,cancel" {
+	if got := strings.Join(log.snapshot(), ","); got != "run" {
 		t.Fatalf("operations = %q", got)
 	}
 }
 
-func TestLauncherCancelsAfterUncertainStart(t *testing.T) {
+func TestLauncherRunReturnsUncertainRPCFailureWithoutRetry(t *testing.T) {
 	log := &requestLog{}
 	workload := validWorkload()
 	socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
 		log.add(request)
-		var operation string
-		_ = json.Unmarshal(request["operation"], &operation)
-		if operation == "start" {
-			return nil
-		}
-		if operation == "cancel" {
-			return response(t, completedCancel(workload.ID, false))
-		}
-		return errorResponse(t, "unexpected")
+		return nil
 	})
 	launcher, err := New(validOptions(t, socket))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = launcher.Run(t.Context(), workload); err == nil {
-		t.Fatal("uncertain start returned success")
+		t.Fatal("uncertain run returned success")
 	}
-	if got := strings.Join(log.snapshot(), ","); got != "start,cancel" {
+	if got := strings.Join(log.snapshot(), ","); got != "run" {
 		t.Fatalf("operations = %q", got)
 	}
 }
 
-func TestLauncherStrictlyRejectsInvalidWaitResultsAndCleansUp(t *testing.T) {
+func TestLauncherStrictlyRejectsInvalidRunResults(t *testing.T) {
 	tests := []struct {
 		name     string
 		response []byte
@@ -415,18 +401,7 @@ func TestLauncherStrictlyRejectsInvalidWaitResultsAndCleansUp(t *testing.T) {
 			workload := validWorkload()
 			socket := fakeLauncherSocket(t, func(request map[string]json.RawMessage) []byte {
 				log.add(request)
-				var operation string
-				_ = json.Unmarshal(request["operation"], &operation)
-				switch operation {
-				case "start":
-					return response(t, startResult(workload))
-				case "wait":
-					return tc.response
-				case "cancel":
-					return response(t, completedCancel(workload.ID, false))
-				default:
-					return nil
-				}
+				return tc.response
 			})
 			launcher, err := New(validOptions(t, socket))
 			if err != nil {
@@ -435,7 +410,7 @@ func TestLauncherStrictlyRejectsInvalidWaitResultsAndCleansUp(t *testing.T) {
 			if _, err = launcher.Run(t.Context(), workload); err == nil {
 				t.Fatal("invalid launcher result was accepted")
 			}
-			if got := strings.Join(log.snapshot(), ","); got != "start,wait,cancel" {
+			if got := strings.Join(log.snapshot(), ","); got != "run" {
 				t.Fatalf("operations = %q", got)
 			}
 		})

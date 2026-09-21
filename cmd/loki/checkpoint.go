@@ -11,10 +11,25 @@ import (
 	"time"
 
 	"loki/internal/config"
+	"loki/internal/daemon"
 	"loki/internal/fault"
 	"loki/internal/gitops"
 	"loki/internal/policy"
+	jobsremote "loki/internal/work/jobs/remote"
 )
+
+func checkpointGitRunner(layout mcpLayout) (gitops.Runner, error) {
+	if layout.ExecutorUID == nil {
+		return nil, fmt.Errorf("checkpoint executor peer is not configured")
+	}
+	executor, err := jobsremote.NewExecutor(jobsremote.ExecutorOptions{
+		Socket: layout.ExecutorSocket, ExpectedUID: layout.ExecutorUID, Timeout: 60 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gitops.JobRunner{Jobs: executor}, nil
+}
 
 func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 	counts := map[string]int{"list": 1, "show": 2, "restore": 2}
@@ -81,6 +96,17 @@ func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+	var layout mcpLayout
+	if err = daemon.ReadJSON("/etc/loki-go/mcp.json", &layout); err != nil {
+		fmt.Fprintln(stderr, "checkpoint executor layout unavailable")
+		return 1
+	}
+	runner, err := checkpointGitRunner(layout)
+	if err != nil {
+		fmt.Fprintln(stderr, fault.Public(err))
+		return 1
+	}
+	c.Runner = runner
 	metadata, err := c.RestoreCheckpoint(ctx, args[1])
 	if err != nil {
 		fmt.Fprintln(stderr, fault.Public(err))

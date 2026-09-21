@@ -111,11 +111,15 @@ type CancelResult struct {
 }
 
 type Launcher interface {
-	Run(context.Context, Workload) (Result, error)
+	Run(context.Context, Workload) (RunExecutionResult, error)
 	Start(context.Context, Workload) (StartResult, error)
 	Inspect(context.Context, string) (Status, error)
 	Output(context.Context, string) (OutputSnapshot, error)
 	Cancel(context.Context, string) (CancelResult, error)
+}
+
+type Runner interface {
+	Run(context.Context, RunRequest) (RunResult, error)
 }
 
 type Controller interface {

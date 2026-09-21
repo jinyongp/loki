@@ -19,13 +19,13 @@ import (
 	"loki/internal/config"
 	"loki/internal/fault"
 	"loki/internal/policy"
-	"loki/internal/process"
 )
 
 type Controller struct {
 	Paths  *policy.Workspace
 	Config config.Config
-	// Env and template roots are administrator-owned service configuration.
+	Runner Runner
+	// Env remains diagnostic metadata until S04 removes the legacy service wiring.
 	Env           []string
 	TemplateRoots []*policy.Workspace
 	mu            sync.Mutex
@@ -34,13 +34,35 @@ type Controller struct {
 var errNotRepository = errors.New("cwd is not inside a Git repository")
 
 func hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
-func (c *Controller) git(ctx context.Context, cwd string, input []byte, maximum int, args ...string) (process.Result, error) {
+
+func (c *Controller) runnerCWD(cwd string) (string, error) {
+	if c == nil || c.Paths == nil || c.Runner == nil {
+		return "", errors.New("Git runner is not configured")
+	}
+	relative, err := filepath.Rel(c.Paths.Root(), cwd)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fault.Error("Git working directory escapes workspace")
+	}
+	if relative == "." {
+		return ".", nil
+	}
+	return filepath.ToSlash(relative), nil
+}
+
+func (c *Controller) git(ctx context.Context, cwd string, input []byte, maximum int, args ...string) (CommandResult, error) {
+	runnerCWD, err := c.runnerCWD(cwd)
+	if err != nil {
+		return CommandResult{}, err
+	}
 	prefix := []string{
 		"/usr/bin/git", "--no-pager", "--literal-pathspecs",
 		"-c", "core.fsmonitor=false",
 		"-c", "core.hooksPath=/dev/null",
 	}
-	return process.Run(ctx, process.Spec{Argv: append(prefix, args...), CWD: cwd, Env: c.Env, Input: input, Timeout: 30 * time.Second, MaxOutput: maximum})
+	return c.Runner.Run(ctx, CommandRequest{
+		Argv: append(prefix, args...), CWD: runnerCWD, Input: input,
+		Timeout: 30 * time.Second, MaxOutput: maximum,
+	})
 }
 
 func (c *Controller) rejectExecutableFilters(ctx context.Context, cwd string) error {
@@ -61,7 +83,7 @@ func (c *Controller) rejectExecutableFilters(ctx context.Context, cwd string) er
 		return fault.Error("unable to inspect Git filter configuration")
 	}
 }
-func public(result process.Result, err error) (map[string]any, error) {
+func public(result CommandResult, err error) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +93,29 @@ func public(result process.Result, err error) (map[string]any, error) {
 	}
 	return value, nil
 }
+func (c *Controller) hostPathFromRunner(value string) (string, error) {
+	clean := filepath.Clean(strings.TrimSpace(value))
+	const runnerRoot = "/workspace"
+	if clean != runnerRoot && !strings.HasPrefix(clean, runnerRoot+"/") {
+		return "", fault.Error("Git path escapes workspace")
+	}
+	relative := strings.TrimPrefix(clean, runnerRoot)
+	relative = strings.TrimPrefix(relative, "/")
+	target := c.Paths.Root()
+	if relative != "" {
+		target = filepath.Join(target, filepath.FromSlash(relative))
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(c.Paths.Root(), resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fault.Error("Git path escapes workspace")
+	}
+	return resolved, nil
+}
+
 func (c *Controller) path(cwd, requested string, exists bool) (string, error) {
 	if requested == "" {
 		return "", fault.Error("invalid Git path")
@@ -98,9 +143,9 @@ func (c *Controller) repositoryRoot(ctx context.Context, cwd string) (string, er
 	if repository.ExitCode != 0 || repository.Truncated {
 		return "", errNotRepository
 	}
-	root, err := filepath.EvalSymlinks(strings.TrimSpace(repository.Output))
+	root, err := c.hostPathFromRunner(repository.Output)
 	if err != nil {
-		return "", err
+		return "", fault.Error("repository escapes workspace")
 	}
 	relative, err := filepath.Rel(c.Paths.Root(), root)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
@@ -114,9 +159,9 @@ func (c *Controller) repositoryRoot(ctx context.Context, cwd string) (string, er
 		if metadata.ExitCode != 0 || metadata.Truncated {
 			return "", fault.Error("unable to inspect Git metadata")
 		}
-		target, resolveErr := filepath.EvalSymlinks(strings.TrimSpace(metadata.Output))
+		target, resolveErr := c.hostPathFromRunner(metadata.Output)
 		if resolveErr != nil {
-			return "", resolveErr
+			return "", fault.Error("Git metadata escapes workspace")
 		}
 		relative, resolveErr = filepath.Rel(c.Paths.Root(), target)
 		if resolveErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
@@ -462,7 +507,14 @@ func (c *Controller) CommitContext(ctx context.Context, cwd string) (map[string]
 	}
 	configured := strings.TrimSpace(resolved.Output)
 	target := configured
-	if !filepath.IsAbs(target) {
+	if filepath.IsAbs(target) {
+		if target == "/workspace" || strings.HasPrefix(target, "/workspace/") {
+			target, err = c.hostPathFromRunner(target)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
 		target = filepath.Join(full, target)
 	}
 	for _, root := range append([]*policy.Workspace{c.Paths}, c.TemplateRoots...) {

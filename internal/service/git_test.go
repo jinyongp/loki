@@ -29,13 +29,13 @@ func TestGitInspectHandlerAppliesDefaultStatusAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	environment := map[string]string{
+		"HOME": t.TempDir(), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+	}
+	configuration.Root = paths.Root()
 	git := &gitops.Controller{
-		Paths:  paths,
-		Config: configuration,
-		Env: []string{
-			"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
-			"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
-		},
+		Paths: paths, Config: configuration, Runner: gitRunnerFixture(t, configuration, environment),
+		Env: toolEnvironment(environment),
 	}
 	handler := GitHandlers(git)["git_inspect"]
 	result, err := handler(t.Context(), map[string]any{"cwd": "repo"})

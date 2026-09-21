@@ -33,7 +33,7 @@ func (c *Controller) Checkpoint(ctx context.Context, cwd string) (*string, error
 	if top.Truncated {
 		return nil, fault.Error("repository path exceeds limit")
 	}
-	root, err := filepath.EvalSymlinks(strings.TrimSpace(top.Output))
+	root, err := c.hostPathFromRunner(top.Output)
 	if err != nil {
 		return nil, err
 	}

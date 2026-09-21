@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -15,7 +16,32 @@ import (
 
 	"loki/internal/config"
 	"loki/internal/fault"
+	"loki/internal/gitops"
+	"loki/internal/process"
 )
+
+type workspaceTestGitRunner struct {
+	root string
+	env  []string
+}
+
+func (r workspaceTestGitRunner) Run(ctx context.Context, request gitops.CommandRequest) (gitops.CommandResult, error) {
+	cwd := r.root
+	if request.CWD != "." {
+		cwd = filepath.Join(r.root, filepath.FromSlash(request.CWD))
+	}
+	result, err := process.Run(ctx, process.Spec{
+		Argv: request.Argv, CWD: cwd, Env: r.env, Input: request.Input,
+		Timeout: request.Timeout, MaxOutput: request.MaxOutput,
+	})
+	root := filepath.Clean(r.root)
+	output := strings.ReplaceAll(result.Output, root, "/workspace")
+	raw := bytes.ReplaceAll(result.Raw, []byte(root), []byte("/workspace"))
+	return gitops.CommandResult{
+		ExitCode: result.ExitCode, Output: output, Raw: raw,
+		Truncated: result.Truncated, TimedOut: result.TimedOut, Canceled: result.Canceled,
+	}, err
+}
 
 func fixture(t *testing.T) *Files {
 	t.Helper()
@@ -38,6 +64,11 @@ func fixture(t *testing.T) *Files {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { f.Close() })
+	environment := []string{
+		"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
+		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0",
+	}
+	f.GitRunner = workspaceTestGitRunner{root: f.Policy.Root(), env: environment}
 	if _, err = os.Stat(f.RGPath); err != nil {
 		f.RGPath = "/home/linuxbrew/.linuxbrew/bin/rg"
 	}

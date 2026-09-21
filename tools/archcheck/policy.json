@@ -298,7 +298,7 @@
     },
     {
       "from": "loki/internal/gitops",
-      "to": "loki/internal/process"
+      "to": "loki/internal/work/jobs"
     },
     {
       "from": "loki/internal/mcpserver",

@@ -86,10 +86,20 @@ func (r *fakeRunner) EndpointBindings(
 	return append([]sandbox.EndpointBinding(nil), r.endpointBindings...), r.endpointErr
 }
 
-func (r *fakeRunner) OutputJob(_ context.Context, _ sandbox.Resource, _ string) ([]byte, bool, error) {
+func (r *fakeRunner) OutputJob(ctx context.Context, resource sandbox.Resource, instanceRef string) ([]byte, bool, error) {
+	return r.OutputJobLimit(ctx, resource, instanceRef, jobs.MaxOutputBytes)
+}
+
+func (r *fakeRunner) OutputJobLimit(_ context.Context, _ sandbox.Resource, _ string, maximum int) ([]byte, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]byte(nil), r.outputBytes...), r.outputTruncated, r.outputErr
+	output := append([]byte(nil), r.outputBytes...)
+	truncated := r.outputTruncated
+	if len(output) > maximum {
+		output = output[:maximum]
+		truncated = true
+	}
+	return output, truncated, r.outputErr
 }
 
 func (r *fakeRunner) ObserveJob(ctx context.Context, _ sandbox.Resource, _ string) (sandbox.Result, error) {
@@ -156,9 +166,14 @@ func (r *fakeRunner) counts() (start, observe, cleanup, inspect int) {
 
 func launcherPolicy(t *testing.T) sandbox.Policy {
 	t.Helper()
+	inputDirectory := filepath.Join(t.TempDir(), "run-inputs")
+	if err := os.Mkdir(inputDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
 	policy, err := sandbox.NewPolicy(sandbox.PolicyOptions{
 		GenerationSHA256: strings.Repeat("a", 64),
 		Image:            "registry.example/loki@sha256:" + strings.Repeat("b", 64),
+		InputDirectory:   inputDirectory,
 		Gateway: sandbox.GatewayPolicyOptions{
 			Image:  "registry.example/loki-gateway@sha256:" + strings.Repeat("c", 64),
 			Binary: "/opt/loki/bin/loki", ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
@@ -232,20 +247,50 @@ func encodedRequest(t *testing.T, value map[string]any) []byte {
 	return raw
 }
 
+func TestPrepareRunInputUsesLauncherOwnedReadOnlyFile(t *testing.T) {
+	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Second, 8)
+	id := strings.Repeat("d", 32)
+	path, err := l.prepareRunInput(id, []byte{'a', 0, 'b'})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != l.runInputPath(id) {
+		t.Fatalf("input path = %q, want %q", path, l.runInputPath(id))
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string([]byte{'a', 0, 'b'}) {
+		t.Fatalf("input = %q", data)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0444 {
+		t.Fatalf("input mode = %04o", info.Mode().Perm())
+	}
+	l.removeRunInput(id)
+	if _, err = os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("removed input stat = %v", err)
+	}
+}
+
 func TestLifecycleOperationsExposeOnlyExecutorJobLifecycle(t *testing.T) {
 	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Second, 8)
 	operations := l.operations()
-	if len(operations) != 5 {
+	if len(operations) != 6 {
 		t.Fatalf("operations = %#v", operations)
 	}
-	for _, name := range []string{"start", "inspect", "output", "wait", "cancel"} {
+	for _, name := range []string{"run", "start", "inspect", "output", "wait", "cancel"} {
 		operation, ok := operations[name]
 		if !ok || operation.Grant != controlpolicy.WorkloadLaunch {
 			t.Fatalf("%s operation = %#v", name, operation)
 		}
 	}
-	if operations["wait"].Timeout != time.Second {
-		t.Fatalf("wait timeout = %v", operations["wait"].Timeout)
+	if operations["run"].Timeout != time.Second || operations["wait"].Timeout != time.Second {
+		t.Fatalf("run/wait timeouts = %v/%v", operations["run"].Timeout, operations["wait"].Timeout)
 	}
 	server := rpc.Server{Principals: identity.FixedUIDResolver{UID: 1001, Kind: identity.Executor}}
 	if !server.Authorized(rpc.Peer{UID: 1001}, controlpolicy.WorkloadLaunch) {

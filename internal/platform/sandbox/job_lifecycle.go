@@ -125,8 +125,17 @@ func (e *Engine) InspectJob(ctx context.Context, resource Resource, instanceRef 
 }
 
 func (e *Engine) OutputJob(ctx context.Context, resource Resource, instanceRef string) ([]byte, bool, error) {
+	return e.OutputJobLimit(ctx, resource, instanceRef, e.outputBytes)
+}
+
+func (e *Engine) OutputJobLimit(
+	ctx context.Context, resource Resource, instanceRef string, maximum int,
+) ([]byte, bool, error) {
 	if e == nil || !resource.Valid() || !validInstanceReference(instanceRef) {
 		return nil, false, errors.New("sandbox exact output is not configured")
+	}
+	if maximum < 1 || maximum > maxRunOutputBytes {
+		return nil, false, errors.New("sandbox output limit is outside the supported range")
 	}
 	version, err := e.apiVersion(ctx)
 	if err != nil {
@@ -139,7 +148,7 @@ func (e *Engine) OutputJob(ctx context.Context, resource Resource, instanceRef s
 	if !owned.state.Exists {
 		return nil, false, errors.New("sandbox workload output is unavailable")
 	}
-	return e.readLogs(version, owned.id)
+	return e.readLogsLimit(version, owned.id, maximum)
 }
 
 func (e *Engine) ObserveJob(ctx context.Context, resource Resource, instanceRef string) (Result, error) {
@@ -322,8 +331,15 @@ func (e *Engine) terminateForObservation(version string, resource Resource, expe
 }
 
 func (e *Engine) readLogs(version, ref string) ([]byte, bool, error) {
+	return e.readLogsLimit(version, ref, e.outputBytes)
+}
+
+func (e *Engine) readLogsLimit(version, ref string, maximum int) ([]byte, bool, error) {
 	if !containerIDPattern.MatchString(ref) {
 		return nil, false, errors.New("sandbox exact resource identity is invalid")
+	}
+	if maximum < 1 || maximum > maxRunOutputBytes {
+		return nil, false, errors.New("sandbox output limit is outside the supported range")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), e.controlTimeout)
 	defer cancel()
@@ -336,11 +352,11 @@ func (e *Engine) readLogs(version, ref string) ([]byte, bool, error) {
 	if response.StatusCode != http.StatusOK {
 		return nil, false, e.unexpectedStatus(response)
 	}
-	return readDockerRawStream(response.Body, e.outputBytes)
+	return readDockerRawStream(response.Body, maximum)
 }
 
 func readDockerRawStream(reader io.Reader, maximum int) ([]byte, bool, error) {
-	if maximum < 1 || maximum > 16<<20 {
+	if maximum < 1 || maximum > maxRunOutputBytes {
 		return nil, false, errors.New("sandbox output limit is outside the supported range")
 	}
 	var output bytes.Buffer

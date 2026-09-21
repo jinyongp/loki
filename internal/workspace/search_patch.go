@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -145,8 +146,19 @@ func parseNumstat(data []byte) ([]PatchFile, error) {
 	return files, nil
 }
 
-func (f *Files) git(ctx context.Context, args []string, input []byte, timeout time.Duration) (process.Result, error) {
-	return process.Run(ctx, process.Spec{Argv: append([]string{f.GitPath}, args...), Input: input, CWD: f.Policy.Root(), Timeout: timeout, MaxOutput: f.Config.MaxOutputBytes})
+func (f *Files) git(ctx context.Context, args []string, input []byte, timeout time.Duration) (gitops.CommandResult, error) {
+	if f.GitRunner == nil {
+		return gitops.CommandResult{}, errors.New("workspace Git runner is not configured")
+	}
+	prefix := []string{
+		"/usr/bin/git", "--no-pager", "--literal-pathspecs",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.hooksPath=/dev/null",
+	}
+	return f.GitRunner.Run(ctx, gitops.CommandRequest{
+		Argv: append(prefix, args...), CWD: ".", Input: input,
+		Timeout: timeout, MaxOutput: f.Config.MaxOutputBytes,
+	})
 }
 
 func (f *Files) Patch(ctx context.Context, patch string) (map[string]any, error) {
@@ -238,7 +250,7 @@ func (f *Files) RemoveTracked(ctx context.Context, path, expected string) (map[s
 	if digest != expected {
 		return nil, fault.New(fault.CodeConflict, "file changed since it was read; read it again before removing", false, "read the file again and use its current sha256")
 	}
-	tracked, err := (&gitops.Controller{Paths: f.Policy, Config: f.Config}).TrackedFile(ctx, path)
+	tracked, err := (&gitops.Controller{Paths: f.Policy, Config: f.Config, Runner: f.GitRunner}).TrackedFile(ctx, path)
 	if err != nil {
 		return nil, err
 	}

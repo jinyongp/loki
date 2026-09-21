@@ -18,14 +18,14 @@ import (
 )
 
 type fakeJobRunner struct {
-	calls       atomic.Int32
-	result      jobs.RunResult
+	calls        atomic.Int32
+	result       jobs.RunResult
 	startResult  jobs.StartResult
 	startRequest jobs.StartRequest
 	status       jobs.Status
-	output      jobs.OutputSnapshot
-	cancel      jobs.CancelResult
-	err         error
+	output       jobs.OutputSnapshot
+	cancel       jobs.CancelResult
+	err          error
 }
 
 func (r *fakeJobRunner) Run(_ context.Context, _ jobs.RunRequest) (jobs.RunResult, error) {
@@ -149,7 +149,7 @@ func TestAsyncOperationsReturnDomainResults(t *testing.T) {
 	startRaw, _ := json.Marshal(map[string]any{
 		"operation": "start", "request_id": start.RequestID,
 		"cwd": ".", "argv": []string{"/bin/true"}, "timeout_seconds": 30,
-		"network": "dependency-install",
+		"network":   "dependency-install",
 		"endpoints": []map[string]any{{"name": "web", "port": 5173}},
 	})
 	if got, err := operations["start"].Handle(t.Context(), startRaw); err != nil || got != start {
@@ -204,7 +204,7 @@ func TestRunOperationReturnsOnlyJobResult(t *testing.T) {
 	exitCode := int64(7)
 	want := jobs.RunResult{
 		JobID: strings.Repeat("c", 32), ExitCode: &exitCode, Outcome: jobs.OutcomeExited,
-		Output: "hello", Truncated: true, Cleanup: jobs.CleanupComplete,
+		Output: []byte("hello"), Truncated: true, Cleanup: jobs.CleanupComplete,
 	}
 	runner := &fakeJobRunner{result: want}
 	operations, err := Operations(runner, time.Second)
@@ -220,7 +220,7 @@ func TestRunOperationReturnsOnlyJobResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantJSON := `{"job_id":"` + want.JobID + `","exit_code":7,"outcome":"exited","output":"hello","truncated":true,"cleanup":"complete"}`
+	wantJSON := `{"job_id":"` + want.JobID + `","exit_code":7,"outcome":"exited","output":"aGVsbG8=","truncated":true,"cleanup":"complete"}`
 	if string(encoded) != wantJSON {
 		t.Fatalf("result = %s", encoded)
 	}

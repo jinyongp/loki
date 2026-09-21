@@ -81,9 +81,11 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	if layout.MaxOutputBytes < 1 || layout.MaxOutputBytes > jobs.MaxOutputBytes {
 		return applauncher.Options{}, errors.New("launcher output limit is outside the supported range")
 	}
+	inputDirectory := filepath.Join(layout.StateDirectory, "run-inputs")
 	policy, err := sandbox.NewPolicy(sandbox.PolicyOptions{
 		GenerationSHA256: layout.PolicySHA256,
 		Image:            layout.Image,
+		InputDirectory:   inputDirectory,
 		Gateway: sandbox.GatewayPolicyOptions{
 			Image: layout.GatewayImage, Binary: layout.GatewayBinary,
 			ExecutionContract: layout.GatewayExecutionContract, EgressPolicy: layout.GatewayEgressPolicy,
@@ -204,6 +206,12 @@ func run(args []string, stderr io.Writer) int {
 		return 1
 	}
 	defer journal.Close()
+	if inputDirectory := options.Policy.InputDirectory(); inputDirectory != "" {
+		if err = daemon.PrivateDirectory(inputDirectory); err != nil {
+			fmt.Fprintln(stderr, "launcher input state unavailable")
+			return 1
+		}
+	}
 	options.Journal = journal
 	options.Ready = func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

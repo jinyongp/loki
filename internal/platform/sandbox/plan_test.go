@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -136,6 +137,51 @@ func TestWorkloadSpecValidation(t *testing.T) {
 	}
 	if _, err := policy.Plan(spec); err == nil {
 		t.Fatal("too many arguments were accepted")
+	}
+}
+
+func TestPlanAcceptsOnlyPolicyOwnedRunInput(t *testing.T) {
+	options := validPolicyOptions()
+	options.InputDirectory = "/var/lib/loki/run-inputs"
+	policy, err := NewPolicy(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := validWorkloadSpec()
+	spec.InputPath = filepath.Join(options.InputDirectory, spec.ID+".stdin")
+	spec.MaxOutputBytes = 8 << 20
+	plan, err := policy.Plan(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Valid() || len(plan.create.HostConfig.Mounts) != 2 {
+		t.Fatalf("input plan = %#v", plan)
+	}
+	mount := plan.create.HostConfig.Mounts[1]
+	if mount.Source != spec.InputPath || mount.Target != "/loki-run-input" || !mount.ReadOnly {
+		t.Fatalf("input mount = %#v", mount)
+	}
+	wantPrefix := []string{"/bin/sh", "-c", `exec "$@" < /loki-run-input`, "--"}
+	if len(plan.create.Cmd) < len(wantPrefix)+len(spec.Argv) {
+		t.Fatalf("wrapped command = %#v", plan.create.Cmd)
+	}
+	for index, want := range wantPrefix {
+		if plan.create.Cmd[index] != want {
+			t.Fatalf("wrapped command[%d] = %q, want %q", index, plan.create.Cmd[index], want)
+		}
+	}
+
+	for _, path := range []string{"/tmp/input", filepath.Join(options.InputDirectory, strings.Repeat("d", 32)+".stdin")} {
+		changed := spec
+		changed.InputPath = path
+		if _, err = policy.Plan(changed); err == nil {
+			t.Fatalf("untrusted input path %q was accepted", path)
+		}
+	}
+	changed := spec
+	changed.MaxOutputBytes = maxRunOutputBytes + 1
+	if _, err = policy.Plan(changed); err == nil {
+		t.Fatal("oversized synchronous output limit was accepted")
 	}
 }
 

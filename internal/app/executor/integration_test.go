@@ -54,8 +54,16 @@ func (r *recordingSandboxRunner) EndpointBindings(
 	return nil, nil
 }
 
-func (r *recordingSandboxRunner) OutputJob(_ context.Context, _ sandbox.Resource, _ string) ([]byte, bool, error) {
-	return []byte("executor-output"), false, nil
+func (r *recordingSandboxRunner) OutputJob(ctx context.Context, resource sandbox.Resource, instanceRef string) ([]byte, bool, error) {
+	return r.OutputJobLimit(ctx, resource, instanceRef, jobs.MaxOutputBytes)
+}
+
+func (r *recordingSandboxRunner) OutputJobLimit(_ context.Context, _ sandbox.Resource, _ string, maximum int) ([]byte, bool, error) {
+	output := []byte("executor-output")
+	if len(output) > maximum {
+		return append([]byte(nil), output[:maximum]...), true, nil
+	}
+	return output, false, nil
 }
 
 func (r *recordingSandboxRunner) ObserveJob(ctx context.Context, _ sandbox.Resource, _ string) (sandbox.Result, error) {
@@ -269,7 +277,7 @@ func TestExecutorToLauncherTrustedAuthorityBoundary(t *testing.T) {
 	jobID, _ := result["job_id"].(string)
 	exitCode, _ := result["exit_code"].(float64)
 	if len(result) != 6 || !regexp.MustCompile("^[0-9a-f]{32}$").MatchString(jobID) || exitCode != 17 ||
-		result["outcome"] != string(jobs.OutcomeExited) || result["output"] != "executor-output" ||
+		result["outcome"] != string(jobs.OutcomeExited) || result["output"] != "ZXhlY3V0b3Itb3V0cHV0" ||
 		result["truncated"] != false || result["cleanup"] != string(jobs.CleanupComplete) {
 		t.Fatalf("executor result = %#v", result)
 	}

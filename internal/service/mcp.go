@@ -34,6 +34,7 @@ type MCPOptions struct {
 	Runtime, PortGuard                                   RuntimeCaller
 	Browser                                              BrowserCaller
 	Jobs                                                 jobs.Controller
+	GitRunner                                            gitops.Runner
 	RuntimeSocket, BrowserSocket, ExecutorSocket, RGPath string
 	PackagedSkillRoot                                    string
 	GitTemplateRoots                                     []string
@@ -78,6 +79,9 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if c.PreviewAccessAudience != "" && options.PreviewAccess == nil {
 		return nil, errors.New("preview Access verifier is required")
 	}
+	if options.GitRunner == nil {
+		return nil, errors.New("MCP requires a confined Git runner")
+	}
 	app = &MCPApp{Claims: NewDevtoolsSessionClaims()}
 	owned := app
 	defer func() {
@@ -92,7 +96,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.RGPath != "" {
 		app.files.RGPath = options.RGPath
 	}
-	git := &gitops.Controller{Paths: app.files.Policy, Config: c}
+	app.files.GitRunner = options.GitRunner
+	git := &gitops.Controller{Paths: app.files.Policy, Config: c, Runner: options.GitRunner}
 	for _, path := range options.GitTemplateRoots {
 		root, e := policy.New(path)
 		if e != nil {

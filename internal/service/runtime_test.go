@@ -237,7 +237,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		Browser: browserFixture(func(context.Context, string, map[string]any) (map[string]any, error) {
 			return map[string]any{"status": "running"}, nil
 		}),
-		Jobs:  jobControllerFixture(),
+		Jobs: jobControllerFixture(), GitRunner: gitRunnerFixture(t, mcpConfig, nil),
 		Ports: mcpPorts, Policy: generation, Token: strings.Repeat("m", 43),
 		RuntimeSocket: socket,
 		Environment: map[string]string{

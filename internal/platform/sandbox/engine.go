@@ -412,7 +412,7 @@ func (e *Engine) createContainer(
 	}
 	controlCtx, cancel := context.WithTimeout(ctx, e.controlTimeout)
 	defer cancel()
-	logBytes := max(e.outputBytes, 64<<10)
+	logBytes := max(e.outputBytes, request.outputBytes, 64<<10)
 	request.HostConfig.LogConfig = dockerLogConfig{
 		Type: "local",
 		Config: map[string]string{

@@ -36,8 +36,39 @@ func NewExecutor(options ExecutorOptions) (*Executor, error) {
 	return &Executor{client: rpc.Client{
 		Socket:      options.Socket,
 		ExpectedUID: &expectedUID,
-		Limits:      rpc.Limits{Timeout: options.Timeout},
+		Limits: rpc.Limits{
+			RequestBytes: jobs.MaxRunRequestBytes, ResponseBytes: jobs.MaxRunResultBytes,
+			Timeout: options.Timeout,
+		},
 	}}, nil
+}
+
+func (e *Executor) Run(ctx context.Context, request jobs.RunRequest) (jobs.RunResult, error) {
+	if e == nil {
+		return jobs.RunResult{}, errors.New("remote executor is not configured")
+	}
+	raw, err := e.client.Call(ctx, struct {
+		Operation      string   `json:"operation"`
+		CWD            string   `json:"cwd"`
+		Argv           []string `json:"argv"`
+		Input          []byte   `json:"input,omitempty"`
+		MaxOutputBytes int      `json:"max_output_bytes,omitempty"`
+	}{
+		Operation: "run", CWD: request.CWD, Argv: append([]string(nil), request.Argv...),
+		Input: append([]byte(nil), request.Input...), MaxOutputBytes: request.MaxOutputBytes,
+	})
+	if err != nil {
+		return jobs.RunResult{}, err
+	}
+	var result jobs.RunResult
+	maximum := request.MaxOutputBytes
+	if maximum == 0 {
+		maximum = jobs.MaxOutputBytes
+	}
+	if err = decodeStrict(raw, &result); err != nil || !result.Valid(maximum) {
+		return jobs.RunResult{}, errors.New("executor returned an invalid run result")
+	}
+	return result, nil
 }
 
 func (e *Executor) Start(ctx context.Context, request jobs.StartRequest) (jobs.StartResult, error) {
@@ -149,4 +180,7 @@ func (e *Executor) Cancel(ctx context.Context, id string) (jobs.CancelResult, er
 	return result, nil
 }
 
-var _ jobs.Controller = (*Executor)(nil)
+var (
+	_ jobs.Controller = (*Executor)(nil)
+	_ jobs.Runner     = (*Executor)(nil)
+)

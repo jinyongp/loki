@@ -66,20 +66,39 @@ func New(options Options) (*Launcher, error) {
 		client: rpc.Client{
 			Socket:      options.Socket,
 			ExpectedUID: &expectedUID,
-			Limits:      rpc.Limits{Timeout: options.Timeout},
+			Limits: rpc.Limits{
+				RequestBytes: jobs.MaxRunRequestBytes, ResponseBytes: jobs.MaxRunResultBytes,
+				Timeout: options.Timeout,
+			},
 		},
 		policySHA256:   options.PolicySHA256,
 		cleanupTimeout: cleanupTimeout,
 	}, nil
 }
 
-func (l *Launcher) Run(ctx context.Context, workload jobs.Workload) (jobs.Result, error) {
-	if _, err := l.Start(ctx, workload); err != nil {
-		return jobs.Result{}, joinCleanup(err, l.cleanup(workload.ID))
+func (l *Launcher) Run(ctx context.Context, workload jobs.Workload) (jobs.RunExecutionResult, error) {
+	if l == nil || !digestPattern.MatchString(l.policySHA256) || !jobIDPattern.MatchString(workload.ID) {
+		return jobs.RunExecutionResult{}, errors.New("remote launcher is not configured")
 	}
-	result, err := l.wait(ctx, workload.ID)
+	raw, err := l.client.Call(ctx, struct {
+		Operation      string   `json:"operation"`
+		ID             string   `json:"id"`
+		PolicySHA256   string   `json:"policy_sha256"`
+		CWD            string   `json:"cwd"`
+		Argv           []string `json:"argv"`
+		Input          []byte   `json:"input,omitempty"`
+		MaxOutputBytes int      `json:"max_output_bytes"`
+	}{
+		Operation: "run", ID: workload.ID, PolicySHA256: l.policySHA256,
+		CWD: workload.CWD, Argv: append([]string(nil), workload.Argv...),
+		Input: append([]byte(nil), workload.Input...), MaxOutputBytes: workload.MaxOutputBytes,
+	})
 	if err != nil {
-		return jobs.Result{}, joinCleanup(err, l.cleanup(workload.ID))
+		return jobs.RunExecutionResult{}, err
+	}
+	var result jobs.RunExecutionResult
+	if err = decodeStrict(raw, &result); err != nil || !result.Valid(workload.MaxOutputBytes) {
+		return jobs.RunExecutionResult{}, errors.New("launcher returned an invalid run result")
 	}
 	return result, nil
 }

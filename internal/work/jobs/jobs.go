@@ -12,15 +12,21 @@ import (
 )
 
 const (
-	maxArgs     = 256
-	maxArgBytes = 64 << 10
+	maxArgs            = 256
+	maxArgBytes        = 64 << 10
+	MaxRunInputBytes   = 64 << 20
+	MaxRunOutputBytes  = 64 << 20
+	MaxRunRequestBytes = 96 << 20
+	MaxRunResultBytes  = 96 << 20
 )
 
 var jobIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 type RunRequest struct {
-	CWD  string   `json:"cwd"`
-	Argv []string `json:"argv"`
+	CWD            string   `json:"cwd"`
+	Argv           []string `json:"argv"`
+	Input          []byte   `json:"input,omitempty"`
+	MaxOutputBytes int      `json:"max_output_bytes,omitempty"`
 }
 
 type Workload struct {
@@ -32,15 +38,50 @@ type Workload struct {
 	TimeoutSeconds int
 	Network        NetworkProfile
 	Endpoints      []EndpointRequest
+	Input          []byte
+	InputPath      string
+	MaxOutputBytes int
+}
+
+type RunExecutionResult struct {
+	ExitCode  *int64        `json:"exit_code,omitempty"`
+	Outcome   Outcome       `json:"outcome"`
+	Output    []byte        `json:"output"`
+	Truncated bool          `json:"truncated"`
+	Cleanup   CleanupStatus `json:"cleanup"`
+}
+
+func (r RunExecutionResult) Valid(maxOutputBytes int) bool {
+	if maxOutputBytes < 1 || maxOutputBytes > MaxRunOutputBytes ||
+		!r.Outcome.Valid() || !r.Cleanup.Valid() || len(r.Output) > maxOutputBytes {
+		return false
+	}
+	if r.ExitCode != nil && (*r.ExitCode < 0 || *r.ExitCode > 255) {
+		return false
+	}
+	if (r.Outcome == OutcomeExited || r.Outcome == OutcomeOOMKilled) && r.ExitCode == nil {
+		return false
+	}
+	if r.Outcome == OutcomeLaunchFailed && r.ExitCode != nil {
+		return false
+	}
+	return true
 }
 
 type RunResult struct {
 	JobID     string        `json:"job_id"`
 	ExitCode  *int64        `json:"exit_code,omitempty"`
 	Outcome   Outcome       `json:"outcome"`
-	Output    string        `json:"output"`
+	Output    []byte        `json:"output"`
 	Truncated bool          `json:"truncated"`
 	Cleanup   CleanupStatus `json:"cleanup"`
+}
+
+func (r RunResult) Valid(maxOutputBytes int) bool {
+	return jobIDPattern.MatchString(r.JobID) && RunExecutionResult{
+		ExitCode: r.ExitCode, Outcome: r.Outcome, Output: r.Output,
+		Truncated: r.Truncated, Cleanup: r.Cleanup,
+	}.Valid(maxOutputBytes)
 }
 
 type IDSource func() (string, error)
@@ -136,6 +177,16 @@ func (s *Service) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if err != nil {
 		return RunResult{}, err
 	}
+	if len(request.Input) > MaxRunInputBytes {
+		return RunResult{}, errors.New("job input exceeds its size limit")
+	}
+	maximum := request.MaxOutputBytes
+	if maximum == 0 {
+		maximum = MaxOutputBytes
+	}
+	if maximum < 1 || maximum > MaxRunOutputBytes {
+		return RunResult{}, errors.New("job output limit is outside the supported range")
+	}
 	id, err := s.newID()
 	if err != nil {
 		return RunResult{}, err
@@ -143,16 +194,19 @@ func (s *Service) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if !jobIDPattern.MatchString(id) {
 		return RunResult{}, errors.New("jobs ID source returned an invalid ID")
 	}
-	result, err := s.launcher.Run(ctx, Workload{ID: id, CWD: cwd, Argv: argv})
+	result, err := s.launcher.Run(ctx, Workload{
+		ID: id, CWD: cwd, Argv: argv,
+		Input: append([]byte(nil), request.Input...), MaxOutputBytes: maximum,
+	})
 	if err != nil {
 		return RunResult{}, err
 	}
-	if !result.Valid(MaxOutputBytes) {
+	if !result.Valid(maximum) {
 		return RunResult{}, errors.New("launcher returned an invalid job result")
 	}
 	return RunResult{
 		JobID: id, ExitCode: result.ExitCode, Outcome: result.Outcome,
-		Output: result.Output.Text, Truncated: result.Output.Truncated, Cleanup: result.Cleanup,
+		Output: append([]byte(nil), result.Output...), Truncated: result.Truncated, Cleanup: result.Cleanup,
 	}, nil
 }
 

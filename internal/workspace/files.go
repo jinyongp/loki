@@ -18,15 +18,17 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/config"
 	"loki/internal/fault"
+	"loki/internal/gitops"
 	"loki/internal/policy"
 )
 
 type Files struct {
-	Config          config.Config
-	Policy          *policy.Workspace
-	mu              sync.Mutex
-	GitPath, RGPath string
-	batchFault      func(stage string, index int) error
+	Config     config.Config
+	Policy     *policy.Workspace
+	GitRunner  gitops.Runner
+	mu         sync.Mutex
+	RGPath     string
+	batchFault func(stage string, index int) error
 }
 
 func New(c config.Config) (*Files, error) {
@@ -34,7 +36,7 @@ func New(c config.Config) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Files{Config: c, Policy: p, GitPath: "/usr/bin/git", RGPath: "/usr/bin/rg"}, nil
+	return &Files{Config: c, Policy: p, RGPath: "/usr/bin/rg"}, nil
 }
 func (f *Files) Close() error                 { return f.Policy.Close() }
 func Digest(data []byte) string               { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }

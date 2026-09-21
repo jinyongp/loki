@@ -25,7 +25,9 @@ func fixture(t *testing.T) *Controller {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &Controller{Paths: paths, Config: configuration, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.test", "GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.test"}}
+	environment := []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.test", "GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.test"}
+	c := &Controller{Paths: paths, Config: configuration, Env: environment}
+	c.Runner = testProcessRunner{Root: paths.Root(), Env: environment}
 	if err := os.Mkdir(filepath.Join(root, "repo"), 0700); err != nil {
 		t.Fatal(err)
 	}

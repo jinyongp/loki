@@ -70,7 +70,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	generation := policyGenerationFixture(t)
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitRunner: gitRunnerFixture(t, c, nil), Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,8 @@ func TestNewMCPAgentGuidanceUsesNativeProvider(t *testing.T) {
 	}
 	home := t.TempDir()
 	app, err := NewMCP(c, MCPOptions{
-		Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), Ports: ports,
+		Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(),
+		GitRunner: gitRunnerFixture(t, c, nil), Ports: ports,
 		Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43),
 		PackagedSkillRoot: packagedRoot,
 		Environment: map[string]string{

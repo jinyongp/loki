@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -32,6 +33,7 @@ type Runner interface {
 	StartJob(context.Context, sandbox.Plan) (sandbox.StartResult, error)
 	EndpointBindings(context.Context, sandbox.Resource, string, []sandbox.EndpointSpec) ([]sandbox.EndpointBinding, error)
 	OutputJob(context.Context, sandbox.Resource, string) ([]byte, bool, error)
+	OutputJobLimit(context.Context, sandbox.Resource, string, int) ([]byte, bool, error)
 	ObserveJob(context.Context, sandbox.Resource, string) (sandbox.Result, error)
 	CleanupJob(context.Context, sandbox.Resource, string) (sandbox.CleanupStatus, error)
 	Inspect(context.Context, sandbox.Resource) (sandbox.ResourceState, error)
@@ -50,24 +52,37 @@ type Options struct {
 }
 
 type lifecycle struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	policy  sandbox.Policy
-	runner  Runner
-	journal *jobs.Journal
-	timeout time.Duration
-	now     func() time.Time
+	ctx               context.Context
+	cancel            context.CancelFunc
+	policy            sandbox.Policy
+	runner            Runner
+	journal           *jobs.Journal
+	runInputDirectory string
+	timeout           time.Duration
+	now               func() time.Time
 
 	mu     sync.Mutex
 	active map[string]*ownedJob
+	runs   map[string]*ownedJob
 	closed bool
 	wg     sync.WaitGroup
 }
 
 type ownedJob struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	err    error
+	cancel         context.CancelFunc
+	done           chan struct{}
+	err            error
+	rawOutputLimit int
+	rawResult      *jobs.RunExecutionResult
+}
+
+type runRequest struct {
+	ID             string   `json:"id"`
+	PolicySHA256   string   `json:"policy_sha256"`
+	CWD            string   `json:"cwd"`
+	Argv           []string `json:"argv"`
+	Input          []byte   `json:"input,omitempty"`
+	MaxOutputBytes int      `json:"max_output_bytes"`
 }
 
 type startRequest struct {
@@ -109,19 +124,25 @@ func newLifecycle(parent context.Context, policy sandbox.Policy, runner Runner, 
 	}
 	ctx, cancel := context.WithCancel(parent)
 	return &lifecycle{
-		ctx:     ctx,
-		cancel:  cancel,
-		policy:  policy,
-		runner:  runner,
-		journal: journal,
-		timeout: timeout,
-		now:     func() time.Time { return time.Now().UTC() },
-		active:  map[string]*ownedJob{},
+		ctx: ctx, cancel: cancel, policy: policy, runner: runner, journal: journal,
+		runInputDirectory: policy.InputDirectory(), timeout: timeout,
+		now: func() time.Time { return time.Now().UTC() }, active: map[string]*ownedJob{}, runs: map[string]*ownedJob{},
 	}, nil
 }
 
 func (l *lifecycle) operations() map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"run": {
+			Grant:   controlpolicy.WorkloadLaunch,
+			Timeout: l.timeout,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				request, err := rpc.Decode[runRequest](raw)
+				if err != nil {
+					return nil, err
+				}
+				return l.runWorkload(ctx, request)
+			},
+		},
 		"start": {
 			Grant: controlpolicy.WorkloadLaunch,
 			Handle: func(_ context.Context, raw json.RawMessage) (any, error) {
@@ -184,6 +205,119 @@ func (l *lifecycle) operations() map[string]rpc.Operation {
 	}
 }
 
+func (l *lifecycle) runInputPath(id string) string {
+	if l.runInputDirectory == "" || !launcherJobIDPattern.MatchString(id) {
+		return ""
+	}
+	return filepath.Join(l.runInputDirectory, id+".stdin")
+}
+
+func (l *lifecycle) removeRunInput(id string) {
+	if path := l.runInputPath(id); path != "" {
+		_ = os.Remove(path)
+	}
+}
+
+func (l *lifecycle) prepareRunInput(id string, data []byte) (string, error) {
+	if len(data) == 0 {
+		return "", nil
+	}
+	if len(data) > jobs.MaxRunInputBytes {
+		return "", fault.Error("workload request is not allowed")
+	}
+	path := l.runInputPath(id)
+	if path == "" {
+		return "", errors.New("launcher synchronous input is not configured")
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return "", err
+	}
+	cleanup := true
+	defer func() {
+		_ = file.Close()
+		if cleanup {
+			_ = os.Remove(path)
+		}
+	}()
+	if _, err = file.Write(data); err != nil {
+		return "", err
+	}
+	if err = file.Sync(); err != nil {
+		return "", err
+	}
+	if err = file.Chmod(0444); err != nil {
+		return "", err
+	}
+	if err = file.Close(); err != nil {
+		return "", err
+	}
+	cleanup = false
+	return path, nil
+}
+
+func (l *lifecycle) lookupRun(id string) (*ownedJob, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	job, ok := l.runs[id]
+	return job, ok
+}
+
+func (l *lifecycle) deleteRun(id string, job *ownedJob) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.runs[id] == job {
+		delete(l.runs, id)
+	}
+}
+
+func (l *lifecycle) runWorkload(ctx context.Context, request runRequest) (jobs.RunExecutionResult, error) {
+	if !launcherJobIDPattern.MatchString(request.ID) ||
+		len(request.Input) > jobs.MaxRunInputBytes ||
+		request.MaxOutputBytes < 1 || request.MaxOutputBytes > jobs.MaxRunOutputBytes {
+		return jobs.RunExecutionResult{}, fault.Error("workload request is not allowed")
+	}
+	inputPath, err := l.prepareRunInput(request.ID, request.Input)
+	if err != nil {
+		return jobs.RunExecutionResult{}, err
+	}
+	if inputPath != "" {
+		defer os.Remove(inputPath)
+	}
+
+	if _, err = l.startWorkload(jobs.Workload{
+		ID: request.ID, CWD: request.CWD, Argv: append([]string(nil), request.Argv...),
+		InputPath: inputPath, MaxOutputBytes: request.MaxOutputBytes,
+	}, request.PolicySHA256); err != nil {
+		return jobs.RunExecutionResult{}, err
+	}
+	job, ok := l.lookupRun(request.ID)
+	if !ok {
+		return jobs.RunExecutionResult{}, errors.New("launcher synchronous job state is unavailable")
+	}
+	defer l.deleteRun(request.ID, job)
+
+	select {
+	case <-job.done:
+		if job.rawResult != nil {
+			return *job.rawResult, job.err
+		}
+		if job.err != nil {
+			return jobs.RunExecutionResult{}, job.err
+		}
+		return jobs.RunExecutionResult{}, errors.New("launcher synchronous result is unavailable")
+	case <-ctx.Done():
+		job.cancel()
+		timer := time.NewTimer(launcherStopTimeout)
+		defer timer.Stop()
+		select {
+		case <-job.done:
+		case <-timer.C:
+		}
+		return jobs.RunExecutionResult{}, ctx.Err()
+	}
+}
+
 func (l *lifecycle) start(spec sandbox.WorkloadSpec) error {
 	_, err := l.startWorkload(jobs.Workload{
 		ID: spec.ID, CWD: spec.CWD, Argv: append([]string(nil), spec.Argv...),
@@ -221,6 +355,9 @@ func jobEndpointLeases(values []sandbox.EndpointBinding) []jobs.EndpointLease {
 func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (jobs.StartResult, error) {
 	var err error
 	if workload.RequestID != "" || workload.RequestSHA256 != "" {
+		if workload.InputPath != "" || workload.MaxOutputBytes != 0 {
+			return jobs.StartResult{}, fault.Error("replayable workload requests cannot carry synchronous-run state")
+		}
 		if workload.RequestID == "" || workload.RequestSHA256 == "" {
 			return jobs.StartResult{}, fault.Error("workload request replay identity is invalid")
 		}
@@ -258,6 +395,7 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 	plan, err := l.policy.Plan(sandbox.WorkloadSpec{
 		ID: workload.ID, PolicySHA256: policySHA256, CWD: workload.CWD,
 		Argv: append([]string(nil), workload.Argv...), Network: network, Endpoints: endpoints,
+		InputPath: workload.InputPath, MaxOutputBytes: workload.MaxOutputBytes,
 	})
 	if err != nil || !launcherJobIDPattern.MatchString(workload.ID) {
 		return jobs.StartResult{}, fault.Error("workload request is not allowed")
@@ -310,8 +448,11 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 	}
 
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
-	job := &ownedJob{cancel: cancel, done: make(chan struct{})}
+	job := &ownedJob{cancel: cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes}
 	l.active[workload.ID] = job
+	if workload.MaxOutputBytes > 0 {
+		l.runs[workload.ID] = job
+	}
 	l.wg.Add(1)
 	go l.runNew(workload.ID, plan, jobCtx, job)
 	return startResultFromRecord(record, false), nil
@@ -366,8 +507,18 @@ func (l *lifecycle) runNew(id string, plan sandbox.Plan, ctx context.Context, jo
 				result.Cleanup = terminalCleanup(cleanup, cleanupErr)
 			}
 		}
-		if _, persistErr := l.journal.MarkTerminal(id, result, l.now()); persistErr != nil {
+		_, persistErr := l.journal.MarkTerminal(id, result, l.now())
+		if persistErr != nil {
 			job.err = errors.Join(startErr, persistErr)
+			return
+		}
+		if job.rawOutputLimit > 0 {
+			raw := jobs.RunExecutionResult{Outcome: outcome, Cleanup: result.Cleanup}
+			if !raw.Valid(job.rawOutputLimit) {
+				job.err = errors.New("sandbox runner returned an invalid synchronous launch result")
+				return
+			}
+			job.rawResult = &raw
 		}
 		return
 	}
@@ -404,9 +555,7 @@ func (l *lifecycle) observeUntilTerminal(id string, resource sandbox.Resource, i
 	for {
 		result, observeErr := l.runner.ObserveJob(ctx, resource, instanceRef)
 		if terminalSandboxResult(result) {
-			if err := l.persistTerminal(id, resource, instanceRef, result); err != nil {
-				job.err = err
-			}
+			l.persistObservedTerminal(id, resource, instanceRef, result, job)
 			return
 		}
 		if ctx.Err() != nil {
@@ -422,9 +571,7 @@ func (l *lifecycle) observeUntilTerminal(id string, resource sandbox.Resource, i
 			return
 		}
 		if observeErr == nil && result.Outcome != sandbox.OutcomeUnknown {
-			if err := l.persistTerminal(id, resource, instanceRef, result); err != nil {
-				job.err = err
-			}
+			l.persistObservedTerminal(id, resource, instanceRef, result, job)
 			return
 		}
 		select {
@@ -451,21 +598,64 @@ func terminalSandboxResult(result sandbox.Result) bool {
 	}
 }
 
-func (l *lifecycle) persistTerminal(id string, resource sandbox.Resource, instanceRef string, result sandbox.Result) error {
+func (l *lifecycle) persistObservedTerminal(
+	id string, resource sandbox.Resource, instanceRef string, result sandbox.Result, job *ownedJob,
+) {
+	var raw jobs.RunExecutionResult
+	var rawErr error
+	if job.rawOutputLimit > 0 {
+		rawResult := result
+		rawResult.Output, rawResult.OutputTruncated, rawErr = l.runner.OutputJobLimit(
+			context.Background(), resource, instanceRef, job.rawOutputLimit,
+		)
+		if rawErr == nil {
+			raw, rawErr = l.convertRunResult(rawResult, job.rawOutputLimit)
+		}
+	}
+	cleanup, persistErr := l.persistTerminal(id, resource, instanceRef, result)
+	if rawErr == nil && job.rawOutputLimit > 0 {
+		raw.Cleanup = cleanup
+		if !raw.Valid(job.rawOutputLimit) {
+			rawErr = errors.New("sandbox runner returned an invalid synchronous result")
+		} else {
+			job.rawResult = &raw
+		}
+	}
+	job.err = errors.Join(rawErr, persistErr)
+}
+
+func (l *lifecycle) persistTerminal(
+	id string, resource sandbox.Resource, instanceRef string, result sandbox.Result,
+) (jobs.CleanupStatus, error) {
 	converted, err := l.convertResult(result)
 	if err != nil {
-		return err
+		return jobs.CleanupFailed, err
 	}
 	if _, err = l.journal.MarkTerminal(id, converted, l.now()); err != nil {
-		return err
+		return jobs.CleanupFailed, err
 	}
 	if converted.Cleanup != jobs.CleanupPending {
-		return nil
+		return converted.Cleanup, nil
 	}
 	cleanup, cleanupErr := l.runner.CleanupJob(context.Background(), resource, instanceRef)
 	status := terminalCleanup(cleanup, cleanupErr)
 	_, persistErr := l.journal.MarkCleanup(id, status, l.now())
-	return persistErr
+	return status, errors.Join(cleanupErr, persistErr)
+}
+
+func (l *lifecycle) convertRunResult(result sandbox.Result, maximum int) (jobs.RunExecutionResult, error) {
+	converted := jobs.RunExecutionResult{
+		Outcome: mapOutcome(result.Outcome), Output: append([]byte(nil), result.Output...),
+		Truncated: result.OutputTruncated, Cleanup: jobCleanup(result.Cleanup),
+	}
+	if result.ExitCodeKnown {
+		exitCode := result.ExitCode
+		converted.ExitCode = &exitCode
+	}
+	if !converted.Valid(maximum) {
+		return jobs.RunExecutionResult{}, errors.New("sandbox runner returned an invalid synchronous result")
+	}
+	return converted, nil
 }
 
 func (l *lifecycle) convertResult(result sandbox.Result) (jobs.Result, error) {
@@ -577,12 +767,43 @@ func (l *lifecycle) terminateRecoveredEndpointAuthority(
 	cleanup, cleanupErr := l.runner.CleanupJob(context.Background(), resource, record.InstanceRef)
 	status := terminalCleanup(cleanup, cleanupErr)
 	_, markErr := l.journal.MarkCleanup(record.ID, status, l.now())
+	l.removeRunInput(record.ID)
 	return markErr
+}
+
+func (l *lifecycle) reconcileRunInputs(records []jobs.Record) error {
+	if l.runInputDirectory == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(l.runInputDirectory)
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{}
+	for _, record := range records {
+		if record.State != jobs.StateTerminal {
+			keep[record.ID] = true
+		}
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		id := strings.TrimSuffix(name, ".stdin")
+		if entry.IsDir() || name == id || !launcherJobIDPattern.MatchString(id) || keep[id] {
+			continue
+		}
+		if err = os.Remove(filepath.Join(l.runInputDirectory, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (l *lifecycle) reconcile() error {
 	records, err := l.journal.List()
 	if err != nil {
+		return err
+	}
+	if err = l.reconcileRunInputs(records); err != nil {
 		return err
 	}
 	for _, record := range records {
@@ -617,6 +838,7 @@ func (l *lifecycle) reconcile() error {
 			}, l.now()); err != nil {
 				return err
 			}
+			l.removeRunInput(record.ID)
 			continue
 		}
 
@@ -627,6 +849,7 @@ func (l *lifecycle) reconcile() error {
 			}, l.now()); err != nil {
 				return err
 			}
+			l.removeRunInput(record.ID)
 			continue
 		}
 		if inspectErr != nil {
@@ -638,6 +861,7 @@ func (l *lifecycle) reconcile() error {
 			}, l.now()); err != nil {
 				return err
 			}
+			l.removeRunInput(record.ID)
 			continue
 		}
 		if !state.Running && !state.Terminal {
@@ -651,6 +875,7 @@ func (l *lifecycle) reconcile() error {
 			if _, err = l.journal.MarkCleanup(record.ID, status, l.now()); err != nil {
 				return errors.Join(cleanupErr, err)
 			}
+			l.removeRunInput(record.ID)
 			continue
 		}
 
@@ -701,6 +926,7 @@ func (l *lifecycle) spawnRecovered(record jobs.Record, resource sandbox.Resource
 
 func (l *lifecycle) finish(id string, job *ownedJob) {
 	job.cancel()
+	l.removeRunInput(id)
 	l.mu.Lock()
 	if l.active[id] == job {
 		delete(l.active, id)
@@ -937,6 +1163,9 @@ func Run(ctx context.Context, options Options) error {
 	}
 	defer listener.Close()
 	server := rpc.Server{
+		Limits: rpc.Limits{
+			RequestBytes: jobs.MaxRunRequestBytes, ResponseBytes: jobs.MaxRunResultBytes,
+		},
 		Principals:     resolver,
 		Operations:     lifecycle.operations(),
 		MaxConnections: 16,

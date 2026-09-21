@@ -29,9 +29,9 @@ func (c *Controller) metadataPath(ctx context.Context, cwd, option string) (stri
 	if result.ExitCode != 0 || result.Truncated {
 		return "", errors.New("unable to inspect Git metadata")
 	}
-	path, err := filepath.EvalSymlinks(strings.TrimSpace(result.Output))
+	path, err := c.hostPathFromRunner(result.Output)
 	if err != nil {
-		return "", err
+		return "", errors.New("Git metadata escapes workspace")
 	}
 	relative, err := filepath.Rel(c.Paths.Root(), path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {

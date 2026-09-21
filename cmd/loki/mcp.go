@@ -16,6 +16,7 @@ import (
 	"loki/internal/auth"
 	"loki/internal/config"
 	"loki/internal/daemon"
+	"loki/internal/gitops"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
 	"loki/internal/service"
@@ -76,6 +77,7 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 			return service.MCPOptions{}, err
 		}
 		options.Jobs = executor
+		options.GitRunner = gitops.JobRunner{Jobs: executor}
 		options.ExecutorSocket = l.ExecutorSocket
 	}
 	return options, nil

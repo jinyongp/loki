@@ -121,6 +121,9 @@ func Run(ctx context.Context, options Options) error {
 	}
 	defer listener.Close()
 	server := rpc.Server{
+		Limits: rpc.Limits{
+			RequestBytes: jobs.MaxRunRequestBytes, ResponseBytes: jobs.MaxRunResultBytes,
+		},
 		Principals:     resolver,
 		Operations:     operations,
 		MaxConnections: 32,

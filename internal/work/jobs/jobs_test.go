@@ -9,7 +9,7 @@ import (
 
 type fakeLauncher struct {
 	workload    Workload
-	result      Result
+	result      RunExecutionResult
 	startResult StartResult
 	status      Status
 	output      OutputSnapshot
@@ -18,7 +18,7 @@ type fakeLauncher struct {
 	calls       int
 }
 
-func (f *fakeLauncher) Run(_ context.Context, workload Workload) (Result, error) {
+func (f *fakeLauncher) Run(_ context.Context, workload Workload) (RunExecutionResult, error) {
 	f.calls++
 	f.workload = cloneWorkload(workload)
 	return f.result, f.err
@@ -48,6 +48,7 @@ func (f *fakeLauncher) Cancel(_ context.Context, _ string) (CancelResult, error)
 func cloneWorkload(workload Workload) Workload {
 	workload.Argv = append([]string(nil), workload.Argv...)
 	workload.Endpoints = append([]EndpointRequest(nil), workload.Endpoints...)
+	workload.Input = append([]byte(nil), workload.Input...)
 	return workload
 }
 
@@ -64,9 +65,9 @@ func exitCode(value int64) *int64 {
 }
 
 func TestServiceGeneratesJobIdentityAndCopiesRequest(t *testing.T) {
-	launcher := &fakeLauncher{result: Result{
+	launcher := &fakeLauncher{result: RunExecutionResult{
 		ExitCode: exitCode(7), Outcome: OutcomeExited,
-		Output: Output{Text: "hello"}, Cleanup: CleanupComplete,
+		Output: []byte("hello"), Cleanup: CleanupComplete,
 	}}
 	id := strings.Repeat("a", 32)
 	service, err := NewService(launcher, fixedID(id))
@@ -80,7 +81,7 @@ func TestServiceGeneratesJobIdentityAndCopiesRequest(t *testing.T) {
 	}
 	request.Argv[1] = "mutated"
 	if result.JobID != id || result.ExitCode == nil || *result.ExitCode != 7 ||
-		result.Outcome != OutcomeExited || result.Output != "hello" || result.Truncated ||
+		result.Outcome != OutcomeExited || string(result.Output) != "hello" || result.Truncated ||
 		result.Cleanup != CleanupComplete {
 		t.Fatalf("result = %#v", result)
 	}
@@ -168,7 +169,7 @@ func TestServiceFailsClosedOnDependenciesLauncherErrorsAndInvalidResults(t *test
 		t.Fatalf("launcher error = %v", err)
 	}
 
-	for _, invalid := range []Result{
+	for _, invalid := range []RunExecutionResult{
 		{ExitCode: exitCode(999), Outcome: OutcomeExited, Cleanup: CleanupComplete},
 		{Outcome: OutcomeExited, Cleanup: CleanupComplete},
 		{Outcome: Outcome("invalid"), Cleanup: CleanupComplete},
