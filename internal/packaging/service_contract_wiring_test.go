@@ -43,6 +43,30 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(nativeLayout), `"ExecutorSocket": "/run/loki-go/executor/control.sock"`) {
 		t.Fatal("native MCP layout does not bind the executor socket")
 	}
+	if !strings.Contains(string(nativeLayout), `"ToolchainStore": "/var/lib/loki-go/toolchains"`) ||
+		!strings.Contains(string(nativeLayout), `"ToolchainCatalog": "/usr/share/doc/loki/toolchain-catalog.json"`) {
+		t.Fatal("native MCP layout does not bind managed toolchain inputs")
+	}
+	launcherLayout, err := os.ReadFile(filepath.Join(root, "packaging/go/launcher.json.in"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(launcherLayout), `"ToolchainStore": "/var/lib/loki-go/toolchains"`) {
+		t.Fatal("native launcher layout does not bind the managed toolchain store")
+	}
+	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/loki-go-lifecycle.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"toolchain provision-managed",
+		"--catalog \"$release/usr/share/doc/loki/toolchain-catalog.json\"",
+		"--store \"$(rooted /var/lib/loki-go/toolchains)\"",
+	} {
+		if !strings.Contains(string(lifecycle), want) {
+			t.Fatalf("native lifecycle does not provision managed toolchains: %s", want)
+		}
+	}
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
 	raw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/mcp.json"))

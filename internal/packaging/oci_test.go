@@ -51,6 +51,11 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"runner:x:10000:10000",
 		"egress:x:10002:10002",
 		"executor:x:10004:10001",
+		"/rootfs/opt/loki/toolchain/bin",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/node",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npm",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npx",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/pnpm",
 	} {
 		if !strings.Contains(dockerfile, required) {
 			t.Errorf("Dockerfile is missing %q", required)
