@@ -90,7 +90,7 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/githubapp"
+      "to": "loki/internal/integrations/github"
     },
     {
       "from": "loki/cmd/loki",
@@ -246,7 +246,11 @@
     },
     {
       "from": "loki/internal/contract",
-      "to": "loki/internal/githubapp"
+      "to": "loki/internal/integrations/github"
+    },
+    {
+      "from": "loki/internal/service",
+      "to": "loki/internal/integrations/github"
     },
     {
       "from": "loki/internal/devtools",
@@ -273,11 +277,11 @@
       "to": "loki/internal/platform/netguard"
     },
     {
-      "from": "loki/internal/githubapp",
+      "from": "loki/internal/integrations/github",
       "to": "loki/internal/fault"
     },
     {
-      "from": "loki/internal/githubapp",
+      "from": "loki/internal/integrations/github",
       "to": "loki/internal/process"
     },
     {
@@ -572,12 +576,6 @@
       "from": "loki/internal/service",
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/githubapp"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
       "to": "loki/internal/mcpserver"
     },
     {
@@ -800,7 +798,7 @@
       "tags": [],
       "target": "feature errors + control/operations"
     },
-    "loki/internal/githubapp": {
+    "loki/internal/integrations/github": {
       "kind": "integration",
       "owner": "github",
       "tags": [

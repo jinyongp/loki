@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/artifacts"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
 	"loki/internal/work/workspace"

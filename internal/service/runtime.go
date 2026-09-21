@@ -20,7 +20,7 @@ import (
 	"loki/internal/devtools"
 	"loki/internal/dockerproxy"
 	"loki/internal/execution"
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 	"loki/internal/portguard"
 	"loki/internal/process"
 	"loki/internal/rpc"
@@ -128,6 +128,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	}
 	devtoolsBroker := devtools.Broker{Client: devtoolsClient, Secrets: controller}
 	var issueFields IssueFieldsClient
+	var githubProvider GitHubProvider
 	var githubCommands GitHubCommandRunner
 	if c.GitHubAppID != 0 {
 		if !filepath.IsAbs(o.GitHubBinary) || o.GitHubPrivateKeyFile != "" && !filepath.IsAbs(o.GitHubPrivateKeyFile) {
@@ -162,6 +163,13 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		issueFields = &githubapp.Client{
 			Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: issueFieldTargets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages},
 			HTTP:   httpClient, Tokens: broker,
+		}
+		githubProvider = &githubapp.Provider{
+			Config: githubapp.ProviderConfig{
+				APIVersion: c.GitHubAPIVersion, Targets: append([]string(nil), c.GitHubTargets...),
+				MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages,
+			},
+			HTTP: httpClient, Tokens: broker,
 		}
 		githubEnvironment := append([]string{}, environment...)
 		githubEnvironment = append(githubEnvironment,
@@ -228,6 +236,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
 		GitHubIssueFieldsOperations(issueFields),
+		GitHubProviderOperations(githubProvider),
 		GitHubCommandOperations(githubCommands),
 		AuditOperations(log),
 		PortOperations(&portguard.Guard{Root: workspace, UID: o.AgentUID, Ports: ports}),

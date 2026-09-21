@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"loki/internal/control/identity"
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 	"loki/internal/service"

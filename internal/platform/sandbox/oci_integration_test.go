@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/previews"
+	"loki/internal/integrations/sharing/previews"
 	"loki/internal/service"
 	"loki/internal/work/jobs"
 )

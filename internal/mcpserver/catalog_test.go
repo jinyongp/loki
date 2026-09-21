@@ -56,12 +56,15 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 		t.Fatal("accepted incomplete catalog")
 	}
 	client := connect(t, testHandlers(t))
+	definitions, err := contract.CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
 	listed, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(listed.Tools) != 33 {
+	if err != nil || len(listed.Tools) != len(definitions) {
 		t.Fatal(listed, err)
 	}
 	wanted := map[string]json.RawMessage{}
-	definitions, _ := contract.CurrentDefinitions()
 	for _, definition := range definitions {
 		raw, _ := json.Marshal(definition)
 		wanted[definition.Name] = raw

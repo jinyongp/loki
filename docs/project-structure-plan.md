@@ -239,7 +239,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/egress` | `work/network` facade and enforcement adapters; share mechanics, not browser policy. |
 | `internal/execution` | Split environment/spec contracts into `work/jobs` and effective host config; it is not itself the new supervisor. |
 | `internal/fault` | Feature errors and narrow `control/operations` outcome categories; protocol presentation in transport. Low-level platform errors remain independent. |
-| `internal/githubapp` | `integrations/github` with private token/CLI adapters; platform key access through a narrow protected credential operation. |
+| `internal/integrations/github` | **A10/S05 landed:** typed repository provider plus constrained CLI escape hatch; installation tokens stay behind repository-scoped provider authority and platform key access remains a narrow protected credential operation. |
 | `internal/work/workspace/git` | **A08/S04 landed:** private Git adapter under the workspace owner; execution runs through confined Jobs, while checkpoint persistence uses `platform/safeio`. |
 | `internal/mcpserver` | `transport/mcp`; bind domain facades, reject unknown inputs, keep SDK and wire conventions out of feature cores. |
 | `internal/transport/mcp/workspace` | **A08/S04 landed:** workspace and Git MCP bindings consume the workspace facade and keep MCP SDK/wire types outside the work owner. |
