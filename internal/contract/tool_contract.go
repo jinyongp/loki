@@ -190,6 +190,8 @@ func retiredSnapshotTools() map[string]bool {
 
 func generatedStandaloneTools() map[string]toolFactory {
 	return map[string]toolFactory{
+		"github_read":               githubProviderReadTool,
+		"github_write":              githubProviderWriteTool,
 		"github_issue_fields_read":  githubIssueFieldsReadTool,
 		"github_issue_fields_write": githubIssueFieldsWriteTool,
 		"job":                       jobTool,

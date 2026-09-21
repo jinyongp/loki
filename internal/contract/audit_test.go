@@ -12,11 +12,11 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ContractAudit{
-		ToolCount:              33,
-		ActionUnionCount:       20,
+		ToolCount:              35,
+		ActionUnionCount:       22,
 		FlatActionUnionCount:   0,
-		InputPropertyCount:     203,
-		DescribedPropertyCount: 203,
+		InputPropertyCount:     211,
+		DescribedPropertyCount: 211,
 		MissingOutputSchema:    0,
 		OpenOutputSchema:       0,
 		MissingAnnotations:     0,
@@ -39,7 +39,7 @@ func TestCurrentContractAuditTracksMigrationDebt(t *testing.T) {
 		"read_image": true, "share_image": true, "artifact_publish": true, "write_image": true,
 		"secret_inspect": true, "secret_write": true, "secret_delete": true,
 		"developer_view": true, "agent_guidance": true, "project_coordination": true, "project_coordination_write": true,
-		"project_context": true, "project_context_write": true, "github": true,
+		"project_context": true, "project_context_write": true, "github_read": true, "github_write": true, "github": true,
 		"workspace_read": true, "workspace_edit": true,
 		"restore_workspace_file": true, "remove_tracked_file": true,
 		"git_inspect": true, "git_stage": true, "job": true,

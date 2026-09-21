@@ -4,7 +4,7 @@ import (
 	"context"
 
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 	"loki/internal/rpc"
 	"loki/internal/secret"
 )

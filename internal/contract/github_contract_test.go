@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/githubapp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	githubapp "loki/internal/integrations/github"
 )
 
 func TestGitHubEscapeHatchPublishesExplicitConservativeContract(t *testing.T) {
@@ -107,5 +108,53 @@ func TestGitHubEscapeHatchPublishesExplicitConservativeContract(t *testing.T) {
 		semantics["crash_recovery"] != string(CrashRecoveryUpstream) ||
 		semantics["affected_resource_limit"] != 1 {
 		t.Fatalf("github command semantics = %#v", semantics)
+	}
+}
+
+func TestGitHubTypedProviderContractsAreSeparatedFromEscapeHatch(t *testing.T) {
+	definitions, err := CurrentDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := seenDefinition(definitions, "github_read")
+	write := seenDefinition(definitions, "github_write")
+	if read == nil || write == nil {
+		t.Fatalf("typed GitHub definitions missing: read=%#v write=%#v", read, write)
+	}
+	hint := func(value *bool) bool { return value != nil && *value }
+	if read.Annotations == nil || !read.Annotations.ReadOnlyHint || !read.Annotations.IdempotentHint ||
+		hint(read.Annotations.DestructiveHint) || !hint(read.Annotations.OpenWorldHint) {
+		t.Fatalf("github_read annotations = %#v", read.Annotations)
+	}
+	if write.Annotations == nil || write.Annotations.ReadOnlyHint || !write.Annotations.IdempotentHint ||
+		hint(write.Annotations.DestructiveHint) || !hint(write.Annotations.OpenWorldHint) {
+		t.Fatalf("github_write annotations = %#v", write.Annotations)
+	}
+	for _, tool := range []*mcp.Tool{read, write} {
+		encoded, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var input map[string]any
+		if err := json.Unmarshal(encoded, &input); err != nil {
+			t.Fatal(err)
+		}
+		properties := input["properties"].(map[string]any)
+		for _, forbidden := range []string{"command", "args", "input"} {
+			if _, exists := properties[forbidden]; exists {
+				t.Fatalf("%s exposes raw GitHub command field %q", tool.Name, forbidden)
+			}
+		}
+	}
+	operations, ok := write.Meta["loki/operations"].(map[string]any)
+	if !ok {
+		t.Fatalf("github_write operation metadata = %#v", write.Meta)
+	}
+	comment := operations["comment"].(map[string]any)
+	if comment["replay"] != string(ReplayRequestID) || comment["request_id_field"] != "request_id" ||
+		comment["failure_atomicity"] != string(FailureUpstream) ||
+		comment["crash_recovery"] != string(CrashRecoveryUpstream) ||
+		comment["affected_resource_limit"] != 1 {
+		t.Fatalf("github_write comment semantics = %#v", comment)
 	}
 }

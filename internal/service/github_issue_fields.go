@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
 )

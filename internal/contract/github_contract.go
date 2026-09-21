@@ -2,7 +2,7 @@ package contract
 
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 )
 
 func overrideGitHub(tool *mcp.Tool) error {

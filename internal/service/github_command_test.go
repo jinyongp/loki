@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"loki/internal/githubapp"
+	"loki/internal/integrations/github"
 	"loki/internal/process"
 )
 

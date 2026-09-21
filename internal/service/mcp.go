@@ -170,7 +170,11 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		groups = append(groups, PreviewHandlers(preview, app.Artifacts))
 	}
 	if c.GitHubAppID != 0 {
-		groups = append(groups, GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime))
+		groups = append(groups,
+			GitHubProviderHandlers(options.Runtime),
+			GitHubIssueFieldsHandlers(options.Runtime),
+			GitHubCommandHandlers(options.Runtime),
+		)
 	}
 	for _, group := range groups {
 		for name, handler := range group {
