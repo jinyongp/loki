@@ -68,6 +68,36 @@ func TestNormalizeOutputBoundsAndRepairsUTF8(t *testing.T) {
 	}
 }
 
+func TestReadJournalSnapshotDoesNotAcquireWriterLock(t *testing.T) {
+	dir := privateJournalDir(t)
+	now := time.Now().UTC()
+	journal := testJournal(t, dir)
+	id := strings.Repeat("f", 32)
+	if _, err := journal.Admit(id, "oci:"+strings.Repeat("e", 64), now.Add(time.Minute), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := journal.BindInstance(id, testInstanceRef(), now.Add(time.Nanosecond)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := journal.MarkRunning(id, now.Add(2*time.Nanosecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".loki-private-snapshot"), []byte("partial"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := ReadJournalSnapshot(dir, JournalLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].ID != id || records[0].State != StateRunning {
+		t.Fatalf("snapshot = %#v", records)
+	}
+	if _, err = OpenJournal(dir, JournalLimits{}); err == nil || !strings.Contains(err.Error(), "already owned") {
+		t.Fatalf("snapshot disturbed writer lock: %v", err)
+	}
+}
+
 func TestJournalPersistsTransitionsAcrossReopenWithoutConsumingResult(t *testing.T) {
 	dir := privateJournalDir(t)
 	now := time.Now().UTC()

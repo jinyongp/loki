@@ -22,6 +22,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runCheckpoint(args[1:], stdout, stderr)
 		case "health":
 			return runHealth(args[1:], stderr)
+		case "host":
+			return runHost(args[1:], stdout, stderr)
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "secret", "github":
@@ -66,6 +68,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki version | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki version | host update status|prepare|apply [OPTIONS] | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
 	return 2
 }

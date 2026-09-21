@@ -44,10 +44,7 @@ type journalEnvelope struct {
 	SHA256  string          `json:"sha256"`
 }
 
-func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
-	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || dir == string(filepath.Separator) || strings.ContainsRune(dir, 0) {
-		return nil, errors.New("job journal directory must be an absolute clean non-root path")
-	}
+func normalizeJournalLimits(limits JournalLimits) (JournalLimits, error) {
 	if limits.MaxRecords == 0 {
 		limits.MaxRecords = 1024
 	}
@@ -65,14 +62,33 @@ func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
 		limits.MaxOutputBytes < 1 || limits.MaxOutputBytes > MaxOutputBytes ||
 		int64(limits.MaxOutputBytes)*6+(64<<10) > limits.MaxRecordBytes ||
 		limits.Retention < 10*time.Millisecond || limits.Retention > 24*time.Hour {
-		return nil, errors.New("job journal limits are outside the supported range")
+		return JournalLimits{}, errors.New("job journal limits are outside the supported range")
+	}
+	return limits, nil
+}
+
+func validateJournalDirectory(dir string) error {
+	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || dir == string(filepath.Separator) || strings.ContainsRune(dir, 0) {
+		return errors.New("job journal directory must be an absolute clean non-root path")
 	}
 	info, err := os.Lstat(dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
-		return nil, errors.New("job journal directory must be a private real directory")
+		return errors.New("job journal directory must be a private real directory")
+	}
+	return nil
+}
+
+func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
+	if err := validateJournalDirectory(dir); err != nil {
+		return nil, err
+	}
+	var err error
+	limits, err = normalizeJournalLimits(limits)
+	if err != nil {
+		return nil, err
 	}
 
 	lockPath := filepath.Join(dir, "journal.lock")
@@ -476,6 +492,59 @@ func (j *Journal) List() ([]Record, error) {
 	return result, nil
 }
 
+func ReadJournalSnapshot(dir string, limits JournalLimits) ([]Record, error) {
+	if err := validateJournalDirectory(dir); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeJournalLimits(limits)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Record, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "journal.lock" {
+			continue
+		}
+		if strings.HasPrefix(name, ".loki-private-") {
+			info, infoErr := entry.Info()
+			if infoErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+				return nil, errors.New("job journal contains an unsafe interrupted publication")
+			}
+			continue
+		}
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			return nil, fmt.Errorf("job journal contains unexpected entry %q", name)
+		}
+		id := strings.TrimSuffix(name, ".json")
+		if !jobIDPattern.MatchString(id) {
+			return nil, errors.New("job journal contains an invalid record name")
+		}
+		if len(result) >= normalized.MaxRecords {
+			return nil, errors.New("job journal exceeds record capacity")
+		}
+		record, readErr := loadJournalRecord(filepath.Join(dir, name), normalized)
+		if readErr != nil {
+			return nil, fmt.Errorf("read job record %q: %w", id, readErr)
+		}
+		if record.ID != id {
+			return nil, errors.New("job journal record identity does not match its file")
+		}
+		result = append(result, record)
+	}
+	sort.Slice(result, func(i, k int) bool {
+		if result[i].CreatedAt == result[k].CreatedAt {
+			return result[i].ID < result[k].ID
+		}
+		return result[i].CreatedAt < result[k].CreatedAt
+	})
+	return result, nil
+}
+
 func (j *Journal) Prune(now time.Time) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -586,6 +655,10 @@ func (j *Journal) load() error {
 }
 
 func (j *Journal) loadRecord(path string) (Record, error) {
+	return loadJournalRecord(path, j.limits)
+}
+
+func loadJournalRecord(path string, limits JournalLimits) (Record, error) {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return Record{}, err
@@ -596,11 +669,11 @@ func (j *Journal) loadRecord(path string) (Record, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return Record{}, errors.New("job journal record must be a private regular file")
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, j.limits.MaxRecordBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, limits.MaxRecordBytes+1))
 	if err != nil {
 		return Record{}, err
 	}
-	if int64(len(raw)) > j.limits.MaxRecordBytes {
+	if int64(len(raw)) > limits.MaxRecordBytes {
 		return Record{}, errors.New("job journal record exceeds size limit")
 	}
 	var envelope journalEnvelope
@@ -623,7 +696,7 @@ func (j *Journal) loadRecord(path string) (Record, error) {
 	if err = recordDecoder.Decode(&record); err != nil {
 		return Record{}, errors.New("job journal record is invalid")
 	}
-	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.valid(j.limits.MaxOutputBytes) {
+	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.valid(limits.MaxOutputBytes) {
 		return Record{}, errors.New("job journal record is invalid")
 	}
 	return record, nil
