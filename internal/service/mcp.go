@@ -14,7 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/agentcontext"
-	"loki/internal/artifacts"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/audit"
 	"loki/internal/auth"
 	"loki/internal/config"
@@ -23,7 +23,7 @@ import (
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/portguard"
-	"loki/internal/previews"
+	"loki/internal/integrations/sharing/previews"
 	workspacemcp "loki/internal/transport/mcp/workspace"
 	"loki/internal/work/jobs"
 	"loki/internal/work/workspace"

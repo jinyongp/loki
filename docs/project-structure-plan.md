@@ -221,7 +221,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `cmd/loki` | Thin operator command plus separate `cmd/<role>` and `app/<role>` wiring; maintenance into tools/maintainer entrypoints. |
 | `internal/admin` | Operator bindings in `transport/cli`; protected use cases in `host` or `control/credentials`; platform import helpers private to their owner. |
 | `internal/agentcontext` | `work/agentcontext`; Loki-native target-scoped AGENTS.md resolution, three-source Skill discovery (`project > user > packaged`), server-computed context basis, and durable semantic recovery context. Native packaged Skills come from `/opt/loki/share/skills`; user Skills are logically `~/.agents/skills` with durable backing outside the repository. Canonical task truth remains in `integrations/devtools`; runtime-owned context persistence and Git evidence are referenced through narrow interfaces. MCP bindings live in `transport/mcp`, and context summaries never become authority. |
-| `internal/artifacts` | `integrations/sharing` capability-link use cases; HTTP serving in `transport/http`; bounded payload storage private to sharing. |
+| `internal/integrations/sharing/artifacts` | **A10/S05 landed:** capability-link state and bounded payload storage owned by sharing; HTTP serving remains composed at the HTTP edge. |
 | `internal/audit` | `control/audit` event contract and private sink/retention adapter using safeio. |
 | `internal/auth` | Core bearer/local connection auth in `transport/http` and trusted principal values in `control/identity`. Cloudflare-specific Access verification/JWKS refresh is not a core-install dependency; retain it only as an optional external-access integration or maintainer migration path if that feature is kept, and never route its safe dialing through browser policy. |
 | `internal/integrations/browser` | **A10/S05 landed:** browser facade and local worker/Chromium implementation live under the owning integration subtree. |
@@ -246,7 +246,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/packaging` | `tests/acceptance/packaging` plus focused architecture checks; do not retain a production-looking package containing only packaging tests. |
 | `internal/policy` | Filesystem mechanisms to `platform/safeio`; workspace-specific validation to `work/workspace`. Do not simply rename it to authorization policy. |
 | `internal/portguard` | OS identity/signal primitives to `platform/proc`; owned service/endpoint policy to `work/endpoints`; no cross-namespace PID interpretation. |
-| `internal/previews` | Preview/share use cases in `integrations/sharing`; endpoint lookup through `work/endpoints`; forwarding in HTTP adapters. |
+| `internal/integrations/sharing/previews` | **A10/S05 landed:** preview/share state and forwarding policy owned by sharing; Job previews remain bound to exact endpoint lease identity. |
 | `internal/process` | Low-level spawning/signals/output mechanics in `platform/proc`; lifecycle and cancellation policy owned by `work/jobs`. |
 | `internal/rpc` | `transport/rpc` codec/client/role bindings; principal/grant semantics in control, not guessed by generic transport. |
 | `internal/secret` | Application secret use cases to `work/secrets`; platform credentials to `control/credentials`; import/export helpers under the corresponding operator boundary. |

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/artifacts"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/config"
 	"loki/internal/contract"
 	"loki/internal/mcpserver"

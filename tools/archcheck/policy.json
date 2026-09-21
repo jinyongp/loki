@@ -402,6 +402,14 @@
     },
     {
       "from": "loki/internal/service",
+      "to": "loki/internal/integrations/sharing/artifacts"
+    },
+    {
+      "from": "loki/internal/service",
+      "to": "loki/internal/integrations/sharing/previews"
+    },
+    {
+      "from": "loki/internal/service",
       "to": "loki/internal/platform/netguard"
     },
     {
@@ -498,12 +506,6 @@
       "from": "loki/internal/service",
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/artifacts"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
       "to": "loki/internal/audit"
     },
     {
@@ -594,12 +596,6 @@
       "from": "loki/internal/service",
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/previews"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
       "to": "loki/internal/process"
     },
     {
@@ -665,11 +661,11 @@
       "tags": [],
       "target": "work/agentcontext"
     },
-    "loki/internal/artifacts": {
+    "loki/internal/integrations/sharing/artifacts": {
       "kind": "integration",
       "owner": "sharing",
       "tags": [],
-      "target": "integrations/sharing"
+      "target": "integrations/sharing/artifacts"
     },
     "loki/internal/audit": {
       "kind": "control",
@@ -914,11 +910,11 @@
       "tags": [],
       "target": "platform/proc + work/endpoints"
     },
-    "loki/internal/previews": {
+    "loki/internal/integrations/sharing/previews": {
       "kind": "integration",
       "owner": "sharing",
       "tags": [],
-      "target": "integrations/sharing"
+      "target": "integrations/sharing/previews"
     },
     "loki/internal/process": {
       "kind": "legacy-platform",
