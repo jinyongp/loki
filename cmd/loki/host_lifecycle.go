@@ -169,6 +169,7 @@ type hostMaintenanceOptions struct {
 	LauncherLayout  string
 	InterruptJobs   bool
 	RestoreBackupID string
+	Component       string
 }
 
 func parseHostMaintenanceOptions(action string, args []string, stderr io.Writer) (hostMaintenanceOptions, error) {
@@ -185,7 +186,8 @@ func parseHostMaintenanceOptions(action string, args []string, stderr io.Writer)
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
 		LauncherLayout: strings.TrimSpace(*launcherLayout), InterruptJobs: *interrupt,
 	}
-	if action == "restore" {
+	switch action {
+	case "restore":
 		if flags.NArg() != 1 {
 			return hostMaintenanceOptions{}, errors.New("usage: loki host restore [OPTIONS] BACKUP_ID")
 		}
@@ -193,8 +195,18 @@ func parseHostMaintenanceOptions(action string, args []string, stderr io.Writer)
 		if result.RestoreBackupID == "" {
 			return hostMaintenanceOptions{}, errors.New("backup id is required")
 		}
-	} else if flags.NArg() != 0 {
-		return hostMaintenanceOptions{}, fmt.Errorf("usage: loki host %s [OPTIONS]", action)
+	case "enable", "disable":
+		if flags.NArg() != 1 {
+			return hostMaintenanceOptions{}, fmt.Errorf("usage: loki host %s [OPTIONS] COMPONENT", action)
+		}
+		result.Component = strings.TrimSpace(flags.Arg(0))
+		if result.Component == "" || len(result.Component) > 128 || strings.ContainsAny(result.Component, "\r\n\x00") {
+			return hostMaintenanceOptions{}, errors.New("component name is invalid")
+		}
+	default:
+		if flags.NArg() != 0 {
+			return hostMaintenanceOptions{}, fmt.Errorf("usage: loki host %s [OPTIONS]", action)
+		}
 	}
 	for name, value := range map[string]string{
 		"--state-root":      result.StateRoot,
@@ -287,6 +299,24 @@ func runHostMaintenanceWith(
 			return 1
 		}
 		if err := encoder.Encode(map[string]bool{"rolled_back": true}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	case "enable":
+		if err := manager.SetComponent(ctx, options.Component, true, mutationOptions); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := encoder.Encode(map[string]string{"enabled": options.Component}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	case "disable":
+		if err := manager.SetComponent(ctx, options.Component, false, mutationOptions); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := encoder.Encode(map[string]string{"disabled": options.Component}); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

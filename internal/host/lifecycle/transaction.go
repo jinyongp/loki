@@ -161,6 +161,7 @@ func compactStrings(values []string) []string {
 type TransactionBackend interface {
 	Snapshot(context.Context, OperationKind, Snapshot) (RuntimeSnapshot, error)
 	Activate(context.Context, Generation, InstallationState) error
+	SetComponent(context.Context, Generation, string, bool) error
 	Migrate(context.Context, []MigrationStep) error
 	Restart(context.Context) error
 	Health(context.Context) error
@@ -254,6 +255,79 @@ func (e *TransactionEngine) Apply(ctx context.Context, request ApplyRequest) (Ap
 		return ApplyResult{}, err
 	}
 	return ApplyResult{PlanID: request.Plan.ID, InterruptedJobs: append([]string(nil), request.ActiveJobs...)}, nil
+}
+
+func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabled bool) error {
+	if e == nil || e.Store == nil || e.Backend == nil {
+		return errors.New("host lifecycle transaction engine is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	lock, journal, err := e.openJournal(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err = e.recoverInterrupted(ctx, journal); err != nil {
+		return err
+	}
+	snapshot, err := e.Store.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("host lifecycle component change requires an installed release")
+	}
+	target, changed, err := optionalComponentTarget(*snapshot.Installed, snapshot.Host.EnabledComponents, name, enabled)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, e.now())
+	if err != nil {
+		return err
+	}
+	kind := OperationDisableComponent
+	if enabled {
+		kind = OperationEnableComponent
+	}
+	record, err := journal.Begin(kind, plan, e.now())
+	if err != nil {
+		return err
+	}
+	backup, err := e.captureBackup(ctx, journal, record, snapshot)
+	if err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, nil, err)
+	}
+	if err = e.Backend.SetComponent(ctx, *snapshot.Installed, name, enabled); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseMigrate, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Restart(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseRestart, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Health(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	_, err = journal.MarkSucceeded(record.ID, e.now())
+	return err
 }
 
 func (e *TransactionEngine) Backup(ctx context.Context) (BackupRecord, error) {
@@ -733,6 +807,27 @@ func (s *FileStore) CommitGeneration(ctx context.Context, candidate Generation, 
 	return removeIfPresent(s.path("prepared.json"))
 }
 
+func (s *FileStore) CommitComponents(ctx context.Context, enabled []string, now time.Time) error {
+	if s == nil {
+		return errors.New("host lifecycle store is not configured")
+	}
+	snapshot, err := s.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("host lifecycle component change requires an installed release")
+	}
+	normalized, err := normalizeOptionalComponentSelection(*snapshot.Installed, enabled)
+	if err != nil {
+		return err
+	}
+	host := snapshot.Host
+	host.EnabledComponents = normalized
+	host.Revision = lifecycleRevision(snapshot.Host.Revision, snapshot.Installed.ID, "components", normalized, now)
+	return writePrivateJSON(s.path("host.json"), host)
+}
+
 func (s *FileStore) RestoreBackup(ctx context.Context, backup BackupRecord) error {
 	if s == nil || !backup.Valid() {
 		return errors.New("host lifecycle backup record is invalid")
@@ -783,6 +878,75 @@ func (s *FileStore) CommitUninstall(ctx context.Context, now time.Time) error {
 		}
 	}
 	return ctx.Err()
+}
+
+func optionalComponentTarget(generation Generation, current []string, name string, enabled bool) ([]string, bool, error) {
+	name = strings.TrimSpace(name)
+	if !releaseNamePattern.MatchString(name) {
+		return nil, false, errors.New("optional component name is invalid")
+	}
+	found := false
+	optional := false
+	for _, component := range generation.Spec.Components {
+		if component.Name == name {
+			found = true
+			optional = component.Optional
+			break
+		}
+	}
+	if !found {
+		return nil, false, errors.New("release does not define the requested component")
+	}
+	if !optional {
+		return nil, false, errors.New("required release component cannot be changed independently")
+	}
+	normalized, err := normalizeOptionalComponentSelection(generation, current)
+	if err != nil {
+		return nil, false, err
+	}
+	exists := false
+	for _, value := range normalized {
+		if value == name {
+			exists = true
+			break
+		}
+	}
+	if exists == enabled {
+		return normalized, false, nil
+	}
+	if enabled {
+		normalized = append(normalized, name)
+		sort.Strings(normalized)
+		return normalized, true, nil
+	}
+	result := make([]string, 0, len(normalized)-1)
+	for _, value := range normalized {
+		if value != name {
+			result = append(result, value)
+		}
+	}
+	return result, true, nil
+}
+
+func normalizeOptionalComponentSelection(generation Generation, values []string) ([]string, error) {
+	if !generation.Valid() {
+		return nil, errors.New("installed release generation is invalid")
+	}
+	optional := make(map[string]bool, len(generation.Spec.Components))
+	for _, component := range generation.Spec.Components {
+		if component.Optional {
+			optional[component.Name] = true
+		}
+	}
+	result := append([]string(nil), values...)
+	for index := range result {
+		result[index] = strings.TrimSpace(result[index])
+		if !releaseNamePattern.MatchString(result[index]) || !optional[result[index]] {
+			return nil, errors.New("enabled optional-component state is invalid for the installed release")
+		}
+	}
+	sort.Strings(result)
+	return compactStrings(result), nil
 }
 
 func lifecycleRevision(values ...any) string {

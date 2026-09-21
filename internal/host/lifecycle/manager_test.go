@@ -61,11 +61,17 @@ func (a *fakeApplier) Apply(_ context.Context, request ApplyRequest) (ApplyResul
 	return result, nil
 }
 
+type fakeComponentCall struct {
+	name    string
+	enabled bool
+}
+
 type fakeMaintainer struct {
 	backupCalls    int
 	restoreCalls   []string
 	rollbackCalls  int
 	uninstallCalls int
+	componentCalls []fakeComponentCall
 }
 
 func (m *fakeMaintainer) Backup(context.Context) (BackupRecord, error) {
@@ -85,6 +91,11 @@ func (m *fakeMaintainer) Rollback(context.Context) error {
 
 func (m *fakeMaintainer) Uninstall(context.Context) error {
 	m.uninstallCalls++
+	return nil
+}
+
+func (m *fakeMaintainer) SetComponent(_ context.Context, name string, enabled bool) error {
+	m.componentCalls = append(m.componentCalls, fakeComponentCall{name: name, enabled: enabled})
 	return nil
 }
 
@@ -210,8 +221,11 @@ func TestManagerMaintenanceUsesSharedActiveJobPolicy(t *testing.T) {
 	if err := manager.Uninstall(t.Context(), MutationOptions{}); err == nil {
 		t.Fatal("uninstall with active jobs was accepted")
 	}
+	if err := manager.SetComponent(t.Context(), "browser", false, MutationOptions{}); err == nil {
+		t.Fatal("component disable with active jobs was accepted")
+	}
 	if maintainer.backupCalls != 0 || len(maintainer.restoreCalls) != 0 ||
-		maintainer.rollbackCalls != 0 || maintainer.uninstallCalls != 0 {
+		maintainer.rollbackCalls != 0 || maintainer.uninstallCalls != 0 || len(maintainer.componentCalls) != 0 {
 		t.Fatalf("blocked maintenance reached engine: %#v", maintainer)
 	}
 
@@ -228,8 +242,12 @@ func TestManagerMaintenanceUsesSharedActiveJobPolicy(t *testing.T) {
 	if err := manager.Uninstall(t.Context(), options); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.SetComponent(t.Context(), "browser", true, options); err != nil {
+		t.Fatal(err)
+	}
 	if maintainer.backupCalls != 1 || !reflect.DeepEqual(maintainer.restoreCalls, []string{"sha256:" + strings.Repeat("b", 64)}) ||
-		maintainer.rollbackCalls != 1 || maintainer.uninstallCalls != 1 {
+		maintainer.rollbackCalls != 1 || maintainer.uninstallCalls != 1 ||
+		!reflect.DeepEqual(maintainer.componentCalls, []fakeComponentCall{{name: "browser", enabled: true}}) {
 		t.Fatalf("approved maintenance calls = %#v", maintainer)
 	}
 }

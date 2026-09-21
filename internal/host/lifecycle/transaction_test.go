@@ -10,22 +10,33 @@ import (
 	"time"
 )
 
+type fakeRuntimeState struct {
+	current    string
+	components map[string]bool
+}
+
 type fakeTransactionBackend struct {
-	current      string
-	snapshots    map[string]string
-	nextSnapshot int
-	healthErr    error
-	restoreErr   error
-	stopped      bool
+	current        string
+	components     map[string]bool
+	snapshots      map[string]fakeRuntimeState
+	nextSnapshot   int
+	componentCalls int
+	healthErr      error
+	restoreErr     error
+	stopped        bool
 }
 
 func (b *fakeTransactionBackend) Snapshot(_ context.Context, _ OperationKind, snapshot Snapshot) (RuntimeSnapshot, error) {
 	if b.snapshots == nil {
-		b.snapshots = map[string]string{}
+		b.snapshots = map[string]fakeRuntimeState{}
 	}
 	b.nextSnapshot++
 	ref := "runtime-snapshot-" + strings.Repeat("x", b.nextSnapshot)
-	b.snapshots[ref] = b.current
+	components := make(map[string]bool, len(b.components))
+	for name, enabled := range b.components {
+		components[name] = enabled
+	}
+	b.snapshots[ref] = fakeRuntimeState{current: b.current, components: components}
 	return RuntimeSnapshot{
 		Ref: ref,
 		Coverage: BackupCoverage{
@@ -39,6 +50,15 @@ func (b *fakeTransactionBackend) Snapshot(_ context.Context, _ OperationKind, sn
 func (b *fakeTransactionBackend) Activate(_ context.Context, candidate Generation, _ InstallationState) error {
 	b.current = candidate.ID
 	b.stopped = false
+	return nil
+}
+
+func (b *fakeTransactionBackend) SetComponent(_ context.Context, _ Generation, name string, enabled bool) error {
+	if b.components == nil {
+		b.components = map[string]bool{}
+	}
+	b.componentCalls++
+	b.components[name] = enabled
 	return nil
 }
 
@@ -56,7 +76,11 @@ func (b *fakeTransactionBackend) Restore(_ context.Context, ref string) error {
 	if !ok {
 		return errors.New("runtime snapshot missing")
 	}
-	b.current = value
+	b.current = value.current
+	b.components = make(map[string]bool, len(value.components))
+	for name, enabled := range value.components {
+		b.components[name] = enabled
+	}
 	b.stopped = false
 	return nil
 }
@@ -92,7 +116,11 @@ func transactionFixture(t *testing.T) (*FileStore, *fakeTransactionBackend, Gene
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend := &fakeTransactionBackend{current: active.ID, snapshots: map[string]string{}}
+	backend := &fakeTransactionBackend{
+		current:    active.ID,
+		components: map[string]bool{"browser": true},
+		snapshots:  map[string]fakeRuntimeState{},
+	}
 	return store, backend, active, candidate, now, workspace
 }
 
@@ -325,6 +353,112 @@ func TestTransactionBackupRestoreAndUninstallPreserveWorkspace(t *testing.T) {
 	}
 }
 
+func TestTransactionComponentChangeUsesGenericTransaction(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	tick := now
+	engine := &TransactionEngine{
+		Store: store, Backend: backend,
+		Now: func() time.Time {
+			tick = tick.Add(time.Millisecond)
+			return tick
+		},
+	}
+
+	if err := engine.SetComponent(t.Context(), "browser", false); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Host.EnabledComponents) != 0 || backend.components["browser"] || backend.componentCalls != 1 {
+		t.Fatalf("disabled component state host=%#v backend=%#v calls=%d", snapshot.Host.EnabledComponents, backend.components, backend.componentCalls)
+	}
+	snapshotCount := backend.nextSnapshot
+	if err = engine.SetComponent(t.Context(), "browser", false); err != nil {
+		t.Fatal(err)
+	}
+	if backend.componentCalls != 1 || backend.nextSnapshot != snapshotCount {
+		t.Fatalf("idempotent disable mutated runtime: calls=%d snapshots=%d", backend.componentCalls, backend.nextSnapshot)
+	}
+
+	if err = engine.SetComponent(t.Context(), "browser", true); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Host.EnabledComponents) != 1 || snapshot.Host.EnabledComponents[0] != "browser" ||
+		!backend.components["browser"] || backend.componentCalls != 2 {
+		t.Fatalf("enabled component state host=%#v backend=%#v calls=%d", snapshot.Host.EnabledComponents, backend.components, backend.componentCalls)
+	}
+
+	lock, err := AcquireOperationLock(store.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	journal, err := OpenOperationJournal(store.Root, lock, OperationJournalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := journal.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var componentRecords int
+	for _, record := range records {
+		if record.Kind != OperationEnableComponent && record.Kind != OperationDisableComponent {
+			continue
+		}
+		componentRecords++
+		if record.State != OperationSucceeded || record.RecoveryBackupID == "" {
+			t.Fatalf("component operation = %#v", record)
+		}
+	}
+	if componentRecords != 2 {
+		t.Fatalf("component operation count = %d", componentRecords)
+	}
+}
+
+func TestTransactionComponentFailureRestoresPreviousState(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+	backend.healthErr = errors.New("component unhealthy")
+
+	if err := engine.SetComponent(t.Context(), "browser", false); err == nil || !strings.Contains(err.Error(), "component unhealthy") {
+		t.Fatalf("component change error = %v", err)
+	}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Host.EnabledComponents) != 1 || snapshot.Host.EnabledComponents[0] != "browser" ||
+		!backend.components["browser"] {
+		t.Fatalf("recovered component state host=%#v backend=%#v", snapshot.Host.EnabledComponents, backend.components)
+	}
+}
+
+func TestOptionalComponentTargetRejectsUnknownAndRequiredComponents(t *testing.T) {
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	generation := generationFixture(t, "1.0.0", now.Add(-time.Hour), 1)
+	if _, _, err := optionalComponentTarget(generation, nil, "unknown", true); err == nil {
+		t.Fatal("unknown component was accepted")
+	}
+
+	spec := releaseSpec("1.0.0", now.Add(-time.Hour), 1)
+	spec.Components = append(spec.Components, Component{Name: "required-addon", Digest: digest("e")})
+	required, err := NewGeneration(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = optionalComponentTarget(required, nil, "required-addon", true); err == nil ||
+		!strings.Contains(err.Error(), "required") {
+		t.Fatalf("required component error = %v", err)
+	}
+}
+
 func TestInitializeInstallUsesWorkspaceWithoutDeletingIt(t *testing.T) {
 	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 	candidate := generationFixture(t, "1.0.0", now.Add(-time.Hour), 1)
@@ -344,7 +478,7 @@ func TestInitializeInstallUsesWorkspaceWithoutDeletingIt(t *testing.T) {
 	if err = store.InitializeInstall(t.Context(), candidate, installation, now); err != nil {
 		t.Fatal(err)
 	}
-	backend := &fakeTransactionBackend{current: "uninstalled", snapshots: map[string]string{}}
+	backend := &fakeTransactionBackend{current: "uninstalled", snapshots: map[string]fakeRuntimeState{}}
 	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
 	manager := Manager{Store: store, Jobs: &fakeJobInventory{}, Applier: engine, Now: func() time.Time { return now }}
 	if _, err = manager.Prepare(t.Context()); err != nil {

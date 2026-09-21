@@ -102,6 +102,10 @@ func (b *fakeHostRuntimeBackend) Activate(_ context.Context, generation lifecycl
 	return nil
 }
 
+func (*fakeHostRuntimeBackend) SetComponent(context.Context, lifecycle.Generation, string, bool) error {
+	return nil
+}
+
 func (*fakeHostRuntimeBackend) Migrate(context.Context, []lifecycle.MigrationStep) error { return nil }
 func (*fakeHostRuntimeBackend) Restart(context.Context) error                            { return nil }
 func (b *fakeHostRuntimeBackend) Health(context.Context) error                           { return b.healthErr }
@@ -437,6 +441,16 @@ func TestHostMaintenanceOptionParsing(t *testing.T) {
 	}
 	if _, err = parseHostMaintenanceOptions("restore", nil, &stderr); err == nil {
 		t.Fatal("restore without backup id was accepted")
+	}
+	enable, err := parseHostMaintenanceOptions("enable", []string{"browser"}, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enable.Component != "browser" {
+		t.Fatalf("enable options = %#v", enable)
+	}
+	if _, err = parseHostMaintenanceOptions("disable", nil, &stderr); err == nil {
+		t.Fatal("disable without component was accepted")
 	}
 }
 

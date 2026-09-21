@@ -99,17 +99,17 @@ func (i launcherJournalInventory) ActiveJobs(ctx context.Context) ([]string, err
 
 func runHost(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	switch args[0] {
 	case "install":
 		return runHostInstall(args[1:], stdout, stderr)
-	case "backup", "restore", "rollback", "uninstall":
+	case "backup", "restore", "rollback", "enable", "disable", "uninstall":
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}
 	if args[0] != "update" || len(args) < 2 {
-		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	action := args[1]
