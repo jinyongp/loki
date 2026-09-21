@@ -94,6 +94,10 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/lifecycle"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/work/workspace"
     },
     {
@@ -267,6 +271,10 @@
     {
       "from": "loki/internal/githubapp",
       "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/platform/safeio"
     },
     {
       "from": "loki/internal/host/policy",
@@ -775,6 +783,14 @@
         "provider-private-key"
       ],
       "target": "integrations/github"
+    },
+    "loki/internal/host/lifecycle": {
+      "kind": "host",
+      "owner": "lifecycle",
+      "tags": [
+        "host-state"
+      ],
+      "target": "host/lifecycle"
     },
     "loki/internal/host/policy": {
       "kind": "host",
