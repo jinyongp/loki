@@ -45,6 +45,10 @@
       "to": "loki/internal/work/jobs"
     },
     {
+      "from": "loki/cmd/loki-bootstrap",
+      "to": "loki/internal/host/bootstrap"
+    },
+    {
       "from": "loki/cmd/loki",
       "to": "loki/internal/admin"
     },
@@ -285,6 +289,10 @@
       "to": "loki/internal/process"
     },
     {
+      "from": "loki/internal/host/bootstrap",
+      "to": "loki/internal/host/releases"
+    },
+    {
       "from": "loki/internal/host/assets",
       "to": "loki/internal/platform/safeio"
     },
@@ -431,6 +439,10 @@
     {
       "from": "loki/internal/state",
       "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/tools/bootstrapbuild",
+      "to": "loki/internal/host/releases"
     },
     {
       "from": "loki/tools/toolchainfetch",
@@ -627,6 +639,14 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/cmd/loki-bootstrap": {
+      "kind": "role",
+      "owner": "bootstrap",
+      "tags": [
+        "release-trust"
+      ],
+      "target": "cmd/loki-bootstrap"
+    },
     "loki/cmd/loki-executor": {
       "kind": "role",
       "owner": "executor",
@@ -806,6 +826,14 @@
       ],
       "target": "integrations/github"
     },
+    "loki/internal/host/bootstrap": {
+      "kind": "host",
+      "owner": "bootstrap",
+      "tags": [
+        "release-trust"
+      ],
+      "target": "host/bootstrap"
+    },
     "loki/internal/host/assets": {
       "kind": "host",
       "owner": "assets",
@@ -966,6 +994,15 @@
         "project-selector"
       ],
       "target": "work/toolchains"
+    },
+    "loki/tools/bootstrapbuild": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling",
+        "release-trust"
+      ],
+      "target": "tools/bootstrapbuild"
     },
     "loki/tools/toolchainfetch": {
       "kind": "tooling",

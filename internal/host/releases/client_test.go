@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +96,21 @@ func TestClientResolvesRoleScopedTargets(t *testing.T) {
 	}
 	assertDescriptor(t, toolchain, "toolchains/catalog-v7.json", toolchainData)
 
+	fetchedRelease, fetchedReleaseRaw, err := client.FetchRelease(t.Context(), "loki-1.2.3.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetchedRelease != release || !bytes.Equal(fetchedReleaseRaw, releaseData) {
+		t.Fatalf("fetched release = %#v, %q", fetchedRelease, fetchedReleaseRaw)
+	}
+	fetchedToolchain, fetchedToolchainRaw, err := client.FetchToolchain(t.Context(), "catalog-v7.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetchedToolchain != toolchain || !bytes.Equal(fetchedToolchainRaw, toolchainData) {
+		t.Fatalf("fetched toolchain = %#v, %q", fetchedToolchain, fetchedToolchainRaw)
+	}
+
 	for _, name := range []string{"metadata", "targets"} {
 		info, statErr := os.Stat(filepath.Join(stateRoot, name))
 		if statErr != nil || info.Mode().Perm() != 0700 {
@@ -102,6 +119,61 @@ func TestClientResolvesRoleScopedTargets(t *testing.T) {
 	}
 	if _, err = client.ResolveRelease(t.Context(), "../toolchains/catalog-v7.json"); err == nil {
 		t.Fatal("cross-namespace traversal was accepted")
+	}
+}
+
+func TestClientFetchesVerifiedTargetsAndReusesCache(t *testing.T) {
+	now := time.Now().UTC()
+	fixture := newRepositoryFixture(t, now)
+	repo := fixture.repository(t, 1, now.Add(24*time.Hour))
+	stateRoot := privateReleaseStateRoot(t)
+	client := openFixtureClient(t, fixture, repo, stateRoot)
+
+	descriptor, raw, err := client.FetchRelease(t.Context(), "loki-1.2.3.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte("release-manifest\n")
+	assertDescriptor(t, descriptor, "releases/loki-1.2.3.json", want)
+	if !bytes.Equal(raw, want) {
+		t.Fatalf("fetched release target = %q", raw)
+	}
+
+	info := targetInfo(t, descriptor.Path, want)
+	delete(repo.files, consistentTargetURL(fixture.baseURL, info))
+	client = openFixtureClient(t, fixture, repo, stateRoot)
+	_, cached, err := client.FetchRelease(t.Context(), "loki-1.2.3.json")
+	if err != nil {
+		t.Fatalf("cached verified target was not reusable: %v", err)
+	}
+	if !bytes.Equal(cached, want) {
+		t.Fatalf("cached release target = %q", cached)
+	}
+
+	tamperedRepo := fixture.repository(t, 1, now.Add(24*time.Hour))
+	tamperedInfo := targetInfo(t, descriptor.Path, want)
+	tamperedRepo.files[consistentTargetURL(fixture.baseURL, tamperedInfo)] = []byte("tampered-target\n")
+	tamperedClient := openFixtureClient(t, fixture, tamperedRepo, privateReleaseStateRoot(t))
+	if _, _, err = tamperedClient.FetchRelease(t.Context(), "loki-1.2.3.json"); err == nil {
+		t.Fatal("tampered release target was accepted")
+	}
+}
+
+func TestClientFetchRejectsTargetContentMismatch(t *testing.T) {
+	now := time.Now().UTC()
+	fixture := newRepositoryFixture(t, now)
+	repo := fixture.repository(t, 1, now.Add(24*time.Hour))
+	for targetURL, raw := range repo.files {
+		if strings.Contains(targetURL, "/targets/releases/") {
+			tampered := append([]byte(nil), raw...)
+			tampered[0] ^= 0x20
+			repo.files[targetURL] = tampered
+			break
+		}
+	}
+	client := openFixtureClient(t, fixture, repo, privateReleaseStateRoot(t))
+	if _, _, err := client.FetchRelease(t.Context(), "loki-1.2.3.json"); err == nil {
+		t.Fatal("release target with mismatched authenticated hash was accepted")
 	}
 }
 
@@ -438,9 +510,10 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 		toolchainKey = *options.toolchainKey
 	}
 
+	releaseInfo := targetInfo(t, releasePath, releaseData)
 	releases := metadata.Targets(options.releaseExpires)
 	releases.Signed.Version = version
-	releases.Signed.Targets[releasePath] = targetInfo(t, releasePath, releaseData)
+	releases.Signed.Targets[releasePath] = releaseInfo
 	if options.wrongReleaseKey {
 		signMetadata(t, releases, toolchainKey)
 	} else {
@@ -451,9 +524,10 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 		releasesRaw = corruptMetadataSignature(t, releasesRaw)
 	}
 
+	toolchainInfo := targetInfo(t, toolchainPath, toolchainData)
 	toolchains := metadata.Targets(options.toolchainExpires)
 	toolchains.Signed.Version = version
-	toolchains.Signed.Targets[toolchainPath] = targetInfo(t, toolchainPath, toolchainData)
+	toolchains.Signed.Targets[toolchainPath] = toolchainInfo
 	if options.wrongToolchainKey {
 		signMetadata(t, toolchains, releaseKey)
 	} else {
@@ -520,6 +594,8 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 		fmt.Sprintf("%s/%d.targets.json", f.baseURL, version):    targetsRaw,
 		fmt.Sprintf("%s/%d.releases.json", f.baseURL, version):   releasesRaw,
 		fmt.Sprintf("%s/%d.toolchains.json", f.baseURL, version): toolchainsRaw,
+		consistentTargetURL(f.baseURL, releaseInfo):              releaseData,
+		consistentTargetURL(f.baseURL, toolchainInfo):            toolchainData,
 	}}
 }
 
@@ -604,6 +680,16 @@ func targetInfo(t *testing.T, targetPath string, data []byte) *metadata.TargetFi
 		t.Fatal(err)
 	}
 	return info
+}
+
+func consistentTargetURL(baseURL string, info *metadata.TargetFiles) string {
+	hash := info.Hashes["sha256"].String()
+	directory := path.Dir(info.Path)
+	filename := hash + "." + path.Base(info.Path)
+	if directory == "." {
+		return baseURL + "/targets/" + filename
+	}
+	return baseURL + "/targets/" + directory + "/" + filename
 }
 
 func metaInfo(version int64, raw []byte) *metadata.MetaFiles {

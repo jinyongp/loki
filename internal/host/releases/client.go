@@ -127,6 +127,14 @@ func (c *Client) ResolveToolchain(ctx context.Context, relativePath string) (Tar
 	return c.resolve(ctx, "toolchains", relativePath)
 }
 
+func (c *Client) FetchRelease(ctx context.Context, relativePath string) (TargetDescriptor, []byte, error) {
+	return c.fetch(ctx, "releases", relativePath)
+}
+
+func (c *Client) FetchToolchain(ctx context.Context, relativePath string) (TargetDescriptor, []byte, error) {
+	return c.fetch(ctx, "toolchains", relativePath)
+}
+
 func (c *Client) resolve(ctx context.Context, namespace, relativePath string) (TargetDescriptor, error) {
 	if c == nil {
 		return TargetDescriptor{}, errors.New("release metadata client is not configured")
@@ -141,27 +149,71 @@ func (c *Client) resolve(ctx context.Context, namespace, relativePath string) (T
 		if resolveErr != nil {
 			return resolveErr
 		}
-		if info == nil || info.Path != targetPath {
-			return errors.New("verified target metadata is incomplete")
-		}
-		if info.Length <= 0 || info.Length > maxTargetBytes {
-			return errors.New("verified target length exceeds policy")
-		}
-		sum, ok := info.Hashes["sha256"]
-		if !ok || len(sum) != 32 {
-			return errors.New("verified target is missing a SHA-256 identity")
-		}
-		descriptor = TargetDescriptor{
-			Path:   info.Path,
-			Length: info.Length,
-			SHA256: hex.EncodeToString(sum),
-		}
-		return nil
+		descriptor, resolveErr = descriptorFromTargetInfo(targetPath, info)
+		return resolveErr
 	})
 	if err != nil {
 		return TargetDescriptor{}, err
 	}
 	return descriptor, nil
+}
+
+func (c *Client) fetch(ctx context.Context, namespace, relativePath string) (TargetDescriptor, []byte, error) {
+	if c == nil {
+		return TargetDescriptor{}, nil, errors.New("release metadata client is not configured")
+	}
+	targetPath, err := namespacedTargetPath(namespace, relativePath)
+	if err != nil {
+		return TargetDescriptor{}, nil, err
+	}
+	var descriptor TargetDescriptor
+	var raw []byte
+	err = c.withUpdater(ctx, func(update *updater.Updater) error {
+		info, fetchErr := update.GetTargetInfo(targetPath)
+		if fetchErr != nil {
+			return fetchErr
+		}
+		descriptor, fetchErr = descriptorFromTargetInfo(targetPath, info)
+		if fetchErr != nil {
+			return fetchErr
+		}
+		_, cached, fetchErr := update.FindCachedTarget(info, "")
+		if fetchErr != nil {
+			return fetchErr
+		}
+		if cached != nil {
+			raw = append([]byte(nil), cached...)
+			return nil
+		}
+		_, downloaded, fetchErr := update.DownloadTarget(info, "", "")
+		if fetchErr != nil {
+			return fetchErr
+		}
+		raw = append([]byte(nil), downloaded...)
+		return descriptor.VerifyBytes(raw)
+	})
+	if err != nil {
+		return TargetDescriptor{}, nil, err
+	}
+	return descriptor, raw, nil
+}
+
+func descriptorFromTargetInfo(targetPath string, info *metadata.TargetFiles) (TargetDescriptor, error) {
+	if info == nil || info.Path != targetPath {
+		return TargetDescriptor{}, errors.New("verified target metadata is incomplete")
+	}
+	if info.Length <= 0 || info.Length > maxTargetBytes {
+		return TargetDescriptor{}, errors.New("verified target length exceeds policy")
+	}
+	sum, ok := info.Hashes["sha256"]
+	if !ok || len(sum) != sha256.Size {
+		return TargetDescriptor{}, errors.New("verified target is missing a SHA-256 identity")
+	}
+	return TargetDescriptor{
+		Path:   info.Path,
+		Length: info.Length,
+		SHA256: hex.EncodeToString(sum),
+	}, nil
 }
 
 func (c *Client) withUpdater(ctx context.Context, fn func(*updater.Updater) error) error {
