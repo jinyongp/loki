@@ -1,6 +1,6 @@
 # Authenticated Release and Toolchain Metadata Selection
 
-Status: accepted for A13 WI-001  
+Status: accepted for A13 WI-001
 Evaluated: 2026-09-21
 
 ## Decision
