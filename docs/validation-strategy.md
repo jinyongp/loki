@@ -42,7 +42,7 @@ Integration checks may require a disposable external executable, host identity, 
 
 | Capability | Check | Required fixture |
 | --- | --- | --- |
-| Compose lifecycle POSIX ACL behavior | `LOKI_REQUIRE_POSIX_ACL_TESTS=1 go test ./internal/packaging -run 'TestComposeLifecycle'` | `setfacl` on PATH. Ordinary developer runs may skip these tests; release verification sets the require flag so absence is a failure. |
+| Compose topology/isolation smoke + workspace ACL behavior | `LOKI_IMAGE=<digest-pinned-image> ./scripts/accept-loki-compose.sh` | Disposable Linux/WSL2 Docker host with Compose v2, Buildx/BuildKit, and `setfacl`. This gate checks the portable container topology, role isolation, optional profiles, restart behavior, derived-image invariants, and the minimal workspace ACL preparation only. Host backup/update/rollback is validated by A11 host-manager acceptance instead of a shell lifecycle implementation. |
 | Chromium/CDP | `LOKI_REQUIRE_BROWSER_TESTS=1 LOKI_TEST_CHROME=/absolute/chromium go test ./internal/integrations/browser/...` | Explicit Chromium binary; `LOKI_TEST_CHROME_LIBS` when the candidate needs a non-default library path. |
 | Real devtools broker process | `LOKI_DEVTOOLS_BINARY=/absolute/devtools go test ./internal/devtools -run TestRealProcessInheritsBrokerSecrets` | Pinned devtools candidate binary. Synthetic secret only. |
 | Locked project execution contract | `LOKI_E2E_DEVTOOLS=... LOKI_E2E_PNPM=... LOKI_E2E_NODE=... LOKI_E2E_CHROMIUM=... go test ./internal/e2e -run TestProjectExecutionContract` | Four absolute candidate executables plus its isolated fixture/cache directories. |
@@ -68,7 +68,7 @@ The race detector proves only races observable in the exercised Go memory model.
 
 ## 5. Release and clean-host acceptance
 
-`scripts/verify-loki-release.sh` is a release-artifact gate, not a substitute for A14 clean-host/adversarial acceptance. It now sets `LOKI_REQUIRE_POSIX_ACL_TESTS=1`, so the lifecycle ACL coverage cannot disappear because the verifier host lacks `setfacl`.
+`scripts/verify-loki-release.sh` is a release-artifact gate, not a substitute for A14 clean-host/adversarial acceptance. It invokes the disposable Compose topology acceptance directly; that acceptance requires `setfacl`, so the workspace ACL gate cannot silently disappear on the verifier host.
 
 The current release verifier still does not make every optional development integration above mandatory. A13/A14 must wire the candidate artifacts into the integration/acceptance checks that are part of the released milestone and fail when a required fixture or check is absent. Required browser, MCP-only project execution, credential-bound workload, distinct-release update/recovery, and sandbox/permission checks may not be reported as successful release coverage when their test was skipped.
 
@@ -80,7 +80,7 @@ At the reviewed baseline, full normal and race runs failed in `internal/auth`, `
 
 - `internal/auth` and `internal/daemon`: deterministic test-fixture defects caused by ambient umask assumptions; keep in the default tier and fix the fixtures.
 - `internal/toolchain`: R9 product defect; keep in the default tier and do not skip or relax the expected executable mode.
-- Compose lifecycle tests in `internal/packaging`: explicit POSIX ACL integration prerequisite; developer runs may skip when `setfacl` is absent, while the release verifier requires it.
+- Compose topology acceptance: explicit Docker + POSIX ACL integration prerequisite. The disposable script requires `setfacl` and fails when it is absent; lifecycle transaction coverage belongs to the Go host-manager acceptance rather than `internal/packaging` shell tests.
 - Chromium/CDP, real devtools, project execution, root permission, OCI archive, and real OCI Job tests: explicit integration prerequisites listed above. The real OCI fixture now covers A05 plus A06/A07 network/endpoint/preview behavior, and the self-contained runner supplies its normal local-Docker inputs. Required release/acceptance coverage closes only when that runner actually records a pass on a supported host.
 
 This classification does not claim that the current Go candidate is release-ready. It prevents environment prerequisites from obscuring product regressions while the architecture remediation proceeds.

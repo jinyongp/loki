@@ -361,6 +361,12 @@ func (e *TransactionEngine) Backup(ctx context.Context) (BackupRecord, error) {
 	if err != nil {
 		return BackupRecord{}, e.recoverFailure(ctx, journal, record.ID, nil, err)
 	}
+	if err = e.Backend.Restart(ctx); err != nil {
+		return BackupRecord{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Health(ctx); err != nil {
+		return BackupRecord{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
 	if _, err = journal.MarkSucceeded(record.ID, e.now()); err != nil {
 		return BackupRecord{}, err
 	}
@@ -550,6 +556,22 @@ func (e *TransactionEngine) openJournal(ctx context.Context) (*OperationLock, *O
 	return lock, journal, nil
 }
 
+func (e *TransactionEngine) restoreRecoveryBackup(ctx context.Context, backup BackupRecord) error {
+	if err := e.Backend.Restore(ctx, backup.RuntimeRef); err != nil {
+		return err
+	}
+	if err := e.Store.RestoreBackup(ctx, backup); err != nil {
+		return err
+	}
+	if backup.Installed == nil {
+		return e.Backend.VerifyStopped(ctx)
+	}
+	if err := e.Backend.Restart(ctx); err != nil {
+		return err
+	}
+	return e.Backend.Health(ctx)
+}
+
 func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *OperationJournal) error {
 	_, found, err := journal.RecoverInterrupted(ctx, func(ctx context.Context, record OperationRecord) error {
 		if record.RecoveryBackupID == "" {
@@ -559,10 +581,7 @@ func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *Ope
 		if loadErr != nil {
 			return loadErr
 		}
-		if restoreErr := e.Backend.Restore(ctx, backup.RuntimeRef); restoreErr != nil {
-			return restoreErr
-		}
-		return e.Store.RestoreBackup(ctx, backup)
+		return e.restoreRecoveryBackup(ctx, backup)
 	}, e.now())
 	if !found {
 		return err
@@ -592,10 +611,7 @@ func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *Operati
 		}
 		return original
 	}
-	recoveryErr := e.Backend.Restore(ctx, backup.RuntimeRef)
-	if recoveryErr == nil {
-		recoveryErr = e.Store.RestoreBackup(ctx, *backup)
-	}
+	recoveryErr := e.restoreRecoveryBackup(ctx, *backup)
 	if recoveryErr != nil {
 		_, persistErr := journal.MarkRecoveryFailed(operationID, recoveryErr, e.now())
 		if persistErr != nil {

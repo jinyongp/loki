@@ -17,11 +17,22 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/host/lifecycle"
+	lifecyclecompose "loki/internal/host/lifecycle/compose"
 	"loki/internal/host/releases"
 )
 
-func newHostRuntimeBackend(*lifecycle.FileStore) (lifecycle.TransactionBackend, error) {
-	return nil, errors.New("host runtime adapter is not configured")
+func newHostRuntimeBackend(store *lifecycle.FileStore) (lifecycle.TransactionBackend, error) {
+	if store == nil || store.Root == "" {
+		return nil, errors.New("host lifecycle store is not configured")
+	}
+	docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER"))
+	if docker == "" {
+		docker = "docker"
+	}
+	return lifecyclecompose.New(lifecyclecompose.Config{
+		StateRoot: store.Root,
+		Runner:    lifecyclecompose.ExecRunner{Executable: docker},
+	})
 }
 
 type hostInstallOptions struct {

@@ -80,18 +80,8 @@ removal of the preserved Python implementation are separate steps. The older
 workstream's deployment-hash invariant remains unverified; Python MCP liveness
 alone is not evidence of filesystem equality.
 
-## Lifecycle commands
+## Lifecycle note
 
-Run from the Loki repository with these non-secret path settings:
+This document records an older validation deployment. The former Compose lifecycle shell used by that deployment has been retired by the transactional host-manager work. Do not use this historical deployment as evidence for current backup, restore, update or rollback semantics.
 
-```sh
-export LOKI_COMPOSE_PROJECT=loki-validation
-export LOKI_COMPOSE_STATE_DIR=/home/jinyongp/.local/state/loki-validation
-export LOKI_GITHUB_CONFIG_FILE=/home/jinyongp/.config/loki/github-validation.toml
-export LOKI_GITHUB_PRIVATE_KEY_FILE=/home/jinyongp/.config/loki/secrets/github-app.pem
-./scripts/loki-compose-lifecycle.sh health
-```
-
-Use the same environment for restart, backup and restore. The successful live
-backup is `backups/live-github-55bd835` below the lifecycle state directory.
-Keep backups private: they contain runtime vault state and its master key.
+For a retained validation stack, direct `docker compose ps`/health inspection may still be used as a topology diagnostic with its existing non-secret configuration paths. Current lifecycle validation must use `loki host` and the A11/A14 acceptance gates, which record a durable operation journal and explicit recovery outcome.

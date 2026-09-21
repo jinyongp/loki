@@ -21,6 +21,8 @@ type fakeTransactionBackend struct {
 	snapshots      map[string]fakeRuntimeState
 	nextSnapshot   int
 	componentCalls int
+	restartCalls   int
+	healthCalls    int
 	healthErr      error
 	restoreErr     error
 	stopped        bool
@@ -64,10 +66,16 @@ func (b *fakeTransactionBackend) SetComponent(_ context.Context, _ Generation, n
 
 func (b *fakeTransactionBackend) Migrate(context.Context, []MigrationStep) error { return nil }
 func (b *fakeTransactionBackend) Restart(context.Context) error {
+	b.restartCalls++
 	b.stopped = false
 	return nil
 }
-func (b *fakeTransactionBackend) Health(context.Context) error { return b.healthErr }
+func (b *fakeTransactionBackend) Health(context.Context) error {
+	b.healthCalls++
+	err := b.healthErr
+	b.healthErr = nil
+	return err
+}
 func (b *fakeTransactionBackend) Restore(_ context.Context, ref string) error {
 	if b.restoreErr != nil {
 		return b.restoreErr
@@ -294,6 +302,17 @@ func TestTransactionRollbackCanRecoverUninstall(t *testing.T) {
 	if backend.current != active.ID || snapshot.Installed == nil || snapshot.Installed.ID != active.ID ||
 		snapshot.Installation == nil || snapshot.Installation.Workspace != workspace {
 		t.Fatalf("rollback after uninstall runtime=%q snapshot=%#v", backend.current, snapshot)
+	}
+}
+
+func TestTransactionBackupRestartsAndHealthChecksRuntime(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+	if _, err := engine.Backup(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if backend.restartCalls != 1 || backend.healthCalls != 1 || backend.stopped {
+		t.Fatalf("backup runtime restart=%d health=%d stopped=%v", backend.restartCalls, backend.healthCalls, backend.stopped)
 	}
 }
 

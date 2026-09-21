@@ -307,11 +307,4 @@ func TestComposeGitHubPrivateKeyIsRuntimeEphemeral(t *testing.T) {
 	if strings.Contains(string(dockerfile), "github_app_private_key") || strings.Contains(string(dockerfile), "BEGIN PRIVATE KEY") {
 		t.Fatal("GitHub private key is referenced by the image build")
 	}
-	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts", "loki-compose-lifecycle.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(lifecycle), "loki-private") || !strings.Contains(string(lifecycle), "for n in runtime-state runner-state") {
-		t.Fatal("GitHub private key entered the Compose backup set")
-	}
 }

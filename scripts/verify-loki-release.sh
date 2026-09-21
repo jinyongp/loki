@@ -25,9 +25,6 @@ inspect_image() {
 inspect_image "$core_image" Loki
 inspect_image "$browser_image" 'Loki Browser'
 
-# Release verification must not silently skip the POSIX ACL lifecycle checks.
-# Developer/unit runs may skip them when setfacl is unavailable.
-export LOKI_REQUIRE_POSIX_ACL_TESTS=1
 go test ./...
 go test -race ./...
 go vet ./...

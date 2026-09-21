@@ -1,0 +1,280 @@
+name: loki
+
+x-loki-service: &loki-service
+  image: ${LOKI_IMAGE:-loki:local}
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 10s
+
+services:
+  prepare:
+    <<: *loki-service
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - >-
+        for path in
+        /var/lib/loki/runner/state /var/lib/loki/runner/config
+        /var/lib/loki/runner/gh-config /var/lib/loki/runner/data
+        /var/lib/loki/runner/xdg-state /var/lib/loki/runner/snapshots
+        /var/lib/loki/runner/agents/skills
+        /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
+        /var/cache/loki/playwright /var/cache/loki/go-build
+        /var/cache/loki/go-mod /var/cache/loki/pip;
+        do install -d -o 10000 -g 10000 -m 0700 "$$path"; done;
+        install -d -o 0 -g 10001 -m 0750 /run/loki/signing;
+        install -d -o 10003 -g 10001 -m 0750 /run/loki/browser;
+        install -d -o 0 -g 10001 -m 0750 /run/loki/launcher;
+        install -d -o 10004 -g 10001 -m 0750 /run/loki/executor;
+        install -d -o 0 -g 0 -m 0700 /var/lib/loki/launcher
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    network_mode: none
+    restart: "no"
+    volumes:
+      - runner-state:/var/lib/loki/runner
+      - user-skills:/var/lib/loki/runner/agents
+      - runner-cache:/var/cache/loki
+      - sockets:/run/loki
+      - launcher-state:/var/lib/loki/launcher
+      - launcher-socket:/run/loki/launcher
+      - executor-socket:/run/loki/executor
+    mem_limit: 32m
+    pids_limit: 16
+
+  egress:
+    <<: *loki-service
+    command: [egress-proxy, --host, 0.0.0.0, --port, "18766", --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --policy, /usr/share/doc/loki/egress-policy.json, --profile, dependency-install, --audit, /var/log/loki/audit.jsonl, --forward-host, 0.0.0.0, --forward-port, "18765", --forward-target, "mcp:18765"]
+    user: "10002:10002"
+    networks: [private, outbound]
+    ports: ["127.0.0.1:18765:18765"]
+    tmpfs:
+      - /tmp:uid=10002,gid=10002,mode=0700
+      - /var/log/loki:uid=10002,gid=10002,mode=0700
+    healthcheck:
+      test: [CMD-SHELL, "nc -z 127.0.0.1 18766 && nc -z 127.0.0.1 18765"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    mem_limit: 128m
+    pids_limit: 64
+
+  browser-proxy:
+    <<: *loki-service
+    profiles: [browser]
+    command: [browser-proxy, --port, "18767", --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --port-guard-socket, /run/loki/runtime/control.sock, --port-guard-uid, "0"]
+    user: "10002:10002"
+    group_add: ["10001"]
+    networks: [private, outbound]
+    depends_on:
+      runtime: {condition: service_healthy}
+    volumes:
+      - sockets:/run/loki
+    tmpfs:
+      - /tmp:uid=10002,gid=10002,mode=0700
+    healthcheck:
+      test: [CMD-SHELL, "nc -z 127.0.0.1 18767"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 128m
+    pids_limit: 64
+
+  browser:
+    <<: *loki-service
+    image: ${LOKI_BROWSER_IMAGE:-loki-browser:local}
+    profiles: [browser]
+    command: [browser, --socket, /run/loki/browser/control.sock, --agent-uid, "10000", --socket-gid, "10001", --chrome, /usr/bin/chromium-browser, --profile, /var/lib/loki/browser/profile, --downloads, /var/lib/loki/browser-downloads, --config, /etc/loki/loki.toml, --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --proxy, "http://browser-proxy:18767"]
+    user: "10003:10003"
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      browser-proxy: {condition: service_healthy}
+    volumes:
+      - browser-state:/var/lib/loki/browser
+      - browser-downloads:/var/lib/loki/browser-downloads
+      - sockets:/run/loki
+    tmpfs:
+      - /tmp:uid=10003,gid=10003,mode=0700
+    shm_size: 256m
+    healthcheck:
+      test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/browser/control.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 1g
+    pids_limit: 256
+
+  signing:
+    <<: *loki-service
+    profiles: [signing]
+    command: [signing-agent, --private-socket, /run/loki/signing/private.sock, --public-socket, /run/loki/signing/agent.sock, --key, /var/lib/loki/signing/key, --runner-uid, "10000", --socket-gid, "10001"]
+    user: "0:0"
+    cap_add: [CHOWN]
+    network_mode: none
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+    volumes:
+      - signing-state:/var/lib/loki/signing
+      - sockets:/run/loki
+      - ${LOKI_SIGNING_KEY_FILE:-/dev/null}:/var/lib/loki/signing/key:ro
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/signing/agent.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+    pids_limit: 32
+
+  launcher:
+    <<: *loki-service
+    entrypoint: [/opt/loki/bin/loki-launcher]
+    command: [--config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/launcher.json, --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --image, "${LOKI_JOB_IMAGE:?set LOKI_JOB_IMAGE to an immutable OCI digest reference}", --gateway-image, "${LOKI_JOB_IMAGE:?set LOKI_JOB_IMAGE to an immutable OCI digest reference}", --workspace-source, "${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}"]
+    user: "0:0"
+    group_add: ["10001"]
+    network_mode: none
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+    volumes:
+      - launcher-state:/var/lib/loki/launcher
+      - launcher-socket:/run/loki/launcher
+      - /run/docker.sock:/run/docker.sock
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/launcher/control.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    pids_limit: 128
+
+  executor:
+    <<: *loki-service
+    entrypoint: [/opt/loki/bin/loki-executor]
+    command: [--config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/executor.json, --execution-contract, /usr/share/doc/loki/container-execution-contract.json]
+    user: "10004:10001"
+    network_mode: none
+    depends_on:
+      launcher: {condition: service_healthy}
+    volumes:
+      - launcher-socket:/run/loki/launcher
+      - executor-socket:/run/loki/executor
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    tmpfs:
+      - /tmp:uid=10004,gid=10001,mode=0700
+    healthcheck:
+      test: [CMD, /bin/sh, -c, "test -S /run/loki/executor/control.sock"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 10s
+    mem_limit: 256m
+    pids_limit: 64
+
+  runtime:
+    <<: *loki-service
+    command: [runtime, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --github-private-key-file, /run/loki-private/github-app-private-key, --layout, /etc/loki/runtime.json]
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID]
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      prepare: {condition: service_completed_successfully}
+      egress: {condition: service_healthy}
+    volumes:
+      - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
+      - runtime-state:/var/lib/loki/runtime
+      - runner-state:/var/lib/loki/runner
+      - user-skills:/var/lib/loki/runner/agents
+      - runner-cache:/var/cache/loki
+      - sockets:/run/loki
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    secrets:
+      - source: github_app_private_key
+        target: /run/loki-private/github-app-private-key
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=0700
+      - /run/loki-private:uid=0,gid=0,mode=0700
+      - /var/tmp/loki/runner:uid=10000,gid=10000,mode=0700
+      - /var/tmp/loki/github:uid=0,gid=10001,mode=0710
+    healthcheck:
+      test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/runtime/control.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 2
+      start_period: 30s
+    mem_limit: 1g
+    pids_limit: 512
+
+  mcp:
+    <<: *loki-service
+    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
+    user: "10000:10000"
+    group_add: ["10001"]
+    networks: [private]
+    depends_on:
+      runtime: {condition: service_healthy}
+      executor: {condition: service_healthy}
+    volumes:
+      - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
+      - runner-state:/var/lib/loki/runner
+      - user-skills:/home/runner/.agents:ro
+      - sockets:/run/loki
+      - executor-socket:/run/loki/executor
+    configs:
+      - source: github_config
+        target: /etc/loki/github.toml
+    secrets: [mcp_token]
+    tmpfs:
+      - /tmp:uid=10000,gid=10000,mode=0700
+    healthcheck:
+      test: [CMD, /opt/loki/bin/loki, health, --unix, /run/loki/runtime/control.sock, --tcp, "127.0.0.1:18765"]
+      interval: 2s
+      timeout: 1s
+      retries: 2
+      start_period: 30s
+    mem_limit: 512m
+    pids_limit: 128
+
+networks:
+  private: {internal: true}
+  outbound: {}
+
+volumes:
+  browser-downloads: {}
+  browser-state: {}
+  executor-socket: {}
+  launcher-socket: {}
+  launcher-state: {}
+  runtime-state: {}
+  runner-state: {}
+  user-skills: {}
+  runner-cache: {}
+  signing-state: {}
+  sockets: {}
+
+configs:
+  github_config:
+    file: ${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}
+
+secrets:
+  mcp_token:
+    file: ${LOKI_MCP_TOKEN_FILE:?set LOKI_MCP_TOKEN_FILE to a token file}
+  github_app_private_key:
+    file: ${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 umask 077
 
@@ -7,11 +8,10 @@ image=${LOKI_IMAGE:-loki:local}
 browser_image=${LOKI_BROWSER_IMAGE:-}
 docker=${LOKI_DOCKER:-docker}
 root=$(mktemp -d "${TMPDIR:-/tmp}/loki-compose-acceptance.XXXXXX")
-state=$root/state
 workspace=$root/workspace
-backup=$root/backup
+token_file=$root/mcp-token
 project=lokiaccept$$
-upgrade_image=$project:upgrade
+derived_image=$project:derived
 before=$root/invariants.before
 after=$root/invariants.after
 
@@ -19,9 +19,10 @@ die() { printf 'loki-compose-acceptance: %s\n' "$*" >&2; exit 1; }
 
 compose() {
   LOKI_IMAGE=$image \
+  LOKI_JOB_IMAGE=$image \
   LOKI_BROWSER_IMAGE=${browser_image:-loki-browser:local} \
   LOKI_WORKSPACE=$workspace \
-  LOKI_MCP_TOKEN_FILE=$state/mcp-token \
+  LOKI_MCP_TOKEN_FILE=$token_file \
     "$docker" compose --project-name "$project" --file "$repo/compose.yaml" "$@"
 }
 
@@ -84,7 +85,7 @@ cleanup() {
     compose --profile browser --profile signing logs --tail 100 browser browser-proxy signing >&2 || true
   fi
   compose --profile browser --profile signing down --volumes --remove-orphans >/dev/null 2>&1 || true
-  "$docker" image rm "$upgrade_image" >/dev/null 2>&1 || true
+  "$docker" image rm "$derived_image" >/dev/null 2>&1 || true
   rm -rf -- "$root"
   exit "$result"
 }
@@ -96,21 +97,22 @@ command -v setfacl >/dev/null || die "setfacl is required"
 case $(uname -s) in Linux) ;; *) die "current acceptance target must be Linux or WSL2" ;; esac
 if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then host=wsl2; else host=linux; fi
 
-snapshot_invariants "$before"
+mkdir -p "$workspace"
+setfacl -m u:10000:rwx,d:u:10000:rwx "$workspace"
 token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-printf %s "$token" |
-  LOKI_COMPOSE_PROJECT=$project LOKI_COMPOSE_STATE_DIR=$state LOKI_IMAGE=$image \
-    "$repo/scripts/loki-compose-lifecycle.sh" initialize "$workspace" "$image"
+printf %s "$token" >"$token_file"
+chmod 0444 "$token_file"
 
-life() {
-  LOKI_COMPOSE_PROJECT=$project LOKI_COMPOSE_STATE_DIR=$state \
-    "$repo/scripts/loki-compose-lifecycle.sh" "$@"
-}
-
-life install
-life health
+snapshot_invariants "$before"
+compose config --quiet
+compose up -d --remove-orphans
+for service in egress launcher executor runtime mcp; do
+  wait_healthy "$service" || die "$service is unhealthy"
+done
 services=$(compose ps --services --status running)
-for service in egress runtime mcp; do grep -qx "$service" <<<"$services" || die "$service is not running"; done
+for service in egress launcher executor runtime mcp; do
+  grep -qx "$service" <<<"$services" || die "$service is not running"
+done
 for service in browser browser-proxy signing; do
   if grep -qx "$service" <<<"$services"; then die "optional service started in the core profile: $service"; fi
 done
@@ -119,56 +121,46 @@ assert_networks runtime "${project}_private"
 assert_networks mcp "${project}_private"
 assert_networks egress "$(printf '%s\n%s' "${project}_outbound" "${project}_private" | sort)"
 assert_no_mount mcp /var/lib/loki/runtime
+assert_no_mount executor /workspace
+assert_no_mount executor /run/docker.sock
 assert_not_inspectable mcp "$token"
 assert_not_inspectable egress "$token"
 
-life restart
-life health
-compose exec -T --user 10000:10000 mcp sh -ec 'printf "runner-owned\n" > /var/lib/loki/runner/restore-owner-check; chmod 0600 /var/lib/loki/runner/restore-owner-check'
-life backup "$backup"
-life restore "$backup"
-compose exec -T --user 10000:10000 mcp sh -ec 'test "$(cat /var/lib/loki/runner/restore-owner-check)" = runner-owned; test "$(stat -c %u:%g /var/lib/loki/runner/restore-owner-check)" = 10000:10000; rm /var/lib/loki/runner/restore-owner-check'
-rotated_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-printf %s "$rotated_token" | life rotate-credentials
-assert_not_inspectable mcp "$token"
-assert_not_inspectable mcp "$rotated_token"
-assert_not_inspectable egress "$token"
-assert_not_inspectable egress "$rotated_token"
-
-"$docker" tag "$image" "$upgrade_image"
-life upgrade "$upgrade_image"
-test "$(cat "$state/current-image")" = "$upgrade_image" || die "upgrade image was not selected"
-life rollback
-test "$(cat "$state/current-image")" = "$image" || die "rollback image was not restored"
+compose restart
+for service in egress launcher executor runtime mcp; do
+  wait_healthy "$service" || die "$service is unhealthy after restart"
+done
 
 base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
 "$docker" buildx build --quiet --load \
   --build-arg "LOKI_BASE=$image" \
   --build-arg "LOKI_BASE_ID=$base_id" \
   --file "$repo/packaging/container/derived/Dockerfile" \
-  --tag "$upgrade_image" "$repo" >/dev/null
-"$repo/scripts/verify-loki-derived-image.sh" "$image" "$upgrade_image"
+  --tag "$derived_image" "$repo" >/dev/null
+"$repo/scripts/verify-loki-derived-image.sh" "$image" "$derived_image"
 
 if test -n "$browser_image"; then
-  compose --profile browser up -d browser
+  compose --profile browser up -d browser browser-proxy
+  wait_healthy browser-proxy || die "browser proxy is unhealthy"
   wait_healthy browser || die "browser profile is unhealthy"
   assert_networks browser "${project}_private"
   assert_networks browser-proxy "$(printf '%s\n%s' "${project}_outbound" "${project}_private" | sort)"
   for service in browser browser-proxy; do
     assert_no_mount "$service" /workspace
     assert_no_mount "$service" /var/lib/loki/runtime
-    assert_not_inspectable "$service" "$rotated_token"
+    assert_not_inspectable "$service" "$token"
   done
-  life health
 fi
 
 if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
   test -f "$LOKI_SIGNING_KEY_FILE" || die "signing key does not exist"
   LOKI_SIGNING_KEY_FILE=$LOKI_SIGNING_KEY_FILE compose --profile signing up -d signing
   wait_healthy signing || die "signing profile is unhealthy"
-  life health
+  assert_no_mount signing /workspace
+  assert_no_mount signing /var/lib/loki/runtime
+  assert_not_inspectable signing "$token"
 fi
 
 snapshot_invariants "$after"
 cmp "$before" "$after" || die "an invariant source or state path changed"
-printf 'loki-compose-acceptance: passed on %s\n' "$host"
+printf 'loki-compose-acceptance: passed topology/isolation smoke on %s\n' "$host"

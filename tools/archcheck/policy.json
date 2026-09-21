@@ -98,6 +98,10 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/lifecycle/compose"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/host/releases"
     },
     {
@@ -277,7 +281,23 @@
       "to": "loki/internal/process"
     },
     {
+      "from": "loki/internal/host/assets",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
       "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/assets"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/lifecycle"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
       "to": "loki/internal/platform/safeio"
     },
     {
@@ -403,6 +423,10 @@
     {
       "from": "loki/tools/toolchainfetch",
       "to": "loki/internal/work/toolchains"
+    },
+    {
+      "from": "loki/tools/renderhostassets",
+      "to": "loki/internal/host/assets"
     },
     {
       "from": "loki/internal/service",
@@ -788,6 +812,14 @@
       ],
       "target": "integrations/github"
     },
+    "loki/internal/host/assets": {
+      "kind": "host",
+      "owner": "assets",
+      "tags": [
+        "host-assets"
+      ],
+      "target": "host/assets"
+    },
     "loki/internal/host/lifecycle": {
       "kind": "host",
       "owner": "lifecycle",
@@ -795,6 +827,14 @@
         "host-state"
       ],
       "target": "host/lifecycle"
+    },
+    "loki/internal/host/lifecycle/compose": {
+      "kind": "host-adapter",
+      "owner": "lifecycle",
+      "tags": [
+        "host-state"
+      ],
+      "target": "host/lifecycle/compose"
     },
     "loki/internal/host/policy": {
       "kind": "host",
@@ -938,6 +978,15 @@
         "tooling"
       ],
       "target": "tools/toolchainfetch"
+    },
+    "loki/tools/renderhostassets": {
+      "kind": "tooling",
+      "owner": "assets",
+      "tags": [
+        "tooling",
+        "host-assets"
+      ],
+      "target": "tools/renderhostassets"
     },
     "loki/internal/work/jobs": {
       "kind": "work",

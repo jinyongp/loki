@@ -4,79 +4,72 @@ The current verified host targets are Linux and WSL2. The repository `compose.ya
 
 ## Requirements
 
-Install current Docker with Compose v2 and Buildx/BuildKit, then build or load a Loki image whose `org.opencontainers.image.title` label is `Loki`. Choose an absolute workspace path. On Linux and WSL2, a newly created empty workspace receives an ACL for container UID 10000 plus an inheritable default. Existing workspaces are never modified and must already be readable, writable, and searchable by UID 10000. Service health confirms bind-mount access during install. The lifecycle script keeps operator state under `${XDG_STATE_HOME:-$HOME/.local/state}/loki-compose` by default. Override it with `LOKI_COMPOSE_STATE_DIR` when multiple installations are needed.
+Install current Docker with Compose v2 and Buildx/BuildKit, and choose an absolute workspace path. The repository `compose.yaml` is a generated developer view of the canonical host asset embedded under `internal/host/assets`; edit the canonical asset and regenerate the developer view instead of maintaining a second deployment source.
 
-The state directory is mode `0700`. Its `mcp-token` is the single Compose client-token file. The file is mode `0444` because the non-root MCP container must read the bind-mounted Compose secret; the private parent directory prevents other host users from opening it. The token must contain at least 43 characters (256 bits of encoded entropy). It is never accepted as an argument or printed.
+Lifecycle mutation is owned by the Go host manager. The retired Compose lifecycle shell is not an install/update/rollback implementation. A source checkout may still use Docker Compose directly for topology and isolation smoke tests, but durable install, backup, restore, update, rollback, optional-component mutation and recovery all go through `loki host`.
 
-## Initialize and install
+## Host lifecycle
 
-Supply a token without a trailing newline through standard input:
-
-```sh
-printf %s "$TOKEN_FROM_YOUR_PASSWORD_MANAGER" |
-  ./scripts/loki-compose-lifecycle.sh initialize /absolute/workspace loki:local
-./scripts/loki-compose-lifecycle.sh install
-./scripts/loki-compose-lifecycle.sh health
-```
-
-`initialize` creates the workspace and private lifecycle state, validates the image label, Docker engine, Compose model, and paths, then stores the token atomically. `install` starts the core services and waits for all health checks. Run `preflight` independently before later maintenance.
-
-Only MCP is published, on `127.0.0.1:18765`. Runtime state stays in the `loki_runtime-state` volume. Runner state stays in `loki_runner-state`.
-
-## Restart and rotate the client token
+The host manager requires an authenticated release generation. Until the source-checkout-free bootstrap from A13 is published, this interface is intended for verified candidate/release testing rather than an unauthenticated local image tag.
 
 ```sh
-./scripts/loki-compose-lifecycle.sh restart
-printf %s "$NEW_TOKEN" |
-  ./scripts/loki-compose-lifecycle.sh rotate-credentials
+# First install from an authenticated release manifest.
+loki host install \
+  --workspace /absolute/workspace \
+  --bootstrap-release-manifest /secure/loki/release-manifest.json
+
+# Inspect and apply a verified update.
+loki host update status
+loki host update prepare
+loki host update apply
+
+# Durable maintenance operations.
+loki host backup
+loki host restore BACKUP_ID
+loki host rollback
+loki host enable browser
+loki host disable browser
+loki host uninstall
 ```
 
-Rotation replaces the token atomically and recreates MCP and its egress relay. If the services do not become healthy, the prior token is restored. Update clients only after the command succeeds.
+For unsafe mutations, active or cleanup-pending Jobs block the operation by default. An operator may explicitly pass `--interrupt-active-jobs` only when interruption is intended. Backup, restore, rollback, update and optional-component operations share the same durable journal, recoverable lock, recovery snapshot and truthful `recovery_failed` outcome model.
 
-## Backup and restore
+The selected workspace is preserved by install, update, restore, rollback and uninstall. Deleting workspace data is not part of the lifecycle contract.
+
+## Source-tree Compose smoke
+
+For local development, use Compose directly with a private token file. This path tests the portable container topology; it does not become a second lifecycle engine.
 
 ```sh
-./scripts/loki-compose-lifecycle.sh backup /secure/backups/loki-2026-09-15
-./scripts/loki-compose-lifecycle.sh restore /secure/backups/loki-2026-09-15
+export LOKI_IMAGE=registry.example/loki@sha256:...
+export LOKI_JOB_IMAGE="$LOKI_IMAGE"
+export LOKI_WORKSPACE=/absolute/workspace
+export LOKI_MCP_TOKEN_FILE=/secure/loki/mcp-token
+
+docker compose config --quiet
+docker compose up -d --remove-orphans
+docker compose ps
 ```
 
-A backup briefly stops the stack and archives `runtime-state` and `runner-state` with SHA-256 checksums. It excludes the workspace because that bind mount remains under the operator's backup policy. It also excludes caches and sockets because they are recreated.
+Only MCP is published, on `127.0.0.1:18765`. Runtime and runner state stay in their named volumes. Browser and signing remain optional profiles.
 
-Restore verifies every checksum before stopping services. It first creates a safety backup of the current state. If extraction or health checks fail, the script attempts to recover that safety backup.
+## Run Linux or WSL2 topology acceptance
 
-Keep backup directories private: the runtime archive contains the encrypted vault and its master key.
-
-## Upgrade and rollback
-
-Load or pull the new image before upgrading:
-
-```sh
-./scripts/loki-compose-lifecycle.sh preflight
-./scripts/loki-compose-lifecycle.sh upgrade registry.example/loki:0.2.0
-./scripts/loki-compose-lifecycle.sh rollback
-```
-
-Upgrade validates the Loki image label, takes a consistent backup, records the current image, recreates services, and waits for health. A failed upgrade restores the prior image and state automatically. `rollback` later switches back to the recorded image and restores the matching pre-upgrade state.
-
-Lifecycle operations use a directory lock and reject concurrent maintenance. Backup destinations must not already exist. Image references, paths, and credentials are stored separately so secrets do not enter Compose arguments, process listings, or lifecycle output.
-
-## Run Linux or WSL2 acceptance
-
-Run the disposable acceptance harness with the exact image intended for installation:
+Run the disposable topology/isolation harness with the exact image intended for validation:
 
 ```sh
 LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/accept-loki-compose.sh
 ```
 
-The harness creates a unique Compose project under a private temporary directory, then checks installation, health, restart, backup and restore, credential rotation, upgrade and rollback, a derived project image, and clean removal. It also confirms that optional services stay stopped in the core profile, credentials do not appear in container inspection data, and runtime, MCP, browser, and proxy containers retain their network and mount boundaries. Set `LOKI_BROWSER_IMAGE` to exercise the browser profile and `LOKI_SIGNING_KEY_FILE` to exercise signing.
+The harness creates a unique Compose project under a private temporary directory, prepares the minimal workspace ACL, starts and restarts the core topology, checks role networks and mounts, verifies that credentials are absent from container inspection data, validates a derived project image, exercises optional browser/signing profiles when configured, and removes the disposable stack. Host backup/update/rollback acceptance is separate and belongs to A11/A14 host-manager gates rather than this script.
 
-To prove that an existing deployment remains unchanged, pass newline-separated files or directory roots through `LOKI_ACCEPTANCE_INVARIANT_PATHS`. The harness records file hashes before startup, compares them after every acceptance operation, and never mounts those paths into the test stack.
+To prove that an existing deployment remains unchanged, pass newline-separated files or directory roots through `LOKI_ACCEPTANCE_INVARIANT_PATHS`. The harness records file hashes before startup and compares them after the topology smoke without mounting those paths into the test stack.
 
 ## Future macOS extension seam
 
-macOS execution is outside the current support and acceptance gate. The reserved future host entry point is `scripts/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep `compose.yaml`, the OCI images, container paths, service identities, network boundaries, and lifecycle state format unchanged.
+macOS execution is outside the current support and acceptance gate. The reserved future topology entry point is `scripts/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep the canonical Compose asset, OCI images, container paths, service identities and network boundaries unchanged.
 
-That adapter must validate bind-mount sharing for the selected absolute workspace, provide host-specific workspace permission preparation in place of the Linux ACL step, select a Docker context, and then exercise the same core, optional-profile, recovery, credential, and cleanup assertions as `scripts/accept-loki-compose.sh`. Adding the adapter must not weaken the Linux or WSL2 gates.
+That adapter must validate bind-mount sharing for the selected absolute workspace, provide the host-specific equivalent of the Linux workspace-permission preparation, select a Docker context, and exercise the same topology/isolation assertions as `scripts/accept-loki-compose.sh`. Host lifecycle semantics remain the Go host manager's responsibility on every supported host.
 
 ## Add project runtimes
 
@@ -93,12 +86,11 @@ docker buildx build --load \
   --tag local/loki-project:current \
   .
 ./scripts/verify-loki-derived-image.sh "$BASE_REF" local/loki-project:current
-./scripts/loki-compose-lifecycle.sh upgrade local/loki-project:current
 ```
 
 Copy project runtime binaries and support files only under `/usr/local` or `/opt/project`. Keep the inherited entrypoint, command, user, working directory, labels, Loki binaries, devtools, rg, identity database, workspace metadata, and volume declarations.
 
-The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for `LOKI_IMAGE`.
+The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for the portable topology smoke. Durable host updates require an authenticated release generation and go through `loki host update prepare|apply`; a local image tag is not an update identity.
 
 ## Configure the optional GitHub App
 

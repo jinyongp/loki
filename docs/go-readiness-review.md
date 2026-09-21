@@ -23,7 +23,7 @@ The [architecture improvement plan](architecture-improvement-plan.md) is the rem
 | Workspace and Git | `internal/policy`, `internal/work/workspace`, `internal/work/workspace/git`, `internal/transport/mcp/workspace` | Descriptor-based path safety, nested repositories, deletion/move, filters, CAS scope, checkpoints, confined Git execution and MCP binding ownership |
 | Credentials and state | `internal/secret`, `internal/state`, `internal/admin`, `internal/auth`, `internal/audit`, `internal/githubapp` | Managed versus application secrets, injection, parser semantics, transactions, token scope and audit/recovery claims |
 | Components and connectivity | `internal/integrations/browser`, `internal/integrations/browser/internal/cdp`, `internal/egress`, `internal/portguard`, `internal/previews`, `internal/artifacts`, `internal/signing`, `internal/dockerproxy` | Cross-container endpoints, egress profiles, browser lifecycle, port ownership, sharing and broker authority |
-| Distribution and verification | `compose.yaml`, `packaging/`, `scripts/`, `internal/toolchain`, `internal/packaging`, `internal/e2e` | Archive installation, ownership, release integrity, lifecycle state, actual acceptance coverage and skipped tests |
+| Distribution and verification | `compose.yaml`, `packaging/`, `scripts/`, `internal/work/toolchains`, `internal/host/lifecycle`, `internal/packaging`, `internal/e2e` | Archive installation, ownership, release integrity, lifecycle state, actual acceptance coverage and skipped tests |
 | Historical implementation | `legacy/python/` and migration documents | Inherited defects and native-host assumptions; no feature-for-feature compatibility obligation |
 
 All Go package groups were inventoried with their source/test sizes and internal dependencies. Critical paths were followed from entrypoint to enforcement, not judged solely by the existence of a helper, a schema, or a passing mock test. Clean-host and operational integration evidence remains a separate required gate.
@@ -43,7 +43,7 @@ All Go package groups were inventoried with their source/test sizes and internal
 | Live provider calls or actual credential access | Not run |
 | Dependency vulnerability/advisory attestation | Not performed; no claim that dependencies are vulnerability-free |
 
-The four failing packages are `internal/auth`, `internal/daemon`, `internal/toolchain`, and `internal/packaging`. Auth/daemon failures expose test assumptions about permissions under umask 0077. Compose lifecycle tests require unavailable `setfacl`. The toolchain executable-mode failure has a reproduced product consequence, described in R9; it must not be dismissed as merely an environment mismatch.
+At the reviewed baseline, the failing areas included auth/daemon fixture modes, toolchain executable-mode handling, and the old Compose lifecycle ACL integration. Those findings are historical evidence, not the current package layout: toolchains now live under `internal/work/toolchains`, and the retired Compose lifecycle shell no longer owns backup/update/rollback. The current Compose topology acceptance requires `setfacl` explicitly, while host lifecycle transaction acceptance is owned by A11.
 
 The nine skipped tests are Chromium pipe/lifecycle/interactions/debug/download tests, the project-execution contract, real runner-versus-vault permission checks, real devtools secret-process integration, and OCI archive content checks. Unit tests therefore do not establish live browser connectivity, actual secret-process isolation, or a complete MCP-only development workflow.
 
@@ -153,7 +153,7 @@ A03/A05/A06/A07 implementation status: project execution now uses the durable `w
 
 Priority: P0 for distribution/toolchain installation. Evidence: reproduced with an offline synthetic archive.
 
-`internal/toolchain/install.go:extractZip` checks link targets lexically but creates subsequent entries using path-based filesystem operations that follow symlink parents. A small archive with chained relative symlinks and a regular file was accepted and wrote a marker into a sibling directory outside the intended extraction staging directory. The entire fixture, including that sibling, was inside a disposable test root.
+`internal/work/toolchains/install.go:extractZip` checks link targets lexically but creates subsequent entries using path-based filesystem operations that follow symlink parents. A small archive with chained relative symlinks and a regular file was accepted and wrote a marker into a sibling directory outside the intended extraction staging directory. The entire fixture, including that sibling, was inside a disposable test root.
 
 The fixture had the checksum supplied by its test manifest. Checksums identify bytes; they do not make a dangerous archive safe to extract. This is not a demonstration of replacing a trusted release remotely. It is a missing containment property in the privileged installation primitive.
 
@@ -193,7 +193,7 @@ Current contract status: the generated Go catalog now uses action-specific discr
 
 Priority: P1. Evidence: source-confirmed; destructive lifecycle commands were not run.
 
-`scripts/loki-compose-lifecycle.sh` attempts rollback with `restore_payload ... || true` and then reports that the previous state/release was restored. Recovery can therefore fail while the message asserts success. Image, previous-image and rollback-backup are separate state publications. Backup stops services; update/restore have no durable job-drain or operation journal. A directory lock can be stranded after an untrappable interruption.
+The former `scripts/loki-compose-lifecycle.sh` transaction engine is retired by A11/S06. Compose remains a portable topology/isolation contract, while installation, backup, restore, update, rollback and optional-component mutation run through the Go host manager with one durable journal, recoverable lock, explicit job-drain policy and truthful recovery outcomes.
 
 Only runtime-state and runner-state are archived by the current primitive. External configuration, selected image/Compose assets, token files, signing keys and optional-component state are not a complete versioned recovery set merely because this backup exists. Some may intentionally remain externally managed, but the recovery contract must declare and verify that dependency.
 
