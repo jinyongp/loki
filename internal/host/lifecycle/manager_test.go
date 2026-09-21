@@ -61,6 +61,33 @@ func (a *fakeApplier) Apply(_ context.Context, request ApplyRequest) (ApplyResul
 	return result, nil
 }
 
+type fakeMaintainer struct {
+	backupCalls    int
+	restoreCalls   []string
+	rollbackCalls  int
+	uninstallCalls int
+}
+
+func (m *fakeMaintainer) Backup(context.Context) (BackupRecord, error) {
+	m.backupCalls++
+	return BackupRecord{}, nil
+}
+
+func (m *fakeMaintainer) Restore(_ context.Context, backupID string) error {
+	m.restoreCalls = append(m.restoreCalls, backupID)
+	return nil
+}
+
+func (m *fakeMaintainer) Rollback(context.Context) error {
+	m.rollbackCalls++
+	return nil
+}
+
+func (m *fakeMaintainer) Uninstall(context.Context) error {
+	m.uninstallCalls++
+	return nil
+}
+
 func managerFixture(t *testing.T) (Manager, *fakeLifecycleStore, *fakeJobInventory, *fakeApplier, time.Time) {
 	t.Helper()
 	now := time.Date(2026, 9, 21, 7, 0, 0, 0, time.UTC)
@@ -162,5 +189,47 @@ func TestManagerApplyRequiresTransactionEngineAfterPreflight(t *testing.T) {
 	jobs.jobs = nil
 	if _, err := manager.Apply(t.Context(), ApplyOptions{}); err == nil || !strings.Contains(err.Error(), "transaction engine") {
 		t.Fatalf("missing applier error = %v", err)
+	}
+}
+
+func TestManagerMaintenanceUsesSharedActiveJobPolicy(t *testing.T) {
+	manager, _, jobs, _, _ := managerFixture(t)
+	maintainer := &fakeMaintainer{}
+	manager.Maintainer = maintainer
+	jobs.jobs = []string{"job-b", "job-a", "job-a"}
+
+	if _, err := manager.Backup(t.Context(), MutationOptions{}); err == nil {
+		t.Fatal("backup with active jobs was accepted")
+	}
+	if err := manager.Restore(t.Context(), "sha256:"+strings.Repeat("a", 64), MutationOptions{}); err == nil {
+		t.Fatal("restore with active jobs was accepted")
+	}
+	if err := manager.Rollback(t.Context(), MutationOptions{}); err == nil {
+		t.Fatal("rollback with active jobs was accepted")
+	}
+	if err := manager.Uninstall(t.Context(), MutationOptions{}); err == nil {
+		t.Fatal("uninstall with active jobs was accepted")
+	}
+	if maintainer.backupCalls != 0 || len(maintainer.restoreCalls) != 0 ||
+		maintainer.rollbackCalls != 0 || maintainer.uninstallCalls != 0 {
+		t.Fatalf("blocked maintenance reached engine: %#v", maintainer)
+	}
+
+	options := MutationOptions{InterruptActiveJobs: true}
+	if _, err := manager.Backup(t.Context(), options); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Restore(t.Context(), "sha256:"+strings.Repeat("b", 64), options); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Rollback(t.Context(), options); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Uninstall(t.Context(), options); err != nil {
+		t.Fatal(err)
+	}
+	if maintainer.backupCalls != 1 || !reflect.DeepEqual(maintainer.restoreCalls, []string{"sha256:" + strings.Repeat("b", 64)}) ||
+		maintainer.rollbackCalls != 1 || maintainer.uninstallCalls != 1 {
+		t.Fatalf("approved maintenance calls = %#v", maintainer)
 	}
 }

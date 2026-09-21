@@ -98,6 +98,10 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/work/workspace"
     },
     {

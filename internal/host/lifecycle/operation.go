@@ -103,6 +103,7 @@ type OperationRecord struct {
 	ObservedHostRevision  string         `json:"observed_host_revision"`
 	ActiveGenerationID    string         `json:"active_generation_id,omitempty"`
 	CandidateGenerationID string         `json:"candidate_generation_id"`
+	RecoveryBackupID      string         `json:"recovery_backup_id,omitempty"`
 	State                 OperationState `json:"state"`
 	Phase                 OperationPhase `json:"phase"`
 	OriginalError         string         `json:"original_error,omitempty"`
@@ -125,6 +126,9 @@ func (r OperationRecord) Valid() bool {
 	if r.ActiveGenerationID != "" && !digestPattern.MatchString(r.ActiveGenerationID) {
 		return false
 	}
+	if r.RecoveryBackupID != "" && !digestPattern.MatchString(r.RecoveryBackupID) {
+		return false
+	}
 	if !validOperationError(r.OriginalError) || !validOperationError(r.RecoveryError) {
 		return false
 	}
@@ -136,11 +140,17 @@ func (r OperationRecord) Valid() bool {
 	}
 	switch r.State {
 	case OperationApplying:
-		return validApplyPhase(r.Phase) && r.OriginalError == "" && r.RecoveryError == "" && r.CompletedAt == ""
+		if !validApplyPhase(r.Phase) || r.OriginalError != "" || r.RecoveryError != "" || r.CompletedAt != "" {
+			return false
+		}
+		if r.Phase == PhaseAdmitted {
+			return r.RecoveryBackupID == ""
+		}
+		return r.RecoveryBackupID != ""
 	case OperationRecovering:
 		return r.Phase == PhaseRollback && r.OriginalError != "" && r.RecoveryError == "" && r.CompletedAt == ""
 	case OperationSucceeded:
-		return r.Phase == PhaseComplete && r.OriginalError == "" && r.RecoveryError == "" &&
+		return r.Phase == PhaseComplete && r.RecoveryBackupID != "" && r.OriginalError == "" && r.RecoveryError == "" &&
 			validOperationCompletion(r.CompletedAt, updated)
 	case OperationRolledBack:
 		return r.Phase == PhaseComplete && r.OriginalError != "" && r.RecoveryError == "" &&
@@ -345,6 +355,9 @@ func (j *OperationJournal) Advance(id string, phase OperationPhase, now time.Tim
 	if err != nil {
 		return OperationRecord{}, err
 	}
+	if phase == PhaseSnapshot {
+		return OperationRecord{}, errors.New("host lifecycle snapshot transition requires a recovery backup checkpoint")
+	}
 	if record.State != OperationApplying || nextApplyPhase(record.Phase) != phase {
 		return OperationRecord{}, errors.New("host lifecycle operation phase transition is invalid")
 	}
@@ -364,13 +377,39 @@ func (j *OperationJournal) Advance(id string, phase OperationPhase, now time.Tim
 	return record, nil
 }
 
+func (j *OperationJournal) RecordSnapshot(id, backupID string, now time.Time) (OperationRecord, error) {
+	record, err := j.require(id)
+	if err != nil {
+		return OperationRecord{}, err
+	}
+	if record.State != OperationApplying || record.Phase != PhaseAdmitted || !digestPattern.MatchString(backupID) {
+		return OperationRecord{}, errors.New("host lifecycle snapshot checkpoint is invalid")
+	}
+	updatedAt, err := nextOperationTime(record, now)
+	if err != nil {
+		return OperationRecord{}, err
+	}
+	record.Phase = PhaseSnapshot
+	record.RecoveryBackupID = backupID
+	record.UpdatedAt = updatedAt
+	if !record.Valid() {
+		return OperationRecord{}, errors.New("host lifecycle snapshot checkpoint produced an invalid record")
+	}
+	if err = j.persist(record, true); err != nil {
+		return OperationRecord{}, err
+	}
+	j.records[id] = record
+	return record, nil
+}
+
 func (j *OperationJournal) MarkSucceeded(id string, now time.Time) (OperationRecord, error) {
 	record, err := j.require(id)
 	if err != nil {
 		return OperationRecord{}, err
 	}
-	if record.State != OperationApplying || record.Phase != PhaseHealth {
-		return OperationRecord{}, errors.New("host lifecycle operation cannot succeed before health validation")
+	ready := record.Phase == PhaseHealth || record.Kind == OperationBackup && record.Phase == PhaseSnapshot
+	if record.State != OperationApplying || !ready {
+		return OperationRecord{}, errors.New("host lifecycle operation cannot succeed before its terminal validation")
 	}
 	updatedAt, err := nextOperationTime(record, now)
 	if err != nil {
@@ -579,7 +618,7 @@ func nextOperationTime(record OperationRecord, now time.Time) (string, error) {
 	}
 	now = now.UTC()
 	if now.Before(previous) {
-		return "", errors.New("host lifecycle operation time cannot move backwards")
+		now = previous
 	}
 	return now.Format(time.RFC3339Nano), nil
 }

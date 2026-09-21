@@ -19,6 +19,10 @@ func operationPlanFixture(t *testing.T, now time.Time) PreparedPlan {
 	return plan
 }
 
+func operationBackupID() string {
+	return "sha256:" + strings.Repeat("f", 64)
+}
+
 func TestOperationLockIsExclusiveAndRecoverable(t *testing.T) {
 	root := privateLifecycleRoot(t)
 	first, err := AcquireOperationLock(root)
@@ -62,8 +66,15 @@ func TestOperationJournalEnforcesApplyTransitionOrder(t *testing.T) {
 	if _, err = journal.Advance(record.ID, PhaseSwitch, now.Add(time.Second)); err == nil {
 		t.Fatal("operation skipped snapshot phase")
 	}
-	for index, phase := range []OperationPhase{PhaseSnapshot, PhaseSwitch, PhaseMigrate, PhaseRestart, PhaseHealth} {
-		record, err = journal.Advance(record.ID, phase, now.Add(time.Duration(index+1)*time.Second))
+	if _, err = journal.Advance(record.ID, PhaseSnapshot, now.Add(time.Second)); err == nil {
+		t.Fatal("snapshot phase advanced without a recovery backup")
+	}
+	record, err = journal.RecordSnapshot(record.ID, operationBackupID(), now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, phase := range []OperationPhase{PhaseSwitch, PhaseMigrate, PhaseRestart, PhaseHealth} {
+		record, err = journal.Advance(record.ID, phase, now.Add(time.Duration(index+2)*time.Second))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +114,7 @@ func TestOperationJournalRecoversPublishedTransitionAfterFailpoint(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = journal.Advance(record.ID, PhaseSnapshot, now.Add(time.Second)); err != nil {
+	if _, err = journal.RecordSnapshot(record.ID, operationBackupID(), now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = journal.Advance(record.ID, PhaseSwitch, now.Add(2*time.Second)); !errors.Is(err, syntheticCrash) {
@@ -242,7 +253,7 @@ func TestOperationJournalBeforePublishCrashKeepsPreviousCheckpoint(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = journal.Advance(record.ID, PhaseSnapshot, now.Add(time.Second)); err != nil {
+	if _, err = journal.RecordSnapshot(record.ID, operationBackupID(), now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = journal.Advance(record.ID, PhaseSwitch, now.Add(2*time.Second)); !errors.Is(err, syntheticCrash) {
@@ -286,7 +297,7 @@ func TestOperationJournalRecoversInterruptedOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = journal.Advance(record.ID, PhaseSnapshot, now.Add(time.Second)); err != nil {
+	if _, err = journal.RecordSnapshot(record.ID, operationBackupID(), now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	var recovered OperationRecord
@@ -338,7 +349,7 @@ func TestOperationJournalReportsRecoveryFailureWithBothErrors(t *testing.T) {
 	}
 }
 
-func TestOperationJournalRejectsBackwardTransitionTime(t *testing.T) {
+func TestOperationJournalClampsBackwardWallClockTransition(t *testing.T) {
 	root := privateLifecycleRoot(t)
 	lock, err := AcquireOperationLock(root)
 	if err != nil {
@@ -354,8 +365,11 @@ func TestOperationJournalRejectsBackwardTransitionTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = journal.Advance(record.ID, PhaseSnapshot, now.Add(-time.Second)); err == nil ||
-		!strings.Contains(err.Error(), "cannot move backwards") {
-		t.Fatalf("backward transition error = %v", err)
+	advanced, err := journal.RecordSnapshot(record.ID, operationBackupID(), now.Add(-time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advanced.UpdatedAt != record.UpdatedAt {
+		t.Fatalf("backward wall clock changed update time: %q != %q", advanced.UpdatedAt, record.UpdatedAt)
 	}
 }

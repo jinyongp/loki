@@ -58,9 +58,16 @@ func (s *FileStore) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	var installation InstallationState
+	if err = readPrivateJSON(s.path("installation.json"), &installation, false); err != nil {
+		return Snapshot{}, err
+	}
 	snapshot.Installed = installed
 	snapshot.Available = available
 	snapshot.Prepared = prepared
+	if installation.Scope != "" || installation.Workspace != "" {
+		snapshot.Installation = &installation
+	}
 	if _, err = snapshot.Host.normalized(); err != nil {
 		return Snapshot{}, err
 	}
@@ -72,6 +79,9 @@ func (s *FileStore) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	if prepared != nil && !prepared.Valid() {
 		return Snapshot{}, errors.New("prepared host update plan is invalid")
+	}
+	if snapshot.Installation != nil && !snapshot.Installation.Valid() {
+		return Snapshot{}, errors.New("host lifecycle installation state is invalid")
 	}
 	return snapshot, nil
 }

@@ -10,10 +10,11 @@ import (
 )
 
 type Snapshot struct {
-	Installed *Generation   `json:"installed,omitempty"`
-	Available *Generation   `json:"available,omitempty"`
-	Prepared  *PreparedPlan `json:"prepared,omitempty"`
-	Host      HostState     `json:"host"`
+	Installed    *Generation        `json:"installed,omitempty"`
+	Available    *Generation        `json:"available,omitempty"`
+	Prepared     *PreparedPlan      `json:"prepared,omitempty"`
+	Installation *InstallationState `json:"installation,omitempty"`
+	Host         HostState          `json:"host"`
 }
 
 type Store interface {
@@ -25,9 +26,11 @@ type JobInventory interface {
 	ActiveJobs(context.Context) ([]string, error)
 }
 
-type ApplyOptions struct {
+type MutationOptions struct {
 	InterruptActiveJobs bool `json:"interrupt_active_jobs"`
 }
+
+type ApplyOptions = MutationOptions
 
 type ApplyRequest struct {
 	Plan       PreparedPlan `json:"plan"`
@@ -44,22 +47,30 @@ type Applier interface {
 	Apply(context.Context, ApplyRequest) (ApplyResult, error)
 }
 
+type Maintainer interface {
+	Backup(context.Context) (BackupRecord, error)
+	Restore(context.Context, string) error
+	Rollback(context.Context) error
+	Uninstall(context.Context) error
+}
+
 type BlockedJobsError struct {
 	Jobs []string
 }
 
 func (e *BlockedJobsError) Error() string {
 	if e == nil || len(e.Jobs) == 0 {
-		return "host update is blocked by active jobs"
+		return "host lifecycle operation is blocked by active jobs"
 	}
-	return fmt.Sprintf("host update is blocked by active jobs: %s", strings.Join(e.Jobs, ", "))
+	return fmt.Sprintf("host lifecycle operation is blocked by active jobs: %s", strings.Join(e.Jobs, ", "))
 }
 
 type Manager struct {
-	Store   Store
-	Jobs    JobInventory
-	Applier Applier
-	Now     func() time.Time
+	Store      Store
+	Jobs       JobInventory
+	Applier    Applier
+	Maintainer Maintainer
+	Now        func() time.Time
 }
 
 func (m Manager) now() time.Time {
@@ -126,12 +137,9 @@ func (m Manager) Apply(ctx context.Context, options ApplyOptions) (ApplyResult, 
 		return ApplyResult{}, errors.New("prepared host update plan is stale; run prepare again")
 	}
 
-	activeJobs, err := m.activeJobs(ctx)
+	activeJobs, err := m.mutationJobs(ctx, options)
 	if err != nil {
 		return ApplyResult{}, err
-	}
-	if len(activeJobs) != 0 && !options.InterruptActiveJobs {
-		return ApplyResult{}, &BlockedJobsError{Jobs: activeJobs}
 	}
 	if m.Applier == nil {
 		return ApplyResult{}, errors.New("host apply transaction engine is not configured")
@@ -149,6 +157,57 @@ func (m Manager) Apply(ctx context.Context, options ApplyOptions) (ApplyResult, 
 		return ApplyResult{}, errors.New("host apply engine returned a mismatched plan identity")
 	}
 	return result, nil
+}
+
+func (m Manager) Backup(ctx context.Context, options MutationOptions) (BackupRecord, error) {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return BackupRecord{}, err
+	}
+	if m.Maintainer == nil {
+		return BackupRecord{}, errors.New("host lifecycle maintenance engine is not configured")
+	}
+	return m.Maintainer.Backup(ctx)
+}
+
+func (m Manager) Restore(ctx context.Context, backupID string, options MutationOptions) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	if m.Maintainer == nil {
+		return errors.New("host lifecycle maintenance engine is not configured")
+	}
+	return m.Maintainer.Restore(ctx, backupID)
+}
+
+func (m Manager) Rollback(ctx context.Context, options MutationOptions) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	if m.Maintainer == nil {
+		return errors.New("host lifecycle maintenance engine is not configured")
+	}
+	return m.Maintainer.Rollback(ctx)
+}
+
+func (m Manager) Uninstall(ctx context.Context, options MutationOptions) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	if m.Maintainer == nil {
+		return errors.New("host lifecycle maintenance engine is not configured")
+	}
+	return m.Maintainer.Uninstall(ctx)
+}
+
+func (m Manager) mutationJobs(ctx context.Context, options MutationOptions) ([]string, error) {
+	activeJobs, err := m.activeJobs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(activeJobs) != 0 && !options.InterruptActiveJobs {
+		return nil, &BlockedJobsError{Jobs: activeJobs}
+	}
+	return activeJobs, nil
 }
 
 func (m Manager) activeJobs(ctx context.Context) ([]string, error) {
