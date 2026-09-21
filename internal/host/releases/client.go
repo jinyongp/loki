@@ -89,6 +89,10 @@ func Open(cfg Config) (*Client, error) {
 	if err = validateRootPolicy(bootstrap); err != nil {
 		return nil, err
 	}
+	rootRole := bootstrap.Signed.Roles[metadata.ROOT]
+	if rootRole.Threshold != 2 || len(rootRole.KeyIDs) != 3 {
+		return nil, errors.New("trusted bootstrap root must use the initial 2-of-3 root policy")
+	}
 
 	metadataDir := filepath.Join(root, "metadata")
 	targetsDir := filepath.Join(root, "targets")
@@ -280,8 +284,8 @@ func validateRootPolicy(root *metadata.Metadata[metadata.RootType]) error {
 		}
 	}
 	rootRole := root.Signed.Roles[metadata.ROOT]
-	if rootRole.Threshold < 2 || len(rootRole.KeyIDs) < 3 {
-		return errors.New("trusted root must retain at least a 2-of-3 root threshold")
+	if rootRole.Threshold < 2 || len(rootRole.KeyIDs) < rootRole.Threshold {
+		return errors.New("trusted root must retain a multi-key root threshold")
 	}
 	return nil
 }
