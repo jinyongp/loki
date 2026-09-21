@@ -237,46 +237,221 @@ func (s GenerationStore) lock(ctx context.Context, name string) (func(), error) 
 	}
 }
 
-func (s GenerationStore) Acquire(id string) (*GenerationLease, error) {
+func validateReferenceOwner(owner string) error {
+	owner = strings.TrimSpace(owner)
+	if owner == "" || len(owner) > 128 || strings.ContainsAny(owner, "/\\\r\n\x00") {
+		return errors.New("toolchain generation reference owner is invalid")
+	}
+	for _, character := range owner {
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			strings.ContainsRune("._:-", character) {
+			continue
+		}
+		return errors.New("toolchain generation reference owner is invalid")
+	}
+	return nil
+}
+
+func referenceToken() (string, error) {
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(random), nil
+}
+
+func validReferenceName(name, suffix string) bool {
+	if len(name) != 32+len(suffix) || !strings.HasSuffix(name, suffix) {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimSuffix(name, suffix))
+	return err == nil
+}
+
+func readReferenceOwner(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() < 2 || info.Size() > 129 {
+		return "", errors.New("toolchain generation reference is invalid")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if len(raw) == 0 || raw[len(raw)-1] != '\n' {
+		return "", errors.New("toolchain generation reference is invalid")
+	}
+	owner := strings.TrimSuffix(string(raw), "\n")
+	if err = validateReferenceOwner(owner); err != nil {
+		return "", err
+	}
+	return owner, nil
+}
+
+func (s GenerationStore) Acquire(id, owner string) (*GenerationLease, error) {
 	if _, err := s.Lookup(id); err != nil {
+		return nil, err
+	}
+	owner = strings.TrimSpace(owner)
+	if err := validateReferenceOwner(owner); err != nil {
 		return nil, err
 	}
 	refDir := filepath.Join(s.Root, "refs", id)
 	if err := os.MkdirAll(refDir, 0700); err != nil {
 		return nil, err
 	}
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
-		return nil, err
-	}
-	path := filepath.Join(refDir, hex.EncodeToString(random)+".ref")
-	fd, err := unix.Open(path, unix.O_CREAT|unix.O_EXCL|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0600)
+	token, err := referenceToken()
 	if err != nil {
 		return nil, err
 	}
-	file := os.NewFile(uintptr(fd), filepath.Base(path))
-	if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		_ = file.Close()
+	temporary := filepath.Join(refDir, token+".tmp")
+	path := filepath.Join(refDir, token+".ref")
+	fd, err := unix.Open(temporary, unix.O_CREAT|unix.O_EXCL|unix.O_WRONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, err
+	}
+	temporaryFile := os.NewFile(uintptr(fd), filepath.Base(temporary))
+	cleanupTemporary := true
+	defer func() {
+		_ = temporaryFile.Close()
+		if cleanupTemporary {
+			_ = os.Remove(temporary)
+		}
+	}()
+	if _, err = temporaryFile.Write([]byte(owner + "\n")); err != nil {
+		return nil, err
+	}
+	if err = temporaryFile.Sync(); err != nil {
+		return nil, err
+	}
+	if err = temporaryFile.Close(); err != nil {
+		return nil, err
+	}
+	if err = os.Rename(temporary, path); err != nil {
+		return nil, err
+	}
+	cleanupTemporary = false
+	if err = syncDirectory(refDir); err != nil {
 		_ = os.Remove(path)
 		return nil, err
 	}
-	return &GenerationLease{file: file, path: path}, nil
+	fd, err = unix.Open(path, unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	leaseFile := os.NewFile(uintptr(fd), filepath.Base(path))
+	if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = leaseFile.Close()
+		return nil, err
+	}
+	return &GenerationLease{file: leaseFile, path: path}, nil
 }
 
-func (l *GenerationLease) Release() error {
+func (l *GenerationLease) Close() error {
 	if l == nil || l.file == nil {
 		return nil
 	}
 	err := unix.Flock(int(l.file.Fd()), unix.LOCK_UN)
 	err = errors.Join(err, l.file.Close())
-	err = errors.Join(err, os.Remove(l.path))
 	l.file = nil
-	l.path = ""
 	return err
 }
 
+func (l *GenerationLease) Release() error {
+	if l == nil {
+		return nil
+	}
+	err := l.Close()
+	if l.path != "" {
+		removeErr := os.Remove(l.path)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		err = errors.Join(err, removeErr)
+		l.path = ""
+	}
+	return err
+}
+
+func (s GenerationStore) ReleaseOwner(id, owner string) error {
+	if err := s.validate(); err != nil {
+		return err
+	}
+	if err := validateGenerationID(id); err != nil {
+		return err
+	}
+	owner = strings.TrimSpace(owner)
+	if err := validateReferenceOwner(owner); err != nil {
+		return err
+	}
+	refDir := filepath.Join(s.Root, "refs", id)
+	entries, err := os.ReadDir(refDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	removed := false
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return errors.New("toolchain generation reference directory contains an invalid entry")
+		}
+		if validReferenceName(entry.Name(), ".tmp") {
+			continue
+		}
+		if !validReferenceName(entry.Name(), ".ref") {
+			return errors.New("toolchain generation reference directory contains an invalid entry")
+		}
+		path := filepath.Join(refDir, entry.Name())
+		actualOwner, readErr := readReferenceOwner(path)
+		if errors.Is(readErr, os.ErrNotExist) {
+			continue
+		}
+		if readErr != nil {
+			return readErr
+		}
+		if actualOwner != owner {
+			continue
+		}
+		fd, openErr := unix.Open(path, unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+		if errors.Is(openErr, os.ErrNotExist) {
+			continue
+		}
+		if openErr != nil {
+			return openErr
+		}
+		lockErr := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)
+		if errors.Is(lockErr, unix.EWOULDBLOCK) {
+			_ = unix.Close(fd)
+			continue
+		}
+		if lockErr != nil {
+			_ = unix.Close(fd)
+			return lockErr
+		}
+		_ = unix.Flock(fd, unix.LOCK_UN)
+		_ = unix.Close(fd)
+		if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		removed = true
+	}
+	if removed {
+		if err = syncDirectory(refDir); err != nil {
+			return err
+		}
+	}
+	_ = os.Remove(refDir)
+	return nil
+}
+
 func (s GenerationStore) InUse(id string) (bool, error) {
-	if err := s.prepare(); err != nil {
+	if err := s.validate(); err != nil {
 		return false, err
 	}
 	if err := validateGenerationID(id); err != nil {
@@ -291,33 +466,22 @@ func (s GenerationStore) InUse(id string) (bool, error) {
 		return false, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ref") {
+		if entry.IsDir() {
 			return false, errors.New("toolchain generation reference directory contains an invalid entry")
 		}
-		path := filepath.Join(refDir, entry.Name())
-		fd, openErr := unix.Open(path, unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
-		if errors.Is(openErr, os.ErrNotExist) {
+		if validReferenceName(entry.Name(), ".tmp") {
 			continue
 		}
-		if openErr != nil {
-			return false, openErr
+		if !validReferenceName(entry.Name(), ".ref") {
+			return false, errors.New("toolchain generation reference directory contains an invalid entry")
 		}
-		lockErr := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)
-		if errors.Is(lockErr, unix.EWOULDBLOCK) {
-			_ = unix.Close(fd)
-			return true, nil
-		}
-		if lockErr != nil {
-			_ = unix.Close(fd)
-			return false, lockErr
-		}
-		_ = unix.Flock(fd, unix.LOCK_UN)
-		_ = unix.Close(fd)
-		if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if _, err = readReferenceOwner(filepath.Join(refDir, entry.Name())); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
 			return false, err
 		}
+		return true, nil
 	}
-	_ = os.Remove(refDir)
 	return false, nil
 }
 

@@ -62,27 +62,36 @@ func TestLauncherToolchainResolverLeasesImmutableGeneration(t *testing.T) {
 	generation := provisionLauncherNode(t, store, id, "26.9.0")
 	resolver := launcherToolchainResolver{store: store}
 
-	resolved, err := resolver.Resolve(t.Context(), []jobs.ToolchainRef{{
+	const owner = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	refs := []jobs.ToolchainRef{{
 		Family: "node", Version: "26.9.0", GenerationID: id,
-	}})
+	}}
+	resolved, err := resolver.Resolve(t.Context(), owner, refs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(resolved.Mounts) != 1 ||
 		resolved.Mounts[0].Family != "node" || resolved.Mounts[0].Source != generation.Root ||
-		resolved.Release == nil {
+		resolved.Close == nil || resolved.Discard == nil {
 		t.Fatalf("resolved toolchains = %#v", resolved)
 	}
 	inUse, err := store.InUse(id)
 	if err != nil || !inUse {
 		t.Fatalf("leased generation = %v, %v", inUse, err)
 	}
-	if err = resolved.Release(); err != nil {
+	if err = resolved.Close(); err != nil {
+		t.Fatal(err)
+	}
+	inUse, err = store.InUse(id)
+	if err != nil || !inUse {
+		t.Fatalf("closed launcher lease lost durable reference = %v, %v", inUse, err)
+	}
+	if err = resolver.Cleanup(owner, refs); err != nil {
 		t.Fatal(err)
 	}
 	inUse, err = store.InUse(id)
 	if err != nil || inUse {
-		t.Fatalf("released generation = %v, %v", inUse, err)
+		t.Fatalf("terminal generation cleanup = %v, %v", inUse, err)
 	}
 }
 
@@ -94,7 +103,7 @@ func TestLauncherToolchainResolverRejectsGenerationVersionMismatch(t *testing.T)
 	provisionLauncherNode(t, store, id, "26.9.0")
 	resolver := launcherToolchainResolver{store: store}
 
-	_, err := resolver.Resolve(t.Context(), []jobs.ToolchainRef{{
+	_, err := resolver.Resolve(t.Context(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", []jobs.ToolchainRef{{
 		Family: "node", Version: "22.23.4", GenerationID: id,
 	}})
 	if err == nil {

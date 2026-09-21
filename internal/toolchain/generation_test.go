@@ -189,35 +189,77 @@ func TestGenerationStoreArtifactLockAndReferences(t *testing.T) {
 	}
 	release()
 
-	lease, err := store.Acquire(id)
+	const owner = "job-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	lease, err := store.Acquire(id, owner)
 	if err != nil {
 		t.Fatal(err)
 	}
 	inUse, err := store.InUse(id)
 	if err != nil || !inUse {
-		t.Fatalf("in-use generation = %v, %v", inUse, err)
+		t.Fatalf("active generation = %v, %v", inUse, err)
+	}
+	if err = store.ReleaseOwner(id, owner); err != nil {
+		t.Fatal(err)
+	}
+	inUse, err = store.InUse(id)
+	if err != nil || !inUse {
+		t.Fatalf("active owner cleanup removed locked reference: %v, %v", inUse, err)
+	}
+
+	// Closing without removing the reference models a launcher crash: the
+	// process lock disappears, but the durable Job-owned reference remains.
+	if err = lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	inUse, err = store.InUse(id)
+	if err != nil || !inUse {
+		t.Fatalf("crash gap lost durable generation reference: %v, %v", inUse, err)
+	}
+
+	recovered, err := store.Acquire(id, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = recovered.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.ReleaseOwner(id, owner); err != nil {
+		t.Fatal(err)
+	}
+	inUse, err = store.InUse(id)
+	if err != nil || inUse {
+		t.Fatalf("terminal owner cleanup retained generation reference: %v, %v", inUse, err)
+	}
+
+	lease, err = store.Acquire(id, "temporary-attempt")
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err = lease.Release(); err != nil {
 		t.Fatal(err)
 	}
 	inUse, err = store.InUse(id)
 	if err != nil || inUse {
-		t.Fatalf("released generation = %v, %v", inUse, err)
+		t.Fatalf("explicit lease release retained generation reference: %v, %v", inUse, err)
 	}
 
 	refDir := filepath.Join(store.Root, "refs", id)
 	if err = os.MkdirAll(refDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	stale := filepath.Join(refDir, strings.Repeat("f", 32)+".ref")
-	if err = os.WriteFile(stale, nil, 0600); err != nil {
+	temporary := filepath.Join(refDir, strings.Repeat("f", 32)+".tmp")
+	if err = os.WriteFile(temporary, []byte("partial"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	inUse, err = store.InUse(id)
 	if err != nil || inUse {
-		t.Fatalf("stale reference = %v, %v", inUse, err)
+		t.Fatalf("unpublished temporary reference affected in-use state: %v, %v", inUse, err)
 	}
-	if _, err = os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stale reference was not collected: %v", err)
+	invalid := filepath.Join(refDir, strings.Repeat("f", 32)+".ref")
+	if err = os.WriteFile(invalid, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.InUse(id); err == nil {
+		t.Fatal("invalid durable reference was silently ignored")
 	}
 }

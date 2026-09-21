@@ -42,11 +42,13 @@ type Runner interface {
 
 type ResolvedToolchains struct {
 	Mounts  []sandbox.ToolchainMount
-	Release func() error
+	Close   func() error
+	Discard func() error
 }
 
 type ToolchainResolver interface {
-	Resolve(context.Context, []jobs.ToolchainRef) (ResolvedToolchains, error)
+	Resolve(context.Context, string, []jobs.ToolchainRef) (ResolvedToolchains, error)
+	Cleanup(string, []jobs.ToolchainRef) error
 }
 
 type Options struct {
@@ -80,12 +82,13 @@ type lifecycle struct {
 }
 
 type ownedJob struct {
-	cancel            context.CancelFunc
-	done              chan struct{}
-	err               error
-	rawOutputLimit    int
-	rawResult         *jobs.RunExecutionResult
-	releaseToolchains func() error
+	cancel          context.CancelFunc
+	done            chan struct{}
+	err             error
+	rawOutputLimit  int
+	rawResult       *jobs.RunExecutionResult
+	closeToolchains func() error
+	toolchains      []jobs.ToolchainRef
 }
 
 type runRequest struct {
@@ -358,20 +361,20 @@ func sandboxEndpointSpecs(values []jobs.EndpointRequest) []sandbox.EndpointSpec 
 	return result
 }
 
-func (l *lifecycle) resolveToolchains(ctx context.Context, refs []jobs.ToolchainRef) (ResolvedToolchains, error) {
+func (l *lifecycle) resolveToolchains(ctx context.Context, owner string, refs []jobs.ToolchainRef) (ResolvedToolchains, error) {
 	if len(refs) == 0 {
 		return ResolvedToolchains{}, nil
 	}
 	if l.toolchains == nil {
 		return ResolvedToolchains{}, errors.New("launcher toolchain resolution is not configured")
 	}
-	resolved, err := l.toolchains.Resolve(ctx, refs)
+	resolved, err := l.toolchains.Resolve(ctx, owner, refs)
 	if err != nil {
 		return ResolvedToolchains{}, err
 	}
-	if len(resolved.Mounts) != len(refs) || resolved.Release == nil {
-		if resolved.Release != nil {
-			_ = resolved.Release()
+	if len(resolved.Mounts) != len(refs) || resolved.Close == nil || resolved.Discard == nil {
+		if resolved.Discard != nil {
+			_ = resolved.Discard()
 		}
 		return ResolvedToolchains{}, errors.New("launcher toolchain resolver returned an incomplete result")
 	}
@@ -381,13 +384,13 @@ func (l *lifecycle) resolveToolchains(ctx context.Context, refs []jobs.Toolchain
 	}
 	for _, mount := range resolved.Mounts {
 		if !families[mount.Family] {
-			_ = resolved.Release()
+			_ = resolved.Discard()
 			return ResolvedToolchains{}, errors.New("launcher toolchain resolver changed the requested family set")
 		}
 		delete(families, mount.Family)
 	}
 	if len(families) != 0 {
-		_ = resolved.Release()
+		_ = resolved.Discard()
 		return ResolvedToolchains{}, errors.New("launcher toolchain resolver omitted a requested family")
 	}
 	return resolved, nil
@@ -438,14 +441,14 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 		}
 	}
 
-	resolvedToolchains, err := l.resolveToolchains(ctx, workload.Toolchains)
+	resolvedToolchains, err := l.resolveToolchains(ctx, workload.ID, workload.Toolchains)
 	if err != nil {
 		return jobs.StartResult{}, fault.Error("workload toolchain selection is unavailable")
 	}
-	releaseResolvedToolchains := true
+	discardResolvedToolchains := true
 	defer func() {
-		if releaseResolvedToolchains && resolvedToolchains.Release != nil {
-			_ = resolvedToolchains.Release()
+		if discardResolvedToolchains && resolvedToolchains.Discard != nil {
+			_ = resolvedToolchains.Discard()
 		}
 	}()
 
@@ -513,9 +516,10 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
 	job := &ownedJob{
 		cancel: cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes,
-		releaseToolchains: resolvedToolchains.Release,
+		closeToolchains: resolvedToolchains.Close,
+		toolchains:      append([]jobs.ToolchainRef(nil), workload.Toolchains...),
 	}
-	releaseResolvedToolchains = false
+	discardResolvedToolchains = false
 	l.active[workload.ID] = job
 	if workload.MaxOutputBytes > 0 {
 		l.runs[workload.ID] = job
@@ -964,6 +968,47 @@ func (l *lifecycle) reconcile() error {
 			return err
 		}
 	}
+	return l.reconcileTerminalToolchains()
+}
+
+func (l *lifecycle) cleanupTerminalToolchains(id string, fallback []jobs.ToolchainRef) error {
+	if len(fallback) == 0 {
+		return nil
+	}
+	if l.toolchains == nil {
+		return errors.New("launcher toolchain cleanup is not configured")
+	}
+	record, ok, err := l.journal.Get(id)
+	if err != nil || !ok || record.State != jobs.StateTerminal || record.Result == nil {
+		return err
+	}
+	if record.Result.Cleanup != jobs.CleanupComplete && record.Result.Cleanup != jobs.CleanupNotRequired {
+		return nil
+	}
+	refs := record.Toolchains
+	if len(refs) == 0 {
+		refs = fallback
+	}
+	return l.toolchains.Cleanup(id, refs)
+}
+
+func (l *lifecycle) reconcileTerminalToolchains() error {
+	records, err := l.journal.List()
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if len(record.Toolchains) == 0 || record.State != jobs.StateTerminal || record.Result == nil ||
+			(record.Result.Cleanup != jobs.CleanupComplete && record.Result.Cleanup != jobs.CleanupNotRequired) {
+			continue
+		}
+		if l.toolchains == nil {
+			return errors.New("launcher toolchain cleanup is not configured")
+		}
+		if err = l.toolchains.Cleanup(record.ID, record.Toolchains); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -981,12 +1026,16 @@ func (l *lifecycle) spawnRecovered(record jobs.Record, resource sandbox.Resource
 		return errors.New("recovered job is already active")
 	}
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
-	resolvedToolchains, err := l.resolveToolchains(jobCtx, record.Toolchains)
+	resolvedToolchains, err := l.resolveToolchains(jobCtx, record.ID, record.Toolchains)
 	if err != nil {
 		cancel()
 		return errors.New("recovered job toolchain selection is unavailable")
 	}
-	job := &ownedJob{cancel: cancel, done: make(chan struct{}), releaseToolchains: resolvedToolchains.Release}
+	job := &ownedJob{
+		cancel: cancel, done: make(chan struct{}),
+		closeToolchains: resolvedToolchains.Close,
+		toolchains:      append([]jobs.ToolchainRef(nil), record.Toolchains...),
+	}
 	l.active[record.ID] = job
 	l.wg.Add(1)
 	go func() {
@@ -999,10 +1048,11 @@ func (l *lifecycle) spawnRecovered(record jobs.Record, resource sandbox.Resource
 func (l *lifecycle) finish(id string, job *ownedJob) {
 	job.cancel()
 	l.removeRunInput(id)
-	if job.releaseToolchains != nil {
-		job.err = errors.Join(job.err, job.releaseToolchains())
-		job.releaseToolchains = nil
+	if job.closeToolchains != nil {
+		job.err = errors.Join(job.err, job.closeToolchains())
+		job.closeToolchains = nil
 	}
+	job.err = errors.Join(job.err, l.cleanupTerminalToolchains(id, job.toolchains))
 	l.mu.Lock()
 	if l.active[id] == job {
 		delete(l.active, id)

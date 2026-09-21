@@ -164,6 +164,40 @@ func (r *fakeRunner) counts() (start, observe, cleanup, inspect int) {
 	return r.startCalls, r.observeCalls, r.cleanupCalls, r.inspectCalls
 }
 
+type fakeToolchainResolver struct {
+	mu            sync.Mutex
+	resolveOwners []string
+	cleanupOwners []string
+}
+
+func (r *fakeToolchainResolver) Resolve(_ context.Context, owner string, refs []jobs.ToolchainRef) (ResolvedToolchains, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.resolveOwners = append(r.resolveOwners, owner)
+	mounts := make([]sandbox.ToolchainMount, len(refs))
+	for index, ref := range refs {
+		mounts[index] = sandbox.ToolchainMount{Family: ref.Family, Source: "/unused/" + ref.GenerationID + "/root"}
+	}
+	return ResolvedToolchains{
+		Mounts:  mounts,
+		Close:   func() error { return nil },
+		Discard: func() error { return nil },
+	}, nil
+}
+
+func (r *fakeToolchainResolver) Cleanup(owner string, _ []jobs.ToolchainRef) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanupOwners = append(r.cleanupOwners, owner)
+	return nil
+}
+
+func (r *fakeToolchainResolver) snapshots() ([]string, []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.resolveOwners...), append([]string(nil), r.cleanupOwners...)
+}
+
 func launcherPolicy(t *testing.T) sandbox.Policy {
 	t.Helper()
 	inputDirectory := filepath.Join(t.TempDir(), "run-inputs")
@@ -236,6 +270,59 @@ func lifecycleFixture(t *testing.T, runner Runner, timeout, retention time.Durat
 		}
 	})
 	return l
+}
+
+func TestLifecycleToolchainOwnerAndTerminalCleanup(t *testing.T) {
+	resolver := &fakeToolchainResolver{}
+	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Minute, 8)
+	l.toolchains = resolver
+	refs := []jobs.ToolchainRef{{
+		Family: "node", Version: "26.9.0", GenerationID: strings.Repeat("d", 64),
+	}}
+	owner := strings.Repeat("e", 32)
+	resolved, err := l.resolveToolchains(t.Context(), owner, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolved.Mounts) != 1 || resolved.Mounts[0].Family != "node" ||
+		resolved.Close == nil || resolved.Discard == nil {
+		t.Fatalf("resolved toolchains = %#v", resolved)
+	}
+	resolveOwners, cleanupOwners := resolver.snapshots()
+	if len(resolveOwners) != 1 || resolveOwners[0] != owner || len(cleanupOwners) != 0 {
+		t.Fatalf("toolchain resolver calls = %#v / %#v", resolveOwners, cleanupOwners)
+	}
+
+	requestID := "123e4567-e89b-12d3-a456-426614174399"
+	jobID, err := jobs.JobIDForRequestID(requestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, fingerprint, err := jobs.NormalizeStartRequest(jobs.StartRequest{
+		RequestID: requestID, CWD: ".", Argv: []string{"/bin/true"}, Toolchains: refs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, _, err = l.journal.AdmitRequestWithToolchains(
+		jobID, "oci:"+strings.Repeat("a", 64), normalized.RequestID, fingerprint,
+		normalized.Network, normalized.Endpoints, normalized.Toolchains, now.Add(time.Minute), now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = l.journal.MarkTerminal(jobID, jobs.Result{
+		Outcome: jobs.OutcomeLaunchFailed, Cleanup: jobs.CleanupNotRequired,
+	}, now.Add(time.Nanosecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err = l.cleanupTerminalToolchains(jobID, refs); err != nil {
+		t.Fatal(err)
+	}
+	_, cleanupOwners = resolver.snapshots()
+	if len(cleanupOwners) != 1 || cleanupOwners[0] != jobID {
+		t.Fatalf("terminal cleanup owners = %#v", cleanupOwners)
+	}
 }
 
 func encodedRequest(t *testing.T, value map[string]any) []byte {
