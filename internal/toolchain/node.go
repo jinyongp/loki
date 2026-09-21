@@ -123,9 +123,9 @@ func joinVersionParts(parts []uint64) string {
 }
 
 type NodeRelease struct {
-	Version string
-	URL     string
-	SHA256  string
+	Version string `json:"version"`
+	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
 }
 
 func (r NodeRelease) Validate() error {

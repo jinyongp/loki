@@ -65,6 +65,7 @@ install -m 0644 "$SOURCE_DIR/packaging/go/executor.json.in" "$ROOT/usr/share/doc
 install -m 0644 "$SOURCE_DIR/packaging/go/execution-contract.json" "$ROOT/usr/share/doc/loki/execution-contract.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/egress-policy.json" "$ROOT/usr/share/doc/loki/egress-policy.json"
 install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$ROOT/usr/share/doc/loki/toolchain-manifest.json"
+install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$ROOT/usr/share/doc/loki/toolchain-catalog.json"
 install -m 0644 "$CATALOG" "$ROOT/usr/share/doc/loki/devtools-catalog.json"
 cp -a "$TOOLCHAIN_BUNDLE/." "$ROOT/usr/share/loki/toolchain/"
 install -m 0644 "$SOURCE_DIR/packaging/go/systemd/"*.service "$SOURCE_DIR/packaging/go/systemd/"*.target "$ROOT/usr/lib/systemd/system/"

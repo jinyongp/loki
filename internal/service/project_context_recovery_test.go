@@ -135,7 +135,7 @@ func TestProjectContextRecoversAcrossMCPRestartAfterPostCheckpointChange(t *test
 			t.Fatal(err)
 		}
 		app, err := NewMCP(c, MCPOptions{
-			Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), Ports: ports,
+			Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports,
 			Policy: policyGenerationFixture(t), Token: token,
 			Environment: map[string]string{
 				"HOME": t.TempDir(), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",

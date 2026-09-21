@@ -9,6 +9,9 @@ import (
 )
 
 func main() {
+	if command := toolchainShimCommand(os.Args[0]); command != "" {
+		os.Exit(runToolchainShim(command, os.Args[1:], os.Stderr))
+	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -27,15 +28,17 @@ const (
 	maxEnv            = 256
 	maxEnvBytes       = 64 << 10
 	maxEndpoints      = 8
+	maxToolchains     = 8
 	maxRunOutputBytes = 64 << 20
 )
 
 var (
-	digestPattern       = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	imageDigestPattern  = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
-	jobIDPattern        = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	envNamePattern      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	endpointNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	digestPattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	imageDigestPattern   = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
+	jobIDPattern         = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	envNamePattern       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	endpointNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	toolchainNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 )
 
 type NetworkProfile string
@@ -77,56 +80,66 @@ type GatewayPolicy struct {
 }
 
 type PolicyOptions struct {
-	GenerationSHA256 string
-	Image            string
-	Gateway          GatewayPolicyOptions
-	Workspace        string
-	InputDirectory   string
-	UID, GID         uint32
-	Environment      []string
-	MemoryBytes      int64
-	PIDs             int64
-	TmpfsBytes       int64
+	GenerationSHA256   string
+	Image              string
+	Gateway            GatewayPolicyOptions
+	Workspace          string
+	InputDirectory     string
+	ToolchainDirectory string
+	UID, GID           uint32
+	Environment        []string
+	MemoryBytes        int64
+	PIDs               int64
+	TmpfsBytes         int64
 }
 
 type Policy struct {
-	generationSHA256 string
-	sandboxSHA256    string
-	image            string
-	gateway          GatewayPolicy
-	workspace        string
-	inputDirectory   string
-	uid, gid         uint32
-	environment      []string
-	memoryBytes      int64
-	pids             int64
-	tmpfsBytes       int64
+	generationSHA256   string
+	sandboxSHA256      string
+	image              string
+	gateway            GatewayPolicy
+	workspace          string
+	inputDirectory     string
+	toolchainDirectory string
+	uid, gid           uint32
+	environment        []string
+	memoryBytes        int64
+	pids               int64
+	tmpfsBytes         int64
+}
+
+type ToolchainMount struct {
+	Family string
+	Source string
 }
 
 type WorkloadSpec struct {
-	ID             string         `json:"id"`
-	PolicySHA256   string         `json:"policy_sha256"`
-	CWD            string         `json:"cwd"`
-	Argv           []string       `json:"argv"`
-	Network        NetworkProfile `json:"network"`
-	Endpoints      []EndpointSpec `json:"endpoints,omitempty"`
-	InputPath      string         `json:"input_path,omitempty"`
-	MaxOutputBytes int            `json:"max_output_bytes,omitempty"`
+	ID             string           `json:"id"`
+	PolicySHA256   string           `json:"policy_sha256"`
+	CWD            string           `json:"cwd"`
+	Argv           []string         `json:"argv"`
+	Network        NetworkProfile   `json:"network"`
+	Endpoints      []EndpointSpec   `json:"endpoints,omitempty"`
+	Toolchains     []ToolchainMount `json:"-"`
+	InputPath      string           `json:"input_path,omitempty"`
+	MaxOutputBytes int              `json:"max_output_bytes,omitempty"`
 }
 
 type Plan struct {
-	valid          bool
-	name           string
-	policySHA256   string
-	sandboxSHA256  string
-	resource       Resource
-	network        NetworkProfile
-	endpoints      []EndpointSpec
-	gateway        GatewayPolicy
-	inputDirectory string
-	inputPath      string
-	maxOutputBytes int
-	create         dockerCreateRequest
+	valid              bool
+	name               string
+	policySHA256       string
+	sandboxSHA256      string
+	resource           Resource
+	network            NetworkProfile
+	endpoints          []EndpointSpec
+	toolchains         []ToolchainMount
+	gateway            GatewayPolicy
+	inputDirectory     string
+	toolchainDirectory string
+	inputPath          string
+	maxOutputBytes     int
+	create             dockerCreateRequest
 }
 
 type dockerCreateRequest struct {
@@ -225,24 +238,25 @@ func (g GatewayPolicy) valid() bool {
 }
 
 func sandboxPolicyFingerprint(
-	generationSHA256, image, workspace, inputDirectory string,
+	generationSHA256, image, workspace, inputDirectory, toolchainDirectory string,
 	uid, gid uint32,
 	environment []string,
 	memoryBytes, pids, tmpfsBytes int64,
 	gateway GatewayPolicy,
 ) (string, error) {
 	payload := struct {
-		GenerationSHA256 string   `json:"generation_sha256"`
-		Image            string   `json:"image"`
-		Workspace        string   `json:"workspace"`
-		InputDirectory   string   `json:"input_directory,omitempty"`
-		UID              uint32   `json:"uid"`
-		GID              uint32   `json:"gid"`
-		Environment      []string `json:"environment"`
-		MemoryBytes      int64    `json:"memory_bytes"`
-		PIDs             int64    `json:"pids"`
-		TmpfsBytes       int64    `json:"tmpfs_bytes"`
-		Gateway          struct {
+		GenerationSHA256   string   `json:"generation_sha256"`
+		Image              string   `json:"image"`
+		Workspace          string   `json:"workspace"`
+		InputDirectory     string   `json:"input_directory,omitempty"`
+		ToolchainDirectory string   `json:"toolchain_directory,omitempty"`
+		UID                uint32   `json:"uid"`
+		GID                uint32   `json:"gid"`
+		Environment        []string `json:"environment"`
+		MemoryBytes        int64    `json:"memory_bytes"`
+		PIDs               int64    `json:"pids"`
+		TmpfsBytes         int64    `json:"tmpfs_bytes"`
+		Gateway            struct {
 			Image             string `json:"image"`
 			Binary            string `json:"binary"`
 			ExecutionContract string `json:"execution_contract"`
@@ -254,7 +268,7 @@ func sandboxPolicyFingerprint(
 		} `json:"gateway"`
 	}{
 		GenerationSHA256: generationSHA256, Image: image, Workspace: workspace, InputDirectory: inputDirectory,
-		UID: uid, GID: gid, Environment: append([]string(nil), environment...),
+		ToolchainDirectory: toolchainDirectory, UID: uid, GID: gid, Environment: append([]string(nil), environment...),
 		MemoryBytes: memoryBytes, PIDs: pids, TmpfsBytes: tmpfsBytes,
 	}
 	payload.Gateway.Image = gateway.image
@@ -286,6 +300,9 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if options.InputDirectory != "" && !cleanAbsoluteNonRoot(options.InputDirectory) {
 		return Policy{}, errors.New("sandbox input directory must be an absolute clean non-root path")
 	}
+	if options.ToolchainDirectory != "" && !cleanAbsoluteNonRoot(options.ToolchainDirectory) {
+		return Policy{}, errors.New("sandbox toolchain directory must be an absolute clean non-root path")
+	}
 	if options.UID == 0 || options.GID == 0 {
 		return Policy{}, errors.New("sandbox workload identity must be unprivileged")
 	}
@@ -307,7 +324,7 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 		return Policy{}, err
 	}
 	sandboxSHA256, err := sandboxPolicyFingerprint(
-		options.GenerationSHA256, options.Image, options.Workspace, options.InputDirectory,
+		options.GenerationSHA256, options.Image, options.Workspace, options.InputDirectory, options.ToolchainDirectory,
 		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway,
 	)
 	if err != nil {
@@ -316,7 +333,7 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	return Policy{
 		generationSHA256: options.GenerationSHA256, sandboxSHA256: sandboxSHA256,
 		image: options.Image, gateway: gateway, workspace: options.Workspace, inputDirectory: options.InputDirectory,
-		uid: options.UID, gid: options.GID, environment: environment,
+		toolchainDirectory: options.ToolchainDirectory, uid: options.UID, gid: options.GID, environment: environment,
 		memoryBytes: options.MemoryBytes, pids: options.PIDs, tmpfsBytes: options.TmpfsBytes,
 	}, nil
 }
@@ -326,6 +343,7 @@ func (p Policy) Valid() bool {
 		!imageDigestPattern.MatchString(p.image) || !p.gateway.valid() ||
 		!cleanAbsoluteNonRoot(p.workspace) ||
 		p.inputDirectory != "" && !cleanAbsoluteNonRoot(p.inputDirectory) ||
+		p.toolchainDirectory != "" && !cleanAbsoluteNonRoot(p.toolchainDirectory) ||
 		p.uid == 0 || p.gid == 0 || p.memoryBytes < minMemoryBytes || p.memoryBytes > maxMemoryBytes ||
 		p.pids < minPIDs || p.pids > maxPIDs || p.tmpfsBytes < minTmpfsBytes || p.tmpfsBytes > maxTmpfsBytes ||
 		p.tmpfsBytes > p.memoryBytes {
@@ -341,7 +359,7 @@ func (p Policy) Valid() bool {
 		}
 	}
 	fingerprint, err := sandboxPolicyFingerprint(
-		p.generationSHA256, p.image, p.workspace, p.inputDirectory, p.uid, p.gid, p.environment,
+		p.generationSHA256, p.image, p.workspace, p.inputDirectory, p.toolchainDirectory, p.uid, p.gid, p.environment,
 		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway,
 	)
 	return err == nil && fingerprint == p.sandboxSHA256
@@ -420,6 +438,41 @@ func normalizeEndpointSpecs(values []EndpointSpec, reservedPort int) ([]Endpoint
 	return result, nil
 }
 
+func normalizeToolchainMounts(values []ToolchainMount, directory string) ([]ToolchainMount, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(values) > maxToolchains || !cleanAbsoluteNonRoot(directory) {
+		return nil, errors.New("sandbox toolchain mounts require a trusted toolchain directory")
+	}
+	generations := filepath.Join(directory, "generations")
+	result := append([]ToolchainMount(nil), values...)
+	for _, value := range result {
+		if !toolchainNamePattern.MatchString(value.Family) || !cleanAbsoluteNonRoot(value.Source) {
+			return nil, errors.New("sandbox toolchain mount is invalid")
+		}
+		relative, err := filepath.Rel(generations, value.Source)
+		if err != nil || !filepath.IsLocal(relative) {
+			return nil, errors.New("sandbox toolchain mount escapes the trusted store")
+		}
+		parts := strings.Split(filepath.ToSlash(relative), "/")
+		if len(parts) != 2 || !digestPattern.MatchString(parts[0]) || parts[1] != "root" {
+			return nil, errors.New("sandbox toolchain mount does not identify an immutable generation root")
+		}
+		info, err := os.Lstat(value.Source)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0222 != 0 {
+			return nil, errors.New("sandbox toolchain generation root is missing or mutable")
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Family < result[j].Family })
+	for index := 1; index < len(result); index++ {
+		if result[index-1].Family == result[index].Family {
+			return nil, errors.New("sandbox toolchain families must be unique")
+		}
+	}
+	return result, nil
+}
+
 func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	if !p.Valid() || spec.PolicySHA256 != p.generationSHA256 {
 		return Plan{}, errors.New("workload policy generation does not match the launcher")
@@ -440,6 +493,10 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		return Plan{}, err
 	}
 	endpoints, err := normalizeEndpointSpecs(spec.Endpoints, p.gateway.proxyPort)
+	if err != nil {
+		return Plan{}, err
+	}
+	toolchains, err := normalizeToolchainMounts(spec.Toolchains, p.toolchainDirectory)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -490,6 +547,12 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 			Init:  true,
 		},
 	}
+	for _, toolchain := range toolchains {
+		create.HostConfig.Mounts = append(create.HostConfig.Mounts, dockerMount{
+			Type: "bind", Source: toolchain.Source, Target: path.Join("/opt/loki/managed", toolchain.Family), ReadOnly: true,
+			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
+		})
+	}
 	if spec.InputPath != "" {
 		create.Cmd = append([]string{"/bin/sh", "-c", `exec "$@" < /loki-run-input`, "--"}, create.Cmd...)
 		create.HostConfig.Mounts = append(create.HostConfig.Mounts, dockerMount{
@@ -500,7 +563,8 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	return Plan{
 		valid: true, name: resource.Name(), policySHA256: p.generationSHA256,
 		sandboxSHA256: p.sandboxSHA256, resource: resource, network: network,
-		endpoints: endpoints, gateway: p.gateway, inputDirectory: p.inputDirectory, inputPath: spec.InputPath,
+		endpoints: endpoints, toolchains: toolchains, gateway: p.gateway,
+		inputDirectory: p.inputDirectory, toolchainDirectory: p.toolchainDirectory, inputPath: spec.InputPath,
 		maxOutputBytes: spec.MaxOutputBytes, create: create,
 	}, nil
 }
@@ -559,6 +623,15 @@ func (p Plan) Valid() bool {
 	}
 	for index := range normalized {
 		if normalized[index] != p.endpoints[index] {
+			return false
+		}
+	}
+	toolchains, err := normalizeToolchainMounts(p.toolchains, p.toolchainDirectory)
+	if err != nil || len(toolchains) != len(p.toolchains) {
+		return false
+	}
+	for index := range toolchains {
+		if toolchains[index] != p.toolchains[index] {
 			return false
 		}
 	}

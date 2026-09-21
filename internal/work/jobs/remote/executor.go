@@ -87,6 +87,7 @@ func (e *Executor) Start(ctx context.Context, request jobs.StartRequest) (jobs.S
 		TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 		Network        jobs.NetworkProfile    `json:"network,omitempty"`
 		Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
+		Toolchains     []jobs.ToolchainRef    `json:"toolchains,omitempty"`
 	}{
 		Operation:      "start",
 		RequestID:      request.RequestID,
@@ -95,6 +96,7 @@ func (e *Executor) Start(ctx context.Context, request jobs.StartRequest) (jobs.S
 		TimeoutSeconds: request.TimeoutSeconds,
 		Network:        request.Network,
 		Endpoints:      append([]jobs.EndpointRequest(nil), request.Endpoints...),
+		Toolchains:     append([]jobs.ToolchainRef(nil), request.Toolchains...),
 	})
 	if err != nil {
 		return jobs.StartResult{}, err

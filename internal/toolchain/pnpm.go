@@ -96,15 +96,20 @@ func ParsePnpmPackageManager(raw string) (Selector, error) {
 	if !strings.HasPrefix(raw, "pnpm@") {
 		return Selector{}, errors.New("packageManager must select pnpm with a pnpm@ version declaration")
 	}
-	return ParseProjectSelector(strings.TrimPrefix(raw, "pnpm@"), PnpmVersionScheme{})
+	value := strings.TrimPrefix(raw, "pnpm@")
+	version, integrity, hasIntegrity := strings.Cut(value, "+")
+	if hasIntegrity && (integrity == "" || len(integrity) > 1024 || strings.ContainsAny(integrity, "\r\n\x00")) {
+		return Selector{}, errors.New("pnpm packageManager integrity suffix is invalid")
+	}
+	return ParseProjectSelector(version, PnpmVersionScheme{})
 }
 
 type PnpmRelease struct {
-	Version      string
-	URL          string
-	SHA256       string
-	NodeMajorMin uint64
-	NodeMajorMax uint64
+	Version      string `json:"version"`
+	URL          string `json:"url"`
+	SHA256       string `json:"sha256"`
+	NodeMajorMin uint64 `json:"node_major_min"`
+	NodeMajorMax uint64 `json:"node_major_max,omitempty"`
 }
 
 func (r PnpmRelease) Validate() error {

@@ -54,10 +54,11 @@ func writePnpmArchive(t *testing.T) (string, string) {
 
 func TestParsePnpmPackageManagerAndVersionScheme(t *testing.T) {
 	for raw, want := range map[string]Selector{
-		"pnpm@12.5.1": {Kind: SelectorExact, Value: "12.5.1"},
-		"pnpm@12.5":   {Kind: SelectorPartial, Value: "12.5"},
-		"pnpm@12":     {Kind: SelectorPartial, Value: "12"},
-		"pnpm@latest": {Kind: SelectorFloating, Value: "*"},
+		"pnpm@12.5.1":                {Kind: SelectorExact, Value: "12.5.1"},
+		"pnpm@12.5.1+sha512.fixture": {Kind: SelectorExact, Value: "12.5.1"},
+		"pnpm@12.5":                  {Kind: SelectorPartial, Value: "12.5"},
+		"pnpm@12":                    {Kind: SelectorPartial, Value: "12"},
+		"pnpm@latest":                {Kind: SelectorFloating, Value: "*"},
 	} {
 		got, err := ParsePnpmPackageManager(raw)
 		if err != nil || got != want {

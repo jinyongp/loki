@@ -38,6 +38,7 @@ type Workload struct {
 	TimeoutSeconds int
 	Network        NetworkProfile
 	Endpoints      []EndpointRequest
+	Toolchains     []ToolchainRef
 	Input          []byte
 	InputPath      string
 	MaxOutputBytes int
@@ -125,6 +126,7 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (StartResult,
 		ID: id, RequestID: normalized.RequestID, RequestSHA256: fingerprint, CWD: normalized.CWD,
 		Argv: append([]string(nil), normalized.Argv...), TimeoutSeconds: normalized.TimeoutSeconds,
 		Network: normalized.Network, Endpoints: append([]EndpointRequest(nil), normalized.Endpoints...),
+		Toolchains: append([]ToolchainRef(nil), normalized.Toolchains...),
 	})
 	if err != nil {
 		return StartResult{}, err

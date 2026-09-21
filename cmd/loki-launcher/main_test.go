@@ -37,6 +37,7 @@ func validLauncherLayout(t *testing.T) launcherLayout {
 		GatewayPIDs:              64,
 		GatewayTmpfsBytes:        32 << 20,
 		Workspace:                t.TempDir(),
+		ToolchainStore:           filepath.Join(t.TempDir(), "toolchains"),
 		Environment:              []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"},
 		WorkloadUID:              2001,
 		WorkloadGID:              2001,
@@ -68,6 +69,9 @@ func TestBuildLauncherConstructsNarrowRoleInputs(t *testing.T) {
 	}
 	if _, ok := options.Runner.(*sandbox.Engine); !ok {
 		t.Fatalf("runner type = %T", options.Runner)
+	}
+	if options.Toolchains == nil {
+		t.Fatal("launcher toolchain resolver is nil")
 	}
 	if options.Ready != nil {
 		t.Fatal("builder installed runtime readiness callback")

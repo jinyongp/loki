@@ -135,7 +135,7 @@ func (j *Journal) MaxOutputBytes() int {
 
 func (j *Journal) Admit(id, backendRef string, deadline, now time.Time) (Record, error) {
 	record, replayed, err := j.admit(
-		id, backendRef, "", "", NetworkNone, nil, deadline, now, false,
+		id, backendRef, "", "", NetworkNone, nil, nil, deadline, now, false,
 	)
 	if replayed {
 		return Record{}, errors.New("legacy job admission cannot replay")
@@ -152,6 +152,16 @@ func (j *Journal) AdmitRequest(id, backendRef, requestID, requestSHA256 string, 
 func (j *Journal) AdmitRequestWithIntent(
 	id, backendRef, requestID, requestSHA256 string,
 	network NetworkProfile, endpoints []EndpointRequest,
+	deadline, now time.Time,
+) (Record, bool, error) {
+	return j.AdmitRequestWithToolchains(
+		id, backendRef, requestID, requestSHA256, network, endpoints, nil, deadline, now,
+	)
+}
+
+func (j *Journal) AdmitRequestWithToolchains(
+	id, backendRef, requestID, requestSHA256 string,
+	network NetworkProfile, endpoints []EndpointRequest, toolchains []ToolchainRef,
 	deadline, now time.Time,
 ) (Record, bool, error) {
 	requestID, err := NormalizeRequestID(requestID)
@@ -174,14 +184,18 @@ func (j *Journal) AdmitRequestWithIntent(
 	if err != nil {
 		return Record{}, false, err
 	}
+	toolchains, err = normalizeToolchainRefs(toolchains)
+	if err != nil {
+		return Record{}, false, err
+	}
 	return j.admit(
-		id, backendRef, requestID, requestSHA256, network, endpoints, deadline, now, true,
+		id, backendRef, requestID, requestSHA256, network, endpoints, toolchains, deadline, now, true,
 	)
 }
 
 func (j *Journal) admit(
 	id, backendRef, requestID, requestSHA256 string,
-	network NetworkProfile, endpoints []EndpointRequest,
+	network NetworkProfile, endpoints []EndpointRequest, toolchains []ToolchainRef,
 	deadline, now time.Time, allowReplay bool,
 ) (Record, bool, error) {
 	j.mu.Lock()
@@ -191,7 +205,7 @@ func (j *Journal) admit(
 	}
 	if !jobIDPattern.MatchString(id) || !validBackendRef(backendRef) ||
 		!validReplayIdentity(requestID, requestSHA256) || !network.Valid() ||
-		!validEndpointRequests(endpoints) {
+		!validEndpointRequests(endpoints) || !validToolchainRefs(toolchains) {
 		return Record{}, false, errors.New("job admission record is invalid")
 	}
 	now = now.UTC()
@@ -204,7 +218,8 @@ func (j *Journal) admit(
 	}
 	if existing, exists := j.records[id]; exists {
 		if allowReplay && existing.RequestID == requestID && existing.RequestSHA256 == requestSHA256 &&
-			existing.Network == network && sameEndpointRequests(existing.EndpointRequests, endpoints) {
+			existing.Network == network && sameEndpointRequests(existing.EndpointRequests, endpoints) &&
+			sameToolchainRefs(existing.Toolchains, toolchains) {
 			return cloneRecord(existing), true, nil
 		}
 		if allowReplay {
@@ -218,8 +233,9 @@ func (j *Journal) admit(
 	record := Record{
 		ID: id, BackendRef: backendRef, RequestID: requestID, RequestSHA256: requestSHA256,
 		Network: network, EndpointRequests: append([]EndpointRequest(nil), endpoints...),
-		State:     StateAdmitted,
-		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
+		Toolchains: append([]ToolchainRef(nil), toolchains...),
+		State:      StateAdmitted,
+		CreatedAt:  now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 		DeadlineAt: deadline.Format(time.RFC3339Nano),
 	}
 	if err := j.publish(record, false); err != nil {

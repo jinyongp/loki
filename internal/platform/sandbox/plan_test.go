@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,6 +138,63 @@ func TestWorkloadSpecValidation(t *testing.T) {
 	}
 	if _, err := policy.Plan(spec); err == nil {
 		t.Fatal("too many arguments were accepted")
+	}
+}
+
+func TestPlanMountsOnlyImmutableManagedToolchainGenerations(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "toolchains")
+	generations := filepath.Join(store, "generations")
+	if err := os.MkdirAll(generations, 0755); err != nil {
+		t.Fatal(err)
+	}
+	generationRoot := filepath.Join(generations, strings.Repeat("d", 64), "root")
+	if err := os.MkdirAll(generationRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(generationRoot, 0555); err != nil {
+		t.Fatal(err)
+	}
+	options := validPolicyOptions()
+	options.ToolchainDirectory = store
+	policy, err := NewPolicy(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := validWorkloadSpec()
+	spec.Toolchains = []ToolchainMount{{Family: "node", Source: generationRoot}}
+	plan, err := policy.Plan(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.create.HostConfig.Mounts) != 2 {
+		t.Fatalf("mounts = %#v", plan.create.HostConfig.Mounts)
+	}
+	mount := plan.create.HostConfig.Mounts[1]
+	if mount.Source != generationRoot || mount.Target != "/opt/loki/managed/node" || !mount.ReadOnly {
+		t.Fatalf("toolchain mount = %#v", mount)
+	}
+
+	outside := spec
+	outside.Toolchains = []ToolchainMount{{Family: "node", Source: filepath.Join(t.TempDir(), "root")}}
+	if _, err = policy.Plan(outside); err == nil {
+		t.Fatal("toolchain mount outside trusted store was accepted")
+	}
+	writableRoot := filepath.Join(store, "generations", strings.Repeat("e", 64), "root")
+	if err = os.MkdirAll(writableRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writable := spec
+	writable.Toolchains = []ToolchainMount{{Family: "node", Source: writableRoot}}
+	if _, err = policy.Plan(writable); err == nil {
+		t.Fatal("writable toolchain generation was accepted")
+	}
+	duplicate := spec
+	duplicate.Toolchains = []ToolchainMount{
+		{Family: "node", Source: generationRoot},
+		{Family: "node", Source: generationRoot},
+	}
+	if _, err = policy.Plan(duplicate); err == nil {
+		t.Fatal("duplicate toolchain family was accepted")
 	}
 }
 

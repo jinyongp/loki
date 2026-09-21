@@ -15,6 +15,7 @@
   "GatewayPIDs": 64,
   "GatewayTmpfsBytes": 33554432,
   "Workspace": "/srv/workspace/loki",
+  "ToolchainStore": "/var/lib/loki-go/toolchains",
   "WorkloadUID": @RUNNER_UID@,
   "WorkloadGID": @RUNNER_GID@,
   "MemoryBytes": 1073741824,

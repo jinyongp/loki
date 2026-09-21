@@ -22,12 +22,16 @@ type jobMCPRequest struct {
 	JobID          string                 `json:"job_id"`
 }
 
+type JobToolchainResolver interface {
+	Resolve(context.Context, string) ([]jobs.ToolchainRef, error)
+}
+
 func jobStatusResult(status jobs.Status) map[string]any {
 	result := map[string]any{
 		"job_id": status.JobID, "state": status.State,
 		"created_at": status.CreatedAt, "updated_at": status.UpdatedAt, "deadline_at": status.DeadlineAt,
 		"network": status.Network, "endpoints": append([]jobs.EndpointLease{}, status.Endpoints...),
-		"truncated": status.Truncated,
+		"toolchains": append([]jobs.ToolchainRef{}, status.Toolchains...), "truncated": status.Truncated,
 	}
 	if status.Outcome != "" {
 		result["outcome"] = status.Outcome
@@ -41,7 +45,7 @@ func jobStatusResult(status jobs.Status) map[string]any {
 	return result
 }
 
-func JobHandlers(controller jobs.Controller) map[string]mcpserver.Handler {
+func JobHandlers(controller jobs.Controller, toolchains JobToolchainResolver) map[string]mcpserver.Handler {
 	return map[string]mcpserver.Handler{
 		"job": mcpserver.Typed(func(ctx context.Context, request jobMCPRequest) (*mcp.CallToolResult, error) {
 			if controller == nil {
@@ -52,10 +56,19 @@ func JobHandlers(controller jobs.Controller) map[string]mcpserver.Handler {
 			}
 			switch request.Action {
 			case "start":
+				var selected []jobs.ToolchainRef
+				var err error
+				if toolchains != nil {
+					selected, err = toolchains.Resolve(ctx, request.CWD)
+					if err != nil {
+						return nil, err
+					}
+				}
 				normalized, _, err := jobs.NormalizeStartRequest(jobs.StartRequest{
 					RequestID: request.RequestID, CWD: request.CWD,
 					Argv: append([]string(nil), request.Argv...), TimeoutSeconds: request.TimeoutSeconds,
 					Network: request.Network, Endpoints: append([]jobs.EndpointRequest(nil), request.Endpoints...),
+					Toolchains: append([]jobs.ToolchainRef(nil), selected...),
 				})
 				if err != nil {
 					return nil, err
@@ -75,6 +88,7 @@ func JobHandlers(controller jobs.Controller) map[string]mcpserver.Handler {
 					"state": result.State, "replayed": result.Replayed, "detached": result.Detached,
 					"deadline_at": result.DeadlineAt, "network": normalized.Network,
 					"endpoint_requests": append([]jobs.EndpointRequest{}, normalized.Endpoints...),
+					"toolchains":        append([]jobs.ToolchainRef{}, normalized.Toolchains...),
 				}, nil)
 			case "inspect":
 				result, err := controller.Inspect(ctx, request.JobID)

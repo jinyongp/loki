@@ -291,11 +291,17 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 		"User=root\n",
 		"ConditionPathExists=/run/docker.sock\n",
 		"ExecStart=/opt/loki/bin/loki-launcher ",
-		"ReadWritePaths=/var/lib/loki-go/launcher /run/loki-go/launcher -/run/docker.sock\n",
+		"ReadOnlyPaths=/var/lib/loki-go/toolchains/generations\n",
+		"ReadWritePaths=/var/lib/loki-go/launcher /var/lib/loki-go/toolchains/refs /run/loki-go/launcher -/run/docker.sock\n",
 		"RestrictAddressFamilies=AF_UNIX\n",
 	} {
 		if !strings.Contains(launcher, want) {
 			t.Fatalf("launcher unit does not contain %q", want)
+		}
+	}
+	for _, forbidden := range []string{"/var/lib/loki-go/toolchains/staging", "/var/lib/loki-go/toolchains/locks"} {
+		if strings.Contains(launcher, forbidden) {
+			t.Fatalf("launcher received managed toolchain mutation authority: %s", forbidden)
 		}
 	}
 	executor := read("loki-go-executor.service")

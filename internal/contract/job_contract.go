@@ -60,6 +60,34 @@ func jobEndpointRequestSchema() map[string]any {
 	}
 }
 
+func jobToolchainRefSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"family": map[string]any{
+				"type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$",
+				"description": "Administrator-approved managed toolchain family selected from project declarations.",
+			},
+			"version": map[string]any{
+				"type": "string", "minLength": 1, "maxLength": 128,
+				"description": "Canonical provider version selected for this Job.",
+			},
+			"generation_id": map[string]any{
+				"type": "string", "pattern": "^[0-9a-f]{64}$",
+				"description": "Immutable Loki-managed generation identity mounted read-only into the Job.",
+			},
+		},
+		"required": []string{"family", "version", "generation_id"},
+	}
+}
+
+func jobToolchainRefListSchema(description string) map[string]any {
+	return map[string]any{
+		"type": "array", "maxItems": 8, "items": jobToolchainRefSchema(),
+		"description": description,
+	}
+}
+
 func jobEndpointLeaseSchema() map[string]any {
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
@@ -106,7 +134,8 @@ func jobStatusOutputSchema() map[string]any {
 				"type": "array", "maxItems": 8, "items": jobEndpointLeaseSchema(),
 				"description": "Job-owned endpoint leases. Leases are absent until the exact gateway binding is durably established.",
 			},
-			"outcome": jobOutcomeSchema("Terminal Job outcome when available."),
+			"toolchains": jobToolchainRefListSchema("Immutable managed toolchain generations selected for this Job from project declarations."),
+			"outcome":    jobOutcomeSchema("Terminal Job outcome when available."),
 			"exit_code": map[string]any{
 				"type": "integer", "minimum": 0, "maximum": 255,
 				"description": "Observed process exit code when the backend produced one.",
@@ -117,7 +146,7 @@ func jobStatusOutputSchema() map[string]any {
 				"description": "Whether retained Job output was truncated at Loki's configured bound.",
 			},
 		},
-		"required": []string{"job_id", "state", "created_at", "updated_at", "deadline_at", "network", "endpoints"},
+		"required": []string{"job_id", "state", "created_at", "updated_at", "deadline_at", "network", "endpoints", "toolchains"},
 	}
 }
 
@@ -143,7 +172,7 @@ func jobTool() (*mcp.Tool, error) {
 			{Name: "argv", Schema: map[string]any{
 				"type": "array", "minItems": 1, "maxItems": 256,
 				"items":       map[string]any{"type": "string", "maxLength": 4096},
-				"description": "Command argument vector. The first item is an absolute in-sandbox executable path until managed toolchain resolution is introduced.",
+				"description": "Command argument vector. The first item is an absolute in-sandbox executable path; managed Node.js and pnpm commands use Loki-owned shims under /opt/loki/toolchain/bin.",
 			}},
 			{Name: "timeout_seconds", Schema: map[string]any{
 				"type": "integer", "minimum": 1, "maximum": 86400,
@@ -193,9 +222,12 @@ func jobTool() (*mcp.Tool, error) {
 			"endpoint_requests": jobEndpointRequestListSchema(
 				"Normalized logical endpoint declarations bound to this start request.",
 			),
+			"toolchains": jobToolchainRefListSchema(
+				"Managed toolchain generations selected by Loki from project declarations for this start request.",
+			),
 		},
 		"required": []string{
-			"action", "request_id", "job_id", "state", "replayed", "detached", "deadline_at", "network", "endpoint_requests",
+			"action", "request_id", "job_id", "state", "replayed", "detached", "deadline_at", "network", "endpoint_requests", "toolchains",
 		},
 	}
 
@@ -250,7 +282,7 @@ func jobTool() (*mcp.Tool, error) {
 
 	tool := &mcp.Tool{
 		Name:        "job",
-		Description: "Start replay-safe asynchronous Jobs through Loki's isolated executor boundary, inspect durable state and Job-owned endpoint leases, read bounded output snapshots, or cancel one Job. Public arguments expose only reviewed logical network profiles and endpoint declarations; launcher, host-port selection, policy, image, mount, credential, Docker, and backend instance authority remain internal.",
+		Description: "Start replay-safe asynchronous Jobs through Loki's isolated executor boundary, inspect durable state, selected managed toolchains and Job-owned endpoint leases, read bounded output snapshots, or cancel one Job. Project toolchain declarations are resolved by Loki; public arguments cannot select generation IDs, host mounts, launcher, host ports, policy, image, credentials, Docker, or backend instance authority.",
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: boolPointer(true), IdempotentHint: false,
 			OpenWorldHint: boolPointer(false), ReadOnlyHint: false,

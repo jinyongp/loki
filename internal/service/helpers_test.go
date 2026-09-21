@@ -75,6 +75,12 @@ func gitJobsFixture(t *testing.T, c config.Config, environment map[string]string
 	return serviceTestJobRunner{root: c.Root, env: toolEnvironment(values)}
 }
 
+type emptyJobToolchainResolver struct{}
+
+func (emptyJobToolchainResolver) Resolve(context.Context, string) ([]jobs.ToolchainRef, error) {
+	return nil, nil
+}
+
 func policyGenerationFixture(t *testing.T) controlpolicy.Generation {
 	t.Helper()
 	generation, err := controlpolicy.NewGeneration(map[string]any{"fixture": true})

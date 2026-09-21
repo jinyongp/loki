@@ -31,6 +31,7 @@ func (f *fakeJobsController) Start(_ context.Context, request jobs.StartRequest)
 	defer f.mu.Unlock()
 	request.Argv = append([]string(nil), request.Argv...)
 	request.Endpoints = append([]jobs.EndpointRequest(nil), request.Endpoints...)
+	request.Toolchains = append([]jobs.ToolchainRef(nil), request.Toolchains...)
 	f.startRequests = append(f.startRequests, request)
 	return f.startResult, f.startErr
 }
@@ -85,9 +86,60 @@ func jobControllerFixture() *fakeJobsController {
 	}
 }
 
+type fakeJobToolchainResolver struct {
+	cwd  string
+	refs []jobs.ToolchainRef
+	err  error
+}
+
+func (r *fakeJobToolchainResolver) Resolve(_ context.Context, cwd string) ([]jobs.ToolchainRef, error) {
+	r.cwd = cwd
+	return append([]jobs.ToolchainRef(nil), r.refs...), r.err
+}
+
+func TestJobHandlerInjectsResolvedToolchainIntent(t *testing.T) {
+	controller := jobControllerFixture()
+	refs := []jobs.ToolchainRef{
+		{Family: "node", Version: "26.9.0", GenerationID: strings.Repeat("a", 64)},
+		{Family: "pnpm", Version: "12.5.1", GenerationID: strings.Repeat("b", 64)},
+	}
+	resolver := &fakeJobToolchainResolver{refs: refs}
+	handler := JobHandlers(controller, resolver)["job"]
+	result, err := handler(t.Context(), map[string]any{
+		"action": "start", "request_id": controller.startResult.RequestID,
+		"cwd": "project", "argv": []any{"/bin/true"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolver.cwd != "project" {
+		t.Fatalf("resolver cwd = %q", resolver.cwd)
+	}
+	controller.mu.Lock()
+	requests := append([]jobs.StartRequest(nil), controller.startRequests...)
+	controller.mu.Unlock()
+	if len(requests) != 1 || !reflect.DeepEqual(requests[0].Toolchains, refs) {
+		t.Fatalf("resolved start request = %#v", requests)
+	}
+	value := result.StructuredContent.(map[string]any)
+	if !reflect.DeepEqual(value["toolchains"], refs) {
+		t.Fatalf("start toolchains = %#v", value["toolchains"])
+	}
+	controller.status.Toolchains = append([]jobs.ToolchainRef(nil), refs...)
+	inspected, err := handler(t.Context(), map[string]any{
+		"action": "inspect", "job_id": controller.startResult.JobID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(inspected.StructuredContent.(map[string]any)["toolchains"], refs) {
+		t.Fatalf("inspect toolchains = %#v", inspected.StructuredContent)
+	}
+}
+
 func TestJobHandlersExposeTypedPublicLifecycle(t *testing.T) {
 	controller := jobControllerFixture()
-	handler := JobHandlers(controller)["job"]
+	handler := JobHandlers(controller, nil)["job"]
 	if handler == nil {
 		t.Fatal("job handler missing")
 	}
@@ -179,13 +231,13 @@ func TestJobHandlersExposeTypedPublicLifecycle(t *testing.T) {
 }
 
 func TestJobHandlerFailsClosedWithoutControllerOrValidAction(t *testing.T) {
-	handler := JobHandlers(nil)["job"]
+	handler := JobHandlers(nil, nil)["job"]
 	if _, err := handler(t.Context(), map[string]any{"action": "inspect", "job_id": strings.Repeat("a", 32)}); err == nil {
 		t.Fatal("job handler accepted missing controller")
 	}
 
 	controller := jobControllerFixture()
-	handler = JobHandlers(controller)["job"]
+	handler = JobHandlers(controller, nil)["job"]
 	if _, err := handler(t.Context(), map[string]any{"action": "unsupported"}); err == nil {
 		t.Fatal("job handler accepted unsupported action")
 	}

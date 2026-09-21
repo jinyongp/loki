@@ -1,0 +1,115 @@
+package toolchain
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func provisionProjectNode(t *testing.T, store GenerationStore, release NodeRelease) {
+	t.Helper()
+	_, err := store.Provision(t.Context(), release.GenerationID(), func(_ context.Context, root string) error {
+		base := filepath.Join(root, "opt", "loki", "toolchain", "node", release.Version, "bin")
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		for _, name := range []string{"node", "npm", "npx"} {
+			if err := os.WriteFile(filepath.Join(base, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func provisionProjectPnpm(t *testing.T, store GenerationStore, release PnpmRelease) {
+	t.Helper()
+	_, err := store.Provision(t.Context(), release.GenerationID(), func(_ context.Context, root string) error {
+		base := filepath.Join(root, "opt", "loki", "toolchain", "pnpm", release.Version)
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(base, "pnpm"), []byte("#!/bin/sh\n"), 0755)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProjectResolverSelectsIndependentProjectGenerations(t *testing.T) {
+	store := generationStoreFixture(t)
+	node22 := nodeRelease("22.23.4", strings.Repeat("a", 64))
+	node26 := nodeRelease("26.9.0", strings.Repeat("b", 64))
+	pnpm := pnpmRelease("12.5.1", strings.Repeat("c", 64), 22, 26)
+	provisionProjectNode(t, store, node22)
+	provisionProjectNode(t, store, node26)
+	provisionProjectPnpm(t, store, pnpm)
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "older", "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "current"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "older", ".node-version"), []byte("22\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "current", ".nvmrc"), []byte("26\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "current", "package.json"), []byte("{\"packageManager\":\"pnpm@12.5.1\"}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resolver := ProjectResolver{
+		Root: root, Store: store,
+		Catalog: Catalog{Version: CatalogVersion, Node: []NodeRelease{node22, node26}, Pnpm: []PnpmRelease{pnpm}},
+	}
+
+	older, err := resolver.Resolve("older/nested")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(older) != 1 || older[0].Family != "node" || older[0].Version != node22.Version ||
+		older[0].GenerationID != node22.GenerationID() {
+		t.Fatalf("older project selection = %#v", older)
+	}
+	current, err := resolver.Resolve("current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current) != 2 ||
+		current[0] != (ProjectSelection{Family: "node", Version: node26.Version, GenerationID: node26.GenerationID()}) ||
+		current[1] != (ProjectSelection{Family: "pnpm", Version: pnpm.Version, GenerationID: pnpm.GenerationID()}) {
+		t.Fatalf("current project selection = %#v", current)
+	}
+}
+
+func TestProjectResolverRejectsConflictingOrEscapingDeclarations(t *testing.T) {
+	store := generationStoreFixture(t)
+	node := nodeRelease("26.9.0", strings.Repeat("d", 64))
+	provisionProjectNode(t, store, node)
+	root := t.TempDir()
+	project := filepath.Join(root, "project")
+	if err := os.Mkdir(project, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".node-version"), []byte("26\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".nvmrc"), []byte("25\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resolver := ProjectResolver{Root: root, Store: store, Catalog: Catalog{Version: CatalogVersion, Node: []NodeRelease{node}}}
+	if _, err := resolver.Resolve("project"); err == nil || !strings.Contains(err.Error(), "conflicting") {
+		t.Fatalf("conflicting selector error = %v", err)
+	}
+	if _, err := resolver.Resolve("../outside"); err == nil {
+		t.Fatal("escaping project cwd was accepted")
+	}
+}

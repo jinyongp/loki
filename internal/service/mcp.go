@@ -35,6 +35,7 @@ type MCPOptions struct {
 	Browser                                              BrowserCaller
 	Jobs                                                 jobs.Controller
 	GitJobs                                              jobs.Runner
+	JobToolchains                                        JobToolchainResolver
 	RuntimeSocket, BrowserSocket, ExecutorSocket, RGPath string
 	PackagedSkillRoot                                    string
 	GitTemplateRoots                                     []string
@@ -81,6 +82,9 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	if options.GitJobs == nil {
 		return nil, errors.New("MCP requires confined Git Job execution")
+	}
+	if options.JobToolchains == nil {
+		return nil, errors.New("MCP requires managed Job toolchain resolution")
 	}
 	app = &MCPApp{Claims: NewDevtoolsSessionClaims()}
 	owned := app
@@ -147,7 +151,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
 	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: repository, Claims: app.Claims}
-	for _, group := range []map[string]mcpserver.Handler{workspacemcp.WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), workspacemcp.GitHandlers(repository), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs)} {
+	for _, group := range []map[string]mcpserver.Handler{workspacemcp.WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), workspacemcp.GitHandlers(repository), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs, options.JobToolchains)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

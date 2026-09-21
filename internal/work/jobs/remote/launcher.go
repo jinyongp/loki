@@ -118,6 +118,7 @@ func (l *Launcher) Start(ctx context.Context, workload jobs.Workload) (jobs.Star
 		TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 		Network        jobs.NetworkProfile    `json:"network,omitempty"`
 		Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
+		Toolchains     []jobs.ToolchainRef    `json:"toolchains,omitempty"`
 	}{
 		Operation:      "start",
 		ID:             workload.ID,
@@ -129,6 +130,7 @@ func (l *Launcher) Start(ctx context.Context, workload jobs.Workload) (jobs.Star
 		TimeoutSeconds: workload.TimeoutSeconds,
 		Network:        workload.Network,
 		Endpoints:      append([]jobs.EndpointRequest(nil), workload.Endpoints...),
+		Toolchains:     append([]jobs.ToolchainRef(nil), workload.Toolchains...),
 	}
 	raw, err := l.client.Call(ctx, request)
 	if err != nil {

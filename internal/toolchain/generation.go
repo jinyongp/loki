@@ -87,7 +87,7 @@ func (s GenerationStore) generationPath(id string) string {
 }
 
 func (s GenerationStore) Lookup(id string) (Generation, error) {
-	if err := s.prepare(); err != nil {
+	if err := s.validate(); err != nil {
 		return Generation{}, err
 	}
 	if err := validateGenerationID(id); err != nil {

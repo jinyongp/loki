@@ -226,7 +226,7 @@ func launcherJournal(t *testing.T, retention time.Duration, maxJobs int) *jobs.J
 func lifecycleFixture(t *testing.T, runner Runner, timeout, retention time.Duration, maxJobs int) *lifecycle {
 	t.Helper()
 	journal := launcherJournal(t, retention, maxJobs)
-	l, err := newLifecycle(t.Context(), launcherPolicy(t), runner, journal, timeout)
+	l, err := newLifecycle(t.Context(), launcherPolicy(t), runner, nil, journal, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestAsyncStartRejectsForgedReplayIdentityBeforeRunner(t *testing.T) {
 			workload.Argv = append([]string(nil), base.Argv...)
 			workload.Endpoints = append([]jobs.EndpointRequest(nil), base.Endpoints...)
 			test.mutate(&workload)
-			if _, err := l.startWorkload(workload, strings.Repeat("a", 64)); err == nil {
+			if _, err := l.startWorkload(t.Context(), workload, strings.Repeat("a", 64)); err == nil {
 				t.Fatal("forged replay identity was accepted")
 			}
 			start, _, _, _ := runner.counts()
@@ -438,7 +438,7 @@ func TestAsyncStartReplaysSameRequestAndConflictsChangedInput(t *testing.T) {
 		ID: id, RequestID: requestID, RequestSHA256: fingerprint,
 		CWD: ".", Argv: []string{"/bin/true"}, TimeoutSeconds: 3,
 	}
-	first, err := l.startWorkload(workload, strings.Repeat("a", 64))
+	first, err := l.startWorkload(t.Context(), workload, strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func TestAsyncStartReplaysSameRequestAndConflictsChangedInput(t *testing.T) {
 		t.Fatal("asynchronous workload did not start")
 	}
 
-	second, err := l.startWorkload(workload, strings.Repeat("a", 64))
+	second, err := l.startWorkload(t.Context(), workload, strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestAsyncStartReplaysSameRequestAndConflictsChangedInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = l.startWorkload(changed, strings.Repeat("a", 64)); err == nil {
+	if _, err = l.startWorkload(t.Context(), changed, strings.Repeat("a", 64)); err == nil {
 		t.Fatal("changed-input request replay was accepted")
 	}
 	starts, _, _, _ = runner.counts()
@@ -499,7 +499,7 @@ func TestAsyncInspectOutputAndCancelAreNonAuthorityBearing(t *testing.T) {
 		outputBytes: []byte("live-output"), outputTruncated: true,
 	}
 	l := lifecycleFixture(t, runner, 5*time.Second, time.Second, 8)
-	if _, err = l.startWorkload(jobs.Workload{
+	if _, err = l.startWorkload(t.Context(), jobs.Workload{
 		ID: id, RequestID: requestID, RequestSHA256: fingerprint,
 		CWD: ".", Argv: []string{"/bin/sleep", "10"}, TimeoutSeconds: 5,
 	}, strings.Repeat("a", 64)); err != nil {
@@ -558,7 +558,7 @@ func TestAsyncStartRejectsRequestedLifetimeAboveTrustedLimit(t *testing.T) {
 	}
 	runner := &fakeRunner{}
 	l := lifecycleFixture(t, runner, time.Second, time.Second, 8)
-	if _, err = l.startWorkload(jobs.Workload{
+	if _, err = l.startWorkload(t.Context(), jobs.Workload{
 		ID: id, RequestID: requestID, RequestSHA256: fingerprint,
 		CWD: ".", Argv: []string{"/bin/true"}, TimeoutSeconds: 2,
 	}, strings.Repeat("a", 64)); err == nil {
@@ -589,7 +589,7 @@ func TestAsyncEndpointLeasesBindBeforeRunningAndReleaseOnCancel(t *testing.T) {
 		endpointBindings: []sandbox.EndpointBinding{{Name: "web", Port: 5173, HostPort: 43001}},
 	}
 	l := lifecycleFixture(t, runner, 5*time.Second, time.Second, 8)
-	if _, err = l.startWorkload(jobs.Workload{
+	if _, err = l.startWorkload(t.Context(), jobs.Workload{
 		ID: id, RequestID: requestID, RequestSHA256: fingerprint,
 		CWD: normalized.CWD, Argv: normalized.Argv, TimeoutSeconds: normalized.TimeoutSeconds,
 		Network: normalized.Network, Endpoints: normalized.Endpoints,
@@ -669,7 +669,7 @@ func TestReconcileRejectsChangedEndpointHostPortAndRevokesLease(t *testing.T) {
 		endpointBindings: []sandbox.EndpointBinding{{Name: "web", Port: 5173, HostPort: 43002}},
 		cleanupResult:    sandbox.CleanupComplete,
 	}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -863,7 +863,7 @@ func TestReconcileResumesWithoutDuplicateStartAndKeepsOriginalDeadline(t *testin
 		blockObserve: true,
 		canceled:     make(chan struct{}),
 	}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,7 +902,7 @@ func TestReconcileMarksMissingUncertainStartOutcomeUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeRunner{inspectState: sandbox.ResourceState{}}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -937,7 +937,7 @@ func TestReconcileDoesNotAdoptUnboundExistingResource(t *testing.T) {
 	}
 
 	runner := &fakeRunner{inspectState: sandbox.ResourceState{Exists: true, Running: true}}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -978,7 +978,7 @@ func TestReconcileRejectsExactInstanceReplacement(t *testing.T) {
 	}
 
 	runner := &fakeRunner{inspectErr: sandbox.ErrInstanceMismatch}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1024,7 +1024,7 @@ func TestReconcileRetainsAndRetriesCleanupDebt(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeRunner{cleanupResult: sandbox.CleanupComplete}
-	l, err := newLifecycle(t.Context(), policy, runner, journal, time.Second)
+	l, err := newLifecycle(t.Context(), policy, runner, nil, journal, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1051,7 +1051,7 @@ func TestCloseCancelsOwnedJobs(t *testing.T) {
 		blockObserve: true, observing: make(chan struct{}), canceled: make(chan struct{}),
 	}
 	journal := launcherJournal(t, time.Second, 8)
-	l, err := newLifecycle(t.Context(), launcherPolicy(t), runner, journal, 5*time.Second)
+	l, err := newLifecycle(t.Context(), launcherPolicy(t), runner, nil, journal, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1079,16 +1079,16 @@ func TestCloseCancelsOwnedJobs(t *testing.T) {
 func TestLifecycleRequiresValidatedInputs(t *testing.T) {
 	runner := &fakeRunner{}
 	journal := launcherJournal(t, time.Second, 8)
-	if _, err := newLifecycle(t.Context(), sandbox.Policy{}, runner, journal, time.Second); err == nil {
+	if _, err := newLifecycle(t.Context(), sandbox.Policy{}, runner, nil, journal, time.Second); err == nil {
 		t.Fatal("zero sandbox policy was accepted")
 	}
-	if _, err := newLifecycle(t.Context(), launcherPolicy(t), nil, journal, time.Second); err == nil {
+	if _, err := newLifecycle(t.Context(), launcherPolicy(t), nil, nil, journal, time.Second); err == nil {
 		t.Fatal("nil runner was accepted")
 	}
-	if _, err := newLifecycle(t.Context(), launcherPolicy(t), runner, nil, time.Second); err == nil {
+	if _, err := newLifecycle(t.Context(), launcherPolicy(t), runner, nil, nil, time.Second); err == nil {
 		t.Fatal("nil journal was accepted")
 	}
-	if _, err := newLifecycle(t.Context(), launcherPolicy(t), runner, journal, 0); err == nil {
+	if _, err := newLifecycle(t.Context(), launcherPolicy(t), runner, nil, journal, 0); err == nil {
 		t.Fatal("zero timeout was accepted")
 	}
 	if err := Run(t.Context(), Options{

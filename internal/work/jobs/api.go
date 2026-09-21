@@ -15,15 +15,17 @@ import (
 const (
 	MaxTimeoutSeconds = 24 * 60 * 60
 	MaxEndpoints      = 8
+	MaxToolchains     = 8
 )
 
 var ErrReplayConflict = errors.New("job request_id conflicts with retained start input")
 
 var (
-	requestIDPattern    = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	sha256Pattern       = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	endpointNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	leaseIDPattern      = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	requestIDPattern     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	sha256Pattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	endpointNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	toolchainNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	leaseIDPattern       = regexp.MustCompile(`^[0-9a-f]{32}$`)
 )
 
 type NetworkProfile string
@@ -40,6 +42,12 @@ func (p NetworkProfile) Valid() bool {
 type EndpointRequest struct {
 	Name string `json:"name"`
 	Port int    `json:"port"`
+}
+
+type ToolchainRef struct {
+	Family       string `json:"family"`
+	Version      string `json:"version"`
+	GenerationID string `json:"generation_id"`
 }
 
 type EndpointLeaseState string
@@ -71,6 +79,7 @@ type StartRequest struct {
 	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
 	Network        NetworkProfile    `json:"network,omitempty"`
 	Endpoints      []EndpointRequest `json:"endpoints,omitempty"`
+	Toolchains     []ToolchainRef    `json:"toolchains,omitempty"`
 }
 
 type StartResult struct {
@@ -90,6 +99,7 @@ type Status struct {
 	DeadlineAt string          `json:"deadline_at"`
 	Network    NetworkProfile  `json:"network"`
 	Endpoints  []EndpointLease `json:"endpoints,omitempty"`
+	Toolchains []ToolchainRef  `json:"toolchains,omitempty"`
 	Outcome    Outcome         `json:"outcome,omitempty"`
 	ExitCode   *int64          `json:"exit_code,omitempty"`
 	Cleanup    CleanupStatus   `json:"cleanup,omitempty"`
@@ -214,6 +224,43 @@ func normalizeEndpointRequests(values []EndpointRequest) ([]EndpointRequest, err
 	return result, nil
 }
 
+func normalizeToolchainRefs(values []ToolchainRef) ([]ToolchainRef, error) {
+	if len(values) > MaxToolchains {
+		return nil, errors.New("job toolchain count exceeds its limit")
+	}
+	result := append([]ToolchainRef(nil), values...)
+	for index := range result {
+		result[index].Family = strings.TrimSpace(result[index].Family)
+		result[index].Version = strings.TrimSpace(result[index].Version)
+		result[index].GenerationID = strings.ToLower(strings.TrimSpace(result[index].GenerationID))
+		if !toolchainNamePattern.MatchString(result[index].Family) ||
+			result[index].Version == "" || len(result[index].Version) > 128 ||
+			strings.ContainsAny(result[index].Version, "\r\n\x00/\\") ||
+			!sha256Pattern.MatchString(result[index].GenerationID) {
+			return nil, errors.New("job toolchain reference is invalid")
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Family < result[j].Family })
+	for index := 1; index < len(result); index++ {
+		if result[index-1].Family == result[index].Family {
+			return nil, errors.New("job toolchain families must be unique")
+		}
+	}
+	return result, nil
+}
+
+func sameToolchainRefs(left, right []ToolchainRef) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func sameEndpointRequests(left, right []EndpointRequest) bool {
 	if len(left) != len(right) {
 		return false
@@ -235,15 +282,20 @@ func startFingerprint(request StartRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	toolchains, err := normalizeToolchainRefs(request.Toolchains)
+	if err != nil {
+		return "", err
+	}
 	payload := struct {
 		CWD            string            `json:"cwd"`
 		Argv           []string          `json:"argv"`
 		TimeoutSeconds int               `json:"timeout_seconds"`
 		Network        NetworkProfile    `json:"network"`
 		Endpoints      []EndpointRequest `json:"endpoints"`
+		Toolchains     []ToolchainRef    `json:"toolchains"`
 	}{
 		CWD: request.CWD, Argv: request.Argv, TimeoutSeconds: request.TimeoutSeconds,
-		Network: network, Endpoints: endpoints,
+		Network: network, Endpoints: endpoints, Toolchains: toolchains,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -306,11 +358,16 @@ func normalizeStartRequest(request StartRequest) (StartRequest, string, error) {
 	if err != nil {
 		return StartRequest{}, "", err
 	}
+	toolchains, err := normalizeToolchainRefs(request.Toolchains)
+	if err != nil {
+		return StartRequest{}, "", err
+	}
 	request.RequestID = requestID
 	request.CWD = cwd
 	request.Argv = argv
 	request.Network = network
 	request.Endpoints = endpoints
+	request.Toolchains = toolchains
 	fingerprint, err := startFingerprint(request)
 	if err != nil {
 		return StartRequest{}, "", err
@@ -339,6 +396,7 @@ func statusFromRecord(record Record) Status {
 		JobID: record.ID, State: record.State,
 		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, DeadlineAt: record.DeadlineAt,
 		Network: record.Network, Endpoints: append([]EndpointLease(nil), record.EndpointLeases...),
+		Toolchains: append([]ToolchainRef(nil), record.Toolchains...),
 	}
 	if record.Result != nil {
 		status.Outcome = record.Result.Outcome

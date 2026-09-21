@@ -40,12 +40,22 @@ type Runner interface {
 	InspectJob(context.Context, sandbox.Resource, string) (sandbox.ResourceState, error)
 }
 
+type ResolvedToolchains struct {
+	Mounts  []sandbox.ToolchainMount
+	Release func() error
+}
+
+type ToolchainResolver interface {
+	Resolve(context.Context, []jobs.ToolchainRef) (ResolvedToolchains, error)
+}
+
 type Options struct {
 	Socket      string
 	SocketGID   int
 	ExecutorUID uint32
 	Policy      sandbox.Policy
 	Runner      Runner
+	Toolchains  ToolchainResolver
 	Journal     *jobs.Journal
 	RunTimeout  time.Duration
 	Ready       func() error
@@ -56,6 +66,7 @@ type lifecycle struct {
 	cancel            context.CancelFunc
 	policy            sandbox.Policy
 	runner            Runner
+	toolchains        ToolchainResolver
 	journal           *jobs.Journal
 	runInputDirectory string
 	timeout           time.Duration
@@ -69,11 +80,12 @@ type lifecycle struct {
 }
 
 type ownedJob struct {
-	cancel         context.CancelFunc
-	done           chan struct{}
-	err            error
-	rawOutputLimit int
-	rawResult      *jobs.RunExecutionResult
+	cancel            context.CancelFunc
+	done              chan struct{}
+	err               error
+	rawOutputLimit    int
+	rawResult         *jobs.RunExecutionResult
+	releaseToolchains func() error
 }
 
 type runRequest struct {
@@ -95,6 +107,7 @@ type startRequest struct {
 	TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
 	Network        jobs.NetworkProfile    `json:"network,omitempty"`
 	Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
+	Toolchains     []jobs.ToolchainRef    `json:"toolchains,omitempty"`
 }
 
 type waitRequest struct {
@@ -109,7 +122,7 @@ type waitResult struct {
 	Cleanup   jobs.CleanupStatus `json:"cleanup"`
 }
 
-func newLifecycle(parent context.Context, policy sandbox.Policy, runner Runner, journal *jobs.Journal, timeout time.Duration) (*lifecycle, error) {
+func newLifecycle(parent context.Context, policy sandbox.Policy, runner Runner, toolchains ToolchainResolver, journal *jobs.Journal, timeout time.Duration) (*lifecycle, error) {
 	if !policy.Valid() {
 		return nil, errors.New("launcher requires a valid sandbox policy")
 	}
@@ -124,7 +137,7 @@ func newLifecycle(parent context.Context, policy sandbox.Policy, runner Runner, 
 	}
 	ctx, cancel := context.WithCancel(parent)
 	return &lifecycle{
-		ctx: ctx, cancel: cancel, policy: policy, runner: runner, journal: journal,
+		ctx: ctx, cancel: cancel, policy: policy, runner: runner, toolchains: toolchains, journal: journal,
 		runInputDirectory: policy.InputDirectory(), timeout: timeout,
 		now: func() time.Time { return time.Now().UTC() }, active: map[string]*ownedJob{}, runs: map[string]*ownedJob{},
 	}, nil
@@ -145,15 +158,16 @@ func (l *lifecycle) operations() map[string]rpc.Operation {
 		},
 		"start": {
 			Grant: controlpolicy.WorkloadLaunch,
-			Handle: func(_ context.Context, raw json.RawMessage) (any, error) {
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 				request, err := rpc.Decode[startRequest](raw)
 				if err != nil {
 					return nil, err
 				}
-				return l.startWorkload(jobs.Workload{
+				return l.startWorkload(ctx, jobs.Workload{
 					ID: request.ID, RequestID: request.RequestID, RequestSHA256: request.RequestSHA256,
 					CWD: request.CWD, Argv: request.Argv, TimeoutSeconds: request.TimeoutSeconds,
 					Network: request.Network, Endpoints: append([]jobs.EndpointRequest(nil), request.Endpoints...),
+					Toolchains: append([]jobs.ToolchainRef(nil), request.Toolchains...),
 				}, request.PolicySHA256)
 			},
 		},
@@ -285,7 +299,7 @@ func (l *lifecycle) runWorkload(ctx context.Context, request runRequest) (jobs.R
 		defer os.Remove(inputPath)
 	}
 
-	if _, err = l.startWorkload(jobs.Workload{
+	if _, err = l.startWorkload(ctx, jobs.Workload{
 		ID: request.ID, CWD: request.CWD, Argv: append([]string(nil), request.Argv...),
 		InputPath: inputPath, MaxOutputBytes: request.MaxOutputBytes,
 	}, request.PolicySHA256); err != nil {
@@ -319,7 +333,7 @@ func (l *lifecycle) runWorkload(ctx context.Context, request runRequest) (jobs.R
 }
 
 func (l *lifecycle) start(spec sandbox.WorkloadSpec) error {
-	_, err := l.startWorkload(jobs.Workload{
+	_, err := l.startWorkload(l.ctx, jobs.Workload{
 		ID: spec.ID, CWD: spec.CWD, Argv: append([]string(nil), spec.Argv...),
 	}, spec.PolicySHA256)
 	return err
@@ -344,6 +358,41 @@ func sandboxEndpointSpecs(values []jobs.EndpointRequest) []sandbox.EndpointSpec 
 	return result
 }
 
+func (l *lifecycle) resolveToolchains(ctx context.Context, refs []jobs.ToolchainRef) (ResolvedToolchains, error) {
+	if len(refs) == 0 {
+		return ResolvedToolchains{}, nil
+	}
+	if l.toolchains == nil {
+		return ResolvedToolchains{}, errors.New("launcher toolchain resolution is not configured")
+	}
+	resolved, err := l.toolchains.Resolve(ctx, refs)
+	if err != nil {
+		return ResolvedToolchains{}, err
+	}
+	if len(resolved.Mounts) != len(refs) || resolved.Release == nil {
+		if resolved.Release != nil {
+			_ = resolved.Release()
+		}
+		return ResolvedToolchains{}, errors.New("launcher toolchain resolver returned an incomplete result")
+	}
+	families := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		families[ref.Family] = true
+	}
+	for _, mount := range resolved.Mounts {
+		if !families[mount.Family] {
+			_ = resolved.Release()
+			return ResolvedToolchains{}, errors.New("launcher toolchain resolver changed the requested family set")
+		}
+		delete(families, mount.Family)
+	}
+	if len(families) != 0 {
+		_ = resolved.Release()
+		return ResolvedToolchains{}, errors.New("launcher toolchain resolver omitted a requested family")
+	}
+	return resolved, nil
+}
+
 func jobEndpointLeases(values []sandbox.EndpointBinding) []jobs.EndpointLease {
 	result := make([]jobs.EndpointLease, len(values))
 	for index, value := range values {
@@ -352,7 +401,7 @@ func jobEndpointLeases(values []sandbox.EndpointBinding) []jobs.EndpointLease {
 	return result
 }
 
-func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (jobs.StartResult, error) {
+func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, policySHA256 string) (jobs.StartResult, error) {
 	var err error
 	if workload.RequestID != "" || workload.RequestSHA256 != "" {
 		if workload.InputPath != "" || workload.MaxOutputBytes != 0 {
@@ -365,6 +414,7 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 			RequestID: workload.RequestID, CWD: workload.CWD,
 			Argv: append([]string(nil), workload.Argv...), TimeoutSeconds: workload.TimeoutSeconds,
 			Network: workload.Network, Endpoints: append([]jobs.EndpointRequest(nil), workload.Endpoints...),
+			Toolchains: append([]jobs.ToolchainRef(nil), workload.Toolchains...),
 		})
 		if normalizeErr != nil {
 			return jobs.StartResult{}, fault.Error("workload request replay identity is invalid")
@@ -380,12 +430,24 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 		workload.TimeoutSeconds = normalized.TimeoutSeconds
 		workload.Network = normalized.Network
 		workload.Endpoints = normalized.Endpoints
+		workload.Toolchains = normalized.Toolchains
 	} else {
 		workload.Network, err = jobs.NormalizeNetworkProfile(workload.Network)
-		if err != nil || workload.Network != jobs.NetworkNone || len(workload.Endpoints) != 0 {
-			return jobs.StartResult{}, fault.Error("legacy workload requests cannot carry network or endpoint intent")
+		if err != nil || workload.Network != jobs.NetworkNone || len(workload.Endpoints) != 0 || len(workload.Toolchains) != 0 {
+			return jobs.StartResult{}, fault.Error("legacy workload requests cannot carry network, endpoint, or toolchain intent")
 		}
 	}
+
+	resolvedToolchains, err := l.resolveToolchains(ctx, workload.Toolchains)
+	if err != nil {
+		return jobs.StartResult{}, fault.Error("workload toolchain selection is unavailable")
+	}
+	releaseResolvedToolchains := true
+	defer func() {
+		if releaseResolvedToolchains && resolvedToolchains.Release != nil {
+			_ = resolvedToolchains.Release()
+		}
+	}()
 
 	network, err := sandboxNetworkProfile(workload.Network)
 	if err != nil {
@@ -395,7 +457,8 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 	plan, err := l.policy.Plan(sandbox.WorkloadSpec{
 		ID: workload.ID, PolicySHA256: policySHA256, CWD: workload.CWD,
 		Argv: append([]string(nil), workload.Argv...), Network: network, Endpoints: endpoints,
-		InputPath: workload.InputPath, MaxOutputBytes: workload.MaxOutputBytes,
+		Toolchains: append([]sandbox.ToolchainMount(nil), resolvedToolchains.Mounts...),
+		InputPath:  workload.InputPath, MaxOutputBytes: workload.MaxOutputBytes,
 	})
 	if err != nil || !launcherJobIDPattern.MatchString(workload.ID) {
 		return jobs.StartResult{}, fault.Error("workload request is not allowed")
@@ -418,9 +481,9 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 	var record jobs.Record
 	var replayed bool
 	if workload.RequestID != "" {
-		record, replayed, err = l.journal.AdmitRequestWithIntent(
+		record, replayed, err = l.journal.AdmitRequestWithToolchains(
 			workload.ID, backendReference(plan), workload.RequestID, workload.RequestSHA256,
-			workload.Network, workload.Endpoints, deadline, now,
+			workload.Network, workload.Endpoints, workload.Toolchains, deadline, now,
 		)
 		if errors.Is(err, jobs.ErrReplayConflict) {
 			return jobs.StartResult{}, fault.New(
@@ -429,8 +492,8 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 			)
 		}
 	} else {
-		if workload.Network != jobs.NetworkNone || len(workload.Endpoints) != 0 {
-			return jobs.StartResult{}, fault.Error("legacy workload requests cannot carry network or endpoint intent")
+		if workload.Network != jobs.NetworkNone || len(workload.Endpoints) != 0 || len(workload.Toolchains) != 0 {
+			return jobs.StartResult{}, fault.Error("legacy workload requests cannot carry network, endpoint, or toolchain intent")
 		}
 		if _, active := l.active[workload.ID]; active {
 			return jobs.StartResult{}, fault.Error("workload ID is already registered")
@@ -448,7 +511,11 @@ func (l *lifecycle) startWorkload(workload jobs.Workload, policySHA256 string) (
 	}
 
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
-	job := &ownedJob{cancel: cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes}
+	job := &ownedJob{
+		cancel: cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes,
+		releaseToolchains: resolvedToolchains.Release,
+	}
+	releaseResolvedToolchains = false
 	l.active[workload.ID] = job
 	if workload.MaxOutputBytes > 0 {
 		l.runs[workload.ID] = job
@@ -914,7 +981,12 @@ func (l *lifecycle) spawnRecovered(record jobs.Record, resource sandbox.Resource
 		return errors.New("recovered job is already active")
 	}
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
-	job := &ownedJob{cancel: cancel, done: make(chan struct{})}
+	resolvedToolchains, err := l.resolveToolchains(jobCtx, record.Toolchains)
+	if err != nil {
+		cancel()
+		return errors.New("recovered job toolchain selection is unavailable")
+	}
+	job := &ownedJob{cancel: cancel, done: make(chan struct{}), releaseToolchains: resolvedToolchains.Release}
 	l.active[record.ID] = job
 	l.wg.Add(1)
 	go func() {
@@ -927,6 +999,10 @@ func (l *lifecycle) spawnRecovered(record jobs.Record, resource sandbox.Resource
 func (l *lifecycle) finish(id string, job *ownedJob) {
 	job.cancel()
 	l.removeRunInput(id)
+	if job.releaseToolchains != nil {
+		job.err = errors.Join(job.err, job.releaseToolchains())
+		job.releaseToolchains = nil
+	}
 	l.mu.Lock()
 	if l.active[id] == job {
 		delete(l.active, id)
@@ -1148,7 +1224,7 @@ func Run(ctx context.Context, options Options) error {
 	if !resolver.Valid() {
 		return errors.New("launcher requires a non-root executor UID")
 	}
-	lifecycle, err := newLifecycle(ctx, options.Policy, options.Runner, options.Journal, options.RunTimeout)
+	lifecycle, err := newLifecycle(ctx, options.Policy, options.Runner, options.Toolchains, options.Journal, options.RunTimeout)
 	if err != nil {
 		return err
 	}

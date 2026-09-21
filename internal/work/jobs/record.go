@@ -98,6 +98,7 @@ type Record struct {
 	Network          NetworkProfile    `json:"network"`
 	EndpointRequests []EndpointRequest `json:"endpoint_requests,omitempty"`
 	EndpointLeases   []EndpointLease   `json:"endpoint_leases,omitempty"`
+	Toolchains       []ToolchainRef    `json:"toolchains,omitempty"`
 	InstanceRef      string            `json:"instance_ref,omitempty"`
 	State            State             `json:"state"`
 	Result           *Result           `json:"result,omitempty"`
@@ -110,7 +111,7 @@ type Record struct {
 func (r Record) valid(maxOutputBytes int) bool {
 	if !jobIDPattern.MatchString(r.ID) || !validBackendRef(r.BackendRef) ||
 		!validReplayIdentity(r.RequestID, r.RequestSHA256) ||
-		!r.Network.Valid() || !validEndpointRequests(r.EndpointRequests) ||
+		!r.Network.Valid() || !validEndpointRequests(r.EndpointRequests) || !validToolchainRefs(r.Toolchains) ||
 		!validEndpointLeases(r.ID, r.InstanceRef, r.EndpointRequests, r.EndpointLeases) ||
 		!validOptionalInstanceRef(r.InstanceRef) || !r.State.Valid() {
 		return false
@@ -154,6 +155,11 @@ func (r Record) valid(maxOutputBytes int) bool {
 func validEndpointRequests(values []EndpointRequest) bool {
 	normalized, err := normalizeEndpointRequests(values)
 	return err == nil && sameEndpointRequests(values, normalized)
+}
+
+func validToolchainRefs(values []ToolchainRef) bool {
+	normalized, err := normalizeToolchainRefs(values)
+	return err == nil && sameToolchainRefs(values, normalized)
 }
 
 func validEndpointLeases(jobID, instanceRef string, requests []EndpointRequest, leases []EndpointLease) bool {

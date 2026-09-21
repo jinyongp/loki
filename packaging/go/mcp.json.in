@@ -5,6 +5,8 @@
   "ExecutorSocket": "/run/loki-go/executor/control.sock",
   "ExecutionContract": "/usr/share/doc/loki/execution-contract.json",
   "PackagedSkillRoot": "/opt/loki/share/skills",
+  "ToolchainStore": "/var/lib/loki-go/toolchains",
+  "ToolchainCatalog": "/usr/share/doc/loki/toolchain-catalog.json",
   "RGPath": "/usr/bin/rg",
   "RuntimeUID": 0,
   "PortGuardUID": @RUNNER_UID@,

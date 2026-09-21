@@ -14,7 +14,7 @@ import (
 
 func runToolchain(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki toolchain install|doctor")
+		fmt.Fprintln(stderr, "usage: loki toolchain install|provision-managed|doctor")
 		return 2
 	}
 	switch args[0] {
@@ -46,6 +46,29 @@ func runToolchain(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case "provision-managed":
+		flags := flag.NewFlagSet("toolchain provision-managed", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		catalogPath := flags.String("catalog", "", "administrator-owned managed toolchain catalog")
+		bundle := flags.String("bundle", "", "verified toolchain bundle")
+		store := flags.String("store", "", "persistent managed generation store")
+		if flags.Parse(args[1:]) != nil || flags.NArg() != 0 ||
+			!filepath.IsAbs(*catalogPath) || !filepath.IsAbs(*bundle) || !filepath.IsAbs(*store) {
+			return 2
+		}
+		raw, err := os.ReadFile(*catalogPath)
+		var catalog toolchain.Catalog
+		if err == nil {
+			catalog, err = toolchain.LoadCatalog(raw)
+		}
+		if err == nil {
+			err = toolchain.ProvisionCatalog(context.Background(), catalog, *bundle, toolchain.GenerationStore{Root: *store})
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	case "doctor":
 		flags := flag.NewFlagSet("toolchain doctor", flag.ContinueOnError)
 		flags.SetOutput(stderr)
@@ -71,7 +94,7 @@ func runToolchain(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	default:
-		fmt.Fprintln(stderr, "usage: loki toolchain install|doctor")
+		fmt.Fprintln(stderr, "usage: loki toolchain install|provision-managed|doctor")
 		return 2
 	}
 }

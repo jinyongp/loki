@@ -16,6 +16,7 @@ import (
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/sandbox"
+	"loki/internal/toolchain"
 	"loki/internal/work/jobs"
 )
 
@@ -43,6 +44,7 @@ type launcherLayout struct {
 	GatewayPIDs              int64
 	GatewayTmpfsBytes        int64
 	Workspace                string
+	ToolchainStore           string
 	Environment              []string
 	WorkloadUID              uint32
 	WorkloadGID              uint32
@@ -69,6 +71,10 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	if layout.WorkloadUID == 0 || layout.WorkloadGID == 0 || layout.ExecutorUID == layout.WorkloadUID {
 		return applauncher.Options{}, errors.New("launcher workload identity must be distinct and unprivileged")
 	}
+	if !filepath.IsAbs(layout.ToolchainStore) || filepath.Clean(layout.ToolchainStore) != layout.ToolchainStore ||
+		layout.ToolchainStore == string(filepath.Separator) {
+		return applauncher.Options{}, errors.New("launcher toolchain store must be an absolute clean non-root path")
+	}
 	if layout.RunTimeoutSeconds < 1 || layout.RunTimeoutSeconds > maxLauncherRunTimeoutSeconds {
 		return applauncher.Options{}, errors.New("launcher run timeout is outside the supported range")
 	}
@@ -92,13 +98,14 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 			ProxyPort: layout.GatewayProxyPort, MemoryBytes: layout.GatewayMemoryBytes,
 			PIDs: layout.GatewayPIDs, TmpfsBytes: layout.GatewayTmpfsBytes,
 		},
-		Workspace:   layout.Workspace,
-		UID:         layout.WorkloadUID,
-		GID:         layout.WorkloadGID,
-		Environment: layout.Environment,
-		MemoryBytes: layout.MemoryBytes,
-		PIDs:        layout.PIDs,
-		TmpfsBytes:  layout.TmpfsBytes,
+		Workspace:          layout.Workspace,
+		ToolchainDirectory: layout.ToolchainStore,
+		UID:                layout.WorkloadUID,
+		GID:                layout.WorkloadGID,
+		Environment:        layout.Environment,
+		MemoryBytes:        layout.MemoryBytes,
+		PIDs:               layout.PIDs,
+		TmpfsBytes:         layout.TmpfsBytes,
 	})
 	if err != nil {
 		return applauncher.Options{}, err
@@ -118,6 +125,7 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		ExecutorUID: layout.ExecutorUID,
 		Policy:      policy,
 		Runner:      engine,
+		Toolchains:  launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
 		RunTimeout:  time.Duration(layout.RunTimeoutSeconds) * time.Second,
 	}, nil
 }

@@ -38,6 +38,10 @@
     },
     {
       "from": "loki/cmd/loki-launcher",
+      "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/cmd/loki-launcher",
       "to": "loki/internal/work/jobs"
     },
     {
@@ -127,6 +131,10 @@
     {
       "from": "loki/cmd/loki",
       "to": "loki/internal/toolchain"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/work/jobs"
     },
     {
       "from": "loki/cmd/loki",

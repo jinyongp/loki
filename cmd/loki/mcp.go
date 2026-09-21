@@ -25,6 +25,7 @@ import (
 type mcpLayout struct {
 	RuntimeSocket, PortGuardSocket, BrowserSocket, ExecutorSocket, RGPath string
 	ExecutionContract, PackagedSkillRoot                                  string
+	ToolchainStore, ToolchainCatalog                                      string
 	RuntimeUID, PortGuardUID, BrowserUID, ExecutorUID                     *uint32
 	GitTemplateRoots                                                      []string
 	Environment                                                           map[string]string
@@ -45,7 +46,7 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 	if !filepath.IsAbs(l.PackagedSkillRoot) {
 		return service.MCPOptions{}, errors.New("MCP packaged Skill root must be absolute")
 	}
-	for _, path := range append([]string{l.RGPath, l.ExecutionContract, l.PackagedSkillRoot}, l.GitTemplateRoots...) {
+	for _, path := range append([]string{l.RGPath, l.ExecutionContract, l.PackagedSkillRoot, l.ToolchainStore, l.ToolchainCatalog}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
 			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
@@ -115,6 +116,11 @@ func runMCP(args []string, stderr io.Writer) int {
 	options, err := layout.options(token)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	options.JobToolchains, err = newMCPToolchainResolver(c.Root, layout.ToolchainStore, layout.ToolchainCatalog)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid MCP toolchain configuration")
 		return 2
 	}
 	contract, err := loadExecutionContract(layout.ExecutionContract)

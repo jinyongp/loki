@@ -157,6 +157,10 @@ prepare_state() {
   runner_uid=$1 runner_gid=$2 workspace_gid=$3 browser_uid=$4 executor_uid=$5
   job_image=$(cat "$release/opt/loki-go-job-image")
   ensure_identities "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid" "$executor_uid"
+  "$release/opt/loki/bin/loki" toolchain provision-managed \
+    --catalog "$release/usr/share/doc/loki/toolchain-catalog.json" \
+    --bundle "$release/usr/share/loki/toolchain" \
+    --store "$(rooted /var/lib/loki-go/toolchains)"
   config=$(rooted /etc/loki-go)
   install -d -g "$workspace_gid" -m 0750 "$config"
   test -f "$config/config.toml" || install -m 0640 "$release/usr/share/doc/loki/config.toml" "$config/config.toml"
