@@ -142,3 +142,102 @@ func TestProjectResolverRejectsConflictingOrEscapingDeclarations(t *testing.T) {
 		t.Fatal("escaping project cwd was accepted")
 	}
 }
+
+func provisionProjectPython(t *testing.T, store GenerationStore, release PythonRelease) {
+	t.Helper()
+	_, err := store.Provision(t.Context(), release.GenerationID(), func(_ context.Context, root string) error {
+		base := filepath.Join(root, "opt", "loki", "toolchain", "python", release.Version, "bin")
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		minor := strings.Join(strings.Split(release.Version, ".")[:2], ".")
+		for _, name := range []string{"python3", "python" + minor} {
+			if err := os.WriteFile(filepath.Join(base, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func provisionProjectUV(t *testing.T, store GenerationStore, release UVRelease) {
+	t.Helper()
+	_, err := store.Provision(t.Context(), release.GenerationID(), func(_ context.Context, root string) error {
+		base := filepath.Join(root, "opt", "loki", "toolchain", "uv", release.Version)
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		for _, name := range []string{"uv", "uvx"} {
+			if err := os.WriteFile(filepath.Join(base, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProjectResolverSelectsPythonAndUVWithinProjectBoundary(t *testing.T) {
+	store := generationStoreFixture(t)
+	python313 := pythonRelease("3.13.15", "20260805", strings.Repeat("1", 64))
+	python314 := pythonRelease("3.14.7", "20260901", strings.Repeat("2", 64))
+	uv := uvRelease("0.12.17", strings.Repeat("3", 64))
+	provisionProjectPython(t, store, python313)
+	provisionProjectPython(t, store, python314)
+	provisionProjectUV(t, store, uv)
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".python-version"), []byte("3.13\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	project := filepath.Join(root, "app")
+	if err := os.MkdirAll(filepath.Join(project, "src"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".python-version"), []byte("3.14\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "pyproject.toml"), []byte("[project]\nrequires-python = \">=3.14,<3.15\"\n[tool.uv]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resolver := ProjectResolver{
+		Root: root, Store: store,
+		Catalog: Catalog{Version: CatalogVersion, Python: []PythonRelease{python313, python314}, UV: []UVRelease{uv}},
+	}
+	selected, err := resolver.Resolve("app/src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 2 ||
+		selected[0] != (ProjectSelection{Family: "python", Version: python314.Version, GenerationID: python314.GenerationID()}) ||
+		selected[1] != (ProjectSelection{Family: "uv", Version: uv.Version, GenerationID: uv.GenerationID()}) {
+		t.Fatalf("Python/uv selection = %#v", selected)
+	}
+}
+
+func TestProjectResolverRejectsPythonPinRequirementConflict(t *testing.T) {
+	store := generationStoreFixture(t)
+	python313 := pythonRelease("3.13.15", "20260805", strings.Repeat("4", 64))
+	python314 := pythonRelease("3.14.7", "20260901", strings.Repeat("5", 64))
+	provisionProjectPython(t, store, python313)
+	provisionProjectPython(t, store, python314)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".python-version"), []byte("3.14\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nrequires-python = \"<3.14\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resolver := ProjectResolver{
+		Root: root, Store: store,
+		Catalog: Catalog{Version: CatalogVersion, Python: []PythonRelease{python313, python314}},
+	}
+	if _, err := resolver.Resolve("."); err == nil {
+		t.Fatal("conflicting Python pin and requires-python were accepted")
+	}
+}

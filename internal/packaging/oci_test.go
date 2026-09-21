@@ -56,14 +56,18 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npm",
 		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npx",
 		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/pnpm",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python3",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uv",
+		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uvx",
 	} {
 		if !strings.Contains(dockerfile, required) {
 			t.Errorf("Dockerfile is missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"python", "playwright", "docker.sock", "apt-get", "apk add"} {
+	for _, forbidden := range []string{"playwright", "docker.sock", "apt-get", "apk add", "/usr/bin/python", "python3="} {
 		if strings.Contains(strings.ToLower(dockerfile), forbidden) {
-			t.Errorf("core image contains optional or legacy dependency %q", forbidden)
+			t.Errorf("core image contains optional or legacy runtime dependency %q", forbidden)
 		}
 	}
 }

@@ -964,7 +964,9 @@
     "loki/internal/work/toolchains": {
       "kind": "work",
       "owner": "toolchains",
-      "tags": [],
+      "tags": [
+        "project-selector"
+      ],
       "target": "work/toolchains"
     },
     "loki/tools/toolchainfetch": {

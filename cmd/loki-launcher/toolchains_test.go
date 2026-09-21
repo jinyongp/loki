@@ -116,3 +116,67 @@ func TestLauncherToolchainResolverRejectsGenerationVersionMismatch(t *testing.T)
 }
 
 var _ applauncher.ToolchainResolver = launcherToolchainResolver{}
+
+func TestLauncherToolchainResolverAcceptsPythonAndUVGenerations(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	cleanupGenerationStore(t, root)
+	store := toolchain.GenerationStore{Root: root}
+
+	pythonID := strings.Repeat("c", 64)
+	pythonVersion := "3.14.7"
+	pythonGeneration, err := store.Provision(t.Context(), pythonID, func(_ context.Context, generationRoot string) error {
+		base := filepath.Join(generationRoot, "opt", "loki", "toolchain", "python", pythonVersion, "bin")
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		for _, name := range []string{"python3", "python3.14"} {
+			if err := os.WriteFile(filepath.Join(base, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	uvID := strings.Repeat("d", 64)
+	uvVersion := "0.12.17"
+	uvGeneration, err := store.Provision(t.Context(), uvID, func(_ context.Context, generationRoot string) error {
+		base := filepath.Join(generationRoot, "opt", "loki", "toolchain", "uv", uvVersion)
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		for _, name := range []string{"uv", "uvx"} {
+			if err := os.WriteFile(filepath.Join(base, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolver := launcherToolchainResolver{store: store}
+	owner := strings.Repeat("e", 32)
+	refs := []jobs.ToolchainRef{
+		{Family: "python", Version: pythonVersion, GenerationID: pythonID},
+		{Family: "uv", Version: uvVersion, GenerationID: uvID},
+	}
+	resolved, err := resolver.Resolve(t.Context(), owner, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolved.Mounts) != 2 ||
+		resolved.Mounts[0].Source != pythonGeneration.Root ||
+		resolved.Mounts[1].Source != uvGeneration.Root {
+		t.Fatalf("resolved mounts = %#v", resolved.Mounts)
+	}
+	if err = resolved.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = resolver.Cleanup(owner, refs); err != nil {
+		t.Fatal(err)
+	}
+}

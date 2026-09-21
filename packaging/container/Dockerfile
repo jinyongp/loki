@@ -45,7 +45,11 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/node \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npm \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npx \
- && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/pnpm
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/pnpm \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python3 \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uv \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uvx
 
 FROM alpine/git:2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f AS git-root
 

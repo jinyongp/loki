@@ -3,8 +3,10 @@ package toolchain
 import (
 	"bytes"
 	"encoding/json"
+
 	"errors"
 	"fmt"
+	"github.com/pelletier/go-toml/v2"
 	"io"
 	"io/fs"
 	"os"
@@ -49,12 +51,17 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 	if err != nil {
 		return nil, err
 	}
+	pythonProject, err := findPythonProject(root, cwd)
+	if err != nil {
+		return nil, err
+	}
 	pnpmSelected := packageFound && strings.HasPrefix(strings.TrimSpace(packageManager), "pnpm@")
-	if !nodeFound && !pnpmSelected {
+	pythonSelected := pythonProject.selectorFound || pythonProject.requirementFound
+	if !nodeFound && !pnpmSelected && !pythonSelected && !pythonProject.uvProject {
 		return nil, nil
 	}
 
-	selections := make([]ProjectSelection, 0, 2)
+	selections := make([]ProjectSelection, 0, 4)
 	if nodeFound {
 		nodeProvider := NodeProvider{Store: r.Store}
 		nodePlan, resolveErr := nodeProvider.Resolve(nodeSelector, r.Catalog.Node, false)
@@ -79,6 +86,34 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 		}
 		selections = append(selections, ProjectSelection{
 			Family: "pnpm", Version: pnpmPlan.Release.Version, GenerationID: pnpmPlan.GenerationID,
+		})
+	}
+	if pythonSelected {
+		pythonProvider := PythonProvider{Store: r.Store}
+		pythonPlan, resolveErr := pythonProvider.ResolveProject(
+			pythonProject.selector, pythonProject.requirement, r.Catalog.Python, false,
+		)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if pythonPlan.Resolution.Acquire {
+			return nil, fmt.Errorf("Python %s is permitted but not provisioned", pythonPlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "python", Version: pythonPlan.Release.Version, GenerationID: pythonPlan.GenerationID,
+		})
+	}
+	if pythonProject.uvProject {
+		uvProvider := UVProvider{Store: r.Store}
+		uvPlan, resolveErr := uvProvider.Resolve("*", r.Catalog.UV, false)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if uvPlan.Resolution.Acquire {
+			return nil, fmt.Errorf("uv %s is permitted but not provisioned", uvPlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "uv", Version: uvPlan.Release.Version, GenerationID: uvPlan.GenerationID,
 		})
 	}
 	return selections, nil
@@ -137,6 +172,81 @@ func findNodeSelector(root *os.Root, cwd string) (string, bool, error) {
 		}
 	}
 	return "", false, nil
+}
+
+type pythonProjectRequest struct {
+	selector         string
+	selectorFound    bool
+	requirement      string
+	requirementFound bool
+	uvProject        bool
+}
+
+func findPythonProject(root *os.Root, cwd string) (pythonProjectRequest, error) {
+	var result pythonProjectRequest
+	for directory := cwd; ; directory = filepath.Dir(directory) {
+		selectorPath := filepath.Join(directory, ".python-version")
+		rawSelector, exists, err := readProjectFile(root, selectorPath, 4096)
+		if err != nil {
+			return pythonProjectRequest{}, err
+		}
+		if exists && !result.selectorFound {
+			value := strings.TrimSpace(string(rawSelector))
+			if _, err = ParseProjectSelector(value, PythonVersionScheme{}); err != nil {
+				return pythonProjectRequest{}, fmt.Errorf("%s: %w", filepath.ToSlash(selectorPath), err)
+			}
+			result.selector = value
+			result.selectorFound = true
+		}
+
+		boundary := false
+		pyprojectPath := filepath.Join(directory, "pyproject.toml")
+		rawProject, projectExists, err := readProjectFile(root, pyprojectPath, 1<<20)
+		if err != nil {
+			return pythonProjectRequest{}, err
+		}
+		if projectExists {
+			boundary = true
+			var document struct {
+				Project struct {
+					RequiresPython string `toml:"requires-python"`
+				} `toml:"project"`
+				Tool map[string]any `toml:"tool"`
+			}
+			if err = toml.Unmarshal(rawProject, &document); err != nil {
+				return pythonProjectRequest{}, fmt.Errorf("%s: invalid pyproject.toml: %w", filepath.ToSlash(pyprojectPath), err)
+			}
+			requirement := strings.TrimSpace(document.Project.RequiresPython)
+			if requirement != "" {
+				if _, err = ParsePythonRequirement(requirement); err != nil {
+					return pythonProjectRequest{}, fmt.Errorf("%s project.requires-python: %w", filepath.ToSlash(pyprojectPath), err)
+				}
+				result.requirement = requirement
+				result.requirementFound = true
+			}
+			if _, ok := document.Tool["uv"]; ok {
+				result.uvProject = true
+			}
+		}
+
+		lockPath := filepath.Join(directory, "uv.lock")
+		_, lockExists, err := readProjectFile(root, lockPath, 8<<20)
+		if err != nil {
+			return pythonProjectRequest{}, err
+		}
+		if lockExists {
+			result.uvProject = true
+			boundary = true
+		}
+		if boundary || directory == "." {
+			break
+		}
+		directory = filepath.Clean(directory)
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return result, nil
 }
 
 func findPackageManager(root *os.Root, cwd string) (string, bool, error) {

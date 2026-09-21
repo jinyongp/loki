@@ -14,9 +14,11 @@ import (
 const CatalogVersion = 1
 
 type Catalog struct {
-	Version int           `json:"version"`
-	Node    []NodeRelease `json:"node"`
-	Pnpm    []PnpmRelease `json:"pnpm"`
+	Version int             `json:"version"`
+	Node    []NodeRelease   `json:"node,omitempty"`
+	Pnpm    []PnpmRelease   `json:"pnpm,omitempty"`
+	Python  []PythonRelease `json:"python,omitempty"`
+	UV      []UVRelease     `json:"uv,omitempty"`
 }
 
 func LoadCatalog(raw []byte) (Catalog, error) {
@@ -40,13 +42,19 @@ func (c Catalog) Validate() error {
 	if c.Version != CatalogVersion {
 		return fmt.Errorf("unsupported toolchain catalog version %d", c.Version)
 	}
-	if len(c.Node) == 0 {
-		return errors.New("toolchain catalog has no Node.js releases")
+	if len(c.Node)+len(c.Pnpm)+len(c.Python)+len(c.UV) == 0 {
+		return errors.New("toolchain catalog has no releases")
 	}
 	if err := validateNodeCatalog(c.Node); err != nil {
 		return err
 	}
 	if err := validatePnpmCatalog(c.Pnpm); err != nil {
+		return err
+	}
+	if err := validatePythonCatalog(c.Python); err != nil {
+		return err
+	}
+	if err := validateUVCatalog(c.UV); err != nil {
 		return err
 	}
 	return nil
@@ -90,6 +98,44 @@ func validatePnpmCatalog(releases []PnpmRelease) error {
 	return nil
 }
 
+func validatePythonCatalog(releases []PythonRelease) error {
+	scheme := PythonVersionScheme{}
+	for index, release := range releases {
+		if err := release.Validate(); err != nil {
+			return err
+		}
+		if index > 0 {
+			comparison, err := scheme.Compare(releases[index-1].Version, release.Version)
+			if err != nil {
+				return err
+			}
+			if comparison >= 0 {
+				return errors.New("Python catalog releases must be unique and sorted")
+			}
+		}
+	}
+	return nil
+}
+
+func validateUVCatalog(releases []UVRelease) error {
+	scheme := UVVersionScheme{}
+	for index, release := range releases {
+		if err := release.Validate(); err != nil {
+			return err
+		}
+		if index > 0 {
+			comparison, err := scheme.Compare(releases[index-1].Version, release.Version)
+			if err != nil {
+				return err
+			}
+			if comparison >= 0 {
+				return errors.New("uv catalog releases must be unique and sorted")
+			}
+		}
+	}
+	return nil
+}
+
 func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store GenerationStore) error {
 	if err := catalog.Validate(); err != nil {
 		return err
@@ -126,6 +172,34 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 		if plan.Resolution.Acquire {
 			source := filepath.Join(artifacts, release.Filename())
 			if _, err = pnpmProvider.Provision(ctx, plan, source); err != nil {
+				return err
+			}
+		}
+	}
+
+	pythonProvider := PythonProvider{Store: store}
+	for _, release := range catalog.Python {
+		plan, resolveErr := pythonProvider.ResolveSelector(release.Version, catalog.Python, false)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if plan.Resolution.Acquire {
+			source := filepath.Join(artifacts, release.Filename())
+			if _, err = pythonProvider.Provision(ctx, plan, source); err != nil {
+				return err
+			}
+		}
+	}
+
+	uvProvider := UVProvider{Store: store}
+	for _, release := range catalog.UV {
+		plan, resolveErr := uvProvider.Resolve(release.Version, catalog.UV, false)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if plan.Resolution.Acquire {
+			source := filepath.Join(artifacts, release.Filename())
+			if _, err = uvProvider.Provision(ctx, plan, source); err != nil {
 				return err
 			}
 		}

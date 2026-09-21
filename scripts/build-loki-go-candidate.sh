@@ -23,12 +23,16 @@ test -x "$DEVTOOLS" || {
   echo "devtools binary is not executable" >&2
   exit 1
 }
-test -f "$TOOLCHAIN_BUNDLE/manifest.json" -a -f "$TOOLCHAIN_BUNDLE/SHA256SUMS" -a -d "$TOOLCHAIN_BUNDLE/artifacts" || {
+test -f "$TOOLCHAIN_BUNDLE/manifest.json" -a -f "$TOOLCHAIN_BUNDLE/catalog.json" -a -f "$TOOLCHAIN_BUNDLE/SHA256SUMS" -a -d "$TOOLCHAIN_BUNDLE/artifacts" || {
   echo "verified toolchain bundle is incomplete" >&2
   exit 1
 }
 cmp "$SOURCE_DIR/packaging/go/toolchain-manifest.json" "$TOOLCHAIN_BUNDLE/manifest.json" || {
   echo "toolchain bundle manifest does not match the candidate source" >&2
+  exit 1
+}
+cmp "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$TOOLCHAIN_BUNDLE/catalog.json" || {
+  echo "toolchain bundle catalog does not match the candidate source" >&2
   exit 1
 }
 (cd "$TOOLCHAIN_BUNDLE" && sha256sum -c SHA256SUMS)

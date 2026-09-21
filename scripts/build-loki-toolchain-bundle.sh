@@ -14,4 +14,5 @@ esac
 
 exec go run "$SOURCE_DIR/tools/toolchainfetch" \
   --manifest "$SOURCE_DIR/packaging/go/toolchain-manifest.json" \
+  --catalog "$SOURCE_DIR/packaging/go/toolchain-catalog.json" \
   --output "$1"

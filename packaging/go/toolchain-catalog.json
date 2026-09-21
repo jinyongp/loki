@@ -13,5 +13,20 @@
       "url": "https://github.com/pnpm/pnpm/releases/download/v12.5.1/pnpm-linux-x64.tar.gz",
       "sha256": "5a397dfb6b3d4b07d3d7769586aeb471048faf04299a492e2808b95a9a1c701f"
     }
+  ],
+  "python": [
+    {
+      "version": "3.14.7",
+      "build": "20260901",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7+20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "3959f92825141e04adf44982d3a83ee57af0877e893b0796e04c1468749d9b04"
+    }
+  ],
+  "uv": [
+    {
+      "version": "0.12.17",
+      "url": "https://github.com/astral-sh/uv/releases/download/0.12.17/uv-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63"
+    }
   ]
 }

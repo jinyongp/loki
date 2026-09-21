@@ -16,7 +16,7 @@ const managedToolchainRoot = "/opt/loki/managed"
 
 func toolchainShimCommand(argv0 string) string {
 	switch filepath.Base(argv0) {
-	case "node", "npm", "npx", "pnpm":
+	case "node", "npm", "npx", "pnpm", "python", "python3", "uv", "uvx":
 		return filepath.Base(argv0)
 	default:
 		return ""
@@ -30,6 +30,10 @@ func resolveToolchainShim(root, command string) (string, error) {
 		family = "node"
 	case "pnpm":
 		family = "pnpm"
+	case "python", "python3":
+		family = "python"
+	case "uv", "uvx":
+		family = "uv"
 	default:
 		return "", errors.New("unsupported Loki toolchain shim")
 	}
@@ -62,12 +66,27 @@ func resolveToolchainShim(root, command string) (string, error) {
 		if err != nil || normalized != version {
 			return "", errors.New("mounted pnpm version is invalid")
 		}
+	case "python":
+		normalized, err := (toolchain.PythonVersionScheme{}).NormalizeVersion(version)
+		if err != nil || normalized != version {
+			return "", errors.New("mounted Python version is invalid")
+		}
+	case "uv":
+		normalized, err := (toolchain.UVVersionScheme{}).NormalizeVersion(version)
+		if err != nil || normalized != version {
+			return "", errors.New("mounted uv version is invalid")
+		}
 	}
 	target := filepath.Join(familyRoot, version)
-	if family == "node" {
+	switch family {
+	case "node":
 		target = filepath.Join(target, "bin", command)
-	} else {
+	case "pnpm":
 		target = filepath.Join(target, "pnpm")
+	case "python":
+		target = filepath.Join(target, "bin", "python3")
+	case "uv":
+		target = filepath.Join(target, command)
 	}
 	info, err := os.Stat(target)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	applauncher "loki/internal/app/launcher"
 	"loki/internal/platform/sandbox"
@@ -88,6 +89,19 @@ func validateToolchainGeneration(ref jobs.ToolchainRef, generation toolchain.Gen
 			return errors.New("pnpm Job toolchain version is invalid")
 		}
 		paths = []string{filepath.Join(generation.Root, "opt", "loki", "toolchain", "pnpm", ref.Version, "pnpm")}
+	case "python":
+		if normalized, err := (toolchain.PythonVersionScheme{}).NormalizeVersion(ref.Version); err != nil || normalized != ref.Version {
+			return errors.New("Python Job toolchain version is invalid")
+		}
+		parts := strings.Split(ref.Version, ".")
+		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "python", ref.Version, "bin")
+		paths = []string{filepath.Join(base, "python3"), filepath.Join(base, "python"+strings.Join(parts[:2], "."))}
+	case "uv":
+		if normalized, err := (toolchain.UVVersionScheme{}).NormalizeVersion(ref.Version); err != nil || normalized != ref.Version {
+			return errors.New("uv Job toolchain version is invalid")
+		}
+		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "uv", ref.Version)
+		paths = []string{filepath.Join(base, "uv"), filepath.Join(base, "uvx")}
 	default:
 		return fmt.Errorf("unsupported Job toolchain family %q", ref.Family)
 	}

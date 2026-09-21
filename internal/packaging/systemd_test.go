@@ -86,6 +86,33 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	}
 }
 
+func TestCandidateToolchainBundleBindsManagedCatalog(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleScript, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-toolchain-bundle.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(bundleScript), `--catalog "$SOURCE_DIR/packaging/go/toolchain-catalog.json"`) {
+		t.Fatal("toolchain bundle build does not include the managed catalog")
+	}
+	candidate, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-go-candidate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"$TOOLCHAIN_BUNDLE/catalog.json"`,
+		`cmp "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$TOOLCHAIN_BUNDLE/catalog.json"`,
+		`install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$ROOT/usr/share/doc/loki/toolchain-catalog.json"`,
+	} {
+		if !strings.Contains(string(candidate), want) {
+			t.Fatalf("candidate build does not bind managed catalog contract: %s", want)
+		}
+	}
+}
+
 func waitScript(t *testing.T) string {
 	t.Helper()
 	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "wait-for-loki-sockets.sh"))
