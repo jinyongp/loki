@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"loki/internal/toolchain"
+	"loki/internal/work/toolchains"
 )
 
 func runToolchain(args []string, stdout, stderr io.Writer) int {

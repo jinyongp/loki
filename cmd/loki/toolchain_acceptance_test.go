@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/toolchain"
+	"loki/internal/work/toolchains"
 )
 
 func acceptanceStore(t *testing.T) toolchain.GenerationStore {

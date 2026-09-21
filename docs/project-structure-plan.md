@@ -253,8 +253,8 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/service` | Function-level split across `app`, `transport`, `work`, `control` and `integrations`; **A08 removed workspace/Git private ownership and their baseline exceptions**, while the remaining feature edges stay scheduled under S03-S05. |
 | `internal/signing` | `integrations/signing` facade and private worker; SSH protocol implementation private; connection binding at transport edge. |
 | `internal/state` | Reuse encrypted persistence mechanics in `platform/securestore`; **S02 completed for private atomic publication** via `platform/safeio`. File locking remains state-owned until a matching neutral contract is extracted; domain state/validation stays owned; offline migration is maintainer-only. |
-| `internal/toolchain` | `work/toolchains`; private providers/store/extractor adapters; approved host-native package setup belongs to `host/lifecycle`, not the project-facing resolver. |
-| `internal/toolchain/cmd/fetch` | `tools/toolchainfetch`, not a nested command hidden among runtime provider code. |
+| `internal/work/toolchains` | **A09/S05 landed:** project selectors, immutable generation store, Node/pnpm providers, catalog and private extractor adapters live under the toolchains owner; host-native package setup remains a host lifecycle concern. |
+| `tools/toolchainfetch` | **A09/S05 landed:** toolchain bundle fetch tooling lives outside runtime provider code and depends on the public toolchains facade. |
 | `internal/work/workspace` | **A08/S04 landed:** workspace public facade and filesystem/revision implementation; repository facade owns the private Git adapter and revision persistence uses `platform/safeio`. Serving/publishing remains with sharing/transport. |
 
 ## 6. Assets, tests and non-Go boundaries

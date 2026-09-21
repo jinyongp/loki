@@ -7,7 +7,7 @@ import (
 )
 
 func TestRepositoryManifest(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "toolchain-manifest.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "go", "toolchain-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

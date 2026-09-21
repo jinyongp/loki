@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"loki/internal/toolchain"
+	"loki/internal/work/toolchains"
 )
 
 func TestToolchainInstallAndOfflineDoctor(t *testing.T) {

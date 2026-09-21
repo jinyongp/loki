@@ -9,8 +9,8 @@ import (
 
 	applauncher "loki/internal/app/launcher"
 	"loki/internal/platform/sandbox"
-	"loki/internal/toolchain"
 	"loki/internal/work/jobs"
+	"loki/internal/work/toolchains"
 )
 
 type launcherToolchainResolver struct {

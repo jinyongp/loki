@@ -16,8 +16,8 @@ import (
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/sandbox"
-	"loki/internal/toolchain"
 	"loki/internal/work/jobs"
+	"loki/internal/work/toolchains"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	applauncher "loki/internal/app/launcher"
-	"loki/internal/toolchain"
 	"loki/internal/work/jobs"
+	"loki/internal/work/toolchains"
 )
 
 func cleanupGenerationStore(t *testing.T, root string) {

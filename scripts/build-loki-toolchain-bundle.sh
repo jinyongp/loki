@@ -12,6 +12,6 @@ case "$1" in
   *) echo "output directory must be absolute" >&2; exit 2 ;;
 esac
 
-exec go run "$SOURCE_DIR/internal/toolchain/cmd/fetch" \
+exec go run "$SOURCE_DIR/tools/toolchainfetch" \
   --manifest "$SOURCE_DIR/packaging/go/toolchain-manifest.json" \
   --output "$1"

@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"loki/internal/toolchain"
 	"loki/internal/work/jobs"
+	"loki/internal/work/toolchains"
 )
 
 type mcpToolchainResolver struct {
