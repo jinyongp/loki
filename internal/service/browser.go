@@ -83,6 +83,9 @@ type screenshotRequest struct {
 
 func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifacts.Store) map[string]mcpserver.Handler {
 	handlers := map[string]mcpserver.Handler{}
+	if client == nil {
+		return handlers
+	}
 	for tool, actions := range map[string]map[string]string{
 		"browser_session":  {"start": "start", "navigate": "navigate", "back": "back", "forward": "forward", "reload": "reload", "stop_loading": "stop_loading", "stop": "stop"},
 		"browser_observe":  {"state": "state", "tabs": "list_tabs", "console": "console", "network": "network", "request": "request", "websockets": "websockets", "errors": "page_errors", "diagnostics": "debug_diagnostics", "dialog": "dialog_state", "downloads": "downloads"},
@@ -152,36 +155,39 @@ func BrowserHandlers(client BrowserCaller, files *workspace.Files, store *artifa
 		}
 		return objectResult(files.SaveScreenshot(r.Path, base64.StdEncoding.EncodeToString(data), r.Overwrite, r.Expected, r.FullPage))
 	})
-	handlers["browser_share_screenshot"] = mcpserver.Typed(func(ctx context.Context, r screenshotRequest) (*mcp.CallToolResult, error) {
-		if store == nil {
-			return nil, fault.Error("temporary image sharing is not configured")
-		}
-		if !artifacts.ValidRequestID(r.RequestID) {
-			return nil, fault.New(fault.CodeInvalidInput, "browser screenshot request_id must be a UUID", false, "generate a new UUID request_id")
-		}
-		if r.TTL < 60 || r.TTL > 3600 {
-			return nil, fault.Error("image link lifetime must be between 60 and 3600 seconds")
-		}
-		fingerprint := browserShareFingerprint(r.FullPage, r.TTL)
-		if replay, ok, err := store.Replay(r.RequestID, fingerprint); err != nil {
-			return nil, browserShareReplayError(err)
-		} else if ok {
-			metadata := browserShareMetadata(replay, r.FullPage)
+	if store != nil {
+		handlers["browser_share_screenshot"] = mcpserver.Typed(func(ctx context.Context, r screenshotRequest) (*mcp.CallToolResult, error) {
+			if store == nil {
+				return nil, fault.Error("temporary image sharing is not configured")
+			}
+			if !artifacts.ValidRequestID(r.RequestID) {
+				return nil, fault.New(fault.CodeInvalidInput, "browser screenshot request_id must be a UUID", false, "generate a new UUID request_id")
+			}
+			if r.TTL < 60 || r.TTL > 3600 {
+				return nil, fault.Error("image link lifetime must be between 60 and 3600 seconds")
+			}
+			fingerprint := browserShareFingerprint(r.FullPage, r.TTL)
+			if replay, ok, err := store.Replay(r.RequestID, fingerprint); err != nil {
+				return nil, browserShareReplayError(err)
+			} else if ok {
+				metadata := browserShareMetadata(replay, r.FullPage)
+				url := metadata["url"].(string)
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: metadata}, nil
+			}
+			data, err := browserScreenshot(ctx, client, r.FullPage)
+			if err != nil {
+				return nil, err
+			}
+			digest := workspace.Digest(data)
+			published, err := store.PublishReplay(r.RequestID, fingerprint, data, "browser-screenshot.png", "image/png", digest, r.TTL, "inline")
+			if err != nil {
+				return nil, browserShareReplayError(err)
+			}
+			metadata := browserShareMetadata(published, r.FullPage)
 			url := metadata["url"].(string)
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: metadata}, nil
-		}
-		data, err := browserScreenshot(ctx, client, r.FullPage)
-		if err != nil {
-			return nil, err
-		}
-		digest := workspace.Digest(data)
-		published, err := store.PublishReplay(r.RequestID, fingerprint, data, "browser-screenshot.png", "image/png", digest, r.TTL, "inline")
-		if err != nil {
-			return nil, browserShareReplayError(err)
-		}
-		metadata := browserShareMetadata(published, r.FullPage)
-		url := metadata["url"].(string)
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Temporary image URL: " + url}}, StructuredContent: metadata}, nil
-	})
+		})
+
+	}
 	return handlers
 }

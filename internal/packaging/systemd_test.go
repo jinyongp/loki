@@ -323,8 +323,14 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 	mcp := read("loki-go-mcp.service")
 	if !strings.Contains(mcp, "loki-go-executor.service") ||
 		!strings.Contains(mcp, "InaccessiblePaths=/run/loki-go/launcher -/run/docker.sock /var/lib/loki-go/launcher") ||
-		strings.Contains(mcp, "Requires=loki-go-launcher.service") {
-		t.Fatal("MCP does not preserve the executor-only launcher boundary")
+		strings.Contains(mcp, "Requires=loki-go-launcher.service") ||
+		!strings.Contains(mcp, "Wants=loki-go-browser.service") {
+		t.Fatal("MCP does not preserve the executor-only launcher and optional browser boundaries")
+	}
+	for _, line := range strings.Split(mcp, "\n") {
+		if strings.HasPrefix(line, "Requires=") && strings.Contains(line, "loki-go-browser.service") {
+			t.Fatalf("MCP makes optional browser a hard dependency: %q", line)
+		}
 	}
 }
 
@@ -415,7 +421,7 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 
 func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	root := t.TempDir()
-	for _, directory := range []string{"runtime", "port-guard", "browser", "signing", "executor"} {
+	for _, directory := range []string{"runtime", "port-guard", "signing", "executor"} {
 		if err := os.Mkdir(filepath.Join(root, directory), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -427,7 +433,7 @@ func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	listeners := []net.Listener{}
-	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "browser/control.sock", "signing/agent.sock", "executor/control.sock"} {
+	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "signing/agent.sock", "executor/control.sock"} {
 		listener, err := net.Listen("unix", filepath.Join(root, socket))
 		if err != nil {
 			t.Fatal(err)

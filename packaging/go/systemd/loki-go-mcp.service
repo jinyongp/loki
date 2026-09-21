@@ -1,8 +1,8 @@
 [Unit]
 Description=Loki Go MCP server
 PartOf=loki-go.target
-Requires=loki-go-runtime.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-executor.service
-Wants=loki-go-egress-proxy.service
+Requires=loki-go-runtime.service loki-go-port-guard.service loki-go-signing-agent.service loki-go-executor.service
+Wants=loki-go-browser.service loki-go-egress-proxy.service
 After=network.target loki-go-egress-proxy.service loki-go-port-guard.service loki-go-browser.service loki-go-signing-agent.service loki-go-runtime.service loki-go-executor.service
 ConditionPathExists=/etc/loki-go/config.toml
 ConditionPathExists=/etc/loki-go/token

@@ -132,7 +132,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 33 {
+	if err != nil || len(tools.Tools) != 30 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -236,6 +236,62 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(c.Root, "hello.txt")); err != nil || string(data) != "fixture" {
 		t.Fatal("workspace content not preserved", err)
+	}
+}
+
+func TestNewMCPExcludesDisabledIntegrationTools(t *testing.T) {
+	c, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Root = t.TempDir()
+	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	runtime := runtimeFixture(func(context.Context, any) (json.RawMessage, error) {
+		return json.RawMessage(`{"in_use":false,"listeners":[],"initialized":true}`), nil
+	})
+	ports, err := portguard.NewPolicy(c.Port, 18766, 18767)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewMCP(c, MCPOptions{
+		Runtime: runtime, PortGuard: runtime, Jobs: jobControllerFixture(),
+		GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{},
+		Ports: ports, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43),
+		Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := app.Server.Connect(t.Context(), serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverSession.Close()
+	client, err := mcp.NewClient(&mcp.Implementation{Name: "disabled-integrations-test", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	listed, err := client.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Tools) != 19 {
+		t.Fatalf("disabled integration tool count = %d, want 19", len(listed.Tools))
+	}
+	forbidden := map[string]bool{
+		"browser_session": true, "browser_observe": true, "browser_interact": true,
+		"browser_screenshot": true, "browser_save_screenshot": true, "browser_share_screenshot": true,
+		"share_image": true, "artifact_publish": true,
+		"preview_publish": true, "shared_resources": true, "revoke_share": true,
+		"github": true, "github_issue_fields_read": true, "github_issue_fields_write": true,
+	}
+	for _, tool := range listed.Tools {
+		if forbidden[tool.Name] {
+			t.Fatalf("disabled integration tool was registered: %s", tool.Name)
+		}
 	}
 }
 

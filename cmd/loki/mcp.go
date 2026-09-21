@@ -32,13 +32,21 @@ type mcpLayout struct {
 }
 
 func (l mcpLayout) options(token string) (service.MCPOptions, error) {
-	for _, path := range []string{l.RuntimeSocket, l.PortGuardSocket, l.BrowserSocket} {
+	for _, path := range []string{l.RuntimeSocket, l.PortGuardSocket} {
 		if !filepath.IsAbs(path) {
-			return service.MCPOptions{}, errors.New("MCP socket paths must be absolute")
+			return service.MCPOptions{}, errors.New("MCP core socket paths must be absolute")
 		}
 	}
-	if l.RuntimeUID == nil || l.PortGuardUID == nil || l.BrowserUID == nil {
-		return service.MCPOptions{}, errors.New("MCP layout requires explicit service UIDs")
+	if l.RuntimeUID == nil || l.PortGuardUID == nil {
+		return service.MCPOptions{}, errors.New("MCP layout requires explicit core service UIDs")
+	}
+	hasBrowserSocket := l.BrowserSocket != ""
+	hasBrowserUID := l.BrowserUID != nil
+	if hasBrowserSocket != hasBrowserUID {
+		return service.MCPOptions{}, errors.New("MCP browser socket and UID must be configured together")
+	}
+	if hasBrowserSocket && (!filepath.IsAbs(l.BrowserSocket) || filepath.Clean(l.BrowserSocket) != l.BrowserSocket) {
+		return service.MCPOptions{}, errors.New("MCP browser peer configuration is invalid")
 	}
 	if !filepath.IsAbs(l.ExecutionContract) {
 		return service.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
@@ -55,10 +63,23 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 	options := service.MCPOptions{
 		Runtime:       rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID},
 		PortGuard:     rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID},
-		Browser:       service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID),
-		RuntimeSocket: l.RuntimeSocket, BrowserSocket: l.BrowserSocket,
-		RGPath: l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot,
+		RuntimeSocket: l.RuntimeSocket,
+		RGPath:        l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot,
 		GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token,
+	}
+	if hasBrowserSocket {
+		info, statErr := os.Stat(l.BrowserSocket)
+		switch {
+		case statErr == nil && info.Mode()&os.ModeSocket != 0:
+			options.Browser = service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
+			options.BrowserSocket = l.BrowserSocket
+		case errors.Is(statErr, os.ErrNotExist):
+			// Optional browser integration is absent from construction.
+		case statErr != nil:
+			return service.MCPOptions{}, fmt.Errorf("inspect MCP browser socket: %w", statErr)
+		default:
+			return service.MCPOptions{}, errors.New("MCP browser socket path is not a socket")
+		}
 	}
 	hasExecutorSocket := l.ExecutorSocket != ""
 	hasExecutorUID := l.ExecutorUID != nil

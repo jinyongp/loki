@@ -65,8 +65,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if len(options.Token) < 43 || strings.ContainsAny(options.Token, "\r\n") {
 		return nil, errors.New("MCP requires a valid bearer token")
 	}
-	if options.Runtime == nil || options.PortGuard == nil || options.Browser == nil || options.Jobs == nil {
-		return nil, errors.New("MCP requires runtime, port-guard, browser and executor Job clients")
+	if options.Runtime == nil || options.PortGuard == nil || options.Jobs == nil {
+		return nil, errors.New("MCP requires runtime, port-guard and executor Job clients")
 	}
 	if !options.Policy.Valid() {
 		return nil, errors.New("MCP requires a valid effective policy generation")
@@ -151,7 +151,28 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
 	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: repository, Claims: app.Claims}
-	for _, group := range []map[string]mcpserver.Handler{workspacemcp.WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), workspacemcp.GitHandlers(repository), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs, options.JobToolchains)} {
+	groups := []map[string]mcpserver.Handler{
+		workspacemcp.WorkspaceHandlers(app.files),
+		workspacemcp.GitHandlers(repository),
+		SecretHandlers(options.Runtime),
+		ProjectCoordinationHandlers(options.Runtime, coordination),
+		ProjectContextHandlers(projectContext),
+		AgentGuidanceHandlers(agentProvider),
+		JobHandlers(options.Jobs, options.JobToolchains),
+	}
+	if app.Artifacts != nil {
+		groups = append(groups, ArtifactHandlers(app.files, app.Artifacts))
+	}
+	if options.Browser != nil {
+		groups = append(groups, BrowserHandlers(options.Browser, app.files, app.Artifacts))
+	}
+	if app.Previews != nil || app.Artifacts != nil {
+		groups = append(groups, PreviewHandlers(preview, app.Artifacts))
+	}
+	if c.GitHubAppID != 0 {
+		groups = append(groups, GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime))
+	}
+	for _, group := range groups {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)
@@ -173,7 +194,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	for name, handler := range handlers {
 		handlers[name] = auditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfiguredCurrent(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
+	app.Server, err = mcpserver.NewConfiguredAvailable(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
 	if err != nil {
 		return nil, err
 	}

@@ -240,47 +240,54 @@ func (c *PreviewController) Publish(ctx context.Context, r previewRequest) (map[
 }
 
 func PreviewHandlers(c *PreviewController, artifactsStore *artifacts.Store) map[string]mcpserver.Handler {
-	return map[string]mcpserver.Handler{
-		"preview_publish": mcpserver.Typed(func(ctx context.Context, r previewRequest) (*mcp.CallToolResult, error) {
-			return objectResult(c.Publish(ctx, r))
-		}),
-		"shared_resources": mcpserver.Typed(func(ctx context.Context, r struct{ Kind string }) (*mcp.CallToolResult, error) {
-			previewsResult := map[string]any{"previews": []any{}, "configured": false, "complete": true}
-			if c.Store != nil {
-				previewsResult = map[string]any{"previews": c.Store.List(), "configured": true, "complete": true}
-			}
-			kind := r.Kind
-			if kind == "" {
-				kind = "all"
-			}
-			switch kind {
-			case "previews":
-				return mcpserver.Object(previewsResult)
-			case "artifacts":
-				return mcpserver.Object(ArtifactList(artifactsStore))
-			case "all":
-				return mcpserver.Object(map[string]any{"previews": previewsResult, "artifacts": ArtifactList(artifactsStore)})
-			}
-			return nil, fault.Error("shared_resources kind must be all, previews, or artifacts")
-		}),
-		"revoke_share": mcpserver.Typed(func(ctx context.Context, r struct {
-			Kind string
-			ID   string `json:"share_id"`
-		}) (*mcp.CallToolResult, error) {
-			if r.Kind == "artifact" {
-				return objectResult(ArtifactRevoke(artifactsStore, r.ID))
-			}
-			if r.Kind != "preview" {
-				return nil, fault.Error("revoke_share kind must be preview or artifact")
-			}
-			if c.Store == nil {
-				return nil, fault.Error("temporary live preview sharing is not configured")
-			}
-			if !previews.ValidShareID(r.ID) {
-				return nil, fault.New(fault.CodeInvalidInput, "preview share_id is invalid", false, "use a share_id returned by preview publication or shared_resources")
-			}
-			_ = c.Store.Revoke(r.ID)
-			return mcpserver.Object(map[string]any{"kind": "preview", "revoked": true, "share_id": r.ID})
-		}),
+	handlers := map[string]mcpserver.Handler{}
+	previewConfigured := c != nil && c.Store != nil
+	artifactConfigured := artifactsStore != nil
+	if !previewConfigured && !artifactConfigured {
+		return handlers
 	}
+	if previewConfigured {
+		handlers["preview_publish"] = mcpserver.Typed(func(ctx context.Context, r previewRequest) (*mcp.CallToolResult, error) {
+			return objectResult(c.Publish(ctx, r))
+		})
+	}
+	handlers["shared_resources"] = mcpserver.Typed(func(ctx context.Context, r struct{ Kind string }) (*mcp.CallToolResult, error) {
+		previewsResult := map[string]any{"previews": []any{}, "configured": false, "complete": true}
+		if previewConfigured {
+			previewsResult = map[string]any{"previews": c.Store.List(), "configured": true, "complete": true}
+		}
+		kind := r.Kind
+		if kind == "" {
+			kind = "all"
+		}
+		switch kind {
+		case "previews":
+			return mcpserver.Object(previewsResult)
+		case "artifacts":
+			return mcpserver.Object(ArtifactList(artifactsStore))
+		case "all":
+			return mcpserver.Object(map[string]any{"previews": previewsResult, "artifacts": ArtifactList(artifactsStore)})
+		}
+		return nil, fault.Error("shared_resources kind must be all, previews, or artifacts")
+	})
+	handlers["revoke_share"] = mcpserver.Typed(func(ctx context.Context, r struct {
+		Kind string
+		ID   string `json:"share_id"`
+	}) (*mcp.CallToolResult, error) {
+		if r.Kind == "artifact" {
+			return objectResult(ArtifactRevoke(artifactsStore, r.ID))
+		}
+		if r.Kind != "preview" {
+			return nil, fault.Error("revoke_share kind must be preview or artifact")
+		}
+		if !previewConfigured {
+			return nil, fault.Error("temporary live preview sharing is not configured")
+		}
+		if !previews.ValidShareID(r.ID) {
+			return nil, fault.New(fault.CodeInvalidInput, "preview share_id is invalid", false, "use a share_id returned by preview publication or shared_resources")
+		}
+		_ = c.Store.Revoke(r.ID)
+		return mcpserver.Object(map[string]any{"kind": "preview", "revoked": true, "share_id": r.ID})
+	})
+	return handlers
 }

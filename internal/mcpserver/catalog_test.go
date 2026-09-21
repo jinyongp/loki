@@ -81,6 +81,46 @@ func TestCurrentCatalogAndResources(t *testing.T) {
 	}
 }
 
+func TestConfiguredAvailableExposesOnlyKnownActiveSubset(t *testing.T) {
+	handlers := map[string]Handler{
+		"system_inspect": func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+			return Object(input)
+		},
+		"workspace_read": func(_ context.Context, input map[string]any) (*mcp.CallToolResult, error) {
+			return Object(input)
+		},
+	}
+	server, err := NewConfiguredAvailable(handlers, ResourceOrigins{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serverSession.Close()
+	client, err := mcp.NewClient(&mcp.Implementation{Name: "subset-test", Version: "1"}, nil).Connect(t.Context(), b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	listed, err := client.ListTools(t.Context(), nil)
+	if err != nil || len(listed.Tools) != 2 {
+		t.Fatalf("subset tools = %#v, %v", listed, err)
+	}
+	if listed.Tools[0].Name != "system_inspect" && listed.Tools[1].Name != "system_inspect" {
+		t.Fatalf("system_inspect missing from subset: %#v", listed.Tools)
+	}
+	if listed.Tools[0].Name != "workspace_read" && listed.Tools[1].Name != "workspace_read" {
+		t.Fatalf("workspace_read missing from subset: %#v", listed.Tools)
+	}
+	unknown := map[string]Handler{"not_a_loki_tool": handlers["system_inspect"]}
+	if _, err = NewConfiguredAvailable(unknown, ResourceOrigins{}); err == nil || !strings.Contains(err.Error(), "unknown tool") {
+		t.Fatalf("unknown subset handler error = %v", err)
+	}
+}
+
 func TestSchemaValidationAndSafeErrors(t *testing.T) {
 	handlers := testHandlers(t)
 	calls := 0

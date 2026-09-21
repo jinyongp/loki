@@ -74,6 +74,35 @@ func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	}
 }
 
+func TestMCPLayoutAllowsBrowserIntegrationToBeDisabled(t *testing.T) {
+	uid := uint32(1000)
+	executorUID := uint32(1002)
+	layout := mcpLayout{
+		RuntimeSocket: "/run/runtime.sock", PortGuardSocket: "/run/ports.sock",
+		ExecutorSocket:    "/run/executor.sock",
+		ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
+		PackagedSkillRoot: "/opt/loki/share/skills",
+		RuntimeUID:        &uid, PortGuardUID: &uid, ExecutorUID: &executorUID,
+	}
+	options, err := layout.options("token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Browser != nil || options.BrowserSocket != "" {
+		t.Fatalf("disabled browser integration was constructed: %#v", options)
+	}
+	for _, mutate := range []func(*mcpLayout){
+		func(l *mcpLayout) { l.BrowserSocket = "/run/browser.sock" },
+		func(l *mcpLayout) { l.BrowserUID = &uid },
+	} {
+		changed := layout
+		mutate(&changed)
+		if _, err = changed.options("token"); err == nil {
+			t.Fatal("partial browser peer configuration was accepted")
+		}
+	}
+}
+
 func TestMCPLayoutAllowsExecutorToRemainUnconfiguredBeforeJobSurfaceBinding(t *testing.T) {
 	uid := uint32(1000)
 	layout := mcpLayout{

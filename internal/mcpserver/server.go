@@ -54,6 +54,40 @@ func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) 
 	return NewConfigured(handlers, origins)
 }
 
+// NewConfiguredAvailable exposes only the contract definitions that have
+// active handlers. It rejects unknown handler names and preserves contract
+// ordering for the enabled subset.
+func NewConfiguredAvailable(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
+	if err := origins.validate(); err != nil {
+		return nil, err
+	}
+	current, err := contract.Current()
+	if err != nil {
+		return nil, err
+	}
+	definitions, err := contract.CurrentDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	selected := make([]*mcp.Tool, 0, len(handlers))
+	known := make(map[string]bool, len(definitions))
+	for _, definition := range definitions {
+		known[definition.Name] = true
+		if handlers[definition.Name] != nil {
+			selected = append(selected, definition)
+		}
+	}
+	for name, handler := range handlers {
+		if handler == nil {
+			return nil, fmt.Errorf("nil implementation for %s", name)
+		}
+		if !known[name] {
+			return nil, fmt.Errorf("unknown tool implementation %s", name)
+		}
+	}
+	return newServer(current, handlers, selected, &origins, contract.CurrentInstructions)
+}
+
 func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {
 	if len(handlers) != len(definitions) {
 		return nil, fmt.Errorf("need %d handlers, got %d", len(definitions), len(handlers))

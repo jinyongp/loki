@@ -99,6 +99,9 @@ func artifactResult(result map[string]any) (*mcp.CallToolResult, error) {
 }
 
 func ArtifactHandlers(files *workspace.Files, store *artifacts.Store) map[string]mcpserver.Handler {
+	if store == nil {
+		return map[string]mcpserver.Handler{}
+	}
 	return map[string]mcpserver.Handler{
 		"share_image": mcpserver.Typed(func(ctx context.Context, r shareImageRequest) (*mcp.CallToolResult, error) {
 			if store == nil {
