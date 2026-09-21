@@ -784,6 +784,14 @@
       ],
       "target": "host/policy"
     },
+    "loki/internal/host/releases": {
+      "kind": "host",
+      "owner": "releases",
+      "tags": [
+        "release-trust"
+      ],
+      "target": "host/releases"
+    },
     "loki/internal/work/workspace/git": {
       "kind": "work-adapter",
       "owner": "workspace",
@@ -1003,6 +1011,13 @@
       ],
       "description": "TOML parsing belongs to host config or project selectors",
       "import_prefix": "github.com/pelletier/go-toml/v2"
+    },
+    {
+      "allowed_tags": [
+        "release-trust"
+      ],
+      "description": "TUF verification belongs to authenticated host release metadata",
+      "import_prefix": "github.com/theupdateframework/go-tuf/v2"
     }
   ],
   "variants": [
