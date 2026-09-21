@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"loki/internal/browser"
 	"loki/internal/config"
 	"loki/internal/daemon"
+	"loki/internal/integrations/browser"
 	"loki/internal/service"
 )
 

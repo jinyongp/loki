@@ -224,10 +224,10 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/artifacts` | `integrations/sharing` capability-link use cases; HTTP serving in `transport/http`; bounded payload storage private to sharing. |
 | `internal/audit` | `control/audit` event contract and private sink/retention adapter using safeio. |
 | `internal/auth` | Core bearer/local connection auth in `transport/http` and trusted principal values in `control/identity`. Cloudflare-specific Access verification/JWKS refresh is not a core-install dependency; retain it only as an optional external-access integration or maintainer migration path if that feature is kept, and never route its safe dialing through browser policy. |
-| `internal/browser` | `integrations/browser` facade, local worker adapter and private Chromium driver/JavaScript. |
+| `internal/integrations/browser` | **A10/S05 landed:** browser facade and local worker/Chromium implementation live under the owning integration subtree. |
 | `internal/browsernet` | **S02 completed:** package removed; shared validation/dial/proxy mechanics now live in `internal/platform/netguard`. Workload grant enforcement remains targeted at `work/network`. |
 | `internal/buildinfo` | `platform/buildinfo`, a leaf package containing build metadata only. |
-| `internal/cdp` | `integrations/browser/internal/cdp` until another real independent consumer justifies extraction. |
+| `internal/integrations/browser/internal/cdp` | **A10/S05 landed:** browser-private CDP transport; Go `internal` visibility prevents peer features from importing it. |
 | `internal/config` | Strict `host/config` loading plus feature-owned Options; neutral syntax helpers extracted only with actual reuse. |
 | `internal/contract` | Reviewed MCP definitions/generated artifacts in `transport/mcp`; domain types with their respective feature, never in a global SDK-dependent contract package. |
 | `internal/daemon` | Safe file/ownership helpers to `platform/safeio`, Unix framing/listener helpers to transport or platform as appropriate, startup to `app/<role>`. |

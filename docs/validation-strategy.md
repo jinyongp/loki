@@ -43,7 +43,7 @@ Integration checks may require a disposable external executable, host identity, 
 | Capability | Check | Required fixture |
 | --- | --- | --- |
 | Compose lifecycle POSIX ACL behavior | `LOKI_REQUIRE_POSIX_ACL_TESTS=1 go test ./internal/packaging -run 'TestComposeLifecycle'` | `setfacl` on PATH. Ordinary developer runs may skip these tests; release verification sets the require flag so absence is a failure. |
-| Chromium/CDP | `LOKI_REQUIRE_BROWSER_TESTS=1 LOKI_TEST_CHROME=/absolute/chromium go test ./internal/browser ./internal/cdp` | Explicit Chromium binary; `LOKI_TEST_CHROME_LIBS` when the candidate needs a non-default library path. |
+| Chromium/CDP | `LOKI_REQUIRE_BROWSER_TESTS=1 LOKI_TEST_CHROME=/absolute/chromium go test ./internal/integrations/browser/...` | Explicit Chromium binary; `LOKI_TEST_CHROME_LIBS` when the candidate needs a non-default library path. |
 | Real devtools broker process | `LOKI_DEVTOOLS_BINARY=/absolute/devtools go test ./internal/devtools -run TestRealProcessInheritsBrokerSecrets` | Pinned devtools candidate binary. Synthetic secret only. |
 | Locked project execution contract | `LOKI_E2E_DEVTOOLS=... LOKI_E2E_PNPM=... LOKI_E2E_NODE=... LOKI_E2E_CHROMIUM=... go test ./internal/e2e -run TestProjectExecutionContract` | Four absolute candidate executables plus its isolated fixture/cache directories. |
 | Runner/vault OS permissions | root-owned disposable Linux test environment running `go test ./internal/execution -run TestLinuxRunnerCanWriteStateButCannotReadVaultKey` | Effective UID 0 only to create/drop to the synthetic runner UID; never a production host. |

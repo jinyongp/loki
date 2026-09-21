@@ -58,7 +58,7 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/browser"
+      "to": "loki/internal/integrations/browser"
     },
     {
       "from": "loki/cmd/loki",
@@ -217,19 +217,19 @@
       "to": "loki/internal/platform/netguard"
     },
     {
-      "from": "loki/internal/browser",
+      "from": "loki/internal/integrations/browser",
       "to": "loki/internal/platform/netguard"
     },
     {
-      "from": "loki/internal/browser",
-      "to": "loki/internal/cdp"
+      "from": "loki/internal/integrations/browser",
+      "to": "loki/internal/integrations/browser/internal/cdp"
     },
     {
-      "from": "loki/internal/browser",
+      "from": "loki/internal/integrations/browser",
       "to": "loki/internal/daemon"
     },
     {
-      "from": "loki/internal/browser",
+      "from": "loki/internal/integrations/browser",
       "to": "loki/internal/fault"
     },
     {
@@ -366,6 +366,10 @@
     },
     {
       "from": "loki/internal/service",
+      "to": "loki/internal/integrations/browser"
+    },
+    {
+      "from": "loki/internal/service",
       "to": "loki/internal/platform/netguard"
     },
     {
@@ -471,12 +475,6 @@
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
       "to": "loki/internal/auth"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/browser"
     },
     {
       "from": "loki/internal/service",
@@ -661,7 +659,7 @@
       "tags": [],
       "target": "transport/http + control/identity"
     },
-    "loki/internal/browser": {
+    "loki/internal/integrations/browser": {
       "kind": "integration",
       "owner": "browser",
       "tags": [
@@ -675,7 +673,7 @@
       "tags": [],
       "target": "platform/buildinfo"
     },
-    "loki/internal/cdp": {
+    "loki/internal/integrations/browser/internal/cdp": {
       "kind": "private-integration",
       "owner": "browser",
       "tags": [],

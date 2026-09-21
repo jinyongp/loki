@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/cdp"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 func event(d *Debug, method string, params map[string]any) {

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"loki/internal/cdp"
 	"loki/internal/fault"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 type pendingDialog struct {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/cdp"
 	"loki/internal/fault"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 func TestDialogTrackerLifecycle(t *testing.T) {

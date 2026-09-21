@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/browser"
+	"loki/internal/integrations/browser"
 )
 
 type browserFixture func(context.Context, string, map[string]any) (map[string]any, error)

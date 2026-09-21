@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"loki/internal/cdp"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 var sensitive = regexp.MustCompile(`(?i)(?:auth|cookie|token|secret|password|passwd|api[-_]?key|signature|credential)`)

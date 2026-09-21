@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"loki/internal/cdp"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 func TestChromiumSharedDownloads(t *testing.T) {

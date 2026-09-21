@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"loki/internal/browser"
 	"loki/internal/control/identity"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/fault"
+	"loki/internal/integrations/browser"
 	"loki/internal/rpc"
 )
 

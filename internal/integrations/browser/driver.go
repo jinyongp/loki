@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"loki/internal/cdp"
 	"loki/internal/daemon"
+	"loki/internal/integrations/browser/internal/cdp"
 	"loki/internal/platform/netguard"
 )
 

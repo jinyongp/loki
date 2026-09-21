@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
-	"loki/internal/cdp"
+	"loki/internal/integrations/browser/internal/cdp"
 )
 
 const maxDownloadRecords = 128
