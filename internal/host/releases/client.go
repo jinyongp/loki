@@ -287,20 +287,13 @@ func validateRootPolicy(root *metadata.Metadata[metadata.RootType]) error {
 }
 
 func validateDelegations(delegations *metadata.Delegations) error {
-	if delegations == nil || len(delegations.Roles) != 2 {
-		return errors.New("top-level targets must contain exactly the release and toolchain delegations")
+	if delegations == nil {
+		return errors.New("top-level targets must contain release and toolchain delegations")
 	}
 	roleKeys := map[string]map[string]bool{}
 	for _, role := range delegations.Roles {
-		if role.Name != "releases" && role.Name != "toolchains" {
-			return fmt.Errorf("unexpected delegated target role %q", role.Name)
-		}
-		if _, exists := roleKeys[role.Name]; exists {
-			return fmt.Errorf("duplicate delegated target role %q", role.Name)
-		}
-		if role.Threshold < 1 || len(role.KeyIDs) < role.Threshold || !role.Terminating ||
-			len(role.PathHashPrefixes) != 0 || len(role.Paths) != 1 || role.Paths[0] != role.Name+"/*" {
-			return fmt.Errorf("delegated target role %q violates namespace policy", role.Name)
+		if role.Threshold < 1 || len(role.KeyIDs) < role.Threshold {
+			return fmt.Errorf("delegated target role %q has an invalid threshold", role.Name)
 		}
 		keys := map[string]bool{}
 		for _, keyID := range role.KeyIDs {
@@ -309,7 +302,27 @@ func validateDelegations(delegations *metadata.Delegations) error {
 			}
 			keys[keyID] = true
 		}
-		roleKeys[role.Name] = keys
+
+		if role.Name == "releases" || role.Name == "toolchains" {
+			if _, exists := roleKeys[role.Name]; exists {
+				return fmt.Errorf("duplicate delegated target role %q", role.Name)
+			}
+			if !role.Terminating || len(role.PathHashPrefixes) != 0 || len(role.Paths) != 1 || role.Paths[0] != role.Name+"/*" {
+				return fmt.Errorf("delegated target role %q violates namespace policy", role.Name)
+			}
+			roleKeys[role.Name] = keys
+			continue
+		}
+
+		for _, protected := range []string{"releases/_scope_probe", "toolchains/_scope_probe"} {
+			matches, err := role.IsDelegatedPath(protected)
+			if err != nil {
+				return fmt.Errorf("delegated target role %q has invalid path policy: %w", role.Name, err)
+			}
+			if matches {
+				return fmt.Errorf("delegated target role %q overlaps a protected namespace", role.Name)
+			}
+		}
 	}
 	releaseKeys, releaseOK := roleKeys["releases"]
 	toolchainKeys, toolchainOK := roleKeys["toolchains"]

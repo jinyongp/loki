@@ -40,6 +40,8 @@ type repositoryOptions struct {
 	targetsExpires    time.Time
 	releaseExpires    time.Time
 	toolchainExpires  time.Time
+	releaseKey        *fixtureKey
+	toolchainKey      *fixtureKey
 	wrongReleaseKey   bool
 	wrongToolchainKey bool
 	corruptRole       string
@@ -213,16 +215,68 @@ func TestClientRejectsWrongDelegatedRoleKeys(t *testing.T) {
 	})
 }
 
+func TestClientAcceptsIndependentDelegatedKeyRotation(t *testing.T) {
+	now := time.Now().UTC()
+	fixture := newRepositoryFixture(t, now)
+	expires := now.Add(24 * time.Hour)
+	stateRoot := privateReleaseStateRoot(t)
+
+	client := openFixtureClient(t, fixture, fixture.repository(t, 1, expires), stateRoot)
+	if _, err := client.ResolveRelease(t.Context(), "loki-1.2.3.json"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ResolveToolchain(t.Context(), "catalog-v7.json"); err != nil {
+		t.Fatal(err)
+	}
+
+	newReleaseKey := newFixtureKey(t)
+	releaseOptions := uniformRepositoryOptions(expires)
+	releaseOptions.releaseKey = &newReleaseKey
+	client = openFixtureClient(t, fixture, fixture.repositoryWithOptions(t, 2, releaseOptions), stateRoot)
+	if _, err := client.ResolveRelease(t.Context(), "loki-1.2.3.json"); err != nil {
+		t.Fatalf("release delegated-key rotation failed: %v", err)
+	}
+	if _, err := client.ResolveToolchain(t.Context(), "catalog-v7.json"); err != nil {
+		t.Fatalf("unchanged toolchain delegation failed after release-key rotation: %v", err)
+	}
+
+	newToolchainKey := newFixtureKey(t)
+	toolchainOptions := uniformRepositoryOptions(expires)
+	toolchainOptions.releaseKey = &newReleaseKey
+	toolchainOptions.toolchainKey = &newToolchainKey
+	client = openFixtureClient(t, fixture, fixture.repositoryWithOptions(t, 3, toolchainOptions), stateRoot)
+	if _, err := client.ResolveToolchain(t.Context(), "catalog-v7.json"); err != nil {
+		t.Fatalf("toolchain delegated-key rotation failed: %v", err)
+	}
+	if _, err := client.ResolveRelease(t.Context(), "loki-1.2.3.json"); err != nil {
+		t.Fatalf("rotated release delegation failed after toolchain-key rotation: %v", err)
+	}
+}
+
 func TestClientRejectsSnapshotMixAndMatch(t *testing.T) {
 	now := time.Now().UTC()
 	fixture := newRepositoryFixture(t, now)
-	repo := fixture.repository(t, 1, now.Add(24*time.Hour))
-	key := fixture.baseURL + "/1.snapshot.json"
-	repo.files[key] = append(append([]byte(nil), repo.files[key]...), ' ')
-	client := openFixtureClient(t, fixture, repo, privateReleaseStateRoot(t))
-	if err := client.Refresh(t.Context()); err == nil {
-		t.Fatal("snapshot content inconsistent with timestamp metadata was accepted")
-	}
+	expires := now.Add(24 * time.Hour)
+
+	t.Run("snapshot-against-timestamp", func(t *testing.T) {
+		repo := fixture.repository(t, 1, expires)
+		key := fixture.baseURL + "/1.snapshot.json"
+		repo.files[key] = append(append([]byte(nil), repo.files[key]...), ' ')
+		client := openFixtureClient(t, fixture, repo, privateReleaseStateRoot(t))
+		if err := client.Refresh(t.Context()); err == nil {
+			t.Fatal("snapshot content inconsistent with timestamp metadata was accepted")
+		}
+	})
+
+	t.Run("delegated-targets-against-snapshot", func(t *testing.T) {
+		repo := fixture.repository(t, 1, expires)
+		key := fixture.baseURL + "/1.releases.json"
+		repo.files[key] = append(append([]byte(nil), repo.files[key]...), ' ')
+		client := openFixtureClient(t, fixture, repo, privateReleaseStateRoot(t))
+		if _, err := client.ResolveRelease(t.Context(), "loki-1.2.3.json"); err == nil {
+			t.Fatal("delegated targets content inconsistent with snapshot metadata was accepted")
+		}
+	})
 }
 
 func TestClientRejectsRollbackAcrossRestart(t *testing.T) {
@@ -375,13 +429,22 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 	toolchainPath := "toolchains/catalog-v7.json"
 	toolchainData := []byte("toolchain-catalog\n")
 
+	releaseKey := f.releaseKey
+	if options.releaseKey != nil {
+		releaseKey = *options.releaseKey
+	}
+	toolchainKey := f.toolchainKey
+	if options.toolchainKey != nil {
+		toolchainKey = *options.toolchainKey
+	}
+
 	releases := metadata.Targets(options.releaseExpires)
 	releases.Signed.Version = version
 	releases.Signed.Targets[releasePath] = targetInfo(t, releasePath, releaseData)
 	if options.wrongReleaseKey {
-		signMetadata(t, releases, f.toolchainKey)
+		signMetadata(t, releases, toolchainKey)
 	} else {
-		signMetadata(t, releases, f.releaseKey)
+		signMetadata(t, releases, releaseKey)
 	}
 	releasesRaw := metadataBytes(t, releases)
 	if options.corruptRole == "releases" {
@@ -392,9 +455,9 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 	toolchains.Signed.Version = version
 	toolchains.Signed.Targets[toolchainPath] = targetInfo(t, toolchainPath, toolchainData)
 	if options.wrongToolchainKey {
-		signMetadata(t, toolchains, f.releaseKey)
+		signMetadata(t, toolchains, releaseKey)
 	} else {
-		signMetadata(t, toolchains, f.toolchainKey)
+		signMetadata(t, toolchains, toolchainKey)
 	}
 	toolchainsRaw := metadataBytes(t, toolchains)
 	if options.corruptRole == "toolchains" {
@@ -405,20 +468,20 @@ func (f *repositoryFixture) repositoryWithOptions(t *testing.T, version int64, o
 	targets.Signed.Version = version
 	targets.Signed.Delegations = &metadata.Delegations{
 		Keys: map[string]*metadata.Key{
-			f.releaseKey.id:   f.releaseKey.tuf,
-			f.toolchainKey.id: f.toolchainKey.tuf,
+			releaseKey.id:   releaseKey.tuf,
+			toolchainKey.id: toolchainKey.tuf,
 		},
 		Roles: []metadata.DelegatedRole{
 			{
 				Name:        "releases",
-				KeyIDs:      []string{f.releaseKey.id},
+				KeyIDs:      []string{releaseKey.id},
 				Threshold:   1,
 				Terminating: true,
 				Paths:       []string{"releases/*"},
 			},
 			{
 				Name:        "toolchains",
-				KeyIDs:      []string{f.toolchainKey.id},
+				KeyIDs:      []string{toolchainKey.id},
 				Threshold:   1,
 				Terminating: true,
 				Paths:       []string{"toolchains/*"},
