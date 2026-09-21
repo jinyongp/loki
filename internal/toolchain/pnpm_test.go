@@ -11,25 +11,11 @@ import (
 	"testing"
 )
 
-func pnpmRelease(version, checksum string, nodeMin, nodeMax uint64) PnpmRelease {
+func pnpmRelease(version, checksum string) PnpmRelease {
 	return PnpmRelease{
-		Version:      version,
-		URL:          "https://github.com/pnpm/pnpm/releases/download/v" + version + "/pnpm-linux-x64.tar.gz",
-		SHA256:       checksum,
-		NodeMajorMin: nodeMin,
-		NodeMajorMax: nodeMax,
-	}
-}
-
-func selectedNodePlan(version string) NodePlan {
-	release := nodeRelease(version, strings.Repeat("a", 64))
-	return NodePlan{
-		Resolution: VersionResolution{
-			Selector: Selector{Kind: SelectorExact, Value: version},
-			Version:  version,
-		},
-		Release:      release,
-		GenerationID: release.GenerationID(),
+		Version: version,
+		URL:     "https://github.com/pnpm/pnpm/releases/download/v" + version + "/pnpm-linux-x64.tar.gz",
+		SHA256:  checksum,
 	}
 }
 
@@ -72,46 +58,23 @@ func TestParsePnpmPackageManagerAndVersionScheme(t *testing.T) {
 	}
 }
 
-func TestPnpmProviderFiltersBySelectedNodeCompatibility(t *testing.T) {
-	store := generationStoreFixture(t)
-	provider := PnpmProvider{Store: store}
-	node := selectedNodePlan("26.9.0")
-	incompatible := pnpmRelease("11.27.0", strings.Repeat("b", 64), 20, 24)
-	current := pnpmRelease("12.5.1", strings.Repeat("c", 64), 22, 26)
-
-	plan, err := provider.Resolve("pnpm@12", []PnpmRelease{incompatible, current}, node, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.Release.Version != "12.5.1" || plan.NodeVersion != "26.9.0" ||
-		plan.NodeGenerationID != node.GenerationID || !plan.Resolution.Acquire {
-		t.Fatalf("pnpm compatibility plan = %#v", plan)
-	}
-
-	if _, err = provider.Resolve("pnpm@11", []PnpmRelease{incompatible}, node, false); err == nil ||
-		!strings.Contains(err.Error(), "compatible") {
-		t.Fatalf("incompatible pnpm release error = %v", err)
-	}
-}
-
 func TestPnpmProviderUsesInstalledMatchUntilExplicitUpdate(t *testing.T) {
 	store := generationStoreFixture(t)
 	provider := PnpmProvider{Store: store}
-	node := selectedNodePlan("26.9.0")
-	old := pnpmRelease("12.4.2", strings.Repeat("d", 64), 22, 26)
-	current := pnpmRelease("12.5.1", strings.Repeat("e", 64), 22, 26)
+	old := pnpmRelease("12.4.2", strings.Repeat("d", 64))
+	current := pnpmRelease("12.5.1", strings.Repeat("e", 64))
 	if _, err := store.Provision(t.Context(), old.GenerationID(), func(context.Context, string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 
-	ordinary, err := provider.Resolve("pnpm@12", []PnpmRelease{old, current}, node, false)
+	ordinary, err := provider.Resolve("pnpm@12", []PnpmRelease{old, current}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ordinary.Resolution.Version != old.Version || !ordinary.Resolution.Installed || ordinary.Resolution.Acquire {
 		t.Fatalf("ordinary pnpm resolution = %#v", ordinary)
 	}
-	update, err := provider.Resolve("pnpm@12", []PnpmRelease{old, current}, node, true)
+	update, err := provider.Resolve("pnpm@12", []PnpmRelease{old, current}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,15 +83,14 @@ func TestPnpmProviderUsesInstalledMatchUntilExplicitUpdate(t *testing.T) {
 	}
 }
 
-func TestPnpmProviderProvisionNativeExecutable(t *testing.T) {
+func TestPnpmProviderProvisionNativeExecutableWithoutNodeDependency(t *testing.T) {
 	const version = "12.5.1"
 	source, checksum := writePnpmArchive(t)
-	release := pnpmRelease(version, checksum, 22, 26)
+	release := pnpmRelease(version, checksum)
 	store := generationStoreFixture(t)
 	provider := PnpmProvider{Store: store}
-	node := selectedNodePlan("26.9.0")
 
-	plan, err := provider.Resolve("pnpm@12.5.1", []PnpmRelease{release}, node, false)
+	plan, err := provider.Resolve("pnpm@12.5.1", []PnpmRelease{release}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,12 +112,11 @@ func TestPnpmProviderProvisionNativeExecutable(t *testing.T) {
 }
 
 func TestPnpmReleaseRejectsUntrustedIdentityAndTamperedArtifact(t *testing.T) {
-	valid := pnpmRelease("12.5.1", strings.Repeat("f", 64), 22, 26)
+	valid := pnpmRelease("12.5.1", strings.Repeat("f", 64))
 	for _, release := range []PnpmRelease{
-		{Version: "v12.5.1", URL: valid.URL, SHA256: valid.SHA256, NodeMajorMin: 22, NodeMajorMax: 26},
-		{Version: valid.Version, URL: "https://example.test/pnpm-linux-x64.tar.gz", SHA256: valid.SHA256, NodeMajorMin: 22, NodeMajorMax: 26},
-		{Version: valid.Version, URL: valid.URL + "?mirror=1", SHA256: valid.SHA256, NodeMajorMin: 22, NodeMajorMax: 26},
-		{Version: valid.Version, URL: valid.URL, SHA256: valid.SHA256, NodeMajorMin: 27, NodeMajorMax: 26},
+		{Version: "v12.5.1", URL: valid.URL, SHA256: valid.SHA256},
+		{Version: valid.Version, URL: "https://example.test/pnpm-linux-x64.tar.gz", SHA256: valid.SHA256},
+		{Version: valid.Version, URL: valid.URL + "?mirror=1", SHA256: valid.SHA256},
 	} {
 		if err := release.Validate(); err == nil {
 			t.Fatalf("untrusted pnpm release accepted: %#v", release)
@@ -163,9 +124,9 @@ func TestPnpmReleaseRejectsUntrustedIdentityAndTamperedArtifact(t *testing.T) {
 	}
 
 	source, checksum := writePnpmArchive(t)
-	release := pnpmRelease("12.5.1", checksum, 22, 26)
+	release := pnpmRelease("12.5.1", checksum)
 	provider := PnpmProvider{Store: generationStoreFixture(t)}
-	plan, err := provider.Resolve("pnpm@12.5.1", []PnpmRelease{release}, selectedNodePlan("26.9.0"), false)
+	plan, err := provider.Resolve("pnpm@12.5.1", []PnpmRelease{release}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

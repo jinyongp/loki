@@ -45,7 +45,7 @@ func TestProjectResolverSelectsIndependentProjectGenerations(t *testing.T) {
 	store := generationStoreFixture(t)
 	node22 := nodeRelease("22.23.4", strings.Repeat("a", 64))
 	node26 := nodeRelease("26.9.0", strings.Repeat("b", 64))
-	pnpm := pnpmRelease("12.5.1", strings.Repeat("c", 64), 22, 26)
+	pnpm := pnpmRelease("12.5.1", strings.Repeat("c", 64))
 	provisionProjectNode(t, store, node22)
 	provisionProjectNode(t, store, node26)
 	provisionProjectPnpm(t, store, pnpm)
@@ -87,6 +87,35 @@ func TestProjectResolverSelectsIndependentProjectGenerations(t *testing.T) {
 		current[0] != (ProjectSelection{Family: "node", Version: node26.Version, GenerationID: node26.GenerationID()}) ||
 		current[1] != (ProjectSelection{Family: "pnpm", Version: pnpm.Version, GenerationID: pnpm.GenerationID()}) {
 		t.Fatalf("current project selection = %#v", current)
+	}
+}
+
+func TestProjectResolverAllowsStandalonePnpmWithoutNodeSelection(t *testing.T) {
+	store := generationStoreFixture(t)
+	pnpm := pnpmRelease("12.5.1", strings.Repeat("e", 64))
+	provisionProjectPnpm(t, store, pnpm)
+	root := t.TempDir()
+	project := filepath.Join(root, "pnpm-only")
+	if err := os.Mkdir(project, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "package.json"), []byte("{\"packageManager\":\"pnpm@12.5.1\"}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	resolver := ProjectResolver{
+		Root: root, Store: store,
+		Catalog: Catalog{Version: CatalogVersion, Node: []NodeRelease{
+			nodeRelease("26.9.0", strings.Repeat("f", 64)),
+		}, Pnpm: []PnpmRelease{pnpm}},
+	}
+	selected, err := resolver.Resolve("pnpm-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 1 || selected[0] != (ProjectSelection{
+		Family: "pnpm", Version: pnpm.Version, GenerationID: pnpm.GenerationID(),
+	}) {
+		t.Fatalf("standalone pnpm selection = %#v", selected)
 	}
 }
 

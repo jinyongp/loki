@@ -53,35 +53,34 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 	if !nodeFound && !pnpmSelected {
 		return nil, nil
 	}
-	if !nodeFound {
-		return nil, errors.New("pnpm project selection requires .node-version or .nvmrc")
-	}
 
-	nodeProvider := NodeProvider{Store: r.Store}
-	nodePlan, err := nodeProvider.Resolve(nodeSelector, r.Catalog.Node, false)
-	if err != nil {
-		return nil, err
+	selections := make([]ProjectSelection, 0, 2)
+	if nodeFound {
+		nodeProvider := NodeProvider{Store: r.Store}
+		nodePlan, resolveErr := nodeProvider.Resolve(nodeSelector, r.Catalog.Node, false)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if nodePlan.Resolution.Acquire {
+			return nil, fmt.Errorf("Node.js %s is permitted but not provisioned", nodePlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "node", Version: nodePlan.Release.Version, GenerationID: nodePlan.GenerationID,
+		})
 	}
-	if nodePlan.Resolution.Acquire {
-		return nil, fmt.Errorf("Node.js %s is permitted but not provisioned", nodePlan.Resolution.Version)
+	if pnpmSelected {
+		pnpmProvider := PnpmProvider{Store: r.Store}
+		pnpmPlan, resolveErr := pnpmProvider.Resolve(packageManager, r.Catalog.Pnpm, false)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if pnpmPlan.Resolution.Acquire {
+			return nil, fmt.Errorf("pnpm %s is permitted but not provisioned", pnpmPlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "pnpm", Version: pnpmPlan.Release.Version, GenerationID: pnpmPlan.GenerationID,
+		})
 	}
-	selections := []ProjectSelection{{
-		Family: "node", Version: nodePlan.Release.Version, GenerationID: nodePlan.GenerationID,
-	}}
-	if !pnpmSelected {
-		return selections, nil
-	}
-	pnpmProvider := PnpmProvider{Store: r.Store}
-	pnpmPlan, err := pnpmProvider.Resolve(packageManager, r.Catalog.Pnpm, nodePlan, false)
-	if err != nil {
-		return nil, err
-	}
-	if pnpmPlan.Resolution.Acquire {
-		return nil, fmt.Errorf("pnpm %s is permitted but not provisioned", pnpmPlan.Resolution.Version)
-	}
-	selections = append(selections, ProjectSelection{
-		Family: "pnpm", Version: pnpmPlan.Release.Version, GenerationID: pnpmPlan.GenerationID,
-	})
 	return selections, nil
 }
 

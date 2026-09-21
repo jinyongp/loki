@@ -105,11 +105,9 @@ func ParsePnpmPackageManager(raw string) (Selector, error) {
 }
 
 type PnpmRelease struct {
-	Version      string `json:"version"`
-	URL          string `json:"url"`
-	SHA256       string `json:"sha256"`
-	NodeMajorMin uint64 `json:"node_major_min"`
-	NodeMajorMax uint64 `json:"node_major_max,omitempty"`
+	Version string `json:"version"`
+	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
 }
 
 func (r PnpmRelease) Validate() error {
@@ -119,9 +117,6 @@ func (r PnpmRelease) Validate() error {
 	}
 	if !sha256Text.MatchString(r.SHA256) {
 		return errors.New("pnpm release checksum must be a lowercase sha256 digest")
-	}
-	if r.NodeMajorMin == 0 || r.NodeMajorMax != 0 && r.NodeMajorMax < r.NodeMajorMin {
-		return errors.New("pnpm Node.js compatibility range is invalid")
 	}
 	parsed, err := url.Parse(r.URL)
 	if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" ||
@@ -144,43 +139,20 @@ func (r PnpmRelease) GenerationID() string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (r PnpmRelease) SupportsNode(version string) (bool, error) {
-	normalized, err := (NodeVersionScheme{}).NormalizeVersion(version)
-	if err != nil {
-		return false, err
-	}
-	parts, _ := parseNumericVersionParts(normalized, 3, 3)
-	major := parts[0]
-	if major < r.NodeMajorMin {
-		return false, nil
-	}
-	if r.NodeMajorMax != 0 && major > r.NodeMajorMax {
-		return false, nil
-	}
-	return true, nil
-}
-
 type PnpmPlan struct {
-	Resolution       VersionResolution
-	Release          PnpmRelease
-	GenerationID     string
-	NodeVersion      string
-	NodeGenerationID string
+	Resolution   VersionResolution
+	Release      PnpmRelease
+	GenerationID string
 }
 
 type PnpmProvider struct {
 	Store GenerationStore
 }
 
-func (p PnpmProvider) Resolve(packageManager string, releases []PnpmRelease, node NodePlan, update bool) (PnpmPlan, error) {
+func (p PnpmProvider) Resolve(packageManager string, releases []PnpmRelease, update bool) (PnpmPlan, error) {
 	selector, err := ParsePnpmPackageManager(packageManager)
 	if err != nil {
 		return PnpmPlan{}, err
-	}
-	if err = node.Release.Validate(); err != nil ||
-		node.GenerationID == "" || node.GenerationID != node.Release.GenerationID() ||
-		node.Resolution.Version == "" || node.Resolution.Version != node.Release.Version {
-		return PnpmPlan{}, errors.New("pnpm resolution requires a valid selected Node.js plan")
 	}
 	if len(releases) == 0 {
 		return PnpmPlan{}, errors.New("pnpm trusted release set is empty")
@@ -191,13 +163,6 @@ func (p PnpmProvider) Resolve(packageManager string, releases []PnpmRelease, nod
 	for _, release := range releases {
 		if err = release.Validate(); err != nil {
 			return PnpmPlan{}, err
-		}
-		compatible, compatibilityErr := release.SupportsNode(node.Release.Version)
-		if compatibilityErr != nil {
-			return PnpmPlan{}, compatibilityErr
-		}
-		if !compatible {
-			continue
 		}
 		if previous, exists := byVersion[release.Version]; exists {
 			if previous != release {
@@ -213,9 +178,6 @@ func (p PnpmProvider) Resolve(packageManager string, releases []PnpmRelease, nod
 			return PnpmPlan{}, lookupErr
 		}
 	}
-	if len(versions) == 0 {
-		return PnpmPlan{}, errors.New("pnpm has no administrator-permitted release compatible with selected Node.js")
-	}
 	resolution, err := ResolveVersion(selector, installed, versions, update, PnpmVersionScheme{})
 	if err != nil {
 		return PnpmPlan{}, err
@@ -224,23 +186,15 @@ func (p PnpmProvider) Resolve(packageManager string, releases []PnpmRelease, nod
 	if !ok {
 		return PnpmPlan{}, errors.New("pnpm resolution escaped trusted release set")
 	}
-	return PnpmPlan{
-		Resolution: resolution, Release: release, GenerationID: release.GenerationID(),
-		NodeVersion: node.Release.Version, NodeGenerationID: node.GenerationID,
-	}, nil
+	return PnpmPlan{Resolution: resolution, Release: release, GenerationID: release.GenerationID()}, nil
 }
 
 func (p PnpmProvider) Provision(ctx context.Context, plan PnpmPlan, source string) (Generation, error) {
 	if err := plan.Release.Validate(); err != nil {
 		return Generation{}, err
 	}
-	if plan.GenerationID != plan.Release.GenerationID() || plan.Resolution.Version != plan.Release.Version ||
-		plan.NodeVersion == "" || plan.NodeGenerationID == "" {
+	if plan.GenerationID != plan.Release.GenerationID() || plan.Resolution.Version != plan.Release.Version {
 		return Generation{}, errors.New("pnpm install plan identity is inconsistent")
-	}
-	compatible, err := plan.Release.SupportsNode(plan.NodeVersion)
-	if err != nil || !compatible {
-		return Generation{}, errors.New("pnpm install plan is incompatible with selected Node.js")
 	}
 	if !filepath.IsAbs(source) || filepath.Clean(source) != source {
 		return Generation{}, errors.New("pnpm artifact source must be a clean absolute path")

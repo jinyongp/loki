@@ -104,7 +104,6 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 	}
 
 	nodeProvider := NodeProvider{Store: store}
-	nodePlans := make(map[string]NodePlan, len(catalog.Node))
 	for _, release := range catalog.Node {
 		plan, resolveErr := nodeProvider.Resolve(release.Version, catalog.Node, false)
 		if resolveErr != nil {
@@ -116,16 +115,11 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 				return err
 			}
 		}
-		nodePlans[release.Version] = plan
 	}
 
 	pnpmProvider := PnpmProvider{Store: store}
 	for _, release := range catalog.Pnpm {
-		node, selectErr := highestCompatibleNodePlan(release, catalog.Node, nodePlans)
-		if selectErr != nil {
-			return selectErr
-		}
-		plan, resolveErr := pnpmProvider.Resolve("pnpm@"+release.Version, catalog.Pnpm, node, false)
+		plan, resolveErr := pnpmProvider.Resolve("pnpm@"+release.Version, catalog.Pnpm, false)
 		if resolveErr != nil {
 			return resolveErr
 		}
@@ -137,39 +131,4 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 		}
 	}
 	return nil
-}
-
-func highestCompatibleNodePlan(release PnpmRelease, releases []NodeRelease, plans map[string]NodePlan) (NodePlan, error) {
-	var selected NodeRelease
-	found := false
-	scheme := NodeVersionScheme{}
-	for _, candidate := range releases {
-		compatible, err := release.SupportsNode(candidate.Version)
-		if err != nil {
-			return NodePlan{}, err
-		}
-		if !compatible {
-			continue
-		}
-		if !found {
-			selected = candidate
-			found = true
-			continue
-		}
-		comparison, err := scheme.Compare(candidate.Version, selected.Version)
-		if err != nil {
-			return NodePlan{}, err
-		}
-		if comparison > 0 {
-			selected = candidate
-		}
-	}
-	if !found {
-		return NodePlan{}, fmt.Errorf("pnpm %s has no compatible Node.js release in the catalog", release.Version)
-	}
-	plan, ok := plans[selected.Version]
-	if !ok {
-		return NodePlan{}, errors.New("compatible Node.js generation was not provisioned")
-	}
-	return plan, nil
 }
