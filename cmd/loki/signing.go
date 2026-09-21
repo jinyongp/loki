@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	"loki/internal/daemon"
-	"loki/internal/signing"
+	"loki/internal/integrations/signing"
 )
 
 func runSigning(args []string, stderr io.Writer) int {

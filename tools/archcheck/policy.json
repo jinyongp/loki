@@ -134,7 +134,7 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/signing"
+      "to": "loki/internal/integrations/signing"
     },
     {
       "from": "loki/cmd/loki",
@@ -421,7 +421,7 @@
       "to": "loki/internal/state"
     },
     {
-      "from": "loki/internal/signing",
+      "from": "loki/internal/integrations/signing",
       "to": "loki/internal/rpc"
     },
     {
@@ -947,7 +947,7 @@
       ],
       "target": "app + transport + feature owners"
     },
-    "loki/internal/signing": {
+    "loki/internal/integrations/signing": {
       "kind": "integration",
       "owner": "signing",
       "tags": [],

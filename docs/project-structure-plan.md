@@ -251,7 +251,7 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/rpc` | `transport/rpc` codec/client/role bindings; principal/grant semantics in control, not guessed by generic transport. |
 | `internal/secret` | Application secret use cases to `work/secrets`; platform credentials to `control/credentials`; import/export helpers under the corresponding operator boundary. |
 | `internal/service` | Function-level split across `app`, `transport`, `work`, `control` and `integrations`; **A08 removed workspace/Git private ownership and their baseline exceptions**, while the remaining feature edges stay scheduled under S03-S05. |
-| `internal/signing` | `integrations/signing` facade and private worker; SSH protocol implementation private; connection binding at transport edge. |
+| `internal/integrations/signing` | **A10/S05 landed:** signing facade and private SSH-agent worker; the service-owned private key stays behind the agent boundary and only identity-list/sign requests cross the restricted proxy. |
 | `internal/state` | Reuse encrypted persistence mechanics in `platform/securestore`; **S02 completed for private atomic publication** via `platform/safeio`. File locking remains state-owned until a matching neutral contract is extracted; domain state/validation stays owned; offline migration is maintainer-only. |
 | `internal/work/toolchains` | **A09/S05 landed:** project selectors, immutable generation store, Node/pnpm providers, catalog and private extractor adapters live under the toolchains owner; host-native package setup remains a host lifecycle concern. |
 | `tools/toolchainfetch` | **A09/S05 landed:** toolchain bundle fetch tooling lives outside runtime provider code and depends on the public toolchains facade. |
