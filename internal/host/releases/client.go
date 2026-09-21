@@ -42,9 +42,9 @@ type Config struct {
 }
 
 type TargetDescriptor struct {
-	Path   string
-	Length int64
-	SHA256 string
+	Path   string `json:"path"`
+	Length int64  `json:"length"`
+	SHA256 string `json:"sha256"`
 }
 
 func (d TargetDescriptor) VerifyBytes(raw []byte) error {
