@@ -13,15 +13,37 @@ import (
 	"loki/internal/rpc"
 )
 
-const MaxMessage = 1024 * 1024
+const (
+	MaxMessage             = 1024 * 1024
+	agentRequestIdentities = byte(11)
+	agentSignRequest       = byte(13)
+)
 
 var failure = []byte{0, 0, 0, 1, 5}
 
+// SSHSignatureGrant is the complete public authority delegated to a runner.
+// The zero value grants nothing. A configured grant permits only SSH-agent
+// identity lookup and raw signature requests; key mutation/lock operations are
+// never delegated through this type.
+type SSHSignatureGrant struct {
+	runnerUID uint32
+	valid     bool
+}
+
+func NewSSHSignatureGrant(runnerUID uint32) SSHSignatureGrant {
+	return SSHSignatureGrant{runnerUID: runnerUID, valid: true}
+}
+
+func (g SSHSignatureGrant) allows(operation byte) bool {
+	return g.valid && (operation == agentRequestIdentities || operation == agentSignRequest)
+}
+
 type Proxy struct {
-	PrivateSocket       string
-	RunnerUID, AgentUID uint32
-	MaxConnections      int
-	Timeout             time.Duration
+	PrivateSocket  string
+	Grant          SSHSignatureGrant
+	AgentUID       uint32
+	MaxConnections int
+	Timeout        time.Duration
 }
 
 func frame(reader io.Reader, allowEmpty bool) ([]byte, error) {
@@ -55,6 +77,9 @@ func write(conn net.Conn, data []byte) error {
 }
 
 func (p Proxy) Serve(ctx context.Context, listener *net.UnixListener) error {
+	if !p.Grant.valid {
+		return errors.New("signing proxy grant is not configured")
+	}
 	maximum := p.MaxConnections
 	if maximum == 0 {
 		maximum = 32
@@ -86,7 +111,7 @@ func (p Proxy) Serve(ctx context.Context, listener *net.UnixListener) error {
 
 func (p Proxy) handle(ctx context.Context, conn *net.UnixConn) {
 	peer, err := rpc.PeerCredentials(conn)
-	if err != nil || peer.UID != p.RunnerUID {
+	if err != nil || peer.UID != p.Grant.runnerUID {
 		return
 	}
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
@@ -115,7 +140,7 @@ func (p Proxy) handle(ctx context.Context, conn *net.UnixConn) {
 		if err != nil {
 			return
 		}
-		if request[4] != 11 && request[4] != 13 {
+		if !p.Grant.allows(request[4]) {
 			if err := write(conn, failure); err != nil {
 				return
 			}

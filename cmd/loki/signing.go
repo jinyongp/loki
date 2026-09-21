@@ -46,7 +46,8 @@ func runSigning(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	proxy := signing.Proxy{PrivateSocket: *private, RunnerUID: uint32(*runner), AgentUID: uint32(*agent)}
+	grant := signing.NewSSHSignatureGrant(uint32(*runner))
+	proxy := signing.Proxy{PrivateSocket: *private, Grant: grant, AgentUID: uint32(*agent)}
 	if err := proxy.Serve(ctx, listener); err != nil {
 		fmt.Fprintln(stderr, "signing proxy failed")
 		return 1
@@ -71,7 +72,8 @@ func runSigningAgent(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	err := signing.RunAgent(ctx, signing.AgentOptions{PrivateSocket: *private, PublicSocket: *public, Key: *key, RunnerUID: uint32(*runner), SocketGID: *group, Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }})
+	grant := signing.NewSSHSignatureGrant(uint32(*runner))
+	err := signing.RunAgent(ctx, signing.AgentOptions{PrivateSocket: *private, PublicSocket: *public, Key: *key, Grant: grant, SocketGID: *group, Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }})
 	if err != nil {
 		fmt.Fprintln(stderr, "signing agent failed:", err)
 		return 1

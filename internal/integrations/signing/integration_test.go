@@ -46,7 +46,7 @@ func TestRealSSHAgentGitSigning(t *testing.T) {
 	public := listener(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	proxy := Proxy{PrivateSocket: private, RunnerUID: uint32(os.Getuid()), AgentUID: uint32(os.Getuid())}
+	proxy := Proxy{PrivateSocket: private, Grant: NewSSHSignatureGrant(uint32(os.Getuid())), AgentUID: uint32(os.Getuid())}
 	done := make(chan error, 1)
 	go func() { done <- proxy.Serve(ctx, public) }()
 	t.Cleanup(func() {

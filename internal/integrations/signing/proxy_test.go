@@ -33,9 +33,10 @@ func TestProxyAllowedRequestsAndUID(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			private, public := listener(t), listener(t)
 			uid := uint32(os.Getuid())
-			proxy := Proxy{PrivateSocket: private.Addr().String(), RunnerUID: uid, AgentUID: uid, Timeout: time.Second}
+			grant := NewSSHSignatureGrant(uid)
+			proxy := Proxy{PrivateSocket: private.Addr().String(), Grant: grant, AgentUID: uid, Timeout: time.Second}
 			if mode == "client-uid" {
-				proxy.RunnerUID++
+				proxy.Grant = NewSSHSignatureGrant(uid + 1)
 			}
 			if mode == "agent-uid" {
 				proxy.AgentUID++
@@ -108,6 +109,32 @@ func TestProxyAllowedRequestsAndUID(t *testing.T) {
 		})
 	}
 }
+func TestSSHSignatureGrantIsExplicitAndNarrow(t *testing.T) {
+	var zero SSHSignatureGrant
+	for _, operation := range []byte{agentRequestIdentities, agentSignRequest, 17, 18, 19, 20, 22, 23, 25, 27} {
+		if zero.allows(operation) {
+			t.Fatalf("zero-value grant allowed operation %d", operation)
+		}
+	}
+	grant := NewSSHSignatureGrant(uint32(os.Getuid()))
+	for _, operation := range []byte{agentRequestIdentities, agentSignRequest} {
+		if !grant.allows(operation) {
+			t.Fatalf("configured grant rejected operation %d", operation)
+		}
+	}
+	for _, operation := range []byte{17, 18, 19, 20, 22, 23, 25, 27} {
+		if grant.allows(operation) {
+			t.Fatalf("configured grant allowed mutation operation %d", operation)
+		}
+	}
+
+	private, public := listener(t), listener(t)
+	proxy := Proxy{PrivateSocket: private.Addr().String(), AgentUID: uint32(os.Getuid())}
+	if err := proxy.Serve(t.Context(), public); err == nil || err.Error() != "signing proxy grant is not configured" {
+		t.Fatalf("zero-grant proxy error = %v", err)
+	}
+}
+
 func TestFrameBounds(t *testing.T) {
 	for _, size := range []uint32{0, MaxMessage + 1, ^uint32(0)} {
 		var header [4]byte

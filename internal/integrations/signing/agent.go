@@ -14,7 +14,7 @@ import (
 
 type AgentOptions struct {
 	PrivateSocket, PublicSocket, Key string
-	RunnerUID                        uint32
+	Grant                            SSHSignatureGrant
 	SocketGID                        int
 	Ready                            func() error
 }
@@ -23,8 +23,9 @@ type AgentOptions struct {
 // Existing socket paths are left intact; the service manager owns stale-runtime
 // directory cleanup before this role starts.
 func RunAgent(ctx context.Context, o AgentOptions) error {
-	if !filepath.IsAbs(o.Key) || !filepath.IsAbs(o.PrivateSocket) || !filepath.IsAbs(o.PublicSocket) || filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || o.SocketGID < 0 {
-		return errors.New("invalid signing agent layout")
+	if !filepath.IsAbs(o.Key) || !filepath.IsAbs(o.PrivateSocket) || !filepath.IsAbs(o.PublicSocket) ||
+		filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || !o.Grant.valid || o.SocketGID < 0 {
+		return errors.New("invalid signing agent layout or grant")
 	}
 	for _, socket := range []string{o.PrivateSocket, o.PublicSocket} {
 		parent := filepath.Dir(socket)
@@ -99,7 +100,7 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 	if err = os.Chmod(o.PublicSocket, 0660); err != nil {
 		return err
 	}
-	proxy := Proxy{PrivateSocket: o.PrivateSocket, RunnerUID: o.RunnerUID, AgentUID: uint32(os.Getuid())}
+	proxy := Proxy{PrivateSocket: o.PrivateSocket, Grant: o.Grant, AgentUID: uint32(os.Getuid())}
 	proxyDone := make(chan error, 1)
 	go func() { proxyDone <- proxy.Serve(run, public) }()
 	defer func() { cancel(); public.Close(); <-proxyDone }()

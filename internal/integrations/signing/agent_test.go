@@ -24,7 +24,7 @@ func TestAgentLifecycle(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunAgent(ctx, AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, RunnerUID: uint32(os.Getuid()), SocketGID: os.Getgid(), Ready: func() error { close(ready); return nil }})
+		done <- RunAgent(ctx, AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, Grant: NewSSHSignatureGrant(uint32(os.Getuid())), SocketGID: os.Getgid(), Ready: func() error { close(ready); return nil }})
 	}()
 	select {
 	case <-ready:
@@ -73,7 +73,7 @@ func TestAgentStartupFailureCleanup(t *testing.T) {
 	}
 	private, public := filepath.Join(root, "private.sock"), filepath.Join(root, "public.sock")
 	want := errors.New("notification fixture failed")
-	err := RunAgent(t.Context(), AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, RunnerUID: uint32(os.Getuid()), SocketGID: os.Getgid(), Ready: func() error { return want }})
+	err := RunAgent(t.Context(), AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, Grant: NewSSHSignatureGrant(uint32(os.Getuid())), SocketGID: os.Getgid(), Ready: func() error { return want }})
 	if !errors.Is(err, want) {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestAgentStartupFailureCleanup(t *testing.T) {
 	if err = os.WriteFile(public, []byte("preserve"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err = RunAgent(t.Context(), AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, RunnerUID: uint32(os.Getuid()), SocketGID: os.Getgid()})
+	err = RunAgent(t.Context(), AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, Grant: NewSSHSignatureGrant(uint32(os.Getuid())), SocketGID: os.Getgid()})
 	if err == nil {
 		t.Fatal("occupied public socket accepted")
 	}
