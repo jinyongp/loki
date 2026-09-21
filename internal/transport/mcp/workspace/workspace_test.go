@@ -1,4 +1,4 @@
-package service
+package workspace
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
-	"loki/internal/workspace"
+	workworkspace "loki/internal/work/workspace"
 )
 
 func TestWorkspaceEditBatchServiceDecodesStructuredOperations(t *testing.T) {
@@ -16,7 +16,7 @@ func TestWorkspaceEditBatchServiceDecodesStructuredOperations(t *testing.T) {
 	}
 	c.Root = t.TempDir()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
-	files, err := workspace.New(c)
+	files, err := workworkspace.New(c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestWorkspaceEditMoveConsumesCASPreconditions(t *testing.T) {
 	}
 	c.Root = t.TempDir()
 	c.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
-	files, err := workspace.New(c)
+	files, err := workworkspace.New(c)
 	if err != nil {
 		t.Fatal(err)
 	}

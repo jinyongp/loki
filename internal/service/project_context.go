@@ -14,8 +14,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/agentcontext"
 	"loki/internal/devtools"
-	"loki/internal/gitops"
 	"loki/internal/mcpserver"
+	"loki/internal/work/workspace"
 )
 
 type projectContextRequest struct {
@@ -50,10 +50,14 @@ type projectContextTransition struct {
 	Reason        string `json:"reason"`
 }
 
+type RepositoryEvidenceProvider interface {
+	ContextEvidence(context.Context, string, string) (workspace.ContextEvidence, error)
+}
+
 type ProjectContextController struct {
 	Runtime  RuntimeCaller
 	Guidance AgentGuidanceProvider
-	Git      *gitops.Controller
+	Git      RepositoryEvidenceProvider
 	Claims   *DevtoolsSessionClaims
 }
 

@@ -18,14 +18,15 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/config"
 	"loki/internal/fault"
-	"loki/internal/gitops"
 	"loki/internal/policy"
+	"loki/internal/work/workspace/git"
 )
 
 type Files struct {
 	Config     config.Config
 	Policy     *policy.Workspace
-	GitRunner  gitops.Runner
+	gitRunner  gitops.Runner
+	repository *Repository
 	mu         sync.Mutex
 	RGPath     string
 	batchFault func(stage string, index int) error

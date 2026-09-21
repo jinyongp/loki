@@ -35,7 +35,7 @@ func TestMCPRoleReadinessAndCancellation(t *testing.T) {
 	ready := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- RunMCP(ctx, c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), GitRunner: gitRunnerFixture(t, c, nil), Ports: ports, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}, listener, func() error { close(ready); return nil })
+		done <- RunMCP(ctx, c, MCPOptions{Runtime: runtime, PortGuard: runtime, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), Ports: ports, Policy: policyGenerationFixture(t), Token: strings.Repeat("t", 43)}, listener, func() error { close(ready); return nil })
 	}()
 	select {
 	case <-ready:

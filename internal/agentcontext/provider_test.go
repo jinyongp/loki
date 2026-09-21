@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"loki/internal/config"
-	"loki/internal/gitops"
 	"loki/internal/policy"
 	"loki/internal/process"
+	"loki/internal/work/workspace/git"
 )
 
 type providerTestGitRunner struct {

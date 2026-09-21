@@ -13,12 +13,12 @@ import (
 	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/fault"
-	"loki/internal/gitops"
 	"loki/internal/policy"
 	jobsremote "loki/internal/work/jobs/remote"
+	"loki/internal/work/workspace"
 )
 
-func checkpointGitRunner(layout mcpLayout) (gitops.Runner, error) {
+func checkpointJobRunner(layout mcpLayout) (*jobsremote.Executor, error) {
 	if layout.ExecutorUID == nil {
 		return nil, fmt.Errorf("checkpoint executor peer is not configured")
 	}
@@ -28,7 +28,7 @@ func checkpointGitRunner(layout mcpLayout) (gitops.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gitops.JobRunner{Jobs: executor}, nil
+	return executor, nil
 }
 
 func runCheckpoint(args []string, stdout, stderr io.Writer) int {
@@ -63,15 +63,23 @@ func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 	}
 	defer paths.Close()
 	configuration, _ := config.Parse(nil)
-	c := &gitops.Controller{Paths: paths, Config: configuration, Env: []string{"PATH=/usr/bin:/bin", "HOME=/home/runner", "LANG=C.UTF-8", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"}}
+	repository, err := workspace.OpenRepository(
+		paths, configuration,
+		[]string{"PATH=/usr/bin:/bin", "HOME=/home/runner", "LANG=C.UTF-8", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"},
+		nil,
+	)
+	if err != nil {
+		fmt.Fprintln(stderr, fault.Public(err))
+		return 1
+	}
 	if args[0] == "list" {
-		ids, err := c.ListCheckpoints()
+		ids, err := repository.ListCheckpoints()
 		if err != nil {
 			fmt.Fprintln(stderr, fault.Public(err))
 			return 1
 		}
 		for _, id := range ids {
-			metadata, err := c.ReadCheckpoint(id)
+			metadata, err := repository.ReadCheckpoint(id)
 			if err != nil {
 				fmt.Fprintln(stderr, fault.Public(err))
 				return 1
@@ -83,7 +91,7 @@ func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if args[0] == "show" {
-		metadata, err := c.ReadCheckpoint(args[1])
+		metadata, err := repository.ReadCheckpoint(args[1])
 		if err != nil {
 			fmt.Fprintln(stderr, fault.Public(err))
 			return 1
@@ -101,13 +109,16 @@ func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "checkpoint executor layout unavailable")
 		return 1
 	}
-	runner, err := checkpointGitRunner(layout)
+	runner, err := checkpointJobRunner(layout)
 	if err != nil {
 		fmt.Fprintln(stderr, fault.Public(err))
 		return 1
 	}
-	c.Runner = runner
-	metadata, err := c.RestoreCheckpoint(ctx, args[1])
+	if err = repository.BindJobs(runner); err != nil {
+		fmt.Fprintln(stderr, fault.Public(err))
+		return 1
+	}
+	metadata, err := repository.RestoreCheckpoint(ctx, args[1])
 	if err != nil {
 		fmt.Fprintln(stderr, fault.Public(err))
 		return 1

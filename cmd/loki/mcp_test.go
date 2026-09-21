@@ -6,23 +6,22 @@ import (
 	"testing"
 
 	"loki/internal/daemon"
-	"loki/internal/gitops"
 	jobsremote "loki/internal/work/jobs/remote"
 )
 
-func TestCheckpointGitRunnerUsesConfiguredExecutor(t *testing.T) {
+func TestCheckpointJobRunnerUsesConfiguredExecutor(t *testing.T) {
 	uid := uint32(os.Getuid())
-	runner, err := checkpointGitRunner(mcpLayout{
+	runner, err := checkpointJobRunner(mcpLayout{
 		ExecutorSocket: filepath.Join(t.TempDir(), "executor.sock"),
 		ExecutorUID:    &uid,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := runner.(gitops.JobRunner); !ok {
-		t.Fatalf("checkpoint Git runner type = %T", runner)
+	if runner == nil {
+		t.Fatal("checkpoint Job runner is nil")
 	}
-	if _, err = checkpointGitRunner(mcpLayout{}); err == nil {
+	if _, err = checkpointJobRunner(mcpLayout{}); err == nil {
 		t.Fatal("checkpoint runner accepted missing executor identity")
 	}
 }
@@ -41,14 +40,14 @@ func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if options.Jobs == nil || options.GitRunner == nil || options.ExecutorSocket != valid.ExecutorSocket {
+	if options.Jobs == nil || options.GitJobs == nil || options.ExecutorSocket != valid.ExecutorSocket {
 		t.Fatalf("executor options = %#v", options)
 	}
 	if _, ok := options.Jobs.(*jobsremote.Executor); !ok {
 		t.Fatalf("jobs client type = %T", options.Jobs)
 	}
-	if _, ok := options.GitRunner.(gitops.JobRunner); !ok {
-		t.Fatalf("Git runner type = %T", options.GitRunner)
+	if _, ok := options.GitJobs.(*jobsremote.Executor); !ok {
+		t.Fatalf("Git Job client type = %T", options.GitJobs)
 	}
 
 	for _, mutate := range []func(*mcpLayout){

@@ -14,9 +14,9 @@ import (
 	"unicode/utf8"
 
 	"loki/internal/fault"
-	"loki/internal/gitops"
 	"loki/internal/policy"
 	"loki/internal/process"
+	"loki/internal/work/workspace/git"
 )
 
 var patchDenied = []string{"GIT binary patch", "Binary files ", "rename from ", "rename to ", "copy from ", "copy to ", "deleted file mode ", "new file mode 120000", "old file mode 120000", "new mode 120000", "old mode 120000", "+++ /dev/null"}
@@ -147,7 +147,7 @@ func parseNumstat(data []byte) ([]PatchFile, error) {
 }
 
 func (f *Files) git(ctx context.Context, args []string, input []byte, timeout time.Duration) (gitops.CommandResult, error) {
-	if f.GitRunner == nil {
+	if f.gitRunner == nil {
 		return gitops.CommandResult{}, errors.New("workspace Git runner is not configured")
 	}
 	prefix := []string{
@@ -155,7 +155,7 @@ func (f *Files) git(ctx context.Context, args []string, input []byte, timeout ti
 		"-c", "core.fsmonitor=false",
 		"-c", "core.hooksPath=/dev/null",
 	}
-	return f.GitRunner.Run(ctx, gitops.CommandRequest{
+	return f.gitRunner.Run(ctx, gitops.CommandRequest{
 		Argv: append(prefix, args...), CWD: ".", Input: input,
 		Timeout: timeout, MaxOutput: f.Config.MaxOutputBytes,
 	})
@@ -250,7 +250,10 @@ func (f *Files) RemoveTracked(ctx context.Context, path, expected string) (map[s
 	if digest != expected {
 		return nil, fault.New(fault.CodeConflict, "file changed since it was read; read it again before removing", false, "read the file again and use its current sha256")
 	}
-	tracked, err := (&gitops.Controller{Paths: f.Policy, Config: f.Config, Runner: f.GitRunner}).TrackedFile(ctx, path)
+	if f.repository == nil {
+		return nil, errors.New("workspace repository is not configured")
+	}
+	tracked, err := f.repository.TrackedFile(ctx, path)
 	if err != nil {
 		return nil, err
 	}

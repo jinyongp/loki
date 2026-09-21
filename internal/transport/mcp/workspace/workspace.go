@@ -1,4 +1,4 @@
-package service
+package workspace
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/workspace"
+	workworkspace "loki/internal/work/workspace"
 )
 
 type workspaceRead struct {
@@ -63,7 +63,7 @@ func objectResult(value map[string]any, err error) (*mcp.CallToolResult, error) 
 	return mcpserver.Object(value)
 }
 
-func WorkspaceHandlers(files *workspace.Files) map[string]mcpserver.Handler {
+func WorkspaceHandlers(files *workworkspace.Files) map[string]mcpserver.Handler {
 	return map[string]mcpserver.Handler{
 		"workspace_read": mcpserver.Typed(func(ctx context.Context, r workspaceRead) (*mcp.CallToolResult, error) {
 			switch r.Action {
@@ -148,9 +148,9 @@ func WorkspaceHandlers(files *workspace.Files) map[string]mcpserver.Handler {
 				if err != nil {
 					return nil, err
 				}
-				operations := make([]workspace.BatchOperation, len(r.Operations))
+				operations := make([]workworkspace.BatchOperation, len(r.Operations))
 				for index, operation := range r.Operations {
-					operations[index] = workspace.BatchOperation{
+					operations[index] = workworkspace.BatchOperation{
 						Action: operation.Action, Path: operation.Path, Content: operation.Content,
 						Old: operation.Old, New: operation.New, ExpectedSHA256: operation.ExpectedSHA256,
 						ExpectedReplacements: operation.ExpectedReplacements, Source: operation.Source,

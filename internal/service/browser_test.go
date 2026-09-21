@@ -18,7 +18,7 @@ import (
 	"loki/internal/config"
 	"loki/internal/contract"
 	"loki/internal/mcpserver"
-	"loki/internal/workspace"
+	"loki/internal/work/workspace"
 )
 
 type browserMCPFixture struct{ browserFixture }

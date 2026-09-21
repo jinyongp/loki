@@ -8,13 +8,16 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
-	"loki/internal/gitops"
 	"loki/internal/policy"
 )
 
+type RepositoryResolver interface {
+	RepositoryRoot(context.Context, string) (string, error)
+}
+
 type Provider struct {
 	Paths          *policy.Workspace
-	Git            *gitops.Controller
+	Git            RepositoryResolver
 	UserHome       string
 	PackagedSkills string
 }

@@ -240,8 +240,9 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/execution` | Split environment/spec contracts into `work/jobs` and effective host config; it is not itself the new supervisor. |
 | `internal/fault` | Feature errors and narrow `control/operations` outcome categories; protocol presentation in transport. Low-level platform errors remain independent. |
 | `internal/githubapp` | `integrations/github` with private token/CLI adapters; platform key access through a narrow protected credential operation. |
-| `internal/gitops` | Repository behavior under `work/workspace`; Git adapter runs through jobs. **S02 completed for checkpoint persistence:** snapshots now publish through `platform/safeio`, not vault/state APIs. |
+| `internal/work/workspace/git` | **A08/S04 landed:** private Git adapter under the workspace owner; execution runs through confined Jobs, while checkpoint persistence uses `platform/safeio`. |
 | `internal/mcpserver` | `transport/mcp`; bind domain facades, reject unknown inputs, keep SDK and wire conventions out of feature cores. |
+| `internal/transport/mcp/workspace` | **A08/S04 landed:** workspace and Git MCP bindings consume the workspace facade and keep MCP SDK/wire types outside the work owner. |
 | `internal/packaging` | `tests/acceptance/packaging` plus focused architecture checks; do not retain a production-looking package containing only packaging tests. |
 | `internal/policy` | Filesystem mechanisms to `platform/safeio`; workspace-specific validation to `work/workspace`. Do not simply rename it to authorization policy. |
 | `internal/portguard` | OS identity/signal primitives to `platform/proc`; owned service/endpoint policy to `work/endpoints`; no cross-namespace PID interpretation. |
@@ -249,12 +250,12 @@ Destinations describe ownership, not mechanical one-to-one moves. Private implem
 | `internal/process` | Low-level spawning/signals/output mechanics in `platform/proc`; lifecycle and cancellation policy owned by `work/jobs`. |
 | `internal/rpc` | `transport/rpc` codec/client/role bindings; principal/grant semantics in control, not guessed by generic transport. |
 | `internal/secret` | Application secret use cases to `work/secrets`; platform credentials to `control/credentials`; import/export helpers under the corresponding operator boundary. |
-| `internal/service` | Function-level split across `app`, `transport`, `work`, `control` and `integrations`; eliminate the umbrella. |
+| `internal/service` | Function-level split across `app`, `transport`, `work`, `control` and `integrations`; **A08 removed workspace/Git private ownership and their baseline exceptions**, while the remaining feature edges stay scheduled under S03-S05. |
 | `internal/signing` | `integrations/signing` facade and private worker; SSH protocol implementation private; connection binding at transport edge. |
 | `internal/state` | Reuse encrypted persistence mechanics in `platform/securestore`; **S02 completed for private atomic publication** via `platform/safeio`. File locking remains state-owned until a matching neutral contract is extracted; domain state/validation stays owned; offline migration is maintainer-only. |
 | `internal/toolchain` | `work/toolchains`; private providers/store/extractor adapters; approved host-native package setup belongs to `host/lifecycle`, not the project-facing resolver. |
 | `internal/toolchain/cmd/fetch` | `tools/toolchainfetch`, not a nested command hidden among runtime provider code. |
-| `internal/workspace` | `work/workspace` public contract; private filesystem/repository/revision implementation. **S02 completed for revision persistence:** revision backups use `platform/safeio` directly; serving/publishing belongs to sharing/transport. |
+| `internal/work/workspace` | **A08/S04 landed:** workspace public facade and filesystem/revision implementation; repository facade owns the private Git adapter and revision persistence uses `platform/safeio`. Serving/publishing remains with sharing/transport. |
 
 ## 6. Assets, tests and non-Go boundaries
 

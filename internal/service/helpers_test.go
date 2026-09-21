@@ -8,38 +8,56 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/gitops"
 	"loki/internal/policy"
 	"loki/internal/process"
+	"loki/internal/work/jobs"
 )
 
-type serviceTestGitRunner struct {
+type serviceTestJobRunner struct {
 	root string
 	env  []string
 }
 
-func (r serviceTestGitRunner) Run(ctx context.Context, request gitops.CommandRequest) (gitops.CommandResult, error) {
+func (r serviceTestJobRunner) Run(ctx context.Context, request jobs.RunRequest) (jobs.RunResult, error) {
 	cwd := r.root
 	if request.CWD != "." {
 		cwd = filepath.Join(r.root, filepath.FromSlash(request.CWD))
 	}
+	maximum := request.MaxOutputBytes
+	if maximum == 0 {
+		maximum = jobs.MaxOutputBytes
+	}
 	result, err := process.Run(ctx, process.Spec{
 		Argv: request.Argv, CWD: cwd, Env: r.env, Input: request.Input,
-		Timeout: request.Timeout, MaxOutput: request.MaxOutput,
+		Timeout: 30 * time.Second, MaxOutput: maximum,
 	})
+	if err != nil {
+		return jobs.RunResult{}, err
+	}
+	outcome := jobs.OutcomeExited
+	if result.TimedOut {
+		outcome = jobs.OutcomeTimedOut
+	}
+	if result.Canceled {
+		outcome = jobs.OutcomeCanceled
+	}
+	exitCode := int64(result.ExitCode)
 	root := filepath.Clean(r.root)
-	output := strings.ReplaceAll(result.Output, root, "/workspace")
 	raw := bytes.ReplaceAll(result.Raw, []byte(root), []byte("/workspace"))
-	return gitops.CommandResult{
-		ExitCode: result.ExitCode, Output: output, Raw: raw,
-		Truncated: result.Truncated, TimedOut: result.TimedOut, Canceled: result.Canceled,
-	}, err
+	if len(raw) == 0 && result.Output != "" {
+		raw = []byte(strings.ReplaceAll(result.Output, root, "/workspace"))
+	}
+	return jobs.RunResult{
+		JobID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ExitCode: &exitCode, Outcome: outcome,
+		Output: raw, Truncated: result.Truncated, Cleanup: jobs.CleanupComplete,
+	}, nil
 }
 
-func gitRunnerFixture(t *testing.T, c config.Config, environment map[string]string) gitops.Runner {
+func gitJobsFixture(t *testing.T, c config.Config, environment map[string]string) jobs.Runner {
 	t.Helper()
 	values := map[string]string{}
 	for key, value := range environment {
@@ -54,7 +72,7 @@ func gitRunnerFixture(t *testing.T, c config.Config, environment map[string]stri
 	if values["GIT_CONFIG_NOSYSTEM"] == "" {
 		values["GIT_CONFIG_NOSYSTEM"] = "1"
 	}
-	return serviceTestGitRunner{root: c.Root, env: toolEnvironment(values)}
+	return serviceTestJobRunner{root: c.Root, env: toolEnvironment(values)}
 }
 
 func policyGenerationFixture(t *testing.T) controlpolicy.Generation {

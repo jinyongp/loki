@@ -22,7 +22,7 @@ import (
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/process"
-	"loki/internal/workspace"
+	"loki/internal/work/workspace"
 )
 
 var browserTools = []string{"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot"}

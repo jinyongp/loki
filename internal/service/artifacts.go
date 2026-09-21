@@ -15,7 +15,7 @@ import (
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
-	"loki/internal/workspace"
+	"loki/internal/work/workspace"
 )
 
 type artifactRequest struct {

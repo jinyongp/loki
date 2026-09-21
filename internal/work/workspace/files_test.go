@@ -16,8 +16,8 @@ import (
 
 	"loki/internal/config"
 	"loki/internal/fault"
-	"loki/internal/gitops"
 	"loki/internal/process"
+	"loki/internal/work/workspace/git"
 )
 
 type workspaceTestGitRunner struct {
@@ -68,7 +68,12 @@ func fixture(t *testing.T) *Files {
 		"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0",
 	}
-	f.GitRunner = workspaceTestGitRunner{root: f.Policy.Root(), env: environment}
+	runner := workspaceTestGitRunner{root: f.Policy.Root(), env: environment}
+	f.gitRunner = runner
+	f.repository = &Repository{
+		controller: &gitops.Controller{Paths: f.Policy, Config: c, Runner: runner},
+		runner:     runner,
+	}
 	if _, err = os.Stat(f.RGPath); err != nil {
 		f.RGPath = "/home/linuxbrew/.linuxbrew/bin/rg"
 	}

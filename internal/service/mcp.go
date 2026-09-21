@@ -20,13 +20,13 @@ import (
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
-	"loki/internal/gitops"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/portguard"
 	"loki/internal/previews"
+	workspacemcp "loki/internal/transport/mcp/workspace"
 	"loki/internal/work/jobs"
-	"loki/internal/workspace"
+	"loki/internal/work/workspace"
 )
 
 type MCPOptions struct {
@@ -34,7 +34,7 @@ type MCPOptions struct {
 	Runtime, PortGuard                                   RuntimeCaller
 	Browser                                              BrowserCaller
 	Jobs                                                 jobs.Controller
-	GitRunner                                            gitops.Runner
+	GitJobs                                              jobs.Runner
 	RuntimeSocket, BrowserSocket, ExecutorSocket, RGPath string
 	PackagedSkillRoot                                    string
 	GitTemplateRoots                                     []string
@@ -79,8 +79,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if c.PreviewAccessAudience != "" && options.PreviewAccess == nil {
 		return nil, errors.New("preview Access verifier is required")
 	}
-	if options.GitRunner == nil {
-		return nil, errors.New("MCP requires a confined Git runner")
+	if options.GitJobs == nil {
+		return nil, errors.New("MCP requires confined Git Job execution")
 	}
 	app = &MCPApp{Claims: NewDevtoolsSessionClaims()}
 	owned := app
@@ -96,17 +96,21 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.RGPath != "" {
 		app.files.RGPath = options.RGPath
 	}
-	app.files.GitRunner = options.GitRunner
-	git := &gitops.Controller{Paths: app.files.Policy, Config: c, Runner: options.GitRunner}
 	for _, path := range options.GitTemplateRoots {
 		root, e := policy.New(path)
 		if e != nil {
 			return nil, e
 		}
 		app.roots = append(app.roots, root)
-		git.TemplateRoots = append(git.TemplateRoots, root)
 	}
-	git.Env = toolEnvironment(options.Environment)
+	gitEnvironment := toolEnvironment(options.Environment)
+	repository, err := workspace.NewRepository(app.files.Policy, c, options.GitJobs, gitEnvironment, app.roots)
+	if err != nil {
+		return nil, err
+	}
+	if err = app.files.AttachRepository(repository); err != nil {
+		return nil, err
+	}
 	userHome := options.Environment["HOME"]
 	if userHome != "" && !filepath.IsAbs(userHome) {
 		return nil, errors.New("MCP HOME must be absolute")
@@ -115,7 +119,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		return nil, errors.New("MCP packaged Skill root must be absolute")
 	}
 	agentProvider := &agentcontext.Provider{
-		Paths: app.files.Policy, Git: git, UserHome: userHome, PackagedSkills: options.PackagedSkillRoot,
+		Paths: app.files.Policy, Git: repository, UserHome: userHome, PackagedSkills: options.PackagedSkillRoot,
 	}
 	if c.ArtifactBaseURL != "" {
 		hosts := append([]string{"127.0.0.1", "127.0.0.1:" + strconv.Itoa(c.Port), "localhost", "localhost:" + strconv.Itoa(c.Port)}, c.PublicHosts...)
@@ -135,15 +139,15 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.RouteAllowed)
 	}
-	system := &SystemController{Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: git.Env, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+	system := &SystemController{Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 		return InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
 	}}
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": SystemHandler(system), "developer_view": DeveloperHandler(app.files),
 	}
 	coordination := &DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
-	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: git, Claims: app.Claims}
-	for _, group := range []map[string]mcpserver.Handler{WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), GitHandlers(git), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs)} {
+	projectContext := &ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: repository, Claims: app.Claims}
+	for _, group := range []map[string]mcpserver.Handler{workspacemcp.WorkspaceHandlers(app.files), ArtifactHandlers(app.files, app.Artifacts), BrowserHandlers(options.Browser, app.files, app.Artifacts), PreviewHandlers(preview, app.Artifacts), workspacemcp.GitHandlers(repository), SecretHandlers(options.Runtime), GitHubIssueFieldsHandlers(options.Runtime), GitHubCommandHandlers(options.Runtime), ProjectCoordinationHandlers(options.Runtime, coordination), ProjectContextHandlers(projectContext), AgentGuidanceHandlers(agentProvider), JobHandlers(options.Jobs)} {
 		for name, handler := range group {
 			if handlers[name] != nil {
 				return nil, fmt.Errorf("duplicate MCP handler: %s", name)

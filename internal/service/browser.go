@@ -14,7 +14,7 @@ import (
 	"loki/internal/artifacts"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/workspace"
+	"loki/internal/work/workspace"
 )
 
 func browserCall(ctx context.Context, client BrowserCaller, operation string, args map[string]any) (map[string]any, error) {

@@ -90,7 +90,7 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/gitops"
+      "to": "loki/internal/work/workspace"
     },
     {
       "from": "loki/cmd/loki",
@@ -190,10 +190,6 @@
     },
     {
       "from": "loki/internal/agentcontext",
-      "to": "loki/internal/gitops"
-    },
-    {
-      "from": "loki/internal/agentcontext",
       "to": "loki/internal/platform/safeio"
     },
     {
@@ -277,27 +273,27 @@
       "to": "loki/internal/execution"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/config"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/daemon"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/fault"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/platform/safeio"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/policy"
     },
     {
-      "from": "loki/internal/gitops",
+      "from": "loki/internal/work/workspace/git",
       "to": "loki/internal/work/jobs"
     },
     {
@@ -385,27 +381,51 @@
       "to": "loki/internal/toolchain"
     },
     {
-      "from": "loki/internal/workspace",
-      "to": "loki/internal/config"
+      "from": "loki/internal/service",
+      "to": "loki/internal/transport/mcp/workspace"
     },
     {
-      "from": "loki/internal/workspace",
+      "from": "loki/internal/service",
+      "to": "loki/internal/work/workspace"
+    },
+    {
+      "from": "loki/internal/transport/mcp/workspace",
       "to": "loki/internal/fault"
     },
     {
-      "from": "loki/internal/workspace",
-      "to": "loki/internal/gitops"
+      "from": "loki/internal/transport/mcp/workspace",
+      "to": "loki/internal/mcpserver"
     },
     {
-      "from": "loki/internal/workspace",
+      "from": "loki/internal/transport/mcp/workspace",
+      "to": "loki/internal/work/workspace"
+    },
+    {
+      "from": "loki/internal/work/workspace",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/work/workspace",
+      "to": "loki/internal/work/jobs"
+    },
+    {
+      "from": "loki/internal/work/workspace",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/work/workspace",
+      "to": "loki/internal/work/workspace/git"
+    },
+    {
+      "from": "loki/internal/work/workspace",
       "to": "loki/internal/platform/safeio"
     },
     {
-      "from": "loki/internal/workspace",
+      "from": "loki/internal/work/workspace",
       "to": "loki/internal/policy"
     },
     {
-      "from": "loki/internal/workspace",
+      "from": "loki/internal/work/workspace",
       "to": "loki/internal/process"
     },
     {
@@ -514,12 +534,6 @@
       "from": "loki/internal/service",
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/gitops"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
       "to": "loki/internal/mcpserver"
     },
     {
@@ -563,12 +577,6 @@
       "reason": "legacy service umbrella crosses composition/transport/feature ownership",
       "remove_unit": "S03/S04/S05",
       "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/workspace"
     }
   ],
   "export_rules": [
@@ -770,13 +778,21 @@
       ],
       "target": "host/policy"
     },
-    "loki/internal/gitops": {
-      "kind": "legacy-work",
+    "loki/internal/work/workspace/git": {
+      "kind": "work-adapter",
       "owner": "workspace",
       "tags": [
         "project-execution-local"
       ],
-      "target": "work/workspace"
+      "target": "work/workspace/git"
+    },
+    "loki/internal/transport/mcp/workspace": {
+      "kind": "transport",
+      "owner": "workspace",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "transport/mcp/workspace"
     },
     "loki/internal/mcpserver": {
       "kind": "transport",
@@ -901,7 +917,7 @@
       "tags": [],
       "target": "work/jobs/remote"
     },
-    "loki/internal/workspace": {
+    "loki/internal/work/workspace": {
       "kind": "work",
       "owner": "workspace",
       "tags": [],
