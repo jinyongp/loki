@@ -22,6 +22,7 @@ type workspaceEdit struct {
 	Action                                              string
 	Path, Content, Old, New, Patch, Source, Destination *string
 	ExpectedSHA256                                      *string `json:"expected_sha256"`
+	ExpectedDestination                                 *string `json:"expected_destination"`
 	ExpectedReplacements                                int     `json:"expected_replacements"`
 	RequestID                                           *string `json:"request_id"`
 	Operations                                          []workspaceBatchOperation
@@ -133,7 +134,15 @@ func WorkspaceHandlers(files *workspace.Files) map[string]mcpserver.Handler {
 				if err != nil {
 					return nil, err
 				}
-				return objectResult(files.Move(source, dest))
+				expected, err := value(r.ExpectedSHA256, "expected_sha256")
+				if err != nil {
+					return nil, err
+				}
+				expectedDestination, err := value(r.ExpectedDestination, "expected_destination")
+				if err != nil {
+					return nil, err
+				}
+				return objectResult(files.Move(source, dest, expected, expectedDestination))
 			case "batch":
 				requestID, err := value(r.RequestID, "request_id")
 				if err != nil {

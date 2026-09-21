@@ -164,10 +164,13 @@ func TestGitConcurrentCASAndWorktree(t *testing.T) {
 	write(t, c, "a.txt", "initial\n")
 	git(t, c, "add", "a.txt")
 	git(t, c, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "initial")
-	git(t, c, "worktree", "add", "-b", "feature", filepath.Join(c.Paths.Root(), "feature"))
-	if _, err := c.Index(t.Context(), "feature"); err != nil {
+	featureRoot := filepath.Join(c.Paths.Root(), "feature")
+	git(t, c, "worktree", "add", "-b", "feature", featureRoot)
+	featureIndex, err := c.Index(t.Context(), "feature")
+	if err != nil {
 		t.Fatal(err)
 	}
+	featureBefore := featureIndex["index_sha256"].(string)
 	write(t, c, "a.txt", "changed\n")
 	write(t, c, "b.txt", "new\n")
 	expected := index(t, c)
@@ -196,6 +199,16 @@ func TestGitConcurrentCASAndWorktree(t *testing.T) {
 	}
 	if success != 1 || conflicts != 1 {
 		t.Fatalf("CAS results: successes=%d conflicts=%d", success, conflicts)
+	}
+	mainAfter := index(t, c)
+	if err := os.WriteFile(filepath.Join(featureRoot, "feature-only.txt"), []byte("feature\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.MutatePaths(t.Context(), "stage", "feature", []string{"feature-only.txt"}, &featureBefore); err != nil {
+		t.Fatalf("independent worktree CAS was invalidated by main worktree mutation: %v", err)
+	}
+	if got := index(t, c); got != mainAfter {
+		t.Fatal("feature worktree staging changed main worktree index")
 	}
 	external := filepath.Join(t.TempDir(), "metadata")
 	cmd := exec.CommandContext(t.Context(), "/usr/bin/git", "init", "-q", "--separate-git-dir", external, filepath.Join(c.Paths.Root(), "foreign"))

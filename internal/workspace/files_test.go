@@ -113,7 +113,17 @@ func TestFileLifecycleAndDirtyRestore(t *testing.T) {
 	if _, err = f.Replace("docs/note.txt", "delta", "stale", before["sha256"].(string), 1); err == nil {
 		t.Fatal("accepted stale hash")
 	}
-	if _, err = f.Move("docs/note.txt", "docs/moved.txt"); err != nil {
+	moveSource, err := f.Read("docs/note.txt", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Move("docs/note.txt", "docs/moved.txt", before["sha256"].(string), "missing"); err == nil {
+		t.Fatal("accepted stale move source hash")
+	}
+	if _, err = f.Move("docs/note.txt", "docs/moved.txt", moveSource["sha256"].(string), "present"); err == nil {
+		t.Fatal("accepted invalid destination precondition")
+	}
+	if _, err = f.Move("docs/note.txt", "docs/moved.txt", moveSource["sha256"].(string), "missing"); err != nil {
 		t.Fatal(err)
 	}
 	restored, err := f.Restore("docs/note.txt", revision, "missing")

@@ -280,7 +280,13 @@ func (f *Files) Replace(path, old, new, expected string, count int) (map[string]
 	return map[string]any{"path": path, "replacements": actual, "previous_revision": revision, "sha256": Digest(updated)}, nil
 }
 
-func (f *Files) Move(source, destination string) (map[string]any, error) {
+func (f *Files) Move(source, destination, expected, expectedDestination string) (map[string]any, error) {
+	if expectedDestination != "missing" {
+		return nil, fault.New(fault.CodeInvalidInput, "move requires expected_destination='missing'", false, "confirm the destination is absent")
+	}
+	if !revisionPattern.MatchString(expected) {
+		return nil, fault.New(fault.CodeInvalidInput, "move requires the observed source sha256", false, "read the source and retry with its current sha256")
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.reconcileBatchesLocked(); err != nil {
@@ -290,12 +296,15 @@ func (f *Files) Move(source, destination string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if Digest(data) != expected {
+		return nil, fault.New(fault.CodeConflict, "move source changed since it was read", false, "read the source again and retry with its current sha256")
+	}
 	if _, err = f.Policy.Resolve(destination, false); err != nil {
 		return nil, err
 	}
 	if dest, err := f.Policy.Open(destination, unix.O_PATH, 0); err == nil {
 		dest.Close()
-		return nil, os.ErrExist
+		return nil, fault.New(fault.CodeConflict, "move destination already exists", false, "choose an absent destination and retry")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -304,6 +313,9 @@ func (f *Files) Move(source, destination string) (map[string]any, error) {
 		return nil, err
 	}
 	if err = f.Policy.Move(source, destination); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, fault.New(fault.CodeConflict, "move destination already exists", false, "choose an absent destination and retry")
+		}
 		return nil, err
 	}
 	return map[string]any{"source": source, "destination": destination, "previous_revision": revision}, nil

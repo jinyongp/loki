@@ -53,8 +53,11 @@ func TestGitStagesDeletedAndRenamedPaths(t *testing.T) {
 	if _, err = c.MutatePaths(t.Context(), "stage", "repo", []string{unknown}, &after); err == nil || !strings.Contains(err.Error(), "does not exist and is not tracked") {
 		t.Fatalf("unknown stage error = %v", err)
 	}
+	if _, err = c.MutatePaths(t.Context(), "unstage", "repo", []string{unknown}, &after); err == nil || !strings.Contains(err.Error(), "not tracked or staged") {
+		t.Fatalf("unknown unstage error = %v", err)
+	}
 	if got := index(t, c); got != after {
-		t.Fatal("rejected absent stage changed index")
+		t.Fatal("rejected absent stage/unstage changed index")
 	}
 
 	nameStatus := git(t, c, "diff", "--cached", "--name-status")
@@ -81,5 +84,16 @@ func TestGitDeletedPathValidationUsesHeadAfterStagedDeletion(t *testing.T) {
 	result, err := c.Diff(t.Context(), "repo", true, &requested)
 	if err != nil || result["output"].(string) == "" {
 		t.Fatalf("HEAD-known staged deletion = %#v, %v", result, err)
+	}
+	after := index(t, c)
+	if _, err = c.MutatePaths(t.Context(), "unstage", "repo", []string{"deleted.txt"}, &after); err != nil {
+		t.Fatal(err)
+	}
+	result, err = c.Diff(t.Context(), "repo", true, &requested)
+	if err != nil || result["output"].(string) != "" {
+		t.Fatalf("unstaged deletion = %#v, %v", result, err)
+	}
+	if _, err = os.Stat(filepath.Join(c.Paths.Root(), "repo", "deleted.txt")); !os.IsNotExist(err) {
+		t.Fatalf("unstage restored deleted worktree file: %v", err)
 	}
 }

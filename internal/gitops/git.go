@@ -280,6 +280,21 @@ func (c *Controller) knownPath(ctx context.Context, cwd, requested string) (stri
 	return relative, nil
 }
 
+func (c *Controller) knownIndexPath(ctx context.Context, cwd, requested string) (string, error) {
+	relative, err := c.path(cwd, requested, false)
+	if err != nil {
+		return "", err
+	}
+	known, err := c.repositoryKnowsPath(ctx, cwd, relative)
+	if err != nil {
+		return "", err
+	}
+	if !known {
+		return "", fault.Error("Git path is not tracked or staged")
+	}
+	return relative, nil
+}
+
 func (c *Controller) Status(ctx context.Context, cwd string) (map[string]any, error) {
 	full, err := c.Paths.ResolveCWD(cwd)
 	if err != nil {
@@ -360,7 +375,7 @@ func (c *Controller) MutatePaths(ctx context.Context, operation, cwd string, pat
 		if operation == "stage" {
 			relative, err = c.knownPath(ctx, full, path)
 		} else {
-			relative, err = c.path(full, path, false)
+			relative, err = c.knownIndexPath(ctx, full, path)
 		}
 		if err != nil {
 			return nil, err
@@ -374,7 +389,7 @@ func (c *Controller) MutatePaths(ctx context.Context, operation, cwd string, pat
 		return nil, err
 	}
 	if expected != nil && *expected != before {
-		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before staging", false, "run git_inspect action=index and retry with the current index_sha256")
+		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before changing staged state", false, "run git_inspect action=index and retry with the current index_sha256")
 	}
 	args := []string{"add", "--"}
 	if operation == "unstage" {
@@ -421,7 +436,7 @@ func (c *Controller) StagePatch(ctx context.Context, cwd, patch string, reverse 
 		return nil, err
 	}
 	if expected != nil && *expected != before {
-		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before staging", false, "run git_inspect action=index and retry with the current index_sha256")
+		return nil, fault.New(fault.CodeConflict, "Git index changed; inspect it again before changing staged state", false, "run git_inspect action=index and retry with the current index_sha256")
 	}
 	data := []byte(patch)
 	stats, err := c.git(ctx, full, data, c.Config.MaxOutputBytes, "apply", "--numstat", "-z")

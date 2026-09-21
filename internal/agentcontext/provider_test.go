@@ -1,15 +1,42 @@
 package agentcontext
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"loki/internal/config"
 	"loki/internal/gitops"
 	"loki/internal/policy"
+	"loki/internal/process"
 )
+
+type providerTestGitRunner struct {
+	root string
+	env  []string
+}
+
+func (r providerTestGitRunner) Run(ctx context.Context, request gitops.CommandRequest) (gitops.CommandResult, error) {
+	cwd := r.root
+	if request.CWD != "." {
+		cwd = filepath.Join(r.root, filepath.FromSlash(request.CWD))
+	}
+	result, err := process.Run(ctx, process.Spec{
+		Argv: request.Argv, CWD: cwd, Env: r.env, Input: request.Input,
+		Timeout: request.Timeout, MaxOutput: request.MaxOutput,
+	})
+	root := filepath.Clean(r.root)
+	return gitops.CommandResult{
+		ExitCode:  result.ExitCode,
+		Output:    strings.ReplaceAll(result.Output, root, "/workspace"),
+		Raw:       bytes.ReplaceAll(result.Raw, []byte(root), []byte("/workspace")),
+		Truncated: result.Truncated, TimedOut: result.TimedOut, Canceled: result.Canceled,
+	}, err
+}
 
 func TestProviderResolvesRepositoryFromCWD(t *testing.T) {
 	root := t.TempDir()
@@ -47,7 +74,7 @@ func TestProviderResolvesRepositoryFromCWD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env}
+	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env, Runner: providerTestGitRunner{root: paths.Root(), env: env}}
 	provider := &Provider{Paths: paths, Git: git, UserHome: userHome}
 
 	result, err := provider.Context(t.Context(), "repo/packages/api", "src/new.go")
@@ -118,7 +145,7 @@ func TestProviderContextUsesTargetOwningNestedRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env}
+	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env, Runner: providerTestGitRunner{root: paths.Root(), env: env}}
 	provider := &Provider{Paths: paths, Git: git, UserHome: userHome}
 
 	for _, test := range []struct {
@@ -209,7 +236,7 @@ func TestProviderContextSupportsInWorkspaceLinkedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env}
+	git := &gitops.Controller{Paths: paths, Config: configuration, Env: env, Runner: providerTestGitRunner{root: paths.Root(), env: env}}
 	provider := &Provider{Paths: paths, Git: git}
 
 	result, err := provider.Context(t.Context(), ".", "feature/new.go")
