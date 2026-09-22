@@ -35,7 +35,7 @@ func candidateArtifact(t *testing.T, name string) string {
 	t.Helper()
 	artifact := filepath.Join(t.TempDir(), name)
 	root := filepath.Join(artifact, "rootfs")
-	source, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "loki-go-lifecycle.sh"))
+	source, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "lifecycle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func lifecycleEnvironment(t *testing.T, root string) ([]string, func()) {
 
 func runLifecycle(t *testing.T, environment []string, wantSuccess bool, arguments ...string) {
 	t.Helper()
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "loki-go-lifecycle.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "lifecycle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

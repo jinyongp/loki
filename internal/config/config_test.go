@@ -72,7 +72,7 @@ func TestStrictConfigurationInput(t *testing.T) {
 }
 
 func TestCheckedInConfig(t *testing.T) {
-	if _, err := Load("../../config/loki-go.toml"); err != nil {
+	if _, err := Load("../../config/runtime.toml"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Load("testdata/python-v047.toml"); err == nil || !strings.Contains(err.Error(), "unsupported Loki configuration setting") {

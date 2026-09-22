@@ -249,7 +249,7 @@ The previous Python server and all Python-deployment-only source, package metada
 
 Keep the archive until the Go replacement has actually been deployed, required MCP workflows and enabled integrations pass, restart and protected-state recovery have been verified, and the operator has retired the Python rollback path. This repository reorganization is not a deployment or a removal of installed Python services.
 
-After that gate, delete `legacy/python/` and remove its navigation references from this plan and the root README. Shared `bundled_skills/`, `config/loki-gitconfig`, current Go packaging, and Go migration/compatibility fixtures remain outside the retirement unit. Go build and release tests must not depend on the Python archive being present.
+After that gate, delete `legacy/python/` and remove its navigation references from this plan and the root README. Shared `bundled_skills/`, `config/gitconfig`, current Go packaging, and Go migration/compatibility fixtures remain outside the retirement unit. Go build and release tests must not depend on the Python archive being present.
 
 ## Implementation sequence
 

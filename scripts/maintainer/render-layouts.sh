@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 8; then
-  echo "usage: render-loki-go-layouts.sh TEMPLATE_DIR OUTPUT_DIR RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID EXECUTOR_UID JOB_IMAGE" >&2
+  echo "usage: render-layouts.sh TEMPLATE_DIR OUTPUT_DIR RUNNER_UID RUNNER_GID WORKSPACE_GID BROWSER_UID EXECUTOR_UID JOB_IMAGE" >&2
   exit 2
 fi
 

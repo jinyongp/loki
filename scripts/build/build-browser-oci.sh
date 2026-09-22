@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 1; then
-  echo "usage: build-loki-browser-oci.sh OUTPUT_OCI" >&2
+  echo "usage: build-browser-oci.sh OUTPUT_OCI" >&2
   exit 2
 fi
 

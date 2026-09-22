@@ -8,7 +8,7 @@ SOURCE_DIR="$REPO_DIR/legacy/python"
 test "$(id -u)" -eq 0
 test -f "$SOURCE_DIR/pyproject.toml"
 test -d "$REPO_DIR/bundled_skills"
-test -f "$REPO_DIR/config/loki-gitconfig"
+test -f "$REPO_DIR/config/gitconfig"
 
 systemctl stop loki-mcp.service loki-runtime.service \
   loki-browser.service loki-port-guard.service loki-signing-agent.service \
@@ -94,7 +94,7 @@ chown root:root /var/lib/loki/signing/id_ed25519 /var/lib/loki/signing/id_ed2551
 chmod 0600 /var/lib/loki/signing/id_ed25519
 chmod 0644 /var/lib/loki/signing/id_ed25519.pub
 install -o root -g root -m 0644 /var/lib/loki/signing/id_ed25519.pub /etc/loki/signing_key.pub
-install -o root -g root -m 0644 "$REPO_DIR/config/loki-gitconfig" /etc/loki/gitconfig
+install -o root -g root -m 0644 "$REPO_DIR/config/gitconfig" /etc/loki/gitconfig
 git_identity_name=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.name || true)
 git_identity_email=$(runuser -u runner -- env HOME=/home/runner git config --global --includes user.email || true)
 if test -z "$git_identity_name" || test -z "$git_identity_email"; then

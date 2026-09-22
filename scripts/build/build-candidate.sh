@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 3; then
-  echo "usage: build-loki-go-candidate.sh OUTPUT_DIRECTORY DEVTOOLS_BINARY TOOLCHAIN_BUNDLE" >&2
+  echo "usage: build-candidate.sh OUTPUT_DIRECTORY DEVTOOLS_BINARY TOOLCHAIN_BUNDLE" >&2
   exit 2
 fi
 
@@ -54,14 +54,14 @@ CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki" "$SOURCE_DIR/cmd/l
 CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki-launcher" "$SOURCE_DIR/cmd/launcher"
 CGO_ENABLED=0 go build -trimpath -o "$ROOT/opt/loki/bin/loki-executor" "$SOURCE_DIR/cmd/executor"
 install -m 0755 "$DEVTOOLS" "$ROOT/opt/loki/bin/devtools"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/wait-for-loki-sockets.sh" "$ROOT/opt/loki/libexec/wait-for-loki-sockets"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/render-loki-go-layouts.sh" "$ROOT/opt/loki/libexec/render-layouts"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/loki-devtools-launch" "$ROOT/opt/loki/libexec/devtools"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/loki-go-lifecycle.sh" "$ROOT/opt/loki/libexec/lifecycle"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/wait-for-sockets.sh" "$ROOT/opt/loki/libexec/wait-for-loki-sockets"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/render-layouts.sh" "$ROOT/opt/loki/libexec/render-layouts"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/devtools-launch" "$ROOT/opt/loki/libexec/devtools"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/lifecycle.sh" "$ROOT/opt/loki/libexec/lifecycle"
 cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/opt/loki/share/skills/"
 cp -a "$SOURCE_DIR/bundled_skills/." "$ROOT/srv/workspace/loki/.agents/skills/"
-install -m 0644 "$SOURCE_DIR/config/loki-go.toml" "$ROOT/usr/share/doc/loki/config.toml"
-install -m 0644 "$SOURCE_DIR/config/loki-gitconfig" "$ROOT/usr/share/doc/loki/gitconfig"
+install -m 0644 "$SOURCE_DIR/config/runtime.toml" "$ROOT/usr/share/doc/loki/config.toml"
+install -m 0644 "$SOURCE_DIR/config/gitconfig" "$ROOT/usr/share/doc/loki/gitconfig"
 install -m 0644 "$SOURCE_DIR/packaging/native/runtime.json.in" "$ROOT/usr/share/doc/loki/runtime.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/native/mcp.json.in" "$ROOT/usr/share/doc/loki/mcp.json.in"
 install -m 0644 "$SOURCE_DIR/packaging/native/launcher.json.in" "$ROOT/usr/share/doc/loki/launcher.json.in"
@@ -84,5 +84,5 @@ ln -s ../../../opt/loki/libexec/devtools "$ROOT/usr/local/bin/devtools"
 
 printf '%s\n' "loki=$("$ROOT/opt/loki/bin/loki" version)" > "$OUTPUT/VERSIONS"
 printf '%s\n' "devtools=$VERSION" >> "$OUTPUT/VERSIONS"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/stage-loki-go-candidate.sh" "$OUTPUT/stage.sh"
-install -m 0755 "$SOURCE_DIR/scripts/maintainer/loki-go-lifecycle.sh" "$OUTPUT/install.sh"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/stage-candidate.sh" "$OUTPUT/stage.sh"
+install -m 0755 "$SOURCE_DIR/scripts/maintainer/lifecycle.sh" "$OUTPUT/install.sh"

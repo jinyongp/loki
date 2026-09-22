@@ -9,14 +9,14 @@ import (
 )
 
 func TestReleaseGateIncludesEveryRequiredLayer(t *testing.T) {
-	gate := readPortabilityFile(t, filepath.Join("..", "..", "scripts", "verify", "verify-loki-release.sh"))
+	gate := readPortabilityFile(t, filepath.Join("..", "..", "scripts", "verify", "verify-release.sh"))
 	for _, required := range []string{
 		"go test ./...",
 		"go test -race ./...",
 		"go vet ./...",
-		"accept-loki-bootstrap.sh",
-		"accept-loki-go-candidate.sh",
-		"accept-loki-compose.sh",
+		"accept-bootstrap.sh",
+		"accept-candidate.sh",
+		"accept-compose.sh",
 		"inspect_image \"$core_image\" Loki",
 		"inspect_image \"$browser_image\" 'Loki Browser'",
 	} {

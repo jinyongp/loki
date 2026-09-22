@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-test "$#" -eq 2 || { echo "usage: verify-loki-derived-image.sh BASE_REFERENCE DERIVED_IMAGE" >&2; exit 2; }
+test "$#" -eq 2 || { echo "usage: verify-derived-image.sh BASE_REFERENCE DERIVED_IMAGE" >&2; exit 2; }
 base=$1
 derived=$2
 docker_cmd=${LOKI_DOCKER:-docker}

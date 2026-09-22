@@ -8,7 +8,7 @@ import (
 )
 
 func TestComposeAcceptanceIsDisposableTopologySmoke(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "verify", "accept-loki-compose.sh"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "verify", "accept-compose.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestComposeAcceptanceIsDisposableTopologySmoke(t *testing.T) {
 		"mktemp -d", "trap cleanup", "down --volumes --remove-orphans",
 		"setfacl -m u:10000:rwx,d:u:10000:rwx",
 		"compose config --quiet", "compose up -d --remove-orphans", "compose restart",
-		"verify-loki-derived-image.sh", "--profile browser", "--profile signing",
+		"verify-derived-image.sh", "--profile browser", "--profile signing",
 		"LOKI_ACCEPTANCE_INVARIANT_PATHS", "cmp \"$before\" \"$after\"",
 		"assert_networks", "assert_no_mount", "assert_not_inspectable",
 		"buildx version", "buildx build --quiet --load",

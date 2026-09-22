@@ -136,7 +136,7 @@ base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
   --build-arg "LOKI_BASE_ID=$base_id" \
   --file "$repo/packaging/images/derived/Dockerfile" \
   --tag "$derived_image" "$repo" >/dev/null
-"$repo/scripts/verify/verify-loki-derived-image.sh" "$image" "$derived_image"
+"$repo/scripts/verify/verify-derived-image.sh" "$image" "$derived_image"
 
 if test -n "$browser_image"; then
   compose --profile browser up -d browser browser-proxy

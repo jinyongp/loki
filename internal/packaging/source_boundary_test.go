@@ -63,9 +63,9 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"packaging/images/browser.Dockerfile",
 		"packaging/native/execution-contract.json",
 		"packaging/native/systemd/loki-go.target",
-		"scripts/build/build-loki-oci.sh",
-		"scripts/verify/verify-loki-release.sh",
-		"scripts/maintainer/loki-go-lifecycle.sh",
+		"scripts/build/build-oci.sh",
+		"scripts/verify/verify-release.sh",
+		"scripts/maintainer/lifecycle.sh",
 		"tools/release/bootstrapbuild/main.go",
 		"docs/first-install.md",
 	} {
@@ -77,9 +77,9 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 	for _, obsolete := range []string{
 		"packaging/container/Dockerfile",
 		"packaging/go/execution-contract.json",
-		"scripts/build-loki-oci.sh",
-		"scripts/accept-loki-compose.sh",
-		"scripts/loki-go-lifecycle.sh",
+		"scripts/build-oci.sh",
+		"scripts/accept-compose.sh",
+		"scripts/lifecycle.sh",
 		"tools/bootstrapbuild/main.go",
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(obsolete))); !os.IsNotExist(err) {

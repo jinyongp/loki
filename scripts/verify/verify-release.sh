@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 3; then
-  echo "usage: verify-loki-release.sh CANDIDATE CORE_IMAGE BROWSER_IMAGE" >&2
+  echo "usage: verify-release.sh CANDIDATE CORE_IMAGE BROWSER_IMAGE" >&2
   exit 2
 fi
 
@@ -29,9 +29,9 @@ go test ./...
 go test -race ./...
 go vet ./...
 
-"$repo/scripts/verify/accept-loki-bootstrap.sh"
-"$repo/scripts/verify/accept-loki-go-candidate.sh" "$candidate"
+"$repo/scripts/verify/accept-bootstrap.sh"
+"$repo/scripts/verify/accept-candidate.sh" "$candidate"
 LOKI_IMAGE=$core_image LOKI_BROWSER_IMAGE=$browser_image \
-  "$repo/scripts/verify/accept-loki-compose.sh"
+  "$repo/scripts/verify/accept-compose.sh"
 
 printf 'loki release verification: passed\n'

@@ -48,11 +48,11 @@ class LegacyLayoutTests(unittest.TestCase):
 
     def test_shared_assets_are_not_duplicated(self):
         self.assertTrue((REPO_ROOT / "bundled_skills/devtools/SKILL.md").is_file())
-        self.assertTrue((REPO_ROOT / "config/loki-gitconfig").is_file())
+        self.assertTrue((REPO_ROOT / "config/gitconfig").is_file())
         self.assertFalse((PYTHON_ROOT / "bundled_skills").exists())
-        self.assertFalse((PYTHON_ROOT / "config/loki-gitconfig").exists())
+        self.assertFalse((PYTHON_ROOT / "config/gitconfig").exists())
         installer = (PYTHON_ROOT / "scripts/install-loki-mcp.sh").read_text()
-        for required in ('test -d "$REPO_DIR/bundled_skills"', 'test -f "$REPO_DIR/config/loki-gitconfig"'):
+        for required in ('test -d "$REPO_DIR/bundled_skills"', 'test -f "$REPO_DIR/config/gitconfig"'):
             self.assertLess(installer.index(required), installer.index("systemctl stop"))
 
     def test_legacy_template_and_go_compatibility_fixture(self):

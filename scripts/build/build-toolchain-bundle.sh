@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 1; then
-  echo "usage: build-loki-toolchain-bundle.sh OUTPUT_DIRECTORY" >&2
+  echo "usage: build-toolchain-bundle.sh OUTPUT_DIRECTORY" >&2
   exit 2
 fi
 

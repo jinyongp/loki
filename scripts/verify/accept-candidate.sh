@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 1; then
-  echo "usage: accept-loki-go-candidate.sh CANDIDATE" >&2
+  echo "usage: accept-candidate.sh CANDIDATE" >&2
   exit 2
 fi
 

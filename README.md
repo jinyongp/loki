@@ -71,8 +71,8 @@ Build a verified toolchain bundle, then pass it with a new absolute output
 directory and a compatible `devtools` executable:
 
 ```sh
-./scripts/build/build-loki-toolchain-bundle.sh /tmp/loki-toolchain-bundle
-./scripts/build/build-loki-go-candidate.sh \
+./scripts/build/build-toolchain-bundle.sh /tmp/loki-toolchain-bundle
+./scripts/build/build-candidate.sh \
   /tmp/loki-go-candidate \
   /absolute/path/to/devtools \
   /tmp/loki-toolchain-bundle
@@ -87,7 +87,7 @@ Run the isolated install, upgrade, reboot, browser, signing, migration, and
 rollback acceptance before considering a cutover:
 
 ```sh
-./scripts/verify/accept-loki-go-candidate.sh /tmp/loki-go-candidate
+./scripts/verify/accept-candidate.sh /tmp/loki-go-candidate
 ```
 
 See [the Go candidate runbook](docs/go-candidate-runbook.md) for installation,

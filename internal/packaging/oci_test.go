@@ -103,7 +103,7 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 			t.Errorf("browser image contains unrelated dependency %q", forbidden)
 		}
 	}
-	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-loki-browser-oci.sh"))
+	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-browser-oci.sh"))
 	for _, required := range []string{"--platform linux/amd64,linux/arm64", "--provenance=mode=max", "type=oci,dest=$output"} {
 		if !strings.Contains(script, required) {
 			t.Errorf("browser build script is missing %q", required)
@@ -113,7 +113,7 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 
 func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 	root := filepath.Join("..", "..")
-	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-loki-oci.sh"))
+	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-oci.sh"))
 	for _, required := range []string{
 		"GOARCH=amd64",
 		"GOARCH=arm64",

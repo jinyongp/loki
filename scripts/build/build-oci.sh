@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 7; then
-  echo "usage: build-loki-oci.sh OUTPUT_OCI DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64 GH_AMD64 GH_ARM64" >&2
+  echo "usage: build-oci.sh OUTPUT_OCI DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64 GH_AMD64 GH_ARM64" >&2
   exit 2
 fi
 

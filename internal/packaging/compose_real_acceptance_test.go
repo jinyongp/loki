@@ -15,7 +15,7 @@ func TestRealComposeAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := filepath.Join(root, "scripts", "accept-loki-compose.sh")
+	script := filepath.Join(root, "scripts", "accept-compose.sh")
 	command := exec.CommandContext(t.Context(), "bash", script)
 	command.Dir = root
 	var output bytes.Buffer

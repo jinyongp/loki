@@ -69,7 +69,7 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	launcher, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "loki-devtools-launch"))
+	launcher, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "devtools-launch"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	if string(launcher) != want {
 		t.Fatalf("devtools launcher = %q, want %q", launcher, want)
 	}
-	build, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-go-candidate.sh"))
+	build, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,14 +91,14 @@ func TestCandidateToolchainBundleBindsManagedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundleScript, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-toolchain-bundle.sh"))
+	bundleScript, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-toolchain-bundle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(bundleScript), `--catalog "$SOURCE_DIR/packaging/native/toolchain-catalog.json"`) {
 		t.Fatal("toolchain bundle build does not include the managed catalog")
 	}
-	candidate, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-go-candidate.sh"))
+	candidate, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestCandidateToolchainBundleBindsManagedCatalog(t *testing.T) {
 
 func waitScript(t *testing.T) string {
 	t.Helper()
-	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "wait-for-loki-sockets.sh"))
+	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "wait-for-sockets.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "render-loki-go-layouts.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "render-layouts.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stage, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "stage-loki-go-candidate.sh"))
+	stage, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "stage-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

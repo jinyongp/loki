@@ -61,7 +61,7 @@ func TestDerivedImageValidatorAcceptsOnlyPreservedImages(t *testing.T) {
 	}
 	fake := filepath.Join(t.TempDir(), "docker")
 	writeExecutable(t, fake, string(fixture))
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "verify", "verify-loki-derived-image.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "verify", "verify-derived-image.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

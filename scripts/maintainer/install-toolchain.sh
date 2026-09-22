@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 2; then
-  echo "usage: install-loki-toolchain.sh LOKI_BINARY TOOLCHAIN_BUNDLE" >&2
+  echo "usage: install-toolchain.sh LOKI_BINARY TOOLCHAIN_BUNDLE" >&2
   exit 2
 fi
 test "$(id -u)" -eq 0 || { echo "toolchain installation requires root" >&2; exit 1; }

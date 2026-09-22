@@ -20,7 +20,7 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := filepath.Join(root, "scripts", "verify", "accept-loki-oci-jobs.sh")
+	script := filepath.Join(root, "scripts", "verify", "accept-oci-jobs.sh")
 	dockerfile := filepath.Join(root, "internal", "platform", "sandbox", "testdata", "oci-image", "Dockerfile")
 	for _, path := range []string{script, dockerfile} {
 		if _, err := os.Stat(path); err != nil {

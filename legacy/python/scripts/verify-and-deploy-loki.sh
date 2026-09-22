@@ -6,7 +6,7 @@ REPO_DIR=$(CDPATH= cd -- "$REPO_DIR" && pwd)
 SOURCE_DIR="$REPO_DIR/legacy/python"
 test -f "$SOURCE_DIR/pyproject.toml"
 test -d "$REPO_DIR/bundled_skills"
-test -f "$REPO_DIR/config/loki-gitconfig"
+test -f "$REPO_DIR/config/gitconfig"
 VERIFY_DIR=$(mktemp -d /tmp/loki-verify.XXXXXX)
 cleanup() {
   status=$?

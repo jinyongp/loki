@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 0; then
-  echo "usage: accept-loki-bootstrap.sh" >&2
+  echo "usage: accept-bootstrap.sh" >&2
   exit 2
 fi
 

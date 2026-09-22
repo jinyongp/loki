@@ -57,7 +57,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(launcherLayout), `"MaxConcurrentJobs": 8`) {
 		t.Fatal("native launcher layout does not bind the concurrent Job limit")
 	}
-	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/maintainer/loki-go-lifecycle.sh"))
+	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/maintainer/lifecycle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

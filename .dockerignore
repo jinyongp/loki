@@ -8,8 +8,8 @@
 !bundled_skills/
 !bundled_skills/**
 !config/
-!config/loki-go.toml
-!config/loki-gitconfig
+!config/runtime.toml
+!config/gitconfig
 !packaging/
 !packaging/images/
 !packaging/images/Dockerfile
@@ -21,4 +21,4 @@
 !packaging/native/deployment-contract.json
 !scripts/
 !scripts/maintainer/
-!scripts/maintainer/loki-devtools-launch
+!scripts/maintainer/devtools-launch

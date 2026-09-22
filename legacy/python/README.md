@@ -25,7 +25,7 @@ The complete retirement unit is `legacy/python/`:
 | `config/loki-mcp.toml` | Python deployment configuration template |
 
 Two shared inputs deliberately remain outside this directory: repository-root
-`bundled_skills/` and `config/loki-gitconfig`. Both implementations use them.
+`bundled_skills/` and `config/gitconfig`. Both implementations use them.
 The legacy installer reads these inputs from the repository root rather than
 copying them into a second source tree. There are no compatibility symlinks or
 forwarding launchers at the retired root paths.
