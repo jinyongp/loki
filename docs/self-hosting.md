@@ -7,8 +7,9 @@ authenticated `loki-bootstrap` artifact and lets `loki host install` handle
 Docker/Compose prerequisite checks, workspace onboarding, embedded assets, and
 persistent host-management CLI installation. See [First install](first-install.md).
 
-The repository `compose.yaml` is the developer view of the portable
-Linux-container contract. Browser and signing remain optional profiles.
+The current verified host targets are Linux and WSL2. The repository
+`compose.yaml` is the developer view of the portable Linux-container contract.
+Browser and signing remain optional profiles.
 
 ## Requirements for source-tree work
 
