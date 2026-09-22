@@ -178,7 +178,7 @@ func installerTemplatePath(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(root, "scripts", "install.sh.tmpl")
+	return filepath.Join(root, "tools", "release", "install.sh.tmpl")
 }
 
 func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
