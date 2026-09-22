@@ -13,7 +13,7 @@ Tools in this directory may assemble or build release artifacts, but they must n
 The builder:
 
 - validates the configured HTTPS metadata repository and initial TUF root before embedding them;
-- builds `cmd/loki-bootstrap` reproducibly with `-trimpath` and an empty Go build ID;
+- builds `cmd/bootstrap` reproducibly with `-trimpath` and an empty Go build ID;
 - writes through a temporary output and publishes the finished executable atomically;
 - does not become a dependency of the install host.
 

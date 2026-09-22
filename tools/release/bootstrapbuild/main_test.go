@@ -81,7 +81,7 @@ func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) 
 		t.Fatalf("builder cwd = %q", runner.cwd)
 	}
 	if !slices.Contains(runner.args, "-trimpath") || !slices.Contains(runner.args, "-buildvcs=false") ||
-		!slices.Contains(runner.args, "./cmd/loki-bootstrap") {
+		!slices.Contains(runner.args, "./cmd/bootstrap") {
 		t.Fatalf("builder args = %#v", runner.args)
 	}
 	encoded := base64.StdEncoding.EncodeToString(root)

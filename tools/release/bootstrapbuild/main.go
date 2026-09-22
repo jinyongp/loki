@@ -153,7 +153,7 @@ func buildBootstrapWithValidator(
 		"-buildvcs=false",
 		"-ldflags", ldflags,
 		"-o", temporaryPath,
-		"./cmd/loki-bootstrap",
+		"./cmd/bootstrap",
 	}
 	buildEnvironment := filteredBuildEnvironment(environment, goos, goarch)
 	if err = runner.Run(ctx, sourceRoot, args, buildEnvironment); err != nil {

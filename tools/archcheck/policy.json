@@ -1,51 +1,51 @@
 {
   "allowed_edges": [
     {
-      "from": "loki/cmd/loki-executor",
+      "from": "loki/cmd/executor",
       "to": "loki/internal/app/executor"
     },
     {
-      "from": "loki/cmd/loki-executor",
+      "from": "loki/cmd/executor",
       "to": "loki/internal/daemon"
     },
     {
-      "from": "loki/cmd/loki-executor",
+      "from": "loki/cmd/executor",
       "to": "loki/internal/host/policy"
     },
     {
-      "from": "loki/cmd/loki-executor",
+      "from": "loki/cmd/executor",
       "to": "loki/internal/work/jobs"
     },
     {
-      "from": "loki/cmd/loki-executor",
+      "from": "loki/cmd/executor",
       "to": "loki/internal/work/jobs/remote"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/app/launcher"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/daemon"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/host/policy"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/platform/sandbox"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/work/toolchains"
     },
     {
-      "from": "loki/cmd/loki-launcher",
+      "from": "loki/cmd/launcher",
       "to": "loki/internal/work/jobs"
     },
     {
-      "from": "loki/cmd/loki-bootstrap",
+      "from": "loki/cmd/bootstrap",
       "to": "loki/internal/host/bootstrap"
     },
     {
@@ -738,25 +738,25 @@
   ],
   "module": "loki",
   "packages": {
-    "loki/cmd/loki-bootstrap": {
+    "loki/cmd/bootstrap": {
       "kind": "role",
       "owner": "bootstrap",
       "tags": [
         "release-trust"
       ],
-      "target": "cmd/loki-bootstrap"
+      "target": "cmd/bootstrap"
     },
-    "loki/cmd/loki-executor": {
+    "loki/cmd/executor": {
       "kind": "role",
       "owner": "executor",
       "tags": [],
-      "target": "cmd/loki-executor"
+      "target": "cmd/executor"
     },
-    "loki/cmd/loki-launcher": {
+    "loki/cmd/launcher": {
       "kind": "role",
       "owner": "launcher",
       "tags": [],
-      "target": "cmd/loki-launcher"
+      "target": "cmd/launcher"
     },
     "loki/cmd/loki": {
       "kind": "legacy-composition",
@@ -1216,7 +1216,7 @@
       ],
       "name": "executor",
       "optional": false,
-      "root": "loki/cmd/loki-executor"
+      "root": "loki/cmd/executor"
     },
     {
       "forbidden_tags": [
@@ -1240,7 +1240,7 @@
       ],
       "name": "launcher",
       "optional": false,
-      "root": "loki/cmd/loki-launcher"
+      "root": "loki/cmd/launcher"
     }
   ],
   "third_party_rules": [
