@@ -188,3 +188,14 @@ func TestGenerationAcquireSerializesWithGenerationMutation(t *testing.T) {
 		t.Fatalf("AcquireContext while generation lock held = %v", err)
 	}
 }
+
+func TestGenerationStoreUsageDoesNotCreateMissingStorage(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing-store")
+	store := GenerationStore{Root: root}
+	if _, err := store.Usage(); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read-only generation usage error = %v", err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read-only generation usage created storage: %v", err)
+	}
+}

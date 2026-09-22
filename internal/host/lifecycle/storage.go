@@ -91,6 +91,64 @@ func (s *FileStore) normalizedStorageLimits() (LifecycleStorageLimits, error) {
 	return normalizeLifecycleStorageLimits(s.StorageLimits)
 }
 
+func (s *FileStore) StoragePolicy() (LifecycleStorageLimits, error) {
+	return s.normalizedStorageLimits()
+}
+
+func (s *FileStore) StorageUsage(ctx context.Context, storage RuntimeSnapshotStorage) (LifecycleStorageUsage, error) {
+	if s == nil || storage == nil {
+		return LifecycleStorageUsage{}, errors.New("host lifecycle storage inspection is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return LifecycleStorageUsage{}, err
+	}
+	backups, err := s.ReadBackupSnapshot(ctx)
+	if err != nil {
+		return LifecycleStorageUsage{}, err
+	}
+	snapshots, err := storage.ListRuntimeSnapshots(ctx)
+	if err != nil {
+		return LifecycleStorageUsage{}, err
+	}
+	snapshotByRef := make(map[string]RuntimeSnapshotInfo, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot.Ref == "" || snapshot.Bytes < 0 || snapshot.CreatedAt.IsZero() {
+			return LifecycleStorageUsage{}, errors.New("runtime snapshot storage returned invalid accounting")
+		}
+		if _, exists := snapshotByRef[snapshot.Ref]; exists {
+			return LifecycleStorageUsage{}, errors.New("runtime snapshot storage returned duplicate references")
+		}
+		snapshotByRef[snapshot.Ref] = snapshot
+	}
+	referenced := make(map[string]bool, len(backups))
+	var usage LifecycleStorageUsage
+	for _, backup := range backups {
+		metaBytes, metaErr := s.backupMetadataBytes(backup.ID)
+		if metaErr != nil {
+			return LifecycleStorageUsage{}, metaErr
+		}
+		_, exists := snapshotByRef[backup.RuntimeRef]
+		if !exists {
+			return LifecycleStorageUsage{}, fmt.Errorf("host lifecycle backup %s references missing runtime snapshot", backup.ID)
+		}
+		if referenced[backup.RuntimeRef] {
+			return LifecycleStorageUsage{}, errors.New("host lifecycle backups share a runtime snapshot reference")
+		}
+		referenced[backup.RuntimeRef] = true
+		usage.BackupBytes += metaBytes
+		usage.Backups++
+	}
+	for _, snapshot := range snapshots {
+		usage.RuntimeBytes += snapshot.Bytes
+		usage.RuntimeSnapshots++
+		if !referenced[snapshot.Ref] {
+			usage.OrphanSnapshots++
+		}
+	}
+	usage.Bytes = usage.BackupBytes + usage.RuntimeBytes
+	return usage, nil
+}
+
 func (s *FileStore) backupPath(id string) (string, error) {
 	if s == nil || !digestPattern.MatchString(id) {
 		return "", errors.New("host lifecycle backup id is invalid")

@@ -773,6 +773,14 @@ func (s *FileStore) LoadBackup(ctx context.Context, id string) (BackupRecord, er
 }
 
 func (s *FileStore) ListBackups(ctx context.Context) ([]BackupRecord, error) {
+	return s.listBackups(ctx, true)
+}
+
+func (s *FileStore) ReadBackupSnapshot(ctx context.Context) ([]BackupRecord, error) {
+	return s.listBackups(ctx, false)
+}
+
+func (s *FileStore) listBackups(ctx context.Context, cleanupInterrupted bool) ([]BackupRecord, error) {
 	if s == nil {
 		return nil, errors.New("host lifecycle store is not configured")
 	}
@@ -793,6 +801,9 @@ func (s *FileStore) ListBackups(ctx context.Context) ([]BackupRecord, error) {
 			info, infoErr := entry.Info()
 			if infoErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 				return nil, errors.New("host lifecycle backup directory contains an unsafe interrupted publication")
+			}
+			if !cleanupInterrupted {
+				return nil, errors.New("host lifecycle backup directory contains an interrupted publication")
 			}
 			if err = os.Remove(filepath.Join(dir, entry.Name())); err != nil {
 				return nil, err

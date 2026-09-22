@@ -110,6 +110,14 @@ type snapshotManifest struct {
 }
 
 func New(config Config) (*Backend, error) {
+	return openBackend(config, true)
+}
+
+func Open(config Config) (*Backend, error) {
+	return openBackend(config, false)
+}
+
+func openBackend(config Config, create bool) (*Backend, error) {
 	root := filepath.Clean(strings.TrimSpace(config.StateRoot))
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) || strings.ContainsRune(root, 0) {
 		return nil, errors.New("compose lifecycle state root must be a clean absolute non-root path")
@@ -138,11 +146,16 @@ func New(config Config) (*Backend, error) {
 	runtimeRoot := filepath.Join(root, "runtime")
 	snapshotRoot := filepath.Join(runtimeRoot, "snapshots")
 	for _, path := range []string{runtimeRoot, snapshotRoot} {
-		if err := os.MkdirAll(path, 0700); err != nil {
-			return nil, err
+		if create {
+			if err := os.MkdirAll(path, 0700); err != nil {
+				return nil, err
+			}
 		}
 		info, err := os.Lstat(path)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
 			return nil, errors.New("compose lifecycle directories must be private and real")
 		}
 	}
@@ -335,6 +348,117 @@ func (b *Backend) Health(ctx context.Context) error {
 	}
 	_, err = b.compose(ctx, state, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", "60")
 	return err
+}
+
+type RuntimeReadiness struct {
+	Activated        bool     `json:"activated"`
+	GenerationID     string   `json:"generation_id,omitempty"`
+	Profiles         []string `json:"profiles,omitempty"`
+	RequiredServices []string `json:"required_services,omitempty"`
+	RunningServices  []string `json:"running_services,omitempty"`
+}
+
+func (r RuntimeReadiness) Ready() bool {
+	if !r.Activated || r.GenerationID == "" {
+		return false
+	}
+	if len(r.RequiredServices) != len(r.RunningServices) {
+		return false
+	}
+	for index := range r.RequiredServices {
+		if r.RequiredServices[index] != r.RunningServices[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
+	if err := ctx.Err(); err != nil {
+		return RuntimeReadiness{}, err
+	}
+	state, found, err := b.loadRuntime()
+	if err != nil {
+		return RuntimeReadiness{}, err
+	}
+	if !found {
+		return RuntimeReadiness{}, nil
+	}
+	composePath := filepath.Join(b.runtimeRoot, "assets", "compose.yaml")
+	githubPath := filepath.Join(b.runtimeRoot, "assets", "github.compose.toml")
+	for _, path := range []string{composePath, githubPath, b.tokenPath()} {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return RuntimeReadiness{}, statErr
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return RuntimeReadiness{}, errors.New("compose lifecycle readiness input is not a regular file")
+		}
+	}
+	env := []string{
+		"LOKI_IMAGE=" + state.CoreImage,
+		"LOKI_JOB_IMAGE=" + state.CoreImage,
+		"LOKI_WORKSPACE=" + state.Workspace,
+		"LOKI_MCP_TOKEN_FILE=" + b.tokenPath(),
+		"LOKI_GITHUB_CONFIG_FILE=" + githubPath,
+		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
+		"LOKI_SIGNING_KEY_FILE=/dev/null",
+	}
+	if state.BrowserImage != "" {
+		env = append(env, "LOKI_BROWSER_IMAGE="+state.BrowserImage)
+	}
+	args := []string{"compose", "--project-name", b.project, "--file", composePath}
+	for _, profile := range state.Profiles {
+		args = append(args, "--profile", profile)
+	}
+	args = append(args, "ps", "--status", "running", "--services")
+	raw, err := b.runner.Run(ctx, env, args...)
+	if err != nil {
+		return RuntimeReadiness{}, err
+	}
+	running := make([]string, 0, 8)
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !validProject(line) {
+			return RuntimeReadiness{}, errors.New("compose lifecycle readiness returned an invalid service name")
+		}
+		running = append(running, line)
+	}
+	sort.Strings(running)
+	running = compactRuntimeServices(running)
+	required := []string{"egress", "executor", "launcher", "mcp", "runtime"}
+	for _, profile := range state.Profiles {
+		switch profile {
+		case "browser":
+			required = append(required, "browser", "browser-proxy")
+		case "signing":
+			required = append(required, "signing")
+		}
+	}
+	sort.Strings(required)
+	required = compactRuntimeServices(required)
+	profiles := append([]string(nil), state.Profiles...)
+	sort.Strings(profiles)
+	return RuntimeReadiness{
+		Activated: true, GenerationID: state.GenerationID, Profiles: profiles,
+		RequiredServices: required, RunningServices: running,
+	}, nil
+}
+
+func compactRuntimeServices(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	result := values[:1]
+	for _, value := range values[1:] {
+		if value != result[len(result)-1] {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func (b *Backend) Restore(ctx context.Context, ref string) error {

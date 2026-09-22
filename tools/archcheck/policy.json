@@ -98,6 +98,10 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/diagnostics"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/host/lifecycle"
     },
     {
@@ -841,6 +845,14 @@
         "host-assets"
       ],
       "target": "host/assets"
+    },
+    "loki/internal/host/diagnostics": {
+      "kind": "host",
+      "owner": "diagnostics",
+      "tags": [
+        "diagnostic"
+      ],
+      "target": "host/diagnostics"
     },
     "loki/internal/host/lifecycle": {
       "kind": "host",

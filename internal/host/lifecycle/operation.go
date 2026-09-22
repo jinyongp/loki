@@ -284,6 +284,68 @@ func OpenOperationJournal(root string, lock *OperationLock, options OperationJou
 	return journal, nil
 }
 
+func ReadOperationSnapshot(root string) ([]OperationRecord, error) {
+	if _, err := OpenFileStore(root); err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(root, "operations")
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := make([]OperationRecord, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".loki-private-") {
+			info, infoErr := entry.Info()
+			if infoErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+				return nil, errors.New("host lifecycle journal contains an unsafe interrupted publication")
+			}
+			return nil, errors.New("host lifecycle journal contains an interrupted publication")
+		}
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			return nil, fmt.Errorf("host lifecycle journal contains unexpected entry %q", name)
+		}
+		if len(result) >= maxOperationRecords {
+			return nil, errors.New("host lifecycle operation journal exceeds record capacity")
+		}
+		id := strings.TrimSuffix(name, ".json")
+		if len(id) != 32 {
+			return nil, errors.New("host lifecycle operation record name is invalid")
+		}
+		if _, decodeErr := hex.DecodeString(id); decodeErr != nil {
+			return nil, errors.New("host lifecycle operation record name is invalid")
+		}
+		record, readErr := loadOperationRecord(filepath.Join(dir, name))
+		if readErr != nil {
+			return nil, fmt.Errorf("load host lifecycle operation %q: %w", id, readErr)
+		}
+		if record.ID != id {
+			return nil, errors.New("host lifecycle operation identity does not match its file")
+		}
+		result = append(result, record)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].StartedAt == result[j].StartedAt {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].StartedAt < result[j].StartedAt
+	})
+	active := 0
+	for _, record := range result {
+		if !record.State.Terminal() {
+			active++
+		}
+	}
+	if active > 1 {
+		return nil, errors.New("host lifecycle journal contains multiple active operations")
+	}
+	return result, nil
+}
+
 func (j *OperationJournal) Active() (OperationRecord, bool, error) {
 	if err := j.ready(); err != nil {
 		return OperationRecord{}, false, err

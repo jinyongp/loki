@@ -176,6 +176,10 @@ func validateGoCatalog(releases []GoRelease) error {
 	return nil
 }
 
+func (c Catalog) GenerationIDs() []string {
+	return catalogGenerationIDs(c)
+}
+
 func catalogGenerationIDs(catalog Catalog) []string {
 	result := make([]string, 0, len(catalog.Node)+len(catalog.Pnpm)+len(catalog.Python)+len(catalog.UV)+len(catalog.Rust)+len(catalog.Go))
 	for _, release := range catalog.Node {

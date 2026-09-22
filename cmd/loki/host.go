@@ -71,6 +71,10 @@ func (i launcherJournalInventory) ActiveJobs(ctx context.Context) ([]string, err
 	if err := daemon.ReadJSON(i.LayoutPath, &layout); err != nil {
 		return nil, err
 	}
+	return activeJobsFromLauncherLayout(ctx, layout)
+}
+
+func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout) ([]string, error) {
 	if !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory ||
 		layout.StateDirectory == string(filepath.Separator) ||
 		layout.MaxJobs < 1 || layout.MaxOutputBytes < 1 || layout.MaxOutputBytes > jobs.MaxOutputBytes ||
@@ -99,17 +103,19 @@ func (i launcherJournalInventory) ActiveJobs(ctx context.Context) ([]string, err
 
 func runHost(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|doctor|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	switch args[0] {
 	case "install":
 		return runHostInstall(args[1:], stdout, stderr)
+	case "doctor":
+		return runHostDoctor(args[1:], stdout, stderr)
 	case "backup", "restore", "rollback", "enable", "disable", "uninstall":
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}
 	if args[0] != "update" || len(args) < 2 {
-		fmt.Fprintln(stderr, "usage: loki host install|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|doctor|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	action := args[1]

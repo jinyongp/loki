@@ -72,6 +72,10 @@ func (s GenerationStore) normalizedLimits() (GenerationLimits, error) {
 	return normalizeGenerationLimits(s.Limits)
 }
 
+func (s GenerationStore) StoragePolicy() (GenerationLimits, error) {
+	return s.normalizedLimits()
+}
+
 func (s GenerationStore) protectedSet() (map[string]bool, error) {
 	result := make(map[string]bool, len(s.Protected))
 	for _, id := range s.Protected {
@@ -83,8 +87,24 @@ func (s GenerationStore) protectedSet() (map[string]bool, error) {
 	return result, nil
 }
 
+func (s GenerationStore) validateStorageLayout() error {
+	if err := s.validate(); err != nil {
+		return err
+	}
+	for _, path := range []string{s.Root, filepath.Join(s.Root, "generations")} {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("toolchain generation storage layout is invalid")
+		}
+	}
+	return nil
+}
+
 func (s GenerationStore) storageEntries() ([]generationStorageEntry, error) {
-	if err := s.prepare(); err != nil {
+	if err := s.validateStorageLayout(); err != nil {
 		return nil, err
 	}
 	protected, err := s.protectedSet()
