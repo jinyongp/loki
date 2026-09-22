@@ -32,6 +32,9 @@ func TestReleaseWorkflowPublishesOnlyAcceptedCandidate(t *testing.T) {
 			t.Fatalf("release workflow lacks %q", required)
 		}
 	}
+	if strings.Count(text, "ref: ${{ inputs.commit }}") != 2 {
+		t.Fatal("release workflow does not pin both checkouts to the accepted commit")
+	}
 	for _, forbidden := range []string{
 		"workflow_dispatch:",
 		"push:",
