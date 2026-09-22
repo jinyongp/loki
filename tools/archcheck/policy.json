@@ -417,6 +417,10 @@
       "to": "loki/internal/host/releases"
     },
     {
+      "from": "loki/tools/release/evidencebuild",
+      "to": "loki/internal/host/releases"
+    },
+    {
       "from": "loki/tools/toolchainfetch",
       "to": "loki/internal/work/toolchains"
     },
@@ -1137,6 +1141,15 @@
         "release-trust"
       ],
       "target": "tools/release/bootstrapbuild"
+    },
+    "loki/tools/release/evidencebuild": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling",
+        "release-trust"
+      ],
+      "target": "tools/release/evidencebuild"
     },
     "loki/tools/toolchainfetch": {
       "kind": "tooling",
