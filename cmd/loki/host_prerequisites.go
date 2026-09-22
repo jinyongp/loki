@@ -22,9 +22,11 @@ const (
 )
 
 var (
-	errHostDockerUnavailable  = errors.New("Docker Engine is unavailable to the current installation boundary")
-	errHostComposeUnavailable = errors.New("Docker Compose v2 is unavailable to the current installation boundary")
-	errHostRuntimeOutdated    = errors.New("Docker runtime is below the release requirement")
+	errHostDockerUnavailable          = errors.New("Docker Engine is unavailable to the current installation boundary")
+	errHostComposeUnavailable         = errors.New("Docker Compose v2 is unavailable to the current installation boundary")
+	errHostRuntimeOutdated            = errors.New("Docker runtime is below the release requirement")
+	errHostDockerSudoApprovalNeeded   = errors.New("explicit sudo Docker approval is required")
+	errHostPrerequisiteApprovalNeeded = errors.New("host prerequisite installation approval is required")
 )
 
 type hostRuntimeProbe struct {
@@ -264,10 +266,10 @@ func prepareHostDockerRuntime(
 		errors.Is(sudoErr, errHostComposeUnavailable) ||
 		errors.Is(sudoErr, errHostRuntimeOutdated)
 	if !installableFailure {
-		return hostRuntimeProbe{}, errors.New("Docker is installed but Loki cannot access the Engine; approve the explicit sudo Docker boundary or fix the Docker daemon/socket access")
+		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker is installed but Loki cannot access the Engine; approve the explicit sudo Docker boundary or fix the Docker daemon/socket access", errHostDockerSudoApprovalNeeded)
 	}
 	if !installPrerequisites {
-		return hostRuntimeProbe{}, errors.New("Docker Engine and Compose v2 do not satisfy this release; rerun interactively or pass --install-prerequisites")
+		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker Engine and Compose v2 do not satisfy this release; rerun interactively or pass --install-prerequisites", errHostPrerequisiteApprovalNeeded)
 	}
 	if host.Environment == "wsl" {
 		initRaw, readErr := os.ReadFile("/proc/1/comm")
@@ -303,6 +305,9 @@ func prepareHostDockerRuntime(
 		if sudoProbe, probeErr := probeHostRuntime(ctx, requirements, []string{"sudo", "docker"}, executor); probeErr == nil {
 			return sudoProbe, nil
 		}
+	}
+	if !allowSudo {
+		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker prerequisites are installed but the current user cannot use the daemon directly", errHostDockerSudoApprovalNeeded)
 	}
 	return hostRuntimeProbe{}, errors.New("Docker prerequisites were installed but the release runtime requirements are still not satisfied")
 }

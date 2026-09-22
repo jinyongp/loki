@@ -16,7 +16,6 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"loki/internal/host/bootstrap"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
 	"loki/internal/host/releases"
@@ -55,6 +54,9 @@ type hostInstallOptions struct {
 	ReleaseManifest      string
 	InstallPrerequisites bool
 	AllowSudoDocker      bool
+	CreateWorkspace      bool
+	PrepareWorkspace     bool
+	AllowSudoWorkspace   bool
 	DockerAccess         string
 }
 
@@ -67,17 +69,22 @@ func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOption
 	releaseManifest := flags.String("bootstrap-release-manifest", "", "authenticated bootstrap release manifest")
 	installPrerequisites := flags.Bool("install-prerequisites", false, "explicitly approve supported host prerequisite installation")
 	allowSudoDocker := flags.Bool("allow-sudo-docker", false, "explicitly allow operator-invoked sudo Docker lifecycle commands")
+	createWorkspace := flags.Bool("create-workspace", false, "explicitly approve creating a missing workspace")
+	prepareWorkspace := flags.Bool("prepare-workspace", false, "explicitly approve the minimal Loki workspace POSIX ACL")
+	allowSudoWorkspace := flags.Bool("allow-sudo-workspace", false, "explicitly allow sudo for approved workspace creation or ACL changes")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return hostInstallOptions{}, errors.New("usage: loki host install [--system] --workspace PATH [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH]")
+		return hostInstallOptions{}, errors.New("usage: loki host install [--system] [--workspace PATH] [--create-workspace] [--prepare-workspace] [--allow-sudo-workspace] [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH]")
 	}
 	result := hostInstallOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot), Workspace: strings.TrimSpace(*workspace),
 		ReleaseManifest: strings.TrimSpace(*releaseManifest), InstallPrerequisites: *installPrerequisites,
-		AllowSudoDocker: *allowSudoDocker,
+		AllowSudoDocker: *allowSudoDocker, CreateWorkspace: *createWorkspace,
+		PrepareWorkspace: *prepareWorkspace, AllowSudoWorkspace: *allowSudoWorkspace,
 	}
-	if result.Workspace == "" || !filepath.IsAbs(result.Workspace) || filepath.Clean(result.Workspace) != result.Workspace ||
-		result.Workspace == string(filepath.Separator) || strings.ContainsRune(result.Workspace, 0) {
-		return hostInstallOptions{}, errors.New("--workspace must be a clean absolute non-root path")
+	if result.Workspace != "" {
+		if _, err := cleanInstallWorkspacePath(result.Workspace); err != nil {
+			return hostInstallOptions{}, err
+		}
 	}
 	if result.StateRoot != "" && (!filepath.IsAbs(result.StateRoot) || filepath.Clean(result.StateRoot) != result.StateRoot ||
 		result.StateRoot == string(filepath.Separator) || strings.ContainsRune(result.StateRoot, 0)) {
@@ -132,25 +139,19 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	ctx := context.Background()
 	executor := execHostCommandExecutor{}
-	host := releases.SupportedHost{}
-	if options.InstallPrerequisites {
-		host, err = bootstrap.DetectHost()
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-	}
-	probe, err := prepareHostDockerRuntime(
-		context.Background(), release.Runtime, host,
-		options.InstallPrerequisites, options.AllowSudoDocker,
-		executor, stdout,
-	)
+	prompter := defaultHostInstallPrompter(stdout)
+	probe, err := interactiveDockerRuntime(ctx, &options, release.Runtime, prompter, executor)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	options.DockerAccess = probe.Access
+	if err = resolveInstallWorkspace(ctx, &options, prompter, executor); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	store, err := lifecycle.EnsureFileStore(options.StateRoot)
 	if err != nil {

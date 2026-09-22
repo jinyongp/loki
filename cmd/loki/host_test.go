@@ -202,8 +202,18 @@ func TestHostInstallOptionParsing(t *testing.T) {
 	if _, err = parseHostInstallOptions([]string{"--workspace", "relative"}, &stderr); err == nil {
 		t.Fatal("relative workspace was accepted")
 	}
-	if _, err = parseHostInstallOptions(nil, &stderr); err == nil {
-		t.Fatal("missing workspace was accepted")
+	interactive, err := parseHostInstallOptions(nil, &stderr)
+	if err != nil || interactive.Workspace != "" {
+		t.Fatalf("interactive install options = %#v err=%v", interactive, err)
+	}
+	approved, err := parseHostInstallOptions([]string{
+		"--workspace", "/srv/workspace",
+		"--create-workspace", "--prepare-workspace", "--allow-sudo-workspace",
+		"--install-prerequisites", "--allow-sudo-docker",
+	}, &stderr)
+	if err != nil || !approved.CreateWorkspace || !approved.PrepareWorkspace || !approved.AllowSudoWorkspace ||
+		!approved.InstallPrerequisites || !approved.AllowSudoDocker {
+		t.Fatalf("approved install options = %#v err=%v", approved, err)
 	}
 }
 
