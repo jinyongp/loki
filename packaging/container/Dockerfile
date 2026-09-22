@@ -49,7 +49,14 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/python3 \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uv \
- && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uvx
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/uvx \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/rustc \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/cargo \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/rustfmt \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/cargo-fmt \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/clippy-driver \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/cargo-clippy \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/rust-analyzer
 
 FROM alpine/git:2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f AS git-root
 

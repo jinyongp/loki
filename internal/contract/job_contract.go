@@ -172,7 +172,7 @@ func jobTool() (*mcp.Tool, error) {
 			{Name: "argv", Schema: map[string]any{
 				"type": "array", "minItems": 1, "maxItems": 256,
 				"items":       map[string]any{"type": "string", "maxLength": 4096},
-				"description": "Command argument vector. The first item is an absolute in-sandbox executable path; managed Node.js and pnpm commands use Loki-owned shims under /opt/loki/toolchain/bin.",
+				"description": "Command argument vector. The first item is an absolute in-sandbox executable path; managed toolchain commands use Loki-owned shims under /opt/loki/toolchain/bin.",
 			}},
 			{Name: "timeout_seconds", Schema: map[string]any{
 				"type": "integer", "minimum": 1, "maximum": 86400,

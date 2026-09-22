@@ -19,6 +19,8 @@ func writeShimExecutable(t *testing.T, root, family, version, command string) st
 		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, "bin", "python3")
 	case "uv":
 		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, command)
+	case "rust":
+		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, "active", "bin", command)
 	default:
 		t.Fatalf("unsupported fixture family %q", family)
 	}
@@ -40,6 +42,9 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 	python := writeShimExecutable(t, root, "python", "3.14.7", "python")
 	uv := writeShimExecutable(t, root, "uv", "0.12.17", "uv")
 	uvx := writeShimExecutable(t, root, "uv", "0.12.17", "uvx")
+	rustc := writeShimExecutable(t, root, "rust", "1.98.1", "rustc")
+	cargo := writeShimExecutable(t, root, "rust", "1.98.1", "cargo")
+	rustfmt := writeShimExecutable(t, root, "rust", "1.98.1", "rustfmt")
 
 	for command, want := range map[string]string{
 		"node":    node,
@@ -48,6 +53,9 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 		"python3": python,
 		"uv":      uv,
 		"uvx":     uvx,
+		"rustc":   rustc,
+		"cargo":   cargo,
+		"rustfmt": rustfmt,
 	} {
 		got, err := resolveToolchainShim(root, command)
 		if err != nil || got != want {
@@ -57,6 +65,7 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 	if toolchainShimCommand("/opt/loki/toolchain/bin/node") != "node" ||
 		toolchainShimCommand("/opt/loki/toolchain/bin/python") != "python" ||
 		toolchainShimCommand("/opt/loki/toolchain/bin/uv") != "uv" ||
+		toolchainShimCommand("/opt/loki/toolchain/bin/rustc") != "rustc" ||
 		toolchainShimCommand("/opt/loki/bin/loki") != "" {
 		t.Fatal("shim argv0 detection is invalid")
 	}

@@ -101,6 +101,123 @@ func runResolvedShim(t *testing.T, root, command string) string {
 	return strings.TrimSpace(string(output))
 }
 
+func acceptanceRustRelease(version, date, digestSeed string) toolchain.RustRelease {
+	host := "x86_64-unknown-linux-gnu"
+	artifact := func(component, target string, index int) toolchain.RustArtifact {
+		filename := component + "-" + version
+		if target != "" {
+			filename += "-" + target
+		}
+		filename += ".tar.xz"
+		return toolchain.RustArtifact{
+			Component:       component,
+			Target:          target,
+			Filename:        filename,
+			URL:             "https://static.rust-lang.org/dist/" + date + "/" + filename,
+			SHA256:          strings.Repeat(digestSeed, 63) + string(rune('0'+index)),
+			StripComponents: 2,
+		}
+	}
+	return toolchain.RustRelease{
+		Channel: "stable",
+		Version: version,
+		Date:    date,
+		Host:    host,
+		Artifacts: []toolchain.RustArtifact{
+			artifact("cargo", host, 1),
+			artifact("rust-std", host, 2),
+			artifact("rustc", host, 3),
+		},
+	}
+}
+
+func provisionAcceptanceRust(t *testing.T, store toolchain.GenerationStore, release toolchain.RustRelease) toolchain.Generation {
+	t.Helper()
+	generation, err := store.Provision(t.Context(), release.GenerationID(), func(_ context.Context, root string) error {
+		base := filepath.Join(root, "opt", "loki", "toolchain", "rust", release.Version, "active", "bin")
+		if err := os.MkdirAll(base, 0755); err != nil {
+			return err
+		}
+		for _, name := range []string{"rustc", "cargo"} {
+			body := "#!/bin/sh\nprintf '" + name + "-" + release.Version + "\n'\n"
+			if err := os.WriteFile(filepath.Join(base, name), []byte(body), 0755); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return generation
+}
+
+func TestManagedRustAcceptanceTwoProjectsUseDifferentVersionsThroughSameShims(t *testing.T) {
+	store := acceptanceStore(t)
+	rust97 := acceptanceRustRelease("1.97.1", "2026-08-06", "a")
+	rust98 := acceptanceRustRelease("1.98.1", "2026-09-03", "b")
+	generations := map[string]toolchain.Generation{}
+	for _, release := range []toolchain.RustRelease{rust97, rust98} {
+		generation := provisionAcceptanceRust(t, store, release)
+		generations[generation.ID] = generation
+	}
+
+	workspace := t.TempDir()
+	for name, version := range map[string]string{
+		"legacy":  rust97.Version,
+		"current": rust98.Version,
+	} {
+		project := filepath.Join(workspace, name)
+		if err := os.Mkdir(project, 0755); err != nil {
+			t.Fatal(err)
+		}
+		declaration := "[toolchain]\nchannel = \"" + version + "\"\nprofile = \"minimal\"\n"
+		if err := os.WriteFile(filepath.Join(project, "rust-toolchain.toml"), []byte(declaration), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resolver := toolchain.ProjectResolver{
+		Root:  workspace,
+		Store: store,
+		Catalog: toolchain.Catalog{
+			Version: toolchain.CatalogVersion,
+			Rust:    []toolchain.RustRelease{rust97, rust98},
+		},
+	}
+	legacy, err := resolver.Resolve("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := resolver.Resolve("current")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(legacy) != 1 || len(current) != 1 ||
+		legacy[0].Family != "rust" || current[0].Family != "rust" ||
+		legacy[0].Version == current[0].Version ||
+		legacy[0].GenerationID == current[0].GenerationID {
+		t.Fatalf("Rust project selections = %#v / %#v", legacy, current)
+	}
+
+	legacyMount := filepath.Join(t.TempDir(), "managed")
+	currentMount := filepath.Join(t.TempDir(), "managed")
+	mountAcceptanceSelections(t, legacyMount, legacy, generations)
+	mountAcceptanceSelections(t, currentMount, current, generations)
+	if got := runResolvedShim(t, legacyMount, "rustc"); got != "rustc-1.97.1" {
+		t.Fatalf("legacy rustc shim = %q", got)
+	}
+	if got := runResolvedShim(t, legacyMount, "cargo"); got != "cargo-1.97.1" {
+		t.Fatalf("legacy cargo shim = %q", got)
+	}
+	if got := runResolvedShim(t, currentMount, "rustc"); got != "rustc-1.98.1" {
+		t.Fatalf("current rustc shim = %q", got)
+	}
+	if got := runResolvedShim(t, currentMount, "cargo"); got != "cargo-1.98.1" {
+		t.Fatalf("current cargo shim = %q", got)
+	}
+}
+
 func TestManagedToolchainAcceptanceTwoProjectsUseDifferentVersionsThroughSameShims(t *testing.T) {
 	store := acceptanceStore(t)
 	node22 := toolchain.NodeRelease{

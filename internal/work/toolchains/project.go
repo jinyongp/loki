@@ -55,13 +55,17 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 	if err != nil {
 		return nil, err
 	}
+	rustProject, rustFound, err := findRustProject(root, cwd)
+	if err != nil {
+		return nil, err
+	}
 	pnpmSelected := packageFound && strings.HasPrefix(strings.TrimSpace(packageManager), "pnpm@")
 	pythonSelected := pythonProject.selectorFound || pythonProject.requirementFound
-	if !nodeFound && !pnpmSelected && !pythonSelected && !pythonProject.uvProject {
+	if !nodeFound && !pnpmSelected && !pythonSelected && !pythonProject.uvProject && !rustFound {
 		return nil, nil
 	}
 
-	selections := make([]ProjectSelection, 0, 4)
+	selections := make([]ProjectSelection, 0, 5)
 	if nodeFound {
 		nodeProvider := NodeProvider{Store: r.Store}
 		nodePlan, resolveErr := nodeProvider.Resolve(nodeSelector, r.Catalog.Node, false)
@@ -114,6 +118,19 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 		}
 		selections = append(selections, ProjectSelection{
 			Family: "uv", Version: uvPlan.Release.Version, GenerationID: uvPlan.GenerationID,
+		})
+	}
+	if rustFound {
+		rustProvider := RustProvider{Store: r.Store}
+		rustPlan, resolveErr := rustProvider.Resolve(rustProject, r.Catalog.Rust, false)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if rustPlan.Resolution.Acquire {
+			return nil, fmt.Errorf("Rust %s is permitted but not provisioned", rustPlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "rust", Version: rustPlan.Release.Version, GenerationID: rustPlan.GenerationID,
 		})
 	}
 	return selections, nil
@@ -247,6 +264,85 @@ func findPythonProject(root *os.Root, cwd string) (pythonProjectRequest, error) 
 		}
 	}
 	return result, nil
+}
+
+func findRustProject(root *os.Root, cwd string) (RustProjectRequest, bool, error) {
+	for directory := cwd; ; directory = filepath.Dir(directory) {
+		for _, candidate := range []struct {
+			name        string
+			allowLegacy bool
+		}{
+			{name: "rust-toolchain", allowLegacy: true},
+			{name: "rust-toolchain.toml"},
+		} {
+			path := filepath.Join(directory, candidate.name)
+			raw, exists, err := readProjectFile(root, path, 64<<10)
+			if err != nil {
+				return RustProjectRequest{}, false, err
+			}
+			if !exists {
+				continue
+			}
+			request, err := parseRustProjectRequest(raw, candidate.allowLegacy)
+			if err != nil {
+				return RustProjectRequest{}, false, fmt.Errorf("%s: %w", filepath.ToSlash(path), err)
+			}
+			return request, true, nil
+		}
+		if directory == "." {
+			break
+		}
+		directory = filepath.Clean(directory)
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return RustProjectRequest{}, false, nil
+}
+
+func parseRustProjectRequest(raw []byte, allowLegacy bool) (RustProjectRequest, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return RustProjectRequest{}, errors.New("Rust toolchain declaration is empty")
+	}
+	if allowLegacy && !strings.HasPrefix(trimmed, "[") {
+		if strings.ContainsAny(trimmed, " \t\r\n\x00") {
+			return RustProjectRequest{}, errors.New("legacy Rust toolchain declaration must contain one channel")
+		}
+		request := RustProjectRequest{Channel: trimmed}
+		if _, err := normalizeRustProjectRequest(request); err != nil {
+			return RustProjectRequest{}, err
+		}
+		return request, nil
+	}
+
+	var document struct {
+		Toolchain struct {
+			Channel    string   `toml:"channel"`
+			Path       string   `toml:"path"`
+			Profile    string   `toml:"profile"`
+			Components []string `toml:"components"`
+			Targets    []string `toml:"targets"`
+		} `toml:"toolchain"`
+	}
+	decoder := toml.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return RustProjectRequest{}, fmt.Errorf("invalid Rust toolchain TOML: %w", err)
+	}
+	if strings.TrimSpace(document.Toolchain.Path) != "" {
+		return RustProjectRequest{}, errors.New("workspace Rust toolchain path selection is not allowed")
+	}
+	request := RustProjectRequest{
+		Channel:    strings.TrimSpace(document.Toolchain.Channel),
+		Profile:    strings.TrimSpace(document.Toolchain.Profile),
+		Components: append([]string(nil), document.Toolchain.Components...),
+		Targets:    append([]string(nil), document.Toolchain.Targets...),
+	}
+	if _, err := normalizeRustProjectRequest(request); err != nil {
+		return RustProjectRequest{}, err
+	}
+	return request, nil
 }
 
 func findPackageManager(root *os.Root, cwd string) (string, bool, error) {

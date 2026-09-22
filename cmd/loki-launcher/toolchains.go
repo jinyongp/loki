@@ -102,6 +102,12 @@ func validateToolchainGeneration(ref jobs.ToolchainRef, generation toolchain.Gen
 		}
 		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "uv", ref.Version)
 		paths = []string{filepath.Join(base, "uv"), filepath.Join(base, "uvx")}
+	case "rust":
+		if normalized, err := toolchain.NormalizeRustVersion(ref.Version); err != nil || normalized != ref.Version {
+			return errors.New("Rust Job toolchain version is invalid")
+		}
+		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "rust", ref.Version, "active", "bin")
+		paths = []string{filepath.Join(base, "rustc"), filepath.Join(base, "cargo")}
 	default:
 		return fmt.Errorf("unsupported Job toolchain family %q", ref.Family)
 	}

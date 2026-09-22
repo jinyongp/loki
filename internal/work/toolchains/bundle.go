@@ -126,7 +126,7 @@ func FetchBundleWithCatalog(
 }
 
 func catalogBundleArtifacts(catalog Catalog) []bundleArtifact {
-	result := make([]bundleArtifact, 0, len(catalog.Node)+len(catalog.Pnpm)+len(catalog.Python)+len(catalog.UV))
+	result := make([]bundleArtifact, 0, len(catalog.Node)+len(catalog.Pnpm)+len(catalog.Python)+len(catalog.UV)+len(catalog.Rust)*6)
 	for _, release := range catalog.Node {
 		result = append(result, bundleArtifact{
 			Name: "managed-node-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
@@ -146,6 +146,17 @@ func catalogBundleArtifacts(catalog Catalog) []bundleArtifact {
 		result = append(result, bundleArtifact{
 			Name: "managed-uv-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
 		})
+	}
+	for _, release := range catalog.Rust {
+		for _, artifact := range release.Artifacts {
+			name := "managed-rust-" + release.Version + "-" + artifact.Component
+			if artifact.Target != "" {
+				name += "-" + artifact.Target
+			}
+			result = append(result, bundleArtifact{
+				Name: name, Filename: artifact.Filename, URL: artifact.URL, SHA256: artifact.SHA256,
+			})
+		}
 	}
 	return result
 }

@@ -19,6 +19,7 @@ type Catalog struct {
 	Pnpm    []PnpmRelease   `json:"pnpm,omitempty"`
 	Python  []PythonRelease `json:"python,omitempty"`
 	UV      []UVRelease     `json:"uv,omitempty"`
+	Rust    []RustRelease   `json:"rust,omitempty"`
 }
 
 func LoadCatalog(raw []byte) (Catalog, error) {
@@ -42,7 +43,7 @@ func (c Catalog) Validate() error {
 	if c.Version != CatalogVersion {
 		return fmt.Errorf("unsupported toolchain catalog version %d", c.Version)
 	}
-	if len(c.Node)+len(c.Pnpm)+len(c.Python)+len(c.UV) == 0 {
+	if len(c.Node)+len(c.Pnpm)+len(c.Python)+len(c.UV)+len(c.Rust) == 0 {
 		return errors.New("toolchain catalog has no releases")
 	}
 	if err := validateNodeCatalog(c.Node); err != nil {
@@ -55,6 +56,9 @@ func (c Catalog) Validate() error {
 		return err
 	}
 	if err := validateUVCatalog(c.UV); err != nil {
+		return err
+	}
+	if err := validateRustCatalog(c.Rust); err != nil {
 		return err
 	}
 	return nil
@@ -136,6 +140,18 @@ func validateUVCatalog(releases []UVRelease) error {
 	return nil
 }
 
+func validateRustCatalog(releases []RustRelease) error {
+	for index, release := range releases {
+		if err := release.Validate(); err != nil {
+			return err
+		}
+		if index > 0 && compareRustRelease(releases[index-1], release) >= 0 {
+			return errors.New("Rust catalog releases must be unique and sorted")
+		}
+	}
+	return nil
+}
+
 func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store GenerationStore) error {
 	if err := catalog.Validate(); err != nil {
 		return err
@@ -200,6 +216,22 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 		if plan.Resolution.Acquire {
 			source := filepath.Join(artifacts, release.Filename())
 			if _, err = uvProvider.Provision(ctx, plan, source); err != nil {
+				return err
+			}
+		}
+	}
+
+	rustProvider := RustProvider{Store: store}
+	for _, release := range catalog.Rust {
+		plan, resolveErr := rustProvider.Resolve(RustProjectRequest{
+			Channel: release.Version,
+			Profile: "minimal",
+		}, catalog.Rust, false)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if plan.Resolution.Acquire {
+			if _, err = rustProvider.Provision(ctx, plan, artifacts); err != nil {
 				return err
 			}
 		}
