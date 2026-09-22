@@ -70,7 +70,7 @@ func Run(ctx context.Context, cfg Config) (Candidate, error) {
 	}
 	host := releases.SupportedHost{}
 	if cfg.Host == nil {
-		host, err = DetectHost()
+		host, err = releases.DetectHost()
 		if err != nil {
 			return Candidate{}, err
 		}

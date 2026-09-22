@@ -12,7 +12,6 @@ import (
 
 	"golang.org/x/term"
 
-	hostbootstrap "loki/internal/host/bootstrap"
 	"loki/internal/host/releases"
 )
 
@@ -243,7 +242,7 @@ func ensureACLPrerequisite(
 	prompter *hostInstallPrompter,
 	executor hostCommandExecutor,
 ) error {
-	host, err := hostbootstrap.DetectHost()
+	host, err := releases.DetectHost()
 	if err != nil {
 		return errors.New("POSIX ACL tools are required; install setfacl/getfacl for this host")
 	}
@@ -361,7 +360,7 @@ func interactiveDockerRuntime(
 ) (hostRuntimeProbe, error) {
 	host := releases.SupportedHost{}
 	if options.InstallPrerequisites {
-		detected, err := hostbootstrap.DetectHost()
+		detected, err := releases.DetectHost()
 		if err != nil {
 			return hostRuntimeProbe{}, err
 		}
@@ -380,7 +379,7 @@ func interactiveDockerRuntime(
 		return hostRuntimeProbe{}, err
 	}
 
-	detected, detectErr := hostbootstrap.DetectHost()
+	detected, detectErr := releases.DetectHost()
 	if detectErr != nil {
 		return hostRuntimeProbe{}, err
 	}
