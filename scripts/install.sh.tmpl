@@ -1,0 +1,51 @@
+#!/bin/sh
+set -eu
+
+release_tag='@@LOKI_RELEASE_TAG@@'
+bootstrap_sha256='@@LOKI_BOOTSTRAP_SHA256@@'
+bootstrap_asset='loki-bootstrap-linux-amd64'
+release_url="https://github.com/jinyongp/loki/releases/download/$release_tag/$bootstrap_asset"
+
+fail() {
+  printf '%s\n' "loki installer: $*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+case "$(uname -s 2>/dev/null)/$(uname -m 2>/dev/null)" in
+  Linux/x86_64|Linux/amd64) ;;
+  *) fail "unsupported host; Loki currently supports Linux amd64 and WSL2 Ubuntu amd64" ;;
+esac
+
+require_command curl
+require_command mktemp
+require_command sha256sum
+require_command chmod
+require_command rm
+
+umask 077
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/loki-install.XXXXXXXX")
+bootstrap="$tmpdir/$bootstrap_asset"
+cleanup() {
+  rm -rf "$tmpdir"
+}
+trap cleanup EXIT HUP INT TERM
+
+curl \
+  --fail \
+  --location \
+  --proto '=https' \
+  --tlsv1.2 \
+  --silent \
+  --show-error \
+  --output "$bootstrap" \
+  "$release_url"
+
+printf '%s  %s\n' "$bootstrap_sha256" "$bootstrap" | sha256sum -c - >/dev/null ||
+  fail "bootstrap SHA-256 verification failed"
+
+chmod 0755 "$bootstrap"
+"$bootstrap" "$@"
