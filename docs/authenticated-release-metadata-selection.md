@@ -64,6 +64,39 @@ Online metadata roles use separate keys. The implementation keeps signer backend
 
 Exact expiry durations remain an operator/release policy value, but WI-002 must enforce bounded expiry and reject expired metadata. Timestamp metadata is intentionally the shortest-lived role.
 
+## Production repository signing and publication
+
+The production signing boundary uses TUF-on-CI as the repository/signing
+orchestrator rather than adding a Loki-specific metadata signer. This was
+re-evaluated on 2026-09-23 against TUF-on-CI v0.21.0.
+
+TUF-on-CI provides threshold signing workflows and supports online signing with
+Google Cloud KMS, Azure Key Vault, and AWS KMS. Root and delegated-targets
+signing remain signing-event responsibilities, while online snapshot/timestamp
+roles may use the configured KMS backend. Loki release workflows do not receive
+or store those private signing keys.
+
+The responsibility split is:
+
+1. TUF-on-CI/signers produce a complete signed repository directory using
+   consistent snapshots and the `releases` / `toolchains` delegated-role model.
+2. The A13 evidence builder executes the accepted
+   `loki-bootstrap --bootstrap-info` surface and requires its embedded metadata
+   URL and trusted root digest to match the supplied production repository.
+3. Loki replays the signed directory through its production `go-tuf/v2` client,
+   verifies every release/toolchain target required by the accepted release
+   manifest, and packages the exact repository bytes into deterministic
+   `tuf-repository.tar.gz`.
+4. A14 evidence binds that archive by length and SHA-256.
+5. Release publication extracts only that accepted archive, re-verifies it with
+   the same production client, archives it as
+   `loki-tuf-repository.tar.gz`, and deploys its contents under
+   `https://jinyongp.dev/loki/tuf/`.
+
+The public release workflow therefore performs no TUF signing. A signing event
+must complete before candidate evidence is assembled. This keeps signing
+authority separate from GitHub Release and Pages publication authority.
+
 ## Release target layout
 
 A release manifest is itself an immutable TUF target. It binds the release generation to concrete content identities, including as applicable:
@@ -150,6 +183,8 @@ Positive fixtures must prove sequential root rotation/recovery and independent r
 
 - The Update Framework Specification 1.0.36: https://github.com/theupdateframework/specification/blob/master/tuf-spec.md
 - go-tuf releases (v2.4.2 current at evaluation): https://github.com/theupdateframework/go-tuf/releases
+- TUF-on-CI repository maintenance: https://github.com/theupdateframework/tuf-on-ci/blob/main/docs/REPOSITORY-MAINTENANCE.md
+- TUF-on-CI changelog (v0.21.0 current at 2026-09-23 re-evaluation): https://github.com/theupdateframework/tuf-on-ci/blob/main/docs/CHANGELOG.md
 - Sigstore bundle format: https://docs.sigstore.dev/about/bundle/
 - Sigstore verification: https://docs.sigstore.dev/cosign/verifying/verify/
 - in-toto Attestation Framework: https://github.com/in-toto/attestation/blob/main/spec/README.md

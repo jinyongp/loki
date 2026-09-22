@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"loki/internal/host/releases"
+	"loki/tools/release/internal/bootstrapinfo"
 )
 
 func publicationFile(path string, raw []byte) releases.FileEvidence {
@@ -36,6 +38,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 
 	hostRaw := []byte("#!/bin/sh\nexit 0\n")
 	bootstrapRaw := []byte("#!/bin/sh\nexit 0\n")
+	tufRepositoryRaw := []byte("signed-tuf-repository")
 	hostAssetsRaw := []byte("host-assets")
 	toolchainRaw := []byte("{\"version\":1}\n")
 	provenanceRaw := []byte("{\"mediaType\":\"application/vnd.dev.sigstore.bundle.v0.3+json\"}\n")
@@ -43,6 +46,61 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 	notesRaw := []byte("# Release 1.2.3\n")
 	policyRaw := []byte("{\"version\":1}\n")
 	configRaw := []byte("version = 1\n")
+
+	previousInspect := inspectPublicationBootstrap
+	previousExtract := extractPublicationTUFArchive
+	previousTrusted := trustedPublicationTUFRoot
+	previousVerify := verifyPublicationTUFDirectory
+	inspectPublicationBootstrap = func(context.Context, string) (bootstrapinfo.Info, error) {
+		return bootstrapinfo.Info{
+			MetadataURL: publicTUFMetadataURL, TrustedRootSHA256: strings.Repeat("a", 64),
+		}, nil
+	}
+	extractPublicationTUFArchive = func(archive, destination string) error {
+		raw, err := os.ReadFile(archive)
+		if err != nil {
+			return err
+		}
+		if string(raw) != string(tufRepositoryRaw) {
+			return fmt.Errorf("unexpected TUF archive bytes")
+		}
+		for name, body := range map[string]string{
+			"1.root.json":    "trusted-root",
+			"timestamp.json": "timestamp",
+		} {
+			if err = os.WriteFile(filepath.Join(destination, name), []byte(body), 0644); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	trustedPublicationTUFRoot = func(root, digest string) ([]byte, error) {
+		if digest != strings.Repeat("a", 64) {
+			return nil, fmt.Errorf("unexpected root digest")
+		}
+		raw, err := os.ReadFile(filepath.Join(root, "1.root.json"))
+		if err != nil {
+			return nil, err
+		}
+		return raw, nil
+	}
+	verifyPublicationTUFDirectory = func(
+		_ context.Context, root string, trusted []byte, requirements []releases.RepositoryRequirement,
+	) error {
+		if string(trusted) != "trusted-root" || len(requirements) != 9 {
+			return fmt.Errorf("unexpected TUF verification inputs")
+		}
+		if _, err := os.Stat(filepath.Join(root, "timestamp.json")); err != nil {
+			return err
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		inspectPublicationBootstrap = previousInspect
+		extractPublicationTUFArchive = previousExtract
+		trustedPublicationTUFRoot = previousTrusted
+		verifyPublicationTUFDirectory = previousVerify
+	})
 
 	hostSum := sha256.Sum256(hostRaw)
 	generation, err := releases.NewGeneration(releases.GenerationSpec{
@@ -112,6 +170,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		"release-manifest.json":  {manifestRaw, 0644},
 		"loki":                   {hostRaw, 0755},
 		"loki-bootstrap":         {bootstrapRaw, 0755},
+		"tuf-repository.tar.gz":  {tufRepositoryRaw, 0644},
 		"host-assets.tar.gz":     {hostAssetsRaw, 0644},
 		"toolchain-catalog.json": {toolchainRaw, 0644},
 		"provenance.bundle.json": {provenanceRaw, 0644},
@@ -136,6 +195,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		ReleaseManifest:  publicationFile("inputs/release-manifest.json", manifestRaw),
 		HostBinary:       publicationFile("inputs/loki", hostRaw),
 		Bootstrap:        publicationFile("inputs/loki-bootstrap", bootstrapRaw),
+		TUFRepository:    publicationFile("inputs/tuf-repository.tar.gz", tufRepositoryRaw),
 		HostAssets:       publicationFile("inputs/host-assets.tar.gz", hostAssetsRaw),
 		ToolchainCatalog: publicationFile("inputs/toolchain-catalog.json", toolchainRaw),
 		Provenance:       publicationFile("inputs/provenance.bundle.json", provenanceRaw),
@@ -208,6 +268,7 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 		"loki-release-manifest.json",
 		"loki-release-notes.md",
 		"loki-toolchain-catalog.json",
+		"loki-tuf-repository.tar.gz",
 	}
 	entries, err := os.ReadDir(filepath.Join(output, "assets"))
 	if err != nil {
@@ -231,6 +292,14 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 	}
 	if string(releaseInstaller) != string(pageInstaller) {
 		t.Fatal("release installer and Pages installer differ")
+	}
+	for _, relative := range []string{
+		"pages/tuf/1.root.json",
+		"pages/tuf/timestamp.json",
+	} {
+		if _, err = os.Stat(filepath.Join(output, filepath.FromSlash(relative))); err != nil {
+			t.Fatalf("published TUF file %s: %v", relative, err)
+		}
 	}
 	bootstrapRaw, err := os.ReadFile(filepath.Join(candidate, "inputs", "loki-bootstrap"))
 	if err != nil {
@@ -260,6 +329,7 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(checksums), "  loki-bootstrap-linux-amd64\n") ||
+		!strings.Contains(string(checksums), "  loki-tuf-repository.tar.gz\n") ||
 		!strings.Contains(string(checksums), "  loki-install.sh\n") {
 		t.Fatalf("public checksums = %s", checksums)
 	}

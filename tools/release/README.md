@@ -25,11 +25,11 @@ Public one-line installer publication remains gated by A14 acceptance.
 
 `evidencebuild` assembles the immutable input directory used by A14 release acceptance.
 
-It accepts an A13 release index/manifest and the exact released targets, verifies every manifest-bound file before copying it, requires digest-pinned core/browser OCI references, records source/config/policy/toolchain identities, and publishes:
+It accepts an A13 release index/manifest, the exact released targets, and a complete signed TUF repository directory produced by the configured signing system. Before copying anything it executes the accepted bootstrap's read-only `--bootstrap-info` surface, requires the embedded metadata URL and trusted-root digest to match the supplied release trust inputs, replays the signed repository through Loki's production `go-tuf/v2` client, verifies every manifest-bound release/toolchain target, converts the repository into deterministic `tuf-repository.tar.gz`, requires digest-pinned core/browser OCI references, records source/config/policy/toolchain identities, and publishes:
 
 - `evidence.json`, with a content-derived candidate evidence ID;
 - `SHA256SUMS`, covering the evidence record and every copied input;
-- `inputs/`, containing the exact files consumed by later clean-host, adversarial, recovery, and independent-review acceptance.
+- `inputs/`, containing the exact files consumed by later clean-host, adversarial, recovery, and independent-review acceptance, including `tuf-repository.tar.gz`.
 
 The output directory must not already exist. Failed assembly does not publish a partial bundle.
 
@@ -43,6 +43,9 @@ go run ./tools/release/evidencebuild \
   --release-manifest /absolute/release/manifest.json \
   --host-binary /absolute/release/loki \
   --bootstrap /absolute/release/loki-bootstrap \
+  --tuf-repository /absolute/signed/tuf-repository \
+  --trusted-root /absolute/signed/root.json \
+  --metadata-url https://jinyongp.dev/loki/tuf/ \
   --host-assets /absolute/release/host-assets.tar.gz \
   --toolchain-catalog /absolute/release/toolchain-catalog.json \
   --provenance /absolute/release/provenance.bundle.json \
@@ -69,6 +72,7 @@ accepted bytes into stable external names such as:
 
 - `loki-linux-amd64`;
 - `loki-bootstrap-linux-amd64`;
+- `loki-tuf-repository.tar.gz`;
 - `loki-host-assets.tar.gz`;
 - `loki-release-manifest.json`;
 - `loki-release-index.json`;
@@ -78,6 +82,13 @@ accepted bytes into stable external names such as:
 
 Public artifacts keep the `loki-` product namespace even though their source
 entrypoints use repository-local role names such as `cmd/bootstrap`.
+
+Before publication, `publishprep` executes the accepted bootstrap's
+`--bootstrap-info` surface, requires its metadata URL to be
+`https://jinyongp.dev/loki/tuf/`, extracts the evidence-bound TUF repository
+with traversal/symlink protections, locates the exact embedded root by SHA-256,
+and re-verifies all required targets through the production TUF client. The
+verified repository is then included under `pages/tuf/`.
 
 The same preparation renders `install.sh` from `install.sh.tmpl`. The
 rendered script contains one exact immutable Git tag and the exact SHA-256 of
@@ -96,9 +107,11 @@ artifact. The publication workflow then:
 1. recreates public assets with `publishprep`;
 2. publishes the exact asset set as an immutable GitHub Release through
    `releaseway/actions`, pinned to a full commit SHA;
-3. archives the release-bound installer as `loki-install.sh`;
+3. archives the release-bound installer as `loki-install.sh` and the exact
+   accepted TUF repository as `loki-tuf-repository.tar.gz`;
 4. only after the GitHub Release succeeds, deploys those same installer bytes
-   to the Loki GitHub Pages project site.
+   plus the verified TUF repository under `tuf/` to the Loki GitHub Pages
+   project site.
 
 When the user-site custom domain is `jinyongp.dev`, the Loki project Pages
 path is `https://jinyongp.dev/loki/`, so the deployed file becomes

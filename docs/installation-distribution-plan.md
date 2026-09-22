@@ -53,11 +53,12 @@ Loki is distributed under the Apache License 2.0.
 
 Public installation artifacts must be readable without requiring a GitHub login or another bootstrap credential. The intended distribution channels are:
 
-- authenticated release metadata and host/bootstrap binaries: GitHub Releases
+- signed TUF metadata and consistent-snapshot targets: `jinyongp.dev/loki/tuf/`
+- immutable public release assets and acceptance evidence: GitHub Releases
 - OCI images: `ghcr.io/jinyongp/loki`
 - reserved post-acceptance installer frontend: `jinyongp.dev/loki/install.sh`
 
-The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). The final publication pipeline is already constrained: an A14 caller supplies the accepted candidate evidence bundle, `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is release-bound to one exact Git tag and the exact SHA-256 of the public `loki-bootstrap-linux-amd64` artifact; it does not resolve a mutable bootstrap at install time. The artifact backend may change later without changing the reserved frontend.
+The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). Before A14 evidence is assembled, the configured TUF signing system must finish a signed repository version. Loki verifies that repository through its production Go TUF client, proves that the accepted bootstrap embeds `https://jinyongp.dev/loki/tuf/` and the same trusted root, and binds the deterministic repository archive into the candidate evidence. The final publication pipeline then has an A14 caller supply that accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update both `jinyongp.dev/loki/install.sh` and `jinyongp.dev/loki/tuf/`. The Pages installer is release-bound to one exact Git tag and the exact SHA-256 of the public `loki-bootstrap-linux-amd64` artifact; it does not resolve a mutable bootstrap at install time. The artifact backend may change later without changing the reserved frontend.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 

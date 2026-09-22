@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -20,7 +23,13 @@ type bootstrapOptions struct {
 	requestedRelease string
 	stateRoot        string
 	system           bool
+	info             bool
 	installArgs      []string
+}
+
+type bootstrapInfo struct {
+	MetadataURL       string `json:"metadata_url"`
+	TrustedRootSHA256 string `json:"trusted_root_sha256"`
 }
 
 func main() {
@@ -48,6 +57,16 @@ func runBootstrap(args []string, stdin io.Reader, stdout, stderr io.Writer, meta
 	if err != nil || len(root) == 0 {
 		fmt.Fprintln(stderr, "bootstrap trusted root is not embedded")
 		return 1
+	}
+	if options.info {
+		sum := sha256.Sum256(root)
+		if err = json.NewEncoder(stdout).Encode(bootstrapInfo{
+			MetadataURL: metadataURL, TrustedRootSHA256: hex.EncodeToString(sum[:]),
+		}); err != nil {
+			fmt.Fprintln(stderr, "encode bootstrap info:", err)
+			return 1
+		}
+		return 0
 	}
 	stateRoot := options.stateRoot
 	if stateRoot == "" {
@@ -99,6 +118,8 @@ func parseBootstrapArgs(args []string) (bootstrapOptions, error) {
 			if options.stateRoot == "" {
 				return bootstrapOptions{}, fmt.Errorf("--bootstrap-state-root requires a value")
 			}
+		case arg == "--bootstrap-info":
+			options.info = true
 		case arg == "--bootstrap-release-manifest" || strings.HasPrefix(arg, "--bootstrap-release-manifest="):
 			return bootstrapOptions{}, fmt.Errorf("--bootstrap-release-manifest is reserved for the authenticated bootstrap handoff")
 		default:
@@ -107,6 +128,9 @@ func parseBootstrapArgs(args []string) (bootstrapOptions, error) {
 			}
 			options.installArgs = append(options.installArgs, arg)
 		}
+	}
+	if options.info && (options.requestedRelease != "" || options.stateRoot != "" || options.system || len(options.installArgs) != 0) {
+		return bootstrapOptions{}, fmt.Errorf("--bootstrap-info cannot be combined with installation options")
 	}
 	return options, nil
 }

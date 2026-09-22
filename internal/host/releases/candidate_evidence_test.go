@@ -40,6 +40,9 @@ func candidateEvidenceFixture(t *testing.T) CandidateEvidenceInput {
 		Bootstrap: candidateFile(
 			"inputs/loki-bootstrap", manifest.Bootstrap.Length, manifest.Bootstrap.SHA256,
 		),
+		TUFRepository: candidateFile(
+			"inputs/tuf-repository.tar.gz", 777, strings.Repeat("6", 64),
+		),
 		HostAssets: candidateFile(
 			"inputs/host-assets.tar.gz", manifest.HostAssets.Length, manifest.HostAssets.SHA256,
 		),

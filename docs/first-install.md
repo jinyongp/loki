@@ -146,9 +146,11 @@ go run ./tools/release/bootstrapbuild \
   --trusted-root /absolute/path/to/root.json
 ```
 
-The placeholder metadata URL above is intentionally not a public Loki install endpoint.
+The placeholder metadata URL above is intentionally not a public Loki install endpoint. A public release bootstrap is instead built with `https://jinyongp.dev/loki/tuf/` and the exact offline root that anchors the signed production repository.
 
-After A14 has accepted the candidate bundle, `tools/release/publishprep` converts that exact evidence into the public GitHub Release asset set and the release-bound installer. The callable `.github/workflows/release.yml` publishes those assets through `releaseway/actions` and only then deploys the same installer bytes to the Loki project Pages site. The workflow does not create tags, choose versions, build a replacement candidate, or sign TUF metadata.
+Before A14 evidence is assembled, the signed TUF repository is produced by the configured TUF signing system. Loki executes the accepted bootstrap's `--bootstrap-info` surface, verifies that its embedded metadata URL and trusted-root SHA-256 match those release inputs, replays the repository through the production `go-tuf/v2` client, and stores the deterministic repository archive in the candidate evidence.
+
+After A14 has accepted the candidate bundle, `tools/release/publishprep` converts that exact evidence into the public GitHub Release asset set and the release-bound installer. The callable `.github/workflows/release.yml` publishes those assets through `releaseway/actions` and only then deploys the same installer bytes plus the accepted TUF repository under `/tuf/` to the Loki project Pages site. The workflow does not create tags, choose versions, build a replacement candidate, or sign TUF metadata.
 
 ## Public installer gate
 

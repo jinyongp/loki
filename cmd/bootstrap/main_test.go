@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -36,6 +40,48 @@ func TestParseBootstrapArgsRejectsMissingBootstrapValues(t *testing.T) {
 	} {
 		if _, err := parseBootstrapArgs(args); err == nil {
 			t.Fatalf("invalid args accepted: %#v", args)
+		}
+	}
+}
+
+func TestBootstrapInfoReportsEmbeddedTrustWithoutInstallation(t *testing.T) {
+	root := []byte("{\"signed\":\"fixture\"}\n")
+	encoded := base64.StdEncoding.EncodeToString(root)
+	var stdout, stderr bytes.Buffer
+	code := runBootstrap(
+		[]string{"--bootstrap-info"},
+		bytes.NewReader(nil),
+		&stdout,
+		&stderr,
+		"https://jinyongp.dev/loki/tuf/",
+		encoded,
+	)
+	if code != 0 {
+		t.Fatalf("bootstrap info exit = %d, stderr=%q", code, stderr.String())
+	}
+	sum := sha256.Sum256(root)
+	want := bootstrapInfo{
+		MetadataURL:       "https://jinyongp.dev/loki/tuf/",
+		TrustedRootSHA256: hex.EncodeToString(sum[:]),
+	}
+	var got bootstrapInfo
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("bootstrap info = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseBootstrapInfoRejectsInstallationOptions(t *testing.T) {
+	for _, args := range [][]string{
+		{"--bootstrap-info", "--system"},
+		{"--bootstrap-info", "--workspace", "/srv/loki"},
+		{"--bootstrap-info", "--bootstrap-release", "1.2.3"},
+		{"--bootstrap-info", "--bootstrap-state-root", "/tmp/state"},
+	} {
+		if _, err := parseBootstrapArgs(args); err == nil {
+			t.Fatalf("mixed bootstrap info args accepted: %#v", args)
 		}
 	}
 }

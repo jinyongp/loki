@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/host/releases"
+	"loki/tools/release/internal/bootstrapinfo"
 )
 
 func writeFixtureFile(t *testing.T, root, name, body string, mode os.FileMode) string {
@@ -46,6 +49,8 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	notesBody := "# Release 1.2.3\n"
 	policyBody := "{\"version\":1,\"allowed_hosts\":[\"registry.npmjs.org\"]}\n"
 	configBody := "version = 1\n"
+	trustedRootBody := "{\"signed\":\"trusted-root\"}\n"
+	metadataURL := "https://jinyongp.dev/loki/tuf/"
 
 	host := writeFixtureFile(t, root, "host/loki", hostBody, 0755)
 	bootstrap := writeFixtureFile(t, root, "host/loki-bootstrap", bootstrapBody, 0755)
@@ -56,6 +61,31 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	notes := writeFixtureFile(t, root, "host/notes.md", notesBody, 0644)
 	policy := writeFixtureFile(t, root, "host/policy.json", policyBody, 0644)
 	config := writeFixtureFile(t, root, "host/config.toml", configBody, 0644)
+	trustedRoot := writeFixtureFile(t, root, "host/root.json", trustedRootBody, 0644)
+	tufRepository := filepath.Join(root, "host", "tuf-repository")
+	if err := os.MkdirAll(tufRepository, 0755); err != nil {
+		t.Fatal(err)
+	}
+	rootSum := sha256.Sum256([]byte(trustedRootBody))
+	previousInspect := inspectBootstrapTrust
+	previousBuild := buildTUFRepositoryArchive
+	inspectBootstrapTrust = func(context.Context, string) (bootstrapinfo.Info, error) {
+		return bootstrapinfo.Info{
+			MetadataURL: metadataURL, TrustedRootSHA256: hex.EncodeToString(rootSum[:]),
+		}, nil
+	}
+	buildTUFRepositoryArchive = func(
+		_ context.Context, repository, output string, root []byte, requirements []releases.RepositoryRequirement,
+	) error {
+		if repository != tufRepository || string(root) != trustedRootBody || len(requirements) != 9 {
+			return errors.New("unexpected TUF repository fixture inputs")
+		}
+		return os.WriteFile(output, []byte("signed-tuf-repository"), 0644)
+	}
+	t.Cleanup(func() {
+		inspectBootstrapTrust = previousInspect
+		buildTUFRepositoryArchive = previousBuild
+	})
 
 	hostSum := sha256.Sum256([]byte(hostBody))
 	generation, err := releases.NewGeneration(releases.GenerationSpec{
@@ -124,7 +154,8 @@ func evidenceAssemblerFixture(t *testing.T) options {
 		Output:         filepath.Join(root, "candidate-evidence"),
 		SourceRevision: strings.Repeat("a", 40),
 		ReleaseIndex:   indexPath, ReleaseManifest: manifestPath,
-		HostBinary: host, Bootstrap: bootstrap, HostAssets: assets,
+		HostBinary: host, Bootstrap: bootstrap, TUFRepository: tufRepository,
+		TrustedRoot: trustedRoot, MetadataURL: metadataURL, HostAssets: assets,
 		ToolchainCatalog: toolchain, Provenance: provenance, Notices: notices,
 		ReleaseNotes: notes, EffectivePolicy: policy, EffectiveConfig: config,
 		CoreImage:    "ghcr.io/example/loki@sha256:" + strings.Repeat("b", 64),
@@ -158,7 +189,7 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	}
 	for _, relative := range []string{
 		"evidence.json", "SHA256SUMS", "inputs/release-index.json", "inputs/release-manifest.json",
-		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz",
+		"inputs/loki", "inputs/loki-bootstrap", "inputs/tuf-repository.tar.gz", "inputs/host-assets.tar.gz",
 		"inputs/toolchain-catalog.json", "inputs/provenance.bundle.json", "inputs/notices.tar.gz",
 		"inputs/release-notes.md", "inputs/effective-policy.json", "inputs/effective-config.toml",
 	} {
@@ -170,7 +201,7 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/release-manifest.json"} {
+	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/tuf-repository.tar.gz", "inputs/release-manifest.json"} {
 		if !strings.Contains(string(checksums), "  "+required+"\n") {
 			t.Fatalf("SHA256SUMS lacks %s: %s", required, checksums)
 		}
@@ -193,6 +224,7 @@ func TestAssembleNormalizesBundleModesDespiteUmask(t *testing.T) {
 		"inputs":                       0755,
 		"inputs/loki":                  0755,
 		"inputs/loki-bootstrap":        0755,
+		"inputs/tuf-repository.tar.gz": 0644,
 		"inputs/release-index.json":    0644,
 		"inputs/effective-policy.json": 0644,
 		"evidence.json":                0644,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -16,14 +17,22 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/host/releases"
+	"loki/tools/release/internal/bootstrapinfo"
 )
 
 const (
 	maxInstallerTemplateBytes = int64(64 << 10)
 	maxEvidenceBytes          = int64(2 << 20)
+	publicTUFMetadataURL      = "https://jinyongp.dev/loki/tuf/"
 )
 
-var fullCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var (
+	fullCommitPattern             = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	inspectPublicationBootstrap   = bootstrapinfo.Inspect
+	extractPublicationTUFArchive  = releases.ExtractTUFRepositoryArchive
+	trustedPublicationTUFRoot     = releases.TrustedTUFRootForDigest
+	verifyPublicationTUFDirectory = releases.VerifyTUFRepositoryDirectory
+)
 
 type options struct {
 	Candidate         string
@@ -92,6 +101,14 @@ func preparePublication(cfg options) error {
 	if strings.TrimSpace(cfg.Tag) != expectedTag {
 		return fmt.Errorf("publication tag must be %s for candidate release %s", expectedTag, evidence.Generation.Spec.Version)
 	}
+	bootstrapPath := filepath.Join(candidate, filepath.FromSlash(evidence.Bootstrap.Path))
+	bootstrapTrust, err := inspectPublicationBootstrap(context.Background(), bootstrapPath)
+	if err != nil {
+		return err
+	}
+	if bootstrapTrust.MetadataURL != publicTUFMetadataURL {
+		return fmt.Errorf("accepted bootstrap metadata URL must be %s", publicTUFMetadataURL)
+	}
 
 	manifestRaw, err := readEvidenceBytes(candidate, evidence.ReleaseManifest, 4<<20)
 	if err != nil {
@@ -112,8 +129,22 @@ func preparePublication(cfg options) error {
 	if err != nil {
 		return fmt.Errorf("load candidate release index: %w", err)
 	}
-	if err = verifyIndexManifestBinding(index, manifest, manifestRaw); err != nil {
+	indexEntry, err := verifyIndexManifestBinding(index, manifest, manifestRaw)
+	if err != nil {
 		return err
+	}
+	repositoryRequirements := []releases.RepositoryRequirement{
+		{Descriptor: releases.TargetDescriptor{
+			Path: "releases/index.json", Length: evidence.ReleaseIndex.Length, SHA256: evidence.ReleaseIndex.SHA256,
+		}},
+		{Descriptor: indexEntry.Manifest},
+		{Descriptor: manifest.HostBinary},
+		{Descriptor: manifest.Bootstrap},
+		{Descriptor: manifest.HostAssets},
+		{Descriptor: manifest.ToolchainCatalog},
+		{Descriptor: manifest.Provenance},
+		{Descriptor: manifest.Notices},
+		{Descriptor: manifest.ReleaseNotes},
 	}
 
 	template, err := readRegularBounded(templatePath, maxInstallerTemplateBytes)
@@ -144,8 +175,12 @@ func preparePublication(cfg options) error {
 	}
 	assetsDir := filepath.Join(temp, "assets")
 	pagesDir := filepath.Join(temp, "pages")
-	for _, dir := range []string{assetsDir, pagesDir} {
+	tufDir := filepath.Join(pagesDir, "tuf")
+	for _, dir := range []string{assetsDir, pagesDir, tufDir} {
 		if err = os.Mkdir(dir, 0755); err != nil {
+			return err
+		}
+		if err = os.Chmod(dir, 0755); err != nil {
 			return err
 		}
 	}
@@ -153,6 +188,7 @@ func preparePublication(cfg options) error {
 	assets := []publicationAsset{
 		{Name: "loki-linux-amd64", Evidence: evidence.HostBinary, Mode: 0755},
 		{Name: "loki-bootstrap-linux-amd64", Evidence: evidence.Bootstrap, Mode: 0755},
+		{Name: "loki-tuf-repository.tar.gz", Evidence: evidence.TUFRepository, Mode: 0644},
 		{Name: "loki-host-assets.tar.gz", Evidence: evidence.HostAssets, Mode: 0644},
 		{Name: "loki-release-index.json", Evidence: evidence.ReleaseIndex, Mode: 0644},
 		{Name: "loki-release-manifest.json", Evidence: evidence.ReleaseManifest, Mode: 0644},
@@ -165,6 +201,20 @@ func preparePublication(cfg options) error {
 		if err = copyEvidenceAsset(candidate, assetsDir, asset); err != nil {
 			return err
 		}
+	}
+
+	tufArchivePath := filepath.Join(candidate, filepath.FromSlash(evidence.TUFRepository.Path))
+	if err = extractPublicationTUFArchive(tufArchivePath, tufDir); err != nil {
+		return fmt.Errorf("extract accepted TUF repository: %w", err)
+	}
+	trustedRoot, err := trustedPublicationTUFRoot(tufDir, bootstrapTrust.TrustedRootSHA256)
+	if err != nil {
+		return fmt.Errorf("resolve accepted TUF trusted root: %w", err)
+	}
+	if err = verifyPublicationTUFDirectory(
+		context.Background(), tufDir, trustedRoot, repositoryRequirements,
+	); err != nil {
+		return fmt.Errorf("verify accepted TUF repository: %w", err)
 	}
 
 	evidenceRaw, err := readRegularBounded(filepath.Join(candidate, "evidence.json"), maxEvidenceBytes)
@@ -186,7 +236,7 @@ func preparePublication(cfg options) error {
 	if err = writeAssetChecksums(assetsDir); err != nil {
 		return err
 	}
-	for _, dir := range []string{assetsDir, pagesDir, temp} {
+	for _, dir := range []string{assetsDir, tufDir, pagesDir, temp} {
 		if err = syncDirectory(dir); err != nil {
 			return err
 		}
@@ -201,21 +251,21 @@ func preparePublication(cfg options) error {
 	return syncDirectory(parent)
 }
 
-func verifyIndexManifestBinding(index releases.ReleaseIndex, manifest releases.ReleaseManifest, raw []byte) error {
+func verifyIndexManifestBinding(index releases.ReleaseIndex, manifest releases.ReleaseManifest, raw []byte) (releases.ReleaseIndexEntry, error) {
 	for _, entry := range index.Entries {
 		if entry.Release != manifest.Generation.Spec.Version || entry.GenerationID != manifest.Generation.ID {
 			continue
 		}
 		verified, err := entry.VerifyManifest(raw)
 		if err != nil {
-			return fmt.Errorf("verify release index manifest binding: %w", err)
+			return releases.ReleaseIndexEntry{}, fmt.Errorf("verify release index manifest binding: %w", err)
 		}
 		if verified.Generation.ID != manifest.Generation.ID {
-			return errors.New("release index manifest binding changed generation")
+			return releases.ReleaseIndexEntry{}, errors.New("release index manifest binding changed generation")
 		}
-		return nil
+		return entry, nil
 	}
-	return errors.New("release index does not contain the candidate release manifest")
+	return releases.ReleaseIndexEntry{}, errors.New("release index does not contain the candidate release manifest")
 }
 
 func renderInstaller(template []byte, tag, bootstrapSHA256 string) ([]byte, error) {

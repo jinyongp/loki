@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,11 +16,17 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/host/releases"
+	"loki/tools/release/internal/bootstrapinfo"
 )
 
 const (
 	maxMetadataBytes      = int64(16 << 20)
 	maxReleaseTargetBytes = int64(1 << 30)
+)
+
+var (
+	inspectBootstrapTrust     = bootstrapinfo.Inspect
+	buildTUFRepositoryArchive = releases.BuildTUFRepositoryArchive
 )
 
 type options struct {
@@ -29,6 +36,9 @@ type options struct {
 	ReleaseManifest  string
 	HostBinary       string
 	Bootstrap        string
+	TUFRepository    string
+	TrustedRoot      string
+	MetadataURL      string
 	HostAssets       string
 	ToolchainCatalog string
 	Provenance       string
@@ -57,6 +67,9 @@ func run(args []string, stderr io.Writer) error {
 	flags.StringVar(&cfg.ReleaseManifest, "release-manifest", "", "release manifest JSON")
 	flags.StringVar(&cfg.HostBinary, "host-binary", "", "Loki host binary")
 	flags.StringVar(&cfg.Bootstrap, "bootstrap", "", "standalone bootstrap binary")
+	flags.StringVar(&cfg.TUFRepository, "tuf-repository", "", "signed TUF repository directory")
+	flags.StringVar(&cfg.TrustedRoot, "trusted-root", "", "exact root.json embedded in the bootstrap")
+	flags.StringVar(&cfg.MetadataURL, "metadata-url", "", "public HTTPS TUF repository URL embedded in the bootstrap")
 	flags.StringVar(&cfg.HostAssets, "host-assets", "", "host asset bundle")
 	flags.StringVar(&cfg.ToolchainCatalog, "toolchain-catalog", "", "managed toolchain catalog")
 	flags.StringVar(&cfg.Provenance, "provenance", "", "release provenance bundle")
@@ -85,6 +98,8 @@ func assemble(cfg options) error {
 		"release manifest":  &cfg.ReleaseManifest,
 		"host binary":       &cfg.HostBinary,
 		"bootstrap":         &cfg.Bootstrap,
+		"TUF repository":    &cfg.TUFRepository,
+		"trusted root":      &cfg.TrustedRoot,
 		"host assets":       &cfg.HostAssets,
 		"toolchain catalog": &cfg.ToolchainCatalog,
 		"provenance":        &cfg.Provenance,
@@ -98,6 +113,25 @@ func assemble(cfg options) error {
 		if err != nil {
 			return err
 		}
+	}
+	cfg.MetadataURL = strings.TrimSpace(cfg.MetadataURL)
+	if cfg.MetadataURL == "" {
+		return errors.New("metadata URL is required")
+	}
+	trustedRoot, err := readRegular(cfg.TrustedRoot, maxMetadataBytes)
+	if err != nil {
+		return fmt.Errorf("read trusted root: %w", err)
+	}
+	bootstrapTrust, err := inspectBootstrapTrust(context.Background(), cfg.Bootstrap)
+	if err != nil {
+		return err
+	}
+	if bootstrapTrust.MetadataURL != cfg.MetadataURL {
+		return errors.New("bootstrap embedded metadata URL does not match the publication metadata URL")
+	}
+	rootSum := sha256.Sum256(trustedRoot)
+	if bootstrapTrust.TrustedRootSHA256 != hex.EncodeToString(rootSum[:]) {
+		return errors.New("bootstrap embedded trusted root does not match the release trusted root")
 	}
 	if info, statErr := os.Lstat(output); statErr == nil {
 		return fmt.Errorf("output already exists: %s (%s)", output, info.Mode())
@@ -136,6 +170,18 @@ func assemble(cfg options) error {
 	if _, err = entry.VerifyManifest(manifestRaw); err != nil {
 		return err
 	}
+	indexDescriptor := descriptorFromBytes("releases/index.json", indexRaw)
+	tufRequirements := []releases.RepositoryRequirement{
+		{Descriptor: indexDescriptor},
+		{Descriptor: entry.Manifest},
+		{Descriptor: manifest.HostBinary},
+		{Descriptor: manifest.Bootstrap},
+		{Descriptor: manifest.HostAssets},
+		{Descriptor: manifest.ToolchainCatalog},
+		{Descriptor: manifest.Provenance},
+		{Descriptor: manifest.Notices},
+		{Descriptor: manifest.ReleaseNotes},
+	}
 
 	temp, err := os.MkdirTemp(parent, "."+filepath.Base(output)+".")
 	if err != nil {
@@ -166,6 +212,19 @@ func assemble(cfg options) error {
 		return err
 	}
 	bootstrapEvidence, err := copyEvidence(cfg.Bootstrap, temp, "inputs/loki-bootstrap", &manifest.Bootstrap, 0755)
+	if err != nil {
+		return err
+	}
+	tufArchive := filepath.Join(temp, "inputs", "tuf-repository.tar.gz")
+	if err = buildTUFRepositoryArchive(
+		context.Background(), cfg.TUFRepository, tufArchive, trustedRoot, tufRequirements,
+	); err != nil {
+		return fmt.Errorf("verify and archive signed TUF repository: %w", err)
+	}
+	if err = os.Chmod(tufArchive, 0644); err != nil {
+		return err
+	}
+	tufRepositoryEvidence, err := evidenceForExisting(tufArchive, "inputs/tuf-repository.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -202,7 +261,7 @@ func assemble(cfg options) error {
 		SourceRevision: cfg.SourceRevision, Manifest: manifest, IndexEntry: entry,
 		CoreImage: cfg.CoreImage, BrowserImage: cfg.BrowserImage,
 		ReleaseIndex: releaseIndexEvidence, ReleaseManifest: releaseManifestEvidence,
-		HostBinary: hostBinaryEvidence, Bootstrap: bootstrapEvidence, HostAssets: hostAssetsEvidence,
+		HostBinary: hostBinaryEvidence, Bootstrap: bootstrapEvidence, TUFRepository: tufRepositoryEvidence, HostAssets: hostAssetsEvidence,
 		ToolchainCatalog: toolchainEvidence, Provenance: provenanceEvidence, Notices: noticesEvidence,
 		ReleaseNotes: releaseNotesEvidence, EffectivePolicy: policyEvidence, EffectiveConfig: configEvidence,
 	})
@@ -219,7 +278,7 @@ func assemble(cfg options) error {
 	}
 
 	files := []releases.FileEvidence{
-		releaseIndexEvidence, releaseManifestEvidence, hostBinaryEvidence, bootstrapEvidence, hostAssetsEvidence,
+		releaseIndexEvidence, releaseManifestEvidence, hostBinaryEvidence, bootstrapEvidence, tufRepositoryEvidence, hostAssetsEvidence,
 		toolchainEvidence, provenanceEvidence, noticesEvidence, releaseNotesEvidence, policyEvidence, configEvidence,
 	}
 	checksums := make([]string, 0, len(files)+1)
@@ -297,6 +356,32 @@ func copyEvidence(source, root, relative string, target *releases.TargetDescript
 		return releases.FileEvidence{}, errors.New("release input does not match manifest target identity")
 	}
 	return evidence, nil
+}
+
+func descriptorFromBytes(path string, raw []byte) releases.TargetDescriptor {
+	sum := sha256.Sum256(raw)
+	return releases.TargetDescriptor{
+		Path: path, Length: int64(len(raw)), SHA256: hex.EncodeToString(sum[:]),
+	}
+}
+
+func evidenceForExisting(path, relative string) (releases.FileEvidence, error) {
+	file, info, err := openRegular(path, maxReleaseTargetBytes)
+	if err != nil {
+		return releases.FileEvidence{}, err
+	}
+	defer file.Close()
+	digest := sha256.New()
+	written, err := io.Copy(digest, file)
+	if err != nil {
+		return releases.FileEvidence{}, err
+	}
+	if written != info.Size() {
+		return releases.FileEvidence{}, errors.New("release input changed while being hashed")
+	}
+	return releases.FileEvidence{
+		Path: relative, Length: written, SHA256: hex.EncodeToString(digest.Sum(nil)),
+	}, nil
 }
 
 func writeEvidenceFile(path string, data []byte, mode os.FileMode) error {
