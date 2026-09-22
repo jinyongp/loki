@@ -245,8 +245,19 @@ upload.addEventListener('change', () => document.title='upload:'+(upload.files[0
 		"index": elementIndex(t, state, "wheel-target"), "delta_x": 0, "delta_y": 500,
 	}, true)
 	var nestedScroll float64
-	if err := d.evaluate(t.Context(), "document.getElementById('scroller').scrollTop", &nestedScroll); err != nil || nestedScroll <= 0 {
-		t.Fatalf("wheel nested scroll = %v %v", nestedScroll, err)
+	deadline := time.Now().Add(time.Second)
+	for {
+		err := d.evaluate(t.Context(), "document.getElementById('scroller').scrollTop", &nestedScroll)
+		if err != nil {
+			t.Fatalf("wheel nested scroll = %v %v", nestedScroll, err)
+		}
+		if nestedScroll > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("wheel nested scroll = %v", nestedScroll)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	for _, name := range []string{"text", "area", "editable"} {

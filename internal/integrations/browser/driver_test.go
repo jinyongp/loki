@@ -143,20 +143,26 @@ func TestChromiumLifecycle(t *testing.T) {
 		t.Fatal("browser bypassed the managed-port proxy")
 	}
 	callBrowser(t, d, "navigate", map[string]any{"url": address + "/first"})
-	second := callBrowser(t, d, "navigate", map[string]any{"url": address + "/second", "new_tab": true})["active_tab_id"]
+	secondPage := callBrowser(t, d, "navigate", map[string]any{"url": address + "/second", "new_tab": true})
+	second := secondPage["active_tab_id"]
+	currentGeneration := browserGeneration(t, secondPage)
 	if second == first {
 		t.Fatal("new tab reused target")
 	}
 	if tabs := callBrowser(t, d, "list_tabs", nil)["tabs"].([]map[string]any); len(tabs) != 2 {
 		t.Fatal(tabs)
 	}
-	if page = callBrowser(t, d, "switch_tab", map[string]any{"tab_id": first}); page["title"] != "/first" {
+	if page = callBrowser(t, d, "switch_tab", map[string]any{"tab_id": first, "expected_browser_generation": currentGeneration}); page["title"] != "/first" {
 		t.Fatal(page)
 	}
-	if result := callBrowser(t, d, "close_tab", map[string]any{"tab_id": first}); result["active_tab_id"] != second {
+	currentGeneration = browserGeneration(t, page)
+	result := callBrowser(t, d, "close_tab", map[string]any{"tab_id": first, "expected_browser_generation": currentGeneration})
+	if result["active_tab_id"] != second {
 		t.Fatal(result)
 	}
-	if result := callBrowser(t, d, "close_tab", map[string]any{"tab_id": second}); result["active_tab_id"] != nil {
+	currentGeneration = browserGeneration(t, result)
+	result = callBrowser(t, d, "close_tab", map[string]any{"tab_id": second, "expected_browser_generation": currentGeneration})
+	if result["active_tab_id"] != nil {
 		t.Fatal(result)
 	}
 	if result := callBrowser(t, d, "start", nil); result["active_tab_id"] == nil {
