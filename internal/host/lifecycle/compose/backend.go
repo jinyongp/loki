@@ -48,6 +48,7 @@ type Runner interface {
 
 type ExecRunner struct {
 	Executable string
+	Prefix     []string
 }
 
 func (r ExecRunner) Run(ctx context.Context, env []string, args ...string) ([]byte, error) {
@@ -55,7 +56,8 @@ func (r ExecRunner) Run(ctx context.Context, env []string, args ...string) ([]by
 	if executable == "" {
 		executable = "docker"
 	}
-	cmd := exec.CommandContext(ctx, executable, args...)
+	commandArgs := append(append([]string(nil), r.Prefix...), args...)
+	cmd := exec.CommandContext(ctx, executable, commandArgs...)
 	cmd.Env = append(os.Environ(), env...)
 	var output bytes.Buffer
 	cmd.Stdout = &output

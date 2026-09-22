@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"loki/internal/host/bootstrap"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
 	"loki/internal/host/releases"
@@ -25,21 +26,36 @@ func newHostRuntimeBackend(store *lifecycle.FileStore) (lifecycle.TransactionBac
 	if store == nil || store.Root == "" {
 		return nil, errors.New("host lifecycle store is not configured")
 	}
-	docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER"))
-	if docker == "" {
-		docker = "docker"
+	if docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER")); docker != "" {
+		return newHostRuntimeBackendWithRunner(store, lifecyclecompose.ExecRunner{Executable: docker})
 	}
-	return lifecyclecompose.New(lifecyclecompose.Config{
-		StateRoot: store.Root,
-		Runner:    lifecyclecompose.ExecRunner{Executable: docker},
-	})
+	access := hostDockerAccessDirect
+	if snapshot, err := store.Snapshot(context.Background()); err == nil && snapshot.Installation != nil &&
+		snapshot.Installation.DockerAccess != "" {
+		access = snapshot.Installation.DockerAccess
+	}
+	runner, err := dockerLifecycleRunner(access)
+	if err != nil {
+		return nil, err
+	}
+	return newHostRuntimeBackendWithRunner(store, runner)
+}
+
+func newHostRuntimeBackendWithRunner(store *lifecycle.FileStore, runner lifecyclecompose.Runner) (lifecycle.TransactionBackend, error) {
+	if store == nil || store.Root == "" {
+		return nil, errors.New("host lifecycle store is not configured")
+	}
+	return lifecyclecompose.New(lifecyclecompose.Config{StateRoot: store.Root, Runner: runner})
 }
 
 type hostInstallOptions struct {
-	System          bool
-	StateRoot       string
-	Workspace       string
-	ReleaseManifest string
+	System               bool
+	StateRoot            string
+	Workspace            string
+	ReleaseManifest      string
+	InstallPrerequisites bool
+	AllowSudoDocker      bool
+	DockerAccess         string
 }
 
 func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOptions, error) {
@@ -49,12 +65,15 @@ func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOption
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
 	workspace := flags.String("workspace", "", "operator-approved workspace directory")
 	releaseManifest := flags.String("bootstrap-release-manifest", "", "authenticated bootstrap release manifest")
+	installPrerequisites := flags.Bool("install-prerequisites", false, "explicitly approve supported host prerequisite installation")
+	allowSudoDocker := flags.Bool("allow-sudo-docker", false, "explicitly allow operator-invoked sudo Docker lifecycle commands")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return hostInstallOptions{}, errors.New("usage: loki host install [--system] --workspace PATH [--state-root PATH]")
+		return hostInstallOptions{}, errors.New("usage: loki host install [--system] --workspace PATH [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH]")
 	}
 	result := hostInstallOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot), Workspace: strings.TrimSpace(*workspace),
-		ReleaseManifest: strings.TrimSpace(*releaseManifest),
+		ReleaseManifest: strings.TrimSpace(*releaseManifest), InstallPrerequisites: *installPrerequisites,
+		AllowSudoDocker: *allowSudoDocker,
 	}
 	if result.Workspace == "" || !filepath.IsAbs(result.Workspace) || filepath.Clean(result.Workspace) != result.Workspace ||
 		result.Workspace == string(filepath.Separator) || strings.ContainsRune(result.Workspace, 0) {
@@ -103,26 +122,59 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	candidate, err := loadBootstrapHostGeneration(options.ReleaseManifest)
+	release, err := loadBootstrapHostRelease(options.ReleaseManifest)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = verifyRunningHostBinary(candidate); err != nil {
+	if err = verifyRunningHostBinary(release.Generation); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+
+	executor := execHostCommandExecutor{}
+	host := releases.SupportedHost{}
+	if options.InstallPrerequisites {
+		if _, pathErr := executor.LookPath("docker"); pathErr != nil {
+			host, err = bootstrap.DetectHost()
+			if err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
+	}
+	probe, err := prepareHostDockerRuntime(
+		context.Background(), release.Runtime, host,
+		options.InstallPrerequisites, options.AllowSudoDocker,
+		executor, stdout,
+	)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	options.DockerAccess = probe.Access
+
 	store, err := lifecycle.EnsureFileStore(options.StateRoot)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	backend, err := newHostRuntimeBackend(store)
+	var runner lifecyclecompose.Runner
+	if docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER")); docker != "" {
+		runner = lifecyclecompose.ExecRunner{Executable: docker}
+	} else {
+		runner, err = dockerLifecycleRunner(probe.Access)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	backend, err := newHostRuntimeBackendWithRunner(store, runner)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	return runHostInstallWith(context.Background(), options, candidate, backend, stdout, stderr)
+	return runHostInstallWith(context.Background(), options, release.Generation, backend, stdout, stderr)
 }
 
 func runHostInstallWith(
@@ -146,7 +198,7 @@ func runHostInstallWith(
 		scope = "system"
 	}
 	if err = store.InitializeInstall(ctx, candidate, lifecycle.InstallationState{
-		Scope: scope, Workspace: options.Workspace,
+		Scope: scope, Workspace: options.Workspace, DockerAccess: options.DockerAccess,
 	}, lifecycleTimeNow()); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -347,36 +399,50 @@ func runHostMaintenanceWith(
 	return 0
 }
 
+type hostInstallRelease struct {
+	Generation lifecycle.Generation
+	Runtime    releases.RuntimeRequirements
+}
+
 func loadBootstrapHostGeneration(path string) (lifecycle.Generation, error) {
+	release, err := loadBootstrapHostRelease(path)
+	return release.Generation, err
+}
+
+func loadBootstrapHostRelease(path string) (hostInstallRelease, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return lifecycle.Generation{}, errors.New("authenticated bootstrap release manifest is required")
+		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest is required")
 	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == string(filepath.Separator) || strings.ContainsRune(path, 0) {
-		return lifecycle.Generation{}, errors.New("authenticated bootstrap release manifest path is invalid")
+		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest path is invalid")
 	}
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
-		return lifecycle.Generation{}, err
+		return hostInstallRelease{}, err
 	}
 	file := os.NewFile(uintptr(fd), filepath.Base(path))
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return lifecycle.Generation{}, errors.New("authenticated bootstrap release manifest must be a private regular file")
+		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest must be a private regular file")
 	}
 	raw, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
 	if err != nil {
-		return lifecycle.Generation{}, err
+		return hostInstallRelease{}, err
 	}
 	if len(raw) == 0 || len(raw) > 1<<20 {
-		return lifecycle.Generation{}, errors.New("authenticated bootstrap release manifest exceeds size policy")
+		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest exceeds size policy")
 	}
 	manifest, err := releases.LoadReleaseManifest(raw)
 	if err != nil {
-		return lifecycle.Generation{}, err
+		return hostInstallRelease{}, err
 	}
-	return lifecycleGenerationFromRelease(manifest.Generation)
+	generation, err := lifecycleGenerationFromRelease(manifest.Generation)
+	if err != nil {
+		return hostInstallRelease{}, err
+	}
+	return hostInstallRelease{Generation: generation, Runtime: manifest.Runtime}, nil
 }
 
 func lifecycleGenerationFromRelease(source releases.Generation) (lifecycle.Generation, error) {

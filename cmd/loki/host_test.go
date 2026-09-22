@@ -306,12 +306,16 @@ func TestBootstrapReleaseManifestLoadsLifecycleGeneration(t *testing.T) {
 	if err = os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := loadBootstrapHostGeneration(path)
+	loaded, err := loadBootstrapHostRelease(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	decoded := loaded.Generation
 	if decoded.ID != manifest.Generation.ID || decoded.Spec.HostBinaryDigest != manifest.Generation.Spec.HostBinaryDigest {
 		t.Fatalf("decoded generation = %#v", decoded)
+	}
+	if loaded.Runtime != manifest.Runtime {
+		t.Fatalf("runtime requirements = %#v, want %#v", loaded.Runtime, manifest.Runtime)
 	}
 	if _, err = loadBootstrapHostGeneration(""); err == nil {
 		t.Fatal("missing authenticated release manifest was accepted")

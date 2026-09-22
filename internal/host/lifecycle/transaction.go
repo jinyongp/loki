@@ -16,12 +16,16 @@ import (
 )
 
 type InstallationState struct {
-	Scope     string `json:"scope"`
-	Workspace string `json:"workspace"`
+	Scope        string `json:"scope"`
+	Workspace    string `json:"workspace"`
+	DockerAccess string `json:"docker_access,omitempty"`
 }
 
 func (s InstallationState) Valid() bool {
 	if s.Scope != "user" && s.Scope != "system" {
+		return false
+	}
+	if s.DockerAccess != "" && s.DockerAccess != "direct" && s.DockerAccess != "sudo" {
 		return false
 	}
 	return filepath.IsAbs(s.Workspace) &&
