@@ -14,6 +14,7 @@ func TestReleaseGateIncludesEveryRequiredLayer(t *testing.T) {
 		"go test ./...",
 		"go test -race ./...",
 		"go vet ./...",
+		"accept-loki-bootstrap.sh",
 		"accept-loki-go-candidate.sh",
 		"accept-loki-compose.sh",
 		"inspect_image \"$core_image\" Loki",
