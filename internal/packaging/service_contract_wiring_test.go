@@ -15,12 +15,12 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	}
 	nativeContract := "/usr/share/doc/loki/execution-contract.json"
 	for _, relative := range []string{
-		"packaging/native/systemd/loki-go-port-guard.service",
-		"packaging/native/systemd/loki-go-egress-proxy.service",
-		"packaging/native/systemd/loki-go-browser-proxy.service",
-		"packaging/native/systemd/loki-go-browser.service",
-		"packaging/native/systemd/loki-go-launcher.service",
-		"packaging/native/systemd/loki-go-executor.service",
+		"packaging/native/systemd/port-guard.service",
+		"packaging/native/systemd/egress-proxy.service",
+		"packaging/native/systemd/browser-proxy.service",
+		"packaging/native/systemd/browser.service",
+		"packaging/native/systemd/launcher.service",
+		"packaging/native/systemd/executor.service",
 	} {
 		raw, err := os.ReadFile(filepath.Join(root, relative))
 		if err != nil {

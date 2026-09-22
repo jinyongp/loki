@@ -46,6 +46,53 @@ func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 	}
 }
 
+func TestNativeCandidateSourceAssetsUseRoleOnlyNames(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{
+		"packaging/native/systemd",
+		"packaging/native/tmpfiles.d",
+	} {
+		entries, readErr := os.ReadDir(filepath.Join(root, relative))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "loki-") {
+				t.Fatalf("repository-internal native asset keeps redundant prefix: %s/%s", relative, entry.Name())
+			}
+		}
+	}
+
+	build, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-candidate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(build)
+	for source, installed := range map[string]string{
+		"browser-proxy.service": "loki-go-browser-proxy.service",
+		"browser.service":       "loki-go-browser.service",
+		"egress-proxy.service":  "loki-go-egress-proxy.service",
+		"executor.service":      "loki-go-executor.service",
+		"launcher.service":      "loki-go-launcher.service",
+		"mcp.service":           "loki-go-mcp.service",
+		"port-guard.service":    "loki-go-port-guard.service",
+		"runtime.service":       "loki-go-runtime.service",
+		"signing-agent.service": "loki-go-signing-agent.service",
+		"host.target":           "loki-go.target",
+	} {
+		want := "packaging/native/systemd/" + source + "\" \"$ROOT/usr/lib/systemd/system/" + installed + "\""
+		if !strings.Contains(text, want) {
+			t.Fatalf("candidate build does not map %s to installed unit %s", source, installed)
+		}
+	}
+	if !strings.Contains(text, "packaging/native/tmpfiles.d/runtime.conf\" \"$ROOT/usr/lib/tmpfiles.d/loki-go.conf\"") {
+		t.Fatal("candidate build does not map the role-only tmpfiles source to the namespaced installed file")
+	}
+}
+
 func TestCandidateIncludesExecutionContract(t *testing.T) {
 	path, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
@@ -238,7 +285,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-runtime.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "runtime.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +305,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	if strings.Contains(text, "StateDirectory=loki-go/runtime loki-go/") {
 		t.Fatal("root runtime still creates runner state")
 	}
-	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "native", "tmpfiles.d", "loki-go.conf"))
+	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "native", "tmpfiles.d", "runtime.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +328,7 @@ func TestMCPUnitMountsUserSkillsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-mcp.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "mcp.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +361,7 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 		}
 		return string(data)
 	}
-	launcher := read("loki-go-launcher.service")
+	launcher := read("launcher.service")
 	for _, want := range []string{
 		"User=root\n",
 		"ConditionPathExists=/run/docker.sock\n",
@@ -332,7 +379,7 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 			t.Fatalf("launcher received managed toolchain mutation authority: %s", forbidden)
 		}
 	}
-	executor := read("loki-go-executor.service")
+	executor := read("executor.service")
 	for _, want := range []string{
 		"Requires=loki-go-launcher.service\n",
 		"User=loki-executor\n",
@@ -348,7 +395,7 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 		strings.Contains(executor, "ReadWritePaths=-/run/docker.sock") {
 		t.Fatal("executor received Docker authority")
 	}
-	mcp := read("loki-go-mcp.service")
+	mcp := read("mcp.service")
 	if !strings.Contains(mcp, "loki-go-executor.service") ||
 		!strings.Contains(mcp, "InaccessiblePaths=/run/loki-go/launcher -/run/docker.sock /var/lib/loki-go/launcher") ||
 		strings.Contains(mcp, "Requires=loki-go-launcher.service") ||
@@ -367,7 +414,7 @@ func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := os.ReadFile(filepath.Join(root, "loki-go.target"))
+	target, err := os.ReadFile(filepath.Join(root, "host.target"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +452,7 @@ func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-browser.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "browser.service"))
 	if err != nil {
 		t.Fatal(err)
 	}

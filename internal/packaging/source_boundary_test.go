@@ -62,7 +62,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"packaging/images/Dockerfile",
 		"packaging/images/browser.Dockerfile",
 		"packaging/native/execution-contract.json",
-		"packaging/native/systemd/loki-go.target",
+		"packaging/native/systemd/host.target",
 		"scripts/build/build-oci.sh",
 		"scripts/verify/verify-release.sh",
 		"scripts/maintainer/lifecycle.sh",
