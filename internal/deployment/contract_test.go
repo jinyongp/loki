@@ -10,7 +10,7 @@ import (
 
 func repositoryContract(t *testing.T) Contract {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "deployment-contract.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "native", "deployment-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

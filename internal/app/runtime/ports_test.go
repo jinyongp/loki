@@ -11,7 +11,7 @@ import (
 )
 
 func TestProtectedPortPolicyUsesMCPAndExecutionContract(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "go", "execution-contract.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

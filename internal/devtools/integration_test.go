@@ -28,7 +28,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "devtools.toml"), []byte(configuration), 0600); err != nil {
 		t.Fatal(err)
 	}
-	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 
 func TestRunnerExecUsesOnlyContractEnvironment(t *testing.T) {
 	t.Setenv("PRIVATE_PARENT_VALUE", "must-not-pass")
-	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestRunnerExecUsesOnlyContractEnvironment(t *testing.T) {
 }
 
 func TestRunnerExecRejectsRelativeCommands(t *testing.T) {
-	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestRunnerExecRejectsRelativeCommands(t *testing.T) {
 }
 
 func TestRunnerExecSelectsDependencyNetwork(t *testing.T) {
-	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

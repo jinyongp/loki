@@ -7,7 +7,7 @@ import (
 )
 
 func TestServiceProxyOverridesMustMatchExecutionContract(t *testing.T) {
-	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	contract, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 func TestRepositoryDependencyPolicy(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "go", "egress-policy.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "native", "egress-policy.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

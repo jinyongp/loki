@@ -28,7 +28,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	uid := uint32(os.Getuid())
 	socket := filepath.Join(root, "socket", "control.sock")
-	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "go", "execution-contract.json"))
+	contractRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

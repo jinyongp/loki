@@ -11,8 +11,8 @@ func TestProxyPortsUsesValidatedExecutionContract(t *testing.T) {
 	for _, test := range []struct {
 		path, egress, browser string
 	}{
-		{filepath.Join("..", "..", "packaging", "go", "execution-contract.json"), "http://127.0.0.1:18766", "http://127.0.0.1:18767"},
-		{filepath.Join("..", "..", "packaging", "container", "config", "execution-contract.json"), "http://egress:18766", "http://browser-proxy:18767"},
+		{filepath.Join("..", "..", "packaging", "native", "execution-contract.json"), "http://127.0.0.1:18766", "http://127.0.0.1:18767"},
+		{filepath.Join("..", "..", "packaging", "images", "config", "execution-contract.json"), "http://egress:18766", "http://browser-proxy:18767"},
 	} {
 		raw, err := os.ReadFile(test.path)
 		if err != nil {

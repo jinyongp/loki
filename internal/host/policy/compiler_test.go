@@ -18,7 +18,7 @@ func shippedInputs(t *testing.T) (config.Config, execution.Contract) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "go", "execution-contract.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
