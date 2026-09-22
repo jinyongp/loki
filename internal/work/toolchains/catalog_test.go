@@ -1,10 +1,12 @@
 package toolchain
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRepositoryManagedToolchainCatalog(t *testing.T) {
@@ -68,6 +70,34 @@ func TestProvisionCatalogReusesInstalledGenerationsWithoutBundleArtifacts(t *tes
 	}
 	if err := ProvisionCatalog(t.Context(), catalog, bundle, store); err != nil {
 		t.Fatalf("reuse installed catalog generations: %v", err)
+	}
+}
+
+func TestProvisionCatalogProtectsCurrentGenerationsAndCollectsOldOnQuota(t *testing.T) {
+	store := generationStoreFixture(t)
+	old := nodeRelease("22.23.4", strings.Repeat("a", 64))
+	current := nodeRelease("26.9.0", strings.Repeat("b", 64))
+	provisionProjectNode(t, store, old)
+	provisionProjectNode(t, store, current)
+	store.Limits = GenerationLimits{
+		MaxBytes: 1 << 20, MaxGenerations: 1, Retention: 24 * time.Hour,
+	}
+
+	bundle := t.TempDir()
+	if err := os.Mkdir(filepath.Join(bundle, "artifacts"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ProvisionCatalog(t.Context(), Catalog{
+		Version: CatalogVersion,
+		Node:    []NodeRelease{current},
+	}, bundle, store); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Lookup(current.GenerationID()); err != nil {
+		t.Fatalf("current catalog generation was reclaimed: %v", err)
+	}
+	if _, err := store.Lookup(old.GenerationID()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retired catalog generation survived quota collection: %v", err)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const CatalogVersion = 1
@@ -175,10 +176,34 @@ func validateGoCatalog(releases []GoRelease) error {
 	return nil
 }
 
+func catalogGenerationIDs(catalog Catalog) []string {
+	result := make([]string, 0, len(catalog.Node)+len(catalog.Pnpm)+len(catalog.Python)+len(catalog.UV)+len(catalog.Rust)+len(catalog.Go))
+	for _, release := range catalog.Node {
+		result = append(result, release.GenerationID())
+	}
+	for _, release := range catalog.Pnpm {
+		result = append(result, release.GenerationID())
+	}
+	for _, release := range catalog.Python {
+		result = append(result, release.GenerationID())
+	}
+	for _, release := range catalog.UV {
+		result = append(result, release.GenerationID())
+	}
+	for _, release := range catalog.Rust {
+		result = append(result, release.GenerationID())
+	}
+	for _, release := range catalog.Go {
+		result = append(result, release.GenerationID())
+	}
+	return result
+}
+
 func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store GenerationStore) error {
 	if err := catalog.Validate(); err != nil {
 		return err
 	}
+	store.Protected = catalogGenerationIDs(catalog)
 	if !filepath.IsAbs(bundle) || filepath.Clean(bundle) != bundle {
 		return errors.New("toolchain catalog bundle must be a clean absolute path")
 	}
@@ -275,5 +300,6 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 			}
 		}
 	}
-	return nil
+	_, err = store.Collect(ctx, time.Now().UTC())
+	return err
 }

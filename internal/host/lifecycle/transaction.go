@@ -523,19 +523,35 @@ func (e *TransactionEngine) restoreTo(ctx context.Context, kind OperationKind, t
 }
 
 func (e *TransactionEngine) captureBackup(ctx context.Context, journal *OperationJournal, record OperationRecord, snapshot Snapshot) (BackupRecord, error) {
+	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+		if _, err := e.collectStorageLocked(ctx, journal, nil); err != nil {
+			return BackupRecord{}, err
+		}
+	}
 	runtimeSnapshot, err := e.Backend.Snapshot(ctx, record.Kind, snapshot)
 	if err != nil {
 		return BackupRecord{}, err
 	}
 	backup, err := NewBackupRecord(record.Kind, snapshot, runtimeSnapshot, e.now())
 	if err != nil {
+		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+			err = errors.Join(err, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
+		}
 		return BackupRecord{}, err
 	}
 	if err = e.Store.SaveBackup(ctx, backup); err != nil {
+		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+			err = errors.Join(err, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
+		}
 		return BackupRecord{}, err
 	}
+	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+		if _, err = e.collectStorageLocked(ctx, journal, map[string]bool{backup.ID: true}); err != nil {
+			return BackupRecord{}, errors.Join(err, e.discardBackup(ctx, backup))
+		}
+	}
 	if _, err = journal.RecordSnapshot(record.ID, backup.ID, e.now()); err != nil {
-		return BackupRecord{}, err
+		return BackupRecord{}, errors.Join(err, e.discardBackup(ctx, backup))
 	}
 	return backup, nil
 }

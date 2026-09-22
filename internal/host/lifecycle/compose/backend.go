@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -601,10 +602,118 @@ func (b *Backend) snapshotDirectory(ref string) (string, error) {
 		return "", errors.New("compose lifecycle snapshot reference escapes snapshot root")
 	}
 	info, err := os.Lstat(ref)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
 		return "", errors.New("compose lifecycle snapshot directory must be private and real")
 	}
 	return ref, nil
+}
+
+func (b *Backend) RuntimeSnapshotUsage(ctx context.Context, ref string) (int64, error) {
+	dir, err := b.snapshotDirectory(ref)
+	if err != nil {
+		return 0, err
+	}
+	var bytes int64
+	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return errors.New("compose lifecycle snapshot contains a symlink")
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		switch {
+		case info.IsDir():
+			return nil
+		case info.Mode().IsRegular():
+			if info.Size() > 0 && bytes > (1<<62)-info.Size() {
+				return errors.New("compose lifecycle snapshot accounting overflow")
+			}
+			bytes += info.Size()
+			return nil
+		default:
+			return errors.New("compose lifecycle snapshot contains an unsupported object")
+		}
+	})
+	return bytes, err
+}
+
+func (b *Backend) ListRuntimeSnapshots(ctx context.Context) ([]lifecycle.RuntimeSnapshotInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(b.snapshotRoot)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]lifecycle.RuntimeSnapshotInfo, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), ".snapshot-") {
+			return nil, errors.New("compose lifecycle snapshot root contains an unexpected entry")
+		}
+		ref := filepath.Join(b.snapshotRoot, entry.Name())
+		dir, dirErr := b.snapshotDirectory(ref)
+		if dirErr != nil {
+			return nil, dirErr
+		}
+		var manifest snapshotManifest
+		manifestPath := filepath.Join(dir, "manifest.json")
+		if err = readPrivateJSON(manifestPath, &manifest); err != nil {
+			return nil, err
+		}
+		if manifest.Version != snapshotManifestVersion || manifest.Volumes == nil {
+			return nil, errors.New("compose lifecycle snapshot manifest is invalid")
+		}
+		bytes, usageErr := b.RuntimeSnapshotUsage(ctx, dir)
+		if usageErr != nil {
+			return nil, usageErr
+		}
+		info, statErr := os.Stat(manifestPath)
+		if statErr != nil {
+			return nil, statErr
+		}
+		result = append(result, lifecycle.RuntimeSnapshotInfo{
+			Ref: dir, Bytes: bytes, CreatedAt: info.ModTime().UTC(),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].Ref < result[j].Ref
+		}
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result, nil
+}
+
+func (b *Backend) DeleteRuntimeSnapshot(ctx context.Context, ref string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dir, err := b.snapshotDirectory(ref)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if err = os.RemoveAll(dir); err != nil {
+		return err
+	}
+	root, err := os.Open(b.snapshotRoot)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.Sync()
 }
 
 func fileSHA256(path string) (string, error) {

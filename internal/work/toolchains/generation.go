@@ -22,7 +22,9 @@ import (
 const generationMetadataVersion = 1
 
 type GenerationStore struct {
-	Root string
+	Root      string
+	Limits    GenerationLimits
+	Protected []string
 }
 
 type Generation struct {
@@ -178,6 +180,22 @@ func (s GenerationStore) Provision(ctx context.Context, id string, install func(
 	if err = os.WriteFile(filepath.Join(staging, "generation.json"), append(encoded, '\n'), 0444); err != nil {
 		return Generation{}, err
 	}
+	limits, err := s.normalizedLimits()
+	if err != nil {
+		return Generation{}, err
+	}
+	stagedBytes, err := generationDiskUsage(staging)
+	if err != nil {
+		return Generation{}, err
+	}
+	releaseStorage, err := s.lock(ctx, "storage")
+	if err != nil {
+		return Generation{}, err
+	}
+	defer releaseStorage()
+	if _, err = s.collectLocked(ctx, time.Now().UTC(), limits, stagedBytes, 1); err != nil {
+		return Generation{}, err
+	}
 	target := s.generationPath(id)
 	if err = os.Rename(staging, target); err != nil {
 		return Generation{}, err
@@ -204,33 +222,45 @@ func (s GenerationStore) LockArtifact(ctx context.Context, digest string) (func(
 	return s.lock(ctx, "artifact-"+digest)
 }
 
-func (s GenerationStore) lock(ctx context.Context, name string) (func(), error) {
+func (s GenerationStore) tryLock(name string) (func(), bool, error) {
+	if err := s.prepare(); err != nil {
+		return nil, false, err
+	}
 	path := filepath.Join(s.Root, "locks", name+".lock")
 	fd, err := unix.Open(path, unix.O_CREAT|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0600)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	file := os.NewFile(uintptr(fd), name+".lock")
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		_ = file.Close()
-		return nil, errors.New("toolchain lock must be a private regular file")
+		return nil, false, errors.New("toolchain lock must be a private regular file")
 	}
-	for {
-		err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)
-		if err == nil {
-			return func() {
-				_ = unix.Flock(fd, unix.LOCK_UN)
-				_ = file.Close()
-			}, nil
+	if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = file.Close()
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return nil, false, nil
 		}
-		if !errors.Is(err, unix.EWOULDBLOCK) {
-			_ = file.Close()
+		return nil, false, err
+	}
+	return func() {
+		_ = unix.Flock(fd, unix.LOCK_UN)
+		_ = file.Close()
+	}, true, nil
+}
+
+func (s GenerationStore) lock(ctx context.Context, name string) (func(), error) {
+	for {
+		release, locked, err := s.tryLock(name)
+		if err != nil {
 			return nil, err
+		}
+		if locked {
+			return release, nil
 		}
 		select {
 		case <-ctx.Done():
-			_ = file.Close()
 			return nil, ctx.Err()
 		case <-time.After(10 * time.Millisecond):
 		}
@@ -293,11 +323,20 @@ func readReferenceOwner(path string) (string, error) {
 }
 
 func (s GenerationStore) Acquire(id, owner string) (*GenerationLease, error) {
-	if _, err := s.Lookup(id); err != nil {
+	return s.AcquireContext(context.Background(), id, owner)
+}
+
+func (s GenerationStore) AcquireContext(ctx context.Context, id, owner string) (*GenerationLease, error) {
+	releaseGeneration, err := s.lock(ctx, "generation-"+id)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseGeneration()
+	if _, err = s.Lookup(id); err != nil {
 		return nil, err
 	}
 	owner = strings.TrimSpace(owner)
-	if err := validateReferenceOwner(owner); err != nil {
+	if err = validateReferenceOwner(owner); err != nil {
 		return nil, err
 	}
 	refDir := filepath.Join(s.Root, "refs", id)
@@ -384,8 +423,13 @@ func (s GenerationStore) ReleaseOwner(id, owner string) error {
 	if err := validateGenerationID(id); err != nil {
 		return err
 	}
+	releaseGeneration, err := s.lock(context.Background(), "generation-"+id)
+	if err != nil {
+		return err
+	}
+	defer releaseGeneration()
 	owner = strings.TrimSpace(owner)
-	if err := validateReferenceOwner(owner); err != nil {
+	if err = validateReferenceOwner(owner); err != nil {
 		return err
 	}
 	refDir := filepath.Join(s.Root, "refs", id)

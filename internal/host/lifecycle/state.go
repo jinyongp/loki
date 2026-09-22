@@ -18,7 +18,8 @@ import (
 const maxLifecycleStateBytes = 1 << 20
 
 type FileStore struct {
-	Root string
+	Root          string
+	StorageLimits LifecycleStorageLimits
 }
 
 func OpenFileStore(root string) (*FileStore, error) {

@@ -46,7 +46,7 @@ func (r launcherToolchainResolver) Resolve(ctx context.Context, owner string, re
 			_ = finish(true)
 			return applauncher.ResolvedToolchains{}, err
 		}
-		lease, err := r.store.Acquire(ref.GenerationID, owner)
+		lease, err := r.store.AcquireContext(ctx, ref.GenerationID, owner)
 		if err != nil {
 			_ = finish(true)
 			return applauncher.ResolvedToolchains{}, fmt.Errorf("lease %s toolchain generation: %w", ref.Family, err)
