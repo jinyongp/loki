@@ -57,6 +57,9 @@ type hostInstallOptions struct {
 	CreateWorkspace      bool
 	PrepareWorkspace     bool
 	AllowSudoWorkspace   bool
+	JSON                 bool
+	PersistCLI           bool
+	CLIPaths             hostCLIInstallPaths
 	DockerAccess         string
 }
 
@@ -72,14 +75,16 @@ func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOption
 	createWorkspace := flags.Bool("create-workspace", false, "explicitly approve creating a missing workspace")
 	prepareWorkspace := flags.Bool("prepare-workspace", false, "explicitly approve the minimal Loki workspace POSIX ACL")
 	allowSudoWorkspace := flags.Bool("allow-sudo-workspace", false, "explicitly allow sudo for approved workspace creation or ACL changes")
+	jsonOutput := flags.Bool("json", false, "emit machine-readable installation result")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return hostInstallOptions{}, errors.New("usage: loki host install [--system] [--workspace PATH] [--create-workspace] [--prepare-workspace] [--allow-sudo-workspace] [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH]")
+		return hostInstallOptions{}, errors.New("usage: loki host install [--system] [--workspace PATH] [--create-workspace] [--prepare-workspace] [--allow-sudo-workspace] [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH] [--json]")
 	}
 	result := hostInstallOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot), Workspace: strings.TrimSpace(*workspace),
 		ReleaseManifest: strings.TrimSpace(*releaseManifest), InstallPrerequisites: *installPrerequisites,
 		AllowSudoDocker: *allowSudoDocker, CreateWorkspace: *createWorkspace,
 		PrepareWorkspace: *prepareWorkspace, AllowSudoWorkspace: *allowSudoWorkspace,
+		JSON: *jsonOutput,
 	}
 	if result.Workspace != "" {
 		if _, err := cleanInstallWorkspacePath(result.Workspace); err != nil {
@@ -138,6 +143,16 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	options.CLIPaths, err = resolveHostCLIInstallPaths(options.System, release.Generation.ID)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err = preflightHostCLIInstall(options.CLIPaths); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	options.PersistCLI = true
 
 	ctx := context.Background()
 	executor := execHostCommandExecutor{}
@@ -196,9 +211,38 @@ func runHostInstallWith(
 	if options.System {
 		scope = "system"
 	}
-	if err = store.InitializeInstall(ctx, candidate, lifecycle.InstallationState{
+	installation := lifecycle.InstallationState{
 		Scope: scope, Workspace: options.Workspace, DockerAccess: options.DockerAccess,
-	}, lifecycleTimeNow()); err != nil {
+	}
+	if _, statErr := os.Stat(filepath.Join(options.StateRoot, "host.json")); statErr == nil {
+		snapshot, snapshotErr := store.Snapshot(ctx)
+		if snapshotErr != nil {
+			fmt.Fprintln(stderr, snapshotErr)
+			return 1
+		}
+		if snapshot.Installed != nil && snapshot.Installed.ID == candidate.ID &&
+			snapshot.Installation != nil && *snapshot.Installation == installation {
+			if err = backend.Health(ctx); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			if options.PersistCLI {
+				if err = publishHostCLI(options.CLIPaths, candidate); err != nil {
+					fmt.Fprintln(stderr, err)
+					return 1
+				}
+			}
+			if err = writeHostInstallResult(stdout, options, candidate, "", true); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			return 0
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		fmt.Fprintln(stderr, statErr)
+		return 1
+	}
+	if err = store.InitializeInstall(ctx, candidate, installation, lifecycleTimeNow()); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -214,7 +258,13 @@ func runHostInstallWith(
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = json.NewEncoder(stdout).Encode(result); err != nil {
+	if options.PersistCLI {
+		if err = publishHostCLI(options.CLIPaths, candidate); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	if err = writeHostInstallResult(stdout, options, candidate, result.PlanID, false); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

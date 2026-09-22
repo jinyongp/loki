@@ -239,7 +239,7 @@ func TestRunHostInstallWithInitializesTransactionalState(t *testing.T) {
 		Workspace:    workspace,
 		DockerAccess: hostDockerAccessSudo,
 	}, candidate, backend, &stdout, &stderr)
-	if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "\"plan_id\":") {
+	if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "Loki installed successfully.") {
 		t.Fatalf("install code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	store, err := lifecycle.OpenFileStore(stateRoot)
