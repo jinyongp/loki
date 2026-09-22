@@ -12,7 +12,6 @@ import (
 
 	"loki/internal/fault"
 	"loki/internal/rpc"
-	"loki/internal/service"
 )
 
 type repeatedStrings []string
@@ -29,7 +28,7 @@ func runSecretProcess(args []string, stdout, stderr io.Writer) int {
 	return executeSecretProcess(args, client, stdout, stderr)
 }
 
-func executeSecretProcess(args []string, client service.RuntimeCaller, stdout, stderr io.Writer) int {
+func executeSecretProcess(args []string, client rpc.Caller, stdout, stderr io.Writer) int {
 	if len(args) == 0 || (args[0] != "start" && args[0] != "restart") {
 		fmt.Fprintln(stderr, "secret-process requires start or restart")
 		return 2

@@ -13,12 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	appbrowser "loki/internal/app/browser"
+	mcpapp "loki/internal/app/mcp"
+	appruntime "loki/internal/app/runtime"
 	"loki/internal/auth"
 	"loki/internal/config"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
-	"loki/internal/service"
 	jobsremote "loki/internal/work/jobs/remote"
 )
 
@@ -31,36 +33,36 @@ type mcpLayout struct {
 	Environment                                                           map[string]string
 }
 
-func (l mcpLayout) options(token string) (service.MCPOptions, error) {
+func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	for _, path := range []string{l.RuntimeSocket, l.PortGuardSocket} {
 		if !filepath.IsAbs(path) {
-			return service.MCPOptions{}, errors.New("MCP core socket paths must be absolute")
+			return mcpapp.MCPOptions{}, errors.New("MCP core socket paths must be absolute")
 		}
 	}
 	if l.RuntimeUID == nil || l.PortGuardUID == nil {
-		return service.MCPOptions{}, errors.New("MCP layout requires explicit core service UIDs")
+		return mcpapp.MCPOptions{}, errors.New("MCP layout requires explicit core service UIDs")
 	}
 	hasBrowserSocket := l.BrowserSocket != ""
 	hasBrowserUID := l.BrowserUID != nil
 	if hasBrowserSocket != hasBrowserUID {
-		return service.MCPOptions{}, errors.New("MCP browser socket and UID must be configured together")
+		return mcpapp.MCPOptions{}, errors.New("MCP browser socket and UID must be configured together")
 	}
 	if hasBrowserSocket && (!filepath.IsAbs(l.BrowserSocket) || filepath.Clean(l.BrowserSocket) != l.BrowserSocket) {
-		return service.MCPOptions{}, errors.New("MCP browser peer configuration is invalid")
+		return mcpapp.MCPOptions{}, errors.New("MCP browser peer configuration is invalid")
 	}
 	if !filepath.IsAbs(l.ExecutionContract) {
-		return service.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
+		return mcpapp.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
 	}
 	if !filepath.IsAbs(l.PackagedSkillRoot) {
-		return service.MCPOptions{}, errors.New("MCP packaged Skill root must be absolute")
+		return mcpapp.MCPOptions{}, errors.New("MCP packaged Skill root must be absolute")
 	}
 	for _, path := range append([]string{l.RGPath, l.ExecutionContract, l.PackagedSkillRoot, l.ToolchainStore, l.ToolchainCatalog}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
-			return service.MCPOptions{}, errors.New("MCP resource paths must be absolute")
+			return mcpapp.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
 	}
 
-	options := service.MCPOptions{
+	options := mcpapp.MCPOptions{
 		Runtime:       rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID},
 		PortGuard:     rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID},
 		RuntimeSocket: l.RuntimeSocket,
@@ -71,31 +73,31 @@ func (l mcpLayout) options(token string) (service.MCPOptions, error) {
 		info, statErr := os.Stat(l.BrowserSocket)
 		switch {
 		case statErr == nil && info.Mode()&os.ModeSocket != 0:
-			options.Browser = service.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
+			options.Browser = appbrowser.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
 			options.BrowserSocket = l.BrowserSocket
 		case errors.Is(statErr, os.ErrNotExist):
 			// Optional browser integration is absent from construction.
 		case statErr != nil:
-			return service.MCPOptions{}, fmt.Errorf("inspect MCP browser socket: %w", statErr)
+			return mcpapp.MCPOptions{}, fmt.Errorf("inspect MCP browser socket: %w", statErr)
 		default:
-			return service.MCPOptions{}, errors.New("MCP browser socket path is not a socket")
+			return mcpapp.MCPOptions{}, errors.New("MCP browser socket path is not a socket")
 		}
 	}
 	hasExecutorSocket := l.ExecutorSocket != ""
 	hasExecutorUID := l.ExecutorUID != nil
 	if hasExecutorSocket != hasExecutorUID {
-		return service.MCPOptions{}, errors.New("MCP executor socket and UID must be configured together")
+		return mcpapp.MCPOptions{}, errors.New("MCP executor socket and UID must be configured together")
 	}
 	if hasExecutorSocket {
 		if !filepath.IsAbs(l.ExecutorSocket) || filepath.Clean(l.ExecutorSocket) != l.ExecutorSocket ||
 			l.ExecutorSocket == string(filepath.Separator) || *l.ExecutorUID == 0 {
-			return service.MCPOptions{}, errors.New("MCP executor peer configuration is invalid")
+			return mcpapp.MCPOptions{}, errors.New("MCP executor peer configuration is invalid")
 		}
 		executor, err := jobsremote.NewExecutor(jobsremote.ExecutorOptions{
 			Socket: l.ExecutorSocket, ExpectedUID: l.ExecutorUID, Timeout: 30 * time.Second,
 		})
 		if err != nil {
-			return service.MCPOptions{}, err
+			return mcpapp.MCPOptions{}, err
 		}
 		options.Jobs = executor
 		options.GitJobs = executor
@@ -154,7 +156,7 @@ func runMCP(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid MCP effective policy")
 		return 2
 	}
-	options.Ports, err = service.ProtectedPortPolicy(c.Port, contract)
+	options.Ports, err = appruntime.ProtectedPortPolicy(c.Port, contract)
 	if err != nil {
 		fmt.Fprintln(stderr, "invalid MCP protected-port policy")
 		return 2
@@ -179,7 +181,7 @@ func runMCP(args []string, stderr io.Writer) int {
 	defer listener.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	if err = service.RunMCP(ctx, c, options, listener, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
+	if err = mcpapp.RunMCP(ctx, c, options, listener, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
 		fmt.Fprintln(stderr, "MCP service failed:", err)
 		return 1
 	}

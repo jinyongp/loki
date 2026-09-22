@@ -8,15 +8,15 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"loki/internal/secret"
 )
 
 var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+type SecretEnvironmentResolver func(context.Context, string, []string) ([]string, []string, error)
+
 type Broker struct {
-	Client  *Client
-	Secrets secret.Controller
+	Client         *Client
+	ResolveSecrets SecretEnvironmentResolver
 }
 
 func (b Broker) Call(ctx context.Context, name string, input json.RawMessage, profile string, secretNames []string) (json.RawMessage, error) {
@@ -29,16 +29,18 @@ func (b Broker) Call(ctx context.Context, name string, input json.RawMessage, pr
 	if name != "process start" && name != "process restart" {
 		return nil, errors.New("secret injection is unavailable for this devtools command")
 	}
-	plan, err := b.Secrets.ResolveEnvironment(ctx, profile, secretNames)
+	if b.ResolveSecrets == nil {
+		return nil, errors.New("devtools secret resolver is unavailable")
+	}
+	entries, private, err := b.ResolveSecrets(ctx, profile, secretNames)
 	if err != nil {
 		return nil, err
 	}
-	environment, err := mergeEnvironment(b.Client.Env, plan.Entries())
+	environment, err := mergeEnvironment(b.Client.Env, entries)
 	if err != nil {
 		return nil, err
 	}
 	result, err := b.Client.call(ctx, name, input, environment)
-	private := plan.RedactionValues()
 	if err != nil {
 		message := err.Error()
 		for _, value := range private {

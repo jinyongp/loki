@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"loki/internal/integrations/sharing/previews"
-	"loki/internal/service"
+	mcptransport "loki/internal/transport/mcp"
 	"loki/internal/work/jobs"
 )
 
@@ -361,8 +361,8 @@ func TestRealOCIJobNetworkEndpointPreview(t *testing.T) {
 		}},
 	}}
 	store := previews.New("preview.test", 0, nil)
-	previewController := &service.PreviewController{Store: store, Jobs: controller}
-	handlers := service.PreviewHandlers(previewController, nil)
+	previewController := &mcptransport.PreviewController{Store: store, Jobs: controller}
+	handlers := mcptransport.PreviewHandlers(previewController, nil)
 	requestID := "70000000-0000-4000-8000-000000000099"
 	published, err := handlers["preview_publish"](t.Context(), map[string]any{
 		"action": "job", "request_id": requestID, "job_id": id, "endpoint": endpoint.Name,

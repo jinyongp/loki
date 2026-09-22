@@ -11,6 +11,16 @@ import (
 	"loki/internal/secret"
 )
 
+func testSecretResolver(controller secret.Controller) SecretEnvironmentResolver {
+	return func(ctx context.Context, profile string, names []string) ([]string, []string, error) {
+		plan, err := controller.ResolveEnvironment(ctx, profile, names)
+		if err != nil {
+			return nil, nil, err
+		}
+		return plan.Entries(), plan.RedactionValues(), nil
+	}
+}
+
 func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 	client, _ := fakeClient(t)
 	script := client.Binary
@@ -23,7 +33,7 @@ func TestBrokerInjectsVaultSecretsWithoutReturningThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	controller := testVault(t)
-	broker := Broker{Client: client, Secrets: controller}
+	broker := Broker{Client: client, ResolveSecrets: testSecretResolver(controller)}
 	input := json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)
 	result, err := broker.Call(context.Background(), "process start", input, "project", []string{"TOKEN"})
 	if err != nil {
@@ -43,7 +53,7 @@ func TestBrokerRejectsPrivateOutputAndUnapprovedInjection(t *testing.T) {
 	if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}
-	broker := Broker{Client: client, Secrets: testVault(t)}
+	broker := Broker{Client: client, ResolveSecrets: testSecretResolver(testVault(t))}
 	input := json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)
 	if _, err := broker.Call(context.Background(), "process start", input, "project", []string{"TOKEN"}); err == nil || !strings.Contains(err.Error(), "private output") {
 		t.Fatalf("private response error = %v", err)
@@ -55,7 +65,7 @@ func TestBrokerRejectsPrivateOutputAndUnapprovedInjection(t *testing.T) {
 
 func TestBrokerRejectsProcessWithoutEncryptedSecrets(t *testing.T) {
 	client, log := fakeClient(t)
-	broker := Broker{Client: client, Secrets: testVault(t)}
+	broker := Broker{Client: client, ResolveSecrets: testSecretResolver(testVault(t))}
 	input := json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`)
 	if _, err := broker.Call(context.Background(), "process start", input, "", nil); err == nil || !strings.Contains(err.Error(), "requires selected") {
 		t.Fatalf("empty-secret error = %v", err)

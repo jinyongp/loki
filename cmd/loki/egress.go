@@ -13,10 +13,10 @@ import (
 	"strings"
 	"syscall"
 
+	appnetwork "loki/internal/app/network"
 	"loki/internal/audit"
 	"loki/internal/daemon"
 	"loki/internal/egress"
-	"loki/internal/service"
 )
 
 const maxEgressForwards = 8
@@ -202,7 +202,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 	for _, forward := range bound {
 		forward := forward
 		go func() {
-			err := service.RunTCPForward(ctx, forward.listener, forward.target)
+			err := appnetwork.RunTCPForward(ctx, forward.listener, forward.target)
 			forwardDone <- err
 			if err != nil {
 				cancel()
@@ -210,7 +210,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		}()
 	}
 
-	err = service.RunAuthenticatedEgressProxy(
+	err = appnetwork.RunAuthenticatedEgressProxy(
 		ctx, listener, policy, *profile, authToken, log,
 		func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") },
 		func(error) { fmt.Fprintln(stderr, "egress audit write failed") },

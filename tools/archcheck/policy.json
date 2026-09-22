@@ -138,10 +138,6 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/service"
-    },
-    {
-      "from": "loki/cmd/loki",
       "to": "loki/internal/integrations/signing"
     },
     {
@@ -254,10 +250,6 @@
     },
     {
       "from": "loki/internal/contract",
-      "to": "loki/internal/integrations/github"
-    },
-    {
-      "from": "loki/internal/service",
       "to": "loki/internal/integrations/github"
     },
     {
@@ -405,30 +397,6 @@
       "to": "loki/internal/work/jobs"
     },
     {
-      "from": "loki/internal/service",
-      "to": "loki/internal/control/identity"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/control/policy"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/integrations/browser"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/integrations/sharing/artifacts"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/integrations/sharing/previews"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
       "from": "loki/internal/secret",
       "to": "loki/internal/fault"
     },
@@ -455,14 +423,6 @@
     {
       "from": "loki/tools/renderhostassets",
       "to": "loki/internal/host/assets"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/transport/mcp/workspace"
-    },
-    {
-      "from": "loki/internal/service",
-      "to": "loki/internal/work/workspace"
     },
     {
       "from": "loki/internal/transport/mcp/workspace",
@@ -507,130 +467,261 @@
     {
       "from": "loki/tools/readinessprobe",
       "to": "loki/internal/process"
-    }
-  ],
-  "edge_exceptions": [
-    {
-      "from": "loki/internal/devtools",
-      "reason": "devtools adapter brokers secrets directly",
-      "remove_unit": "A04/S04",
-      "to": "loki/internal/secret"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/agentcontext"
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/browser"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/audit"
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/mcp"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/auth"
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/network"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/buildinfo"
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/runtime"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/config"
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/control/identity"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/contract"
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/control/policy"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
+      "from": "loki/internal/app/browser",
       "to": "loki/internal/daemon"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/devtools"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/dockerproxy"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/egress"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/execution"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
+      "from": "loki/internal/app/browser",
       "to": "loki/internal/fault"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/mcpserver"
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/integrations/browser"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/policy"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/portguard"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
+      "from": "loki/internal/app/browser",
       "to": "loki/internal/rpc"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/agentcontext"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/auth"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/integrations/sharing/artifacts"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/integrations/sharing/previews"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/mcpserver"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/transport/mcp"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/transport/mcp/workspace"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/work/jobs"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/internal/work/workspace"
+    },
+    {
+      "from": "loki/internal/app/network",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/internal/app/network",
+      "to": "loki/internal/egress"
+    },
+    {
+      "from": "loki/internal/app/network",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/agentcontext"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/devtools"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/dockerproxy"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/execution"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/integrations/github"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/app/runtime",
       "to": "loki/internal/secret"
     },
     {
-      "from": "loki/internal/service",
-      "reason": "legacy service umbrella crosses composition/transport/feature ownership",
-      "remove_unit": "S03/S04/S05",
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/agentcontext"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/audit"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/contract"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/devtools"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/integrations/github"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/integrations/sharing/artifacts"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/integrations/sharing/previews"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/mcpserver"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
       "to": "loki/internal/work/jobs"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/internal/work/workspace"
     }
   ],
+  "edge_exceptions": [],
   "export_rules": [
     {
       "allowed_tags": [
@@ -695,11 +786,43 @@
       "tags": [],
       "target": "control/audit"
     },
+    "loki/internal/app/browser": {
+      "kind": "app",
+      "owner": "browser",
+      "tags": [
+        "browser-worker"
+      ],
+      "target": "app/browser"
+    },
     "loki/internal/app/executor": {
       "kind": "app",
       "owner": "executor",
       "tags": [],
       "target": "app/executor"
+    },
+    "loki/internal/app/mcp": {
+      "kind": "app",
+      "owner": "mcp",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "app/mcp"
+    },
+    "loki/internal/app/network": {
+      "kind": "app",
+      "owner": "network",
+      "tags": [],
+      "target": "app/network"
+    },
+    "loki/internal/app/runtime": {
+      "kind": "app",
+      "owner": "runtime",
+      "tags": [
+        "devtools",
+        "platform-credential-store",
+        "provider-private-key"
+      ],
+      "target": "app/runtime"
     },
     "loki/internal/app/launcher": {
       "kind": "app",
@@ -894,6 +1017,14 @@
       ],
       "target": "work/workspace/git"
     },
+    "loki/internal/transport/mcp": {
+      "kind": "transport",
+      "owner": "mcp",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "transport/mcp"
+    },
     "loki/internal/transport/mcp/workspace": {
       "kind": "transport",
       "owner": "workspace",
@@ -975,15 +1106,6 @@
         "platform-credential-store"
       ],
       "target": "work/secrets + control/credentials"
-    },
-    "loki/internal/service": {
-      "kind": "legacy-umbrella",
-      "owner": "composition",
-      "tags": [
-        "mcp-wire",
-        "project-execution-local"
-      ],
-      "target": "app + transport + feature owners"
     },
     "loki/internal/integrations/signing": {
       "kind": "integration",

@@ -15,7 +15,6 @@ import (
 	"loki/internal/fault"
 	"loki/internal/integrations/github"
 	"loki/internal/rpc"
-	"loki/internal/service"
 )
 
 func runAdministration(args []string, stdout, stderr io.Writer) int {
@@ -23,7 +22,7 @@ func runAdministration(args []string, stdout, stderr io.Writer) int {
 	return executeAdministration(args, rpc.Client{Socket: "/run/loki-go/runtime/control.sock", ExpectedUID: &uid}, stdout, stderr)
 }
 
-func executeAdministration(args []string, client service.RuntimeCaller, stdout, stderr io.Writer) int {
+func executeAdministration(args []string, client rpc.Caller, stdout, stderr io.Writer) int {
 	return executeAdministrationInput(args, client, func(ctx context.Context, prompt io.Writer, multiline bool) (string, error) {
 		if multiline {
 			return admin.ReadPrivateKey(ctx, prompt)
@@ -32,7 +31,7 @@ func executeAdministration(args []string, client service.RuntimeCaller, stdout, 
 	}, stdout, stderr)
 }
 
-func executeAdministrationInput(args []string, client service.RuntimeCaller, readSecret func(context.Context, io.Writer, bool) (string, error), stdout, stderr io.Writer) int {
+func executeAdministrationInput(args []string, client rpc.Caller, readSecret func(context.Context, io.Writer, bool) (string, error), stdout, stderr io.Writer) int {
 	request, err := admin.Request(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "loki:", fault.Public(err))

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/service"
+	appruntime "loki/internal/app/runtime"
 )
 
 func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
@@ -142,7 +142,7 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	var runtime struct {
-		service.RuntimeOptions
+		appruntime.RuntimeOptions
 		ExecutionContract string
 	}
 	if err = json.Unmarshal(data, &runtime); err != nil {

@@ -44,6 +44,24 @@ type Peer struct {
 	PID      int32
 	UID, GID uint32
 }
+type Caller interface {
+	Call(context.Context, any) (json.RawMessage, error)
+}
+
+func DecodeCall(ctx context.Context, client Caller, request any, out any) error {
+	if client == nil {
+		return fault.Error("runtime is unavailable")
+	}
+	raw, err := client.Call(ctx, request)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(raw, out); err != nil {
+		return fault.Error("invalid runtime response")
+	}
+	return nil
+}
+
 type Handler func(context.Context, json.RawMessage) (any, error)
 type Operation struct {
 	Grant  controlpolicy.Grant

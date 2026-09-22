@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"syscall"
 
+	appnetwork "loki/internal/app/network"
 	"loki/internal/daemon"
 	"loki/internal/platform/netguard"
 	"loki/internal/rpc"
-	"loki/internal/service"
 )
 
 func runBrowserProxy(args []string, stderr io.Writer) int {
@@ -55,7 +55,7 @@ func runBrowserProxy(args []string, stderr io.Writer) int {
 	defer listener.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	if err = service.RunBrowserProxy(ctx, listener, policy, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
+	if err = appnetwork.RunBrowserProxy(ctx, listener, policy, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
 		fmt.Fprintln(stderr, "browser proxy failed")
 		return 1
 	}

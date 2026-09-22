@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	appruntime "loki/internal/app/runtime"
 	"loki/internal/control/identity"
 	"loki/internal/integrations/github"
 	"loki/internal/rpc"
 	"loki/internal/secret"
-	"loki/internal/service"
 )
 
 type adminCall func(context.Context, any) (json.RawMessage, error)
@@ -33,7 +33,7 @@ func TestSecretCLIImportsOnlyDeleteConfirmedSources(t *testing.T) {
 	if _, err := controller.CreateProfile(t.Context(), "fixture"); err != nil {
 		t.Fatal(err)
 	}
-	ops := service.SecretOperations(controller)
+	ops := appruntime.SecretOperations(controller)
 	realCall := adminCall(func(ctx context.Context, request any) (json.RawMessage, error) {
 		m := request.(map[string]any)
 		raw, err := json.Marshal(request)
@@ -103,7 +103,7 @@ func TestAdministrativeCLIEncryptedRuntime(t *testing.T) {
 	defer cancel()
 	server := rpc.Server{Principals: identity.ResolverFunc(func(pid int32, uid, gid uint32) identity.Principal {
 		return identity.Principal{Kind: identity.HostAdministrator, PID: pid, UID: uid, GID: gid}
-	}), Operations: service.SecretOperations(controller)}
+	}), Operations: appruntime.SecretOperations(controller)}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, listener) }()
 	t.Cleanup(func() {

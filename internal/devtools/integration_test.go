@@ -85,7 +85,7 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := json.RawMessage(`{"args":["probe"],"dir":".","request-id":"6ab1d7f0-21b6-4d0b-9f47-83be95872c51"}`)
-	result, err := (Broker{Client: client, Secrets: controller}).Call(ctx, "process start", request, "project", []string{"TOKEN"})
+	result, err := (Broker{Client: client, ResolveSecrets: testSecretResolver(controller)}).Call(ctx, "process start", request, "project", []string{"TOKEN"})
 	if err != nil {
 		t.Fatal(err)
 	}

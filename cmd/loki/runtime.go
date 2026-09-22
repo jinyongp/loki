@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 	"syscall"
 
+	appruntime "loki/internal/app/runtime"
 	"loki/internal/config"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
-	"loki/internal/service"
 )
 
 type runtimeLayout struct {
-	service.RuntimeOptions
+	appruntime.RuntimeOptions
 	ExecutionContract string
 }
 
@@ -65,7 +65,7 @@ func runRuntime(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	err = service.RunRuntime(ctx, options, configuration, contract, generation, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
+	err = appruntime.RunRuntime(ctx, options, configuration, contract, generation, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
 	if err != nil {
 		fmt.Fprintln(stderr, "runtime service failed:", err)
 		return 1

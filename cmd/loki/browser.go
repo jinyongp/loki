@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"syscall"
 
+	appbrowser "loki/internal/app/browser"
 	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/integrations/browser"
-	"loki/internal/service"
 )
 
 func runBrowser(args []string, stderr io.Writer) int {
@@ -47,7 +47,7 @@ func runBrowser(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	options := service.BrowserOptions{
+	options := appbrowser.BrowserOptions{
 		Socket: *socket, AgentUID: uint32(*uid), SocketGID: *gid,
 		Browser: browser.Options{
 			Binary: *binary, Profile: *profile, Downloads: *downloads, Proxy: *proxy,
@@ -57,7 +57,7 @@ func runBrowser(args []string, stderr io.Writer) int {
 			MaxUploadBytes: configuration.BrowserMaxUploadBytes,
 		},
 	}
-	if err := service.RunBrowser(ctx, options, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
+	if err := appbrowser.RunBrowser(ctx, options, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }); err != nil {
 		fmt.Fprintln(stderr, "browser service failed:", err)
 		return 1
 	}
