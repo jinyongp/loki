@@ -26,18 +26,35 @@ The repository uses `devtools.toml` as its developer command profile. The
 the supplied release must implement protocol version 1 and the required
 `process start` and `process restart` command schemas.
 
-## Self-hosting
+## Install
 
-The verified self-hosting targets are Linux and WSL2 with Docker Compose v2.
-Build or load the core and optional browser images, then follow the
-[self-hosting runbook](docs/self-hosting.md) for initialization, recovery,
-upgrades, and release acceptance. macOS has a documented host-adapter seam but
-is outside the current support and acceptance gate.
+Ordinary installation is source-free. On a supported clean Ubuntu 24.04 or WSL2
+host, run the authenticated `loki-bootstrap` artifact and follow its prompts:
 
-Authenticated source-free first-install validation uses the standalone
-`loki-bootstrap` artifact described in [First install](docs/first-install.md).
-The public one-line installer remains unadvertised until A14 release acceptance
-passes.
+```sh
+chmod 0755 ./loki-bootstrap
+./loki-bootstrap
+```
+
+The installer selects the workspace, diagnoses the release-declared Docker and
+Compose prerequisites, shows any required host or ACL changes before asking for
+approval, starts the immutable Compose release, and persists the verified
+host-management CLI. It does not require a Loki checkout or a local development
+toolchain. After installation, use `loki host status`, `loki host connection`,
+and `loki host doctor`.
+
+See [First install](docs/first-install.md) for interactive, system-scoped, and
+non-interactive usage. The public one-line installer remains unadvertised until
+A14 release acceptance passes.
+
+## Maintainer self-hosting
+
+Direct source-tree Compose and native/systemd candidate procedures are
+maintainer/release-engineering paths, not the ordinary first-install
+experience. See the [self-hosting runbook](docs/self-hosting.md) for topology
+smoke tests, release acceptance, derived images, and specialized deployments.
+macOS has a documented host-adapter seam but is outside the current support and
+acceptance gate.
 
 ## Go candidate
 

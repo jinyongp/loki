@@ -99,8 +99,13 @@ func TestPublicOneLineInstallerRemainsGated(t *testing.T) {
 	for _, required := range []string{
 		"not published or advertised",
 		"loki-bootstrap",
+		"./loki-bootstrap",
 		"tools/release/bootstrapbuild",
 		"does not need a Loki source checkout",
+		"you do not need to install them manually",
+		"loki host status",
+		"loki host connection",
+		"--install-prerequisites",
 		"A14 release acceptance",
 	} {
 		if !strings.Contains(string(firstInstall), required) {

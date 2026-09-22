@@ -1,29 +1,46 @@
-# Self-host Loki with Compose
+# Maintainer self-hosting with Compose
 
-The current verified host targets are Linux and WSL2. The repository `compose.yaml` defines the portable Linux-container contract for the core `runtime`, `mcp`, and `egress` roles. Browser and signing run as optional profiles. GitHub credentials can be added to the core services through host file paths.
+This page is for source-tree development, release engineering, topology
+acceptance, and specialized self-hosting. It is **not** the ordinary
+first-install procedure. A normal supported-host installation starts from the
+authenticated `loki-bootstrap` artifact and lets `loki host install` handle
+Docker/Compose prerequisite checks, workspace onboarding, embedded assets, and
+persistent host-management CLI installation. See [First install](first-install.md).
 
-## Requirements
+The repository `compose.yaml` is the developer view of the portable
+Linux-container contract. Browser and signing remain optional profiles.
 
-Install current Docker with Compose v2 and Buildx/BuildKit, and choose an absolute workspace path. The repository `compose.yaml` is a generated developer view of the canonical host asset embedded under `internal/host/assets`; edit the canonical asset and regenerate the developer view instead of maintaining a second deployment source.
+## Requirements for source-tree work
 
-Lifecycle mutation is owned by the Go host manager. The retired Compose lifecycle shell is not an install/update/rollback implementation. A source checkout may still use Docker Compose directly for topology and isolation smoke tests, but durable install, backup, restore, update, rollback, optional-component mutation and recovery all go through `loki host`.
+Source-tree Compose work requires current Docker with Compose v2 and
+Buildx/BuildKit. Release/topology acceptance also requires the prerequisites
+listed in [Validation tiers and prerequisites](validation-strategy.md).
+
+The repository `compose.yaml` is generated from the canonical host asset under
+`internal/host/assets`; edit and regenerate the canonical asset instead of
+maintaining a second deployment source.
+
+Lifecycle mutation is owned by the Go host manager. Direct `docker compose`
+commands on this page are smoke/engineering tools, not a second
+install/update/rollback implementation.
 
 ## Host lifecycle
 
-The host manager requires an authenticated release generation. Until the source-checkout-free bootstrap from A13 is published, this interface is intended for verified candidate/release testing rather than an unauthenticated local image tag.
+Ordinary users reach this interface through the authenticated bootstrap. The
+low-level release-manifest handoff is reserved for the bootstrap and
+release-validation fixtures; it is not a manual end-user install step.
+
+After installation, the persistent host CLI provides:
 
 ```sh
-# First install from an authenticated release manifest.
-loki host install \
-  --workspace /absolute/workspace \
-  --bootstrap-release-manifest /secure/loki/release-manifest.json
+loki host status
+loki host connection
+loki host doctor
 
-# Inspect and apply a verified update.
 loki host update status
 loki host update prepare
 loki host update apply
 
-# Durable maintenance operations.
 loki host backup
 loki host restore BACKUP_ID
 loki host rollback

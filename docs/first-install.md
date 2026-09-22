@@ -1,78 +1,143 @@
 # First install
 
-This document is the canonical first-install procedure for the A13/A14 release-validation phase.
+This is the canonical first-install procedure for the A13/A14 release-validation phase.
 
-The public one-line installer is **not published or advertised yet**. Release acceptance must pass before the reserved installer frontend is documented for general use.
+The public one-line installer is **not published or advertised yet**. Until A14 release acceptance passes, obtain the exact `loki-bootstrap` artifact from the release-validation fixture. The final public shell frontend is reserved only as a thin bootstrap downloader; it does not contain lifecycle logic.
 
-## Inputs
+## What you need
 
-A first-install validation fixture provides:
+On a supported clean host, you need only:
 
-- a `loki-bootstrap` binary built for the target host;
-- an embedded initial TUF root and authenticated metadata repository URL in that binary;
-- authenticated release metadata and immutable release targets reachable from that repository;
-- the operator-selected absolute workspace path.
+- Ubuntu 24.04 amd64, or WSL2 running Ubuntu 24.04 amd64;
+- the authenticated `loki-bootstrap` artifact for that host;
+- a directory you want Loki to use as its workspace.
 
-The target host does not need a Loki source checkout or a local Go, Node.js, Python, Rust, or other development compiler/toolchain.
+The target host does not need a Loki source checkout. You do **not** need to install Go, Node.js, pnpm, Python, uv, Rust, Chromium, or any other development toolchain.
 
-## Supported validation hosts
+Docker Engine and Docker Compose v2 are runtime prerequisites, but on supported Ubuntu hosts you do not need to install them manually. If the installed release needs Docker changes, Loki shows the exact prerequisite commands and asks for approval before changing packages or services. Loki never adds the operator to the `docker` group automatically.
 
-A13 validates:
+## Interactive install
 
-- Ubuntu 24.04 amd64;
-- WSL2 running Ubuntu 24.04 amd64.
-
-Other hosts are not part of the A13 first-install acceptance row.
-
-## User-scoped install
-
-Use the exact bootstrap artifact supplied by the release-validation fixture:
+Make the supplied bootstrap executable and run it:
 
 ```sh
 chmod 0755 ./loki-bootstrap
-./loki-bootstrap --workspace /absolute/workspace
+./loki-bootstrap
 ```
 
-The bootstrap authenticates release metadata, selects the matching release, verifies the release manifest and host binary, stages them in private temporary storage, and invokes `loki host install`.
+The installer asks for the workspace when it is not supplied. If the directory does not exist, it shows the exact creation command before asking to create it. If Loki needs a minimal POSIX ACL for the container runtime identity, it shows that exact ACL change before applying it.
 
-To validate a specific release instead of the current release selected by authenticated metadata:
+If Docker Engine or Compose does not satisfy the authenticated release requirements, supported Ubuntu installations show the official Docker apt-repository/package commands before asking whether to run them. An existing compatible Docker installation is left unchanged.
 
-```sh
-./loki-bootstrap \
-  --bootstrap-release 1.2.3 \
-  --workspace /absolute/workspace
+If the current user cannot access an otherwise compatible Docker daemon, Loki does not silently change group membership. Interactive installation can instead offer an explicit sudo-backed host-lifecycle Docker boundary. MCP, executor, and project jobs still do not receive the raw Docker socket.
+
+A successful user-scoped install persists the verified host CLI at:
+
+```text
+~/.local/bin/loki
 ```
+
+The installed Compose runtime remains bound to the operator-approved workspace and publishes MCP only on loopback.
 
 ## System-scoped install
 
-System scope uses the same bootstrap and authenticated release flow:
+For machine-wide host-management ownership, use the same authenticated flow:
 
 ```sh
-sudo ./loki-bootstrap \
-  --system \
-  --workspace /absolute/workspace
+sudo ./loki-bootstrap --system
 ```
 
-The scope changes host-management ownership and paths. It does not change MCP authorization, project execution authority, or the sandbox contract.
+System scope installs the host CLI at:
 
-## What the bootstrap does not do
+```text
+/usr/local/bin/loki
+```
 
-The bootstrap does not:
+The scope changes host-management ownership and paths. It does not broaden MCP authorization, project execution authority, filesystem access, network grants, or Docker authority.
 
-- contain install, update, rollback, backup, restore, or optional-component lifecycle logic;
-- configure a specific MCP client;
+## Non-interactive install
+
+Automation must make every privileged mutation class explicit. For example:
+
+```sh
+./loki-bootstrap \
+  --workspace /srv/workspace \
+  --create-workspace \
+  --prepare-workspace \
+  --install-prerequisites \
+  --allow-sudo-workspace \
+  --allow-sudo-docker
+```
+
+Omit approvals that are not needed by the target host. Missing required input or approval fails instead of prompting when stdin is not interactive.
+
+Use `--json` when the caller needs a machine-readable installation result.
+
+To validate a specific authenticated release instead of the current release selected by metadata:
+
+```sh
+./loki-bootstrap --bootstrap-release 1.2.3
+```
+
+## After installation
+
+The installer prints the installed release, workspace, MCP endpoint, persistent CLI path, and the commands for connection details and health checks.
+
+For user scope:
+
+```sh
+~/.local/bin/loki host status
+~/.local/bin/loki host connection
+~/.local/bin/loki host doctor
+```
+
+For system scope:
+
+```sh
+sudo /usr/local/bin/loki host status --system
+sudo /usr/local/bin/loki host connection --system
+sudo /usr/local/bin/loki host doctor --system
+```
+
+`loki host connection` reports the loopback MCP endpoint, transport, authentication mode, and token-file path. It does not print the token value.
+
+## What the installer handles
+
+The authenticated bootstrap and host manager together:
+
+1. detect the supported host;
+2. authenticate release metadata using the embedded initial TUF root;
+3. select and verify the release manifest and host binary;
+4. validate the release-declared Docker Engine and Compose minimum versions;
+5. request approval for any supported Ubuntu prerequisite changes;
+6. select, create, and minimally prepare the operator-approved workspace;
+7. materialize versioned Compose/configuration assets and a private MCP token;
+8. apply the immutable release images through the transactional host lifecycle;
+9. persist the verified host-management CLI;
+10. report status and connection information.
+
+The operator does not need to manage Compose YAML, internal service identities, fixed UID/GID values, token generation, Docker socket mounts, or Loki-managed language toolchains.
+
+## Safety boundaries
+
+The installer does not:
+
 - trust mutable image tags or unchecked release URLs;
 - accept a workspace-provided trust root;
-- silently broaden workspace permissions;
+- recursively `chmod` the workspace;
+- add the operator to the Docker group automatically;
+- expose the Docker socket to MCP, executor, or project jobs;
+- configure a specific MCP client;
+- silently install packages or elevate privileges in non-interactive mode;
 - require a source checkout or development toolchain.
 
 Lifecycle mutation remains owned by `loki host`.
 
 ## Release engineering
 
-The canonical bootstrap builder lives at `tools/release/bootstrapbuild`. It is a release-engineering tool, not an install-host dependency. It embeds only the authenticated metadata URL and initial trusted TUF root into the standalone bootstrap binary.
+The canonical bootstrap builder lives at `tools/release/bootstrapbuild`. It is release-engineering tooling, not an install-host dependency. It embeds only the authenticated metadata URL and initial trusted TUF root into the standalone bootstrap binary.
 
-Example release-engineering invocation:
+Example:
 
 ```sh
 go run ./tools/release/bootstrapbuild \
