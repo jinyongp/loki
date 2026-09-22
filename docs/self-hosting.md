@@ -85,7 +85,7 @@ To prove that an existing deployment remains unchanged, pass newline-separated f
 
 ## Future macOS extension seam
 
-macOS execution is outside the current support and acceptance gate. The reserved future topology entry point is `scripts/verify/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep the canonical Compose asset, OCI images, container paths, service identities and network boundaries unchanged.
+macOS execution is outside the current support and acceptance gate. The reserved future topology entry point is `scripts/verify/accept-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep the canonical Compose asset, OCI images, container paths, service identities and network boundaries unchanged.
 
 That adapter must validate bind-mount sharing for the selected absolute workspace, provide the host-specific equivalent of the Linux workspace-permission preparation, select a Docker context, and exercise the same topology/isolation assertions as `scripts/verify/accept-compose.sh`. Host lifecycle semantics remain the Go host manager's responsibility on every supported host.
 

@@ -34,7 +34,7 @@
     "PIP_CACHE_DIR":"/var/cache/loki/pip",
     "TMPDIR":"/var/tmp/loki/runner",
     "PATH":"/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
-    "GIT_CONFIG_GLOBAL":"/usr/share/doc/loki/loki-gitconfig",
+    "GIT_CONFIG_GLOBAL":"/usr/share/doc/loki/gitconfig",
     "GIT_CONFIG_NOSYSTEM":"1",
     "GIT_OPTIONAL_LOCKS":"0",
     "LANG":"C.UTF-8",

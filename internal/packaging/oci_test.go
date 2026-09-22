@@ -147,7 +147,7 @@ func TestContainerExecutionContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contract.NetworkProfiles["dependency-install"].Proxy != "http://egress:18766" || contract.Environment["GIT_CONFIG_GLOBAL"] != "/usr/share/doc/loki/loki-gitconfig" {
+	if contract.NetworkProfiles["dependency-install"].Proxy != "http://egress:18766" || contract.Environment["GIT_CONFIG_GLOBAL"] != "/usr/share/doc/loki/gitconfig" {
 		t.Fatal("container execution contract does not use container service paths")
 	}
 }

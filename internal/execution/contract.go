@@ -105,7 +105,7 @@ func (c Contract) Validate() error {
 	if !slices.Contains([]string{"/opt/loki/toolchain/bin:/opt/loki/bin:/usr/local/bin:/usr/bin:/bin", "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin"}, c.Environment["PATH"]) {
 		return errors.New("execution contract PATH is not a supported service layout")
 	}
-	if !slices.Contains([]string{"/etc/loki-go/gitconfig", "/usr/share/doc/loki/loki-gitconfig"}, c.Environment["GIT_CONFIG_GLOBAL"]) {
+	if !slices.Contains([]string{"/etc/loki-go/gitconfig", "/usr/share/doc/loki/gitconfig"}, c.Environment["GIT_CONFIG_GLOBAL"]) {
 		return errors.New("execution contract Git config is not a supported service layout")
 	}
 	requiredEnvironment := map[string]string{

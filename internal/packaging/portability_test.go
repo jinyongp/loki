@@ -54,7 +54,7 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 	for _, required := range []string{
 		"The current verified host targets are Linux and WSL2.",
 		"macOS execution is outside the current support and acceptance gate.",
-		"scripts/verify/accept-loki-compose-macos.sh",
+		"scripts/verify/accept-compose-macos.sh",
 		"Docker Desktop or Colima",
 	} {
 		if !strings.Contains(docs, required) {

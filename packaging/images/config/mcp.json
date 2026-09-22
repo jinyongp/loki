@@ -14,7 +14,7 @@
   "Environment": {
     "HOME": "/home/runner",
     "PATH": "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin",
-    "GIT_CONFIG_GLOBAL": "/usr/share/doc/loki/loki-gitconfig",
+    "GIT_CONFIG_GLOBAL": "/usr/share/doc/loki/gitconfig",
     "GIT_CONFIG_NOSYSTEM": "1",
     "SSH_AUTH_SOCK": "/run/loki/signing/agent.sock",
     "LANG": "C.UTF-8",

@@ -14,7 +14,7 @@ import (
 
 func shippedInputs(t *testing.T) (config.Config, execution.Contract) {
 	t.Helper()
-	c, err := config.Load(filepath.Join("..", "..", "..", "config", "loki-go.toml"))
+	c, err := config.Load(filepath.Join("..", "..", "..", "config", "runtime.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
