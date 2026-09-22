@@ -225,8 +225,9 @@ func TestRunHostInstallWithInitializesTransactionalState(t *testing.T) {
 	backend := &fakeHostRuntimeBackend{}
 	var stdout, stderr bytes.Buffer
 	code := runHostInstallWith(t.Context(), hostInstallOptions{
-		StateRoot: stateRoot,
-		Workspace: workspace,
+		StateRoot:    stateRoot,
+		Workspace:    workspace,
+		DockerAccess: hostDockerAccessSudo,
 	}, candidate, backend, &stdout, &stderr)
 	if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "\"plan_id\":") {
 		t.Fatalf("install code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -241,7 +242,7 @@ func TestRunHostInstallWithInitializesTransactionalState(t *testing.T) {
 	}
 	if backend.active != candidate.ID || snapshot.Installed == nil || snapshot.Installed.ID != candidate.ID ||
 		snapshot.Installation == nil || snapshot.Installation.Scope != "user" ||
-		snapshot.Installation.Workspace != workspace {
+		snapshot.Installation.Workspace != workspace || snapshot.Installation.DockerAccess != hostDockerAccessSudo {
 		t.Fatalf("installed snapshot=%#v backend=%q", snapshot, backend.active)
 	}
 	if raw, err := os.ReadFile(filepath.Join(workspace, "keep.txt")); err != nil || string(raw) != "keep" {

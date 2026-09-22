@@ -16,6 +16,7 @@ type fakeHostExecutor struct {
 	outputs map[string]string
 	errs    map[string]error
 	calls   []string
+	after   func(string)
 }
 
 func (f *fakeHostExecutor) LookPath(name string) (string, error) {
@@ -28,10 +29,15 @@ func (f *fakeHostExecutor) LookPath(name string) (string, error) {
 func (f *fakeHostExecutor) Run(_ context.Context, executable string, args []string, stdin string) ([]byte, error) {
 	key := strings.Join(append([]string{executable}, args...), "::")
 	f.calls = append(f.calls, key)
-	if err := f.errs[key]; err != nil {
+	output := f.outputs[key]
+	err := f.errs[key]
+	if f.after != nil {
+		f.after(key)
+	}
+	if err != nil {
 		return nil, err
 	}
-	return []byte(f.outputs[key]), nil
+	return []byte(output), nil
 }
 
 func runtimeRequirements() releases.RuntimeRequirements {
@@ -179,5 +185,51 @@ func TestPrepareHostDockerRuntimeKeepsWorkingDockerUntouched(t *testing.T) {
 		if strings.Contains(call, "apt-get") {
 			t.Fatalf("working Docker was reconfigured: %q", call)
 		}
+	}
+}
+
+func TestPrepareHostDockerRuntimeUpgradesOutdatedDockerOnlyAfterApproval(t *testing.T) {
+	executor := &fakeHostExecutor{
+		paths: map[string]bool{
+			"docker": true, "sudo": true, "apt-get": true, "install": true, "curl": true,
+			"chmod": true, "tee": true, "systemctl": true,
+		},
+		outputs: map[string]string{
+			"docker::version::--format::{{.Server.Version}}": "27.5.1\n",
+			"docker::compose::version::--short":              "2.38.0\n",
+		},
+		errs: map[string]error{},
+	}
+	executor.after = func(call string) {
+		if call == "sudo::systemctl::enable::--now::docker" {
+			executor.outputs["docker::version::--format::{{.Server.Version}}"] = "29.8.1\n"
+			executor.outputs["docker::compose::version::--short"] = "2.40.0\n"
+		}
+	}
+	host := releases.SupportedHost{
+		Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64",
+	}
+	if _, err := prepareHostDockerRuntime(
+		t.Context(), runtimeRequirements(), host, false, false, executor, nil,
+	); err == nil || !strings.Contains(err.Error(), "--install-prerequisites") {
+		t.Fatalf("outdated Docker without approval error = %v", err)
+	}
+	before := len(executor.calls)
+	var plan strings.Builder
+	probe, err := prepareHostDockerRuntime(
+		t.Context(), runtimeRequirements(), host, true, true, executor, &plan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if probe.Access != hostDockerAccessDirect || probe.DockerVersion != "29.8.1" || probe.ComposeVersion != "2.40.0" {
+		t.Fatalf("upgraded runtime = %#v", probe)
+	}
+	calls := strings.Join(executor.calls[before:], "\n")
+	if !strings.Contains(calls, "apt-get::install::-y::docker-ce::docker-ce-cli::containerd.io::docker-buildx-plugin::docker-compose-plugin") {
+		t.Fatalf("upgrade plan did not install official Docker packages: %s", calls)
+	}
+	if !strings.Contains(plan.String(), "Types: deb") || !strings.Contains(plan.String(), "Signed-By: /etc/apt/keyrings/docker.asc") {
+		t.Fatalf("prerequisite preview omitted docker.sources content: %s", plan.String())
 	}
 }

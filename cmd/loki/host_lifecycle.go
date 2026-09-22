@@ -135,12 +135,10 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 	executor := execHostCommandExecutor{}
 	host := releases.SupportedHost{}
 	if options.InstallPrerequisites {
-		if _, pathErr := executor.LookPath("docker"); pathErr != nil {
-			host, err = bootstrap.DetectHost()
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
+		host, err = bootstrap.DetectHost()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	}
 	probe, err := prepareHostDockerRuntime(

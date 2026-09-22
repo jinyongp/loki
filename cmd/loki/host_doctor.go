@@ -53,14 +53,27 @@ func openHostDoctorRuntime(store *lifecycle.FileStore) (hostDoctorRuntime, error
 	if store == nil {
 		return nil, errors.New("host lifecycle store is not configured")
 	}
-	docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER"))
-	if docker == "" {
-		docker = "docker"
+	if docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER")); docker != "" {
+		return lifecyclecompose.Open(lifecyclecompose.Config{
+			StateRoot: store.Root,
+			Runner:    lifecyclecompose.ExecRunner{Executable: docker},
+		})
 	}
-	return lifecyclecompose.Open(lifecyclecompose.Config{
-		StateRoot: store.Root,
-		Runner:    lifecyclecompose.ExecRunner{Executable: docker},
-	})
+	access := hostDockerAccessDirect
+	if snapshot, err := store.Snapshot(context.Background()); err == nil && snapshot.Installation != nil &&
+		snapshot.Installation.DockerAccess != "" {
+		access = snapshot.Installation.DockerAccess
+	}
+	var runner lifecyclecompose.Runner
+	switch access {
+	case hostDockerAccessDirect:
+		runner = lifecyclecompose.ExecRunner{Executable: "docker"}
+	case hostDockerAccessSudo:
+		runner = lifecyclecompose.ExecRunner{Executable: "sudo", Prefix: []string{"-n", "docker"}}
+	default:
+		return nil, errors.New("host lifecycle Docker access mode is invalid")
+	}
+	return lifecyclecompose.Open(lifecyclecompose.Config{StateRoot: store.Root, Runner: runner})
 }
 
 func parseHostDoctorOptions(args []string, stderr io.Writer) (hostDoctorOptions, error) {

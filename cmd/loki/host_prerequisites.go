@@ -21,6 +21,12 @@ const (
 	maxHostCommandOutput   = 32 << 10
 )
 
+var (
+	errHostDockerUnavailable  = errors.New("Docker Engine is unavailable to the current installation boundary")
+	errHostComposeUnavailable = errors.New("Docker Compose v2 is unavailable to the current installation boundary")
+	errHostRuntimeOutdated    = errors.New("Docker runtime is below the release requirement")
+)
+
 type hostRuntimeProbe struct {
 	Access         string
 	DockerVersion  string
@@ -86,19 +92,19 @@ func probeHostRuntime(
 	}
 	dockerRaw, err := run("version", "--format", "{{.Server.Version}}")
 	if err != nil {
-		return hostRuntimeProbe{}, errors.New("Docker Engine is unavailable to the current installation boundary")
+		return hostRuntimeProbe{}, errHostDockerUnavailable
 	}
 	composeRaw, err := run("compose", "version", "--short")
 	if err != nil {
-		return hostRuntimeProbe{}, errors.New("Docker Compose v2 is unavailable to the current installation boundary")
+		return hostRuntimeProbe{}, errHostComposeUnavailable
 	}
 	dockerVersion := strings.TrimSpace(string(dockerRaw))
 	composeVersion := strings.TrimPrefix(strings.TrimSpace(string(composeRaw)), "v")
 	if err = requireRuntimeVersion("Docker Engine", dockerVersion, requirements.DockerMin); err != nil {
-		return hostRuntimeProbe{}, err
+		return hostRuntimeProbe{}, fmt.Errorf("%w: %v", errHostRuntimeOutdated, err)
 	}
 	if err = requireRuntimeVersion("Docker Compose", composeVersion, requirements.ComposeMin); err != nil {
-		return hostRuntimeProbe{}, err
+		return hostRuntimeProbe{}, fmt.Errorf("%w: %v", errHostRuntimeOutdated, err)
 	}
 	access := hostDockerAccessDirect
 	if command[0] == "sudo" {
@@ -237,46 +243,66 @@ func prepareHostDockerRuntime(
 	if override := strings.TrimSpace(os.Getenv("LOKI_DOCKER")); override != "" {
 		return probeHostRuntime(ctx, requirements, []string{override}, executor)
 	}
-	if direct, err := probeHostRuntime(ctx, requirements, []string{"docker"}, executor); err == nil {
+	direct, directErr := probeHostRuntime(ctx, requirements, []string{"docker"}, executor)
+	if directErr == nil {
 		return direct, nil
 	}
 
 	_, dockerPathErr := executor.LookPath("docker")
-	if dockerPathErr != nil {
-		if !installPrerequisites {
-			return hostRuntimeProbe{}, errors.New("Docker Engine and Compose v2 are required; rerun interactively or pass --install-prerequisites")
-		}
-		if host.Environment == "wsl" {
-			initRaw, readErr := os.ReadFile("/proc/1/comm")
-			if readErr != nil {
-				return hostRuntimeProbe{}, errors.New("cannot determine whether WSL2 systemd is enabled")
-			}
-			if err := validateAutomaticDockerInstallHost(host, string(initRaw)); err != nil {
-				return hostRuntimeProbe{}, err
-			}
-		}
-		steps, err := ubuntuDockerPrerequisitePlan(host)
-		if err != nil {
-			return hostRuntimeProbe{}, err
-		}
-		if planWriter != nil {
-			fmt.Fprintln(planWriter, "Loki needs the following host prerequisites:")
-			for _, step := range steps {
-				fmt.Fprintf(planWriter, "  - %s\n    %s\n", step.Description, formatHostCommand(step, os.Geteuid() == 0))
-			}
-		}
-		if err = executeHostCommandPlan(ctx, steps, executor); err != nil {
-			return hostRuntimeProbe{}, err
-		}
-		if direct, probeErr := probeHostRuntime(ctx, requirements, []string{"docker"}, executor); probeErr == nil {
-			return direct, nil
+	var sudoErr error
+	if allowSudo && dockerPathErr == nil {
+		if sudoProbe, err := probeHostRuntime(ctx, requirements, []string{"sudo", "docker"}, executor); err == nil {
+			return sudoProbe, nil
+		} else {
+			sudoErr = err
 		}
 	}
 
+	installableFailure := dockerPathErr != nil ||
+		errors.Is(directErr, errHostComposeUnavailable) ||
+		errors.Is(directErr, errHostRuntimeOutdated) ||
+		errors.Is(sudoErr, errHostComposeUnavailable) ||
+		errors.Is(sudoErr, errHostRuntimeOutdated)
+	if !installableFailure {
+		return hostRuntimeProbe{}, errors.New("Docker is installed but Loki cannot access the Engine; approve the explicit sudo Docker boundary or fix the Docker daemon/socket access")
+	}
+	if !installPrerequisites {
+		return hostRuntimeProbe{}, errors.New("Docker Engine and Compose v2 do not satisfy this release; rerun interactively or pass --install-prerequisites")
+	}
+	if host.Environment == "wsl" {
+		initRaw, readErr := os.ReadFile("/proc/1/comm")
+		if readErr != nil {
+			return hostRuntimeProbe{}, errors.New("cannot determine whether WSL2 systemd is enabled")
+		}
+		if err := validateAutomaticDockerInstallHost(host, string(initRaw)); err != nil {
+			return hostRuntimeProbe{}, err
+		}
+	}
+	steps, err := ubuntuDockerPrerequisitePlan(host)
+	if err != nil {
+		return hostRuntimeProbe{}, err
+	}
+	if planWriter != nil {
+		fmt.Fprintln(planWriter, "Loki needs the following host prerequisites:")
+		for _, step := range steps {
+			fmt.Fprintf(planWriter, "  - %s\n    %s\n", step.Description, formatHostCommand(step, os.Geteuid() == 0))
+			if step.Stdin != "" {
+				for _, line := range strings.Split(strings.TrimSuffix(step.Stdin, "\n"), "\n") {
+					fmt.Fprintf(planWriter, "      %s\n", line)
+				}
+			}
+		}
+	}
+	if err = executeHostCommandPlan(ctx, steps, executor); err != nil {
+		return hostRuntimeProbe{}, err
+	}
+	if direct, probeErr := probeHostRuntime(ctx, requirements, []string{"docker"}, executor); probeErr == nil {
+		return direct, nil
+	}
 	if allowSudo {
-		if sudoProbe, err := probeHostRuntime(ctx, requirements, []string{"sudo", "docker"}, executor); err == nil {
+		if sudoProbe, probeErr := probeHostRuntime(ctx, requirements, []string{"sudo", "docker"}, executor); probeErr == nil {
 			return sudoProbe, nil
 		}
 	}
-	return hostRuntimeProbe{}, errors.New("Docker is installed but Loki cannot use a compatible Engine and Compose v2; allow the explicit sudo Docker boundary or fix the Docker installation")
+	return hostRuntimeProbe{}, errors.New("Docker prerequisites were installed but the release runtime requirements are still not satisfied")
 }
