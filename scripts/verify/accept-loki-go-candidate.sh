@@ -6,7 +6,7 @@ if test "$#" -ne 1; then
   exit 2
 fi
 
-SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CANDIDATE=$(realpath "$1")
 test -x "$CANDIDATE/install.sh"
 RUN_ID="$$-$(date +%s)"
@@ -25,7 +25,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 docker buildx version >/dev/null 2>&1 || { echo "Docker Buildx with BuildKit is required" >&2; exit 1; }
-docker buildx build --quiet --load --tag "$IMAGE" "$SOURCE_DIR/packaging/go/acceptance"
+docker buildx build --quiet --load --tag "$IMAGE" "$SOURCE_DIR/packaging/native/acceptance"
 
 pass=1
 passes=${LOKI_ACCEPTANCE_PASSES:-2}

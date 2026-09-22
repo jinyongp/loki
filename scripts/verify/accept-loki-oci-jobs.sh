@@ -6,7 +6,7 @@ if test "$#" -ne 0; then
   exit 2
 fi
 
-SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 
 fail() {
   echo "loki OCI Job acceptance: $*" >&2
@@ -43,8 +43,8 @@ case "$allowed_authority" in
   *) fail "allowed authority must use host:443" ;;
 esac
 test -n "$allowed_host" || fail "allowed authority host is empty"
-grep -F "\"$allowed_host\"" "$SOURCE_DIR/packaging/go/egress-policy.json" >/dev/null 2>&1 ||
-  fail "allowed authority is not present in packaging/go/egress-policy.json: $allowed_authority"
+grep -F "\"$allowed_host\"" "$SOURCE_DIR/packaging/native/egress-policy.json" >/dev/null 2>&1 ||
+  fail "allowed authority is not present in packaging/native/egress-policy.json: $allowed_authority"
 
 workspace_owned=0
 if test -n "${LOKI_TEST_DOCKER_WORKSPACE:-}"; then

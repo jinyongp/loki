@@ -6,13 +6,13 @@ if test "$#" -ne 1; then
   exit 2
 fi
 
-SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 case "$1" in
   /*) ;;
   *) echo "output directory must be absolute" >&2; exit 2 ;;
 esac
 
 exec go run "$SOURCE_DIR/tools/toolchainfetch" \
-  --manifest "$SOURCE_DIR/packaging/go/toolchain-manifest.json" \
-  --catalog "$SOURCE_DIR/packaging/go/toolchain-catalog.json" \
+  --manifest "$SOURCE_DIR/packaging/native/toolchain-manifest.json" \
+  --catalog "$SOURCE_DIR/packaging/native/toolchain-catalog.json" \
   --output "$1"

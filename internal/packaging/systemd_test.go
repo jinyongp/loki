@@ -47,7 +47,7 @@ func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 }
 
 func TestCandidateIncludesExecutionContract(t *testing.T) {
-	path, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "execution-contract.json"))
+	path, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	launcher, err := os.ReadFile(filepath.Join(root, "scripts", "loki-devtools-launch"))
+	launcher, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "loki-devtools-launch"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestDevtoolsLauncherUsesRunnerEnvironmentContract(t *testing.T) {
 	if string(launcher) != want {
 		t.Fatalf("devtools launcher = %q, want %q", launcher, want)
 	}
-	build, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-go-candidate.sh"))
+	build, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-go-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,21 +91,21 @@ func TestCandidateToolchainBundleBindsManagedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundleScript, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-toolchain-bundle.sh"))
+	bundleScript, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-toolchain-bundle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(bundleScript), `--catalog "$SOURCE_DIR/packaging/go/toolchain-catalog.json"`) {
+	if !strings.Contains(string(bundleScript), `--catalog "$SOURCE_DIR/packaging/native/toolchain-catalog.json"`) {
 		t.Fatal("toolchain bundle build does not include the managed catalog")
 	}
-	candidate, err := os.ReadFile(filepath.Join(root, "scripts", "build-loki-go-candidate.sh"))
+	candidate, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-loki-go-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
 		`"$TOOLCHAIN_BUNDLE/catalog.json"`,
-		`cmp "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$TOOLCHAIN_BUNDLE/catalog.json"`,
-		`install -m 0644 "$SOURCE_DIR/packaging/go/toolchain-catalog.json" "$ROOT/usr/share/doc/loki/toolchain-catalog.json"`,
+		`cmp "$SOURCE_DIR/packaging/native/toolchain-catalog.json" "$TOOLCHAIN_BUNDLE/catalog.json"`,
+		`install -m 0644 "$SOURCE_DIR/packaging/native/toolchain-catalog.json" "$ROOT/usr/share/doc/loki/toolchain-catalog.json"`,
 	} {
 		if !strings.Contains(string(candidate), want) {
 			t.Fatalf("candidate build does not bind managed catalog contract: %s", want)
@@ -115,7 +115,7 @@ func TestCandidateToolchainBundleBindsManagedCatalog(t *testing.T) {
 
 func waitScript(t *testing.T) string {
 	t.Helper()
-	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "wait-for-loki-sockets.sh"))
+	path, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "wait-for-loki-sockets.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,11 +124,11 @@ func waitScript(t *testing.T) string {
 
 func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 	root := t.TempDir()
-	templates, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go"))
+	templates, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "render-loki-go-layouts.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "maintainer", "render-loki-go-layouts.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-runtime.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-runtime.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	if strings.Contains(text, "StateDirectory=loki-go/runtime loki-go/") {
 		t.Fatal("root runtime still creates runner state")
 	}
-	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "go", "tmpfiles.d", "loki-go.conf"))
+	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "native", "tmpfiles.d", "loki-go.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestMCPUnitMountsUserSkillsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-mcp.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-mcp.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestMCPUnitMountsUserSkillsReadOnly(t *testing.T) {
 }
 
 func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "systemd"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "systemd"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func TestJobRoleUnitsKeepLauncherAuthorityNarrow(t *testing.T) {
 }
 
 func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "go", "systemd"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "packaging", "native", "systemd"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +405,7 @@ func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unit, err := os.ReadFile(filepath.Join(root, "packaging", "go", "systemd", "loki-go-browser.service"))
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "loki-go-browser.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stage, err := os.ReadFile(filepath.Join(root, "scripts", "stage-loki-go-candidate.sh"))
+	stage, err := os.ReadFile(filepath.Join(root, "scripts", "maintainer", "stage-loki-go-candidate.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

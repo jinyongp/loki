@@ -15,12 +15,12 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	}
 	nativeContract := "/usr/share/doc/loki/execution-contract.json"
 	for _, relative := range []string{
-		"packaging/go/systemd/loki-go-port-guard.service",
-		"packaging/go/systemd/loki-go-egress-proxy.service",
-		"packaging/go/systemd/loki-go-browser-proxy.service",
-		"packaging/go/systemd/loki-go-browser.service",
-		"packaging/go/systemd/loki-go-launcher.service",
-		"packaging/go/systemd/loki-go-executor.service",
+		"packaging/native/systemd/loki-go-port-guard.service",
+		"packaging/native/systemd/loki-go-egress-proxy.service",
+		"packaging/native/systemd/loki-go-browser-proxy.service",
+		"packaging/native/systemd/loki-go-browser.service",
+		"packaging/native/systemd/loki-go-launcher.service",
+		"packaging/native/systemd/loki-go-executor.service",
 	} {
 		raw, err := os.ReadFile(filepath.Join(root, relative))
 		if err != nil {
@@ -30,7 +30,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 			t.Fatalf("%s does not bind the native execution contract", relative)
 		}
 	}
-	nativeLayout, err := os.ReadFile(filepath.Join(root, "packaging/go/mcp.json.in"))
+	nativeLayout, err := os.ReadFile(filepath.Join(root, "packaging/native/mcp.json.in"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 		!strings.Contains(string(nativeLayout), `"ToolchainCatalog": "/usr/share/doc/loki/toolchain-catalog.json"`) {
 		t.Fatal("native MCP layout does not bind managed toolchain inputs")
 	}
-	launcherLayout, err := os.ReadFile(filepath.Join(root, "packaging/go/launcher.json.in"))
+	launcherLayout, err := os.ReadFile(filepath.Join(root, "packaging/native/launcher.json.in"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(launcherLayout), `"MaxConcurrentJobs": 8`) {
 		t.Fatal("native launcher layout does not bind the concurrent Job limit")
 	}
-	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/loki-go-lifecycle.sh"))
+	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/maintainer/loki-go-lifecycle.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 			t.Fatalf("native lifecycle does not provision managed toolchains: %s", want)
 		}
 	}
-	containerLauncherRaw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/launcher.json"))
+	containerLauncherRaw, err := os.ReadFile(filepath.Join(root, "packaging/images/config/launcher.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
-	raw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/mcp.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "packaging/images/config/mcp.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

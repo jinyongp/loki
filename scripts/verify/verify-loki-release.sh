@@ -6,7 +6,7 @@ if test "$#" -ne 3; then
   exit 2
 fi
 
-repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 candidate=$(realpath "$1")
 core_image=$2
 browser_image=$3
@@ -29,8 +29,8 @@ go test ./...
 go test -race ./...
 go vet ./...
 
-"$repo/scripts/accept-loki-go-candidate.sh" "$candidate"
+"$repo/scripts/verify/accept-loki-go-candidate.sh" "$candidate"
 LOKI_IMAGE=$core_image LOKI_BROWSER_IMAGE=$browser_image \
-  "$repo/scripts/accept-loki-compose.sh"
+  "$repo/scripts/verify/accept-loki-compose.sh"
 
 printf 'loki release verification: passed\n'

@@ -9,7 +9,7 @@ import (
 )
 
 func TestReleaseGateIncludesEveryRequiredLayer(t *testing.T) {
-	gate := readPortabilityFile(t, filepath.Join("..", "..", "scripts", "verify-loki-release.sh"))
+	gate := readPortabilityFile(t, filepath.Join("..", "..", "scripts", "verify", "verify-loki-release.sh"))
 	for _, required := range []string{
 		"go test ./...",
 		"go test -race ./...",
@@ -27,7 +27,7 @@ func TestReleaseGateIncludesEveryRequiredLayer(t *testing.T) {
 
 func TestDocumentedRepositoryScriptsExist(t *testing.T) {
 	root := filepath.Join("..", "..")
-	reference := regexp.MustCompile(`\./(scripts/[A-Za-z0-9._-]+)`)
+	reference := regexp.MustCompile(`\./(scripts/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+)`)
 	documents := []string{
 		filepath.Join(root, "README.md"),
 		filepath.Join(root, "docs", "go-candidate-runbook.md"),
@@ -48,6 +48,23 @@ func TestDocumentedRepositoryScriptsExist(t *testing.T) {
 			if info.Mode()&0111 == 0 {
 				t.Errorf("%s references non-executable %s", document, match[1])
 			}
+		}
+	}
+}
+
+func TestPublicInstallerAdvertisingRemainsGated(t *testing.T) {
+	root := filepath.Join("..", "..")
+	for _, relative := range []string{
+		"README.md",
+		"docs/first-install.md",
+		"docs/installation-distribution-plan.md",
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "curl -fsSL https://jinyongp.dev/loki/install.sh") {
+			t.Fatalf("%s advertises the pre-A14 public installer", relative)
 		}
 	}
 }

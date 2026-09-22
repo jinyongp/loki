@@ -413,7 +413,7 @@
       "to": "loki/internal/platform/safeio"
     },
     {
-      "from": "loki/tools/bootstrapbuild",
+      "from": "loki/tools/release/bootstrapbuild",
       "to": "loki/internal/host/releases"
     },
     {
@@ -1129,14 +1129,14 @@
       ],
       "target": "work/toolchains"
     },
-    "loki/tools/bootstrapbuild": {
+    "loki/tools/release/bootstrapbuild": {
       "kind": "tooling",
       "owner": "releases",
       "tags": [
         "tooling",
         "release-trust"
       ],
-      "target": "tools/bootstrapbuild"
+      "target": "tools/release/bootstrapbuild"
     },
     "loki/tools/toolchainfetch": {
       "kind": "tooling",

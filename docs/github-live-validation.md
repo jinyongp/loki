@@ -38,7 +38,7 @@ automatically add them to Loki's target map.
 - Fresh amd64/arm64 core and browser builds passed. Downloaded tool archives were
   checked against their official release checksums; actual binary hashes are in
   image provenance.
-- The complete `scripts/verify-loki-release.sh` gate passed on `e71e706`, including
+- The complete `scripts/verify/verify-loki-release.sh` gate passed on `e71e706`, including
   full Go tests, full race tests, vet, two systemd candidate runs, populated-state
   Compose restore, credential rotation, upgrade/rollback, derived image and browser.
 - GitHub writes through MCP passed: temporary issue #1 and PR #2 were created,

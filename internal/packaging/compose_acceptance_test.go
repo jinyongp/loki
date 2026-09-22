@@ -8,7 +8,7 @@ import (
 )
 
 func TestComposeAcceptanceIsDisposableTopologySmoke(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "accept-loki-compose.sh"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "verify", "accept-loki-compose.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine:3.24.2@sha256:31b6477333eb8257db9e5d7c3a7264fd0467928756f0bbcc27d35bea5d28cdbd
 COPY --from=build /out/loki /opt/loki/bin/loki
-COPY packaging/go/execution-contract.json packaging/go/egress-policy.json /usr/share/doc/loki/
+COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/
 ENV PATH=/opt/loki/bin:/usr/local/bin:/usr/bin:/bin
 WORKDIR /workspace
 CMD ["/bin/sh"]

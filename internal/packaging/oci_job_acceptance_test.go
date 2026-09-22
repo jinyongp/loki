@@ -20,7 +20,7 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := filepath.Join(root, "scripts", "accept-loki-oci-jobs.sh")
+	script := filepath.Join(root, "scripts", "verify", "accept-loki-oci-jobs.sh")
 	dockerfile := filepath.Join(root, "internal", "platform", "sandbox", "testdata", "oci-image", "Dockerfile")
 	for _, path := range []string{script, dockerfile} {
 		if _, err := os.Stat(path); err != nil {
@@ -117,7 +117,7 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 		"-o /out/loki ./cmd/loki",
 		"FROM alpine:3.24.2@sha256:",
 		"COPY --from=build /out/loki /opt/loki/bin/loki",
-		"COPY packaging/go/execution-contract.json packaging/go/egress-policy.json /usr/share/doc/loki/",
+		"COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/",
 		"CMD [\"/bin/sh\"]",
 	} {
 		if !strings.Contains(body, required) {

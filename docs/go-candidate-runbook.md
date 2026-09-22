@@ -17,8 +17,8 @@
 ## 후보 생성
 
 ```sh
-./scripts/build-loki-toolchain-bundle.sh /tmp/loki-toolchain-bundle
-./scripts/build-loki-go-candidate.sh \
+./scripts/build/build-loki-toolchain-bundle.sh /tmp/loki-toolchain-bundle
+./scripts/build/build-loki-go-candidate.sh \
   /tmp/loki-go-candidate \
   "$(command -v devtools)" \
   /tmp/loki-toolchain-bundle
@@ -29,7 +29,7 @@
 ## 격리 승인
 
 ```sh
-./scripts/accept-loki-go-candidate.sh /tmp/loki-go-candidate
+./scripts/verify/accept-loki-go-candidate.sh /tmp/loki-go-candidate
 ```
 
 기본 실행은 서로 다른 privileged Ubuntu 컨테이너에서 같은 후보를 두 번 검사한다. 각 실행은 다음을 모두 통과해야 한다.
@@ -52,7 +52,7 @@
 Docker 가능한 disposable Linux host에서는 별도 fixture 값을 조합하지 않고 다음 한 명령으로 실제 Job lifecycle/network/endpoint 승인을 실행한다.
 
 ```sh
-./scripts/accept-loki-oci-jobs.sh
+./scripts/verify/accept-loki-oci-jobs.sh
 ```
 
 runner는 현재 Docker Buildx/BuildKit이 준비되어 있는지 먼저 확인한다. 기본 `/var/run/docker.sock`의 peer UID를 확인하고, 임시 shared workspace와 loopback-only Registry 3.1.1을 만든 뒤 현재 checkout에서 gateway 실행 파일과 execution/egress contract만 포함한 최소 fixture 이미지를 BuildKit으로 빌드한다. 이미지를 임시 registry에 push해 immutable `repo@sha256` 참조를 얻은 다음 모든 `TestRealOCIJob*` 케이스를 required mode로 실행하고 자신이 만든 registry/container/workspace/image reference를 정리한다. deprecated legacy Docker builder로의 fallback은 제공하지 않는다. 기본 허용 대상은 committed egress policy에 포함된 `registry.npmjs.org:443`이다.
@@ -64,7 +64,7 @@ Docker socket, workspace, allowlisted authority, daemon peer UID 또는 registry
 systemd 후보와 self-hosting 이미지를 함께 승인할 때는 빌드가 끝난 동일 소스 리비전의 산출물 세 개를 전달한다.
 
 ```sh
-./scripts/verify-loki-release.sh \
+./scripts/verify/verify-loki-release.sh \
   /tmp/loki-go-candidate \
   loki:release-candidate \
   loki-browser:release-candidate
@@ -121,4 +121,4 @@ sudo journalctl -b --no-pager -u 'loki-go*' -n 300
 sudo /usr/local/sbin/loki-go-lifecycle health
 ```
 
-MCP unit은 runtime, port guard, browser, signing, executor socket을 기다린다. executor는 별도의 privileged launcher에만 연결되고 MCP에는 launcher socket이나 Docker socket이 노출되지 않는다. native launcher unit은 `/run/docker.sock` 경로가 있어야 시작하지만, 빈 Job journal에서의 lifecycle health는 Docker daemon의 실제 OCI 실행 가능성까지 검사하지 않는다. 그 기능은 위 `./scripts/accept-loki-oci-jobs.sh` real OCI/network acceptance가 통과해야 증명된다.
+MCP unit은 runtime, port guard, browser, signing, executor socket을 기다린다. executor는 별도의 privileged launcher에만 연결되고 MCP에는 launcher socket이나 Docker socket이 노출되지 않는다. native launcher unit은 `/run/docker.sock` 경로가 있어야 시작하지만, 빈 Job journal에서의 lifecycle health는 Docker daemon의 실제 OCI 실행 가능성까지 검사하지 않는다. 그 기능은 위 `./scripts/verify/accept-loki-oci-jobs.sh` real OCI/network acceptance가 통과해야 증명된다.

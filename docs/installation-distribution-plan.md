@@ -51,35 +51,29 @@ Other Linux distributions may run Loki when a compatible Docker Engine and Docke
 
 Loki is distributed under the Apache License 2.0.
 
-Public installation artifacts should be readable without requiring a GitHub login or another bootstrap credential. The intended distribution channels are:
+Public installation artifacts must be readable without requiring a GitHub login or another bootstrap credential. The intended distribution channels are:
 
-- stable installer frontend: `https://jinyongp.dev/loki/install.sh`
-- host CLI binaries and release metadata: GitHub Releases
+- authenticated release metadata and host/bootstrap binaries: GitHub Releases
 - OCI images: `ghcr.io/jinyongp/loki`
+- reserved post-acceptance installer frontend: `jinyongp.dev/loki/install.sh`
 
-`jinyongp.dev` is the stable user-facing installation URL. The artifact backend may change without changing the documented install command.
+The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). The artifact backend may change later without changing the reserved frontend.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 
 ## Bootstrap architecture
 
-The public shell installer must remain deliberately small. Its responsibilities are limited to:
+The source-free bootstrap is deliberately small. It:
 
-1. Detect the supported operating system and CPU architecture.
-2. Fetch signed or otherwise authenticated release metadata.
-3. Download the matching Loki host-management binary.
-4. Verify its checksum and release authenticity.
-5. Start `loki host install`.
+1. Uses an embedded initial TUF root and authenticated metadata repository URL.
+2. Resolves the requested or current Loki release for the supported host.
+3. Downloads and verifies the matching host binary and release manifest.
+4. Stages the verified inputs privately.
+5. Hands installation to `loki host install`.
 
-The shell bootstrap must not contain the Compose lifecycle implementation. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
+A future public shell frontend may only detect the supported host, download the authenticated bootstrap artifact, and execute it. It must not contain lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
 
-The intended first-install command is:
-
-```sh
-curl -fsSL https://jinyongp.dev/loki/install.sh | sh
-```
-
-The installer should use `/dev/tty` for interactive approval when standard input is occupied by the pipe.
+The canonical pre-release first-install procedure is [docs/first-install.md](first-install.md). No public one-line shell command is documented until A14 release acceptance passes.
 
 ## Installation scope
 
@@ -87,15 +81,7 @@ User-scoped host management is the recommended default because the operator-faci
 
 A system-wide host-management installation remains available explicitly. Both scopes run the same workload, policy and isolation contract and therefore expose the same MCP capabilities and restrictions. Scope changes who owns host-management state and commands; it must not weaken or broaden project execution authority.
 
-The intended entry points are:
-
-```sh
-# Recommended default: user-scoped host manager
-curl -fsSL https://jinyongp.dev/loki/install.sh | sh
-
-# Explicit system-wide host manager
-curl -fsSL https://jinyongp.dev/loki/install.sh | sudo sh -s -- --system
-```
+During A13/A14 validation, both scopes are invoked through the verified `loki-bootstrap` artifact rather than a public installer URL. The bootstrap forwards installation options, including `--system`, to `loki host install`.
 
 The exact host paths are an implementation detail of the selected scope. They must not alter the container runtime contract or MCP authorization boundary.
 

@@ -58,7 +58,7 @@ Only MCP is published, on `127.0.0.1:18765`. Runtime and runner state stay in th
 Run the disposable topology/isolation harness with the exact image intended for validation:
 
 ```sh
-LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/accept-loki-compose.sh
+LOKI_IMAGE=registry.example/loki@sha256:... ./scripts/verify/accept-loki-compose.sh
 ```
 
 The harness creates a unique Compose project under a private temporary directory, prepares the minimal workspace ACL, starts and restarts the core topology, checks role networks and mounts, verifies that credentials are absent from container inspection data, validates a derived project image, exercises optional browser/signing profiles when configured, and removes the disposable stack. Host backup/update/rollback acceptance is separate and belongs to A11/A14 host-manager gates rather than this script.
@@ -67,9 +67,9 @@ To prove that an existing deployment remains unchanged, pass newline-separated f
 
 ## Future macOS extension seam
 
-macOS execution is outside the current support and acceptance gate. The reserved future topology entry point is `scripts/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep the canonical Compose asset, OCI images, container paths, service identities and network boundaries unchanged.
+macOS execution is outside the current support and acceptance gate. The reserved future topology entry point is `scripts/verify/accept-loki-compose-macos.sh`; it is intentionally not implemented yet. A future adapter may target Docker Desktop or Colima, but must keep the canonical Compose asset, OCI images, container paths, service identities and network boundaries unchanged.
 
-That adapter must validate bind-mount sharing for the selected absolute workspace, provide the host-specific equivalent of the Linux workspace-permission preparation, select a Docker context, and exercise the same topology/isolation assertions as `scripts/accept-loki-compose.sh`. Host lifecycle semantics remain the Go host manager's responsibility on every supported host.
+That adapter must validate bind-mount sharing for the selected absolute workspace, provide the host-specific equivalent of the Linux workspace-permission preparation, select a Docker context, and exercise the same topology/isolation assertions as `scripts/verify/accept-loki-compose.sh`. Host lifecycle semantics remain the Go host manager's responsibility on every supported host.
 
 ## Add project runtimes
 
@@ -82,10 +82,10 @@ BASE_ID=$(docker image inspect --format '{{.Id}}' "$BASE_REF")
 docker buildx build --load \
   --build-arg LOKI_BASE="$BASE_REF" \
   --build-arg LOKI_BASE_ID="$BASE_ID" \
-  --file packaging/container/derived/Dockerfile \
+  --file packaging/images/derived/Dockerfile \
   --tag local/loki-project:current \
   .
-./scripts/verify-loki-derived-image.sh "$BASE_REF" local/loki-project:current
+./scripts/verify/verify-loki-derived-image.sh "$BASE_REF" local/loki-project:current
 ```
 
 Copy project runtime binaries and support files only under `/usr/local` or `/opt/project`. Keep the inherited entrypoint, command, user, working directory, labels, Loki binaries, devtools, rg, identity database, workspace metadata, and volume declarations.

@@ -300,7 +300,7 @@ func TestComposeGitHubPrivateKeyIsRuntimeEphemeral(t *testing.T) {
 		hasMount(runtime.Volumes, "/run/loki-private") {
 		t.Fatal("GitHub private key is not isolated in root-only ephemeral storage")
 	}
-	dockerfile, err := os.ReadFile(filepath.Join(root, "packaging", "container", "Dockerfile"))
+	dockerfile, err := os.ReadFile(filepath.Join(root, "packaging", "images", "Dockerfile"))
 	if err != nil {
 		t.Fatal(err)
 	}

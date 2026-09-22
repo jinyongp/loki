@@ -6,7 +6,7 @@ if test "$#" -ne 1; then
   exit 2
 fi
 
-source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 output=$1
 case "$output" in
   /*) ;;
@@ -18,7 +18,7 @@ loki_revision=${LOKI_REVISION:-$(git -C "$source_dir" rev-parse HEAD)}
 loki_date=${LOKI_DATE:-$(git -C "$source_dir" show -s --format=%cI "$loki_revision" 2>/dev/null || printf unknown)}
 
 docker buildx build "$source_dir" \
-  --file "$source_dir/packaging/container/browser.Dockerfile" \
+  --file "$source_dir/packaging/images/browser.Dockerfile" \
   --platform linux/amd64,linux/arm64 \
   --build-arg "LOKI_VERSION=$loki_version" \
   --build-arg "LOKI_REVISION=$loki_revision" \

@@ -277,19 +277,36 @@ func validateEmbeddedTrust(metadataURL string, root []byte) error {
 }
 
 func filteredBuildEnvironment(environment []string, goos, goarch string) []string {
-	result := make([]string, 0, len(environment)+3)
+	result := make([]string, 0, len(environment)+8)
 	for _, entry := range environment {
 		key, _, ok := strings.Cut(entry, "=")
 		if !ok {
 			continue
 		}
 		switch key {
-		case "CGO_ENABLED", "GOOS", "GOARCH":
+		case "CGO_ENABLED", "GOOS", "GOARCH", "GOFLAGS", "GOEXPERIMENT",
+			"GOAMD64", "GOARM64", "GOARM", "GO386", "GOMIPS", "GOMIPS64",
+			"GOPPC64", "GORISCV64", "GOWASM", "GOTOOLCHAIN", "GOENV", "GOWORK":
 			continue
 		default:
 			result = append(result, entry)
 		}
 	}
-	result = append(result, "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	result = append(result,
+		"CGO_ENABLED=0",
+		"GOOS="+goos,
+		"GOARCH="+goarch,
+		"GOFLAGS=",
+		"GOEXPERIMENT=",
+		"GOTOOLCHAIN=local",
+		"GOENV=off",
+		"GOWORK=off",
+	)
+	switch goarch {
+	case "amd64":
+		result = append(result, "GOAMD64=v1")
+	case "arm64":
+		result = append(result, "GOARM64=v8.0")
+	}
 	return result
 }

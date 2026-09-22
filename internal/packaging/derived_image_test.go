@@ -11,7 +11,7 @@ import (
 
 func TestDerivedImageContractIsNarrowAndVersioned(t *testing.T) {
 	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "packaging", "container", "derived-image-contract.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "packaging", "images", "derived-image-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestDerivedImageContractIsNarrowAndVersioned(t *testing.T) {
 }
 
 func TestDerivedDockerfilePreservesLokiConfiguration(t *testing.T) {
-	body := readOCIFile(t, filepath.Join("..", "..", "packaging", "container", "derived", "Dockerfile"))
+	body := readOCIFile(t, filepath.Join("..", "..", "packaging", "images", "derived", "Dockerfile"))
 	for _, required := range []string{"ARG LOKI_BASE", "FROM ${LOKI_BASE}", "io.loki.derived.base=\"${LOKI_BASE_ID}\""} {
 		if !strings.Contains(body, required) {
 			t.Errorf("derived Dockerfile missing %q", required)
@@ -61,7 +61,7 @@ func TestDerivedImageValidatorAcceptsOnlyPreservedImages(t *testing.T) {
 	}
 	fake := filepath.Join(t.TempDir(), "docker")
 	writeExecutable(t, fake, string(fixture))
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "verify-loki-derived-image.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "verify", "verify-loki-derived-image.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

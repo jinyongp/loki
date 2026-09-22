@@ -34,7 +34,7 @@ Go-side migration and compatibility support is not part of the retirement unit.
 In particular, keep `cmd/loki/migrate_vault*`, `internal/secret/migration*`,
 `internal/state/` and its synthetic `testdata/python-v1.json`, and
 `internal/config/testdata/python-v047.toml`. These fixtures do not import or run
-the archived server. The Go systemd candidate under `packaging/go/`, current
+the archived server. The Go systemd candidate under `packaging/native/`, current
 `scripts/`, and Go/Compose configuration also remain current assets.
 
 ## Local validation

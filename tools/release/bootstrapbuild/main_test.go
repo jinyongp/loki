@@ -65,7 +65,12 @@ func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) 
 		validatedRoot = append([]byte(nil), raw...)
 		return nil
 	}
-	environment := []string{"PATH=/usr/bin:/bin", "CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64", "LANG=C.UTF-8"}
+	environment := []string{
+		"PATH=/usr/bin:/bin", "LANG=C.UTF-8",
+		"CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64",
+		"GOFLAGS=-race", "GOEXPERIMENT=arenas", "GOAMD64=v4",
+		"GOTOOLCHAIN=auto", "GOENV=/tmp/goenv", "GOWORK=/tmp/go.work",
+	}
 	if err := buildBootstrapWithValidator(t.Context(), options, runner, environment, validator); err != nil {
 		t.Fatal(err)
 	}
@@ -85,12 +90,19 @@ func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) 
 		!strings.Contains(joined, "main.trustedRootBase64="+encoded) {
 		t.Fatalf("embedded linker flags = %#v", runner.args)
 	}
-	for _, want := range []string{"CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64"} {
+	for _, want := range []string{
+		"CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64", "GOAMD64=v1",
+		"GOFLAGS=", "GOEXPERIMENT=", "GOTOOLCHAIN=local", "GOENV=off", "GOWORK=off",
+	} {
 		if !slices.Contains(runner.env, want) {
 			t.Fatalf("builder environment missing %q: %#v", want, runner.env)
 		}
 	}
-	for _, forbidden := range []string{"CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64"} {
+	for _, forbidden := range []string{
+		"CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64",
+		"GOFLAGS=-race", "GOEXPERIMENT=arenas", "GOAMD64=v4",
+		"GOTOOLCHAIN=auto", "GOENV=/tmp/goenv", "GOWORK=/tmp/go.work",
+	} {
 		if slices.Contains(runner.env, forbidden) {
 			t.Fatalf("builder environment retained %q: %#v", forbidden, runner.env)
 		}

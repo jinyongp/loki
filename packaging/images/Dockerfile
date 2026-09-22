@@ -98,12 +98,12 @@ COPY --from=artifacts --chmod=0755 /ripgrep/${TARGETARCH}/rg /usr/bin/rg
 COPY --from=artifacts --chmod=0755 /gh/${TARGETARCH}/gh /usr/bin/gh
 COPY --from=artifacts /metadata/devtools-catalog.json /usr/share/doc/loki/devtools-catalog.json
 COPY --from=artifacts /metadata/provenance.json /usr/share/doc/loki/provenance.json
-COPY --chmod=0755 scripts/loki-devtools-launch /opt/loki/libexec/devtools
+COPY --chmod=0755 scripts/maintainer/loki-devtools-launch /opt/loki/libexec/devtools
 COPY bundled_skills/ /opt/loki/share/skills/
 COPY config/loki-go.toml config/loki-gitconfig /usr/share/doc/loki/
-COPY packaging/go/execution-contract.json packaging/go/egress-policy.json packaging/go/deployment-contract.json /usr/share/doc/loki/
-COPY packaging/container/config/ /etc/loki/
-COPY packaging/container/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json
+COPY packaging/native/execution-contract.json packaging/native/egress-policy.json packaging/native/deployment-contract.json /usr/share/doc/loki/
+COPY packaging/images/config/ /etc/loki/
+COPY packaging/images/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json
 
 ENV PATH=/opt/loki/bin:/usr/local/bin:/usr/bin:/bin \
     LANG=C.UTF-8 \

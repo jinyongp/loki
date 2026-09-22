@@ -6,7 +6,7 @@ if test "$#" -ne 7; then
   exit 2
 fi
 
-source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 output=$1
 devtools_amd64=$2
 devtools_arm64=$3
@@ -95,7 +95,7 @@ printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtoo
   > "$artifacts/metadata/provenance.json"
 
 docker buildx build "$source_dir" \
-  --file "$source_dir/packaging/container/Dockerfile" \
+  --file "$source_dir/packaging/images/Dockerfile" \
   --platform linux/amd64,linux/arm64 \
   --build-context "artifacts=$artifacts" \
   --build-arg "LOKI_VERSION=$loki_version" \

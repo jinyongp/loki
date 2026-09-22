@@ -25,15 +25,23 @@ func TestRetiredPythonEntrypointsAreOutsideCurrentSource(t *testing.T) {
 
 func TestCurrentPackagingDoesNotDependOnPythonArchive(t *testing.T) {
 	root := filepath.Join("..", "..")
-	paths := []string{".dockerignore", "compose.yaml", "packaging/container/Dockerfile", "packaging/container/browser.Dockerfile"}
-	entries, err := os.ReadDir(filepath.Join(root, "scripts"))
+	paths := []string{".dockerignore", "compose.yaml", "packaging/images/Dockerfile", "packaging/images/browser.Dockerfile"}
+	err := filepath.WalkDir(filepath.Join(root, "scripts"), func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		paths = append(paths, filepath.ToSlash(relative))
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			paths = append(paths, filepath.Join("scripts", entry.Name()))
-		}
 	}
 	for _, name := range paths {
 		raw, err := os.ReadFile(filepath.Join(root, name))
@@ -44,6 +52,38 @@ func TestCurrentPackagingDoesNotDependOnPythonArchive(t *testing.T) {
 			if strings.Contains(string(raw), forbidden) {
 				t.Errorf("current packaging %s depends on %s", name, forbidden)
 			}
+		}
+	}
+}
+
+func TestCanonicalReleasePackagingPaths(t *testing.T) {
+	root := filepath.Join("..", "..")
+	for _, relative := range []string{
+		"packaging/images/Dockerfile",
+		"packaging/images/browser.Dockerfile",
+		"packaging/native/execution-contract.json",
+		"packaging/native/systemd/loki-go.target",
+		"scripts/build/build-loki-oci.sh",
+		"scripts/verify/verify-loki-release.sh",
+		"scripts/maintainer/loki-go-lifecycle.sh",
+		"tools/release/bootstrapbuild/main.go",
+		"docs/first-install.md",
+	} {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(relative)))
+		if err != nil || info.IsDir() {
+			t.Fatalf("canonical release path %s: %v", relative, err)
+		}
+	}
+	for _, obsolete := range []string{
+		"packaging/container/Dockerfile",
+		"packaging/go/execution-contract.json",
+		"scripts/build-loki-oci.sh",
+		"scripts/accept-loki-compose.sh",
+		"scripts/loki-go-lifecycle.sh",
+		"tools/bootstrapbuild/main.go",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(obsolete))); !os.IsNotExist(err) {
+			t.Fatalf("obsolete release path still exists: %s (%v)", obsolete, err)
 		}
 	}
 }

@@ -21,7 +21,7 @@ import (
 
 func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 	root := filepath.Join("..", "..")
-	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "container", "Dockerfile"))
+	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "images", "Dockerfile"))
 	dockerignore := readOCIFile(t, filepath.Join(root, ".dockerignore"))
 	if !strings.HasPrefix(dockerignore, "**\n") || strings.Contains(dockerignore, "pyproject") || strings.Contains(dockerignore, "tests/") {
 		t.Fatal("container build context is not an explicit Go allowlist")
@@ -83,7 +83,7 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 
 func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 	root := filepath.Join("..", "..")
-	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "container", "browser.Dockerfile"))
+	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "images", "browser.Dockerfile"))
 	for _, required := range []string{
 		"ARG TARGETARCH",
 		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
@@ -103,7 +103,7 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 			t.Errorf("browser image contains unrelated dependency %q", forbidden)
 		}
 	}
-	script := readOCIFile(t, filepath.Join(root, "scripts", "build-loki-browser-oci.sh"))
+	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-loki-browser-oci.sh"))
 	for _, required := range []string{"--platform linux/amd64,linux/arm64", "--provenance=mode=max", "type=oci,dest=$output"} {
 		if !strings.Contains(script, required) {
 			t.Errorf("browser build script is missing %q", required)
@@ -113,7 +113,7 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 
 func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 	root := filepath.Join("..", "..")
-	script := readOCIFile(t, filepath.Join(root, "scripts", "build-loki-oci.sh"))
+	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-loki-oci.sh"))
 	for _, required := range []string{
 		"GOARCH=amd64",
 		"GOARCH=arm64",
@@ -139,7 +139,7 @@ func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 }
 
 func TestContainerExecutionContract(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "container", "config", "execution-contract.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "images", "config", "execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

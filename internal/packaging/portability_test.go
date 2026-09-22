@@ -26,8 +26,8 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		filepath.Join(root, "scripts", "build-loki-oci.sh"),
-		filepath.Join(root, "scripts", "build-loki-browser-oci.sh"),
+		filepath.Join(root, "scripts", "build", "build-loki-oci.sh"),
+		filepath.Join(root, "scripts", "build", "build-loki-browser-oci.sh"),
 	} {
 		build := readPortabilityFile(t, path)
 		if !strings.Contains(build, "--platform linux/amd64,linux/arm64") || !strings.Contains(build, "--provenance=mode=max") {
@@ -35,18 +35,18 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 		}
 	}
 
-	candidateAcceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "accept-loki-go-candidate.sh"))
+	candidateAcceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "verify", "accept-loki-go-candidate.sh"))
 	for _, required := range []string{"buildx version", "buildx build --quiet --load"} {
 		if !strings.Contains(candidateAcceptance, required) {
 			t.Errorf("Go candidate acceptance lacks %q", required)
 		}
 	}
-	acceptanceImage := readPortabilityFile(t, filepath.Join(root, "packaging", "go", "acceptance", "Dockerfile"))
+	acceptanceImage := readPortabilityFile(t, filepath.Join(root, "packaging", "native", "acceptance", "Dockerfile"))
 	if !strings.Contains(acceptanceImage, "FROM ubuntu:24.04@sha256:") {
 		t.Fatal("Go candidate acceptance image is not digest-pinned")
 	}
 
-	acceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "accept-loki-compose.sh"))
+	acceptance := readPortabilityFile(t, filepath.Join(root, "scripts", "verify", "accept-loki-compose.sh"))
 	if !strings.Contains(acceptance, "current acceptance target must be Linux or WSL2") {
 		t.Fatal("current acceptance target is not explicit")
 	}
@@ -54,7 +54,7 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 	for _, required := range []string{
 		"The current verified host targets are Linux and WSL2.",
 		"macOS execution is outside the current support and acceptance gate.",
-		"scripts/accept-loki-compose-macos.sh",
+		"scripts/verify/accept-loki-compose-macos.sh",
 		"Docker Desktop or Colima",
 	} {
 		if !strings.Contains(docs, required) {
