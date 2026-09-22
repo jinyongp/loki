@@ -316,23 +316,30 @@ func inspectHostDoctor(
 	} else {
 		launcherLayout = &layout
 		activeJobs, jobsErr := activeJobsFromLauncherLayout(ctx, layout)
+		evidence := []hostdiagnostics.Evidence{
+			{Name: "active_jobs", Value: strconv.Itoa(len(activeJobs))},
+			{Name: "max_concurrent_jobs", Value: strconv.Itoa(layout.MaxConcurrentJobs)},
+		}
 		switch {
 		case jobsErr != nil:
 			checks = append(checks, hostdiagnostics.Blocked(
 				"jobs", "job_journal_unavailable",
 				"job journal could not be validated",
 			))
+		case len(activeJobs) > layout.MaxConcurrentJobs:
+			checks = append(checks, hostdiagnostics.Blocked(
+				"jobs", "active_jobs_over_limit",
+				"active jobs exceed the configured launcher concurrency limit", evidence...,
+			))
 		case len(activeJobs) > 0:
 			checks = append(checks, hostdiagnostics.Degraded(
 				"jobs", "active_jobs_present",
-				"active jobs currently block non-interrupting host maintenance",
-				hostdiagnostics.Evidence{Name: "active_jobs", Value: strconv.Itoa(len(activeJobs))},
+				"active jobs currently block non-interrupting host maintenance", evidence...,
 			))
 		default:
 			checks = append(checks, hostdiagnostics.Healthy(
 				"jobs", "jobs_idle",
-				"no active jobs block host maintenance",
-				hostdiagnostics.Evidence{Name: "active_jobs", Value: "0"},
+				"no active jobs block host maintenance", evidence...,
 			))
 		}
 	}

@@ -18,7 +18,10 @@ const (
 	MaxToolchains     = 8
 )
 
-var ErrReplayConflict = errors.New("job request_id conflicts with retained start input")
+var (
+	ErrReplayConflict  = errors.New("job request_id conflicts with retained start input")
+	ErrJournalCapacity = errors.New("job journal capacity is exhausted")
+)
 
 var (
 	requestIDPattern     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)

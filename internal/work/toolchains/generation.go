@@ -19,7 +19,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const generationMetadataVersion = 1
+const (
+	generationMetadataVersion      = 1
+	maxConcurrentProvisioningSlots = 2
+)
 
 type GenerationStore struct {
 	Root      string
@@ -147,6 +150,12 @@ func (s GenerationStore) Provision(ctx context.Context, id string, install func(
 		return Generation{}, lookupErr
 	}
 
+	releaseProvisioning, err := s.acquireProvisionSlot(ctx)
+	if err != nil {
+		return Generation{}, err
+	}
+	defer releaseProvisioning()
+
 	staging, err := os.MkdirTemp(filepath.Join(s.Root, "staging"), "."+id+"-")
 	if err != nil {
 		return Generation{}, err
@@ -220,6 +229,25 @@ func (s GenerationStore) LockArtifact(ctx context.Context, digest string) (func(
 		return nil, err
 	}
 	return s.lock(ctx, "artifact-"+digest)
+}
+
+func (s GenerationStore) acquireProvisionSlot(ctx context.Context) (func(), error) {
+	for {
+		for index := 0; index < maxConcurrentProvisioningSlots; index++ {
+			release, locked, lockErr := s.tryLock(fmt.Sprintf("provision-%02d", index))
+			if lockErr != nil {
+				return nil, lockErr
+			}
+			if locked {
+				return release, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 }
 
 func (s GenerationStore) tryLock(name string) (func(), bool, error) {

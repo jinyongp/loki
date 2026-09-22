@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/fault"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/work/workspace"
@@ -50,6 +50,14 @@ func shareImageReplayError(err error) error {
 	if errors.Is(err, artifacts.ErrRequestConflict) {
 		return fault.New(fault.CodeConflict, "share_image request_id was already used for different share inputs", false, "generate a new request_id when path or ttl_seconds changes")
 	}
+	if errors.Is(err, artifacts.ErrCapacityFull) || errors.Is(err, artifacts.ErrReplayCapacityFull) {
+		return fault.New(
+			fault.CodeQuotaExceeded,
+			"temporary artifact sharing capacity is full",
+			true,
+			"wait for existing links or request identities to expire, or revoke an existing share before retrying",
+		)
+	}
 	return err
 }
 
@@ -82,6 +90,14 @@ func artifactPublishFingerprint(action, path string, paths []string, filename st
 func artifactPublishReplayError(err error) error {
 	if errors.Is(err, artifacts.ErrRequestConflict) {
 		return fault.New(fault.CodeConflict, "artifact_publish request_id was already used for different publication inputs", false, "generate a new request_id when action, path(s), filename, or ttl_seconds changes")
+	}
+	if errors.Is(err, artifacts.ErrCapacityFull) || errors.Is(err, artifacts.ErrReplayCapacityFull) {
+		return fault.New(
+			fault.CodeQuotaExceeded,
+			"temporary artifact sharing capacity is full",
+			true,
+			"wait for existing links or request identities to expire, or revoke an existing share before retrying",
+		)
 	}
 	return err
 }

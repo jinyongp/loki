@@ -13,6 +13,7 @@ import (
 
 	"loki/internal/control/identity"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/fault"
 	"loki/internal/platform/sandbox"
 	"loki/internal/rpc"
 	"loki/internal/work/jobs"
@@ -571,6 +572,29 @@ func TestAsyncStartReplaysSameRequestAndConflictsChangedInput(t *testing.T) {
 	}
 }
 
+func TestSynchronousRunOutputIsBoundedAndMarkedTruncated(t *testing.T) {
+	id := strings.Repeat("9", 32)
+	runner := &fakeRunner{
+		observeResult: sandbox.Result{
+			ExitCode: 0, ExitCodeKnown: true, Outcome: sandbox.OutcomeExited,
+			Cleanup: sandbox.CleanupPending,
+		},
+		outputBytes: []byte("0123456789"),
+	}
+	l := lifecycleFixture(t, runner, time.Second, time.Minute, 8)
+	result, err := l.runWorkload(t.Context(), runRequest{
+		ID: id, PolicySHA256: strings.Repeat("a", 64),
+		CWD: ".", Argv: []string{"/bin/true"}, MaxOutputBytes: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result.Output) != "0123" || !result.Truncated ||
+		result.Outcome != jobs.OutcomeExited || result.Cleanup != jobs.CleanupComplete {
+		t.Fatalf("bounded synchronous result = %#v", result)
+	}
+}
+
 func TestAsyncInspectOutputAndCancelAreNonAuthorityBearing(t *testing.T) {
 	requestID := "123e4567-e89b-12d3-a456-426614174001"
 	id, err := jobs.JobIDForRequestID(requestID)
@@ -886,6 +910,100 @@ func TestWaitTimeoutDoesNotCancelJobButExplicitCancelDoes(t *testing.T) {
 	}
 }
 
+func TestConcurrentJobCapacityAllowsIdempotentReplay(t *testing.T) {
+	requestID := "123e4567-e89b-12d3-a456-426614174099"
+	id, err := jobs.JobIDForRequestID(requestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, fingerprint, err := jobs.NormalizeStartRequest(jobs.StartRequest{
+		RequestID: requestID, CWD: ".", Argv: []string{"/bin/sleep", "10"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{blockObserve: true, observing: make(chan struct{}), canceled: make(chan struct{})}
+	l := lifecycleFixture(t, runner, 5*time.Second, time.Minute, 8)
+	l.maxConcurrentJobs = 1
+	workload := jobs.Workload{
+		ID: id, RequestID: requestID, RequestSHA256: fingerprint,
+		CWD: normalized.CWD, Argv: normalized.Argv, TimeoutSeconds: normalized.TimeoutSeconds,
+		Network: normalized.Network, Endpoints: normalized.Endpoints, Toolchains: normalized.Toolchains,
+	}
+	first, err := l.startWorkload(t.Context(), workload, strings.Repeat("a", 64))
+	if err != nil || first.Replayed {
+		t.Fatalf("first start = %#v err=%v", first, err)
+	}
+	select {
+	case <-runner.observing:
+	case <-time.After(time.Second):
+		t.Fatal("replay fixture did not become active")
+	}
+	replayed, err := l.startWorkload(t.Context(), workload, strings.Repeat("a", 64))
+	if err != nil || !replayed.Replayed || replayed.JobID != id {
+		t.Fatalf("capacity-full replay = %#v err=%v", replayed, err)
+	}
+	starts, _, _, _ := runner.counts()
+	if starts != 1 {
+		t.Fatalf("replay started backend %d times", starts)
+	}
+	cancelCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if _, err = l.cancelJob(cancelCtx, id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConcurrentJobCapacityReturnsRetryableQuotaAndReleases(t *testing.T) {
+	first := strings.Repeat("a", 32)
+	second := strings.Repeat("b", 32)
+	runner := &fakeRunner{blockObserve: true, observing: make(chan struct{}), canceled: make(chan struct{})}
+	l := lifecycleFixture(t, runner, 5*time.Second, time.Minute, 8)
+	l.maxConcurrentJobs = 1
+
+	if err := l.start(launcherSpec(first)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-runner.observing:
+	case <-time.After(time.Second):
+		t.Fatal("first job did not become active")
+	}
+
+	err := l.start(launcherSpec(second))
+	detail := fault.Describe(err)
+	if detail.Code != fault.CodeQuotaExceeded || !detail.Retryable ||
+		!strings.Contains(detail.NextAction, "active job") {
+		t.Fatalf("concurrent capacity detail = %#v err=%v", detail, err)
+	}
+	if _, ok, getErr := l.journal.Get(second); getErr != nil || ok {
+		t.Fatalf("rejected job acquired durable admission: ok=%v err=%v", ok, getErr)
+	}
+
+	cancelCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if _, err = l.cancelJob(cancelCtx, first); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-runner.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("active job did not observe cancellation")
+	}
+
+	runner.mu.Lock()
+	runner.blockObserve = false
+	runner.observing = nil
+	runner.canceled = nil
+	runner.mu.Unlock()
+	if err = l.start(launcherSpec(second)); err != nil {
+		t.Fatalf("capacity was not released: %v", err)
+	}
+	if _, err = l.wait(t.Context(), second); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDuplicateCapacityAndRetentionAreBounded(t *testing.T) {
 	first := strings.Repeat("c", 32)
 	second := strings.Repeat("d", 32)
@@ -904,6 +1022,9 @@ func TestDuplicateCapacityAndRetentionAreBounded(t *testing.T) {
 	}
 	if err := l.start(launcherSpec(second)); err == nil {
 		t.Fatal("capacity overflow was accepted")
+	} else if detail := fault.Describe(err); detail.Code != fault.CodeQuotaExceeded || !detail.Retryable ||
+		!strings.Contains(detail.NextAction, "retained job results") {
+		t.Fatalf("retained job capacity detail = %#v", detail)
 	}
 	cancelCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 	if _, err := l.cancelJob(cancelCtx, first); err != nil {

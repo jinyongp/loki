@@ -111,3 +111,18 @@ func TestPreviewJobPublicationBindsExactEndpointLease(t *testing.T) {
 		t.Fatalf("reused endpoint lease error = %#v", detail)
 	}
 }
+
+func TestPreviewCapacityErrorsAreRetryableQuota(t *testing.T) {
+	for name, err := range map[string]error{
+		"preview": previews.ErrCapacityFull,
+		"replay":  previews.ErrReplayCapacityFull,
+	} {
+		t.Run(name, func(t *testing.T) {
+			detail := fault.Describe(previewReplayError(err))
+			if detail.Code != fault.CodeQuotaExceeded || !detail.Retryable ||
+				!strings.Contains(detail.NextAction, "retry") {
+				t.Fatalf("preview capacity detail = %#v", detail)
+			}
+		})
+	}
+}

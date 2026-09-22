@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -169,6 +170,77 @@ func TestGenerationStoreConcurrentProvisionDoesNotOversubscribeQuota(t *testing.
 	}
 	if usage.Generations != 1 {
 		t.Fatalf("concurrent provision oversubscribed generations: %#v", usage)
+	}
+}
+
+func TestGenerationStoreProvisioningConcurrencyQueuesAtFixedLimit(t *testing.T) {
+	store := generationStoreFixture(t)
+	firstID := strings.Repeat("b", 64)
+	secondID := strings.Repeat("c", 64)
+	thirdID := strings.Repeat("d", 64)
+	entered := make(chan string, 3)
+	releaseInitial := make(chan struct{})
+	results := make(chan error, 3)
+	var current atomic.Int32
+	var maximum atomic.Int32
+
+	install := func(id string) func(context.Context, string) error {
+		return func(_ context.Context, root string) error {
+			active := current.Add(1)
+			for {
+				seen := maximum.Load()
+				if active <= seen || maximum.CompareAndSwap(seen, active) {
+					break
+				}
+			}
+			defer current.Add(-1)
+			entered <- id
+			if id != thirdID {
+				<-releaseInitial
+			}
+			return os.WriteFile(filepath.Join(root, "payload"), []byte(id), 0644)
+		}
+	}
+	start := func(id string) {
+		go func() {
+			_, err := store.Provision(t.Context(), id, install(id))
+			results <- err
+		}()
+	}
+
+	start(firstID)
+	start(secondID)
+	seen := map[string]bool{}
+	for len(seen) < maxConcurrentProvisioningSlots {
+		select {
+		case id := <-entered:
+			seen[id] = true
+		case <-time.After(time.Second):
+			t.Fatal("initial provisioning slots did not fill")
+		}
+	}
+	start(thirdID)
+	select {
+	case id := <-entered:
+		t.Fatalf("third provisioning entered before a slot released: %q", id)
+	case <-time.After(40 * time.Millisecond):
+	}
+	close(releaseInitial)
+	select {
+	case id := <-entered:
+		if id != thirdID {
+			t.Fatalf("queued provisioning entry = %q", id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued provisioning did not resume")
+	}
+	for range []int{0, 1, 2} {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if maximum.Load() != maxConcurrentProvisioningSlots {
+		t.Fatalf("maximum concurrent provisioning = %d", maximum.Load())
 	}
 }
 

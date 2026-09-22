@@ -54,6 +54,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if !strings.Contains(string(launcherLayout), `"ToolchainStore": "/var/lib/loki-go/toolchains"`) {
 		t.Fatal("native launcher layout does not bind the managed toolchain store")
 	}
+	if !strings.Contains(string(launcherLayout), `"MaxConcurrentJobs": 8`) {
+		t.Fatal("native launcher layout does not bind the concurrent Job limit")
+	}
 	lifecycle, err := os.ReadFile(filepath.Join(root, "scripts/loki-go-lifecycle.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +70,18 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 			t.Fatalf("native lifecycle does not provision managed toolchains: %s", want)
 		}
 	}
+	containerLauncherRaw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/launcher.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var containerLauncher map[string]any
+	if err = json.Unmarshal(containerLauncherRaw, &containerLauncher); err != nil {
+		t.Fatal(err)
+	}
+	if containerLauncher["MaxConcurrentJobs"] != float64(8) {
+		t.Fatalf("container launcher concurrent Job limit = %#v", containerLauncher["MaxConcurrentJobs"])
+	}
+
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
 	raw, err := os.ReadFile(filepath.Join(root, "packaging/container/config/mcp.json"))

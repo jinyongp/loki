@@ -512,8 +512,8 @@ func TestJournalRejectsInvalidTransitionsAndCapacity(t *testing.T) {
 	if _, err = journal.Admit(id, "oci:"+strings.Repeat("b", 64), now.Add(time.Minute), now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = journal.Admit(strings.Repeat("c", 32), "oci:"+strings.Repeat("d", 64), now.Add(time.Minute), now); err == nil {
-		t.Fatal("journal capacity overflow accepted")
+	if _, err = journal.Admit(strings.Repeat("c", 32), "oci:"+strings.Repeat("d", 64), now.Add(time.Minute), now); !errors.Is(err, ErrJournalCapacity) {
+		t.Fatalf("journal capacity error = %v", err)
 	}
 	if _, err = journal.MarkCleanup(id, CleanupComplete, now); err == nil {
 		t.Fatal("cleanup before terminal accepted")

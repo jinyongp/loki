@@ -47,6 +47,7 @@ func validLauncherLayout(t *testing.T) launcherLayout {
 		RunTimeoutSeconds:        30,
 		ResultRetentionSeconds:   60,
 		MaxJobs:                  64,
+		MaxConcurrentJobs:        8,
 		MaxOutputBytes:           256 << 10,
 	}
 }
@@ -58,7 +59,8 @@ func TestBuildLauncherConstructsNarrowRoleInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if options.Socket != layout.Socket || options.SocketGID != layout.SocketGID ||
-		options.ExecutorUID != layout.ExecutorUID || options.RunTimeout != 30*time.Second {
+		options.ExecutorUID != layout.ExecutorUID || options.RunTimeout != 30*time.Second ||
+		options.MaxConcurrentJobs != layout.MaxConcurrentJobs {
 		t.Fatalf("launcher options = %#v", options)
 	}
 	if options.Journal != nil {
@@ -137,6 +139,9 @@ func TestBuildLauncherRejectsUnsafeLayout(t *testing.T) {
 		{"retention-high", func(l *launcherLayout) { l.ResultRetentionSeconds = maxLauncherResultRetentionSeconds + 1 }},
 		{"jobs-zero", func(l *launcherLayout) { l.MaxJobs = 0 }},
 		{"jobs-high", func(l *launcherLayout) { l.MaxJobs = maxLauncherJobs + 1 }},
+		{"concurrent-jobs-zero", func(l *launcherLayout) { l.MaxConcurrentJobs = 0 }},
+		{"concurrent-jobs-high", func(l *launcherLayout) { l.MaxConcurrentJobs = maxLauncherConcurrentJobs + 1 }},
+		{"concurrent-jobs-retained", func(l *launcherLayout) { l.MaxConcurrentJobs = l.MaxJobs + 1 }},
 		{"output-zero", func(l *launcherLayout) { l.MaxOutputBytes = 0 }},
 		{"output-high", func(l *launcherLayout) { l.MaxOutputBytes = jobs.MaxOutputBytes + 1 }},
 	}

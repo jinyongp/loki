@@ -11,6 +11,7 @@ var (
 	requestIDPattern          = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	requestFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	ErrRequestConflict        = errors.New("artifact request_id was already used for a different publication")
+	ErrReplayCapacityFull     = errors.New("temporary artifact replay capacity is full")
 )
 
 type publishReplay struct {
@@ -119,7 +120,7 @@ func (s *Store) PublishReplay(requestID, fingerprint string, data []byte, filena
 		return replay, replayErr
 	}
 	if len(s.requests) >= s.replayMax {
-		return nil, errors.New("temporary artifact replay capacity is full; wait for request identities to expire")
+		return nil, ErrReplayCapacityFull
 	}
 	link, err := s.Publish(data, filename, mime, digest, ttl, disposition)
 	if err != nil {

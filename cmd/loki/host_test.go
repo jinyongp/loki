@@ -507,6 +507,7 @@ func TestLauncherJournalInventoryReadsActiveJobsWithoutWriterOwnership(t *testin
 	raw, err := json.Marshal(map[string]any{
 		"StateDirectory":         dir,
 		"MaxJobs":                limits.MaxRecords,
+		"MaxConcurrentJobs":      1,
 		"MaxOutputBytes":         limits.MaxOutputBytes,
 		"ResultRetentionSeconds": 60,
 	})

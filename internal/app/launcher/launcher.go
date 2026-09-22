@@ -22,9 +22,11 @@ import (
 )
 
 const (
-	maxRunTimeout       = 24 * time.Hour
-	launcherStopTimeout = 30 * time.Second
-	reconcileRetryDelay = 100 * time.Millisecond
+	maxRunTimeout              = 24 * time.Hour
+	launcherStopTimeout        = 30 * time.Second
+	reconcileRetryDelay        = 100 * time.Millisecond
+	defaultMaxConcurrentJobs   = 16
+	maxSupportedConcurrentJobs = 256
 )
 
 var launcherJobIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -52,15 +54,16 @@ type ToolchainResolver interface {
 }
 
 type Options struct {
-	Socket      string
-	SocketGID   int
-	ExecutorUID uint32
-	Policy      sandbox.Policy
-	Runner      Runner
-	Toolchains  ToolchainResolver
-	Journal     *jobs.Journal
-	RunTimeout  time.Duration
-	Ready       func() error
+	Socket            string
+	SocketGID         int
+	ExecutorUID       uint32
+	Policy            sandbox.Policy
+	Runner            Runner
+	Toolchains        ToolchainResolver
+	Journal           *jobs.Journal
+	RunTimeout        time.Duration
+	MaxConcurrentJobs int
+	Ready             func() error
 }
 
 type lifecycle struct {
@@ -72,6 +75,7 @@ type lifecycle struct {
 	journal           *jobs.Journal
 	runInputDirectory string
 	timeout           time.Duration
+	maxConcurrentJobs int
 	now               func() time.Time
 
 	mu     sync.Mutex
@@ -141,9 +145,19 @@ func newLifecycle(parent context.Context, policy sandbox.Policy, runner Runner, 
 	ctx, cancel := context.WithCancel(parent)
 	return &lifecycle{
 		ctx: ctx, cancel: cancel, policy: policy, runner: runner, toolchains: toolchains, journal: journal,
-		runInputDirectory: policy.InputDirectory(), timeout: timeout,
+		runInputDirectory: policy.InputDirectory(), timeout: timeout, maxConcurrentJobs: defaultMaxConcurrentJobs,
 		now: func() time.Time { return time.Now().UTC() }, active: map[string]*ownedJob{}, runs: map[string]*ownedJob{},
 	}, nil
+}
+
+func normalizeMaxConcurrentJobs(value int) (int, error) {
+	if value == 0 {
+		return defaultMaxConcurrentJobs, nil
+	}
+	if value < 1 || value > maxSupportedConcurrentJobs {
+		return 0, errors.New("launcher concurrent job limit is outside the supported range")
+	}
+	return value, nil
 }
 
 func (l *lifecycle) operations() map[string]rpc.Operation {
@@ -480,6 +494,21 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 	}
 
 	now := l.now()
+	if err = l.journal.Prune(now); err != nil {
+		return jobs.StartResult{}, fault.Error("launcher job admission failed")
+	}
+	_, retained, err := l.journal.Get(workload.ID)
+	if err != nil {
+		return jobs.StartResult{}, fault.Error("launcher job admission failed")
+	}
+	if !retained && len(l.active) >= l.maxConcurrentJobs {
+		return jobs.StartResult{}, fault.New(
+			fault.CodeQuotaExceeded,
+			"launcher concurrent job capacity is full",
+			true,
+			"wait for an active job to finish or cancel one before retrying",
+		)
+	}
 	deadline := now.Add(lifetime)
 	var record jobs.Record
 	var replayed bool
@@ -502,6 +531,14 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 			return jobs.StartResult{}, fault.Error("workload ID is already registered")
 		}
 		record, err = l.journal.Admit(workload.ID, backendReference(plan), deadline, now)
+	}
+	if errors.Is(err, jobs.ErrJournalCapacity) {
+		return jobs.StartResult{}, fault.New(
+			fault.CodeQuotaExceeded,
+			"launcher retained job-result capacity is full",
+			true,
+			"wait for retained job results to expire before retrying",
+		)
 	}
 	if err != nil {
 		return jobs.StartResult{}, fault.Error("launcher job admission failed")
@@ -1278,6 +1315,11 @@ func Run(ctx context.Context, options Options) error {
 	if err != nil {
 		return err
 	}
+	maxConcurrentJobs, err := normalizeMaxConcurrentJobs(options.MaxConcurrentJobs)
+	if err != nil {
+		return err
+	}
+	lifecycle.maxConcurrentJobs = maxConcurrentJobs
 	defer lifecycle.close()
 	if err = lifecycle.reconcile(); err != nil {
 		return err

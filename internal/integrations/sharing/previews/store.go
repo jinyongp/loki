@@ -47,7 +47,11 @@ var hostPattern = regexp.MustCompile(`^loki-([0-9a-f]{32})$`)
 var requestIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var routeAuthorityPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-var ErrRequestConflict = errors.New("preview request_id was already used for a different publication")
+var (
+	ErrRequestConflict    = errors.New("preview request_id was already used for a different publication")
+	ErrCapacityFull       = errors.New("temporary preview capacity is full")
+	ErrReplayCapacityFull = errors.New("temporary preview replay capacity is full")
+)
 
 func ValidShareID(id string) bool   { return idPattern.MatchString(id) }
 func ValidRequestID(id string) bool { return requestIDPattern.MatchString(id) }
@@ -225,11 +229,11 @@ func (s *Store) publishRoutes(requestID string, routes []Route, cwd, command str
 			return clonePreviewResult(replay.Result), nil
 		}
 		if len(s.requests) >= s.replayMax {
-			return nil, errors.New("temporary preview replay capacity is full; wait for preview requests to expire")
+			return nil, ErrReplayCapacityFull
 		}
 	}
 	if len(s.items) >= s.maximum {
-		return nil, errors.New("temporary preview capacity is full; stop or wait for a preview to expire")
+		return nil, ErrCapacityFull
 	}
 	id, err := randomToken(8)
 	if err != nil {

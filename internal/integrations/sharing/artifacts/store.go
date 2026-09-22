@@ -16,6 +16,8 @@ import (
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
+var ErrCapacityFull = errors.New("temporary artifact capacity is full")
+
 func ValidShareID(id string) bool { return tokenPattern.MatchString(id) }
 
 type Options struct {
@@ -109,7 +111,7 @@ func (s *Store) Publish(data []byte, filename, mime, digest string, ttl int, dis
 	now := s.options.Clock()
 	s.purge(now)
 	if len(s.items) >= s.options.MaxItems || len(data) > s.options.MaxBytes-s.bytes {
-		return nil, errors.New("temporary artifact capacity is full; wait for links to expire and retry")
+		return nil, ErrCapacityFull
 	}
 	var token string
 	for {

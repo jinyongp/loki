@@ -7,12 +7,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/config"
 	"loki/internal/contract"
+	"loki/internal/fault"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/mcpserver"
 	"loki/internal/work/workspace"
 )
@@ -206,5 +208,22 @@ func TestArtifactMCP(t *testing.T) {
 	}})
 	if err != nil || !r.IsError {
 		t.Fatalf("TTL: %v %+v", err, r)
+	}
+}
+
+func TestArtifactCapacityErrorsAreRetryableQuota(t *testing.T) {
+	for name, err := range map[string]error{
+		"artifact": artifacts.ErrCapacityFull,
+		"replay":   artifacts.ErrReplayCapacityFull,
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, mapped := range []error{artifactPublishReplayError(err), shareImageReplayError(err)} {
+				detail := fault.Describe(mapped)
+				if detail.Code != fault.CodeQuotaExceeded || !detail.Retryable ||
+					!strings.Contains(detail.NextAction, "retry") {
+					t.Fatalf("artifact capacity detail = %#v", detail)
+				}
+			}
+		})
 	}
 }

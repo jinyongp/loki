@@ -69,8 +69,8 @@ func TestRoutesAndLifetime(t *testing.T) {
 			t.Fatalf("%+v => %+v %s %v", tc, r, next, ok)
 		}
 	}
-	if _, err = s.Publish(map[string]int{"/": 3001}, "", "", 60); err == nil {
-		t.Fatal("capacity")
+	if _, err = s.Publish(map[string]int{"/": 3001}, "", "", 60); !errors.Is(err, ErrCapacityFull) {
+		t.Fatalf("capacity error = %v", err)
 	}
 	if _, ok = s.ResolveHost(host + ".evil"); ok {
 		t.Fatal("host suffix")

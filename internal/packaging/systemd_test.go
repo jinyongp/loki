@@ -193,7 +193,8 @@ func TestLayoutRendererProducesServiceOwnedInputs(t *testing.T) {
 		launcher["WorkloadUID"] != float64(1001) ||
 		launcher["WorkloadGID"] != float64(1002) ||
 		launcher["Image"] != jobImage || launcher["GatewayImage"] != jobImage ||
-		launcher["Workspace"] != "/srv/workspace/loki" {
+		launcher["Workspace"] != "/srv/workspace/loki" ||
+		launcher["MaxConcurrentJobs"] != float64(8) {
 		t.Fatalf("launcher layout = %#v", launcher)
 	}
 	data, err = os.ReadFile(filepath.Join(root, "executor.json"))

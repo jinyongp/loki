@@ -1,6 +1,7 @@
 package artifacts
 
 import (
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -51,15 +52,15 @@ func TestStoreLifecycle(t *testing.T) {
 			}
 		}
 	}
-	if _, err = s.Publish([]byte("abcd"), "b", "text/plain", "", 60, "inline"); err == nil {
-		t.Fatal("byte capacity bypass")
+	if _, err = s.Publish([]byte("abcd"), "b", "text/plain", "", 60, "inline"); !errors.Is(err, ErrCapacityFull) {
+		t.Fatalf("byte capacity error = %v", err)
 	}
 	second, err := s.Publish([]byte("def"), "b", "text/plain", "", 61, "inline")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Publish(nil, "c", "text/plain", "", 60, "inline"); err == nil {
-		t.Fatal("item capacity bypass")
+	if _, err = s.Publish(nil, "c", "text/plain", "", 60, "inline"); !errors.Is(err, ErrCapacityFull) {
+		t.Fatalf("item capacity error = %v", err)
 	}
 	if rows := s.List(); len(rows) != 2 || rows[0]["share_id"] != token {
 		t.Fatal(rows)

@@ -20,5 +20,6 @@
   "RunTimeoutSeconds": 86400,
   "ResultRetentionSeconds": 3600,
   "MaxJobs": 64,
+  "MaxConcurrentJobs": 8,
   "MaxOutputBytes": 262144
 }

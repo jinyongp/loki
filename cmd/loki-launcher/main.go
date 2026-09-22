@@ -24,6 +24,7 @@ const (
 	maxLauncherRunTimeoutSeconds      = 24 * 60 * 60
 	maxLauncherResultRetentionSeconds = 60 * 60
 	maxLauncherJobs                   = 1024
+	maxLauncherConcurrentJobs         = 256
 )
 
 type launcherLayout struct {
@@ -54,6 +55,7 @@ type launcherLayout struct {
 	RunTimeoutSeconds        int
 	ResultRetentionSeconds   int
 	MaxJobs                  int
+	MaxConcurrentJobs        int
 	MaxOutputBytes           int
 }
 
@@ -83,6 +85,10 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	}
 	if layout.MaxJobs < 1 || layout.MaxJobs > maxLauncherJobs {
 		return applauncher.Options{}, errors.New("launcher job capacity is outside the supported range")
+	}
+	if layout.MaxConcurrentJobs < 1 || layout.MaxConcurrentJobs > maxLauncherConcurrentJobs ||
+		layout.MaxConcurrentJobs > layout.MaxJobs {
+		return applauncher.Options{}, errors.New("launcher concurrent job capacity is outside the supported range")
 	}
 	if layout.MaxOutputBytes < 1 || layout.MaxOutputBytes > jobs.MaxOutputBytes {
 		return applauncher.Options{}, errors.New("launcher output limit is outside the supported range")
@@ -120,13 +126,14 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		return applauncher.Options{}, err
 	}
 	return applauncher.Options{
-		Socket:      layout.Socket,
-		SocketGID:   layout.SocketGID,
-		ExecutorUID: layout.ExecutorUID,
-		Policy:      policy,
-		Runner:      engine,
-		Toolchains:  launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
-		RunTimeout:  time.Duration(layout.RunTimeoutSeconds) * time.Second,
+		Socket:            layout.Socket,
+		SocketGID:         layout.SocketGID,
+		ExecutorUID:       layout.ExecutorUID,
+		Policy:            policy,
+		Runner:            engine,
+		Toolchains:        launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
+		RunTimeout:        time.Duration(layout.RunTimeoutSeconds) * time.Second,
+		MaxConcurrentJobs: layout.MaxConcurrentJobs,
 	}, nil
 }
 

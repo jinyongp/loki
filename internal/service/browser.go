@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/fault"
+	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/mcpserver"
 	"loki/internal/work/workspace"
 )
@@ -49,6 +49,14 @@ func browserShareMetadata(publication map[string]any, full bool) map[string]any 
 func browserShareReplayError(err error) error {
 	if errors.Is(err, artifacts.ErrRequestConflict) {
 		return fault.New(fault.CodeConflict, "browser screenshot request_id was already used for different share inputs", false, "generate a new request_id when full_page or ttl_seconds changes")
+	}
+	if errors.Is(err, artifacts.ErrCapacityFull) || errors.Is(err, artifacts.ErrReplayCapacityFull) {
+		return fault.New(
+			fault.CodeQuotaExceeded,
+			"temporary browser screenshot sharing capacity is full",
+			true,
+			"wait for existing links or request identities to expire, or revoke an existing share before retrying",
+		)
 	}
 	return err
 }

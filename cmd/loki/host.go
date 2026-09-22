@@ -56,6 +56,7 @@ type hostLauncherLayout struct {
 	RunTimeoutSeconds        int
 	ResultRetentionSeconds   int
 	MaxJobs                  int
+	MaxConcurrentJobs        int
 	MaxOutputBytes           int
 }
 
@@ -77,7 +78,8 @@ func (i launcherJournalInventory) ActiveJobs(ctx context.Context) ([]string, err
 func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout) ([]string, error) {
 	if !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory ||
 		layout.StateDirectory == string(filepath.Separator) ||
-		layout.MaxJobs < 1 || layout.MaxOutputBytes < 1 || layout.MaxOutputBytes > jobs.MaxOutputBytes ||
+		layout.MaxJobs < 1 || layout.MaxConcurrentJobs < 1 || layout.MaxConcurrentJobs > layout.MaxJobs ||
+		layout.MaxOutputBytes < 1 || layout.MaxOutputBytes > jobs.MaxOutputBytes ||
 		layout.ResultRetentionSeconds < 1 {
 		return nil, errors.New("launcher layout contains invalid job journal settings")
 	}

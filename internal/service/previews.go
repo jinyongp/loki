@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/integrations/sharing/artifacts"
 	"loki/internal/fault"
+	"loki/internal/integrations/sharing/artifacts"
+	"loki/internal/integrations/sharing/previews"
 	"loki/internal/mcpserver"
 	"loki/internal/portguard"
-	"loki/internal/integrations/sharing/previews"
 	"loki/internal/work/jobs"
 )
 
@@ -145,6 +145,14 @@ func rejectLoopbacks(listener map[string]any) error {
 func previewReplayError(err error) error {
 	if errors.Is(err, previews.ErrRequestConflict) {
 		return fault.New(fault.CodeConflict, "preview request_id was already used for a different publication", false, "generate a new request_id for changed preview inputs")
+	}
+	if errors.Is(err, previews.ErrCapacityFull) || errors.Is(err, previews.ErrReplayCapacityFull) {
+		return fault.New(
+			fault.CodeQuotaExceeded,
+			"temporary preview capacity is full",
+			true,
+			"stop an existing preview or wait for preview/request retention to expire before retrying",
+		)
 	}
 	return err
 }

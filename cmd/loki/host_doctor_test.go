@@ -14,6 +14,7 @@ import (
 	hostdiagnostics "loki/internal/host/diagnostics"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
+	"loki/internal/work/jobs"
 	toolchain "loki/internal/work/toolchains"
 )
 
@@ -131,7 +132,7 @@ func hostDoctorFixture(t *testing.T) (hostDoctorOptions, *fakeHostDoctorRuntime,
 	launcherPath := filepath.Join(t.TempDir(), "launcher.json")
 	layout := hostLauncherLayout{
 		StateDirectory: journalDir, ToolchainStore: toolchainRoot,
-		MaxJobs: 64, MaxOutputBytes: 262144, ResultRetentionSeconds: 3600,
+		MaxJobs: 64, MaxConcurrentJobs: 8, MaxOutputBytes: 262144, ResultRetentionSeconds: 3600,
 	}
 	layoutRaw, err := json.Marshal(layout)
 	if err != nil {
@@ -176,6 +177,52 @@ func TestHostDoctorHealthyReportIsBoundedAndRedacted(t *testing.T) {
 	code := runHostDoctorWith(t.Context(), options, dependencies, &stdout, &stderr)
 	if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "\"status\":\"healthy\"") {
 		t.Fatalf("doctor code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestHostDoctorBlocksWhenRecoveredActiveJobsExceedLimit(t *testing.T) {
+	options, runtime, now := hostDoctorFixture(t)
+	var layout hostLauncherLayout
+	raw, err := os.ReadFile(options.LauncherLayout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &layout); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := jobs.OpenJournal(layout.StateDirectory, jobs.JournalLimits{
+		MaxRecords: layout.MaxJobs, MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
+		MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const hexIDs = "abcdef0123456789"
+	for index := 0; index < layout.MaxConcurrentJobs+1; index++ {
+		id := strings.Repeat(string(hexIDs[index]), 32)
+		if _, err = journal.Admit(id, "oci:"+strings.Repeat("a", 64), now.Add(time.Hour), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = journal.Close(); err != nil {
+		t.Fatal(err)
+	}
+	report, err := inspectHostDoctor(t.Context(), options, hostDoctorDependencies{
+		OpenRuntime: func(*lifecycle.FileStore) (hostDoctorRuntime, error) { return runtime, nil },
+		Now:         func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, check := range report.Checks {
+		if check.Name == "jobs" && check.Status == hostdiagnostics.StatusBlocked &&
+			check.Code == "active_jobs_over_limit" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("active Job overload was not reported: %#v", report.Checks)
 	}
 }
 

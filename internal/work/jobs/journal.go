@@ -244,7 +244,7 @@ func (j *Journal) admit(
 		return Record{}, false, errors.New("job is already recorded")
 	}
 	if len(j.records) >= j.limits.MaxRecords {
-		return Record{}, false, errors.New("job journal capacity is exhausted")
+		return Record{}, false, ErrJournalCapacity
 	}
 	record := Record{
 		ID: id, BackendRef: backendRef, RequestID: requestID, RequestSHA256: requestSHA256,
