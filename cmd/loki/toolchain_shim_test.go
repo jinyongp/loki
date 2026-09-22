@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,8 @@ func writeShimExecutable(t *testing.T, root, family, version, command string) st
 		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, command)
 	case "rust":
 		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, "active", "bin", command)
+	case "go":
+		path = filepath.Join(root, family, "opt", "loki", "toolchain", family, version, "bin", command)
 	default:
 		t.Fatalf("unsupported fixture family %q", family)
 	}
@@ -45,6 +48,8 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 	rustc := writeShimExecutable(t, root, "rust", "1.98.1", "rustc")
 	cargo := writeShimExecutable(t, root, "rust", "1.98.1", "cargo")
 	rustfmt := writeShimExecutable(t, root, "rust", "1.98.1", "rustfmt")
+	goBin := writeShimExecutable(t, root, "go", "1.27.1", "go")
+	gofmt := writeShimExecutable(t, root, "go", "1.27.1", "gofmt")
 
 	for command, want := range map[string]string{
 		"node":    node,
@@ -56,6 +61,8 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 		"rustc":   rustc,
 		"cargo":   cargo,
 		"rustfmt": rustfmt,
+		"go":      goBin,
+		"gofmt":   gofmt,
 	} {
 		got, err := resolveToolchainShim(root, command)
 		if err != nil || got != want {
@@ -66,8 +73,21 @@ func TestResolveToolchainShimUsesSingleMountedVersion(t *testing.T) {
 		toolchainShimCommand("/opt/loki/toolchain/bin/python") != "python" ||
 		toolchainShimCommand("/opt/loki/toolchain/bin/uv") != "uv" ||
 		toolchainShimCommand("/opt/loki/toolchain/bin/rustc") != "rustc" ||
+		toolchainShimCommand("/opt/loki/toolchain/bin/go") != "go" ||
 		toolchainShimCommand("/opt/loki/bin/loki") != "" {
 		t.Fatal("shim argv0 detection is invalid")
+	}
+}
+
+func TestGoToolchainShimForcesManagedLocalSelection(t *testing.T) {
+	environment := []string{"PATH=/bin", "GOTOOLCHAIN=auto", "HOME=/tmp/home"}
+	got := toolchainShimEnvironment("go", environment)
+	want := []string{"PATH=/bin", "HOME=/tmp/home", "GOTOOLCHAIN=local"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Go shim environment = %#v, want %#v", got, want)
+	}
+	if other := toolchainShimEnvironment("node", environment); !reflect.DeepEqual(other, environment) {
+		t.Fatalf("non-Go shim environment changed = %#v", other)
 	}
 }
 

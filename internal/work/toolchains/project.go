@@ -3,15 +3,16 @@ package toolchain
 import (
 	"bytes"
 	"encoding/json"
-
 	"errors"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
+	"golang.org/x/mod/modfile"
 )
 
 type ProjectSelection struct {
@@ -59,13 +60,17 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 	if err != nil {
 		return nil, err
 	}
+	goProject, goFound, err := findGoProject(root, cwd)
+	if err != nil {
+		return nil, err
+	}
 	pnpmSelected := packageFound && strings.HasPrefix(strings.TrimSpace(packageManager), "pnpm@")
 	pythonSelected := pythonProject.selectorFound || pythonProject.requirementFound
-	if !nodeFound && !pnpmSelected && !pythonSelected && !pythonProject.uvProject && !rustFound {
+	if !nodeFound && !pnpmSelected && !pythonSelected && !pythonProject.uvProject && !rustFound && !goFound {
 		return nil, nil
 	}
 
-	selections := make([]ProjectSelection, 0, 5)
+	selections := make([]ProjectSelection, 0, 6)
 	if nodeFound {
 		nodeProvider := NodeProvider{Store: r.Store}
 		nodePlan, resolveErr := nodeProvider.Resolve(nodeSelector, r.Catalog.Node, false)
@@ -131,6 +136,19 @@ func (r ProjectResolver) Resolve(cwd string) ([]ProjectSelection, error) {
 		}
 		selections = append(selections, ProjectSelection{
 			Family: "rust", Version: rustPlan.Release.Version, GenerationID: rustPlan.GenerationID,
+		})
+	}
+	if goFound {
+		goProvider := GoProvider{Store: r.Store}
+		goPlan, resolveErr := goProvider.Resolve(goProject, r.Catalog.Go, false)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if goPlan.Resolution.Acquire {
+			return nil, fmt.Errorf("Go %s is permitted but not provisioned", goPlan.Resolution.Version)
+		}
+		selections = append(selections, ProjectSelection{
+			Family: "go", Version: goPlan.Release.Version, GenerationID: goPlan.GenerationID,
 		})
 	}
 	return selections, nil
@@ -343,6 +361,78 @@ func parseRustProjectRequest(raw []byte, allowLegacy bool) (RustProjectRequest, 
 		return RustProjectRequest{}, err
 	}
 	return request, nil
+}
+
+func findGoProject(root *os.Root, cwd string) (GoProjectRequest, bool, error) {
+	for directory := cwd; ; directory = filepath.Dir(directory) {
+		path := filepath.Join(directory, "go.work")
+		raw, exists, err := readProjectFile(root, path, 1<<20)
+		if err != nil {
+			return GoProjectRequest{}, false, err
+		}
+		if exists {
+			file, parseErr := modfile.ParseWork(filepath.ToSlash(path), raw, nil)
+			if parseErr != nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: invalid go.work: %w", filepath.ToSlash(path), parseErr)
+			}
+			if file.Go == nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: go.work has no go directive", filepath.ToSlash(path))
+			}
+			request := GoProjectRequest{Minimum: file.Go.Version}
+			if file.Toolchain != nil {
+				request.Toolchain = file.Toolchain.Name
+			}
+			normalized, normalizeErr := normalizeGoProjectRequest(request)
+			if normalizeErr != nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: %w", filepath.ToSlash(path), normalizeErr)
+			}
+			return GoProjectRequest{Minimum: normalized.Minimum, Toolchain: normalized.Toolchain}, true, nil
+		}
+		if directory == "." {
+			break
+		}
+		directory = filepath.Clean(directory)
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+
+	for directory := cwd; ; directory = filepath.Dir(directory) {
+		path := filepath.Join(directory, "go.mod")
+		raw, exists, err := readProjectFile(root, path, 1<<20)
+		if err != nil {
+			return GoProjectRequest{}, false, err
+		}
+		if exists {
+			file, parseErr := modfile.Parse(filepath.ToSlash(path), raw, nil)
+			if parseErr != nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: invalid go.mod: %w", filepath.ToSlash(path), parseErr)
+			}
+			if file.Module == nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: go.mod has no module directive", filepath.ToSlash(path))
+			}
+			request := GoProjectRequest{Minimum: "1.16"}
+			if file.Go != nil {
+				request.Minimum = file.Go.Version
+			}
+			if file.Toolchain != nil {
+				request.Toolchain = file.Toolchain.Name
+			}
+			normalized, normalizeErr := normalizeGoProjectRequest(request)
+			if normalizeErr != nil {
+				return GoProjectRequest{}, false, fmt.Errorf("%s: %w", filepath.ToSlash(path), normalizeErr)
+			}
+			return GoProjectRequest{Minimum: normalized.Minimum, Toolchain: normalized.Toolchain}, true, nil
+		}
+		if directory == "." {
+			break
+		}
+		directory = filepath.Clean(directory)
+		if directory == string(filepath.Separator) {
+			break
+		}
+	}
+	return GoProjectRequest{}, false, nil
 }
 
 func findPackageManager(root *os.Root, cwd string) (string, bool, error) {

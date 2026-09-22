@@ -108,6 +108,12 @@ func validateToolchainGeneration(ref jobs.ToolchainRef, generation toolchain.Gen
 		}
 		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "rust", ref.Version, "active", "bin")
 		paths = []string{filepath.Join(base, "rustc"), filepath.Join(base, "cargo")}
+	case "go":
+		if normalized, err := (toolchain.GoVersionScheme{}).NormalizeVersion(ref.Version); err != nil || normalized != ref.Version {
+			return errors.New("Go Job toolchain version is invalid")
+		}
+		base := filepath.Join(generation.Root, "opt", "loki", "toolchain", "go", ref.Version, "bin")
+		paths = []string{filepath.Join(base, "go"), filepath.Join(base, "gofmt")}
 	default:
 		return fmt.Errorf("unsupported Job toolchain family %q", ref.Family)
 	}

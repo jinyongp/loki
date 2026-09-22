@@ -29,6 +29,13 @@
       "sha256": "fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63"
     }
   ],
+  "go": [
+    {
+      "version": "1.27.1",
+      "url": "https://go.dev/dl/go1.27.1.linux-amd64.tar.gz",
+      "sha256": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
+    }
+  ],
   "rust": [
     {
       "channel": "stable",

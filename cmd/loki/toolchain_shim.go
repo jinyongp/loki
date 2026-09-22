@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/unix"
 
@@ -17,7 +18,8 @@ const managedToolchainRoot = "/opt/loki/managed"
 func toolchainShimCommand(argv0 string) string {
 	switch filepath.Base(argv0) {
 	case "node", "npm", "npx", "pnpm", "python", "python3", "uv", "uvx",
-		"rustc", "cargo", "rustfmt", "cargo-fmt", "clippy-driver", "cargo-clippy", "rust-analyzer":
+		"rustc", "cargo", "rustfmt", "cargo-fmt", "clippy-driver", "cargo-clippy", "rust-analyzer",
+		"go", "gofmt":
 		return filepath.Base(argv0)
 	default:
 		return ""
@@ -37,6 +39,8 @@ func resolveToolchainShim(root, command string) (string, error) {
 		family = "uv"
 	case "rustc", "cargo", "rustfmt", "cargo-fmt", "clippy-driver", "cargo-clippy", "rust-analyzer":
 		family = "rust"
+	case "go", "gofmt":
+		family = "go"
 	default:
 		return "", errors.New("unsupported Loki toolchain shim")
 	}
@@ -84,6 +88,11 @@ func resolveToolchainShim(root, command string) (string, error) {
 		if err != nil || normalized != version {
 			return "", errors.New("mounted Rust version is invalid")
 		}
+	case "go":
+		normalized, err := (toolchain.GoVersionScheme{}).NormalizeVersion(version)
+		if err != nil || normalized != version {
+			return "", errors.New("mounted Go version is invalid")
+		}
 	}
 	target := filepath.Join(familyRoot, version)
 	switch family {
@@ -97,12 +106,27 @@ func resolveToolchainShim(root, command string) (string, error) {
 		target = filepath.Join(target, command)
 	case "rust":
 		target = filepath.Join(target, "active", "bin", command)
+	case "go":
+		target = filepath.Join(target, "bin", command)
 	}
 	info, err := os.Stat(target)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 		return "", fmt.Errorf("managed %s executable is unavailable", command)
 	}
 	return target, nil
+}
+
+func toolchainShimEnvironment(command string, environment []string) []string {
+	if command != "go" {
+		return environment
+	}
+	result := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		if !strings.HasPrefix(entry, "GOTOOLCHAIN=") {
+			result = append(result, entry)
+		}
+	}
+	return append(result, "GOTOOLCHAIN=local")
 }
 
 func runToolchainShim(command string, args []string, stderr io.Writer) int {
@@ -112,7 +136,7 @@ func runToolchainShim(command string, args []string, stderr io.Writer) int {
 		return 126
 	}
 	argv := append([]string{command}, args...)
-	if err = unix.Exec(target, argv, os.Environ()); err != nil {
+	if err = unix.Exec(target, argv, toolchainShimEnvironment(command, os.Environ())); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 126
 	}

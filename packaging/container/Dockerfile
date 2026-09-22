@@ -56,7 +56,9 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/cargo-fmt \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/clippy-driver \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/cargo-clippy \
- && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/rust-analyzer
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/rust-analyzer \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/go \
+ && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/gofmt
 
 FROM alpine/git:2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f AS git-root
 

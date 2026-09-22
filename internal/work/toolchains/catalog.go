@@ -20,6 +20,7 @@ type Catalog struct {
 	Python  []PythonRelease `json:"python,omitempty"`
 	UV      []UVRelease     `json:"uv,omitempty"`
 	Rust    []RustRelease   `json:"rust,omitempty"`
+	Go      []GoRelease     `json:"go,omitempty"`
 }
 
 func LoadCatalog(raw []byte) (Catalog, error) {
@@ -43,7 +44,7 @@ func (c Catalog) Validate() error {
 	if c.Version != CatalogVersion {
 		return fmt.Errorf("unsupported toolchain catalog version %d", c.Version)
 	}
-	if len(c.Node)+len(c.Pnpm)+len(c.Python)+len(c.UV)+len(c.Rust) == 0 {
+	if len(c.Node)+len(c.Pnpm)+len(c.Python)+len(c.UV)+len(c.Rust)+len(c.Go) == 0 {
 		return errors.New("toolchain catalog has no releases")
 	}
 	if err := validateNodeCatalog(c.Node); err != nil {
@@ -59,6 +60,9 @@ func (c Catalog) Validate() error {
 		return err
 	}
 	if err := validateRustCatalog(c.Rust); err != nil {
+		return err
+	}
+	if err := validateGoCatalog(c.Go); err != nil {
 		return err
 	}
 	return nil
@@ -152,6 +156,25 @@ func validateRustCatalog(releases []RustRelease) error {
 	return nil
 }
 
+func validateGoCatalog(releases []GoRelease) error {
+	scheme := GoVersionScheme{}
+	for index, release := range releases {
+		if err := release.Validate(); err != nil {
+			return err
+		}
+		if index > 0 {
+			comparison, err := scheme.Compare(releases[index-1].Version, release.Version)
+			if err != nil {
+				return err
+			}
+			if comparison >= 0 {
+				return errors.New("Go catalog releases must be unique and sorted")
+			}
+		}
+	}
+	return nil
+}
+
 func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store GenerationStore) error {
 	if err := catalog.Validate(); err != nil {
 		return err
@@ -232,6 +255,22 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 		}
 		if plan.Resolution.Acquire {
 			if _, err = rustProvider.Provision(ctx, plan, artifacts); err != nil {
+				return err
+			}
+		}
+	}
+
+	goProvider := GoProvider{Store: store}
+	for _, release := range catalog.Go {
+		plan, resolveErr := goProvider.Resolve(GoProjectRequest{
+			Minimum: release.Version, Toolchain: "go" + release.Version,
+		}, catalog.Go, false)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if plan.Resolution.Acquire {
+			source := filepath.Join(artifacts, release.Filename())
+			if _, err = goProvider.Provision(ctx, plan, source); err != nil {
 				return err
 			}
 		}
