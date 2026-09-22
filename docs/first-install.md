@@ -2,7 +2,7 @@
 
 This is the canonical first-install procedure for the A13/A14 release-validation phase.
 
-The public one-line installer is **not published or advertised yet**. Until A14 release acceptance passes, obtain the exact `loki-bootstrap` artifact from the release-validation fixture. The final public shell frontend is reserved only as a thin bootstrap downloader; it does not contain lifecycle logic.
+The public one-line installer is **not published or advertised yet**. Until A14 release acceptance passes, obtain the exact `loki-bootstrap` artifact from the release-validation fixture. The final public shell frontend and publication workflow are implemented but remain gated: the rendered script is bound to one immutable Git tag and the exact SHA-256 of `loki-bootstrap-linux-amd64`, and it contains no lifecycle logic.
 
 ## What you need
 
@@ -148,6 +148,8 @@ go run ./tools/release/bootstrapbuild \
 
 The placeholder metadata URL above is intentionally not a public Loki install endpoint.
 
+After A14 has accepted the candidate bundle, `tools/release/publishprep` converts that exact evidence into the public GitHub Release asset set and the release-bound installer. The callable `.github/workflows/release.yml` publishes those assets through `releaseway/actions` and only then deploys the same installer bytes to the Loki project Pages site. The workflow does not create tags, choose versions, build a replacement candidate, or sign TUF metadata.
+
 ## Public installer gate
 
-The stable shell frontend reserved by the distribution plan remains unavailable until A14 release acceptance passes with no blocking findings or required skips. Until that gate closes, documentation must not present a public one-line shell install command.
+The stable shell frontend reserved by the distribution plan remains unavailable until A14 release acceptance passes with no blocking findings or required skips and the release publication workflow has successfully deployed Pages. Until that gate closes, documentation must not present the public one-line shell command as a live installation path.

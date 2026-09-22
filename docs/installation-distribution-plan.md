@@ -57,7 +57,7 @@ Public installation artifacts must be readable without requiring a GitHub login 
 - OCI images: `ghcr.io/jinyongp/loki`
 - reserved post-acceptance installer frontend: `jinyongp.dev/loki/install.sh`
 
-The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). The artifact backend may change later without changing the reserved frontend.
+The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). The final publication pipeline is already constrained: an A14 caller supplies the accepted candidate evidence bundle, `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is release-bound to one exact Git tag and the exact SHA-256 of the public `loki-bootstrap-linux-amd64` artifact; it does not resolve a mutable bootstrap at install time. The artifact backend may change later without changing the reserved frontend.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 
@@ -71,9 +71,9 @@ The source-free bootstrap is deliberately small. It:
 4. Stages the verified inputs privately.
 5. Hands installation to `loki host install`.
 
-A future public shell frontend may only detect the supported host, download the authenticated bootstrap artifact, and execute it. It must not contain lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
+The reserved public shell frontend is a release-rendered thin downloader. It detects the supported host, downloads one exact `loki-bootstrap` artifact from one immutable GitHub Release tag, verifies the SHA-256 embedded into that rendered installer, and executes the bootstrap with the caller's arguments. It contains no lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
 
-The canonical pre-release first-install procedure is [docs/first-install.md](first-install.md). No public one-line shell command is documented until A14 release acceptance passes.
+The canonical pre-release first-install procedure is [docs/first-install.md](first-install.md). The source and publication workflow for the stable frontend are implemented, but no public one-line shell command is documented as live until A14 release acceptance passes and the Pages deployment succeeds.
 
 ## Installation scope
 

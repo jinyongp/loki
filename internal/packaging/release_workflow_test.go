@@ -56,6 +56,39 @@ func TestReleaseWorkflowPublishesOnlyAcceptedCandidate(t *testing.T) {
 	}
 }
 
+func TestInstallerDocumentationKeepsA14PublicationGate(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planRaw, err := os.ReadFile(filepath.Join(root, "docs", "installation-distribution-plan.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstInstallRaw, err := os.ReadFile(filepath.Join(root, "docs", "first-install.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := string(planRaw)
+	firstInstall := string(firstInstallRaw)
+	for _, required := range []string{
+		"releaseway/actions",
+		"jinyongp.dev/loki/install.sh",
+		"loki-bootstrap-linux-amd64",
+	} {
+		if !strings.Contains(plan, required) {
+			t.Fatalf("installation distribution plan lacks %q", required)
+		}
+	}
+	if !strings.Contains(firstInstall, "not published or advertised yet") ||
+		!strings.Contains(firstInstall, "releaseway/actions") {
+		t.Fatal("first-install documentation no longer preserves the A14 publication gate")
+	}
+	if strings.Contains(firstInstall, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") {
+		t.Fatal("pre-A14 first-install documentation advertises the live one-line command")
+	}
+}
+
 func TestInstallerTemplateIsReleaseBoundAndThin(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

@@ -55,3 +55,56 @@ go run ./tools/release/evidencebuild \
 ```
 
 A14 acceptance records the resulting `evidence.json` ID. It does not substitute source-tree binaries or mutable image tags after the bundle is assembled.
+
+
+## Publication preparation
+
+`publishprep` converts one already-verified A14 candidate evidence bundle into
+the exact public publication set. It does not build or sign a release.
+
+The tool verifies the candidate bundle again, requires its source revision to
+match the publication commit, requires the Git tag to be `v<release-version>`,
+and rechecks the authenticated release-index/manifest binding before copying
+accepted bytes into stable external names such as:
+
+- `loki-linux-amd64`;
+- `loki-bootstrap-linux-amd64`;
+- `loki-host-assets.tar.gz`;
+- `loki-release-manifest.json`;
+- `loki-release-index.json`;
+- `loki-provenance.bundle.json`;
+- `loki-notices.tar.gz`;
+- `loki-release-notes.md`.
+
+Public artifacts keep the `loki-` product namespace even though their source
+entrypoints use repository-local role names such as `cmd/bootstrap`.
+
+The same preparation renders `install.sh` from `install.sh.tmpl`. The
+rendered script contains one exact immutable Git tag and the exact SHA-256 of
+`loki-bootstrap-linux-amd64`; it never resolves a mutable `latest` bootstrap
+at install time. The installer only detects the supported platform, downloads
+that bootstrap over HTTPS, verifies the embedded digest, and executes it with
+the caller's arguments. Lifecycle behavior remains in the authenticated
+bootstrap and `loki host`.
+
+## GitHub publication
+
+`.github/workflows/release.yml` is intentionally `workflow_call`-only. The
+A14 caller must first upload the accepted candidate bundle as a workflow
+artifact. The publication workflow then:
+
+1. recreates public assets with `publishprep`;
+2. publishes the exact asset set as an immutable GitHub Release through
+   `releaseway/actions`, pinned to a full commit SHA;
+3. archives the release-bound installer as `loki-install.sh`;
+4. only after the GitHub Release succeeds, deploys those same installer bytes
+   to the Loki GitHub Pages project site.
+
+When the user-site custom domain is `jinyongp.dev`, the Loki project Pages
+path is `https://jinyongp.dev/loki/`, so the deployed file becomes
+`https://jinyongp.dev/loki/install.sh`.
+
+Pages must be configured to use GitHub Actions before the first live
+publication. Live GitHub Release and Pages publication remain part of the A14
+gate; this workflow has no tag-push or manual-dispatch trigger that can bypass
+that caller.
