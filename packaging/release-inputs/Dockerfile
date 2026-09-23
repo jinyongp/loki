@@ -27,7 +27,7 @@ RUN cd /src/gh \
       -o /out/gh ./cmd/gh \
  && /out/gh version | grep -q '^gh version 2\.101\.0 '
 
-FROM --platform=$TARGETPLATFORM rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446 AS ripgrep
+FROM --platform=$TARGETPLATFORM rust:1.98.1-alpine3.24@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f AS ripgrep
 ARG RIPGREP_VERSION=15.2.0
 ARG RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f
 RUN apk add --no-cache git build-base pcre2-dev perl
