@@ -7,12 +7,57 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
+
+	"loki/internal/host/releases"
 )
+
+func commandManifest(t *testing.T, version string, binary []byte) []byte {
+	t.Helper()
+	sum := sha256.Sum256(binary)
+	generation, err := releases.NewGeneration(releases.GenerationSpec{
+		Version:          version,
+		ReleasedAt:       time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC),
+		HostBinaryDigest: "sha256:" + hex.EncodeToString(sum[:]),
+		CoreImageDigest:  "sha256:" + strings.Repeat("b", 64),
+		ConfigSchema:     1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
+		Reads: releases.Compatibility{
+			Config:    releases.SchemaRange{Min: 1, Max: 1},
+			Policy:    releases.SchemaRange{Min: 1, Max: 1},
+			Toolchain: releases.SchemaRange{Min: 1, Max: 1},
+			State:     releases.SchemaRange{Min: 1, Max: 1},
+		},
+		Rollback: releases.RollbackCoverage{StateSnapshot: true, ConfigSnapshot: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := func(path, digest string) releases.TargetDescriptor {
+		return releases.TargetDescriptor{Path: path, Length: 1, SHA256: strings.Repeat(digest, 64)}
+	}
+	manifest := releases.ReleaseManifest{
+		Version:          releases.ReleaseManifestVersion,
+		Generation:       generation,
+		HostBinary:       releases.TargetDescriptor{Path: "releases/bin/loki-" + version, Length: int64(len(binary)), SHA256: hex.EncodeToString(sum[:])},
+		HostAssets:       target("releases/assets/loki-host-"+version+".tar.gz", "d"),
+		ToolchainCatalog: target("toolchains/catalogs/"+version+".json", "e"),
+		Provenance:       target("releases/provenance/"+version+".bundle.json", "f"),
+		Notices:          target("releases/notices/"+version+".tar.gz", "1"),
+		ReleaseNotes:     target("releases/notes/"+version+".md", "2"),
+		SupportedHosts:   []releases.SupportedHost{{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"}},
+		Runtime:          releases.RuntimeRequirements{DockerMin: "28.0.0", ComposeMin: "2.39.0"},
+	}
+	raw, err := releases.EncodeReleaseManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
 
 func TestParseBootstrapArgsSeparatesBootstrapAndInstallerFlags(t *testing.T) {
 	options, err := parseBootstrapArgs([]string{
-		"--bootstrap-release=1.2.3",
 		"--bootstrap-state-root", "/tmp/loki-bootstrap-state",
 		"--system",
 		"--workspace", "/srv/loki",
@@ -20,7 +65,7 @@ func TestParseBootstrapArgsSeparatesBootstrapAndInstallerFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if options.requestedRelease != "1.2.3" || options.stateRoot != "/tmp/loki-bootstrap-state" || !options.system {
+	if options.stateRoot != "/tmp/loki-bootstrap-state" || !options.system {
 		t.Fatalf("bootstrap options = %#v", options)
 	}
 	want := []string{"--system", "--workspace", "/srv/loki"}
@@ -29,12 +74,12 @@ func TestParseBootstrapArgsSeparatesBootstrapAndInstallerFlags(t *testing.T) {
 	}
 }
 
-func TestParseBootstrapArgsRejectsMissingBootstrapValues(t *testing.T) {
+func TestParseBootstrapArgsRejectsReleaseOverrideAndReservedManifest(t *testing.T) {
 	for _, args := range [][]string{
-		{"--bootstrap-release"},
-		{"--bootstrap-release="},
 		{"--bootstrap-state-root"},
 		{"--bootstrap-state-root="},
+		{"--bootstrap-release", "1.2.3"},
+		{"--bootstrap-release=v1.2.3"},
 		{"--bootstrap-release-manifest", "/tmp/forged.json"},
 		{"--bootstrap-release-manifest=/tmp/forged.json"},
 	} {
@@ -44,25 +89,30 @@ func TestParseBootstrapArgsRejectsMissingBootstrapValues(t *testing.T) {
 	}
 }
 
-func TestBootstrapInfoReportsEmbeddedTrustWithoutInstallation(t *testing.T) {
-	root := []byte("{\"signed\":\"fixture\"}\n")
-	encoded := base64.StdEncoding.EncodeToString(root)
+func TestBootstrapInfoReportsEmbeddedReleaseBindingWithoutInstallation(t *testing.T) {
+	manifest := commandManifest(t, "1.2.3", []byte("host-binary"))
+	encoded := base64.StdEncoding.EncodeToString(manifest)
 	var stdout, stderr bytes.Buffer
 	code := runBootstrap(
 		[]string{"--bootstrap-info"},
 		bytes.NewReader(nil),
 		&stdout,
 		&stderr,
-		"https://jinyongp.dev/loki/tuf/",
+		"v1.2.3",
 		encoded,
 	)
 	if code != 0 {
 		t.Fatalf("bootstrap info exit = %d, stderr=%q", code, stderr.String())
 	}
-	sum := sha256.Sum256(root)
+	loaded, err := releases.LoadReleaseManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(manifest)
 	want := bootstrapInfo{
-		MetadataURL:       "https://jinyongp.dev/loki/tuf/",
-		TrustedRootSHA256: hex.EncodeToString(sum[:]),
+		ReleaseTag:            "v1.2.3",
+		ReleaseManifestSHA256: hex.EncodeToString(sum[:]),
+		HostBinarySHA256:      loaded.HostBinary.SHA256,
 	}
 	var got bootstrapInfo
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
@@ -77,7 +127,6 @@ func TestParseBootstrapInfoRejectsInstallationOptions(t *testing.T) {
 	for _, args := range [][]string{
 		{"--bootstrap-info", "--system"},
 		{"--bootstrap-info", "--workspace", "/srv/loki"},
-		{"--bootstrap-info", "--bootstrap-release", "1.2.3"},
 		{"--bootstrap-info", "--bootstrap-state-root", "/tmp/state"},
 	} {
 		if _, err := parseBootstrapArgs(args); err == nil {
@@ -86,13 +135,14 @@ func TestParseBootstrapInfoRejectsInstallationOptions(t *testing.T) {
 	}
 }
 
-func TestRunBootstrapFailsClosedWithoutEmbeddedTrust(t *testing.T) {
+func TestRunBootstrapFailsClosedWithoutEmbeddedRelease(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := runBootstrap(nil, bytes.NewReader(nil), &stdout, &stderr, "", ""); code != 1 {
-		t.Fatalf("missing metadata URL exit = %d, stderr=%q", code, stderr.String())
+		t.Fatalf("missing release tag exit = %d, stderr=%q", code, stderr.String())
 	}
 	stderr.Reset()
-	if code := runBootstrap(nil, bytes.NewReader(nil), &stdout, &stderr, "https://updates.example.test/repository", ""); code != 1 {
-		t.Fatalf("missing trusted root exit = %d, stderr=%q", code, stderr.String())
+	manifest := commandManifest(t, "1.2.3", []byte("host-binary"))
+	if code := runBootstrap(nil, bytes.NewReader(nil), &stdout, &stderr, "v9.9.9", base64.StdEncoding.EncodeToString(manifest)); code != 1 {
+		t.Fatalf("mismatched release tag exit = %d, stderr=%q", code, stderr.String())
 	}
 }

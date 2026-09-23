@@ -29,7 +29,7 @@ the supplied release must implement protocol version 1 and the required
 ## Install
 
 Ordinary installation is source-free. On a supported clean Ubuntu 24.04 or WSL2
-host, run the authenticated `loki-bootstrap` artifact and follow its prompts:
+host, run the release-bound `loki-bootstrap` artifact and follow its prompts:
 
 ```sh
 chmod 0755 ./loki-bootstrap

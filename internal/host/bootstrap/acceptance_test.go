@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,36 +29,6 @@ func (r cleanHostRunner) Run(ctx context.Context, executable string, args []stri
 	return command.Run()
 }
 
-func sourceFreeBootstrapFixture(t *testing.T, binary []byte) *fakeReleaseSource {
-	t.Helper()
-	now := time.Date(2026, 9, 22, 6, 30, 0, 0, time.UTC)
-	manifest, manifestRaw := bootstrapManifest(t, "3.0.0", now, binary)
-	manifestDescriptor := bootstrapDescriptor("releases/manifests/3.0.0.json", manifestRaw)
-	entry, err := releases.IndexEntryForManifest(manifest, manifestDescriptor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	index, err := releases.NewReleaseIndex([]releases.ReleaseIndexEntry{entry})
-	if err != nil {
-		t.Fatal(err)
-	}
-	indexRaw, err := json.Marshal(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &fakeReleaseSource{targets: map[string]struct {
-		descriptor releases.TargetDescriptor
-		raw        []byte
-	}{
-		"index.json": {
-			descriptor: bootstrapDescriptor("releases/index.json", indexRaw),
-			raw:        indexRaw,
-		},
-		"manifests/3.0.0.json": {descriptor: manifestDescriptor, raw: manifestRaw},
-		"bin/loki-3.0.0":       {descriptor: manifest.HostBinary, raw: binary},
-	}}
-}
-
 func TestSourceFreeBootstrapAcceptanceUbuntuAndWSL(t *testing.T) {
 	for _, environment := range []string{"native", "wsl"} {
 		t.Run(environment, func(t *testing.T) {
@@ -81,7 +50,7 @@ func TestSourceFreeBootstrapAcceptanceUbuntuAndWSL(t *testing.T) {
 				"test -f \"$4\"\n" +
 				"shift 4\n" +
 				"printf '%s\\n' \"$@\" > \"$LOKI_ACCEPTANCE_MARKER\"\n")
-			source := sourceFreeBootstrapFixture(t, binary)
+			manifest, manifestRaw := bootstrapManifest(t, "3.0.0", time.Date(2026, 9, 22, 6, 30, 0, 0, time.UTC), binary)
 			host := releases.SupportedHost{
 				Environment: environment, Distribution: "ubuntu", Version: "24.04", Arch: "amd64",
 			}
@@ -92,19 +61,20 @@ func TestSourceFreeBootstrapAcceptanceUbuntuAndWSL(t *testing.T) {
 				args = append([]string{"--system"}, args...)
 			}
 			candidate, err := Run(t.Context(), Config{
-				StateRoot:        stateRoot,
-				RequestedRelease: "3.0.0",
-				Host:             &host,
-				InstallArgs:      args,
+				StateRoot:       stateRoot,
+				ReleaseTag:      "v3.0.0",
+				ReleaseManifest: manifestRaw,
+				Host:            &host,
+				InstallArgs:     args,
 				Runner: cleanHostRunner{
 					workdir: cleanRoot, home: home, marker: marker,
 				},
-				Source: source,
+				Fetcher: &fakeAssetFetcher{raw: binary},
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if candidate.Host != host || candidate.Entry.Release != "3.0.0" {
+			if candidate.Host != host || candidate.Manifest.Generation.ID != manifest.Generation.ID {
 				t.Fatalf("bootstrap candidate = %#v", candidate)
 			}
 			raw, err := os.ReadFile(marker)

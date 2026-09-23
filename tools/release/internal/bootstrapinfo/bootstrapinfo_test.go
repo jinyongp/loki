@@ -16,24 +16,26 @@ func writeInspectorFixture(t *testing.T, body string) string {
 	return path
 }
 
-func TestInspectReadsValidatedBootstrapTrust(t *testing.T) {
+func TestInspectReadsValidatedBootstrapReleaseBinding(t *testing.T) {
 	digest := strings.Repeat("a", 64)
-	path := writeInspectorFixture(t, "printf '%s\\n' '{\"metadata_url\":\"https://jinyongp.dev/loki/tuf/\",\"trusted_root_sha256\":\""+digest+"\"}'")
+	hostDigest := strings.Repeat("b", 64)
+	path := writeInspectorFixture(t, "printf '%s\\n' '{\"release_tag\":\"v1.2.3\",\"release_manifest_sha256\":\""+digest+"\",\"host_binary_sha256\":\""+hostDigest+"\"}'")
 	info, err := Inspect(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.MetadataURL != "https://jinyongp.dev/loki/tuf/" || info.TrustedRootSHA256 != digest {
+	if info.ReleaseTag != "v1.2.3" || info.ReleaseManifestSHA256 != digest || info.HostBinarySHA256 != hostDigest {
 		t.Fatalf("bootstrap info = %#v", info)
 	}
 }
 
 func TestInspectRejectsInvalidOutputAndSymlink(t *testing.T) {
+	good := strings.Repeat("a", 64)
 	for name, body := range map[string]string{
-		"unknown-field": "printf '%s\\n' '{\"metadata_url\":\"https://example.test/tuf/\",\"trusted_root_sha256\":\"" + strings.Repeat("a", 64) + "\",\"extra\":true}'",
-		"http":          "printf '%s\\n' '{\"metadata_url\":\"http://example.test/tuf/\",\"trusted_root_sha256\":\"" + strings.Repeat("a", 64) + "\"}'",
-		"bad-digest":    "printf '%s\\n' '{\"metadata_url\":\"https://example.test/tuf/\",\"trusted_root_sha256\":\"bad\"}'",
-		"trailing-json": "printf '%s\\n' '{\"metadata_url\":\"https://example.test/tuf/\",\"trusted_root_sha256\":\"" + strings.Repeat("a", 64) + "\"} 1'",
+		"unknown-field": "printf '%s\\n' '{\"release_tag\":\"v1.2.3\",\"release_manifest_sha256\":\"" + good + "\",\"host_binary_sha256\":\"" + good + "\",\"extra\":true}'",
+		"bad-tag":       "printf '%s\\n' '{\"release_tag\":\"1.2.3\",\"release_manifest_sha256\":\"" + good + "\",\"host_binary_sha256\":\"" + good + "\"}'",
+		"bad-digest":    "printf '%s\\n' '{\"release_tag\":\"v1.2.3\",\"release_manifest_sha256\":\"bad\",\"host_binary_sha256\":\"" + good + "\"}'",
+		"trailing-json": "printf '%s\\n' '{\"release_tag\":\"v1.2.3\",\"release_manifest_sha256\":\"" + good + "\",\"host_binary_sha256\":\"" + good + "\"} 1'",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Inspect(t.Context(), writeInspectorFixture(t, body)); err == nil {

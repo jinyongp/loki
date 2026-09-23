@@ -16,17 +16,17 @@ import (
 	"loki/internal/host/releases"
 )
 
-const maxBootstrapRootBytes = 512 << 10
+const maxBootstrapManifestBytes = 16 << 20
 
 var targetTokenPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
 type buildOptions struct {
-	Output      string
-	MetadataURL string
-	TrustedRoot string
-	SourceRoot  string
-	GOOS        string
-	GOARCH      string
+	Output          string
+	ReleaseTag      string
+	ReleaseManifest string
+	SourceRoot      string
+	GOOS            string
+	GOARCH          string
 }
 
 type buildRunner interface {
@@ -50,8 +50,8 @@ func (execBuildRunner) Run(ctx context.Context, cwd string, args, environment []
 func main() {
 	var options buildOptions
 	flag.StringVar(&options.Output, "output", "", "absolute output path")
-	flag.StringVar(&options.MetadataURL, "metadata-url", "", "HTTPS TUF metadata repository URL")
-	flag.StringVar(&options.TrustedRoot, "trusted-root", "", "initial TUF root.json path")
+	flag.StringVar(&options.ReleaseTag, "release-tag", "", "exact immutable Git release tag")
+	flag.StringVar(&options.ReleaseManifest, "release-manifest", "", "exact release manifest JSON path")
 	flag.StringVar(&options.SourceRoot, "source-root", "", "repository root (defaults to current repository)")
 	flag.StringVar(&options.GOOS, "goos", "linux", "target GOOS")
 	flag.StringVar(&options.GOARCH, "goarch", "amd64", "target GOARCH")
@@ -66,24 +66,9 @@ func main() {
 	}
 }
 
-type trustValidator func(string, []byte) error
-
 func buildBootstrap(ctx context.Context, options buildOptions, runner buildRunner, environment []string) error {
-	return buildBootstrapWithValidator(ctx, options, runner, environment, validateEmbeddedTrust)
-}
-
-func buildBootstrapWithValidator(
-	ctx context.Context,
-	options buildOptions,
-	runner buildRunner,
-	environment []string,
-	validate trustValidator,
-) error {
 	if runner == nil {
 		return errors.New("bootstrap build runner is not configured")
-	}
-	if validate == nil {
-		return errors.New("bootstrap trust validator is not configured")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -96,12 +81,18 @@ func buildBootstrapWithValidator(
 	if err != nil {
 		return err
 	}
-	rootRaw, err := readTrustedRoot(options.TrustedRoot)
+	manifestRaw, err := readReleaseManifest(options.ReleaseManifest)
 	if err != nil {
 		return err
 	}
-	if err = validate(options.MetadataURL, rootRaw); err != nil {
-		return err
+	manifest, err := releases.LoadReleaseManifest(manifestRaw)
+	if err != nil {
+		return fmt.Errorf("validate bootstrap release manifest: %w", err)
+	}
+	releaseTag := strings.TrimSpace(options.ReleaseTag)
+	expectedTag := "v" + manifest.Generation.Spec.Version
+	if releaseTag != expectedTag {
+		return fmt.Errorf("bootstrap release tag must be %s", expectedTag)
 	}
 	goos := strings.ToLower(strings.TrimSpace(options.GOOS))
 	goarch := strings.ToLower(strings.TrimSpace(options.GOARCH))
@@ -141,11 +132,11 @@ func buildBootstrapWithValidator(
 		}
 	}()
 
-	embeddedRoot := base64.StdEncoding.EncodeToString(rootRaw)
+	embeddedManifest := base64.StdEncoding.EncodeToString(manifestRaw)
 	ldflags := strings.Join([]string{
 		"-buildid=",
-		"-X", "main.releaseMetadataURL=" + options.MetadataURL,
-		"-X", "main.trustedRootBase64=" + embeddedRoot,
+		"-X", "main.releaseTag=" + releaseTag,
+		"-X", "main.releaseManifestBase64=" + embeddedManifest,
 	}, " ")
 	args := []string{
 		"build",
@@ -225,55 +216,32 @@ func validateOutputPath(value string) (string, error) {
 	return value, nil
 }
 
-func readTrustedRoot(path string) ([]byte, error) {
+func readReleaseManifest(path string) ([]byte, error) {
 	path = strings.TrimSpace(path)
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == string(filepath.Separator) ||
 		strings.ContainsRune(path, 0) {
-		return nil, errors.New("bootstrap trusted root path must be a clean absolute non-root path")
+		return nil, errors.New("bootstrap release manifest path must be a clean absolute non-root path")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maxBootstrapRootBytes {
-		return nil, errors.New("bootstrap trusted root must be a bounded regular file")
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maxBootstrapManifestBytes {
+		return nil, errors.New("bootstrap release manifest must be a bounded regular file")
 	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	raw, err := io.ReadAll(io.LimitReader(file, maxBootstrapRootBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, maxBootstrapManifestBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) == 0 || len(raw) > maxBootstrapRootBytes {
-		return nil, errors.New("bootstrap trusted root exceeds size policy")
+	if len(raw) == 0 || len(raw) > maxBootstrapManifestBytes {
+		return nil, errors.New("bootstrap release manifest exceeds size policy")
 	}
 	return raw, nil
-}
-
-func validateEmbeddedTrust(metadataURL string, root []byte) error {
-	stateRoot, err := os.MkdirTemp("", "loki-bootstrap-trust-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(stateRoot)
-	if err = os.Chmod(stateRoot, 0700); err != nil {
-		return err
-	}
-	client, err := releases.Open(releases.Config{
-		StateRoot:         stateRoot,
-		RemoteMetadataURL: strings.TrimSpace(metadataURL),
-		TrustedRoot:       root,
-	})
-	if err != nil {
-		return fmt.Errorf("validate bootstrap trust: %w", err)
-	}
-	if client == nil {
-		return errors.New("validate bootstrap trust returned no client")
-	}
-	return nil
 }
 
 func filteredBuildEnvironment(environment []string, goos, goarch string) []string {

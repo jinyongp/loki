@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	ReleaseManifestVersion = 1
+	ReleaseManifestVersion = 2
 	ReleaseIndexVersion    = 1
 )
 
@@ -38,7 +38,6 @@ type ReleaseManifest struct {
 	Version          int                 `json:"version"`
 	Generation       Generation          `json:"generation"`
 	HostBinary       TargetDescriptor    `json:"host_binary"`
-	Bootstrap        TargetDescriptor    `json:"bootstrap"`
 	HostAssets       TargetDescriptor    `json:"host_assets"`
 	ToolchainCatalog TargetDescriptor    `json:"toolchain_catalog"`
 	Provenance       TargetDescriptor    `json:"provenance"`
@@ -78,7 +77,6 @@ func NewReleaseManifest(manifest ReleaseManifest) (ReleaseManifest, error) {
 		namespace string
 	}{
 		"host binary":       {manifest.HostBinary, "releases"},
-		"bootstrap":         {manifest.Bootstrap, "releases"},
 		"host assets":       {manifest.HostAssets, "releases"},
 		"toolchain catalog": {manifest.ToolchainCatalog, "toolchains"},
 		"provenance":        {manifest.Provenance, "releases"},
@@ -283,7 +281,7 @@ func validateTargetDescriptor(descriptor TargetDescriptor, namespace string) err
 	relative := strings.TrimPrefix(descriptor.Path, namespace+"/")
 	expected, err := namespacedTargetPath(namespace, relative)
 	if err != nil || expected != descriptor.Path {
-		return errors.New("target path is outside its authenticated namespace")
+		return errors.New("target path is outside its declared namespace")
 	}
 	if descriptor.Length <= 0 || descriptor.Length > maxTargetBytes || !sha256Pattern.MatchString(descriptor.SHA256) {
 		return errors.New("target content identity is invalid")

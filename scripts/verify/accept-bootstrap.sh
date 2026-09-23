@@ -13,4 +13,4 @@ go test ./internal/host/bootstrap   -run '^TestSourceFreeBootstrapAcceptanceUbun
 
 go test ./internal/host/releases   -run '^TestAuthenticatedMetadataAcceptanceFreshnessRollbackAndRotation$'   -count=1
 
-printf 'loki authenticated bootstrap acceptance: passed\n'
+printf 'loki release-bound bootstrap acceptance: passed\n'

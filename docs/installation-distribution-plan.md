@@ -53,12 +53,11 @@ Loki is distributed under the Apache License 2.0.
 
 Public installation artifacts must be readable without requiring a GitHub login or another bootstrap credential. The intended distribution channels are:
 
-- signed TUF metadata and consistent-snapshot targets: `jinyongp.dev/loki/tuf/`
 - immutable public release assets and acceptance evidence: GitHub Releases
 - OCI images: `ghcr.io/jinyongp/loki`
 - reserved post-acceptance installer frontend: `jinyongp.dev/loki/install.sh`
 
-The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the authenticated `loki-bootstrap` binary artifact described in [First install](first-install.md). Before A14 evidence is assembled, the configured TUF signing system must finish a signed repository version. Loki verifies that repository through its production Go TUF client, proves that the accepted bootstrap embeds `https://jinyongp.dev/loki/tuf/` and the same trusted root, and binds the deterministic repository archive into the candidate evidence. The final publication pipeline then has an A14 caller supply that accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update both `jinyongp.dev/loki/install.sh` and `jinyongp.dev/loki/tuf/`. The Pages installer is release-bound to one exact Git tag and the exact SHA-256 of the public `loki-bootstrap-linux-amd64` artifact; it does not resolve a mutable bootstrap at install time. The artifact backend may change later without changing the reserved frontend.
+The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the release-bound `loki-bootstrap` artifact described in [First install](first-install.md). The bootstrap embeds one exact release manifest and tag, downloads the matching host binary from that immutable GitHub Release, and verifies its manifest-bound length and SHA-256 before execution. The final publication pipeline has an A14 caller supply the accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is itself bound to the same exact Git tag and the exact SHA-256 of `loki-bootstrap-linux-amd64`; no mutable release lookup occurs during first install.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 
@@ -66,11 +65,12 @@ Released OCI images must preserve the licenses and required notices of bundled t
 
 The source-free bootstrap is deliberately small. It:
 
-1. Uses an embedded initial TUF root and authenticated metadata repository URL.
-2. Resolves the requested or current Loki release for the supported host.
-3. Downloads and verifies the matching host binary and release manifest.
-4. Stages the verified inputs privately.
-5. Hands installation to `loki host install`.
+1. Embeds one exact release tag and release manifest.
+2. Confirms the detected host is supported by that manifest.
+3. Downloads the matching host binary from the same immutable GitHub Release.
+4. Verifies the binary length and SHA-256 from the embedded manifest.
+5. Stages the verified binary and manifest privately.
+6. Hands installation to `loki host install`.
 
 The reserved public shell frontend is a release-rendered thin downloader. It detects the supported host, downloads one exact `loki-bootstrap` artifact from one immutable GitHub Release tag, verifies the SHA-256 embedded into that rendered installer, and executes the bootstrap with the caller's arguments. It contains no lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
 
@@ -142,7 +142,7 @@ Loki manages development toolchains independently from the workspace. Runtime fa
 
 Loki does not depend on external version managers such as fnm, nvm, pyenv, or rustup for its runtime contract. Instead, the runtime exposes thin Loki-owned shims at the front of `PATH`. A shim resolves the requested toolchain version for the current working directory and then executes the matching binary from a Loki-managed store.
 
-The managed store lives outside the workspace and is writable only through Loki's toolchain management boundary. Ordinary runner processes may read and execute installed toolchains but cannot replace or mutate them. Toolchains are downloaded only from Loki-defined trusted sources, verified against authenticated metadata and checksums, and installed atomically.
+The managed store lives outside the workspace and is writable only through Loki's toolchain management boundary. Ordinary runner processes may read and execute installed toolchains but cannot replace or mutate them. Toolchains are downloaded only from Loki-defined trusted sources, verified against administrator-owned catalog identities and checksums, and installed atomically.
 
 Projects use ecosystem-standard version declarations where practical. Examples include `.node-version` or `.nvmrc` for Node.js, the `packageManager` field for pnpm, `.python-version` for Python, uv's project version requirements, `rust-toolchain.toml` for Rust, and Go module/toolchain declarations. Loki-specific project policy files are not used to grant execution or network permissions.
 
@@ -262,7 +262,7 @@ Implementation proceeds through enforcement and usefulness before installation p
 2. Provide a usable MCP-only execution workflow and correct file/repository operations through that boundary (A07-A08).
 3. Implement safe toolchain provisioning/shims (A09). After its dependencies are ready, optional runtime integrations (A10) and the transactional core host lifecycle (A11) may progress independently rather than blocking one another.
 4. Complete remaining providers, resource/retention budgets, diagnostics and package cleanup (A12), including each finished optional integration's lifecycle hooks and acceptance.
-5. Prepare authenticated artifacts and the thin bootstrap, then run source-checkout-free Ubuntu/WSL acceptance against actual distinct release images (A13-A14). Advertise the public one-line installation only after those required gates pass.
+5. Prepare immutable release artifacts and the release-bound thin bootstrap, then run source-checkout-free Ubuntu/WSL acceptance against actual distinct release images (A13-A14). Advertise the public one-line installation only after those required gates pass.
 
 The host CLI still owns workspace selection, explicit prerequisite approval, embedded/versioned Compose assets, optional-component management, and generic connection reporting. Runtime findings must not be bypassed by making the installer silently grant broader privileges. Production deployment, acceptance of cutover, and legacy retirement remain separately authorized operations; no review or implementation step implicitly restarts the existing Python service.
 

@@ -3,7 +3,7 @@
 This page is for source-tree development, release engineering, topology
 acceptance, and specialized self-hosting. It is **not** the ordinary
 first-install procedure. A normal supported-host installation starts from the
-authenticated `loki-bootstrap` artifact and lets `loki host install` handle
+release-bound `loki-bootstrap` artifact and lets `loki host install` handle
 Docker/Compose prerequisite checks, workspace onboarding, embedded assets, and
 persistent host-management CLI installation. See [First install](first-install.md).
 
@@ -27,7 +27,7 @@ install/update/rollback implementation.
 
 ## Host lifecycle
 
-Ordinary users reach this interface through the authenticated bootstrap. The
+Ordinary users reach this interface through the release-bound bootstrap. The
 low-level release-manifest handoff is reserved for the bootstrap and
 release-validation fixtures; it is not a manual end-user install step.
 
@@ -108,7 +108,7 @@ docker buildx build --load \
 
 Copy project runtime binaries and support files only under `/usr/local` or `/opt/project`. Keep the inherited entrypoint, command, user, working directory, labels, Loki binaries, devtools, rg, identity database, workspace metadata, and volume declarations.
 
-The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for the portable topology smoke. Durable host updates require an authenticated release generation and go through `loki host update prepare|apply`; a local image tag is not an update identity.
+The validator compares OCI configuration and provenance labels, hashes Loki-managed files in both images, checks service UID/GID records and workspace mode, and executes `loki version` and `devtools version` without network access. A derived image that changes these invariants is not eligible for the portable topology smoke. Durable host updates require an immutable release generation and go through `loki host update prepare|apply`; a local image tag is not an update identity.
 
 ## Configure the optional GitHub App
 

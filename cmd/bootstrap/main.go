@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,22 +12,18 @@ import (
 )
 
 var (
-	releaseMetadataURL string
-	trustedRootBase64  string
+	releaseTag            string
+	releaseManifestBase64 string
 )
 
 type bootstrapOptions struct {
-	requestedRelease string
-	stateRoot        string
-	system           bool
-	info             bool
-	installArgs      []string
+	stateRoot   string
+	system      bool
+	info        bool
+	installArgs []string
 }
 
-type bootstrapInfo struct {
-	MetadataURL       string `json:"metadata_url"`
-	TrustedRootSHA256 string `json:"trusted_root_sha256"`
-}
+type bootstrapInfo = bootstrap.ReleaseBindingInfo
 
 func main() {
 	input := io.Reader(os.Stdin)
@@ -39,30 +32,22 @@ func main() {
 		defer tty.Close()
 		input = tty
 	}
-	os.Exit(runBootstrap(os.Args[1:], input, os.Stdout, os.Stderr, releaseMetadataURL, trustedRootBase64))
+	os.Exit(runBootstrap(os.Args[1:], input, os.Stdout, os.Stderr, releaseTag, releaseManifestBase64))
 }
 
-func runBootstrap(args []string, stdin io.Reader, stdout, stderr io.Writer, metadataURL, rootBase64 string) int {
+func runBootstrap(args []string, stdin io.Reader, stdout, stderr io.Writer, tag, manifestBase64 string) int {
 	options, err := parseBootstrapArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	metadataURL = strings.TrimSpace(metadataURL)
-	if metadataURL == "" {
-		fmt.Fprintln(stderr, "bootstrap release metadata URL is not embedded")
-		return 1
-	}
-	root, err := base64.StdEncoding.Strict().DecodeString(strings.TrimSpace(rootBase64))
-	if err != nil || len(root) == 0 {
-		fmt.Fprintln(stderr, "bootstrap trusted root is not embedded")
+	manifestRaw, releaseInfo, err := bootstrap.DecodeEmbeddedRelease(tag, manifestBase64)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if options.info {
-		sum := sha256.Sum256(root)
-		if err = json.NewEncoder(stdout).Encode(bootstrapInfo{
-			MetadataURL: metadataURL, TrustedRootSHA256: hex.EncodeToString(sum[:]),
-		}); err != nil {
+		if err = json.NewEncoder(stdout).Encode(releaseInfo); err != nil {
 			fmt.Fprintln(stderr, "encode bootstrap info:", err)
 			return 1
 		}
@@ -78,12 +63,11 @@ func runBootstrap(args []string, stdin io.Reader, stdout, stderr io.Writer, meta
 	}
 	runner := bootstrap.ExecRunner{Stdin: stdin, Stdout: stdout, Stderr: stderr}
 	if _, err = bootstrap.Run(context.Background(), bootstrap.Config{
-		StateRoot:         stateRoot,
-		RemoteMetadataURL: metadataURL,
-		TrustedRoot:       root,
-		RequestedRelease:  options.requestedRelease,
-		InstallArgs:       options.installArgs,
-		Runner:            runner,
+		StateRoot:       stateRoot,
+		ReleaseTag:      tag,
+		ReleaseManifest: manifestRaw,
+		InstallArgs:     options.installArgs,
+		Runner:          runner,
 	}); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -96,17 +80,6 @@ func parseBootstrapArgs(args []string) (bootstrapOptions, error) {
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		switch {
-		case arg == "--bootstrap-release":
-			index++
-			if index >= len(args) || strings.TrimSpace(args[index]) == "" {
-				return bootstrapOptions{}, fmt.Errorf("--bootstrap-release requires a value")
-			}
-			options.requestedRelease = strings.TrimSpace(args[index])
-		case strings.HasPrefix(arg, "--bootstrap-release="):
-			options.requestedRelease = strings.TrimSpace(strings.TrimPrefix(arg, "--bootstrap-release="))
-			if options.requestedRelease == "" {
-				return bootstrapOptions{}, fmt.Errorf("--bootstrap-release requires a value")
-			}
 		case arg == "--bootstrap-state-root":
 			index++
 			if index >= len(args) || strings.TrimSpace(args[index]) == "" {
@@ -120,8 +93,10 @@ func parseBootstrapArgs(args []string) (bootstrapOptions, error) {
 			}
 		case arg == "--bootstrap-info":
 			options.info = true
+		case arg == "--bootstrap-release" || strings.HasPrefix(arg, "--bootstrap-release="):
+			return bootstrapOptions{}, fmt.Errorf("--bootstrap-release is not supported; the bootstrap is bound to one release")
 		case arg == "--bootstrap-release-manifest" || strings.HasPrefix(arg, "--bootstrap-release-manifest="):
-			return bootstrapOptions{}, fmt.Errorf("--bootstrap-release-manifest is reserved for the authenticated bootstrap handoff")
+			return bootstrapOptions{}, fmt.Errorf("--bootstrap-release-manifest is reserved for the verified bootstrap handoff")
 		default:
 			if arg == "--system" {
 				options.system = true
@@ -129,7 +104,7 @@ func parseBootstrapArgs(args []string) (bootstrapOptions, error) {
 			options.installArgs = append(options.installArgs, arg)
 		}
 	}
-	if options.info && (options.requestedRelease != "" || options.stateRoot != "" || options.system || len(options.installArgs) != 0) {
+	if options.info && (options.stateRoot != "" || options.system || len(options.installArgs) != 0) {
 		return bootstrapOptions{}, fmt.Errorf("--bootstrap-info cannot be combined with installation options")
 	}
 	return options, nil

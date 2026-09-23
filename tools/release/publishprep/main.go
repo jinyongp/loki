@@ -23,15 +23,11 @@ import (
 const (
 	maxInstallerTemplateBytes = int64(64 << 10)
 	maxEvidenceBytes          = int64(2 << 20)
-	publicTUFMetadataURL      = "https://jinyongp.dev/loki/tuf/"
 )
 
 var (
-	fullCommitPattern             = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	inspectPublicationBootstrap   = bootstrapinfo.Inspect
-	extractPublicationTUFArchive  = releases.ExtractTUFRepositoryArchive
-	trustedPublicationTUFRoot     = releases.TrustedTUFRootForDigest
-	verifyPublicationTUFDirectory = releases.VerifyTUFRepositoryDirectory
+	fullCommitPattern           = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	inspectPublicationBootstrap = bootstrapinfo.Inspect
 )
 
 type options struct {
@@ -102,12 +98,9 @@ func preparePublication(cfg options) error {
 		return fmt.Errorf("publication tag must be %s for candidate release %s", expectedTag, evidence.Generation.Spec.Version)
 	}
 	bootstrapPath := filepath.Join(candidate, filepath.FromSlash(evidence.Bootstrap.Path))
-	bootstrapTrust, err := inspectPublicationBootstrap(context.Background(), bootstrapPath)
+	bootstrapRelease, err := inspectPublicationBootstrap(context.Background(), bootstrapPath)
 	if err != nil {
 		return err
-	}
-	if bootstrapTrust.MetadataURL != publicTUFMetadataURL {
-		return fmt.Errorf("accepted bootstrap metadata URL must be %s", publicTUFMetadataURL)
 	}
 
 	manifestRaw, err := readEvidenceBytes(candidate, evidence.ReleaseManifest, 4<<20)
@@ -121,6 +114,12 @@ func preparePublication(cfg options) error {
 	if manifest.Generation.ID != evidence.Generation.ID {
 		return errors.New("candidate release manifest generation does not match evidence")
 	}
+	manifestSum := sha256.Sum256(manifestRaw)
+	if bootstrapRelease.ReleaseTag != expectedTag ||
+		bootstrapRelease.ReleaseManifestSHA256 != hex.EncodeToString(manifestSum[:]) ||
+		bootstrapRelease.HostBinarySHA256 != manifest.HostBinary.SHA256 {
+		return errors.New("accepted bootstrap release binding does not match candidate manifest")
+	}
 	indexRaw, err := readEvidenceBytes(candidate, evidence.ReleaseIndex, 4<<20)
 	if err != nil {
 		return err
@@ -129,22 +128,8 @@ func preparePublication(cfg options) error {
 	if err != nil {
 		return fmt.Errorf("load candidate release index: %w", err)
 	}
-	indexEntry, err := verifyIndexManifestBinding(index, manifest, manifestRaw)
-	if err != nil {
+	if _, err = verifyIndexManifestBinding(index, manifest, manifestRaw); err != nil {
 		return err
-	}
-	repositoryRequirements := []releases.RepositoryRequirement{
-		{Descriptor: releases.TargetDescriptor{
-			Path: "releases/index.json", Length: evidence.ReleaseIndex.Length, SHA256: evidence.ReleaseIndex.SHA256,
-		}},
-		{Descriptor: indexEntry.Manifest},
-		{Descriptor: manifest.HostBinary},
-		{Descriptor: manifest.Bootstrap},
-		{Descriptor: manifest.HostAssets},
-		{Descriptor: manifest.ToolchainCatalog},
-		{Descriptor: manifest.Provenance},
-		{Descriptor: manifest.Notices},
-		{Descriptor: manifest.ReleaseNotes},
 	}
 
 	template, err := readRegularBounded(templatePath, maxInstallerTemplateBytes)
@@ -175,8 +160,7 @@ func preparePublication(cfg options) error {
 	}
 	assetsDir := filepath.Join(temp, "assets")
 	pagesDir := filepath.Join(temp, "pages")
-	tufDir := filepath.Join(pagesDir, "tuf")
-	for _, dir := range []string{assetsDir, pagesDir, tufDir} {
+	for _, dir := range []string{assetsDir, pagesDir} {
 		if err = os.Mkdir(dir, 0755); err != nil {
 			return err
 		}
@@ -188,7 +172,6 @@ func preparePublication(cfg options) error {
 	assets := []publicationAsset{
 		{Name: "loki-linux-amd64", Evidence: evidence.HostBinary, Mode: 0755},
 		{Name: "loki-bootstrap-linux-amd64", Evidence: evidence.Bootstrap, Mode: 0755},
-		{Name: "loki-tuf-repository.tar.gz", Evidence: evidence.TUFRepository, Mode: 0644},
 		{Name: "loki-host-assets.tar.gz", Evidence: evidence.HostAssets, Mode: 0644},
 		{Name: "loki-release-index.json", Evidence: evidence.ReleaseIndex, Mode: 0644},
 		{Name: "loki-release-manifest.json", Evidence: evidence.ReleaseManifest, Mode: 0644},
@@ -201,20 +184,6 @@ func preparePublication(cfg options) error {
 		if err = copyEvidenceAsset(candidate, assetsDir, asset); err != nil {
 			return err
 		}
-	}
-
-	tufArchivePath := filepath.Join(candidate, filepath.FromSlash(evidence.TUFRepository.Path))
-	if err = extractPublicationTUFArchive(tufArchivePath, tufDir); err != nil {
-		return fmt.Errorf("extract accepted TUF repository: %w", err)
-	}
-	trustedRoot, err := trustedPublicationTUFRoot(tufDir, bootstrapTrust.TrustedRootSHA256)
-	if err != nil {
-		return fmt.Errorf("resolve accepted TUF trusted root: %w", err)
-	}
-	if err = verifyPublicationTUFDirectory(
-		context.Background(), tufDir, trustedRoot, repositoryRequirements,
-	); err != nil {
-		return fmt.Errorf("verify accepted TUF repository: %w", err)
 	}
 
 	evidenceRaw, err := readRegularBounded(filepath.Join(candidate, "evidence.json"), maxEvidenceBytes)
@@ -236,7 +205,7 @@ func preparePublication(cfg options) error {
 	if err = writeAssetChecksums(assetsDir); err != nil {
 		return err
 	}
-	for _, dir := range []string{assetsDir, tufDir, pagesDir, temp} {
+	for _, dir := range []string{assetsDir, pagesDir, temp} {
 		if err = syncDirectory(dir); err != nil {
 			return err
 		}

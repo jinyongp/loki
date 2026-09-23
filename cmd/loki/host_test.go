@@ -171,7 +171,6 @@ func releaseManifestFixture(t *testing.T, now time.Time) releases.ReleaseManifes
 		Version:          releases.ReleaseManifestVersion,
 		Generation:       generation,
 		HostBinary:       target("releases/bin/loki-1.2.3-linux-amd64", "a"),
-		Bootstrap:        target("releases/bootstrap/loki-bootstrap-1.2.3-linux-amd64", "c"),
 		HostAssets:       target("releases/assets/loki-host-1.2.3.tar.gz", "d"),
 		ToolchainCatalog: target("toolchains/catalog-1.2.3.json", "e"),
 		Provenance:       target("releases/provenance/loki-1.2.3.intoto.jsonl", "f"),
@@ -329,13 +328,13 @@ func TestBootstrapReleaseManifestLoadsLifecycleGeneration(t *testing.T) {
 		t.Fatalf("runtime requirements = %#v, want %#v", loaded.Runtime, manifest.Runtime)
 	}
 	if _, err = loadBootstrapHostGeneration(""); err == nil {
-		t.Fatal("missing authenticated release manifest was accepted")
+		t.Fatal("missing verified release manifest was accepted")
 	}
 	if err = os.Chmod(path, 0644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = loadBootstrapHostGeneration(path); err == nil {
-		t.Fatal("public authenticated release manifest was accepted")
+		t.Fatal("public verified release manifest was accepted")
 	}
 }
 

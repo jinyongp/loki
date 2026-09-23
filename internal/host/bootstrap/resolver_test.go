@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -13,31 +12,26 @@ import (
 	"loki/internal/host/releases"
 )
 
-type fakeReleaseSource struct {
-	targets map[string]struct {
-		descriptor releases.TargetDescriptor
-		raw        []byte
-	}
-	err error
+type fakeAssetFetcher struct {
+	raw     []byte
+	err     error
+	url     string
+	maximum int64
 }
 
-func (s *fakeReleaseSource) FetchRelease(_ context.Context, relative string) (releases.TargetDescriptor, []byte, error) {
-	if s.err != nil {
-		return releases.TargetDescriptor{}, nil, s.err
+func (f *fakeAssetFetcher) Fetch(_ context.Context, assetURL string, maximum int64) ([]byte, error) {
+	f.url = assetURL
+	f.maximum = maximum
+	if f.err != nil {
+		return nil, f.err
 	}
-	target, ok := s.targets[relative]
-	if !ok {
-		return releases.TargetDescriptor{}, nil, errors.New("fixture target not found")
-	}
-	return target.descriptor, append([]byte(nil), target.raw...), nil
+	return append([]byte(nil), f.raw...), nil
 }
 
 func bootstrapDescriptor(path string, raw []byte) releases.TargetDescriptor {
 	sum := sha256.Sum256(raw)
 	return releases.TargetDescriptor{
-		Path:   path,
-		Length: int64(len(raw)),
-		SHA256: hex.EncodeToString(sum[:]),
+		Path: path, Length: int64(len(raw)), SHA256: hex.EncodeToString(sum[:]),
 	}
 }
 
@@ -45,24 +39,17 @@ func bootstrapGeneration(t *testing.T, version string, releasedAt time.Time, bin
 	t.Helper()
 	sum := sha256.Sum256(binary)
 	generation, err := releases.NewGeneration(releases.GenerationSpec{
-		Version:          version,
-		ReleasedAt:       releasedAt,
+		Version: version, ReleasedAt: releasedAt,
 		HostBinaryDigest: "sha256:" + hex.EncodeToString(sum[:]),
 		CoreImageDigest:  "sha256:" + strings.Repeat("b", 64),
-		ConfigSchema:     1,
-		PolicySchema:     1,
-		ToolchainSchema:  1,
-		StateSchema:      1,
+		ConfigSchema:     1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
 		Reads: releases.Compatibility{
 			Config:    releases.SchemaRange{Min: 1, Max: 1},
 			Policy:    releases.SchemaRange{Min: 1, Max: 1},
 			Toolchain: releases.SchemaRange{Min: 1, Max: 1},
 			State:     releases.SchemaRange{Min: 1, Max: 1},
 		},
-		Rollback: releases.RollbackCoverage{
-			StateSnapshot:  true,
-			ConfigSnapshot: true,
-		},
+		Rollback: releases.RollbackCoverage{StateSnapshot: true, ConfigSnapshot: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -74,17 +61,12 @@ func bootstrapManifest(t *testing.T, version string, releasedAt time.Time, binar
 	t.Helper()
 	generation := bootstrapGeneration(t, version, releasedAt, binary)
 	descriptor := func(targetPath, fill string) releases.TargetDescriptor {
-		return releases.TargetDescriptor{
-			Path:   targetPath,
-			Length: 1,
-			SHA256: strings.Repeat(fill, 64),
-		}
+		return releases.TargetDescriptor{Path: targetPath, Length: 1, SHA256: strings.Repeat(fill, 64)}
 	}
 	manifest := releases.ReleaseManifest{
 		Version:          releases.ReleaseManifestVersion,
 		Generation:       generation,
 		HostBinary:       bootstrapDescriptor("releases/bin/loki-"+version, binary),
-		Bootstrap:        descriptor("releases/bootstrap/loki-bootstrap-"+version, "c"),
 		HostAssets:       descriptor("releases/assets/loki-host-"+version+".tar.gz", "d"),
 		ToolchainCatalog: descriptor("toolchains/catalogs/"+version+".json", "e"),
 		Provenance:       descriptor("releases/provenance/"+version+".bundle.json", "f"),
@@ -107,115 +89,52 @@ func bootstrapManifest(t *testing.T, version string, releasedAt time.Time, binar
 	return normalized, raw
 }
 
-func bootstrapSourceFixture(t *testing.T) (*fakeReleaseSource, releases.SupportedHost, []byte, []byte) {
-	t.Helper()
-	now := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
-	firstBinary := []byte("loki-host-v1")
-	secondBinary := []byte("loki-host-v2")
-	firstManifest, firstRaw := bootstrapManifest(t, "1.0.0", now, firstBinary)
-	secondManifest, secondRaw := bootstrapManifest(t, "2.0.0", now.Add(time.Hour), secondBinary)
-
-	firstDescriptor := bootstrapDescriptor("releases/manifests/1.0.0.json", firstRaw)
-	secondDescriptor := bootstrapDescriptor("releases/manifests/2.0.0.json", secondRaw)
-	firstEntry, err := releases.IndexEntryForManifest(firstManifest, firstDescriptor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secondEntry, err := releases.IndexEntryForManifest(secondManifest, secondDescriptor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	index, err := releases.NewReleaseIndex([]releases.ReleaseIndexEntry{secondEntry, firstEntry})
-	if err != nil {
-		t.Fatal(err)
-	}
-	indexRaw, err := jsonMarshal(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := &fakeReleaseSource{targets: map[string]struct {
-		descriptor releases.TargetDescriptor
-		raw        []byte
-	}{
-		"index.json": {
-			descriptor: bootstrapDescriptor("releases/index.json", indexRaw),
-			raw:        indexRaw,
-		},
-		"manifests/1.0.0.json": {descriptor: firstDescriptor, raw: firstRaw},
-		"manifests/2.0.0.json": {descriptor: secondDescriptor, raw: secondRaw},
-		"bin/loki-1.0.0":       {descriptor: firstManifest.HostBinary, raw: firstBinary},
-		"bin/loki-2.0.0":       {descriptor: secondManifest.HostBinary, raw: secondBinary},
-	}}
+func TestResolveUsesReleaseBoundGitHubAsset(t *testing.T) {
+	binary := []byte("loki-host-v2")
+	manifest, raw := bootstrapManifest(t, "2.0.0", time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), binary)
 	host := releases.SupportedHost{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"}
-	return source, host, firstBinary, secondBinary
-}
+	fetcher := &fakeAssetFetcher{raw: binary}
 
-func jsonMarshal(value any) ([]byte, error) {
-	return json.Marshal(value)
-}
-
-func TestResolveSelectsLatestOrExplicitAuthenticatedRelease(t *testing.T) {
-	source, host, firstBinary, secondBinary := bootstrapSourceFixture(t)
-
-	latest, err := Resolve(t.Context(), source, host, "")
+	candidate, err := Resolve(t.Context(), raw, host, "v2.0.0", fetcher)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if latest.Entry.Release != "2.0.0" || string(latest.Binary) != string(secondBinary) || latest.Host != host {
-		t.Fatalf("latest candidate = %#v", latest)
+	if candidate.Manifest.Generation.ID != manifest.Generation.ID || string(candidate.Binary) != string(binary) || candidate.Host != host {
+		t.Fatalf("candidate = %#v", candidate)
 	}
-
-	explicit, err := Resolve(t.Context(), source, host, "1.0.0")
-	if err != nil {
-		t.Fatal(err)
+	if fetcher.url != "https://github.com/jinyongp/loki/releases/download/v2.0.0/loki-linux-amd64" {
+		t.Fatalf("release asset URL = %q", fetcher.url)
 	}
-	if explicit.Entry.Release != "1.0.0" || string(explicit.Binary) != string(firstBinary) {
-		t.Fatalf("explicit candidate = %#v", explicit)
-	}
-
-	if _, err = Resolve(t.Context(), source, host, "9.9.9"); err == nil {
-		t.Fatal("release missing from authenticated index was accepted")
+	if fetcher.maximum != manifest.HostBinary.Length {
+		t.Fatalf("release asset size limit = %d", fetcher.maximum)
 	}
 }
 
-func TestResolveRejectsDescriptorDriftAndUnsupportedHost(t *testing.T) {
-	source, host, _, _ := bootstrapSourceFixture(t)
+func TestResolveRejectsReleaseDrift(t *testing.T) {
+	binary := []byte("loki-host-v2")
+	_, raw := bootstrapManifest(t, "2.0.0", time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), binary)
+	host := releases.SupportedHost{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"}
 
-	t.Run("index-content", func(t *testing.T) {
-		changed, _, _, _ := bootstrapSourceFixture(t)
-		target := changed.targets["index.json"]
-		target.raw = append(target.raw, ' ')
-		changed.targets["index.json"] = target
-		if _, err := Resolve(t.Context(), changed, host, ""); err == nil {
-			t.Fatal("release index bytes that do not match authenticated descriptor were accepted")
+	t.Run("tag", func(t *testing.T) {
+		if _, err := Resolve(t.Context(), raw, host, "v1.0.0", &fakeAssetFetcher{raw: binary}); err == nil {
+			t.Fatal("mismatched release tag was accepted")
 		}
 	})
-
-	t.Run("manifest-descriptor", func(t *testing.T) {
-		changed, _, _, _ := bootstrapSourceFixture(t)
-		target := changed.targets["manifests/2.0.0.json"]
-		target.descriptor.SHA256 = strings.Repeat("0", 64)
-		changed.targets["manifests/2.0.0.json"] = target
-		if _, err := Resolve(t.Context(), changed, host, ""); err == nil {
-			t.Fatal("release manifest descriptor drift was accepted")
+	t.Run("binary", func(t *testing.T) {
+		if _, err := Resolve(t.Context(), raw, host, "v2.0.0", &fakeAssetFetcher{raw: []byte("tampered")}); err == nil {
+			t.Fatal("tampered host binary was accepted")
 		}
 	})
-
-	t.Run("binary-descriptor", func(t *testing.T) {
-		changed, _, _, _ := bootstrapSourceFixture(t)
-		target := changed.targets["bin/loki-2.0.0"]
-		target.descriptor.SHA256 = strings.Repeat("0", 64)
-		changed.targets["bin/loki-2.0.0"] = target
-		if _, err := Resolve(t.Context(), changed, host, ""); err == nil {
-			t.Fatal("host binary descriptor drift was accepted")
-		}
-	})
-
 	t.Run("unsupported-host", func(t *testing.T) {
 		unsupported := host
 		unsupported.Arch = "arm64"
-		if _, err := Resolve(t.Context(), source, unsupported, ""); err == nil {
+		if _, err := Resolve(t.Context(), raw, unsupported, "v2.0.0", &fakeAssetFetcher{raw: binary}); err == nil {
 			t.Fatal("unsupported host was accepted")
+		}
+	})
+	t.Run("download", func(t *testing.T) {
+		if _, err := Resolve(t.Context(), raw, host, "v2.0.0", &fakeAssetFetcher{err: errors.New("offline")}); err == nil {
+			t.Fatal("release download failure was ignored")
 		}
 	})
 }

@@ -32,20 +32,19 @@ func (r ExecRunner) Run(ctx context.Context, executable string, args []string) e
 	command.Stdout = r.Stdout
 	command.Stderr = r.Stderr
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("run authenticated Loki host installer: %w", err)
+		return fmt.Errorf("run verified Loki host installer: %w", err)
 	}
 	return nil
 }
 
 type Config struct {
-	StateRoot         string
-	RemoteMetadataURL string
-	TrustedRoot       []byte
-	RequestedRelease  string
-	Host              *releases.SupportedHost
-	InstallArgs       []string
-	Runner            Runner
-	Source            ReleaseSource
+	StateRoot       string
+	ReleaseTag      string
+	ReleaseManifest []byte
+	Host            *releases.SupportedHost
+	InstallArgs     []string
+	Runner          Runner
+	Fetcher         AssetFetcher
 }
 
 func Run(ctx context.Context, cfg Config) (Candidate, error) {
@@ -55,20 +54,8 @@ func Run(ctx context.Context, cfg Config) (Candidate, error) {
 	if err := ensureStateRoot(cfg.StateRoot); err != nil {
 		return Candidate{}, err
 	}
-	source := cfg.Source
-	var err error
-	if source == nil {
-		client, openErr := releases.Open(releases.Config{
-			StateRoot:         cfg.StateRoot,
-			RemoteMetadataURL: cfg.RemoteMetadataURL,
-			TrustedRoot:       cfg.TrustedRoot,
-		})
-		if openErr != nil {
-			return Candidate{}, openErr
-		}
-		source = client
-	}
 	host := releases.SupportedHost{}
+	var err error
 	if cfg.Host == nil {
 		host, err = releases.DetectHost()
 		if err != nil {
@@ -77,7 +64,7 @@ func Run(ctx context.Context, cfg Config) (Candidate, error) {
 	} else {
 		host = *cfg.Host
 	}
-	candidate, err := Resolve(ctx, source, host, cfg.RequestedRelease)
+	candidate, err := Resolve(ctx, cfg.ReleaseManifest, host, cfg.ReleaseTag, cfg.Fetcher)
 	if err != nil {
 		return Candidate{}, err
 	}
@@ -113,9 +100,9 @@ func runCandidate(ctx context.Context, stateRoot string, candidate Candidate, in
 	if err := candidate.Manifest.HostBinary.VerifyBytes(candidate.Binary); err != nil {
 		return fmt.Errorf("verify bootstrap host binary: %w", err)
 	}
-	verifiedManifest, err := candidate.Entry.VerifyManifest(candidate.ManifestBytes)
+	verifiedManifest, err := releases.LoadReleaseManifest(candidate.ManifestBytes)
 	if err != nil {
-		return fmt.Errorf("verify bootstrap release manifest: %w", err)
+		return fmt.Errorf("verify embedded release manifest: %w", err)
 	}
 	if verifiedManifest.Generation.ID != candidate.Manifest.Generation.ID {
 		return errors.New("bootstrap release manifest identity changed after resolution")

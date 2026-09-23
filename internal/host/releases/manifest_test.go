@@ -38,7 +38,6 @@ func releaseManifestFixture(t *testing.T, version string, releasedAt time.Time) 
 		Version:          ReleaseManifestVersion,
 		Generation:       generation,
 		HostBinary:       releaseTarget("releases/bin/loki-"+version, "a"),
-		Bootstrap:        releaseTarget("releases/bootstrap/loki-install-"+version, "e"),
 		HostAssets:       releaseTarget("releases/assets/loki-host-"+version+".tar.gz", "f"),
 		ToolchainCatalog: releaseTarget("toolchains/catalogs/"+version+".json", "1"),
 		Provenance:       releaseTarget("releases/provenance/"+version+".bundle.json", "2"),
@@ -96,7 +95,7 @@ func TestReleaseManifestRejectsContractAndNamespaceDrift(t *testing.T) {
 			manifest.HostBinary.SHA256 = strings.Repeat("9", 64)
 		},
 		"release-target-outside-role": func(manifest *ReleaseManifest) {
-			manifest.Bootstrap.Path = "toolchains/bootstrap/loki-install"
+			manifest.ReleaseNotes.Path = "toolchains/notes/release.md"
 		},
 		"toolchain-target-outside-role": func(manifest *ReleaseManifest) {
 			manifest.ToolchainCatalog.Path = "releases/toolchains/catalog.json"

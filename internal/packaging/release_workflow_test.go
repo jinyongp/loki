@@ -77,8 +77,8 @@ func TestInstallerDocumentationKeepsA14PublicationGate(t *testing.T) {
 	for _, required := range []string{
 		"releaseway/actions",
 		"jinyongp.dev/loki/install.sh",
-		"jinyongp.dev/loki/tuf/",
 		"loki-bootstrap-linux-amd64",
+		"release-bound",
 	} {
 		if !strings.Contains(plan, required) {
 			t.Fatalf("installation distribution plan lacks %q", required)

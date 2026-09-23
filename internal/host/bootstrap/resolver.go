@@ -4,78 +4,100 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"loki/internal/host/releases"
 )
 
-type ReleaseSource interface {
-	FetchRelease(context.Context, string) (releases.TargetDescriptor, []byte, error)
+const publicReleaseHost = "github.com"
+
+type AssetFetcher interface {
+	Fetch(context.Context, string, int64) ([]byte, error)
+}
+
+type HTTPFetcher struct {
+	Client *http.Client
+}
+
+func (f HTTPFetcher) Fetch(ctx context.Context, assetURL string, maximum int64) ([]byte, error) {
+	if maximum <= 0 {
+		return nil, errors.New("release asset size limit is invalid")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := f.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download release asset: HTTP %d", response.StatusCode)
+	}
+	if response.ContentLength > maximum {
+		return nil, errors.New("release asset exceeds manifest size")
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maximum+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maximum {
+		return nil, errors.New("release asset exceeds manifest size")
+	}
+	return raw, nil
 }
 
 type Candidate struct {
-	Entry         releases.ReleaseIndexEntry
 	Manifest      releases.ReleaseManifest
 	ManifestBytes []byte
 	Host          releases.SupportedHost
 	Binary        []byte
 }
 
-func Resolve(ctx context.Context, source ReleaseSource, host releases.SupportedHost, requestedRelease string) (Candidate, error) {
-	if source == nil {
-		return Candidate{}, errors.New("bootstrap release source is not configured")
+func Resolve(
+	ctx context.Context,
+	manifestRaw []byte,
+	host releases.SupportedHost,
+	releaseTag string,
+	fetcher AssetFetcher,
+) (Candidate, error) {
+	if fetcher == nil {
+		fetcher = HTTPFetcher{}
 	}
-	indexDescriptor, indexRaw, err := source.FetchRelease(ctx, "index.json")
+	manifest, err := releases.LoadReleaseManifest(manifestRaw)
 	if err != nil {
-		return Candidate{}, fmt.Errorf("fetch authenticated release index: %w", err)
+		return Candidate{}, fmt.Errorf("load embedded release manifest: %w", err)
 	}
-	if indexDescriptor.Path != "releases/index.json" {
-		return Candidate{}, errors.New("authenticated release index target path is invalid")
-	}
-	if err = indexDescriptor.VerifyBytes(indexRaw); err != nil {
-		return Candidate{}, fmt.Errorf("verify authenticated release index target: %w", err)
-	}
-	index, err := releases.LoadReleaseIndex(indexRaw)
-	if err != nil {
-		return Candidate{}, err
-	}
-	entry, err := selectRelease(index, strings.TrimSpace(requestedRelease))
-	if err != nil {
-		return Candidate{}, err
-	}
-
-	manifestRelative := strings.TrimPrefix(entry.Manifest.Path, "releases/")
-	manifestDescriptor, manifestRaw, err := source.FetchRelease(ctx, manifestRelative)
-	if err != nil {
-		return Candidate{}, fmt.Errorf("fetch authenticated release manifest: %w", err)
-	}
-	if manifestDescriptor != entry.Manifest {
-		return Candidate{}, errors.New("authenticated release manifest descriptor does not match the release index")
-	}
-	manifest, err := entry.VerifyManifest(manifestRaw)
-	if err != nil {
-		return Candidate{}, err
+	expectedTag := "v" + manifest.Generation.Spec.Version
+	if strings.TrimSpace(releaseTag) != expectedTag {
+		return Candidate{}, fmt.Errorf("bootstrap release tag must be %s", expectedTag)
 	}
 	if !supportsHost(manifest.SupportedHosts, host) {
 		return Candidate{}, fmt.Errorf(
 			"release %s does not support %s/%s %s %s",
-			entry.Release, host.Environment, host.Distribution, host.Version, host.Arch,
+			manifest.Generation.Spec.Version, host.Environment, host.Distribution, host.Version, host.Arch,
 		)
 	}
-
-	binaryRelative := strings.TrimPrefix(manifest.HostBinary.Path, "releases/")
-	binaryDescriptor, binaryRaw, err := source.FetchRelease(ctx, binaryRelative)
+	assetURL, err := releaseAssetURL(expectedTag, "loki-linux-amd64")
 	if err != nil {
-		return Candidate{}, fmt.Errorf("fetch authenticated host binary: %w", err)
-	}
-	if binaryDescriptor != manifest.HostBinary {
-		return Candidate{}, errors.New("authenticated host binary descriptor does not match the release manifest")
-	}
-	if err = manifest.HostBinary.VerifyBytes(binaryRaw); err != nil {
 		return Candidate{}, err
 	}
+	binaryRaw, err := fetcher.Fetch(ctx, assetURL, manifest.HostBinary.Length)
+	if err != nil {
+		return Candidate{}, fmt.Errorf("fetch release host binary: %w", err)
+	}
+	if err = manifest.HostBinary.VerifyBytes(binaryRaw); err != nil {
+		return Candidate{}, fmt.Errorf("verify release host binary: %w", err)
+	}
 	return Candidate{
-		Entry:         entry,
 		Manifest:      manifest,
 		ManifestBytes: append([]byte(nil), manifestRaw...),
 		Host:          host,
@@ -83,19 +105,16 @@ func Resolve(ctx context.Context, source ReleaseSource, host releases.SupportedH
 	}, nil
 }
 
-func selectRelease(index releases.ReleaseIndex, requested string) (releases.ReleaseIndexEntry, error) {
-	if err := index.Validate(); err != nil {
-		return releases.ReleaseIndexEntry{}, err
+func releaseAssetURL(tag, asset string) (string, error) {
+	if tag == "" || asset == "" || strings.ContainsAny(tag+asset, "/\\\x00") {
+		return "", errors.New("release asset identity is invalid")
 	}
-	if requested == "" {
-		return index.Entries[len(index.Entries)-1], nil
+	result := &url.URL{
+		Scheme: "https",
+		Host:   publicReleaseHost,
+		Path:   "/jinyongp/loki/releases/download/" + tag + "/" + asset,
 	}
-	for _, entry := range index.Entries {
-		if entry.Release == requested {
-			return entry, nil
-		}
-	}
-	return releases.ReleaseIndexEntry{}, fmt.Errorf("release %q is not present in the authenticated index", requested)
+	return result.String(), nil
 }
 
 func supportsHost(supported []releases.SupportedHost, host releases.SupportedHost) bool {

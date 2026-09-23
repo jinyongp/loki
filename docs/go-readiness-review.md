@@ -271,4 +271,3 @@ The review/plan deliverable is complete at this baseline, with explicit limits. 
 - [Linux cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html): process hierarchy, resource ownership and cgroup.kill.
 - [Docker security](https://docs.docker.com/engine/security/): daemon authority and container isolation responsibilities.
 - [Docker networking](https://docs.docker.com/engine/network/): container network isolation and explicit network connectivity.
-- [The Update Framework specification](https://theupdateframework.github.io/specification/latest/): authenticated metadata, rollback/freeze protection and key-role separation for the proposed distribution design.

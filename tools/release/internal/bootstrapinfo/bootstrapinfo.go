@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,8 +17,9 @@ import (
 const maxOutputBytes = 64 << 10
 
 type Info struct {
-	MetadataURL       string `json:"metadata_url"`
-	TrustedRootSHA256 string `json:"trusted_root_sha256"`
+	ReleaseTag            string `json:"release_tag"`
+	ReleaseManifestSHA256 string `json:"release_manifest_sha256"`
+	HostBinarySHA256      string `json:"host_binary_sha256"`
 }
 
 func Inspect(ctx context.Context, binary string) (Info, error) {
@@ -46,19 +46,19 @@ func Inspect(ctx context.Context, binary string) (Info, error) {
 	if err = command.Run(); err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
-			return Info{}, fmt.Errorf("inspect bootstrap trust: %w", err)
+			return Info{}, fmt.Errorf("inspect bootstrap release binding: %w", err)
 		}
-		return Info{}, fmt.Errorf("inspect bootstrap trust: %w: %s", err, message)
+		return Info{}, fmt.Errorf("inspect bootstrap release binding: %w: %s", err, message)
 	}
 	var result Info
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(&result); err != nil {
-		return Info{}, errors.New("bootstrap trust output is invalid JSON")
+		return Info{}, errors.New("bootstrap info output is invalid JSON")
 	}
 	var trailing any
 	if err = decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return Info{}, errors.New("bootstrap trust output contains trailing JSON")
+		return Info{}, errors.New("bootstrap info output contains trailing JSON")
 	}
 	if err = result.Validate(); err != nil {
 		return Info{}, err
@@ -67,17 +67,20 @@ func Inspect(ctx context.Context, binary string) (Info, error) {
 }
 
 func (i Info) Validate() error {
-	parsed, err := url.Parse(i.MetadataURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil ||
-		parsed.RawQuery != "" || parsed.Fragment != "" {
-		return errors.New("bootstrap metadata URL is invalid")
+	if strings.TrimSpace(i.ReleaseTag) != i.ReleaseTag || !strings.HasPrefix(i.ReleaseTag, "v") || len(i.ReleaseTag) < 2 {
+		return errors.New("bootstrap release tag is invalid")
 	}
-	if len(i.TrustedRootSHA256) != 64 {
-		return errors.New("bootstrap trusted-root digest is invalid")
-	}
-	raw, err := hex.DecodeString(i.TrustedRootSHA256)
-	if err != nil || len(raw) != 32 || strings.ToLower(i.TrustedRootSHA256) != i.TrustedRootSHA256 {
-		return errors.New("bootstrap trusted-root digest is invalid")
+	for name, value := range map[string]string{
+		"release-manifest": i.ReleaseManifestSHA256,
+		"host-binary":      i.HostBinarySHA256,
+	} {
+		if len(value) != 64 || strings.ToLower(value) != value {
+			return fmt.Errorf("bootstrap %s digest is invalid", name)
+		}
+		raw, err := hex.DecodeString(value)
+		if err != nil || len(raw) != 32 {
+			return fmt.Errorf("bootstrap %s digest is invalid", name)
+		}
 	}
 	return nil
 }
@@ -93,7 +96,7 @@ func (w *boundedBuffer) Write(p []byte) (int, error) {
 		if remaining > 0 {
 			_, _ = w.buffer.Write(p[:remaining])
 		}
-		return len(p), errors.New("bootstrap trust output exceeds size policy")
+		return len(p), errors.New("bootstrap info output exceeds size policy")
 	}
 	return w.buffer.Write(p)
 }

@@ -69,7 +69,7 @@ func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOption
 	system := flags.Bool("system", false, "install the host manager system-wide")
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
 	workspace := flags.String("workspace", "", "operator-approved workspace directory")
-	releaseManifest := flags.String("bootstrap-release-manifest", "", "authenticated bootstrap release manifest")
+	releaseManifest := flags.String("bootstrap-release-manifest", "", "verified bootstrap release manifest")
 	installPrerequisites := flags.Bool("install-prerequisites", false, "explicitly approve supported host prerequisite installation")
 	allowSudoDocker := flags.Bool("allow-sudo-docker", false, "explicitly allow operator-invoked sudo Docker lifecycle commands")
 	createWorkspace := flags.Bool("create-workspace", false, "explicitly approve creating a missing workspace")
@@ -461,10 +461,10 @@ func loadBootstrapHostGeneration(path string) (lifecycle.Generation, error) {
 func loadBootstrapHostRelease(path string) (hostInstallRelease, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest is required")
+		return hostInstallRelease{}, errors.New("verified bootstrap release manifest is required")
 	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == string(filepath.Separator) || strings.ContainsRune(path, 0) {
-		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest path is invalid")
+		return hostInstallRelease{}, errors.New("verified bootstrap release manifest path is invalid")
 	}
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -474,14 +474,14 @@ func loadBootstrapHostRelease(path string) (hostInstallRelease, error) {
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest must be a private regular file")
+		return hostInstallRelease{}, errors.New("verified bootstrap release manifest must be a private regular file")
 	}
 	raw, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
 	if err != nil {
 		return hostInstallRelease{}, err
 	}
 	if len(raw) == 0 || len(raw) > 1<<20 {
-		return hostInstallRelease{}, errors.New("authenticated bootstrap release manifest exceeds size policy")
+		return hostInstallRelease{}, errors.New("verified bootstrap release manifest exceeds size policy")
 	}
 	manifest, err := releases.LoadReleaseManifest(raw)
 	if err != nil {
@@ -530,7 +530,7 @@ func lifecycleGenerationFromRelease(source releases.Generation) (lifecycle.Gener
 		return lifecycle.Generation{}, err
 	}
 	if candidate.ID != source.ID {
-		return lifecycle.Generation{}, errors.New("authenticated release generation identity does not match lifecycle contract")
+		return lifecycle.Generation{}, errors.New("verified release generation identity does not match lifecycle contract")
 	}
 	return candidate, nil
 }
@@ -552,7 +552,7 @@ func verifyRunningHostBinary(candidate lifecycle.Generation) error {
 	got := hex.EncodeToString(hash.Sum(nil))
 	want := strings.TrimPrefix(candidate.Spec.HostBinaryDigest, "sha256:")
 	if got != want {
-		return errors.New("running host binary does not match authenticated release generation")
+		return errors.New("running host binary does not match verified release generation")
 	}
 	return nil
 }

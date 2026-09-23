@@ -158,7 +158,7 @@ func publishCurrentExecutable(destination, expectedDigest string) error {
 	}
 	got := "sha256:" + hex.EncodeToString(hash.Sum(nil))
 	if got != expectedDigest {
-		return errors.New("running host binary no longer matches the authenticated release")
+		return errors.New("running host binary no longer matches the verified release")
 	}
 	if err = unix.Renameat2(unix.AT_FDCWD, tempName, unix.AT_FDCWD, destination, unix.RENAME_NOREPLACE); err != nil {
 		if errors.Is(err, unix.EEXIST) {

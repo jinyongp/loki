@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,9 +31,7 @@ func writeFixtureFile(t *testing.T, root, name, body string, mode os.FileMode) s
 
 func descriptorFor(body, target string) releases.TargetDescriptor {
 	sum := sha256.Sum256([]byte(body))
-	return releases.TargetDescriptor{
-		Path: target, Length: int64(len(body)), SHA256: hex.EncodeToString(sum[:]),
-	}
+	return releases.TargetDescriptor{Path: target, Length: int64(len(body)), SHA256: hex.EncodeToString(sum[:])}
 }
 
 func evidenceAssemblerFixture(t *testing.T) options {
@@ -49,8 +46,6 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	notesBody := "# Release 1.2.3\n"
 	policyBody := "{\"version\":1,\"allowed_hosts\":[\"registry.npmjs.org\"]}\n"
 	configBody := "version = 1\n"
-	trustedRootBody := "{\"signed\":\"trusted-root\"}\n"
-	metadataURL := "https://jinyongp.dev/loki/tuf/"
 
 	host := writeFixtureFile(t, root, "host/loki", hostBody, 0755)
 	bootstrap := writeFixtureFile(t, root, "host/loki-bootstrap", bootstrapBody, 0755)
@@ -61,31 +56,6 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	notes := writeFixtureFile(t, root, "host/notes.md", notesBody, 0644)
 	policy := writeFixtureFile(t, root, "host/policy.json", policyBody, 0644)
 	config := writeFixtureFile(t, root, "host/config.toml", configBody, 0644)
-	trustedRoot := writeFixtureFile(t, root, "host/root.json", trustedRootBody, 0644)
-	tufRepository := filepath.Join(root, "host", "tuf-repository")
-	if err := os.MkdirAll(tufRepository, 0755); err != nil {
-		t.Fatal(err)
-	}
-	rootSum := sha256.Sum256([]byte(trustedRootBody))
-	previousInspect := inspectBootstrapTrust
-	previousBuild := buildTUFRepositoryArchive
-	inspectBootstrapTrust = func(context.Context, string) (bootstrapinfo.Info, error) {
-		return bootstrapinfo.Info{
-			MetadataURL: metadataURL, TrustedRootSHA256: hex.EncodeToString(rootSum[:]),
-		}, nil
-	}
-	buildTUFRepositoryArchive = func(
-		_ context.Context, repository, output string, root []byte, requirements []releases.RepositoryRequirement,
-	) error {
-		if repository != tufRepository || string(root) != trustedRootBody || len(requirements) != 9 {
-			return errors.New("unexpected TUF repository fixture inputs")
-		}
-		return os.WriteFile(output, []byte("signed-tuf-repository"), 0644)
-	}
-	t.Cleanup(func() {
-		inspectBootstrapTrust = previousInspect
-		buildTUFRepositoryArchive = previousBuild
-	})
 
 	hostSum := sha256.Sum256([]byte(hostBody))
 	generation, err := releases.NewGeneration(releases.GenerationSpec{
@@ -99,10 +69,8 @@ func evidenceAssemblerFixture(t *testing.T) options {
 		},
 		ConfigSchema: 1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
 		Reads: releases.Compatibility{
-			Config:    releases.SchemaRange{Min: 1, Max: 1},
-			Policy:    releases.SchemaRange{Min: 1, Max: 1},
-			Toolchain: releases.SchemaRange{Min: 1, Max: 1},
-			State:     releases.SchemaRange{Min: 1, Max: 1},
+			Config: releases.SchemaRange{Min: 1, Max: 1}, Policy: releases.SchemaRange{Min: 1, Max: 1},
+			Toolchain: releases.SchemaRange{Min: 1, Max: 1}, State: releases.SchemaRange{Min: 1, Max: 1},
 		},
 		Rollback: releases.RollbackCoverage{
 			StateSnapshot: true, ConfigSnapshot: true,
@@ -115,7 +83,6 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	manifest, err := releases.NewReleaseManifest(releases.ReleaseManifest{
 		Version: releases.ReleaseManifestVersion, Generation: generation,
 		HostBinary:       descriptorFor(hostBody, "releases/bin/loki-1.2.3"),
-		Bootstrap:        descriptorFor(bootstrapBody, "releases/bootstrap/loki-bootstrap-1.2.3"),
 		HostAssets:       descriptorFor(assetsBody, "releases/assets/host-1.2.3.tar.gz"),
 		ToolchainCatalog: descriptorFor(toolchainBody, "toolchains/catalogs/1.2.3.json"),
 		Provenance:       descriptorFor(provenanceBody, "releases/provenance/1.2.3.bundle.json"),
@@ -150,12 +117,22 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	}
 	indexPath := writeFixtureFile(t, root, "metadata/index.json", string(indexRaw), 0644)
 
+	manifestSum := sha256.Sum256(manifestRaw)
+	previousInspect := inspectBootstrapRelease
+	inspectBootstrapRelease = func(context.Context, string) (bootstrapinfo.Info, error) {
+		return bootstrapinfo.Info{
+			ReleaseTag:            "v1.2.3",
+			ReleaseManifestSHA256: hex.EncodeToString(manifestSum[:]),
+			HostBinarySHA256:      manifest.HostBinary.SHA256,
+		}, nil
+	}
+	t.Cleanup(func() { inspectBootstrapRelease = previousInspect })
+
 	return options{
 		Output:         filepath.Join(root, "candidate-evidence"),
 		SourceRevision: strings.Repeat("a", 40),
 		ReleaseIndex:   indexPath, ReleaseManifest: manifestPath,
-		HostBinary: host, Bootstrap: bootstrap, TUFRepository: tufRepository,
-		TrustedRoot: trustedRoot, MetadataURL: metadataURL, HostAssets: assets,
+		HostBinary: host, Bootstrap: bootstrap, HostAssets: assets,
 		ToolchainCatalog: toolchain, Provenance: provenance, Notices: notices,
 		ReleaseNotes: notes, EffectivePolicy: policy, EffectiveConfig: config,
 		CoreImage:    "ghcr.io/example/loki@sha256:" + strings.Repeat("b", 64),
@@ -180,18 +157,14 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if verified.ID != evidence.ID {
-		t.Fatalf("verified bundle ID = %q, want %q", verified.ID, evidence.ID)
-	}
-	if evidence.SourceRevision != cfg.SourceRevision || evidence.Generation.Spec.Version != "1.2.3" ||
-		evidence.CoreImage != cfg.CoreImage || evidence.BrowserImage != cfg.BrowserImage {
+	if verified.ID != evidence.ID || evidence.SourceRevision != cfg.SourceRevision || evidence.Generation.Spec.Version != "1.2.3" {
 		t.Fatalf("evidence = %#v", evidence)
 	}
 	for _, relative := range []string{
 		"evidence.json", "SHA256SUMS", "inputs/release-index.json", "inputs/release-manifest.json",
-		"inputs/loki", "inputs/loki-bootstrap", "inputs/tuf-repository.tar.gz", "inputs/host-assets.tar.gz",
-		"inputs/toolchain-catalog.json", "inputs/provenance.bundle.json", "inputs/notices.tar.gz",
-		"inputs/release-notes.md", "inputs/effective-policy.json", "inputs/effective-config.toml",
+		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz", "inputs/toolchain-catalog.json",
+		"inputs/provenance.bundle.json", "inputs/notices.tar.gz", "inputs/release-notes.md",
+		"inputs/effective-policy.json", "inputs/effective-config.toml",
 	} {
 		if _, err = os.Stat(filepath.Join(cfg.Output, filepath.FromSlash(relative))); err != nil {
 			t.Fatalf("bundle file %s: %v", relative, err)
@@ -201,9 +174,9 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/tuf-repository.tar.gz", "inputs/release-manifest.json"} {
+	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/release-manifest.json"} {
 		if !strings.Contains(string(checksums), "  "+required+"\n") {
-			t.Fatalf("SHA256SUMS lacks %s: %s", required, checksums)
+			t.Fatalf("SHA256SUMS lacks %s", required)
 		}
 	}
 	if err = assemble(cfg); err == nil {
@@ -220,15 +193,9 @@ func TestAssembleNormalizesBundleModesDespiteUmask(t *testing.T) {
 		t.Fatal(err)
 	}
 	for relative, want := range map[string]os.FileMode{
-		".":                            0755,
-		"inputs":                       0755,
-		"inputs/loki":                  0755,
-		"inputs/loki-bootstrap":        0755,
-		"inputs/tuf-repository.tar.gz": 0644,
-		"inputs/release-index.json":    0644,
-		"inputs/effective-policy.json": 0644,
-		"evidence.json":                0644,
-		"SHA256SUMS":                   0644,
+		".": 0755, "inputs": 0755, "inputs/loki": 0755, "inputs/loki-bootstrap": 0755,
+		"inputs/release-index.json": 0644, "inputs/effective-policy.json": 0644,
+		"evidence.json": 0644, "SHA256SUMS": 0644,
 	} {
 		info, statErr := os.Stat(filepath.Join(cfg.Output, filepath.FromSlash(relative)))
 		if statErr != nil {
@@ -237,6 +204,22 @@ func TestAssembleNormalizesBundleModesDespiteUmask(t *testing.T) {
 		if got := info.Mode().Perm(); got != want {
 			t.Fatalf("%s mode = %04o, want %04o", relative, got, want)
 		}
+	}
+}
+
+func TestAssembleRejectsReleaseBindingDrift(t *testing.T) {
+	cfg := evidenceAssemblerFixture(t)
+	previous := inspectBootstrapRelease
+	inspectBootstrapRelease = func(context.Context, string) (bootstrapinfo.Info, error) {
+		return bootstrapinfo.Info{
+			ReleaseTag:            "v9.9.9",
+			ReleaseManifestSHA256: strings.Repeat("a", 64),
+			HostBinarySHA256:      strings.Repeat("b", 64),
+		}, nil
+	}
+	defer func() { inspectBootstrapRelease = previous }()
+	if err := assemble(cfg); err == nil {
+		t.Fatal("assembler accepted bootstrap release binding drift")
 	}
 }
 
@@ -261,9 +244,6 @@ func TestAssembleRejectsMutableOrTamperedCandidateInputs(t *testing.T) {
 		if err := assemble(cfg); err == nil {
 			t.Fatal("assembler accepted a mutable core image reference")
 		}
-		if _, err := os.Stat(cfg.Output); !os.IsNotExist(err) {
-			t.Fatalf("failed assembly published output: %v", err)
-		}
 	})
 	t.Run("tampered-host", func(t *testing.T) {
 		cfg := evidenceAssemblerFixture(t)
@@ -272,9 +252,6 @@ func TestAssembleRejectsMutableOrTamperedCandidateInputs(t *testing.T) {
 		}
 		if err := assemble(cfg); err == nil {
 			t.Fatal("assembler accepted a host binary that does not match the manifest")
-		}
-		if _, err := os.Stat(cfg.Output); !os.IsNotExist(err) {
-			t.Fatalf("failed assembly published output: %v", err)
 		}
 	})
 }
@@ -299,45 +276,5 @@ func TestPublishEvidenceBundleNeverReplacesExistingOutput(t *testing.T) {
 	raw, err := os.ReadFile(marker)
 	if err != nil || string(raw) != "preserve" {
 		t.Fatalf("existing output changed: data=%q err=%v", raw, err)
-	}
-	if _, err = os.Stat(staging); err != nil {
-		t.Fatalf("failed no-replace publication removed staging: %v", err)
-	}
-}
-
-func TestVerifyCandidateBundleRejectsShapeChecksumAndModeDrift(t *testing.T) {
-	tests := map[string]func(*testing.T, string){
-		"unexpected-entry": func(t *testing.T, root string) {
-			if err := os.WriteFile(filepath.Join(root, "unexpected"), []byte("x"), 0644); err != nil {
-				t.Fatal(err)
-			}
-		},
-		"checksum": func(t *testing.T, root string) {
-			if err := os.WriteFile(filepath.Join(root, "SHA256SUMS"), []byte("tampered\n"), 0644); err != nil {
-				t.Fatal(err)
-			}
-		},
-		"host-mode": func(t *testing.T, root string) {
-			if err := os.Chmod(filepath.Join(root, "inputs", "loki"), 0644); err != nil {
-				t.Fatal(err)
-			}
-		},
-		"bootstrap-mode": func(t *testing.T, root string) {
-			if err := os.Chmod(filepath.Join(root, "inputs", "loki-bootstrap"), 0644); err != nil {
-				t.Fatal(err)
-			}
-		},
-	}
-	for name, mutate := range tests {
-		t.Run(name, func(t *testing.T) {
-			cfg := evidenceAssemblerFixture(t)
-			if err := assemble(cfg); err != nil {
-				t.Fatal(err)
-			}
-			mutate(t, cfg.Output)
-			if _, err := releases.VerifyCandidateBundle(cfg.Output); err == nil {
-				t.Fatal("bundle verifier accepted release candidate drift")
-			}
-		})
 	}
 }

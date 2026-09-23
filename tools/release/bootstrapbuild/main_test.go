@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"loki/internal/host/releases"
 )
 
 type fakeBuildRunner struct {
@@ -26,12 +31,51 @@ func (r *fakeBuildRunner) Run(_ context.Context, cwd string, args, environment [
 		return r.err
 	}
 	for index := 0; index+1 < len(args); index++ {
-		if args[index] != "-o" {
-			continue
+		if args[index] == "-o" {
+			return os.WriteFile(args[index+1], []byte("bootstrap-binary"), 0600)
 		}
-		return os.WriteFile(args[index+1], []byte("bootstrap-binary"), 0600)
 	}
 	return errors.New("builder output path was not supplied")
+}
+
+func bootstrapBuildManifest(t *testing.T, version string) []byte {
+	t.Helper()
+	binary := []byte("host-binary")
+	sum := sha256.Sum256(binary)
+	generation, err := releases.NewGeneration(releases.GenerationSpec{
+		Version:          version,
+		ReleasedAt:       time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC),
+		HostBinaryDigest: "sha256:" + hex.EncodeToString(sum[:]),
+		CoreImageDigest:  "sha256:" + strings.Repeat("b", 64),
+		ConfigSchema:     1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
+		Reads: releases.Compatibility{
+			Config: releases.SchemaRange{Min: 1, Max: 1}, Policy: releases.SchemaRange{Min: 1, Max: 1},
+			Toolchain: releases.SchemaRange{Min: 1, Max: 1}, State: releases.SchemaRange{Min: 1, Max: 1},
+		},
+		Rollback: releases.RollbackCoverage{StateSnapshot: true, ConfigSnapshot: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := func(path, fill string) releases.TargetDescriptor {
+		return releases.TargetDescriptor{Path: path, Length: 1, SHA256: strings.Repeat(fill, 64)}
+	}
+	raw, err := releases.EncodeReleaseManifest(releases.ReleaseManifest{
+		Version:          releases.ReleaseManifestVersion,
+		Generation:       generation,
+		HostBinary:       releases.TargetDescriptor{Path: "releases/bin/loki-" + version, Length: int64(len(binary)), SHA256: hex.EncodeToString(sum[:])},
+		HostAssets:       target("releases/assets/loki-host-"+version+".tar.gz", "d"),
+		ToolchainCatalog: target("toolchains/catalogs/"+version+".json", "e"),
+		Provenance:       target("releases/provenance/"+version+".bundle.json", "f"),
+		Notices:          target("releases/notices/"+version+".tar.gz", "1"),
+		ReleaseNotes:     target("releases/notes/"+version+".md", "2"),
+		SupportedHosts:   []releases.SupportedHost{{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"}},
+		Runtime:          releases.RuntimeRequirements{DockerMin: "28.0.0", ComposeMin: "2.39.0"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func bootstrapBuildFixture(t *testing.T) (buildOptions, []byte) {
@@ -40,42 +84,32 @@ func bootstrapBuildFixture(t *testing.T) (buildOptions, []byte) {
 	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module fixture\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	root := []byte("{\"signed\":\"fixture\"}\n")
-	rootPath := filepath.Join(t.TempDir(), "root.json")
-	if err := os.WriteFile(rootPath, root, 0600); err != nil {
+	manifest := bootstrapBuildManifest(t, "1.2.3")
+	manifestPath := filepath.Join(t.TempDir(), "release-manifest.json")
+	if err := os.WriteFile(manifestPath, manifest, 0600); err != nil {
 		t.Fatal(err)
 	}
 	return buildOptions{
-		Output:      filepath.Join(t.TempDir(), "loki-bootstrap"),
-		MetadataURL: "https://updates.example.test/repository",
-		TrustedRoot: rootPath,
-		SourceRoot:  source,
-		GOOS:        "linux",
-		GOARCH:      "amd64",
-	}, root
+		Output:          filepath.Join(t.TempDir(), "loki-bootstrap"),
+		ReleaseTag:      "v1.2.3",
+		ReleaseManifest: manifestPath,
+		SourceRoot:      source,
+		GOOS:            "linux",
+		GOARCH:          "amd64",
+	}, manifest
 }
 
-func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) {
-	options, root := bootstrapBuildFixture(t)
+func TestBuildBootstrapEmbedsReleaseBindingAndPublishesAtomically(t *testing.T) {
+	options, manifest := bootstrapBuildFixture(t)
 	runner := &fakeBuildRunner{}
-	var validatedURL string
-	var validatedRoot []byte
-	validator := func(url string, raw []byte) error {
-		validatedURL = url
-		validatedRoot = append([]byte(nil), raw...)
-		return nil
-	}
 	environment := []string{
 		"PATH=/usr/bin:/bin", "LANG=C.UTF-8",
 		"CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64",
 		"GOFLAGS=-race", "GOEXPERIMENT=arenas", "GOAMD64=v4",
 		"GOTOOLCHAIN=auto", "GOENV=/tmp/goenv", "GOWORK=/tmp/go.work",
 	}
-	if err := buildBootstrapWithValidator(t.Context(), options, runner, environment, validator); err != nil {
+	if err := buildBootstrap(t.Context(), options, runner, environment); err != nil {
 		t.Fatal(err)
-	}
-	if validatedURL != options.MetadataURL || !slices.Equal(validatedRoot, root) {
-		t.Fatalf("validated trust = %q %q", validatedURL, validatedRoot)
 	}
 	if runner.cwd != options.SourceRoot {
 		t.Fatalf("builder cwd = %q", runner.cwd)
@@ -84,10 +118,9 @@ func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) 
 		!slices.Contains(runner.args, "./cmd/bootstrap") {
 		t.Fatalf("builder args = %#v", runner.args)
 	}
-	encoded := base64.StdEncoding.EncodeToString(root)
 	joined := strings.Join(runner.args, "\n")
-	if !strings.Contains(joined, "main.releaseMetadataURL="+options.MetadataURL) ||
-		!strings.Contains(joined, "main.trustedRootBase64="+encoded) {
+	if !strings.Contains(joined, "main.releaseTag="+options.ReleaseTag) ||
+		!strings.Contains(joined, "main.releaseManifestBase64="+base64.StdEncoding.EncodeToString(manifest)) {
 		t.Fatalf("embedded linker flags = %#v", runner.args)
 	}
 	for _, want := range []string{
@@ -98,41 +131,20 @@ func TestBuildBootstrapEmbedsValidatedTrustAndPublishesAtomically(t *testing.T) 
 			t.Fatalf("builder environment missing %q: %#v", want, runner.env)
 		}
 	}
-	for _, forbidden := range []string{
-		"CGO_ENABLED=1", "GOOS=windows", "GOARCH=arm64",
-		"GOFLAGS=-race", "GOEXPERIMENT=arenas", "GOAMD64=v4",
-		"GOTOOLCHAIN=auto", "GOENV=/tmp/goenv", "GOWORK=/tmp/go.work",
-	} {
-		if slices.Contains(runner.env, forbidden) {
-			t.Fatalf("builder environment retained %q: %#v", forbidden, runner.env)
-		}
-	}
 	info, err := os.Stat(options.Output)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
 		t.Fatalf("bootstrap output = %v, %v", info, err)
-	}
-	raw, err := os.ReadFile(options.Output)
-	if err != nil || string(raw) != "bootstrap-binary" {
-		t.Fatalf("bootstrap output bytes = %q, %v", raw, err)
-	}
-	entries, err := os.ReadDir(filepath.Dir(options.Output))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".loki-bootstrap-") {
-			t.Fatalf("temporary bootstrap output leaked: %s", entry.Name())
-		}
 	}
 }
 
 func TestBuildBootstrapFailsClosedBeforeRunner(t *testing.T) {
 	options, _ := bootstrapBuildFixture(t)
 	tests := map[string]func(*buildOptions){
-		"relative-output": func(value *buildOptions) { value.Output = "bootstrap" },
-		"relative-root":   func(value *buildOptions) { value.TrustedRoot = "root.json" },
-		"bad-goos":        func(value *buildOptions) { value.GOOS = "linux;sh" },
-		"bad-goarch":      func(value *buildOptions) { value.GOARCH = "../amd64" },
+		"relative-output":   func(value *buildOptions) { value.Output = "bootstrap" },
+		"relative-manifest": func(value *buildOptions) { value.ReleaseManifest = "release-manifest.json" },
+		"wrong-tag":         func(value *buildOptions) { value.ReleaseTag = "v9.9.9" },
+		"bad-goos":          func(value *buildOptions) { value.GOOS = "linux;sh" },
+		"bad-goarch":        func(value *buildOptions) { value.GOARCH = "../amd64" },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -140,7 +152,7 @@ func TestBuildBootstrapFailsClosedBeforeRunner(t *testing.T) {
 			changed.Output = filepath.Join(t.TempDir(), "bootstrap")
 			mutate(&changed)
 			runner := &fakeBuildRunner{}
-			if err := buildBootstrapWithValidator(t.Context(), changed, runner, nil, func(string, []byte) error { return nil }); err == nil {
+			if err := buildBootstrap(t.Context(), changed, runner, nil); err == nil {
 				t.Fatal("invalid bootstrap build options were accepted")
 			}
 			if len(runner.args) != 0 {
@@ -150,36 +162,16 @@ func TestBuildBootstrapFailsClosedBeforeRunner(t *testing.T) {
 	}
 }
 
-func TestBuildBootstrapRejectsExistingOutputAndTrustFailure(t *testing.T) {
+func TestBuildBootstrapRejectsExistingOutput(t *testing.T) {
 	options, _ := bootstrapBuildFixture(t)
 	if err := os.WriteFile(options.Output, []byte("existing"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	runner := &fakeBuildRunner{}
-	if err := buildBootstrapWithValidator(t.Context(), options, runner, nil, func(string, []byte) error { return nil }); err == nil {
+	if err := buildBootstrap(t.Context(), options, runner, nil); err == nil {
 		t.Fatal("existing output was overwritten")
 	}
 	if len(runner.args) != 0 {
 		t.Fatalf("runner called for existing output: %#v", runner.args)
-	}
-
-	options, _ = bootstrapBuildFixture(t)
-	want := errors.New("invalid trust")
-	if err := buildBootstrapWithValidator(t.Context(), options, runner, nil, func(string, []byte) error { return want }); !errors.Is(err, want) {
-		t.Fatalf("trust validation error = %v", err)
-	}
-}
-
-func TestValidateEmbeddedTrustRejectsInvalidBootstrapInputs(t *testing.T) {
-	for name, url := range map[string]string{
-		"empty": "",
-		"http":  "http://updates.example.test/repository",
-		"query": "https://updates.example.test/repository?channel=stable",
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := validateEmbeddedTrust(url, []byte("{}")); err == nil {
-				t.Fatal("invalid bootstrap trust was accepted")
-			}
-		})
 	}
 }

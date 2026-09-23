@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
+
+	"loki/internal/host/releases"
 )
 
 type captureRunner struct {
@@ -49,23 +52,28 @@ func (r *captureRunner) Run(_ context.Context, executable string, args []string)
 	return r.err
 }
 
-func TestRunUsesAuthenticatedCandidateWithoutSourceToolchain(t *testing.T) {
-	source, host, _, secondBinary := bootstrapSourceFixture(t)
+func TestRunUsesReleaseBoundCandidateWithoutSourceToolchain(t *testing.T) {
+	binary := []byte("loki-host-v2")
+	manifest, manifestRaw := bootstrapManifest(t, "2.0.0", time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), binary)
+	host := manifest.SupportedHosts[0]
 	stateRoot := filepath.Join(t.TempDir(), "bootstrap-state")
 	runner := &captureRunner{}
+	fetcher := &fakeAssetFetcher{raw: binary}
+
 	candidate, err := Run(t.Context(), Config{
-		StateRoot:        stateRoot,
-		RequestedRelease: "",
-		Host:             &host,
-		InstallArgs:      []string{"--system", "--workspace", "/srv/loki-workspace"},
-		Runner:           runner,
-		Source:           source,
+		StateRoot:       stateRoot,
+		ReleaseTag:      "v2.0.0",
+		ReleaseManifest: manifestRaw,
+		Host:            &host,
+		InstallArgs:     []string{"--system", "--workspace", "/srv/loki-workspace"},
+		Runner:          runner,
+		Fetcher:         fetcher,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candidate.Entry.Release != "2.0.0" || string(runner.raw) != string(secondBinary) {
-		t.Fatalf("candidate=%#v runner bytes=%q", candidate.Entry, runner.raw)
+	if candidate.Manifest.Generation.Spec.Version != "2.0.0" || string(runner.raw) != string(binary) {
+		t.Fatalf("candidate=%#v runner bytes=%q", candidate.Manifest.Generation, runner.raw)
 	}
 	if runner.mode != 0700 {
 		t.Fatalf("staged binary mode = %04o", runner.mode)
@@ -87,8 +95,10 @@ func TestRunUsesAuthenticatedCandidateWithoutSourceToolchain(t *testing.T) {
 }
 
 func TestRunCandidateRejectsTamperedBinaryBeforeExecution(t *testing.T) {
-	source, host, _, _ := bootstrapSourceFixture(t)
-	candidate, err := Resolve(t.Context(), source, host, "")
+	binary := []byte("loki-host-v2")
+	_, manifestRaw := bootstrapManifest(t, "2.0.0", time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), binary)
+	host := releasesHost(t, manifestRaw)
+	candidate, err := Resolve(t.Context(), manifestRaw, host, "v2.0.0", &fakeAssetFetcher{raw: binary})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,17 +118,30 @@ func TestRunCandidateRejectsTamperedBinaryBeforeExecution(t *testing.T) {
 }
 
 func TestRunPropagatesInstallerFailure(t *testing.T) {
-	source, host, _, _ := bootstrapSourceFixture(t)
+	binary := []byte("loki-host-v2")
+	manifest, manifestRaw := bootstrapManifest(t, "2.0.0", time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC), binary)
+	host := manifest.SupportedHosts[0]
 	runner := &captureRunner{err: errors.New("install failed")}
 	_, err := Run(t.Context(), Config{
-		StateRoot: filepath.Join(t.TempDir(), "bootstrap-state"),
-		Host:      &host,
-		Runner:    runner,
-		Source:    source,
+		StateRoot:       filepath.Join(t.TempDir(), "bootstrap-state"),
+		ReleaseTag:      "v2.0.0",
+		ReleaseManifest: manifestRaw,
+		Host:            &host,
+		Runner:          runner,
+		Fetcher:         &fakeAssetFetcher{raw: binary},
 	})
 	if err == nil {
 		t.Fatal("host installer failure was ignored")
 	}
+}
+
+func releasesHost(t *testing.T, manifestRaw []byte) releases.SupportedHost {
+	t.Helper()
+	manifest, err := releases.LoadReleaseManifest(manifestRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manifest.SupportedHosts[0]
 }
 
 func TestDefaultStateRootUsesExplicitScope(t *testing.T) {

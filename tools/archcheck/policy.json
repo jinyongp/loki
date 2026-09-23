@@ -1295,13 +1295,6 @@
       "allowed_tags": [
         "release-trust"
       ],
-      "description": "TUF verification belongs to authenticated host release metadata",
-      "import_prefix": "github.com/theupdateframework/go-tuf/v2"
-    },
-    {
-      "allowed_tags": [
-        "release-trust"
-      ],
       "description": "in-toto provenance contracts belong to authenticated host release metadata",
       "import_prefix": "github.com/in-toto/attestation"
     },

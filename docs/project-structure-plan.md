@@ -82,7 +82,7 @@ internal/
 
   host/                       operator lifecycle; never a workload API
     config/                   host file parsing and effective config assembly
-    releases/                 authenticated metadata and release generations
+    releases/                 immutable release metadata and generations
     lifecycle/                install, prepare/apply, rollback and removal
     diagnostics/              operator health and recovery views
     assets/                   canonical embedded Compose/config templates
