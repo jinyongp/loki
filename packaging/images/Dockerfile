@@ -60,7 +60,7 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/go \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/gofmt
 
-FROM alpine/git:2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f AS git-root
+FROM alpine/git:2.54.0@sha256:ae0f6f4bce38d2b8c40becc0d6241a08d9f57186ea03029de2189a2b5e722d94 AS git-root
 
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 ARG TARGETARCH
