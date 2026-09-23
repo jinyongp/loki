@@ -15,7 +15,8 @@ RUN cd /src/devtools \
  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
     go build -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=$DEVTOOLS_VERSION -X main.commit=$DEVTOOLS_COMMIT" \
-      -o /out/devtools ./cmd/devtools
+      -o /out/devtools ./cmd/devtools \
+ && /out/devtools version | grep -q '"version":"0.18.0"'
 
 RUN git clone --depth 1 --branch "v$GH_VERSION" https://github.com/cli/cli.git /src/gh \
  && test "$(git -C /src/gh rev-parse HEAD)" = "$GH_COMMIT"
@@ -23,7 +24,8 @@ RUN cd /src/gh \
  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
     go build -trimpath -buildvcs=false \
       -ldflags "-s -w -X github.com/cli/cli/v2/internal/build.Version=$GH_VERSION -X github.com/cli/cli/v2/internal/build.Date=$GH_DATE" \
-      -o /out/gh ./cmd/gh
+      -o /out/gh ./cmd/gh \
+ && /out/gh version | grep -q '^gh version 2\.101\.0 '
 
 FROM --platform=$TARGETPLATFORM rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446 AS ripgrep
 ARG RIPGREP_VERSION=15.2.0
@@ -32,7 +34,9 @@ RUN apk add --no-cache git build-base pcre2-dev perl
 ENV PCRE2_SYS_STATIC=1
 RUN git clone --depth 1 --branch "$RIPGREP_VERSION" https://github.com/BurntSushi/ripgrep.git /src/ripgrep \
  && test "$(git -C /src/ripgrep rev-parse HEAD)" = "$RIPGREP_COMMIT"
-RUN cd /src/ripgrep && cargo build --locked --profile release-lto --features pcre2
+RUN cd /src/ripgrep \
+ && cargo build --locked --profile release-lto --features pcre2 \
+ && /src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0$'
 
 FROM scratch AS go-export
 COPY --from=go-tools /out/devtools /devtools

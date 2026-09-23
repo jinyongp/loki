@@ -79,12 +79,6 @@ install -m 0755 "$go_dir/devtools" "$tmp/output/devtools/$arch/devtools"
 install -m 0755 "$ripgrep_dir/rg" "$tmp/output/ripgrep/$arch/rg"
 install -m 0755 "$go_dir/gh" "$tmp/output/gh/$arch/gh"
 
-if test "$arch" = amd64; then
-  "$tmp/output/devtools/$arch/devtools" version | grep -q '"version":"0.18.0"'
-  "$tmp/output/ripgrep/$arch/rg" --version | grep -q '^ripgrep 15\.2\.0$'
-  "$tmp/output/gh/$arch/gh" version | grep -q '^gh version 2\.101\.0 '
-fi
-
 printf '%s\n' \
   "arch=$arch" \
   "devtools=0.18.0" \

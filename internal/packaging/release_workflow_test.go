@@ -94,9 +94,6 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"--progress=plain",
 		"type=local,dest=$destination",
 		"::error::release input %s linux/%s source build failed: %s",
-		`"version":"0.18.0"`,
-		`^ripgrep 15\.2\.0$`,
-		`^gh version 2\.101\.0 `,
 	} {
 		if !strings.Contains(script, required) {
 			t.Fatalf("release input builder lacks %q", required)
@@ -114,6 +111,9 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"apk add --no-cache git build-base pcre2-dev perl",
 		"PCRE2_SYS_STATIC=1",
 		"cargo build --locked --profile release-lto --features pcre2",
+		`/out/devtools version | grep -q '"version":"0.18.0"'`,
+		`/out/gh version | grep -q '^gh version 2\.101\.0 '`,
+		`/src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0$'`,
 		"/src/ripgrep/target/release-lto/rg",
 		"AS go-export",
 		"AS ripgrep-export",
