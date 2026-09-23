@@ -67,6 +67,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"scripts/build/build-oci.sh",
 		"scripts/build/build-release-inputs.sh",
 		"scripts/verify/verify-release.sh",
+		"scripts/verify/release-pins.sh",
 		"scripts/maintainer/lifecycle.sh",
 		"tools/release/bootstrapbuild/main.go",
 		"tools/release/releasebuild/main.go",

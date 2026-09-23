@@ -20,6 +20,7 @@ func TestS06CanonicalReleaseStructure(t *testing.T) {
 		"scripts/build/build-release-inputs.sh",
 		"scripts/build/build-candidate.sh",
 		"scripts/verify/verify-release.sh",
+		"scripts/verify/release-pins.sh",
 		"scripts/verify/accept-compose.sh",
 		"scripts/maintainer/render-layouts.sh",
 		"tools/release/bootstrapbuild/main.go",

@@ -81,13 +81,7 @@ jobs:
       - name: Verify release dependency pins are current
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(gh release view --repo jinyongp/devtools --json tagName --jq .tagName)" = v0.18.0
-          test "$(gh release view --repo cli/cli --json tagName --jq .tagName)" = v2.101.0
-          test "$(gh release view --repo BurntSushi/ripgrep --json tagName --jq .tagName)" = 15.2.0
-          test "$(gh release view --repo releaseway/actions --json tagName --jq .tagName)" = v0.1.4
+        run: sh ./scripts/verify/release-pins.sh metadata
 
       - name: Resolve version
         id: version
@@ -162,6 +156,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Verify release container pins are current
+        if: matrix.arch == 'amd64'
+        run: sh ./scripts/verify/release-pins.sh containers
 
       - name: Expose GitHub cache runtime
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0

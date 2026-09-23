@@ -23,10 +23,9 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"bump:",
 		"actions-up@1.20.1",
 		"npm view actions-up version",
-		"jinyongp/devtools --json tagName",
-		"cli/cli --json tagName",
-		"BurntSushi/ripgrep --json tagName",
-		"releaseway/actions --json tagName",
+		"./scripts/verify/release-pins.sh metadata",
+		"./scripts/verify/release-pins.sh containers",
+		"Verify release container pins are current",
 		"crazy-max/ghaction-github-runtime@",
 		"# v4.0.0",
 		"release-inputs:",
@@ -153,6 +152,33 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	for _, forbidden := range []string{"releases/download", "gh release download", "curl "} {
 		if strings.Contains(script, forbidden) || strings.Contains(dockerfile, forbidden) {
 			t.Fatalf("release input build depends on binary release downloads: %q", forbidden)
+		}
+	}
+}
+
+
+func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "release-pins.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"https://go.dev/dl/?mode=json",
+		"https://static.rust-lang.org/dist/channel-rust-stable.toml",
+		"https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+		"APKINDEX.tar.gz",
+		"jinyongp/devtools",
+		"cli/cli",
+		"BurntSushi/ripgrep",
+		"releaseway/actions",
+		"docker/dockerfile:1",
+		"alpine/git:latest",
+		"docker buildx imagetools inspect",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("release pin verifier lacks %q", required)
 		}
 	}
 }
