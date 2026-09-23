@@ -139,7 +139,7 @@ the workflow performs the release without a second operator handoff:
 2. runs `actions-up@1.20.1` in report mode and refuses stale GitHub Action
    pins;
 3. resolves the next release version;
-4. builds required external CLI inputs from exact upstream source commits for both supported image architectures;
+4. builds required external CLI inputs from exact upstream source commits on native amd64 and arm64 GitHub runners in parallel;
 5. builds and pushes the core and browser OCI images and records their immutable
    digests;
 6. assembles release metadata, bootstrap and candidate evidence;

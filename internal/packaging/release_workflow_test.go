@@ -22,7 +22,11 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"workflow_dispatch:",
 		"bump:",
 		"actions-up@1.20.1",
+		"release-inputs:",
+		"ubuntu-24.04-arm",
 		"./scripts/build/build-release-inputs.sh",
+		"pattern: loki-release-inputs-*",
+		"merge-multiple: true",
 		"./scripts/build/build-oci.sh",
 		"./scripts/build/build-browser-oci.sh",
 		"Require anonymously pullable runtime images",
@@ -82,8 +86,10 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	script := string(scriptRaw)
 	dockerfile := string(dockerfileRaw)
 	for _, required := range []string{
+		"usage: build-release-inputs.sh OUTPUT_DIRECTORY ARCH",
 		"packaging/release-inputs/Dockerfile",
 		"--platform \"linux/$arch\"",
+		`requires a native $arch runner`,
 		"--target \"$target\"",
 		"--progress=plain",
 		"type=local,dest=$destination",

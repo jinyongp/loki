@@ -123,9 +123,46 @@ jobs:
             echo "released_at=$released_at"
           } >>"$GITHUB_OUTPUT"
 
+  release-inputs:
+    name: Build release inputs (${{ matrix.arch }})
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build native release inputs
+        run: sh ./scripts/build/build-release-inputs.sh "$RUNNER_TEMP/release-inputs" "${{ matrix.arch }}"
+
+      - name: Upload release inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: loki-release-inputs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/release-inputs
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: Build immutable release
-    needs: preflight
+    needs:
+      - preflight
+      - release-inputs
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -162,8 +199,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Build pinned release inputs
-        run: sh ./scripts/build/build-release-inputs.sh "$RUNNER_TEMP/release-inputs"
+      - name: Download release inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: loki-release-inputs-*
+          path: ${{ runner.temp }}/release-inputs
+          merge-multiple: true
 
       - name: Build and push candidate images
         id: images
@@ -361,11 +402,17 @@ jobs:
       - name: Run bootstrap acceptance
         run: ./scripts/verify/accept-bootstrap.sh
 
+      - name: Download release inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: loki-release-inputs-*
+          path: ${{ runner.temp }}/release-inputs
+          merge-multiple: true
+
       - name: Run real devtools integration
         shell: bash
         run: |
           set -euo pipefail
-          sh ./scripts/build/build-release-inputs.sh "$RUNNER_TEMP/release-inputs"
           LOKI_DEVTOOLS_BINARY="$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" \
             go test ./internal/devtools -run TestRealProcessInheritsBrokerSecrets -v -count=1
 
