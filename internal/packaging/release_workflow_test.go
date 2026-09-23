@@ -35,6 +35,8 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"pattern: loki-release-inputs-*",
 		"merge-multiple: true",
 		"Restore release input executable modes",
+		"Restore candidate executable modes",
+		"chmod 0755 candidate/inputs/loki candidate/inputs/loki-bootstrap",
 		"LOKI_BUILD_CACHE_SCOPE: release-inputs",
 		"LOKI_BUILD_CACHE_SCOPE=loki-core",
 		"LOKI_BUILD_CACHE_SCOPE=loki-browser",

@@ -406,6 +406,9 @@ jobs:
           name: ${{ needs.build.outputs.candidate_artifact }}
           path: candidate
 
+      - name: Restore candidate executable modes
+        run: chmod 0755 candidate/inputs/loki candidate/inputs/loki-bootstrap
+
       - name: Verify candidate publication projection
         env:
           TAG: ${{ needs.preflight.outputs.tag }}
@@ -501,6 +504,9 @@ jobs:
         with:
           name: ${{ needs.build.outputs.candidate_artifact }}
           path: candidate
+
+      - name: Restore candidate executable modes
+        run: chmod 0755 candidate/inputs/loki candidate/inputs/loki-bootstrap
 
       - name: Prepare public assets and Pages installer
         env:
