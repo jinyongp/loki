@@ -42,7 +42,7 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"io.loki.ripgrep.arm64.sha256",
 		"io.loki.gh.amd64.sha256",
 		"io.loki.gh.arm64.sha256",
-		"dockerfile:1.27.0@sha256:",
+		"dockerfile:1@sha256:",
 		"golang:1.27.1-bookworm@sha256:",
 		"alpine:3.24.2@sha256:",
 		"alpine/git:2.54.0@sha256:",

@@ -107,7 +107,7 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 	root := filepath.Join("..", "..")
 	body := mustRead(t, filepath.Join(root, "internal", "platform", "sandbox", "testdata", "oci-image", "Dockerfile"))
 	for _, required := range []string{
-		"docker/dockerfile:1.27.0@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e",
+		"docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32",
 		"FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:",
 		"ARG TARGETOS",
 		"ARG TARGETARCH",
