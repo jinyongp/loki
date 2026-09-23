@@ -43,6 +43,8 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"golang:1.27.1-bookworm@sha256:",
 		"alpine:3.24.2@sha256:",
 		"alpine/git:2.54.0@sha256:",
+		"org.opencontainers.image.source=\"https://github.com/jinyongp/loki\"",
+		"org.opencontainers.image.licenses=\"Apache-2.0\"",
 		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",
 		"-o /out/loki-launcher ./cmd/launcher",
 		"-o /out/loki-executor ./cmd/executor",
@@ -104,7 +106,13 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 		}
 	}
 	script := readOCIFile(t, filepath.Join(root, "scripts", "build", "build-browser-oci.sh"))
-	for _, required := range []string{"--platform linux/amd64,linux/arm64", "--provenance=mode=max", "type=oci,dest=$output"} {
+	for _, required := range []string{
+		"--platform linux/amd64,linux/arm64",
+		"--provenance=mode=max",
+		"type=oci,dest=$output",
+		`--tag "$output" --push`,
+		`--metadata-file "$LOKI_BUILD_METADATA"`,
+	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("browser build script is missing %q", required)
 		}
@@ -128,6 +136,8 @@ func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 		"gh_arm64_sha",
 		"--platform linux/amd64,linux/arm64",
 		"--provenance=mode=max",
+		`--tag "$output" --push`,
+		`--metadata-file "$LOKI_BUILD_METADATA"`,
 		"SOURCE_DATE_EPOCH=$source_date_epoch",
 		"devtools-catalog.json",
 		"provenance.json",

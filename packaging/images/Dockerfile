@@ -76,6 +76,8 @@ ARG GH_VERSION
 ARG GH_AMD64_SHA256
 ARG GH_ARM64_SHA256
 LABEL org.opencontainers.image.title="Loki" \
+      org.opencontainers.image.source="https://github.com/jinyongp/loki" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="$LOKI_VERSION" \
       org.opencontainers.image.revision="$LOKI_REVISION" \
       io.loki.devtools.version="$DEVTOOLS_VERSION" \

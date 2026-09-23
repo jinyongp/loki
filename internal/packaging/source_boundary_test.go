@@ -64,9 +64,12 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"packaging/native/execution-contract.json",
 		"packaging/native/systemd/host.target",
 		"scripts/build/build-oci.sh",
+		"scripts/build/fetch-release-inputs.sh",
 		"scripts/verify/verify-release.sh",
 		"scripts/maintainer/lifecycle.sh",
 		"tools/release/bootstrapbuild/main.go",
+		"tools/release/releasebuild/main.go",
+		"tools/release/version/main.go",
 		"docs/first-install.md",
 	} {
 		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(relative)))

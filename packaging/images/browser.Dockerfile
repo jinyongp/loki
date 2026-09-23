@@ -23,6 +23,8 @@ ARG LOKI_VERSION
 ARG LOKI_REVISION
 ARG CHROMIUM_VERSION=152.0.7977.82-r0
 LABEL org.opencontainers.image.title="Loki Browser" \
+      org.opencontainers.image.source="https://github.com/jinyongp/loki" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="$LOKI_VERSION" \
       org.opencontainers.image.revision="$LOKI_REVISION" \
       io.loki.browser.name="chromium" \

@@ -417,6 +417,18 @@
       "to": "loki/internal/host/releases"
     },
     {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/assets"
+    },
+    {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/releases"
+    },
+    {
       "from": "loki/tools/release/evidencebuild",
       "to": "loki/internal/host/releases"
     },
@@ -1171,6 +1183,23 @@
         "release-trust"
       ],
       "target": "tools/release/publishprep"
+    },
+    "loki/tools/release/releasebuild": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling",
+        "release-trust"
+      ],
+      "target": "tools/release/releasebuild"
+    },
+    "loki/tools/release/version": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling"
+      ],
+      "target": "tools/release/version"
     },
     "loki/tools/release/internal/bootstrapinfo": {
       "kind": "tooling",

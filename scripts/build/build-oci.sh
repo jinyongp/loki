@@ -2,7 +2,7 @@
 set -eu
 
 if test "$#" -ne 7; then
-  echo "usage: build-oci.sh OUTPUT_OCI DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64 GH_AMD64 GH_ARM64" >&2
+  echo "usage: build-oci.sh OUTPUT_OR_REF DEVTOOLS_AMD64 DEVTOOLS_ARM64 RIPGREP_AMD64 RIPGREP_ARM64 GH_AMD64 GH_ARM64" >&2
   exit 2
 fi
 
@@ -16,8 +16,9 @@ gh_amd64=$6
 gh_arm64=$7
 
 case "$output" in
-  /*) ;;
-  *) echo "output path must be absolute" >&2; exit 2 ;;
+  /*) output_mode=archive ;;
+  [a-z0-9]*/*:*) output_mode=registry ;;
+  *) echo "output must be an absolute OCI archive path or registry tag" >&2; exit 2 ;;
 esac
 for binary in "$devtools_amd64" "$devtools_arm64"; do
   test -x "$binary" || { echo "devtools binary is not executable: $binary" >&2; exit 1; }
@@ -94,7 +95,7 @@ printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtoo
   "$loki_version" "$loki_revision" "$loki_date" "$devtools_version_json" "$amd64_sha" "$arm64_sha" "$ripgrep_version" "$ripgrep_amd64_sha" "$ripgrep_arm64_sha" "$gh_version" "$gh_amd64_sha" "$gh_arm64_sha" \
   > "$artifacts/metadata/provenance.json"
 
-docker buildx build "$source_dir" \
+set -- docker buildx build "$source_dir" \
   --file "$source_dir/packaging/images/Dockerfile" \
   --platform linux/amd64,linux/arm64 \
   --build-context "artifacts=$artifacts" \
@@ -111,5 +112,14 @@ docker buildx build "$source_dir" \
   --build-arg "GH_VERSION=$gh_version" \
   --build-arg "GH_AMD64_SHA256=$gh_amd64_sha" \
   --build-arg "GH_ARM64_SHA256=$gh_arm64_sha" \
-  --provenance=mode=max \
-  --output "type=oci,dest=$output"
+  --provenance=mode=max
+
+if test "$output_mode" = archive; then
+  set -- "$@" --output "type=oci,dest=$output"
+else
+  set -- "$@" --tag "$output" --push
+fi
+if test -n "${LOKI_BUILD_METADATA:-}"; then
+  set -- "$@" --metadata-file "$LOKI_BUILD_METADATA"
+fi
+"$@"
