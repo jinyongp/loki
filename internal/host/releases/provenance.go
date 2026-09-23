@@ -1,7 +1,6 @@
 package releases
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,9 +10,6 @@ import (
 
 	slsav1 "github.com/in-toto/attestation/go/predicates/provenance/v1"
 	intotov1 "github.com/in-toto/attestation/go/v1"
-	sigbundle "github.com/sigstore/sigstore-go/pkg/bundle"
-	sigroot "github.com/sigstore/sigstore-go/pkg/root"
-	sigverify "github.com/sigstore/sigstore-go/pkg/verify"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -38,16 +34,6 @@ type ProvenanceBuild struct {
 	ExternalParameters map[string]string
 	ResolvedInputs     []ProvenanceSubject
 	Subjects           []ProvenanceSubject
-}
-
-type ProvenancePolicy struct {
-	Issuer                 string
-	SubjectAlternativeName string
-}
-
-type ProvenanceVerifier struct {
-	verifier *sigverify.Verifier
-	identity sigverify.CertificateIdentity
 }
 
 func BuildSLSAProvenanceStatement(build ProvenanceBuild) ([]byte, error) {
@@ -117,97 +103,6 @@ func BuildSLSAProvenanceStatement(build ProvenanceBuild) ([]byte, error) {
 		return nil, fmt.Errorf("in-toto statement is invalid: %w", err)
 	}
 	return protojson.Marshal(statement)
-}
-
-func NewProvenanceVerifier(trusted sigroot.TrustedMaterial, policy ProvenancePolicy) (*ProvenanceVerifier, error) {
-	if trusted == nil {
-		return nil, errors.New("Sigstore trusted material is required")
-	}
-	issuer := strings.TrimSpace(policy.Issuer)
-	san := strings.TrimSpace(policy.SubjectAlternativeName)
-	if issuer == "" || san == "" || strings.ContainsAny(issuer+san, "\r\n\x00") {
-		return nil, errors.New("Sigstore certificate identity policy is incomplete")
-	}
-	identity, err := sigverify.NewShortCertificateIdentity(issuer, "", san, "")
-	if err != nil {
-		return nil, err
-	}
-	verifier, err := sigverify.NewVerifier(
-		trusted,
-		sigverify.WithSignedCertificateTimestamps(1),
-		sigverify.WithTransparencyLog(1),
-		sigverify.WithObserverTimestamps(1),
-		sigverify.WithoutStatementPredicate(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &ProvenanceVerifier{verifier: verifier, identity: identity}, nil
-}
-
-func (v *ProvenanceVerifier) VerifyBundle(raw []byte, expected []ProvenanceSubject) error {
-	if v == nil || v.verifier == nil {
-		return errors.New("Sigstore provenance verifier is not configured")
-	}
-	if len(raw) == 0 || len(raw) > maxProvenanceBundleLen {
-		return errors.New("Sigstore provenance bundle exceeds size policy")
-	}
-	subjects, err := normalizeProvenanceSubjects(expected)
-	if err != nil {
-		return err
-	}
-	var signed sigbundle.Bundle
-	if err = signed.UnmarshalJSON(raw); err != nil {
-		return fmt.Errorf("decode Sigstore bundle: %w", err)
-	}
-	digests := make([]sigverify.ArtifactDigest, 0, len(subjects))
-	for _, subject := range subjects {
-		value, decodeErr := hex.DecodeString(subject.SHA256)
-		if decodeErr != nil {
-			return decodeErr
-		}
-		digests = append(digests, sigverify.ArtifactDigest{Algorithm: "sha256", Digest: value})
-	}
-	result, err := v.verifier.Verify(
-		&signed,
-		sigverify.NewPolicy(
-			sigverify.WithArtifactDigests(digests),
-			sigverify.WithCertificateIdentity(v.identity),
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("verify Sigstore provenance bundle: %w", err)
-	}
-	return validateVerifiedProvenance(result, subjects)
-}
-
-func validateVerifiedProvenance(result *sigverify.VerificationResult, expected []ProvenanceSubject) error {
-	if result == nil || result.Statement == nil {
-		return errors.New("verified Sigstore bundle has no in-toto statement")
-	}
-	if result.Statement.GetType() != intotov1.StatementTypeUri ||
-		result.Statement.GetPredicateType() != slsaProvenanceV1 {
-		return errors.New("verified Sigstore bundle is not SLSA provenance v1")
-	}
-	if result.VerifiedIdentity == nil {
-		return errors.New("verified Sigstore bundle has no verified certificate identity")
-	}
-	actual := make([]ProvenanceSubject, 0, len(result.Statement.GetSubject()))
-	for _, subject := range result.Statement.GetSubject() {
-		if subject == nil {
-			return errors.New("verified provenance contains an empty subject")
-		}
-		digest := subject.GetDigest()["sha256"]
-		actual = append(actual, ProvenanceSubject{Name: subject.GetName(), SHA256: digest})
-	}
-	normalized, err := normalizeProvenanceSubjects(actual)
-	if err != nil {
-		return fmt.Errorf("verified provenance subjects: %w", err)
-	}
-	if !slices.Equal(normalized, expected) {
-		return errors.New("verified provenance subjects do not match the release evidence set")
-	}
-	return nil
 }
 
 func normalizeProvenanceSubjects(subjects []ProvenanceSubject) ([]ProvenanceSubject, error) {

@@ -41,7 +41,7 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	bootstrapBody := "#!/bin/sh\nexit 0\n"
 	assetsBody := "host-assets"
 	toolchainBody := "{\"version\":1}\n"
-	provenanceBody := "{\"mediaType\":\"application/vnd.dev.sigstore.bundle.v0.3+json\"}\n"
+	provenanceBody := "{\"_type\":\"https://in-toto.io/Statement/v1\"}\n"
 	noticesBody := "notices"
 	notesBody := "# Release 1.2.3\n"
 	policyBody := "{\"version\":1,\"allowed_hosts\":[\"registry.npmjs.org\"]}\n"

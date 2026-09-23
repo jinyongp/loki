@@ -1295,15 +1295,8 @@
       "allowed_tags": [
         "release-trust"
       ],
-      "description": "in-toto provenance contracts belong to authenticated host release metadata",
+      "description": "in-toto provenance contracts belong to immutable release evidence",
       "import_prefix": "github.com/in-toto/attestation"
-    },
-    {
-      "allowed_tags": [
-        "release-trust"
-      ],
-      "description": "Sigstore bundle verification belongs to authenticated host release metadata",
-      "import_prefix": "github.com/sigstore/sigstore-go"
     }
   ],
   "variants": [

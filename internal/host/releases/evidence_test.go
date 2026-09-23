@@ -40,7 +40,7 @@ func releaseEvidenceFixture(t *testing.T) (ReleaseManifest, []byte, []byte, Rele
 	t.Helper()
 	now := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
 	manifest := releaseManifestFixture(t, "1.2.3", now)
-	provenanceRaw := []byte("self-contained-sigstore-bundle")
+	provenanceRaw := []byte("self-contained-provenance-bundle")
 	noticesRaw, _, err := BuildNoticeBundle(noticeRequirementsFixture(), noticeMaterialsFixture())
 	if err != nil {
 		t.Fatal(err)

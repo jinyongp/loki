@@ -169,7 +169,7 @@ Extraction has a separate confinement boundary, type/mode rules and size/time/en
 
 Start with Node/pnpm as the end-to-end implementation exercise, then Python/uv, Rust components and Go. This is incremental validation of the common architecture, not permission to hardcode Node assumptions into it. Derived OCI images remain the separate mechanism for relatively static native/OS dependencies.
 
-Keep release and toolchain acquisition bound to immutable content identities. Public release installation uses an exact Git tag plus manifest-bound length/SHA-256 checks, while toolchain catalogs identify exact permitted artifacts and verify their checksums before atomic installation. Release provenance and required license notices remain separate evidence; do not add an independent update-metadata signing system.
+Keep release and toolchain acquisition bound to immutable content identities. Public release installation uses an exact Git tag plus manifest-bound length/SHA-256 checks, while toolchain catalogs identify exact permitted artifacts and verify their checksums before atomic installation. Release provenance and required license notices remain separate evidence.
 
 ## 8. Turn host lifecycle into a recoverable transaction
 

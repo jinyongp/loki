@@ -7,15 +7,8 @@ import (
 
 	slsav1 "github.com/in-toto/attestation/go/predicates/provenance/v1"
 	intotov1 "github.com/in-toto/attestation/go/v1"
-	sigroot "github.com/sigstore/sigstore-go/pkg/root"
-	sigverify "github.com/sigstore/sigstore-go/pkg/verify"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
-
-type emptySigstoreTrust struct {
-	sigroot.BaseTrustedMaterial
-}
 
 func provenanceBuildFixture() ProvenanceBuild {
 	return ProvenanceBuild{
@@ -122,77 +115,5 @@ func TestBuildSLSAProvenanceStatementRejectsIncompleteInputs(t *testing.T) {
 				t.Fatalf("%s provenance input was accepted", name)
 			}
 		})
-	}
-}
-
-func TestProvenanceVerifierRequiresExactOfflinePolicy(t *testing.T) {
-	if _, err := NewProvenanceVerifier(nil, ProvenancePolicy{
-		Issuer:                 "https://token.actions.githubusercontent.com",
-		SubjectAlternativeName: "https://github.com/jinyongp/loki/.github/workflows/release.yml@refs/tags/v1.2.3",
-	}); err == nil {
-		t.Fatal("missing Sigstore trusted material was accepted")
-	}
-	if _, err := NewProvenanceVerifier(&emptySigstoreTrust{}, ProvenancePolicy{}); err == nil {
-		t.Fatal("empty Sigstore identity policy was accepted")
-	}
-	verifier, err := NewProvenanceVerifier(&emptySigstoreTrust{}, ProvenancePolicy{
-		Issuer:                 "https://token.actions.githubusercontent.com",
-		SubjectAlternativeName: "https://github.com/jinyongp/loki/.github/workflows/release.yml@refs/tags/v1.2.3",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = verifier.VerifyBundle([]byte("{}"), provenanceBuildFixture().Subjects); err == nil {
-		t.Fatal("malformed Sigstore bundle was accepted")
-	}
-}
-
-func TestVerifiedProvenanceMustMatchExactSubjectSet(t *testing.T) {
-	build := provenanceBuildFixture()
-	raw, err := BuildSLSAProvenanceStatement(build)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var statement intotov1.Statement
-	if err = protojson.Unmarshal(raw, &statement); err != nil {
-		t.Fatal(err)
-	}
-	expected, err := normalizeProvenanceSubjects(build.Subjects)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := &sigverify.VerificationResult{
-		Statement:        &statement,
-		VerifiedIdentity: &sigverify.CertificateIdentity{},
-	}
-	if err = validateVerifiedProvenance(result, expected); err != nil {
-		t.Fatal(err)
-	}
-
-	extra := *result
-	extraStatement := proto.Clone(&statement).(*intotov1.Statement)
-	extraStatement.Subject = append(append([]*intotov1.ResourceDescriptor(nil), statement.Subject...), &intotov1.ResourceDescriptor{
-		Name: "extra",
-		Digest: map[string]string{
-			"sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-		},
-	})
-	extra.Statement = extraStatement
-	if err = validateVerifiedProvenance(&extra, expected); err == nil {
-		t.Fatal("provenance with an extra subject was accepted")
-	}
-
-	wrongPredicate := *result
-	wrongStatement := proto.Clone(&statement).(*intotov1.Statement)
-	wrongStatement.PredicateType = "https://example.test/predicate"
-	wrongPredicate.Statement = wrongStatement
-	if err = validateVerifiedProvenance(&wrongPredicate, expected); err == nil {
-		t.Fatal("non-SLSA provenance predicate was accepted")
-	}
-
-	noIdentity := *result
-	noIdentity.VerifiedIdentity = nil
-	if err = validateVerifiedProvenance(&noIdentity, expected); err == nil {
-		t.Fatal("provenance without verified signer identity was accepted")
 	}
 }

@@ -40,7 +40,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 	bootstrapRaw := []byte("#!/bin/sh\nexit 0\n")
 	hostAssetsRaw := []byte("host-assets")
 	toolchainRaw := []byte("{\"version\":1}\n")
-	provenanceRaw := []byte("{\"mediaType\":\"application/vnd.dev.sigstore.bundle.v0.3+json\"}\n")
+	provenanceRaw := []byte("{\"_type\":\"https://in-toto.io/Statement/v1\"}\n")
 	noticesRaw := []byte("notices")
 	notesRaw := []byte("# Release 1.2.3\n")
 	policyRaw := []byte("{\"version\":1}\n")
