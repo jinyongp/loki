@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-launcher ./cmd/launcher \
  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-executor ./cmd/executor
 
-FROM --platform=$BUILDPLATFORM alpine:3.24.2@sha256:31b6477333eb8257db9e5d7c3a7264fd0467928756f0bbcc27d35bea5d28cdbd AS layout
+FROM --platform=$BUILDPLATFORM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS layout
 RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec /rootfs/opt/loki/share/skills /rootfs/opt/loki/toolchain/bin /rootfs/usr/local/bin /rootfs/usr/share/doc/loki \
  && install -d -o 10000 -g 10001 -m 2770 /rootfs/workspace \
  && install -d -o 10000 -g 10000 -m 0700 /rootfs/var/cache/loki /rootfs/var/lib/loki/runner \
@@ -62,7 +62,7 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
 
 FROM alpine/git:2.54.0@sha256:3b44767883ac77bddae0160cc27b6b039345e23fa3504f4159efaa32264ab57f AS git-root
 
-FROM alpine:3.24.2@sha256:31b6477333eb8257db9e5d7c3a7264fd0467928756f0bbcc27d35bea5d28cdbd
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 ARG TARGETARCH
 ARG LOKI_VERSION
 ARG LOKI_REVISION

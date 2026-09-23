@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags="-s -w -X loki/internal/buildinfo.Version=$LOKI_VERSION -X loki/internal/buildinfo.Commit=$LOKI_REVISION -X loki/internal/buildinfo.Date=$LOKI_DATE" \
       -o /out/loki ./cmd/loki
 
-FROM alpine:3.24.2@sha256:31b6477333eb8257db9e5d7c3a7264fd0467928756f0bbcc27d35bea5d28cdbd
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 ARG LOKI_VERSION
 ARG LOKI_REVISION
 ARG CHROMIUM_VERSION=152.0.7977.82-r0
