@@ -617,7 +617,19 @@ func (e *Engine) call(ctx context.Context, method, endpoint string, body any) (*
 }
 
 func (e *Engine) unexpectedStatus(response *http.Response) error {
-	_, _ = readBounded(response.Body, min(e.responseBytes, 64<<10))
+	raw, err := readBounded(response.Body, min(e.responseBytes, 64<<10))
+	if err != nil {
+		return fmt.Errorf("sandbox Docker daemon returned HTTP %d", response.StatusCode)
+	}
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(raw, &payload) == nil {
+		message := strings.TrimSpace(payload.Message)
+		if message != "" && len(message) <= 1024 && !strings.ContainsAny(message, "\r\n\x00") {
+			return fmt.Errorf("sandbox Docker daemon returned HTTP %d: %s", response.StatusCode, message)
+		}
+	}
 	return fmt.Errorf("sandbox Docker daemon returned HTTP %d", response.StatusCode)
 }
 

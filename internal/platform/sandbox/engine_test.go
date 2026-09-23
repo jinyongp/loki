@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -418,5 +419,26 @@ func TestEngineOptionsRejectUntrustedConfiguration(t *testing.T) {
 		if _, err := NewEngine(options); err == nil {
 			t.Fatalf("invalid EngineOptions accepted: %#v", options)
 		}
+	}
+}
+
+func TestUnexpectedStatusIncludesBoundedDockerMessage(t *testing.T) {
+	engine := &Engine{responseBytes: 4096}
+	response := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(`{"message":"conflicting options: port publishing and the container type network mode"}`)),
+	}
+	err := engine.unexpectedStatus(response)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 400: conflicting options: port publishing") {
+		t.Fatalf("unexpected status error = %v", err)
+	}
+
+	response = &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(`{"message":"unsafe\nmessage"}`)),
+	}
+	err = engine.unexpectedStatus(response)
+	if err == nil || err.Error() != "sandbox Docker daemon returned HTTP 400" {
+		t.Fatalf("unsafe daemon message was exposed: %v", err)
 	}
 }
