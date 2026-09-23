@@ -36,7 +36,7 @@ RUN git clone --depth 1 --branch "$RIPGREP_VERSION" https://github.com/BurntSush
  && test "$(git -C /src/ripgrep rev-parse HEAD)" = "$RIPGREP_COMMIT"
 RUN cd /src/ripgrep \
  && cargo build --locked --profile release-lto --features pcre2 \
- && /src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0$'
+ && /src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0 '
 
 FROM scratch AS go-export
 COPY --from=go-tools /out/devtools /devtools
