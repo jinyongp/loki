@@ -67,7 +67,7 @@ test -n "$devtools_version" || { echo "invalid devtools version response" >&2; e
 
 amd64_sha=$(sha256sum "$devtools_amd64" | cut -d' ' -f1)
 arm64_sha=$(sha256sum "$devtools_arm64" | cut -d' ' -f1)
-ripgrep_version=$($ripgrep_amd64 --version | sed -n '1s/^ripgrep //p')
+ripgrep_version=$($ripgrep_amd64 --version | sed -n '1s/^ripgrep \([^ ]*\).*/\1/p')
 test -n "$ripgrep_version" || { echo "invalid ripgrep version response" >&2; exit 1; }
 ripgrep_amd64_sha=$(sha256sum "$ripgrep_amd64" | cut -d' ' -f1)
 ripgrep_arm64_sha=$(sha256sum "$ripgrep_arm64" | cut -d' ' -f1)
@@ -113,6 +113,12 @@ set -- docker buildx build "$source_dir" \
   --build-arg "GH_AMD64_SHA256=$gh_amd64_sha" \
   --build-arg "GH_ARM64_SHA256=$gh_arm64_sha" \
   --provenance=mode=max
+
+if test -n "${LOKI_BUILD_CACHE_SCOPE:-}"; then
+  set -- "$@" \
+    --cache-from "type=gha,version=2,scope=$LOKI_BUILD_CACHE_SCOPE" \
+    --cache-to "type=gha,version=2,mode=max,scope=$LOKI_BUILD_CACHE_SCOPE,ignore-error=true"
+fi
 
 if test "$output_mode" = archive; then
   set -- "$@" --output "type=oci,dest=$output"

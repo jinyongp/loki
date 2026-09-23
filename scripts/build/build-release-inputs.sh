@@ -44,13 +44,20 @@ build_target() {
   target=$1
   destination=$2
   log="$tmp/$target-$arch.log"
-  if ! docker buildx build "$source_dir" \
+  set -- docker buildx build "$source_dir" \
     --file "$source_dir/packaging/release-inputs/Dockerfile" \
     --platform "linux/$arch" \
     --target "$target" \
     --progress=plain \
     --provenance=false \
-    --output "type=local,dest=$destination" >"$log" 2>&1; then
+    --output "type=local,dest=$destination"
+  if test -n "${LOKI_BUILD_CACHE_SCOPE:-}"; then
+    scope="${LOKI_BUILD_CACHE_SCOPE}-$target-$arch"
+    set -- "$@" \
+      --cache-from "type=gha,version=2,scope=$scope" \
+      --cache-to "type=gha,version=2,mode=max,scope=$scope,ignore-error=true"
+  fi
+  if ! "$@" >"$log" 2>&1; then
     tail -n 40 "$log" >&2 || true
     summary=$(tail -n 1 "$log" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g')
     printf '::error::release input %s linux/%s source build failed: %s\n' "$target" "$arch" "$summary" >&2

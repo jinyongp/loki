@@ -26,6 +26,12 @@ set -- docker buildx build "$source_dir" \
   --build-arg "LOKI_DATE=$loki_date" \
   --provenance=mode=max
 
+if test -n "${LOKI_BUILD_CACHE_SCOPE:-}"; then
+  set -- "$@" \
+    --cache-from "type=gha,version=2,scope=$LOKI_BUILD_CACHE_SCOPE" \
+    --cache-to "type=gha,version=2,mode=max,scope=$LOKI_BUILD_CACHE_SCOPE,ignore-error=true"
+fi
+
 if test "$output_mode" = archive; then
   set -- "$@" --output "type=oci,dest=$output"
 else

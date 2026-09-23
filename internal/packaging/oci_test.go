@@ -112,6 +112,8 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 		"type=oci,dest=$output",
 		`--tag "$output" --push`,
 		`--metadata-file "$LOKI_BUILD_METADATA"`,
+		"type=gha,version=2,scope=$LOKI_BUILD_CACHE_SCOPE",
+		"type=gha,version=2,mode=max,scope=$LOKI_BUILD_CACHE_SCOPE,ignore-error=true",
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("browser build script is missing %q", required)
@@ -138,6 +140,8 @@ func TestOCIBuildValidatesDevtoolsInputsAndProvenance(t *testing.T) {
 		"--provenance=mode=max",
 		`--tag "$output" --push`,
 		`--metadata-file "$LOKI_BUILD_METADATA"`,
+		"type=gha,version=2,scope=$LOKI_BUILD_CACHE_SCOPE",
+		"type=gha,version=2,mode=max,scope=$LOKI_BUILD_CACHE_SCOPE,ignore-error=true",
 		"SOURCE_DATE_EPOCH=$source_date_epoch",
 		"devtools-catalog.json",
 		"provenance.json",

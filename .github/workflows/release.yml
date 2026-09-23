@@ -60,6 +60,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          latest_actions_up=$(npm view actions-up version)
+          test "$latest_actions_up" = 1.20.1 || {
+            echo "actions-up 1.20.1 is stale; latest is $latest_actions_up" >&2
+            exit 1
+          }
           npm exec --yes actions-up@1.20.1 -- \
             --dir .github \
             --dry-run \
@@ -72,6 +77,17 @@ jobs:
           sed -n '/^{/,$p' "$RUNNER_TEMP/actions-up.raw" >"$RUNNER_TEMP/actions-up.json"
           jq -e '.summary.totalUpdates == 0 and .summary.totalBlockedByMode == 0 and .summary.totalBlockedByAge == 0' \
             "$RUNNER_TEMP/actions-up.json" >/dev/null
+
+      - name: Verify release dependency pins are current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh release view --repo jinyongp/devtools --json tagName --jq .tagName)" = v0.18.0
+          test "$(gh release view --repo cli/cli --json tagName --jq .tagName)" = v2.101.0
+          test "$(gh release view --repo BurntSushi/ripgrep --json tagName --jq .tagName)" = 15.2.0
+          test "$(gh release view --repo releaseway/actions --json tagName --jq .tagName)" = v0.1.4
 
       - name: Resolve version
         id: version
@@ -147,7 +163,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      - name: Expose GitHub cache runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
       - name: Build native release inputs
+        env:
+          LOKI_BUILD_CACHE_SCOPE: release-inputs
         run: sh ./scripts/build/build-release-inputs.sh "$RUNNER_TEMP/release-inputs" "${{ matrix.arch }}"
 
       - name: Upload release inputs
@@ -192,6 +213,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      - name: Expose GitHub cache runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -205,6 +229,18 @@ jobs:
           pattern: loki-release-inputs-*
           path: ${{ runner.temp }}/release-inputs
           merge-multiple: true
+
+      - name: Restore release input executable modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod 0755 \
+            "$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" \
+            "$RUNNER_TEMP/release-inputs/devtools/arm64/devtools" \
+            "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg" \
+            "$RUNNER_TEMP/release-inputs/ripgrep/arm64/rg" \
+            "$RUNNER_TEMP/release-inputs/gh/amd64/gh" \
+            "$RUNNER_TEMP/release-inputs/gh/arm64/gh"
 
       - name: Build and push candidate images
         id: images
@@ -221,6 +257,7 @@ jobs:
           core_ref="ghcr.io/jinyongp/loki:candidate-${GITHUB_SHA}"
           browser_ref="ghcr.io/jinyongp/loki-browser:candidate-${GITHUB_SHA}"
           export LOKI_BUILD_METADATA="$RUNNER_TEMP/core-image.json"
+          export LOKI_BUILD_CACHE_SCOPE=loki-core
           ./scripts/build/build-oci.sh "$core_ref" \
             "$inputs/devtools/amd64/devtools" \
             "$inputs/devtools/arm64/devtools" \
@@ -229,6 +266,7 @@ jobs:
             "$inputs/gh/amd64/gh" \
             "$inputs/gh/arm64/gh"
           export LOKI_BUILD_METADATA="$RUNNER_TEMP/browser-image.json"
+          export LOKI_BUILD_CACHE_SCOPE=loki-browser
           ./scripts/build/build-browser-oci.sh "$browser_ref"
           core_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/core-image.json")
           browser_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/browser-image.json")
@@ -413,6 +451,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          chmod 0755 "$RUNNER_TEMP/release-inputs/devtools/amd64/devtools"
           LOKI_DEVTOOLS_BINARY="$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" \
             go test ./internal/devtools -run TestRealProcessInheritsBrokerSecrets -v -count=1
 
