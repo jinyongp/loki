@@ -255,6 +255,7 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
 		}
 	}
+	internalNetwork := p.resource.InternalNetworkName()
 	return dockerCreateRequest{
 		Image:           p.gateway.image,
 		Cmd:             command,
@@ -269,12 +270,17 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			ReadonlyRootfs: true,
 			CapDrop:        []string{"ALL"},
 			SecurityOpt:    []string{"no-new-privileges:true"},
-			NetworkMode:    "none",
+			NetworkMode:    internalNetwork,
 			Memory:         p.gateway.memoryBytes,
 			PidsLimit:      p.gateway.pids,
 			Tmpfs:          map[string]string{"/tmp": gatewayTmpfs},
 			PortBindings:   portBindings,
 			Init:           true,
+		},
+		NetworkingConfig: &dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				internalNetwork: {Aliases: []string{domainGatewayAlias}},
+			},
 		},
 	}
 }
@@ -626,9 +632,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	workloadID = workloadCandidate
 
-	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}); err != nil {
-		return fail(err)
-	}
 	if err = e.connectNetwork(ctx, version, internalID, workloadID, []string{domainWorkloadAlias}); err != nil {
 		return fail(err)
 	}

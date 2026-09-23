@@ -172,8 +172,15 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			case resource.GatewayName():
 				if request.Image != plan.gateway.image ||
 					!resource.ownsComponent(request.Labels, resourceComponentGateway) ||
-					request.HostConfig.NetworkMode != "none" || request.NetworkDisabled {
+					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
+				}
+				if request.NetworkingConfig == nil {
+					t.Fatal("gateway create omitted networking config")
+				}
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
+				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainGatewayAlias {
+					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -342,7 +349,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 		started.EndpointBindings[1] != (EndpointBinding{Name: "web", Port: 5173, HostPort: 43002}) {
 		t.Fatalf("endpoint bindings = %#v", started.EndpointBindings)
 	}
-	if len(state.connects) != 3 {
+	if len(state.connects) != 2 {
 		t.Fatalf("network connects = %#v", state.connects)
 	}
 	stateView, err := engine.InspectJob(t.Context(), resource, started.InstanceRef)

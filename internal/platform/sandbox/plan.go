@@ -143,18 +143,19 @@ type Plan struct {
 }
 
 type dockerCreateRequest struct {
-	Image           string              `json:"Image"`
-	Cmd             []string            `json:"Cmd"`
-	Env             []string            `json:"Env"`
-	outputBytes     int                 `json:"-"`
-	WorkingDir      string              `json:"WorkingDir"`
-	User            string              `json:"User"`
-	NetworkDisabled bool                `json:"NetworkDisabled"`
-	AttachStdout    bool                `json:"AttachStdout"`
-	AttachStderr    bool                `json:"AttachStderr"`
-	ExposedPorts    map[string]struct{} `json:"ExposedPorts,omitempty"`
-	Labels          map[string]string   `json:"Labels"`
-	HostConfig      dockerHostConfig    `json:"HostConfig"`
+	Image            string                  `json:"Image"`
+	Cmd              []string                `json:"Cmd"`
+	Env              []string                `json:"Env"`
+	outputBytes      int                     `json:"-"`
+	WorkingDir       string                  `json:"WorkingDir"`
+	User             string                  `json:"User"`
+	NetworkDisabled  bool                    `json:"NetworkDisabled"`
+	AttachStdout     bool                    `json:"AttachStdout"`
+	AttachStderr     bool                    `json:"AttachStderr"`
+	ExposedPorts     map[string]struct{}     `json:"ExposedPorts,omitempty"`
+	Labels           map[string]string       `json:"Labels"`
+	HostConfig       dockerHostConfig        `json:"HostConfig"`
+	NetworkingConfig *dockerNetworkingConfig `json:"NetworkingConfig,omitempty"`
 }
 
 type dockerHostConfig struct {
@@ -174,6 +175,14 @@ type dockerHostConfig struct {
 type dockerPortBinding struct {
 	HostIP   string `json:"HostIp"`
 	HostPort string `json:"HostPort"`
+}
+
+type dockerNetworkingConfig struct {
+	EndpointsConfig map[string]dockerEndpointSettings `json:"EndpointsConfig"`
+}
+
+type dockerEndpointSettings struct {
+	Aliases []string `json:"Aliases,omitempty"`
 }
 
 type dockerLogConfig struct {
