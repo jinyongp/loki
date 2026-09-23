@@ -262,7 +262,7 @@ Implementation proceeds through enforcement and usefulness before installation p
 2. Provide a usable MCP-only execution workflow and correct file/repository operations through that boundary (A07-A08).
 3. Implement safe toolchain provisioning/shims (A09). After its dependencies are ready, optional runtime integrations (A10) and the transactional core host lifecycle (A11) may progress independently rather than blocking one another.
 4. Complete remaining providers, resource/retention budgets, diagnostics and package cleanup (A12), including each finished optional integration's lifecycle hooks and acceptance.
-5. Prepare immutable release artifacts and the release-bound thin bootstrap, then run source-checkout-free Ubuntu/WSL acceptance against actual distinct release images (A13-A14). Advertise the public one-line installation only after those required gates pass.
+5. Dispatch the automated release workflow to prepare immutable release artifacts and the release-bound thin bootstrap, run source-checkout-free Ubuntu/WSL acceptance against the actual release images, create the immutable GitHub Release, deploy Pages, and verify the canonical public one-line installation.
 
 The host CLI still owns workspace selection, explicit prerequisite approval, embedded/versioned Compose assets, optional-component management, and generic connection reporting. Runtime findings must not be bypassed by making the installer silently grant broader privileges. Production deployment, acceptance of cutover, and legacy retirement remain separately authorized operations; no review or implementation step implicitly restarts the existing Python service.
 

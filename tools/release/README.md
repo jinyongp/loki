@@ -7,6 +7,24 @@ Release manifest, provenance, notices, and candidate-evidence semantics live und
 `internal/host/lifecycle`. Release tools assemble accepted bytes; they do not
 create a second lifecycle implementation.
 
+
+## Release version
+
+`version` resolves the next stable `vMAJOR.MINOR.PATCH` tag from repository
+history. With no existing release tag, patch and minor start at `v0.1.0`; major
+starts at `v1.0.0`. The GitHub release workflow uses patch by default and lets
+the operator select minor or major when dispatching a release.
+
+## Release assembler
+
+`releasebuild` creates the canonical release input set from one source commit
+and the accepted digest-pinned core/browser OCI images. It builds the Linux
+amd64 host binary and release-bound bootstrap, renders the immutable release
+manifest/index, materializes the embedded host assets, compiles the effective
+policy/config evidence, and creates provenance, notices, toolchain-catalog and
+release-note targets. The output is atomically published as one directory and
+then consumed by `evidencebuild`.
+
 ## Bootstrap builder
 
 `bootstrapbuild` builds the standalone `loki-bootstrap` binary used for
@@ -113,20 +131,33 @@ and `loki host`.
 
 ## GitHub publication
 
-`.github/workflows/release.yml` is intentionally `workflow_call`-only. The
-A14 caller first uploads the accepted candidate as a workflow artifact. The
-publication workflow then:
+`.github/workflows/release.yml` is the end-to-end release entry point. Run it
+manually on `main` and choose the semantic-version increment. From that point
+the workflow performs the release without a second operator handoff:
 
-1. recreates the public asset set with `publishprep`;
-2. publishes those exact assets as an immutable GitHub Release through
-   `releaseway/actions`, pinned to a full commit SHA;
-3. archives the rendered installer as `loki-install.sh`;
-4. only after the GitHub Release succeeds, deploys the same installer bytes to
-   the Loki GitHub Pages project site.
+1. verifies that the selected source is the current remote `main`;
+2. runs `actions-up@1.20.1` in report mode and refuses stale GitHub Action
+   pins;
+3. resolves the next release version;
+4. downloads exact checksum-verified external release inputs;
+5. builds and pushes the core and browser OCI images and records their immutable
+   digests;
+6. assembles release metadata, bootstrap and candidate evidence;
+7. runs deterministic Go gates plus real OCI, Compose/browser, bootstrap,
+   devtools and toolchain acceptance;
+8. creates the release Git tag only after acceptance succeeds;
+9. publishes the exact accepted assets with
+   `releaseway/actions@v0.1.3`, pinned to its full commit SHA;
+10. deploys the release-bound `install.sh` through GitHub Pages; and
+11. compares the public installer to the archived release asset and runs a
+    source-free installation smoke test.
 
-When the user-site custom domain is `jinyongp.dev`, the deployed installer path
-is `https://jinyongp.dev/loki/install.sh`.
+Every cross-repository GitHub Action remains pinned to a full commit SHA. The
+adjacent version comment is maintained by `actions-up`.
 
-Pages must be configured for GitHub Actions before the first live publication.
-The workflow has no tag-push or manual-dispatch trigger that can bypass the A14
-caller.
+The deployed installer path is
+`https://jinyongp.dev/loki/install.sh`. GitHub Pages must use GitHub Actions
+as its source. GHCR container packages must also be public for anonymous
+source-free installation; GitHub currently exposes package visibility as a
+package setting rather than a supported visibility-mutation REST endpoint, so
+the workflow verifies anonymous pullability before creating a release.

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestReleaseWorkflowPublishesOnlyAcceptedCandidate(t *testing.T) {
+func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -19,24 +19,34 @@ func TestReleaseWorkflowPublishesOnlyAcceptedCandidate(t *testing.T) {
 	}
 	text := string(raw)
 	for _, required := range []string{
-		"workflow_call:",
-		"candidate-artifact:",
+		"workflow_dispatch:",
+		"bump:",
+		"actions-up@1.20.1",
+		"./scripts/build/fetch-release-inputs.sh",
+		"./scripts/build/build-oci.sh",
+		"./scripts/build/build-browser-oci.sh",
+		"Require anonymously pullable runtime images",
+		"go run ./tools/release/releasebuild",
+		"go run ./tools/release/evidencebuild",
 		"go run ./tools/release/publishprep",
-		"releaseway/actions@5b7090184832d6fc92ccee5b3caa0417d3df9235 # v0.1.0",
-		"needs: release",
-		"environment:",
-		"name: github-pages",
-		"actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1",
+		"./scripts/verify/accept-oci-jobs.sh",
+		"./scripts/verify/accept-compose.sh",
+		"./scripts/verify/accept-bootstrap.sh",
+		"./scripts/build/build-toolchain-bundle.sh",
+		"Create or verify release tag",
+		"releaseway/actions@078be0809c2db65ab44788000e56d0baa1c1c02a # v0.1.3",
+		"actions/upload-pages-artifact@",
+		"actions/deploy-pages@",
+		"https://jinyongp.dev/loki/install.sh",
+		"Run public source-free installation",
+		"--install-prerequisites",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("release workflow lacks %q", required)
 		}
 	}
-	if strings.Count(text, "ref: ${{ inputs.commit }}") != 2 {
-		t.Fatal("release workflow does not pin both checkouts to the accepted commit")
-	}
 	for _, forbidden := range []string{
-		"workflow_dispatch:",
+		"workflow_call:",
 		"push:",
 		"pull_request:",
 		"releaseway/actions@v",
