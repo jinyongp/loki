@@ -25,20 +25,40 @@ tmp=$(mktemp -d "$parent/.loki-release-inputs.XXXXXXXX")
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT HUP INT TERM
 
-for arch in amd64 arm64; do
-  platform_dir="$tmp/build-$arch"
-  docker buildx build "$source_dir" \
+build_target() {
+  arch=$1
+  target=$2
+  destination=$3
+  log="$tmp/$target-$arch.log"
+  if ! docker buildx build "$source_dir" \
     --file "$source_dir/packaging/release-inputs/Dockerfile" \
     --platform "linux/$arch" \
+    --target "$target" \
+    --progress=plain \
     --provenance=false \
-    --output "type=local,dest=$platform_dir"
+    --output "type=local,dest=$destination" >"$log" 2>&1; then
+    tail -n 40 "$log" >&2 || true
+    echo "::error title=release input $target linux/$arch::source build failed; inspect Build pinned release inputs log" >&2
+    return 1
+  fi
+}
 
-  for binary in devtools rg gh; do
-    test -x "$platform_dir/$binary" || {
-      echo "release input build did not produce $binary for linux/$arch" >&2
+for arch in amd64 arm64; do
+  go_dir="$tmp/go-$arch"
+  ripgrep_dir="$tmp/ripgrep-$arch"
+  build_target "$arch" go-export "$go_dir"
+  build_target "$arch" ripgrep-export "$ripgrep_dir"
+
+  for binary in devtools gh; do
+    test -x "$go_dir/$binary" || {
+      echo "::error title=release input go-export linux/$arch::missing $binary output" >&2
       exit 1
     }
   done
+  test -x "$ripgrep_dir/rg" || {
+    echo "::error title=release input ripgrep-export linux/$arch::missing rg output" >&2
+    exit 1
+  }
 done
 
 install -d "$tmp/output/devtools/amd64" "$tmp/output/devtools/arm64" \
@@ -46,9 +66,9 @@ install -d "$tmp/output/devtools/amd64" "$tmp/output/devtools/arm64" \
   "$tmp/output/gh/amd64" "$tmp/output/gh/arm64"
 
 for arch in amd64 arm64; do
-  install -m 0755 "$tmp/build-$arch/devtools" "$tmp/output/devtools/$arch/devtools"
-  install -m 0755 "$tmp/build-$arch/rg" "$tmp/output/ripgrep/$arch/rg"
-  install -m 0755 "$tmp/build-$arch/gh" "$tmp/output/gh/$arch/gh"
+  install -m 0755 "$tmp/go-$arch/devtools" "$tmp/output/devtools/$arch/devtools"
+  install -m 0755 "$tmp/ripgrep-$arch/rg" "$tmp/output/ripgrep/$arch/rg"
+  install -m 0755 "$tmp/go-$arch/gh" "$tmp/output/gh/$arch/gh"
 done
 
 "$tmp/output/devtools/amd64/devtools" version | grep -q '"version":"0.18.0"'

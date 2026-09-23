@@ -84,7 +84,10 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	for _, required := range []string{
 		"packaging/release-inputs/Dockerfile",
 		"--platform \"linux/$arch\"",
-		"type=local,dest=$platform_dir",
+		"--target \"$target\"",
+		"--progress=plain",
+		"type=local,dest=$destination",
+		"::error title=release input $target linux/$arch::",
 		`"version":"0.18.0"`,
 		`^ripgrep 15\.2\.0$`,
 		`^gh version 2\.101\.0 `,
@@ -102,6 +105,8 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
 		"golang:1.27.1-bookworm@sha256:",
 		"rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446",
+		"AS go-export",
+		"AS ripgrep-export",
 	} {
 		if !strings.Contains(dockerfile, required) {
 			t.Fatalf("release-input Dockerfile lacks %q", required)
