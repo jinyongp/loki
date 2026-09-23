@@ -421,6 +421,23 @@ jobs:
             --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl"
           sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
 
+      - name: Run CI-sensitive Go tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          go test -json ./internal/secret ./internal/work/workspace -count=1 | tee "$RUNNER_TEMP/go-sensitive-test.json"
+          status=${PIPESTATUS[0]}
+          set -e
+          if test "$status" -ne 0; then
+            jq -r 'select(.Action == "fail" and .Test != null) | (.Package + "::" + .Test)' "$RUNNER_TEMP/go-sensitive-test.json" |
+              sort -u |
+              while IFS= read -r failure; do
+                test -n "$failure" && printf '::error title=CI-sensitive Go test failed::%s\n' "$failure"
+              done
+            exit "$status"
+          fi
+
       - name: Run Go tests
         shell: bash
         run: |

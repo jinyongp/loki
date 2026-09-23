@@ -47,6 +47,8 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"go run ./tools/release/releasebuild",
 		"go run ./tools/release/evidencebuild",
 		"go run ./tools/release/publishprep",
+		"Run CI-sensitive Go tests",
+		"CI-sensitive Go test failed",
 		"Run Go tests",
 		"Run Go race tests",
 		"Run Go vet",
