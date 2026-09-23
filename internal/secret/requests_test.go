@@ -13,7 +13,11 @@ import (
 
 func TestGuardedSecretMutationsReplayAndCAS(t *testing.T) {
 	ctx := context.Background()
-	controller := Controller{StateDirectory: t.TempDir()}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	controller := Controller{StateDirectory: dir}
 	if _, err := controller.Initialize(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +84,11 @@ func TestGuardedSecretMutationsReplayAndCAS(t *testing.T) {
 
 func TestGuardedStagedImportReplaysAfterSourceConsumption(t *testing.T) {
 	ctx := context.Background()
-	controller := Controller{StateDirectory: t.TempDir()}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	controller := Controller{StateDirectory: dir}
 	if _, err := controller.Initialize(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +132,11 @@ func TestGuardedStagedImportReplaysAfterSourceConsumption(t *testing.T) {
 
 func TestConcurrentSameSecretMutationReplaysWinner(t *testing.T) {
 	ctx := context.Background()
-	controller := Controller{StateDirectory: t.TempDir()}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	controller := Controller{StateDirectory: dir}
 	if _, err := controller.Initialize(ctx); err != nil {
 		t.Fatal(err)
 	}
