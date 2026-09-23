@@ -23,8 +23,11 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 	root := filepath.Join("..", "..")
 	dockerfile := readOCIFile(t, filepath.Join(root, "packaging", "images", "Dockerfile"))
 	dockerignore := readOCIFile(t, filepath.Join(root, ".dockerignore"))
-	if !strings.HasPrefix(dockerignore, "**\n") || strings.Contains(dockerignore, "pyproject") || strings.Contains(dockerignore, "tests/") {
-		t.Fatal("container build context is not an explicit Go allowlist")
+	if !strings.HasPrefix(dockerignore, "**\n") ||
+		strings.Contains(dockerignore, "pyproject") ||
+		strings.Contains(dockerignore, "tests/") ||
+		!strings.Contains(dockerignore, "**/*_test.go") {
+		t.Fatal("container build context is not an explicit production Go allowlist")
 	}
 	for _, required := range []string{
 		"ARG TARGETARCH",

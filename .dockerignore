@@ -22,3 +22,4 @@
 !scripts/
 !scripts/maintainer/
 !scripts/maintainer/devtools-launch
+**/*_test.go

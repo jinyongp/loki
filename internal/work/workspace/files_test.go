@@ -74,8 +74,10 @@ func fixture(t *testing.T) *Files {
 		controller: &gitops.Controller{Paths: f.Policy, Config: c, Runner: runner},
 		runner:     runner,
 	}
-	if _, err = os.Stat(f.RGPath); err != nil {
-		f.RGPath = "/home/linuxbrew/.linuxbrew/bin/rg"
+	if configured := strings.TrimSpace(os.Getenv("LOKI_TEST_RG")); configured != "" {
+		f.RGPath = configured
+	} else if resolved, lookupErr := exec.LookPath("rg"); lookupErr == nil {
+		f.RGPath = resolved
 	}
 	return f
 }
