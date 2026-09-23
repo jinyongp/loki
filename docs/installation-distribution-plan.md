@@ -55,9 +55,9 @@ Public installation artifacts must be readable without requiring a GitHub login 
 
 - immutable public release assets and acceptance evidence: GitHub Releases
 - OCI images: `ghcr.io/jinyongp/loki`
-- reserved post-acceptance installer frontend: `jinyongp.dev/loki/install.sh`
+- stable installer frontend: `https://jinyongp.dev/loki/install.sh`
 
-The stable installer frontend is reserved but is not published or advertised while A13/A14 acceptance remains open. During release validation, first install starts from the release-bound `loki-bootstrap` artifact described in [First install](first-install.md). The bootstrap embeds one exact release manifest and tag, downloads the matching host binary from that immutable GitHub Release, and verifies its manifest-bound length and SHA-256 before execution. The final publication pipeline has an A14 caller supply the accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is itself bound to the same exact Git tag and the exact SHA-256 of `loki-bootstrap-linux-amd64`; no mutable release lookup occurs during first install.
+The normal first-install command is `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`. During release validation, the same flow can start from the release-bound `loki-bootstrap-linux-amd64` artifact described in [First install](first-install.md). The bootstrap embeds one exact release manifest and tag, downloads the matching host binary from that immutable GitHub Release, and verifies its manifest-bound length and SHA-256 before execution. The publication pipeline consumes the accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is bound to the same exact Git tag and the exact SHA-256 of `loki-bootstrap-linux-amd64`; no mutable release lookup occurs during first install.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 
@@ -74,7 +74,7 @@ The source-free bootstrap is deliberately small. It:
 
 The reserved public shell frontend is a release-rendered thin downloader. It detects the supported host, downloads one exact `loki-bootstrap` artifact from one immutable GitHub Release tag, verifies the SHA-256 embedded into that rendered installer, and executes the bootstrap with the caller's arguments. It contains no lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
 
-The canonical pre-release first-install procedure is [docs/first-install.md](first-install.md). The source and publication workflow for the stable frontend are implemented, but no public one-line shell command is documented as live until A14 release acceptance passes and the Pages deployment succeeds.
+The canonical first-install procedure is [docs/first-install.md](first-install.md). The stable public entry point is `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`; the URL is populated only by the accepted release publication workflow after the corresponding immutable GitHub Release succeeds.
 
 ## Installation scope
 

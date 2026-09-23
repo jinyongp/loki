@@ -1,19 +1,26 @@
 # First install
 
-This is the canonical first-install procedure for the A13/A14 release-validation phase.
+The normal Loki installation entry point is:
 
-The public one-line installer is **not published or advertised yet**. Until A14
-release acceptance passes, obtain the exact `loki-bootstrap` artifact from the
-release-validation fixture. The final shell frontend is already release-bound:
-it contains one immutable Git tag and the exact SHA-256 of
-`loki-bootstrap-linux-amd64`.
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh
+```
+
+The installer served at that URL is generated for one immutable release. It
+contains that release's exact Git tag and the SHA-256 of
+`loki-bootstrap-linux-amd64`, verifies the downloaded bootstrap, and only then
+executes it.
+
+The first public release has not been published yet. Until it is available,
+pre-release builds can be installed by running the supplied
+`loki-bootstrap-linux-amd64` artifact directly.
 
 ## What you need
 
 On a supported clean host, you need only:
 
 - Ubuntu 24.04 amd64, or WSL2 running Ubuntu 24.04 amd64;
-- the release-bound `loki-bootstrap` artifact for that host;
+- the `loki-bootstrap-linux-amd64` artifact when using a pre-release build;
 - a directory you want Loki to use as its workspace.
 
 The target host does not need a Loki source checkout or a local Go, Node.js,
@@ -30,8 +37,8 @@ before changing packages or services. Loki never adds the operator to the
 Make the supplied bootstrap executable and run it:
 
 ```sh
-chmod 0755 ./loki-bootstrap
-./loki-bootstrap
+chmod 0755 ./loki-bootstrap-linux-amd64
+./loki-bootstrap-linux-amd64
 ```
 
 The bootstrap is built for one exact release. It contains that release's
@@ -68,7 +75,7 @@ and publishes MCP only on loopback.
 For machine-wide host-management ownership:
 
 ```sh
-sudo ./loki-bootstrap --system
+sudo ./loki-bootstrap-linux-amd64 --system
 ```
 
 System scope installs the host CLI at:
@@ -86,7 +93,7 @@ or Docker authority.
 Automation must make every privileged mutation class explicit:
 
 ```sh
-./loki-bootstrap \
+./loki-bootstrap-linux-amd64 \
   --workspace /srv/workspace \
   --create-workspace \
   --prepare-workspace \
@@ -160,32 +167,9 @@ The installer does not:
 
 Lifecycle mutation remains owned by `loki host`.
 
-## Release engineering
+## Public installer publication
 
-The canonical bootstrap builder lives at `tools/release/bootstrapbuild`. It is
-release-engineering tooling, not an install-host dependency. It embeds one exact
-Git release tag and that release's exact manifest:
-
-```sh
-go run ./tools/release/bootstrapbuild \
-  --output /absolute/output/loki-bootstrap \
-  --release-tag v1.2.3 \
-  --release-manifest /absolute/release/release-manifest.json
-```
-
-Before A14 evidence is assembled, `tools/release/evidencebuild` executes the
-accepted bootstrap's `--bootstrap-info` surface and requires its embedded tag,
-manifest SHA-256, and host-binary SHA-256 to match the candidate inputs.
-
-After A14 accepts the candidate bundle, `tools/release/publishprep` converts
-those exact bytes into the public GitHub Release asset set and the release-bound
-installer. The callable `.github/workflows/release.yml` publishes the immutable
-GitHub Release through `releaseway/actions` and only then deploys the same
-`install.sh` bytes to the Loki project Pages site.
-
-## Public installer gate
-
-The stable shell frontend remains unavailable until A14 release acceptance
-passes with no blocking findings or required skips and the publication workflow
-successfully deploys Pages. Until that gate closes, documentation must not
-present the public one-line shell command as a live installation path.
+The stable frontend is `https://jinyongp.dev/loki/install.sh`. Each accepted
+release publication replaces it with a release-bound installer only after the
+immutable GitHub Release succeeds. Until the first release is published, use a
+supplied pre-release bootstrap for validation.

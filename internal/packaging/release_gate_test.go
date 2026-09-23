@@ -53,7 +53,7 @@ func TestDocumentedRepositoryScriptsExist(t *testing.T) {
 	}
 }
 
-func TestPublicInstallerAdvertisingRemainsGated(t *testing.T) {
+func TestPublicInstallerRemainsCanonical(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, relative := range []string{
 		"README.md",
@@ -64,8 +64,8 @@ func TestPublicInstallerAdvertisingRemainsGated(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(raw), "curl -fsSL https://jinyongp.dev/loki/install.sh") {
-			t.Fatalf("%s advertises the pre-A14 public installer", relative)
+		if !strings.Contains(string(raw), "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") {
+			t.Fatalf("%s no longer documents the canonical one-line installer", relative)
 		}
 	}
 }

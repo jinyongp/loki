@@ -59,7 +59,7 @@ func TestReleaseWorkflowPublishesOnlyAcceptedCandidate(t *testing.T) {
 	}
 }
 
-func TestInstallerDocumentationKeepsA14PublicationGate(t *testing.T) {
+func TestInstallerDocumentationKeepsCanonicalOneLineInstall(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -84,12 +84,9 @@ func TestInstallerDocumentationKeepsA14PublicationGate(t *testing.T) {
 			t.Fatalf("installation distribution plan lacks %q", required)
 		}
 	}
-	if !strings.Contains(firstInstall, "not published or advertised yet") ||
-		!strings.Contains(firstInstall, "releaseway/actions") {
-		t.Fatal("first-install documentation no longer preserves the A14 publication gate")
-	}
-	if strings.Contains(firstInstall, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") {
-		t.Fatal("pre-A14 first-install documentation advertises the live one-line command")
+	if !strings.Contains(firstInstall, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") ||
+		!strings.Contains(firstInstall, "loki-bootstrap-linux-amd64") {
+		t.Fatal("first-install documentation no longer presents the canonical one-line installer and pre-release fallback")
 	}
 }
 

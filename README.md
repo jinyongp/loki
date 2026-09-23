@@ -11,9 +11,9 @@ machine credentials or the Docker socket.
 
 > **Release status**
 >
-> Loki is not publicly released yet. The installer and release workflow are
-> implemented, but final clean-host and release acceptance is still in progress.
-> The public one-line installer will be documented here after that gate passes.
+> The first public release has not been published yet. The stable installation
+> entry point is already fixed at `https://jinyongp.dev/loki/install.sh`; it
+> becomes usable when the first accepted release is published.
 
 ## Supported systems
 
@@ -29,28 +29,35 @@ components after showing the exact changes and asking for approval.
 You do not need a Loki source checkout or a local Go, Node.js, Python, Rust, or
 browser toolchain to install a released build.
 
-## Install a pre-release build
+## Install
 
-If you have been given a pre-release Loki build, download its
-`loki-bootstrap-linux-amd64` artifact and run:
+The normal installation command is:
+
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh
+```
+
+The installer is tied to one immutable Loki release. It downloads the matching
+bootstrap, verifies its SHA-256 before running it, then asks which directory Loki
+may use as its workspace. Any Docker or filesystem changes that require host
+privileges are shown before approval.
+
+The first public release has not been published yet. Until then, if you have
+been given a pre-release build, run its bootstrap directly:
 
 ```sh
 chmod +x loki-bootstrap-linux-amd64
 ./loki-bootstrap-linux-amd64
 ```
 
-The installer will ask which directory Loki may use as its workspace. It checks
-the host, explains any Docker or filesystem changes it needs, asks before making
-privileged changes, installs the Loki host CLI, and starts the selected release.
-
-For a machine-wide installation:
+For a machine-wide pre-release installation:
 
 ```sh
 sudo ./loki-bootstrap-linux-amd64 --system
 ```
 
-For unattended installation, see [First install](docs/first-install.md) for the
-explicit approval flags and JSON output mode.
+For unattended installation and the available approval flags, see
+[First install](docs/first-install.md).
 
 ## Check the installation
 

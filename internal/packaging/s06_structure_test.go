@@ -76,7 +76,7 @@ func TestS06CanonicalReleaseStructure(t *testing.T) {
 	}
 }
 
-func TestPublicOneLineInstallerRemainsGated(t *testing.T) {
+func TestPublicOneLineInstallerRemainsCanonical(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, path := range []string{
 		"README.md",
@@ -88,8 +88,8 @@ func TestPublicOneLineInstallerRemainsGated(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := string(raw)
-		if strings.Contains(body, "curl -fsSL https://jinyongp.dev/loki/install.sh") {
-			t.Fatalf("%s advertises the gated public one-line installer", path)
+		if !strings.Contains(body, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") {
+			t.Fatalf("%s no longer documents the canonical public one-line installer", path)
 		}
 	}
 	firstInstall, err := os.ReadFile(filepath.Join(root, "docs", "first-install.md"))
@@ -97,16 +97,15 @@ func TestPublicOneLineInstallerRemainsGated(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
-		"not published or advertised",
-		"loki-bootstrap",
-		"./loki-bootstrap",
-		"tools/release/bootstrapbuild",
+		"curl -fsSL https://jinyongp.dev/loki/install.sh | sh",
+		"loki-bootstrap-linux-amd64",
+		"./loki-bootstrap-linux-amd64",
 		"does not need a Loki source checkout",
 		"you do not need to install them manually",
 		"loki host status",
 		"loki host connection",
 		"--install-prerequisites",
-		"A14 release acceptance",
+		"stable frontend",
 	} {
 		if !strings.Contains(string(firstInstall), required) {
 			t.Fatalf("first-install documentation lacks %q", required)
