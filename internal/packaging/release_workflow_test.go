@@ -105,6 +105,10 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
 		"golang:1.27.1-bookworm@sha256:",
 		"rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446",
+		"apk add --no-cache git build-base pcre2-dev perl",
+		"PCRE2_SYS_STATIC=1",
+		"cargo build --locked --profile release-lto --features pcre2",
+		"/src/ripgrep/target/release-lto/rg",
 		"AS go-export",
 		"AS ripgrep-export",
 	} {

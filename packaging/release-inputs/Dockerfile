@@ -28,14 +28,15 @@ RUN cd /src/gh \
 FROM --platform=$TARGETPLATFORM rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446 AS ripgrep
 ARG RIPGREP_VERSION=15.2.0
 ARG RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f
-RUN apk add --no-cache git pcre2-dev
+RUN apk add --no-cache git build-base pcre2-dev perl
+ENV PCRE2_SYS_STATIC=1
 RUN git clone --depth 1 --branch "$RIPGREP_VERSION" https://github.com/BurntSushi/ripgrep.git /src/ripgrep \
  && test "$(git -C /src/ripgrep rev-parse HEAD)" = "$RIPGREP_COMMIT"
-RUN cd /src/ripgrep && cargo build --locked --release
+RUN cd /src/ripgrep && cargo build --locked --profile release-lto --features pcre2
 
 FROM scratch AS go-export
 COPY --from=go-tools /out/devtools /devtools
 COPY --from=go-tools /out/gh /gh
 
 FROM scratch AS ripgrep-export
-COPY --from=ripgrep /src/ripgrep/target/release/rg /rg
+COPY --from=ripgrep /src/ripgrep/target/release-lto/rg /rg
