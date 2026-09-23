@@ -12,7 +12,7 @@ case "$output" in
   *) echo "output directory must be absolute" >&2; exit 2 ;;
 esac
 test ! -e "$output" || { echo "output directory already exists" >&2; exit 1; }
-command -v gh >/dev/null 2>&1 || { echo "gh is required" >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required" >&2; exit 1; }
 command -v tar >/dev/null 2>&1 || { echo "tar is required" >&2; exit 1; }
 
@@ -28,7 +28,9 @@ download() {
   repo=$1
   tag=$2
   asset=$3
-  gh release download "$tag" --repo "$repo" --pattern "$asset" --dir "$tmp"
+  curl --fail --location --retry 3 --retry-all-errors \
+    --output "$tmp/$asset" \
+    "https://github.com/$repo/releases/download/$tag/$asset"
 }
 
 for arch in amd64 arm64; do

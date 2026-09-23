@@ -69,6 +69,31 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	}
 }
 
+func TestReleaseInputFetcherUsesPublicPinnedArtifacts(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "build", "fetch-release-inputs.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"devtools_version=0.18.0",
+		"ripgrep_version=15.2.0",
+		"gh_version=2.101.0",
+		"curl --fail --location --retry 3 --retry-all-errors",
+		"sha256sum -c",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("release input fetcher lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{"gh release download", "GH_TOKEN"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("release input fetcher depends on cross-repository GitHub auth: %q", forbidden)
+		}
+	}
+}
+
 func TestInstallerDocumentationKeepsCanonicalOneLineInstall(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
