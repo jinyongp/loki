@@ -87,7 +87,7 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"--target \"$target\"",
 		"--progress=plain",
 		"type=local,dest=$destination",
-		"::error title=release input $target linux/$arch::",
+		"::error::release input %s linux/%s source build failed: %s",
 		`"version":"0.18.0"`,
 		`^ripgrep 15\.2\.0$`,
 		`^gh version 2\.101\.0 `,

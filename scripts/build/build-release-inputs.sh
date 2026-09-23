@@ -38,7 +38,8 @@ build_target() {
     --provenance=false \
     --output "type=local,dest=$destination" >"$log" 2>&1; then
     tail -n 40 "$log" >&2 || true
-    echo "::error title=release input $target linux/$arch::source build failed; inspect Build pinned release inputs log" >&2
+    summary=$(tail -n 1 "$log" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g')
+    printf '::error::release input %s linux/%s source build failed: %s\n' "$target" "$arch" "$summary" >&2
     return 1
   fi
 }
