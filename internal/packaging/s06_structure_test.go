@@ -12,11 +12,12 @@ func TestS06CanonicalReleaseStructure(t *testing.T) {
 
 	for _, path := range []string{
 		"packaging/images/Dockerfile",
+		"packaging/release-inputs/Dockerfile",
 		"packaging/images/browser.Dockerfile",
 		"packaging/native/execution-contract.json",
 		"packaging/native/systemd/host.target",
 		"scripts/build/build-oci.sh",
-		"scripts/build/fetch-release-inputs.sh",
+		"scripts/build/build-release-inputs.sh",
 		"scripts/build/build-candidate.sh",
 		"scripts/verify/verify-release.sh",
 		"scripts/verify/accept-compose.sh",

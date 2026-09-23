@@ -139,15 +139,14 @@ the workflow performs the release without a second operator handoff:
 2. runs `actions-up@1.20.1` in report mode and refuses stale GitHub Action
    pins;
 3. resolves the next release version;
-4. downloads exact checksum-verified external release inputs;
+4. builds required external CLI inputs from exact upstream source commits for both supported image architectures;
 5. builds and pushes the core and browser OCI images and records their immutable
    digests;
 6. assembles release metadata, bootstrap and candidate evidence;
 7. runs deterministic Go gates plus real OCI, Compose/browser, bootstrap,
    devtools and toolchain acceptance;
 8. creates the release Git tag only after acceptance succeeds;
-9. publishes the exact accepted assets with
-   `releaseway/actions@v0.1.3`, pinned to its full commit SHA;
+9. publishes the exact accepted assets with `releaseway/actions`, pinned to the latest stable release's full commit SHA;
 10. deploys the release-bound `install.sh` through GitHub Pages; and
 11. compares the public installer to the archived release asset and runs a
     source-free installation smoke test.

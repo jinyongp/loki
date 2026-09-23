@@ -25,7 +25,8 @@ func TestRetiredPythonEntrypointsAreOutsideCurrentSource(t *testing.T) {
 
 func TestCurrentPackagingDoesNotDependOnPythonArchive(t *testing.T) {
 	root := filepath.Join("..", "..")
-	paths := []string{".dockerignore", "compose.yaml", "packaging/images/Dockerfile", "packaging/images/browser.Dockerfile"}
+	paths := []string{".dockerignore", "compose.yaml", "packaging/images/Dockerfile",
+		"packaging/release-inputs/Dockerfile", "packaging/images/browser.Dockerfile"}
 	err := filepath.WalkDir(filepath.Join(root, "scripts"), func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -64,7 +65,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"packaging/native/execution-contract.json",
 		"packaging/native/systemd/host.target",
 		"scripts/build/build-oci.sh",
-		"scripts/build/fetch-release-inputs.sh",
+		"scripts/build/build-release-inputs.sh",
 		"scripts/verify/verify-release.sh",
 		"scripts/maintainer/lifecycle.sh",
 		"tools/release/bootstrapbuild/main.go",

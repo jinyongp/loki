@@ -22,7 +22,7 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"workflow_dispatch:",
 		"bump:",
 		"actions-up@1.20.1",
-		"./scripts/build/fetch-release-inputs.sh",
+		"./scripts/build/build-release-inputs.sh",
 		"./scripts/build/build-oci.sh",
 		"./scripts/build/build-browser-oci.sh",
 		"Require anonymously pullable runtime images",
@@ -34,7 +34,7 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"./scripts/verify/accept-bootstrap.sh",
 		"./scripts/build/build-toolchain-bundle.sh",
 		"Create or verify release tag",
-		"releaseway/actions@078be0809c2db65ab44788000e56d0baa1c1c02a # v0.1.3",
+		"releaseway/actions@",
 		"actions/upload-pages-artifact@",
 		"actions/deploy-pages@",
 		"https://jinyongp.dev/loki/install.sh",
@@ -69,27 +69,47 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	}
 }
 
-func TestReleaseInputFetcherUsesPublicPinnedArtifacts(t *testing.T) {
+func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "scripts", "build", "fetch-release-inputs.sh"))
+	scriptRaw, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-release-inputs.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(raw)
+	dockerfileRaw, err := os.ReadFile(filepath.Join(root, "packaging", "release-inputs", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(scriptRaw)
+	dockerfile := string(dockerfileRaw)
 	for _, required := range []string{
-		"devtools_version=0.18.0",
-		"ripgrep_version=15.2.0",
-		"gh_version=2.101.0",
-		"curl --fail --location --retry 3 --retry-all-errors",
-		"sha256sum -c",
+		"packaging/release-inputs/Dockerfile",
+		"--platform \"linux/$arch\"",
+		"type=local,dest=$platform_dir",
+		`"version":"0.18.0"`,
+		`^ripgrep 15\.2\.0$`,
+		`^gh version 2\.101\.0 `,
 	} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("release input fetcher lacks %q", required)
+		if !strings.Contains(script, required) {
+			t.Fatalf("release input builder lacks %q", required)
 		}
 	}
-	for _, forbidden := range []string{"gh release download", "GH_TOKEN"} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("release input fetcher depends on cross-repository GitHub auth: %q", forbidden)
+	for _, required := range []string{
+		"DEVTOOLS_VERSION=0.18.0",
+		"DEVTOOLS_COMMIT=6d93f0a3c24976a108cf9c4aa374dbe6c467559e",
+		"GH_VERSION=2.101.0",
+		"GH_COMMIT=0cf1092493af067646fc5f3db9421c6a6ec9c938",
+		"RIPGREP_VERSION=15.2.0",
+		"RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
+		"golang:1.27.1-bookworm@sha256:",
+		"rust:1.98.1-alpine3.24@sha256:c913be57168b9240b86f373f94060152a2e09ea16a72e0801a02ee3a262ca446",
+	} {
+		if !strings.Contains(dockerfile, required) {
+			t.Fatalf("release-input Dockerfile lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{"releases/download", "gh release download", "curl "} {
+		if strings.Contains(script, forbidden) || strings.Contains(dockerfile, forbidden) {
+			t.Fatalf("release input build depends on binary release downloads: %q", forbidden)
 		}
 	}
 }
