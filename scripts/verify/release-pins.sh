@@ -98,24 +98,59 @@ verify_ref() {
     fail "$label digest is stale: pinned $pinned_digest, current $current_digest ($floating)"
 }
 
+verify_frontend() {
+  file=$1
+  label=$2
+  frontend=$(sed -n '1s/^# syntax=//p' "$file")
+  test -n "$frontend" || fail "$label Dockerfile frontend pin is missing"
+  verify_ref "$frontend" docker/dockerfile:1 "$label Dockerfile frontend"
+}
+
+verify_go_builder() {
+  file=$1
+  label=$2
+  golang=$(sed -n 's/^FROM --platform=\$BUILDPLATFORM \(golang:[^ ]*@sha256:[0-9a-f]*\) AS .*/\1/p' "$file" | head -n 1)
+  test -n "$golang" || fail "$label Go builder image pin is missing"
+  verify_ref "$golang" "${golang%@*}" "$label Go builder image"
+}
+
+verify_alpine_runtime() {
+  file=$1
+  label=$2
+  alpine=$(sed -n 's/^FROM \(alpine:[^ ]*@sha256:[0-9a-f]*\)$/\1/p' "$file" | tail -n 1)
+  test -n "$alpine" || fail "$label Alpine runtime image pin is missing"
+  verify_ref "$alpine" "${alpine%@*}" "$label Alpine runtime image"
+}
+
 verify_containers() {
   require docker
   docker buildx version >/dev/null 2>&1 ||
     fail "Docker Buildx is required for container pin verification"
 
-  frontend=$(sed -n '1s/^# syntax=//p' "$source_dir/packaging/images/Dockerfile")
-  verify_ref "$frontend" docker/dockerfile:1 "Dockerfile frontend"
+  for item in \
+    "$source_dir/packaging/images/Dockerfile|core" \
+    "$source_dir/packaging/images/browser.Dockerfile|browser" \
+    "$source_dir/packaging/release-inputs/Dockerfile|release-inputs"
+  do
+    file=${item%%|*}
+    label=${item#*|}
+    verify_frontend "$file" "$label"
+    verify_go_builder "$file" "$label"
+  done
 
-  golang=$(sed -n     's/^FROM --platform=\$BUILDPLATFORM \(golang:[^ ]*@sha256:[0-9a-f]*\) AS build$/\1/p'     "$source_dir/packaging/images/Dockerfile")
-  verify_ref "$golang" "${golang%@*}" "Go builder image"
+  verify_alpine_runtime "$source_dir/packaging/images/Dockerfile" core
+  verify_alpine_runtime "$source_dir/packaging/images/browser.Dockerfile" browser
 
-  alpine=$(sed -n     's/^FROM \(alpine:[^ ]*@sha256:[0-9a-f]*\)$/\1/p'     "$source_dir/packaging/images/Dockerfile" | tail -n 1)
-  verify_ref "$alpine" "${alpine%@*}" "Alpine runtime image"
-
-  git_image=$(sed -n     's/^FROM \(alpine\/git:[^ ]*@sha256:[0-9a-f]*\) AS git-root$/\1/p'     "$source_dir/packaging/images/Dockerfile")
+  git_image=$(sed -n \
+    's/^FROM \(alpine\/git:[^ ]*@sha256:[0-9a-f]*\) AS git-root$/\1/p' \
+    "$source_dir/packaging/images/Dockerfile")
+  test -n "$git_image" || fail "alpine/git image pin is missing"
   verify_ref "$git_image" alpine/git:latest "alpine/git image"
 
-  rust=$(sed -n     's/^FROM --platform=\$TARGETPLATFORM \(rust:[^ ]*@sha256:[0-9a-f]*\) AS ripgrep$/\1/p'     "$source_dir/packaging/release-inputs/Dockerfile")
+  rust=$(sed -n \
+    's/^FROM --platform=\$TARGETPLATFORM \(rust:[^ ]*@sha256:[0-9a-f]*\) AS ripgrep$/\1/p' \
+    "$source_dir/packaging/release-inputs/Dockerfile")
+  test -n "$rust" || fail "Rust builder image pin is missing"
   verify_ref "$rust" "${rust%@*}" "Rust builder image"
 }
 

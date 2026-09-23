@@ -176,6 +176,12 @@ func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
 		"docker/dockerfile:1",
 		"alpine/git:latest",
 		"docker buildx imagetools inspect",
+		"packaging/images/Dockerfile|core",
+		"packaging/images/browser.Dockerfile|browser",
+		"packaging/release-inputs/Dockerfile|release-inputs",
+		"verify_frontend",
+		"verify_go_builder",
+		"verify_alpine_runtime",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("release pin verifier lacks %q", required)
