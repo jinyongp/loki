@@ -421,15 +421,29 @@ jobs:
             --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl"
           sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
 
-      - name: Run deterministic release gates
+      - name: Run Go tests
+        run: go test ./... -count=1
+
+      - name: Run Go race tests
+        run: go test -race ./... -count=1
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Build all Go packages
+        run: go build ./...
+
+      - name: Verify architecture policy
+        run: go run ./tools/archcheck
+
+      - name: Verify Go module tidiness
+        shell: bash
         run: |
-          go test ./... -count=1
-          go test -race ./... -count=1
-          go vet ./...
-          go build ./...
-          go run ./tools/archcheck
+          set -euo pipefail
           test -z "$(go mod tidy -diff)"
-          git diff --check
+
+      - name: Verify Git diff hygiene
+        run: git diff --check
 
       - name: Run real OCI job acceptance
         run: ./scripts/verify/accept-oci-jobs.sh
