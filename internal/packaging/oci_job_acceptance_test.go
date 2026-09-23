@@ -79,7 +79,9 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 
 	goCall := mustRead(t, goLog)
 	for _, required := range []string{
-		"args=test ./internal/platform/sandbox -run ^TestRealOCIJob -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobNetworkEndpointPreview$ -v -count=1",
 		"LOKI_REQUIRE_OCI_JOB_TESTS=1",
 		"LOKI_TEST_DOCKER_SOCKET=" + socket,
 		"LOKI_TEST_DOCKER_PEER_UID=" + strconv.Itoa(os.Getuid()),
@@ -206,5 +208,5 @@ set -eu
   printf 'LOKI_TEST_DOCKER_IMAGE=%s\n' "$LOKI_TEST_DOCKER_IMAGE"
   printf 'LOKI_TEST_DOCKER_WORKSPACE=%s\n' "$LOKI_TEST_DOCKER_WORKSPACE"
   printf 'LOKI_TEST_EGRESS_ALLOWED_AUTHORITY=%s\n' "$LOKI_TEST_EGRESS_ALLOWED_AUTHORITY"
-} >"$LOKI_FAKE_GO_LOG"
+} >>"$LOKI_FAKE_GO_LOG"
 `

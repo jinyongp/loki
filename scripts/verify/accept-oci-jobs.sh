@@ -125,12 +125,23 @@ printf '%s\n' "$image_digest" |
 printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s\n' \
   "$socket" "$image_digest" "$allowed_authority"
 
-LOKI_REQUIRE_OCI_JOB_TESTS=1 \
-LOKI_TEST_DOCKER_SOCKET="$socket" \
-LOKI_TEST_DOCKER_PEER_UID="$peer_uid" \
-LOKI_TEST_DOCKER_IMAGE="$image_digest" \
-LOKI_TEST_DOCKER_WORKSPACE="$workspace" \
-LOKI_TEST_EGRESS_ALLOWED_AUTHORITY="$allowed_authority" \
-  go test ./internal/platform/sandbox -run '^TestRealOCIJob' -v -count=1
+run_oci_test() {
+  test_name=$1
+  printf 'loki OCI Job acceptance: running %s\n' "$test_name"
+  if ! LOKI_REQUIRE_OCI_JOB_TESTS=1 \
+    LOKI_TEST_DOCKER_SOCKET="$socket" \
+    LOKI_TEST_DOCKER_PEER_UID="$peer_uid" \
+    LOKI_TEST_DOCKER_IMAGE="$image_digest" \
+    LOKI_TEST_DOCKER_WORKSPACE="$workspace" \
+    LOKI_TEST_EGRESS_ALLOWED_AUTHORITY="$allowed_authority" \
+      go test ./internal/platform/sandbox -run "^$test_name$" -v -count=1; then
+    printf '::error title=OCI acceptance failed::%s failed\n' "$test_name" >&2
+    return 1
+  fi
+}
+
+run_oci_test TestRealOCIJobLifecycle
+run_oci_test TestRealOCIJobRecoveryAndBoundedOutput
+run_oci_test TestRealOCIJobNetworkEndpointPreview
 
 printf 'loki OCI Job acceptance: passed\n'
