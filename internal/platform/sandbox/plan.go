@@ -687,7 +687,7 @@ func (p Plan) NeedsGateway() bool {
 }
 
 func (p Plan) NeedsOutboundNetwork() bool {
-	return p.Valid() && p.network == NetworkDependencyInstall
+	return p.NeedsGateway()
 }
 
 func (p Plan) GatewayName() string {

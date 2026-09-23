@@ -172,14 +172,14 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			case resource.GatewayName():
 				if request.Image != plan.gateway.image ||
 					!resource.ownsComponent(request.Labels, resourceComponentGateway) ||
-					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
+					request.HostConfig.NetworkMode != resource.OutboundNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
 				if request.NetworkingConfig == nil {
 					t.Fatal("gateway create omitted networking config")
 				}
-				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
-				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainGatewayAlias {
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.OutboundNetworkName()]
+				if !ok || len(endpoint.Aliases) != 0 {
 					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
@@ -349,7 +349,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 		started.EndpointBindings[1] != (EndpointBinding{Name: "web", Port: 5173, HostPort: 43002}) {
 		t.Fatalf("endpoint bindings = %#v", started.EndpointBindings)
 	}
-	if len(state.connects) != 2 {
+	if len(state.connects) != 2 ||
+		!strings.Contains(state.connects[0], "/networks/"+state.internalID+"/connect="+state.gatewayID) ||
+		!strings.Contains(state.connects[1], "/networks/"+state.internalID+"/connect="+state.workloadID) {
 		t.Fatalf("network connects = %#v", state.connects)
 	}
 	stateView, err := engine.InspectJob(t.Context(), resource, started.InstanceRef)

@@ -372,8 +372,8 @@ func TestPlanDefinesPolicyBoundNetworkDomain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !endpointPlan.NeedsGateway() || endpointPlan.NeedsOutboundNetwork() ||
-		endpointPlan.OutboundNetworkName() != "" {
+	if !endpointPlan.NeedsGateway() || !endpointPlan.NeedsOutboundNetwork() ||
+		endpointPlan.OutboundNetworkName() != "loki-job-egress-"+endpointOnly.ID {
 		t.Fatalf("endpoint-only network plan = %#v", endpointPlan)
 	}
 }
