@@ -29,6 +29,8 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"crazy-max/ghaction-github-runtime@",
 		"# v4.0.0",
 		"release-inputs:",
+		"oci-gates:",
+		"Verify OCI runtime",
 		"source-gates:",
 		"LOKI_TEST_RG:",
 		"CI-sensitive Go test detail",

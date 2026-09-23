@@ -127,17 +127,24 @@ printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s\n' \
 
 run_oci_test() {
   test_name=$1
+  log=$(mktemp "${TMPDIR:-/tmp}/loki-oci-test.XXXXXXXX")
   printf 'loki OCI Job acceptance: running %s\n' "$test_name"
-  if ! LOKI_REQUIRE_OCI_JOB_TESTS=1 \
+  if LOKI_REQUIRE_OCI_JOB_TESTS=1 \
     LOKI_TEST_DOCKER_SOCKET="$socket" \
     LOKI_TEST_DOCKER_PEER_UID="$peer_uid" \
     LOKI_TEST_DOCKER_IMAGE="$image_digest" \
     LOKI_TEST_DOCKER_WORKSPACE="$workspace" \
     LOKI_TEST_EGRESS_ALLOWED_AUTHORITY="$allowed_authority" \
-      go test ./internal/platform/sandbox -run "^$test_name$" -v -count=1; then
-    printf '::error title=OCI acceptance failed::%s failed\n' "$test_name" >&2
-    return 1
+      go test ./internal/platform/sandbox -run "^$test_name$" -v -count=1 >"$log" 2>&1; then
+    cat "$log"
+    rm -f "$log"
+    return 0
   fi
+  cat "$log" >&2
+  summary=$(tail -n 20 "$log" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g')
+  rm -f "$log"
+  printf '::error title=OCI acceptance failed::%s failed: %s\n' "$test_name" "$summary" >&2
+  return 1
 }
 
 run_oci_test TestRealOCIJobLifecycle
