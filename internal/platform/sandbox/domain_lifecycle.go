@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -839,7 +840,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 			map[string]string{"com.docker.network.bridge.host_binding_ipv4": "127.0.0.1"},
 		)
 		if createErr != nil {
-			return fail(createErr)
+			return fail(fmt.Errorf("sandbox outbound network create: %w", createErr))
 		}
 		outboundNetwork, inspectErr := e.inspectNetwork(
 			ctx, version, outboundCandidate, resource.OutboundNetworkName(), resource, resourceComponentOutboundNetwork,
@@ -861,7 +862,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		result.Created = true
 	}
 	if err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("sandbox gateway create: %w", err))
 	}
 	gatewayOwned, err := e.inspectComponentRef(
 		ctx, version, gatewayCandidate, resource, resourceComponentGateway,
@@ -882,10 +883,10 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 
 	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, nil, 1); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("sandbox gateway outbound attach: %w", err))
 	}
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("sandbox gateway start: %w", err))
 	}
 	gatewayReady, err := e.inspectComponentRef(
 		ctx, version, gatewayID, resource, resourceComponentGateway,
@@ -909,7 +910,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		result.Created = true
 	}
 	if err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("sandbox workload create: %w", err))
 	}
 	workloadOwned, err := e.inspectComponentRef(
 		ctx, version, workloadCandidate, resource, resourceComponentWorkload,
@@ -937,7 +938,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 			result.Created = true
 		}
 		if createErr != nil {
-			return fail(createErr)
+			return fail(fmt.Errorf("sandbox publisher create: %w", createErr))
 		}
 		publisherOwned, inspectErr := e.inspectComponentRef(
 			ctx, version, publisherCandidate, resource, resourceComponentPublisher,
@@ -950,7 +951,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		}
 		publisherID = publisherCandidate
 		if err = e.startRef(ctx, version, publisherID, resource); err != nil {
-			return fail(err)
+			return fail(fmt.Errorf("sandbox publisher start: %w", err))
 		}
 		if err = e.waitPublisherEndpointBindings(
 			ctx, version, resource, publisherID, plan.endpoints,
@@ -960,7 +961,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 
 	if err = e.startRef(ctx, version, workloadID, resource); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("sandbox workload start: %w", err))
 	}
 	instanceRef := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID)
 	if instanceRef == "" {
