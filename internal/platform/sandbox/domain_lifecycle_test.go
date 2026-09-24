@@ -55,9 +55,14 @@ func domainNetworkJSON(
 	for _, member := range members {
 		containers[member] = map[string]any{}
 	}
+	subnet, gateway := "172.31.0.0/24", "172.31.0.1"
+	if internal {
+		subnet, gateway = "172.30.0.0/24", "172.30.0.1"
+	}
 	return map[string]any{
 		"Id": id, "Name": name, "Internal": internal,
 		"Labels": resource.labelsFor(component), "Containers": containers,
+		"IPAM": map[string]any{"Config": []map[string]string{{"Subnet": subnet, "Gateway": gateway}}},
 	}
 }
 
@@ -236,8 +241,13 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
-				if request.NetworkingConfig != nil {
-					t.Errorf("gateway create unexpectedly included networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig == nil {
+					t.Fatal("gateway create omitted networking config")
+				}
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
+				if !ok || endpoint.IPAMConfig == nil || endpoint.IPAMConfig.IPv4Address != "172.30.0.2" ||
+					len(endpoint.Aliases) != 0 {
+					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -246,8 +256,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				if state.proxyToken == "" || strings.Contains(strings.Join(request.Cmd, " "), state.proxyToken) ||
 					!strings.Contains(strings.Join(request.Cmd, " "), "--auth-token-env LOKI_JOB_PROXY_TOKEN") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000="+resource.Name()+":3000") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173="+resource.Name()+":5173") {
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000=172.30.0.3:3000") ||
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=172.30.0.3:5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
 				if request.HostConfig.PublishAllPorts || len(request.ExposedPorts) != 0 ||
@@ -265,8 +275,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				command := strings.Join(request.Cmd, " ")
 				if !strings.Contains(command, "endpoint-publisher --host 0.0.0.0") ||
-					!strings.Contains(command, "--forward 3000="+resource.GatewayName()+":3000") ||
-					!strings.Contains(command, "--forward 5173="+resource.GatewayName()+":5173") {
+					!strings.Contains(command, "--forward 3000=172.31.0.2:3000") ||
+					!strings.Contains(command, "--forward 5173=172.31.0.2:5173") {
 					t.Errorf("publisher command = %#v", request.Cmd)
 				}
 				for _, port := range []int{3000, 5173} {
@@ -286,10 +296,15 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() {
 					t.Errorf("workload create = %#v", request)
 				}
-				if request.NetworkingConfig != nil {
-					t.Errorf("workload create unexpectedly included networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig == nil {
+					t.Fatal("workload create omitted networking config")
 				}
-				wantProxy := "http://loki:" + state.proxyToken + "@" + resource.GatewayName() + ":18766"
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
+				if !ok || endpoint.IPAMConfig == nil || endpoint.IPAMConfig.IPv4Address != "172.30.0.3" ||
+					len(endpoint.Aliases) != 0 {
+					t.Errorf("workload networking config = %#v", request.NetworkingConfig)
+				}
+				wantProxy := "http://loki:" + state.proxyToken + "@172.30.0.2:18766"
 				environment := strings.Join(request.Env, "\n")
 				if state.proxyToken == "" ||
 					!strings.Contains(environment, "HTTPS_PROXY="+wantProxy) ||
@@ -375,7 +390,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					"NetworkSettings": map[string]any{
 						"Ports": map[string]any{},
 						"Networks": map[string]any{
-							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
+							resource.InternalNetworkName(): map[string]any{
+								"NetworkID": state.internalID, "IPAddress": "172.30.0.3",
+							},
 						},
 					},
 					"State": map[string]any{
@@ -401,8 +418,12 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					"NetworkSettings": map[string]any{
 						"Ports": map[string]any{},
 						"Networks": map[string]any{
-							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
-							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},
+							resource.InternalNetworkName(): map[string]any{
+								"NetworkID": state.internalID, "IPAddress": "172.30.0.2",
+							},
+							resource.OutboundNetworkName(): map[string]any{
+								"NetworkID": state.outboundID, "IPAddress": "172.31.0.2",
+							},
 						},
 					},
 					"State": map[string]any{
@@ -440,7 +461,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					"NetworkSettings": map[string]any{
 						"Ports": ports,
 						"Networks": map[string]any{
-							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},
+							resource.OutboundNetworkName(): map[string]any{
+								"NetworkID": state.outboundID, "IPAddress": "172.31.0.3",
+							},
 						},
 					},
 					"State": map[string]any{

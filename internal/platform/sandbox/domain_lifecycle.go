@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -28,10 +30,12 @@ type domainReference struct {
 }
 
 type inspectedNetwork struct {
-	id       string
-	exists   bool
-	internal bool
-	members  map[string]bool
+	id          string
+	exists      bool
+	internal    bool
+	members     map[string]bool
+	ipv4Subnet  string
+	ipv4Gateway string
 }
 
 type domainSnapshot struct {
@@ -362,6 +366,40 @@ func (s domainSnapshot) allAbsent() bool {
 		!s.internal.exists && !s.outbound.exists
 }
 
+func requiredNetworkIPv4(resource inspectedResource, networkID string) (string, error) {
+	value := resource.networkIPv4[networkID]
+	ip := net.ParseIP(value)
+	if ip == nil || ip.To4() == nil {
+		return "", errors.New("sandbox resource is missing its required IPv4 network address")
+	}
+	return ip.String(), nil
+}
+
+func reservedInternalIPv4s(network inspectedNetwork) (string, string, error) {
+	prefix, err := netip.ParsePrefix(network.ipv4Subnet)
+	if err != nil || !prefix.Addr().Is4() {
+		return "", "", errors.New("sandbox internal network is missing an IPv4 subnet")
+	}
+	gateway, err := netip.ParseAddr(network.ipv4Gateway)
+	if err != nil || !gateway.Is4() || !prefix.Contains(gateway) {
+		return "", "", errors.New("sandbox internal network is missing an IPv4 gateway")
+	}
+	addresses := make([]netip.Addr, 0, 2)
+	for candidate := prefix.Masked().Addr().Next(); prefix.Contains(candidate); candidate = candidate.Next() {
+		if candidate == gateway {
+			continue
+		}
+		if !prefix.Contains(candidate.Next()) {
+			break
+		}
+		addresses = append(addresses, candidate)
+		if len(addresses) == 2 {
+			return addresses[0].String(), addresses[1].String(), nil
+		}
+	}
+	return "", "", errors.New("sandbox internal network does not have enough IPv4 addresses")
+}
+
 func jobProxyToken() (string, error) {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
@@ -370,7 +408,7 @@ func jobProxyToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
-func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
+func (p Plan) gatewayCreateRequest(authToken, workloadIPv4, gatewayIPv4 string) dockerCreateRequest {
 	gatewayTmpfs := "rw,noexec,nosuid,nodev,size=" + strconv.FormatInt(p.gateway.tmpfsBytes, 10) + ",mode=1777"
 	command := []string{
 		p.gateway.binary, "egress-proxy",
@@ -385,10 +423,8 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 	if len(p.endpoints) > 0 {
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
-			command = append(
-				command, "--forward",
-				strconv.Itoa(endpoint.Port)+"="+p.resource.Name()+":"+strconv.Itoa(endpoint.Port),
-			)
+			port := strconv.Itoa(endpoint.Port)
+			command = append(command, "--forward", port+"="+net.JoinHostPort(workloadIPv4, port))
 		}
 	}
 	internalNetwork := p.resource.InternalNetworkName()
@@ -413,10 +449,15 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			PublishAllPorts: false,
 			Init:            true,
 		},
+		NetworkingConfig: &dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				internalNetwork: {IPAMConfig: &dockerEndpointIPAMConfig{IPv4Address: gatewayIPv4}},
+			},
+		},
 	}
 }
 
-func (p Plan) publisherCreateRequest() dockerCreateRequest {
+func (p Plan) publisherCreateRequest(gatewayOutboundIPv4 string) dockerCreateRequest {
 	if !p.NeedsPublisher() {
 		return dockerCreateRequest{}
 	}
@@ -425,7 +466,7 @@ func (p Plan) publisherCreateRequest() dockerCreateRequest {
 	portBindings := make(map[string][]dockerPortBinding, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
 		port := strconv.Itoa(endpoint.Port)
-		command = append(command, "--forward", port+"="+p.resource.GatewayName()+":"+port)
+		command = append(command, "--forward", port+"="+net.JoinHostPort(gatewayOutboundIPv4, port))
 		key := port + "/tcp"
 		exposedPorts[key] = struct{}{}
 		portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
@@ -454,15 +495,20 @@ func (p Plan) publisherCreateRequest() dockerCreateRequest {
 	}
 }
 
-func (p Plan) workloadCreateRequest(authToken string) dockerCreateRequest {
+func (p Plan) workloadCreateRequest(authToken, gatewayIPv4, workloadIPv4 string) dockerCreateRequest {
 	request := p.create
 	request.Env = append([]string(nil), p.create.Env...)
 	if p.NeedsGateway() {
 		internalNetwork := p.resource.InternalNetworkName()
 		request.HostConfig.NetworkMode = internalNetwork
+		request.NetworkingConfig = &dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				internalNetwork: {IPAMConfig: &dockerEndpointIPAMConfig{IPv4Address: workloadIPv4}},
+			},
+		}
 	}
 	if p.network == NetworkDependencyInstall {
-		proxyURL := "http://loki:" + authToken + "@" + p.resource.GatewayName() + ":" + strconv.Itoa(p.gateway.proxyPort)
+		proxyURL := "http://loki:" + authToken + "@" + net.JoinHostPort(gatewayIPv4, strconv.Itoa(p.gateway.proxyPort))
 		request.Env = append(request.Env,
 			"HTTPS_PROXY="+proxyURL,
 			"https_proxy="+proxyURL,
@@ -539,6 +585,12 @@ func (e *Engine) inspectNetwork(
 		Internal   bool                       `json:"Internal"`
 		Labels     map[string]string          `json:"Labels"`
 		Containers map[string]json.RawMessage `json:"Containers"`
+		IPAM       struct {
+			Config []struct {
+				Subnet  string `json:"Subnet"`
+				Gateway string `json:"Gateway"`
+			} `json:"Config"`
+		} `json:"IPAM"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if err = decoder.Decode(&decoded); err != nil {
@@ -559,7 +611,23 @@ func (e *Engine) inspectNetwork(
 		}
 		members[id] = true
 	}
-	return inspectedNetwork{id: decoded.ID, exists: true, internal: decoded.Internal, members: members}, nil
+	ipv4Subnet, ipv4Gateway := "", ""
+	for _, config := range decoded.IPAM.Config {
+		prefix, prefixErr := netip.ParsePrefix(config.Subnet)
+		gateway, gatewayErr := netip.ParseAddr(config.Gateway)
+		if prefixErr != nil || gatewayErr != nil || !prefix.Addr().Is4() || !gateway.Is4() {
+			continue
+		}
+		if ipv4Subnet != "" {
+			return inspectedNetwork{}, errors.New("sandbox network returned multiple IPv4 subnets")
+		}
+		ipv4Subnet = prefix.Masked().String()
+		ipv4Gateway = gateway.String()
+	}
+	return inspectedNetwork{
+		id: decoded.ID, exists: true, internal: decoded.Internal, members: members,
+		ipv4Subnet: ipv4Subnet, ipv4Gateway: ipv4Gateway,
+	}, nil
 }
 
 func (e *Engine) connectNetwork(
@@ -760,6 +828,10 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return result, err
 	}
 	internalID = internalCandidate
+	gatewayInternalIPv4, workloadInternalIPv4, err := reservedInternalIPv4s(internalNetwork)
+	if err != nil {
+		return fail(err)
+	}
 
 	if plan.NeedsOutboundNetwork() {
 		outboundCandidate, createErr := e.createNetwork(
@@ -782,7 +854,8 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 
 	gatewayCandidate, gatewayCreated, err := e.createContainer(
-		ctx, version, resource.GatewayName(), plan.gatewayCreateRequest(authToken),
+		ctx, version, resource.GatewayName(),
+		plan.gatewayCreateRequest(authToken, workloadInternalIPv4, gatewayInternalIPv4),
 	)
 	if gatewayCreated {
 		result.Created = true
@@ -800,6 +873,13 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return fail(err)
 	}
 	gatewayID = gatewayCandidate
+	actualGatewayInternalIPv4, err := requiredNetworkIPv4(gatewayOwned, internalID)
+	if err != nil || actualGatewayInternalIPv4 != gatewayInternalIPv4 {
+		if err == nil {
+			err = errors.New("sandbox gateway IPv4 assignment changed after creation")
+		}
+		return fail(err)
+	}
 
 	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, nil, 1); err != nil {
 		return fail(err)
@@ -807,10 +887,51 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
 		return fail(err)
 	}
+	gatewayReady, err := e.inspectComponentRef(
+		ctx, version, gatewayID, resource, resourceComponentGateway,
+	)
+	if err != nil || !gatewayReady.state.Running {
+		if err == nil {
+			err = errors.New("sandbox gateway did not remain running after start")
+		}
+		return fail(err)
+	}
+	gatewayOutboundIPv4, err := requiredNetworkIPv4(gatewayReady, outboundID)
+	if err != nil {
+		return fail(err)
+	}
+
+	workloadCandidate, workloadCreated, err := e.createContainer(
+		ctx, version, resource.Name(),
+		plan.workloadCreateRequest(authToken, gatewayInternalIPv4, workloadInternalIPv4),
+	)
+	if workloadCreated {
+		result.Created = true
+	}
+	if err != nil {
+		return fail(err)
+	}
+	workloadOwned, err := e.inspectComponentRef(
+		ctx, version, workloadCandidate, resource, resourceComponentWorkload,
+	)
+	if err != nil || !workloadOwned.state.Exists || workloadOwned.id != workloadCandidate {
+		if err == nil {
+			err = errors.New("sandbox workload identity changed after creation")
+		}
+		return fail(err)
+	}
+	workloadID = workloadCandidate
+	actualWorkloadInternalIPv4, err := requiredNetworkIPv4(workloadOwned, internalID)
+	if err != nil || actualWorkloadInternalIPv4 != workloadInternalIPv4 {
+		if err == nil {
+			err = errors.New("sandbox workload IPv4 assignment changed after creation")
+		}
+		return fail(err)
+	}
 
 	if plan.NeedsPublisher() {
 		publisherCandidate, publisherCreated, createErr := e.createContainer(
-			ctx, version, resource.PublisherName(), plan.publisherCreateRequest(),
+			ctx, version, resource.PublisherName(), plan.publisherCreateRequest(gatewayOutboundIPv4),
 		)
 		if publisherCreated {
 			result.Created = true
@@ -837,26 +958,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 			return fail(err)
 		}
 	}
-
-	workloadCandidate, workloadCreated, err := e.createContainer(
-		ctx, version, resource.Name(), plan.workloadCreateRequest(authToken),
-	)
-	if workloadCreated {
-		result.Created = true
-	}
-	if err != nil {
-		return fail(err)
-	}
-	workloadOwned, err := e.inspectComponentRef(
-		ctx, version, workloadCandidate, resource, resourceComponentWorkload,
-	)
-	if err != nil || !workloadOwned.state.Exists || workloadOwned.id != workloadCandidate {
-		if err == nil {
-			err = errors.New("sandbox workload identity changed after creation")
-		}
-		return fail(err)
-	}
-	workloadID = workloadCandidate
 
 	if err = e.startRef(ctx, version, workloadID, resource); err != nil {
 		return fail(err)

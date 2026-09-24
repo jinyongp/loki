@@ -275,6 +275,7 @@ type inspectedResource struct {
 	requestedPortBindings map[string][]dockerPortBinding
 	publishAllPorts       bool
 	networkIDs            map[string]bool
+	networkIPv4           map[string]string
 }
 
 func (e *Engine) inspect(ctx context.Context, version string, resource Resource) (ResourceState, error) {
@@ -341,6 +342,7 @@ func (e *Engine) inspectComponentRef(
 			Ports    map[string][]dockerPortBinding `json:"Ports"`
 			Networks map[string]struct {
 				NetworkID string `json:"NetworkID"`
+				IPAddress string `json:"IPAddress"`
 			} `json:"Networks"`
 		} `json:"NetworkSettings"`
 		State struct {
@@ -392,6 +394,7 @@ func (e *Engine) inspectComponentRef(
 		requestedBindings[key] = append([]dockerPortBinding(nil), bindings...)
 	}
 	networkIDs := make(map[string]bool, len(decoded.NetworkSettings.Networks))
+	networkIPv4 := make(map[string]string, len(decoded.NetworkSettings.Networks))
 	for _, settings := range decoded.NetworkSettings.Networks {
 		if settings.NetworkID == "" {
 			continue
@@ -400,6 +403,13 @@ func (e *Engine) inspectComponentRef(
 			return inspectedResource{}, errors.New("sandbox Docker daemon returned an invalid network identity")
 		}
 		networkIDs[settings.NetworkID] = true
+		if settings.IPAddress != "" {
+			ip := net.ParseIP(settings.IPAddress)
+			if ip == nil || ip.To4() == nil {
+				return inspectedResource{}, errors.New("sandbox Docker daemon returned an invalid IPv4 network address")
+			}
+			networkIPv4[settings.NetworkID] = ip.String()
+		}
 	}
 	return inspectedResource{
 		id: decoded.ID, state: state, publishedPorts: ports,
@@ -408,6 +418,7 @@ func (e *Engine) inspectComponentRef(
 		requestedPortBindings: requestedBindings,
 		publishAllPorts:       decoded.HostConfig.PublishAllPorts,
 		networkIDs:            networkIDs,
+		networkIPv4:           networkIPv4,
 	}, nil
 }
 
