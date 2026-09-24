@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	domainInstanceRefPrefix = "oci-domain-v1:"
+	domainInstanceRefPrefix = "oci-domain-v2:"
 	domainWorkloadAlias     = "loki-workload"
 	domainGatewayAlias      = "loki-gateway"
 )
@@ -26,6 +26,7 @@ type domainReference struct {
 	aggregate string
 	workload  string
 	gateway   string
+	publisher string
 	internal  string
 	outbound  string
 }
@@ -38,10 +39,11 @@ type inspectedNetwork struct {
 }
 
 type domainSnapshot struct {
-	workload inspectedResource
-	gateway  inspectedResource
-	internal inspectedNetwork
-	outbound inspectedNetwork
+	workload  inspectedResource
+	gateway   inspectedResource
+	publisher inspectedResource
+	internal  inspectedNetwork
+	outbound  inspectedNetwork
 }
 
 func opaqueIDDigest(value string) string {
@@ -54,24 +56,31 @@ func validOpaqueIDDigest(value string) bool {
 	return err == nil && len(raw) == sha256.Size
 }
 
-func domainInstanceReference(workloadID, gatewayID, internalID, outboundID string) string {
+func domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID string) string {
 	for _, id := range []string{workloadID, gatewayID, internalID} {
 		if !containerIDPattern.MatchString(id) {
 			return ""
 		}
 	}
-	if outboundID != "" && !containerIDPattern.MatchString(outboundID) {
-		return ""
+	for _, id := range []string{publisherID, outboundID} {
+		if id != "" && !containerIDPattern.MatchString(id) {
+			return ""
+		}
+	}
+	publisherPart := "-"
+	if publisherID != "" {
+		publisherPart = opaqueIDDigest(publisherID)
 	}
 	outboundPart := "-"
 	if outboundID != "" {
 		outboundPart = opaqueIDDigest(outboundID)
 	}
-	aggregateRaw := workloadID + "\x00" + gatewayID + "\x00" + internalID + "\x00" + outboundID
+	aggregateRaw := workloadID + "\x00" + gatewayID + "\x00" + publisherID + "\x00" + internalID + "\x00" + outboundID
 	return domainInstanceRefPrefix + strings.Join([]string{
 		opaqueIDDigest(aggregateRaw),
 		opaqueIDDigest(workloadID),
 		opaqueIDDigest(gatewayID),
+		publisherPart,
 		opaqueIDDigest(internalID),
 		outboundPart,
 	}, ":")
@@ -82,20 +91,22 @@ func parseDomainReference(value string) (domainReference, bool) {
 		return domainReference{}, false
 	}
 	parts := strings.Split(strings.TrimPrefix(value, domainInstanceRefPrefix), ":")
-	if len(parts) != 5 {
+	if len(parts) != 6 {
 		return domainReference{}, false
 	}
-	for index := 0; index < 4; index++ {
+	for _, index := range []int{0, 1, 2, 4} {
 		if !validOpaqueIDDigest(parts[index]) {
 			return domainReference{}, false
 		}
 	}
-	if parts[4] != "-" && !validOpaqueIDDigest(parts[4]) {
-		return domainReference{}, false
+	for _, index := range []int{3, 5} {
+		if parts[index] != "-" && !validOpaqueIDDigest(parts[index]) {
+			return domainReference{}, false
+		}
 	}
 	return domainReference{
-		aggregate: parts[0], workload: parts[1], gateway: parts[2],
-		internal: parts[3], outbound: parts[4],
+		aggregate: parts[0], workload: parts[1], gateway: parts[2], publisher: parts[3],
+		internal: parts[4], outbound: parts[5],
 	}, true
 }
 
@@ -108,11 +119,15 @@ func isDomainInstanceReference(value string) bool {
 	return strings.HasPrefix(value, domainInstanceRefPrefix)
 }
 
+func (r domainReference) expectsPublisher() bool {
+	return r.publisher != "-"
+}
+
 func (r domainReference) expectsOutbound() bool {
 	return r.outbound != "-"
 }
 
-func (r domainReference) matches(workloadID, gatewayID, internalID, outboundID string) bool {
+func (r domainReference) matches(workloadID, gatewayID, publisherID, internalID, outboundID string) bool {
 	if !containerIDPattern.MatchString(workloadID) ||
 		!containerIDPattern.MatchString(gatewayID) ||
 		!containerIDPattern.MatchString(internalID) {
@@ -123,6 +138,13 @@ func (r domainReference) matches(workloadID, gatewayID, internalID, outboundID s
 		r.internal != opaqueIDDigest(internalID) {
 		return false
 	}
+	if r.expectsPublisher() {
+		if !containerIDPattern.MatchString(publisherID) || r.publisher != opaqueIDDigest(publisherID) {
+			return false
+		}
+	} else if publisherID != "" {
+		return false
+	}
 	if r.expectsOutbound() {
 		if !containerIDPattern.MatchString(outboundID) || r.outbound != opaqueIDDigest(outboundID) {
 			return false
@@ -130,7 +152,7 @@ func (r domainReference) matches(workloadID, gatewayID, internalID, outboundID s
 	} else if outboundID != "" {
 		return false
 	}
-	aggregateRaw := workloadID + "\x00" + gatewayID + "\x00" + internalID + "\x00" + outboundID
+	aggregateRaw := workloadID + "\x00" + gatewayID + "\x00" + publisherID + "\x00" + internalID + "\x00" + outboundID
 	return r.aggregate == opaqueIDDigest(aggregateRaw)
 }
 
@@ -140,6 +162,11 @@ func (r domainReference) matchesPresent(snapshot domainSnapshot) bool {
 	}
 	if snapshot.gateway.state.Exists && r.gateway != opaqueIDDigest(snapshot.gateway.id) {
 		return false
+	}
+	if snapshot.publisher.state.Exists {
+		if !r.expectsPublisher() || r.publisher != opaqueIDDigest(snapshot.publisher.id) {
+			return false
+		}
 	}
 	if snapshot.internal.exists && r.internal != opaqueIDDigest(snapshot.internal.id) {
 		return false
@@ -184,6 +211,9 @@ func (r domainReference) completenessError(snapshot domainSnapshot) error {
 	if !snapshot.gateway.state.Exists {
 		return errors.New("sandbox resource domain is missing gateway")
 	}
+	if r.expectsPublisher() != snapshot.publisher.state.Exists {
+		return errors.New("sandbox resource domain publisher presence changed")
+	}
 	if !snapshot.internal.exists {
 		return errors.New("sandbox resource domain is missing internal network")
 	}
@@ -207,13 +237,23 @@ func (r domainReference) completenessError(snapshot domainSnapshot) error {
 				" outbound=" + strconv.FormatBool(snapshot.gateway.networkIDs[snapshot.outbound.id]),
 		)
 	}
+	if snapshot.publisher.state.Exists && !exactNetworkIDs(snapshot.publisher.networkIDs, snapshot.outbound.id) {
+		return errors.New(
+			"sandbox publisher network set mismatch: count=" + strconv.Itoa(len(snapshot.publisher.networkIDs)) +
+				" outbound=" + strconv.FormatBool(snapshot.publisher.networkIDs[snapshot.outbound.id]),
+		)
+	}
 	if !networkMembersAllowed(snapshot.internal.members, snapshot.workload.id, snapshot.gateway.id) {
 		return errors.New("sandbox internal network has unexpected members: count=" + strconv.Itoa(len(snapshot.internal.members)))
 	}
-	if snapshot.outbound.exists && !networkMembersAllowed(snapshot.outbound.members, snapshot.gateway.id) {
+	if snapshot.outbound.exists && !networkMembersAllowed(
+		snapshot.outbound.members, snapshot.gateway.id, snapshot.publisher.id,
+	) {
 		return errors.New("sandbox outbound network has unexpected members: count=" + strconv.Itoa(len(snapshot.outbound.members)))
 	}
-	if !r.matches(snapshot.workload.id, snapshot.gateway.id, snapshot.internal.id, snapshot.outbound.id) {
+	if !r.matches(
+		snapshot.workload.id, snapshot.gateway.id, snapshot.publisher.id, snapshot.internal.id, snapshot.outbound.id,
+	) {
 		return errors.New("sandbox resource domain identity changed")
 	}
 	return nil
@@ -227,33 +267,39 @@ func endpointBindingsFromSnapshot(snapshot domainSnapshot, endpoints []EndpointS
 	if len(snapshot.workload.publishedPorts) != 0 {
 		return nil, errors.New("sandbox workload unexpectedly publishes host ports")
 	}
+	if len(snapshot.gateway.publishedPorts) != 0 {
+		return nil, errors.New("sandbox gateway unexpectedly publishes host ports")
+	}
 	if len(endpoints) == 0 {
-		if len(snapshot.gateway.publishedPorts) != 0 {
-			return nil, errors.New("sandbox gateway unexpectedly publishes host ports")
+		if len(snapshot.publisher.publishedPorts) != 0 {
+			return nil, errors.New("sandbox publisher unexpectedly publishes host ports")
 		}
 		return nil, nil
 	}
-	if len(snapshot.gateway.publishedPorts) != len(endpoints) {
+	if !snapshot.publisher.state.Exists {
+		return nil, errors.New("sandbox endpoint publisher is missing")
+	}
+	if len(snapshot.publisher.publishedPorts) != len(endpoints) {
 		return nil, errors.New(
-			"sandbox gateway endpoint publication is incomplete: expected=" + strconv.Itoa(len(endpoints)) +
-				" observed=" + strconv.Itoa(len(snapshot.gateway.publishedPorts)),
+			"sandbox publisher endpoint publication is incomplete: expected=" + strconv.Itoa(len(endpoints)) +
+				" observed=" + strconv.Itoa(len(snapshot.publisher.publishedPorts)),
 		)
 	}
 	result := make([]EndpointBinding, 0, len(endpoints))
 	seenHostPorts := map[int]bool{}
 	for _, endpoint := range endpoints {
 		key := strconv.Itoa(endpoint.Port) + "/tcp"
-		bindings, ok := snapshot.gateway.publishedPorts[key]
+		bindings, ok := snapshot.publisher.publishedPorts[key]
 		if !ok || len(bindings) != 1 {
-			return nil, errors.New("sandbox gateway endpoint binding is missing")
+			return nil, errors.New("sandbox publisher endpoint binding is missing")
 		}
 		binding := bindings[0]
 		if binding.HostIP != "127.0.0.1" {
-			return nil, errors.New("sandbox gateway endpoint is not loopback-bound")
+			return nil, errors.New("sandbox publisher endpoint is not loopback-bound")
 		}
 		hostPort, err := strconv.Atoi(binding.HostPort)
 		if err != nil || hostPort < 1024 || hostPort > 65535 || seenHostPorts[hostPort] {
-			return nil, errors.New("sandbox gateway endpoint host port is invalid")
+			return nil, errors.New("sandbox publisher endpoint host port is invalid")
 		}
 		seenHostPorts[hostPort] = true
 		result = append(result, EndpointBinding{Name: endpoint.Name, Port: endpoint.Port, HostPort: hostPort})
@@ -261,8 +307,8 @@ func endpointBindingsFromSnapshot(snapshot domainSnapshot, endpoints []EndpointS
 	return result, nil
 }
 
-func (e *Engine) waitGatewayEndpointBindings(
-	ctx context.Context, version string, resource Resource, gatewayID string, endpoints []EndpointSpec,
+func (e *Engine) waitPublisherEndpointBindings(
+	ctx context.Context, version string, resource Resource, publisherID string, endpoints []EndpointSpec,
 ) error {
 	if len(endpoints) == 0 {
 		return nil
@@ -275,16 +321,16 @@ func (e *Engine) waitGatewayEndpointBindings(
 	defer cancel()
 	var lastErr error
 	for {
-		gateway, err := e.inspectComponentRef(
-			waitCtx, version, gatewayID, resource, resourceComponentGateway,
+		publisher, err := e.inspectComponentRef(
+			waitCtx, version, publisherID, resource, resourceComponentPublisher,
 		)
 		if err != nil {
 			return err
 		}
-		if !gateway.state.Running {
-			detail := "sandbox gateway stopped before endpoint publication: exit=" +
-				strconv.FormatInt(gateway.state.ExitCode, 10)
-			if output, truncated, logErr := e.readLogsLimit(version, gatewayID, 8<<10); logErr == nil && len(output) > 0 {
+		if !publisher.state.Running {
+			detail := "sandbox endpoint publisher stopped before publication: exit=" +
+				strconv.FormatInt(publisher.state.ExitCode, 10)
+			if output, truncated, logErr := e.readLogsLimit(version, publisherID, 8<<10); logErr == nil && len(output) > 0 {
 				detail += " output=" + strings.TrimSpace(string(output))
 				if truncated {
 					detail += " [truncated]"
@@ -293,7 +339,7 @@ func (e *Engine) waitGatewayEndpointBindings(
 			return errors.New(detail)
 		}
 		if _, bindingErr := endpointBindingsFromSnapshot(
-			domainSnapshot{gateway: gateway}, endpoints,
+			domainSnapshot{publisher: publisher}, endpoints,
 		); bindingErr == nil {
 			return nil
 		} else {
@@ -304,11 +350,11 @@ func (e *Engine) waitGatewayEndpointBindings(
 		case <-waitCtx.Done():
 			timer.Stop()
 			return errors.New(
-				"sandbox gateway endpoint publication did not stabilize: " + lastErr.Error() +
-					" publish_all=" + strconv.FormatBool(gateway.publishAllPorts) +
-					" requested_bindings=" + strconv.Itoa(len(gateway.requestedPortBindings)) +
-					" exposed_ports=" + strconv.Itoa(gateway.exposedPortKeys) +
-					" network_port_keys=" + strconv.Itoa(gateway.networkPortKeys),
+				"sandbox publisher endpoint publication did not stabilize: " + lastErr.Error() +
+					" publish_all=" + strconv.FormatBool(publisher.publishAllPorts) +
+					" requested_bindings=" + strconv.Itoa(len(publisher.requestedPortBindings)) +
+					" exposed_ports=" + strconv.Itoa(publisher.exposedPortKeys) +
+					" network_port_keys=" + strconv.Itoa(publisher.networkPortKeys),
 			)
 		case <-timer.C:
 		}
@@ -316,7 +362,8 @@ func (e *Engine) waitGatewayEndpointBindings(
 }
 
 func (s domainSnapshot) allAbsent() bool {
-	return !s.workload.state.Exists && !s.gateway.state.Exists && !s.internal.exists && !s.outbound.exists
+	return !s.workload.state.Exists && !s.gateway.state.Exists && !s.publisher.state.Exists &&
+		!s.internal.exists && !s.outbound.exists
 }
 
 func jobProxyToken() (string, error) {
@@ -339,8 +386,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		"--audit", "/tmp/egress-audit.jsonl",
 		"--auth-token-env", "LOKI_JOB_PROXY_TOKEN",
 	}
-	exposedPorts := map[string]struct{}{}
-	portBindings := map[string][]dockerPortBinding{}
 	if len(p.endpoints) > 0 {
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
@@ -348,9 +393,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 				command, "--forward",
 				strconv.Itoa(endpoint.Port)+"="+domainWorkloadAlias+":"+strconv.Itoa(endpoint.Port),
 			)
-			key := strconv.Itoa(endpoint.Port) + "/tcp"
-			exposedPorts[key] = struct{}{}
-			portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
 		}
 	}
 	outboundNetwork := p.resource.OutboundNetworkName()
@@ -362,7 +404,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		NetworkDisabled: false,
 		AttachStdout:    true,
 		AttachStderr:    true,
-		ExposedPorts:    exposedPorts,
 		Labels:          p.resource.labelsFor(resourceComponentGateway),
 		HostConfig: dockerHostConfig{
 			ReadonlyRootfs:  true,
@@ -372,6 +413,44 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			Memory:          p.gateway.memoryBytes,
 			PidsLimit:       p.gateway.pids,
 			Tmpfs:           map[string]string{"/tmp": gatewayTmpfs},
+			PortBindings:    map[string][]dockerPortBinding{},
+			PublishAllPorts: false,
+			Init:            true,
+		},
+	}
+}
+
+func (p Plan) publisherCreateRequest() dockerCreateRequest {
+	if !p.NeedsPublisher() {
+		return dockerCreateRequest{}
+	}
+	command := []string{p.gateway.binary, "endpoint-publisher", "--host", "0.0.0.0"}
+	exposedPorts := make(map[string]struct{}, len(p.endpoints))
+	portBindings := make(map[string][]dockerPortBinding, len(p.endpoints))
+	for _, endpoint := range p.endpoints {
+		port := strconv.Itoa(endpoint.Port)
+		command = append(command, "--forward", port+"="+p.resource.GatewayName()+":"+port)
+		key := port + "/tcp"
+		exposedPorts[key] = struct{}{}
+		portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
+	}
+	return dockerCreateRequest{
+		Image:           p.gateway.image,
+		Cmd:             command,
+		User:            p.create.User,
+		NetworkDisabled: false,
+		AttachStdout:    true,
+		AttachStderr:    true,
+		ExposedPorts:    exposedPorts,
+		Labels:          p.resource.labelsFor(resourceComponentPublisher),
+		HostConfig: dockerHostConfig{
+			ReadonlyRootfs:  true,
+			CapDrop:         []string{"ALL"},
+			SecurityOpt:     []string{"no-new-privileges:true"},
+			NetworkMode:     p.resource.OutboundNetworkName(),
+			Memory:          p.gateway.memoryBytes,
+			PidsLimit:       p.gateway.pids,
+			Tmpfs:           map[string]string{},
 			PortBindings:    portBindings,
 			PublishAllPorts: false,
 			Init:            true,
@@ -540,6 +619,10 @@ func (e *Engine) inspectDomain(
 	if err != nil {
 		return domainSnapshot{}, err
 	}
+	publisher, err := e.inspectComponentRef(ctx, version, resource.PublisherName(), resource, resourceComponentPublisher)
+	if err != nil {
+		return domainSnapshot{}, err
+	}
 	internal, err := e.inspectNetwork(
 		ctx, version, resource.InternalNetworkName(), resource.InternalNetworkName(),
 		resource, resourceComponentInternalNetwork,
@@ -560,7 +643,9 @@ func (e *Engine) inspectDomain(
 	if outbound.exists && outbound.internal {
 		return domainSnapshot{}, errors.New("sandbox outbound network became internal")
 	}
-	return domainSnapshot{workload: workload, gateway: gateway, internal: internal, outbound: outbound}, nil
+	return domainSnapshot{
+		workload: workload, gateway: gateway, publisher: publisher, internal: internal, outbound: outbound,
+	}, nil
 }
 
 func (e *Engine) resolveDomainWorkload(
@@ -622,17 +707,15 @@ func (e *Engine) EndpointBindings(
 
 func (e *Engine) cleanupPartialDomain(
 	version string, resource Resource,
-	workloadID, gatewayID, internalID, outboundID string,
+	workloadID, gatewayID, publisherID, internalID, outboundID string,
 ) error {
 	var result error
-	if containerIDPattern.MatchString(workloadID) {
+	for _, containerID := range []string{workloadID, publisherID, gatewayID} {
+		if !containerIDPattern.MatchString(containerID) {
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), e.cleanupTimeout)
-		result = errors.Join(result, e.removeRef(ctx, version, workloadID, resource))
-		cancel()
-	}
-	if containerIDPattern.MatchString(gatewayID) {
-		ctx, cancel := context.WithTimeout(context.Background(), e.cleanupTimeout)
-		result = errors.Join(result, e.removeRef(ctx, version, gatewayID, resource))
+		result = errors.Join(result, e.removeRef(ctx, version, containerID, resource))
 		cancel()
 	}
 	if containerIDPattern.MatchString(outboundID) {
@@ -655,12 +738,14 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if err != nil {
 		return result, errors.New("sandbox gateway credential generation failed")
 	}
-	var internalID, outboundID, gatewayID, workloadID string
+	var internalID, outboundID, gatewayID, publisherID, workloadID string
 	fail := func(primary error) (StartResult, error) {
-		cleanupErr := e.cleanupPartialDomain(version, resource, workloadID, gatewayID, internalID, outboundID)
+		cleanupErr := e.cleanupPartialDomain(
+			version, resource, workloadID, gatewayID, publisherID, internalID, outboundID,
+		)
 		if cleanupErr != nil {
 			result.Created = true
-			if ref := domainInstanceReference(workloadID, gatewayID, internalID, outboundID); ref != "" {
+			if ref := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID); ref != "" {
 				result.InstanceRef = ref
 			}
 		}
@@ -728,11 +813,38 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
 		return fail(err)
 	}
-	if err = e.waitGatewayEndpointBindings(ctx, version, resource, gatewayID, plan.endpoints); err != nil {
-		return fail(err)
-	}
 	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}, -1); err != nil {
 		return fail(err)
+	}
+
+	if plan.NeedsPublisher() {
+		publisherCandidate, publisherCreated, createErr := e.createContainer(
+			ctx, version, resource.PublisherName(), plan.publisherCreateRequest(),
+		)
+		if publisherCreated {
+			result.Created = true
+		}
+		if createErr != nil {
+			return fail(createErr)
+		}
+		publisherOwned, inspectErr := e.inspectComponentRef(
+			ctx, version, publisherCandidate, resource, resourceComponentPublisher,
+		)
+		if inspectErr != nil || !publisherOwned.state.Exists || publisherOwned.id != publisherCandidate {
+			if inspectErr == nil {
+				inspectErr = errors.New("sandbox publisher identity changed after creation")
+			}
+			return fail(inspectErr)
+		}
+		publisherID = publisherCandidate
+		if err = e.startRef(ctx, version, publisherID, resource); err != nil {
+			return fail(err)
+		}
+		if err = e.waitPublisherEndpointBindings(
+			ctx, version, resource, publisherID, plan.endpoints,
+		); err != nil {
+			return fail(err)
+		}
 	}
 
 	workloadCandidate, workloadCreated, err := e.createContainer(
@@ -758,7 +870,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if err = e.startRef(ctx, version, workloadID, resource); err != nil {
 		return fail(err)
 	}
-	instanceRef := domainInstanceReference(workloadID, gatewayID, internalID, outboundID)
+	instanceRef := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID)
 	if instanceRef == "" {
 		return fail(errors.New("sandbox resource domain identity is invalid"))
 	}
@@ -802,6 +914,12 @@ func (e *Engine) cleanupDomain(
 	if snapshot.workload.state.Exists {
 		_, err = e.cleanupComponentResource(
 			version, resource, snapshot.workload.id, resourceComponentWorkload,
+		)
+		cleanupErr = errors.Join(cleanupErr, err)
+	}
+	if snapshot.publisher.state.Exists {
+		_, err = e.cleanupComponentResource(
+			version, resource, snapshot.publisher.id, resourceComponentPublisher,
 		)
 		cleanupErr = errors.Join(cleanupErr, err)
 	}

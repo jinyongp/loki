@@ -13,18 +13,20 @@ import (
 type domainFixtureState struct {
 	mu sync.Mutex
 
-	workloadID string
-	gatewayID  string
-	internalID string
-	outboundID string
+	workloadID  string
+	gatewayID   string
+	publisherID string
+	internalID  string
+	outboundID  string
 
-	workloadRunning        bool
-	gatewayRunning         bool
-	gatewayRunningInspects int
-	workloadRemoved        bool
-	gatewayRemoved         bool
-	internalRemoved        bool
-	outboundRemoved        bool
+	workloadRunning  bool
+	gatewayRunning   bool
+	publisherRunning bool
+	workloadRemoved  bool
+	gatewayRemoved   bool
+	publisherRemoved bool
+	internalRemoved  bool
+	outboundRemoved  bool
 
 	connects   []string
 	proxyToken string
@@ -62,9 +64,10 @@ func domainNetworkJSON(
 func TestDomainReferenceCompletenessUsesContainerAttachments(t *testing.T) {
 	workloadID := strings.Repeat("1", 64)
 	gatewayID := strings.Repeat("2", 64)
-	internalID := strings.Repeat("3", 64)
-	outboundID := strings.Repeat("4", 64)
-	referenceRaw := domainInstanceReference(workloadID, gatewayID, internalID, outboundID)
+	publisherID := strings.Repeat("3", 64)
+	internalID := strings.Repeat("4", 64)
+	outboundID := strings.Repeat("5", 64)
+	referenceRaw := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID)
 	reference, ok := parseDomainReference(referenceRaw)
 	if !ok {
 		t.Fatal("domain reference did not parse")
@@ -78,20 +81,24 @@ func TestDomainReferenceCompletenessUsesContainerAttachments(t *testing.T) {
 			id: gatewayID, state: ResourceState{Exists: true, Running: true},
 			networkIDs: map[string]bool{internalID: true, outboundID: true},
 		},
+		publisher: inspectedResource{
+			id: publisherID, state: ResourceState{Exists: true, Running: true},
+			networkIDs: map[string]bool{outboundID: true},
+		},
 		internal: inspectedNetwork{
 			id: internalID, exists: true, internal: true,
 			members: map[string]bool{gatewayID: true},
 		},
 		outbound: inspectedNetwork{
 			id: outboundID, exists: true,
-			members: map[string]bool{gatewayID: true},
+			members: map[string]bool{gatewayID: true, publisherID: true},
 		},
 	}
 	if !reference.complete(snapshot) {
-		t.Fatal("configured container attachments were rejected because an expected active endpoint was absent")
+		t.Fatal("configured container attachments were rejected")
 	}
 
-	rogueID := strings.Repeat("5", 64)
+	rogueID := strings.Repeat("6", 64)
 	snapshot.internal.members[rogueID] = true
 	if reference.complete(snapshot) {
 		t.Fatal("unexpected active internal network member was accepted")
@@ -108,26 +115,30 @@ func TestEndpointBindingsRequireLoopbackUniqueHostPorts(t *testing.T) {
 	endpoints := []EndpointSpec{{Name: "api", Port: 3000}, {Name: "web", Port: 5173}}
 	snapshot := domainSnapshot{
 		workload: inspectedResource{publishedPorts: map[string][]dockerPortBinding{}},
-		gateway: inspectedResource{publishedPorts: map[string][]dockerPortBinding{
-			"3000/tcp": {{HostIP: "127.0.0.1", HostPort: "43001"}},
-			"5173/tcp": {{HostIP: "127.0.0.1", HostPort: "43002"}},
-		}},
+		gateway:  inspectedResource{publishedPorts: map[string][]dockerPortBinding{}},
+		publisher: inspectedResource{
+			state: ResourceState{Exists: true, Running: true},
+			publishedPorts: map[string][]dockerPortBinding{
+				"3000/tcp": {{HostIP: "127.0.0.1", HostPort: "43001"}},
+				"5173/tcp": {{HostIP: "127.0.0.1", HostPort: "43002"}},
+			},
+		},
 	}
 	bindings, err := endpointBindingsFromSnapshot(snapshot, endpoints)
 	if err != nil || len(bindings) != 2 || bindings[0].HostPort != 43001 || bindings[1].HostPort != 43002 {
 		t.Fatalf("bindings = %#v, %v", bindings, err)
 	}
 
-	snapshot.gateway.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: "43001"}}
+	snapshot.publisher.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: "43001"}}
 	if _, err = endpointBindingsFromSnapshot(snapshot, endpoints); err == nil {
 		t.Fatal("non-loopback host binding was accepted")
 	}
-	snapshot.gateway.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43002"}}
+	snapshot.publisher.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43002"}}
 	if _, err = endpointBindingsFromSnapshot(snapshot, endpoints); err == nil {
 		t.Fatal("reused host port was accepted")
 	}
-	snapshot.gateway.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43001"}}
-	snapshot.gateway.publishedPorts["9999/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43003"}}
+	snapshot.publisher.publishedPorts["3000/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43001"}}
+	snapshot.publisher.publishedPorts["9999/tcp"] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "43003"}}
 	if _, err = endpointBindingsFromSnapshot(snapshot, endpoints); err == nil {
 		t.Fatal("unexpected published port was accepted")
 	}
@@ -138,10 +149,11 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 	plan := domainPlan(t)
 	resource := plan.Resource()
 	state := &domainFixtureState{
-		workloadID: strings.Repeat("1", 64),
-		gatewayID:  strings.Repeat("2", 64),
-		internalID: strings.Repeat("3", 64),
-		outboundID: strings.Repeat("4", 64),
+		workloadID:  strings.Repeat("1", 64),
+		gatewayID:   strings.Repeat("2", 64),
+		publisherID: strings.Repeat("3", 64),
+		internalID:  strings.Repeat("4", 64),
+		outboundID:  strings.Repeat("5", 64),
 	}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +215,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				_ = json.NewEncoder(w).Encode(domainNetworkJSON(
 					resource, state.outboundID, resource.OutboundNetworkName(),
-					resourceComponentOutboundNetwork, false, state.gatewayID,
+					resourceComponentOutboundNetwork, false, state.gatewayID, state.publisherID,
 				))
 			default:
 				http.NotFound(w, r)
@@ -238,21 +250,37 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=loki-workload:5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
-				if request.HostConfig.PublishAllPorts {
-					t.Errorf("gateway unexpectedly enabled publish-all = %#v", request.HostConfig)
+				if request.HostConfig.PublishAllPorts || len(request.ExposedPorts) != 0 ||
+					len(request.HostConfig.PortBindings) != 0 {
+					t.Errorf("gateway unexpectedly publishes host ports = %#v", request)
+				}
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"Id": state.gatewayID})
+			case resource.PublisherName():
+				if request.Image != plan.gateway.image ||
+					!resource.ownsComponent(request.Labels, resourceComponentPublisher) ||
+					request.HostConfig.NetworkMode != resource.OutboundNetworkName() || request.NetworkDisabled ||
+					request.NetworkingConfig != nil || request.HostConfig.PublishAllPorts {
+					t.Errorf("publisher create = %#v", request)
+				}
+				command := strings.Join(request.Cmd, " ")
+				if !strings.Contains(command, "endpoint-publisher --host 0.0.0.0") ||
+					!strings.Contains(command, "--forward 3000="+resource.GatewayName()+":3000") ||
+					!strings.Contains(command, "--forward 5173="+resource.GatewayName()+":5173") {
+					t.Errorf("publisher command = %#v", request.Cmd)
 				}
 				for _, port := range []int{3000, 5173} {
 					key := strconv.Itoa(port) + "/tcp"
 					if _, ok := request.ExposedPorts[key]; !ok {
-						t.Errorf("gateway did not expose endpoint %s", key)
+						t.Errorf("publisher did not expose endpoint %s", key)
 					}
 					bindings := request.HostConfig.PortBindings[key]
 					if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "" {
-						t.Errorf("gateway publish binding %s = %#v", key, bindings)
+						t.Errorf("publisher binding %s = %#v", key, bindings)
 					}
 				}
 				w.WriteHeader(http.StatusCreated)
-				_ = json.NewEncoder(w).Encode(map[string]any{"Id": state.gatewayID})
+				_ = json.NewEncoder(w).Encode(map[string]any{"Id": state.publisherID})
 			case resource.Name():
 				if !resource.owns(request.Labels) || request.NetworkDisabled ||
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() {
@@ -294,10 +322,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			}
 			if request.Container == state.gatewayID {
 				if !state.gatewayRunning {
-					t.Error("gateway connected to internal network before port-publishing startup")
-				}
-				if state.gatewayRunningInspects < 2 {
-					t.Error("gateway connected to internal network before endpoint publication stabilized")
+					t.Error("gateway connected to internal network before startup")
 				}
 				if request.EndpointConfig.GwPriority != -1 ||
 					len(request.EndpointConfig.Aliases) != 1 ||
@@ -313,6 +338,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			switch ref {
 			case state.gatewayID:
 				state.gatewayRunning = true
+			case state.publisherID:
+				state.publisherRunning = true
 			case state.workloadID:
 				state.workloadRunning = true
 			default:
@@ -325,6 +352,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			switch ref {
 			case state.gatewayID:
 				state.gatewayRunning = false
+			case state.publisherID:
+				state.publisherRunning = false
 			case state.workloadID:
 				state.workloadRunning = false
 			default:
@@ -364,23 +393,17 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					return
 				}
 				status := "created"
-				ports := map[string]any{}
 				if state.gatewayRunning {
 					status = "running"
-					state.gatewayRunningInspects++
-					if state.gatewayRunningInspects >= 2 {
-						ports = map[string]any{
-							"18766/tcp": nil,
-							"3000/tcp":  []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
-							"5173/tcp":  []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
-						}
-					}
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"Id":     state.gatewayID,
 					"Config": map[string]any{"Labels": resource.labelsFor(resourceComponentGateway)},
+					"HostConfig": map[string]any{
+						"PortBindings": map[string]any{}, "PublishAllPorts": false,
+					},
 					"NetworkSettings": map[string]any{
-						"Ports": ports,
+						"Ports": map[string]any{},
 						"Networks": map[string]any{
 							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
 							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},
@@ -388,6 +411,44 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					},
 					"State": map[string]any{
 						"Status": status, "Running": state.gatewayRunning,
+						"OOMKilled": false, "ExitCode": 0,
+					},
+				})
+			case resource.PublisherName(), state.publisherID:
+				if state.publisherRemoved {
+					http.NotFound(w, r)
+					return
+				}
+				status := "created"
+				ports := map[string]any{}
+				if state.publisherRunning {
+					status = "running"
+					ports = map[string]any{
+						"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
+						"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
+					}
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"Id": state.publisherID,
+					"Config": map[string]any{
+						"Labels": resource.labelsFor(resourceComponentPublisher),
+						"ExposedPorts": map[string]any{"3000/tcp": map[string]any{}, "5173/tcp": map[string]any{}},
+					},
+					"HostConfig": map[string]any{
+						"PortBindings": map[string]any{
+							"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": ""}},
+							"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": ""}},
+						},
+						"PublishAllPorts": false,
+					},
+					"NetworkSettings": map[string]any{
+						"Ports": ports,
+						"Networks": map[string]any{
+							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},
+						},
+					},
+					"State": map[string]any{
+						"Status": status, "Running": state.publisherRunning,
 						"OOMKilled": false, "ExitCode": 0,
 					},
 				})
@@ -402,6 +463,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				state.workloadRemoved = true
 			case state.gatewayID:
 				state.gatewayRemoved = true
+			case state.publisherID:
+				state.publisherRemoved = true
 			default:
 				t.Errorf("unexpected container delete %q", ref)
 			}
@@ -451,7 +514,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 	if err != nil || cleanup != CleanupComplete {
 		t.Fatalf("domain cleanup = %s, %v", cleanup, err)
 	}
-	if !state.workloadRemoved || !state.gatewayRemoved || !state.internalRemoved || !state.outboundRemoved {
+	if !state.workloadRemoved || !state.gatewayRemoved || !state.publisherRemoved ||
+		!state.internalRemoved || !state.outboundRemoved {
 		t.Fatalf("domain retained resources = %#v", state)
 	}
 }
@@ -465,7 +529,7 @@ func TestDomainRecoveryRejectsReplacedGatewayWithoutMutation(t *testing.T) {
 	internalID := strings.Repeat("7", 64)
 	outboundID := strings.Repeat("8", 64)
 	replacementGatewayID := strings.Repeat("9", 64)
-	instanceRef := domainInstanceReference(workloadID, gatewayID, internalID, outboundID)
+	instanceRef := domainInstanceReference(workloadID, gatewayID, "", internalID, outboundID)
 	mutated := false
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -521,7 +585,7 @@ func TestDomainCleanupContinuesAfterPriorPartialRemoval(t *testing.T) {
 	gatewayID := strings.Repeat("b", 64)
 	internalID := strings.Repeat("c", 64)
 	outboundID := strings.Repeat("d", 64)
-	instanceRef := domainInstanceReference(workloadID, gatewayID, internalID, outboundID)
+	instanceRef := domainInstanceReference(workloadID, gatewayID, "", internalID, outboundID)
 	gatewayRemoved := false
 	internalRemoved := false
 	outboundRemoved := false
@@ -531,6 +595,8 @@ func TestDomainCleanupContinuesAfterPriorPartialRemoval(t *testing.T) {
 		case r.URL.Path == "/version":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ApiVersion": version})
 		case r.Method == http.MethodGet && r.URL.Path == "/v"+version+"/containers/"+resource.Name()+"/json":
+			http.NotFound(w, r)
+		case r.Method == http.MethodGet && r.URL.Path == "/v"+version+"/containers/"+resource.PublisherName()+"/json":
 			http.NotFound(w, r)
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/containers/"):
 			if gatewayRemoved {

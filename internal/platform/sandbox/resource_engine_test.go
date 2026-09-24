@@ -122,6 +122,7 @@ func TestEngineInspectOwnsOnlyLokiResources(t *testing.T) {
 						})
 					}
 				case "/v" + version + "/containers/" + resource.GatewayName() + "/json",
+					"/v" + version + "/containers/" + resource.PublisherName() + "/json",
 					"/v" + version + "/networks/" + resource.InternalNetworkName(),
 					"/v" + version + "/networks/" + resource.OutboundNetworkName():
 					http.NotFound(w, r)

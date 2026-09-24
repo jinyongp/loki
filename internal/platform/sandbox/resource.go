@@ -15,6 +15,7 @@ const (
 
 	resourceComponentWorkload        = "workload"
 	resourceComponentGateway         = "gateway"
+	resourceComponentPublisher       = "publisher"
 	resourceComponentInternalNetwork = "internal-network"
 	resourceComponentOutboundNetwork = "outbound-network"
 )
@@ -79,6 +80,13 @@ func (r Resource) GatewayName() string {
 	return "loki-job-gateway-" + r.jobID
 }
 
+func (r Resource) PublisherName() string {
+	if !r.Valid() {
+		return ""
+	}
+	return "loki-job-publisher-" + r.jobID
+}
+
 func (r Resource) InternalNetworkName() string {
 	if !r.Valid() {
 		return ""
@@ -95,7 +103,7 @@ func (r Resource) OutboundNetworkName() string {
 
 func validResourceComponent(component string) bool {
 	switch component {
-	case resourceComponentWorkload, resourceComponentGateway,
+	case resourceComponentWorkload, resourceComponentGateway, resourceComponentPublisher,
 		resourceComponentInternalNetwork, resourceComponentOutboundNetwork:
 		return true
 	default:

@@ -234,6 +234,15 @@ func (e *Engine) Inspect(ctx context.Context, resource Resource) (ResourceState,
 	if gateway.state.Exists {
 		return ResourceState{Exists: true}, nil
 	}
+	publisher, err := e.inspectComponentRef(
+		ctx, version, resource.PublisherName(), resource, resourceComponentPublisher,
+	)
+	if err != nil {
+		return ResourceState{}, err
+	}
+	if publisher.state.Exists {
+		return ResourceState{Exists: true}, nil
+	}
 	internal, err := e.inspectNetwork(
 		ctx, version, resource.InternalNetworkName(), resource.InternalNetworkName(),
 		resource, resourceComponentInternalNetwork,
@@ -279,6 +288,8 @@ func componentContainerName(resource Resource, component string) string {
 		return resource.Name()
 	case resourceComponentGateway:
 		return resource.GatewayName()
+	case resourceComponentPublisher:
+		return resource.PublisherName()
 	default:
 		return ""
 	}

@@ -42,6 +42,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "egress-proxy" {
 		return runEgressProxy(args[1:], stderr)
 	}
+	if len(args) > 0 && args[0] == "endpoint-publisher" {
+		return runEndpointPublisher(args[1:], stderr)
+	}
 	if len(args) > 0 && args[0] == "mcp" {
 		return runMCP(args[1:], stderr)
 	}

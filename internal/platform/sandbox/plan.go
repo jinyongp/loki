@@ -692,11 +692,22 @@ func (p Plan) NeedsOutboundNetwork() bool {
 	return p.NeedsGateway()
 }
 
+func (p Plan) NeedsPublisher() bool {
+	return p.Valid() && len(p.endpoints) > 0
+}
+
 func (p Plan) GatewayName() string {
 	if !p.NeedsGateway() {
 		return ""
 	}
 	return p.resource.GatewayName()
+}
+
+func (p Plan) PublisherName() string {
+	if !p.NeedsPublisher() {
+		return ""
+	}
+	return p.resource.PublisherName()
 }
 
 func (p Plan) InternalNetworkName() string {
