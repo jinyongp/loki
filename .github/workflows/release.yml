@@ -57,6 +57,7 @@ jobs:
       - name: Run fast release contract tests
         run: >-
           go test
+          ./internal/app/launcher
           ./internal/platform/sandbox
           ./internal/packaging
           ./internal/host/releases
@@ -258,10 +259,15 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           if test "$status" -ne 0; then
-            jq -r 'select(.Action == "fail" and .Package != null) | .Package' "$RUNNER_TEMP/go-test.json" |
+            jq -r 'select(.Action == "fail" and .Test != null) | (.Package + "::" + .Test)' "$RUNNER_TEMP/go-test.json" |
               sort -u |
-              while IFS= read -r package; do
-                test -n "$package" && printf '::error title=Go test package failed::%s\n' "$package"
+              while IFS= read -r failure; do
+                test -n "$failure" && printf '::error title=Go test failed::%s\n' "$failure"
+              done
+            jq -r 'select(.Action == "output" and .Test != null and (.Output | contains("_test.go:"))) | (.Package + "::" + .Test + "::" + (.Output | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")))' "$RUNNER_TEMP/go-test.json" |
+              tail -n 40 |
+              while IFS= read -r detail; do
+                test -n "$detail" && printf '::error title=Go test detail::%s\n' "$detail"
               done
             exit "$status"
           fi
