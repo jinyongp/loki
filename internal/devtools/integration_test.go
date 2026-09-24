@@ -36,32 +36,41 @@ func TestRealProcessInheritsBrokerSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := filepath.Join(root, "runner")
-	cache := filepath.Join(root, "cache")
-	temp := filepath.Join(root, "temp")
-	for name, path := range map[string]string{"runner-state": state, "runner-cache": cache, "runner-temp": temp} {
-		directory := contract.Directories[name]
-		directory.Path = path
-		contract.Directories[name] = directory
-	}
-	contract.Environment["XDG_CONFIG_HOME"] = filepath.Join(state, "config")
-	contract.Environment["GH_CONFIG_DIR"] = filepath.Join(state, "config", "gh")
-	contract.Environment["XDG_DATA_HOME"] = filepath.Join(state, "data")
-	contract.Environment["XDG_STATE_HOME"] = filepath.Join(state, "state")
-	contract.Environment["XDG_CACHE_HOME"] = cache
-	contract.Environment["NPM_CONFIG_CACHE"] = filepath.Join(cache, "npm")
-	contract.Environment["npm_config_store_dir"] = filepath.Join(cache, "pnpm")
-	contract.Environment["PLAYWRIGHT_BROWSERS_PATH"] = filepath.Join(cache, "playwright")
-	contract.Environment["GOCACHE"] = filepath.Join(cache, "go-build")
-	contract.Environment["GOMODCACHE"] = filepath.Join(cache, "go-mod")
-	contract.Environment["PIP_CACHE_DIR"] = filepath.Join(cache, "pip")
-	contract.Environment["TMPDIR"] = temp
-	if err = os.MkdirAll(temp, 0700); err != nil {
-		t.Fatal(err)
-	}
 	environment, err := contract.EnvironmentList()
 	if err != nil {
 		t.Fatal(err)
+	}
+	state := filepath.Join(root, "runner")
+	cache := filepath.Join(root, "cache")
+	temp := filepath.Join(root, "temp")
+	overrides := map[string]string{
+		"HOME":                     filepath.Join(root, "home"),
+		"GH_CONFIG_DIR":            filepath.Join(state, "gh-config"),
+		"XDG_CONFIG_HOME":          filepath.Join(state, "config"),
+		"XDG_DATA_HOME":            filepath.Join(state, "data"),
+		"XDG_STATE_HOME":           filepath.Join(state, "state"),
+		"XDG_CACHE_HOME":           cache,
+		"NPM_CONFIG_CACHE":         filepath.Join(cache, "npm"),
+		"npm_config_store_dir":     filepath.Join(cache, "pnpm"),
+		"PLAYWRIGHT_BROWSERS_PATH": filepath.Join(cache, "playwright"),
+		"GOCACHE":                  filepath.Join(cache, "go-build"),
+		"GOMODCACHE":               filepath.Join(cache, "go-mod"),
+		"PIP_CACHE_DIR":            filepath.Join(cache, "pip"),
+		"TMPDIR":                   temp,
+	}
+	for _, path := range overrides {
+		if err = os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for index, value := range environment {
+		name, _, ok := strings.Cut(value, "=")
+		if !ok {
+			t.Fatalf("invalid execution environment entry %q", value)
+		}
+		if replacement, exists := overrides[name]; exists {
+			environment[index] = name + "=" + replacement
+		}
 	}
 	client, err := NewClient(binary, root, environment)
 	if err != nil {
