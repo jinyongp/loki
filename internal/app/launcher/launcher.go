@@ -1194,6 +1194,10 @@ func (l *lifecycle) wait(ctx context.Context, id string) (jobs.Result, error) {
 	}
 	job, active := l.lookupActive(id)
 	if !active {
+		latest, latestErr := l.durableRecord(id)
+		if latestErr == nil && latest.State == jobs.StateTerminal && latest.Result != nil {
+			return *latest.Result, nil
+		}
 		return jobs.Result{}, fault.Error("workload recovery is pending")
 	}
 	return l.waitActive(ctx, id, job)
@@ -1232,6 +1236,14 @@ func (l *lifecycle) cancelStatus(ctx context.Context, id string) (jobs.CancelRes
 	}
 	job, active := l.lookupActive(id)
 	if !active {
+		latest, latestErr := l.durableRecord(id)
+		if latestErr == nil && latest.State == jobs.StateTerminal {
+			status, statusErr := jobs.StatusFromRecord(latest)
+			if statusErr != nil {
+				return jobs.CancelResult{}, statusErr
+			}
+			return jobs.CancelResult{JobID: id, Canceled: false, Status: status}, nil
+		}
 		return jobs.CancelResult{}, fault.Error("workload recovery is pending")
 	}
 	job.cancel()
