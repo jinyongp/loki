@@ -136,7 +136,7 @@ manually on `main` and choose the semantic-version increment. From that point
 the workflow performs the release without a second operator handoff:
 
 1. verifies that the selected source is the current remote `main`;
-2. runs `actions-up@1.20.1` in report mode and refuses stale GitHub Action
+2. runs `actions-up@1.21.0` in report mode and refuses stale GitHub Action
    pins;
 3. resolves the next release version;
 4. builds required external CLI inputs from exact upstream source commits on native amd64 and arm64 GitHub runners in parallel;

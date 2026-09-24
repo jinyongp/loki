@@ -74,11 +74,11 @@ jobs:
         run: |
           set -euo pipefail
           latest_actions_up=$(npm view actions-up version)
-          test "$latest_actions_up" = 1.20.1 || {
-            echo "actions-up 1.20.1 is stale; latest is $latest_actions_up" >&2
+          test "$latest_actions_up" = 1.21.0 || {
+            echo "actions-up 1.21.0 is stale; latest is $latest_actions_up" >&2
             exit 1
           }
-          npm exec --yes actions-up@1.20.1 -- \
+          npm exec --yes actions-up@1.21.0 -- \
             --dir .github \
             --dry-run \
             --json \

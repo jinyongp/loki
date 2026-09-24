@@ -21,7 +21,7 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	for _, required := range []string{
 		"workflow_dispatch:",
 		"bump:",
-		"actions-up@1.20.1",
+		"actions-up@1.21.0",
 		"npm view actions-up version",
 		"./scripts/verify/release-pins.sh metadata",
 		"./scripts/verify/release-pins.sh containers",
