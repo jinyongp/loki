@@ -183,12 +183,7 @@ type dockerNetworkingConfig struct {
 }
 
 type dockerEndpointSettings struct {
-	Aliases    []string                  `json:"Aliases,omitempty"`
-	IPAMConfig *dockerEndpointIPAMConfig `json:"IPAMConfig,omitempty"`
-}
-
-type dockerEndpointIPAMConfig struct {
-	IPv4Address string `json:"IPv4Address,omitempty"`
+	Aliases []string `json:"Aliases,omitempty"`
 }
 
 type dockerLogConfig struct {

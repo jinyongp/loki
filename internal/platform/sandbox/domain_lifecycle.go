@@ -12,14 +12,16 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const domainInstanceRefPrefix = "oci-domain-v2:"
+const (
+	domainInstanceRefPrefix = "oci-domain-v2:"
+	domainWorkloadAlias     = "loki-workload"
+)
 
 type domainReference struct {
 	aggregate string
@@ -31,12 +33,10 @@ type domainReference struct {
 }
 
 type inspectedNetwork struct {
-	id          string
-	exists      bool
-	internal    bool
-	members     map[string]bool
-	ipv4Subnet  string
-	ipv4Gateway string
+	id       string
+	exists   bool
+	internal bool
+	members  map[string]bool
 }
 
 type domainSnapshot struct {
@@ -376,31 +376,6 @@ func requiredNetworkIPv4(resource inspectedResource, networkID string) (string, 
 	return ip.String(), nil
 }
 
-func reservedInternalIPv4s(network inspectedNetwork) (string, string, error) {
-	prefix, err := netip.ParsePrefix(network.ipv4Subnet)
-	if err != nil || !prefix.Addr().Is4() {
-		return "", "", errors.New("sandbox internal network is missing an IPv4 subnet")
-	}
-	gateway, err := netip.ParseAddr(network.ipv4Gateway)
-	if err != nil || !gateway.Is4() || !prefix.Contains(gateway) {
-		return "", "", errors.New("sandbox internal network is missing an IPv4 gateway")
-	}
-	addresses := make([]netip.Addr, 0, 2)
-	for candidate := prefix.Masked().Addr().Next(); prefix.Contains(candidate); candidate = candidate.Next() {
-		if candidate == gateway {
-			continue
-		}
-		if !prefix.Contains(candidate.Next()) {
-			break
-		}
-		addresses = append(addresses, candidate)
-		if len(addresses) == 2 {
-			return addresses[0].String(), addresses[1].String(), nil
-		}
-	}
-	return "", "", errors.New("sandbox internal network does not have enough IPv4 addresses")
-}
-
 func jobProxyToken() (string, error) {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
@@ -409,7 +384,7 @@ func jobProxyToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
-func (p Plan) gatewayCreateRequest(authToken, workloadIPv4, gatewayIPv4 string) dockerCreateRequest {
+func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 	gatewayTmpfs := "rw,noexec,nosuid,nodev,size=" + strconv.FormatInt(p.gateway.tmpfsBytes, 10) + ",mode=1777"
 	command := []string{
 		p.gateway.binary, "egress-proxy",
@@ -425,7 +400,7 @@ func (p Plan) gatewayCreateRequest(authToken, workloadIPv4, gatewayIPv4 string) 
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
 			port := strconv.Itoa(endpoint.Port)
-			command = append(command, "--forward", port+"="+net.JoinHostPort(workloadIPv4, port))
+			command = append(command, "--forward", port+"="+domainWorkloadAlias+":"+port)
 		}
 	}
 	internalNetwork := p.resource.InternalNetworkName()
@@ -449,11 +424,6 @@ func (p Plan) gatewayCreateRequest(authToken, workloadIPv4, gatewayIPv4 string) 
 			PortBindings:    map[string][]dockerPortBinding{},
 			PublishAllPorts: false,
 			Init:            true,
-		},
-		NetworkingConfig: &dockerNetworkingConfig{
-			EndpointsConfig: map[string]dockerEndpointSettings{
-				internalNetwork: {IPAMConfig: &dockerEndpointIPAMConfig{IPv4Address: gatewayIPv4}},
-			},
 		},
 	}
 }
@@ -496,7 +466,7 @@ func (p Plan) publisherCreateRequest(gatewayOutboundIPv4 string) dockerCreateReq
 	}
 }
 
-func (p Plan) workloadCreateRequest(authToken, gatewayIPv4, workloadIPv4 string) dockerCreateRequest {
+func (p Plan) workloadCreateRequest(authToken, gatewayIPv4 string) dockerCreateRequest {
 	request := p.create
 	request.Env = append([]string(nil), p.create.Env...)
 	if p.NeedsGateway() {
@@ -504,7 +474,7 @@ func (p Plan) workloadCreateRequest(authToken, gatewayIPv4, workloadIPv4 string)
 		request.HostConfig.NetworkMode = internalNetwork
 		request.NetworkingConfig = &dockerNetworkingConfig{
 			EndpointsConfig: map[string]dockerEndpointSettings{
-				internalNetwork: {IPAMConfig: &dockerEndpointIPAMConfig{IPv4Address: workloadIPv4}},
+				internalNetwork: {Aliases: []string{domainWorkloadAlias}},
 			},
 		}
 	}
@@ -586,12 +556,6 @@ func (e *Engine) inspectNetwork(
 		Internal   bool                       `json:"Internal"`
 		Labels     map[string]string          `json:"Labels"`
 		Containers map[string]json.RawMessage `json:"Containers"`
-		IPAM       struct {
-			Config []struct {
-				Subnet  string `json:"Subnet"`
-				Gateway string `json:"Gateway"`
-			} `json:"Config"`
-		} `json:"IPAM"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if err = decoder.Decode(&decoded); err != nil {
@@ -612,23 +576,7 @@ func (e *Engine) inspectNetwork(
 		}
 		members[id] = true
 	}
-	ipv4Subnet, ipv4Gateway := "", ""
-	for _, config := range decoded.IPAM.Config {
-		prefix, prefixErr := netip.ParsePrefix(config.Subnet)
-		gateway, gatewayErr := netip.ParseAddr(config.Gateway)
-		if prefixErr != nil || gatewayErr != nil || !prefix.Addr().Is4() || !gateway.Is4() {
-			continue
-		}
-		if ipv4Subnet != "" {
-			return inspectedNetwork{}, errors.New("sandbox network returned multiple IPv4 subnets")
-		}
-		ipv4Subnet = prefix.Masked().String()
-		ipv4Gateway = gateway.String()
-	}
-	return inspectedNetwork{
-		id: decoded.ID, exists: true, internal: decoded.Internal, members: members,
-		ipv4Subnet: ipv4Subnet, ipv4Gateway: ipv4Gateway,
-	}, nil
+	return inspectedNetwork{id: decoded.ID, exists: true, internal: decoded.Internal, members: members}, nil
 }
 
 func (e *Engine) connectNetwork(
@@ -829,10 +777,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return result, err
 	}
 	internalID = internalCandidate
-	gatewayInternalIPv4, workloadInternalIPv4, err := reservedInternalIPv4s(internalNetwork)
-	if err != nil {
-		return fail(err)
-	}
 
 	if plan.NeedsOutboundNetwork() {
 		outboundCandidate, createErr := e.createNetwork(
@@ -855,8 +799,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 
 	gatewayCandidate, gatewayCreated, err := e.createContainer(
-		ctx, version, resource.GatewayName(),
-		plan.gatewayCreateRequest(authToken, workloadInternalIPv4, gatewayInternalIPv4),
+		ctx, version, resource.GatewayName(), plan.gatewayCreateRequest(authToken),
 	)
 	if gatewayCreated {
 		result.Created = true
@@ -874,13 +817,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return fail(err)
 	}
 	gatewayID = gatewayCandidate
-	actualGatewayInternalIPv4, err := requiredNetworkIPv4(gatewayOwned, internalID)
-	if err != nil || actualGatewayInternalIPv4 != gatewayInternalIPv4 {
-		if err == nil {
-			err = errors.New("sandbox gateway IPv4 assignment changed after creation")
-		}
-		return fail(err)
-	}
 
 	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, nil, 1); err != nil {
 		return fail(fmt.Errorf("sandbox gateway outbound attach: %w", err))
@@ -897,14 +833,17 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		}
 		return fail(err)
 	}
+	gatewayInternalIPv4, err := requiredNetworkIPv4(gatewayReady, internalID)
+	if err != nil {
+		return fail(err)
+	}
 	gatewayOutboundIPv4, err := requiredNetworkIPv4(gatewayReady, outboundID)
 	if err != nil {
 		return fail(err)
 	}
 
 	workloadCandidate, workloadCreated, err := e.createContainer(
-		ctx, version, resource.Name(),
-		plan.workloadCreateRequest(authToken, gatewayInternalIPv4, workloadInternalIPv4),
+		ctx, version, resource.Name(), plan.workloadCreateRequest(authToken, gatewayInternalIPv4),
 	)
 	if workloadCreated {
 		result.Created = true
@@ -922,13 +861,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return fail(err)
 	}
 	workloadID = workloadCandidate
-	actualWorkloadInternalIPv4, err := requiredNetworkIPv4(workloadOwned, internalID)
-	if err != nil || actualWorkloadInternalIPv4 != workloadInternalIPv4 {
-		if err == nil {
-			err = errors.New("sandbox workload IPv4 assignment changed after creation")
-		}
-		return fail(err)
-	}
 
 	if plan.NeedsPublisher() {
 		publisherCandidate, publisherCreated, createErr := e.createContainer(

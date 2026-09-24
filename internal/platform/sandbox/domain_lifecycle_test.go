@@ -241,13 +241,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
-				if request.NetworkingConfig == nil {
-					t.Fatal("gateway create omitted networking config")
-				}
-				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
-				if !ok || endpoint.IPAMConfig == nil || endpoint.IPAMConfig.IPv4Address != "172.30.0.2" ||
-					len(endpoint.Aliases) != 0 {
-					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig != nil {
+					t.Errorf("gateway create unexpectedly included networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -256,8 +251,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				if state.proxyToken == "" || strings.Contains(strings.Join(request.Cmd, " "), state.proxyToken) ||
 					!strings.Contains(strings.Join(request.Cmd, " "), "--auth-token-env LOKI_JOB_PROXY_TOKEN") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000=172.30.0.3:3000") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=172.30.0.3:5173") {
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000="+domainWorkloadAlias+":3000") ||
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173="+domainWorkloadAlias+":5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
 				if request.HostConfig.PublishAllPorts || len(request.ExposedPorts) != 0 ||
@@ -300,8 +295,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					t.Fatal("workload create omitted networking config")
 				}
 				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
-				if !ok || endpoint.IPAMConfig == nil || endpoint.IPAMConfig.IPv4Address != "172.30.0.3" ||
-					len(endpoint.Aliases) != 0 {
+				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainWorkloadAlias {
 					t.Errorf("workload networking config = %#v", request.NetworkingConfig)
 				}
 				wantProxy := "http://loki:" + state.proxyToken + "@172.30.0.2:18766"
