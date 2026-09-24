@@ -207,23 +207,23 @@ func run(args []string, stderr io.Writer) int {
 		layout.Workspace = *workspaceOverride
 	}
 	if err := resolveLauncherPolicy(&layout, *configPath, *githubConfigPath, *executionContractPath); err != nil {
-		fmt.Fprintln(stderr, "invalid launcher effective policy")
+		fmt.Fprintln(stderr, "invalid launcher effective policy:", err)
 		return 2
 	}
 	options, err := buildLauncher(layout)
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid launcher configuration")
+		fmt.Fprintln(stderr, "invalid launcher configuration:", err)
 		return 2
 	}
 	journal, err := openLauncherJournal(layout)
 	if err != nil {
-		fmt.Fprintln(stderr, "launcher state unavailable")
+		fmt.Fprintln(stderr, "launcher state unavailable:", err)
 		return 1
 	}
 	defer journal.Close()
 	if inputDirectory := options.Policy.InputDirectory(); inputDirectory != "" {
 		if err = daemon.PrivateDirectory(inputDirectory); err != nil {
-			fmt.Fprintln(stderr, "launcher input state unavailable")
+			fmt.Fprintln(stderr, "launcher input state unavailable:", err)
 			return 1
 		}
 	}
