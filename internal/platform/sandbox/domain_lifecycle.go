@@ -16,11 +16,7 @@ import (
 	"time"
 )
 
-const (
-	domainInstanceRefPrefix = "oci-domain-v2:"
-	domainWorkloadAlias     = "loki-workload"
-	domainGatewayAlias      = "loki-gateway"
-)
+const domainInstanceRefPrefix = "oci-domain-v2:"
 
 type domainReference struct {
 	aggregate string
@@ -391,7 +387,7 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		for _, endpoint := range p.endpoints {
 			command = append(
 				command, "--forward",
-				strconv.Itoa(endpoint.Port)+"="+domainWorkloadAlias+":"+strconv.Itoa(endpoint.Port),
+				strconv.Itoa(endpoint.Port)+"="+p.resource.Name()+":"+strconv.Itoa(endpoint.Port),
 			)
 		}
 	}
@@ -417,11 +413,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			PublishAllPorts: false,
 			Init:            true,
 		},
-		NetworkingConfig: &dockerNetworkingConfig{
-			EndpointsConfig: map[string]dockerEndpointSettings{
-				internalNetwork: {Aliases: []string{domainGatewayAlias}},
-			},
-		},
 	}
 }
 
@@ -434,7 +425,7 @@ func (p Plan) publisherCreateRequest() dockerCreateRequest {
 	portBindings := make(map[string][]dockerPortBinding, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
 		port := strconv.Itoa(endpoint.Port)
-		command = append(command, "--forward", port+"="+domainGatewayAlias+":"+port)
+		command = append(command, "--forward", port+"="+p.resource.GatewayName()+":"+port)
 		key := port + "/tcp"
 		exposedPorts[key] = struct{}{}
 		portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
@@ -469,14 +460,9 @@ func (p Plan) workloadCreateRequest(authToken string) dockerCreateRequest {
 	if p.NeedsGateway() {
 		internalNetwork := p.resource.InternalNetworkName()
 		request.HostConfig.NetworkMode = internalNetwork
-		request.NetworkingConfig = &dockerNetworkingConfig{
-			EndpointsConfig: map[string]dockerEndpointSettings{
-				internalNetwork: {Aliases: []string{domainWorkloadAlias}},
-			},
-		}
 	}
 	if p.network == NetworkDependencyInstall {
-		proxyURL := "http://loki:" + authToken + "@" + domainGatewayAlias + ":" + strconv.Itoa(p.gateway.proxyPort)
+		proxyURL := "http://loki:" + authToken + "@" + p.resource.GatewayName() + ":" + strconv.Itoa(p.gateway.proxyPort)
 		request.Env = append(request.Env,
 			"HTTPS_PROXY="+proxyURL,
 			"https_proxy="+proxyURL,
@@ -815,7 +801,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	gatewayID = gatewayCandidate
 
-	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, []string{domainGatewayAlias}, 1); err != nil {
+	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, nil, 1); err != nil {
 		return fail(err)
 	}
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {

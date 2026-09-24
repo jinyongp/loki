@@ -236,12 +236,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
-				if request.NetworkingConfig == nil {
-					t.Fatal("gateway create omitted networking config")
-				}
-				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
-				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainGatewayAlias {
-					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig != nil {
+					t.Errorf("gateway create unexpectedly included networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -250,8 +246,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				if state.proxyToken == "" || strings.Contains(strings.Join(request.Cmd, " "), state.proxyToken) ||
 					!strings.Contains(strings.Join(request.Cmd, " "), "--auth-token-env LOKI_JOB_PROXY_TOKEN") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000=loki-workload:3000") ||
-					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=loki-workload:5173") {
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 3000="+resource.Name()+":3000") ||
+					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173="+resource.Name()+":5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
 				if request.HostConfig.PublishAllPorts || len(request.ExposedPorts) != 0 ||
@@ -269,8 +265,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				command := strings.Join(request.Cmd, " ")
 				if !strings.Contains(command, "endpoint-publisher --host 0.0.0.0") ||
-					!strings.Contains(command, "--forward 3000="+domainGatewayAlias+":3000") ||
-					!strings.Contains(command, "--forward 5173="+domainGatewayAlias+":5173") {
+					!strings.Contains(command, "--forward 3000="+resource.GatewayName()+":3000") ||
+					!strings.Contains(command, "--forward 5173="+resource.GatewayName()+":5173") {
 					t.Errorf("publisher command = %#v", request.Cmd)
 				}
 				for _, port := range []int{3000, 5173} {
@@ -290,14 +286,10 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.InternalNetworkName() {
 					t.Errorf("workload create = %#v", request)
 				}
-				if request.NetworkingConfig == nil {
-					t.Fatal("workload create omitted networking config")
+				if request.NetworkingConfig != nil {
+					t.Errorf("workload create unexpectedly included networking config = %#v", request.NetworkingConfig)
 				}
-				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
-				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainWorkloadAlias {
-					t.Errorf("workload networking config = %#v", request.NetworkingConfig)
-				}
-				wantProxy := "http://loki:" + state.proxyToken + "@loki-gateway:18766"
+				wantProxy := "http://loki:" + state.proxyToken + "@" + resource.GatewayName() + ":18766"
 				environment := strings.Join(request.Env, "\n")
 				if state.proxyToken == "" ||
 					!strings.Contains(environment, "HTTPS_PROXY="+wantProxy) ||
@@ -330,8 +322,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				if r.URL.Path != "/v"+version+"/networks/"+state.outboundID+"/connect" ||
 					request.EndpointConfig.GwPriority != 1 ||
-					len(request.EndpointConfig.Aliases) != 1 ||
-					request.EndpointConfig.Aliases[0] != domainGatewayAlias {
+					len(request.EndpointConfig.Aliases) != 0 {
 					t.Errorf("gateway outbound attachment = path %q config %#v", r.URL.Path, request.EndpointConfig)
 				}
 			}
