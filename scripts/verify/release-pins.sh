@@ -81,6 +81,41 @@ verify_metadata() {
   releaseway_latest=$(gh release view --repo releaseway/actions --json tagName --jq .tagName)
   test -n "$releaseway_pinned" && test "$releaseway_pinned" = "$releaseway_latest" ||
     fail "releaseway/actions $releaseway_pinned is stale; latest is $releaseway_latest"
+
+  docker_min=$(sed -n 's/.*Runtime: releases.RuntimeRequirements{DockerMin: "\([^"]*\)", ComposeMin: "\([^"]*\)"}.*/\1/p' \
+    "$source_dir/tools/release/releasebuild/main.go" | head -n 1)
+  compose_min=$(sed -n 's/.*Runtime: releases.RuntimeRequirements{DockerMin: "\([^"]*\)", ComposeMin: "\([^"]*\)"}.*/\2/p' \
+    "$source_dir/tools/release/releasebuild/main.go" | head -n 1)
+  test -n "$docker_min" && test -n "$compose_min" ||
+    fail "release runtime minimums are missing"
+
+  docker_packages="$tmp/docker-packages"
+  curl -fsSL \
+    'https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages' \
+    -o "$docker_packages"
+
+  latest_package_version() {
+    package_name=$1
+    awk -v package_name="$package_name" 'BEGIN { RS=""; FS="\n" }
+      {
+        package=""; version="";
+        for (i=1; i<=NF; i++) {
+          if ($i ~ /^Package: /) package=substr($i, 10);
+          if ($i ~ /^Version: /) version=substr($i, 10);
+        }
+        if (package == package_name) print version;
+      }' "$docker_packages" |
+      sed 's/^[0-9][0-9]*://; s/-.*$//' |
+      sort -V |
+      tail -n 1
+  }
+
+  docker_latest=$(latest_package_version docker-ce)
+  compose_latest=$(latest_package_version docker-compose-plugin)
+  test -n "$docker_latest" && test "$docker_min" = "$docker_latest" ||
+    fail "Docker Engine minimum $docker_min is stale; latest official noble/stable package is $docker_latest"
+  test -n "$compose_latest" && test "$compose_min" = "$compose_latest" ||
+    fail "Docker Compose minimum $compose_min is stale; latest official noble/stable package is $compose_latest"
 }
 
 inspect_digest() {

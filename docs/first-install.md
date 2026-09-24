@@ -26,7 +26,7 @@ On a supported clean host, you need only:
 The target host does not need a Loki source checkout or a local Go, Node.js,
 pnpm, Python, uv, Rust, Chromium, or other development toolchain.
 
-Docker Engine and Docker Compose v2 are runtime prerequisites, but on supported
+Docker Engine and Docker Compose are runtime prerequisites, but on supported
 Ubuntu hosts you do not need to install them manually. If the release needs
 Docker changes, Loki shows the exact prerequisite commands and asks for approval
 before changing packages or services. Loki never adds the operator to the

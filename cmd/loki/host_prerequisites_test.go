@@ -41,7 +41,7 @@ func (f *fakeHostExecutor) Run(_ context.Context, executable string, args []stri
 }
 
 func runtimeRequirements() releases.RuntimeRequirements {
-	return releases.RuntimeRequirements{DockerMin: "28.0.0", ComposeMin: "2.39.0"}
+	return releases.RuntimeRequirements{DockerMin: "29.8.1", ComposeMin: "5.5.1"}
 }
 
 func TestProbeHostRuntimeRequiresReleaseMinimums(t *testing.T) {
@@ -49,7 +49,7 @@ func TestProbeHostRuntimeRequiresReleaseMinimums(t *testing.T) {
 		paths: map[string]bool{"docker": true},
 		outputs: map[string]string{
 			"docker::version::--format::{{.Server.Version}}": "29.8.1\n",
-			"docker::compose::version::--short":              "v2.39.4\n",
+			"docker::compose::version::--short":              "v5.5.1\n",
 		},
 		errs: map[string]error{},
 	}
@@ -57,7 +57,7 @@ func TestProbeHostRuntimeRequiresReleaseMinimums(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if probe.Access != hostDockerAccessDirect || probe.DockerVersion != "29.8.1" || probe.ComposeVersion != "2.39.4" {
+	if probe.Access != hostDockerAccessDirect || probe.DockerVersion != "29.8.1" || probe.ComposeVersion != "5.5.1" {
 		t.Fatalf("runtime probe = %#v", probe)
 	}
 	executor.outputs["docker::version::--format::{{.Server.Version}}"] = "27.5.1\n"
@@ -72,7 +72,7 @@ func TestProbeHostRuntimeSupportsExplicitSudoBoundary(t *testing.T) {
 		paths: map[string]bool{"sudo": true},
 		outputs: map[string]string{
 			"sudo::docker::version::--format::{{.Server.Version}}": "29.8.1\n",
-			"sudo::docker::compose::version::--short":              "2.40.0\n",
+			"sudo::docker::compose::version::--short":              "5.5.1\n",
 		},
 		errs: map[string]error{},
 	}
@@ -167,7 +167,7 @@ func TestPrepareHostDockerRuntimeKeepsWorkingDockerUntouched(t *testing.T) {
 		paths: map[string]bool{"docker": true},
 		outputs: map[string]string{
 			"docker::version::--format::{{.Server.Version}}": "29.8.1\n",
-			"docker::compose::version::--short":              "2.40.0\n",
+			"docker::compose::version::--short":              "5.5.1\n",
 		},
 		errs: map[string]error{},
 	}
@@ -203,7 +203,7 @@ func TestPrepareHostDockerRuntimeUpgradesOutdatedDockerOnlyAfterApproval(t *test
 	executor.after = func(call string) {
 		if call == "sudo::systemctl::enable::--now::docker" {
 			executor.outputs["docker::version::--format::{{.Server.Version}}"] = "29.8.1\n"
-			executor.outputs["docker::compose::version::--short"] = "2.40.0\n"
+			executor.outputs["docker::compose::version::--short"] = "5.5.1\n"
 		}
 	}
 	host := releases.SupportedHost{
@@ -222,7 +222,7 @@ func TestPrepareHostDockerRuntimeUpgradesOutdatedDockerOnlyAfterApproval(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if probe.Access != hostDockerAccessDirect || probe.DockerVersion != "29.8.1" || probe.ComposeVersion != "2.40.0" {
+	if probe.Access != hostDockerAccessDirect || probe.DockerVersion != "29.8.1" || probe.ComposeVersion != "5.5.1" {
 		t.Fatalf("upgraded runtime = %#v", probe)
 	}
 	calls := strings.Join(executor.calls[before:], "\n")

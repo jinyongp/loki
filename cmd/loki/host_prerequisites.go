@@ -23,7 +23,7 @@ const (
 
 var (
 	errHostDockerUnavailable          = errors.New("Docker Engine is unavailable to the current installation boundary")
-	errHostComposeUnavailable         = errors.New("Docker Compose v2 is unavailable to the current installation boundary")
+	errHostComposeUnavailable         = errors.New("Docker Compose is unavailable to the current installation boundary")
 	errHostRuntimeOutdated            = errors.New("Docker runtime is below the release requirement")
 	errHostDockerSudoApprovalNeeded   = errors.New("explicit sudo Docker approval is required")
 	errHostPrerequisiteApprovalNeeded = errors.New("host prerequisite installation approval is required")
@@ -187,7 +187,7 @@ func ubuntuDockerPrerequisitePlan(host releases.SupportedHost) ([]hostCommandSte
 		{Description: "make Docker's apt signing key readable by apt", Executable: "chmod", Args: []string{"a+r", "/etc/apt/keyrings/docker.asc"}, Root: true},
 		{Description: "register Docker's official stable apt repository", Executable: "tee", Args: []string{"/etc/apt/sources.list.d/docker.sources"}, Stdin: sources, Root: true},
 		{Description: "refresh the package index with Docker's repository", Executable: "apt-get", Args: []string{"update"}, Root: true},
-		{Description: "install Docker Engine, Buildx and Compose v2", Executable: "apt-get", Args: []string{"install", "-y", "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"}, Root: true},
+		{Description: "install Docker Engine, Buildx and Compose", Executable: "apt-get", Args: []string{"install", "-y", "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"}, Root: true},
 		{Description: "enable and start Docker Engine", Executable: "systemctl", Args: []string{"enable", "--now", "docker"}, Root: true},
 	}, nil
 }
@@ -269,7 +269,7 @@ func prepareHostDockerRuntime(
 		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker is installed but Loki cannot access the Engine; approve the explicit sudo Docker boundary or fix the Docker daemon/socket access", errHostDockerSudoApprovalNeeded)
 	}
 	if !installPrerequisites {
-		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker Engine and Compose v2 do not satisfy this release; rerun interactively or pass --install-prerequisites", errHostPrerequisiteApprovalNeeded)
+		return hostRuntimeProbe{}, fmt.Errorf("%w: Docker Engine and Compose do not satisfy this release; rerun interactively or pass --install-prerequisites", errHostPrerequisiteApprovalNeeded)
 	}
 	if host.Environment == "wsl" {
 		initRaw, readErr := os.ReadFile("/proc/1/comm")

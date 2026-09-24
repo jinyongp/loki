@@ -70,7 +70,7 @@ func bootstrapBuildManifest(t *testing.T, version string) []byte {
 		Notices:          target("releases/notices/"+version+".tar.gz", "1"),
 		ReleaseNotes:     target("releases/notes/"+version+".md", "2"),
 		SupportedHosts:   []releases.SupportedHost{{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"}},
-		Runtime:          releases.RuntimeRequirements{DockerMin: "28.0.0", ComposeMin: "2.39.0"},
+		Runtime:          releases.RuntimeRequirements{DockerMin: "29.8.1", ComposeMin: "5.5.1"},
 	})
 	if err != nil {
 		t.Fatal(err)

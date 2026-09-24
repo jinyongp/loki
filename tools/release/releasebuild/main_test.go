@@ -75,7 +75,7 @@ func TestAssembleBuildsReleaseBoundArtifactSet(t *testing.T) {
 		manifest.Generation.Spec.Components[0].Digest != "sha256:"+browserDigest {
 		t.Fatalf("release manifest generation = %#v", manifest.Generation.Spec)
 	}
-	if manifest.Runtime.DockerMin != "28.0.0" || manifest.Runtime.ComposeMin != "2.39.0" {
+	if manifest.Runtime.DockerMin != "29.8.1" || manifest.Runtime.ComposeMin != "5.5.1" {
 		t.Fatalf("runtime requirements = %#v", manifest.Runtime)
 	}
 	indexRaw, err := os.ReadFile(filepath.Join(output, "release-index.json"))

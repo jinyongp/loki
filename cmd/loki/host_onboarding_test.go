@@ -206,7 +206,7 @@ func TestInteractiveDockerRuntimeOffersExplicitSudoWithoutDockerGroupMutation(t 
 		paths: map[string]bool{"docker": true, "sudo": true},
 		outputs: map[string]string{
 			"sudo::docker::version::--format::{{.Server.Version}}": "29.8.1\n",
-			"sudo::docker::compose::version::--short":              "2.40.0\n",
+			"sudo::docker::compose::version::--short":              "5.5.1\n",
 		},
 		errs: map[string]error{
 			"docker::version::--format::{{.Server.Version}}": errors.New("permission denied"),
@@ -241,7 +241,7 @@ func TestApproveSudoDockerRuntimeWorksAfterPrerequisiteInstall(t *testing.T) {
 		paths: map[string]bool{"docker": true, "sudo": true},
 		outputs: map[string]string{
 			"sudo::docker::version::--format::{{.Server.Version}}": "29.8.1\n",
-			"sudo::docker::compose::version::--short":              "2.40.0\n",
+			"sudo::docker::compose::version::--short":              "5.5.1\n",
 		},
 		errs: map[string]error{
 			"docker::version::--format::{{.Server.Version}}": errors.New("permission denied"),

@@ -45,7 +45,7 @@ The initial clean-host acceptance targets for the new installer are:
 - Ubuntu 24.04 amd64
 - WSL2 running Ubuntu 24.04 amd64
 
-Other Linux distributions may run Loki when a compatible Docker Engine and Docker Compose v2 are already available. Loki does not initially automate package-manager changes on those distributions.
+Other Linux distributions may run Loki when a compatible Docker Engine and Docker Compose are already available. Loki does not initially automate package-manager changes on those distributions.
 
 ## License and public distribution
 
@@ -100,7 +100,7 @@ The selected workspace remains the operator-approved host data root. The gateway
 
 ## Docker prerequisite policy
 
-Loki first checks whether Docker Engine and Docker Compose v2 already work for the current operator. If they do, installation does not alter Docker configuration.
+Loki first checks whether Docker Engine and Docker Compose already work for the current operator. If they do, installation does not alter Docker configuration.
 
 On the fully supported Ubuntu hosts, Loki may offer to install the minimum Docker/Compose prerequisites when they are missing. Before making any package-manager or service change, Loki prints the exact commands it proposes to run and asks for explicit approval.
 

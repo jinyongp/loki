@@ -13,7 +13,7 @@ Browser and signing remain optional profiles.
 
 ## Requirements for source-tree work
 
-Source-tree Compose work requires current Docker with Compose v2 and
+Source-tree Compose work requires current Docker with Compose and
 Buildx/BuildKit. Release/topology acceptance also requires the prerequisites
 listed in [Validation tiers and prerequisites](validation-strategy.md).
 

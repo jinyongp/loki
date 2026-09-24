@@ -48,8 +48,8 @@ func releaseManifestFixture(t *testing.T, version string, releasedAt time.Time) 
 			{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"},
 		},
 		Runtime: RuntimeRequirements{
-			DockerMin:  "28.0.0",
-			ComposeMin: "2.39.0",
+			DockerMin:  "29.8.1",
+			ComposeMin: "5.5.1",
 		},
 	}
 }

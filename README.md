@@ -22,7 +22,7 @@ The first supported hosts are:
 - Ubuntu 24.04 on amd64
 - WSL2 with Ubuntu 24.04 on amd64
 
-Loki uses Docker Engine and Docker Compose v2 for its runtime. On supported
+Loki uses Docker Engine and Docker Compose for its runtime. On supported
 Ubuntu systems, the installer can offer to install or update the required Docker
 components after showing the exact changes and asking for approval.
 

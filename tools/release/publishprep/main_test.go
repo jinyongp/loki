@@ -74,7 +74,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 			{Environment: "native", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"},
 			{Environment: "wsl", Distribution: "ubuntu", Version: "24.04", Arch: "amd64"},
 		},
-		Runtime: releases.RuntimeRequirements{DockerMin: "28.0.0", ComposeMin: "2.39.0"},
+		Runtime: releases.RuntimeRequirements{DockerMin: "29.8.1", ComposeMin: "5.5.1"},
 	})
 	if err != nil {
 		t.Fatal(err)

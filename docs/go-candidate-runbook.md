@@ -6,7 +6,7 @@
 
 ## 사전 조건
 
-- Ubuntu 24.04 amd64, systemd, current Docker with Compose v2 and Buildx/BuildKit
+- Ubuntu 24.04 amd64, systemd, current Docker with Compose and Buildx/BuildKit
 - Go 1.27.1
 - CLI 프로토콜 3, JSON envelope 1, JSON 출력 방식의 `process start`·`process restart` schema를 제공하는 `devtools` 후보 실행 파일
 - `runner`의 전역 Git `user.name`과 `user.email`
