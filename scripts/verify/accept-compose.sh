@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 umask 077
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
@@ -13,8 +13,27 @@ project=lokiaccept$$
 derived_image=$project:derived
 before=$root/invariants.before
 after=$root/invariants.after
+stage=setup
 
-die() { printf 'loki-compose-acceptance: %s\n' "$*" >&2; exit 1; }
+annotation_escape() {
+  printf '%s' "$1" | sed 's/%/%25/g; s/::/%3A%3A/g'
+}
+
+report_error() {
+  local status=$1 line=$2 command=$3 message
+  message="stage=$stage line=$line exit=$status command=$command"
+  printf 'loki-compose-acceptance: %s\n' "$message" >&2
+  printf '::error title=Compose acceptance failed::%s\n' "$(annotation_escape "$message")" >&2
+}
+
+trap 'status=$?; report_error "$status" "$LINENO" "$BASH_COMMAND"; exit "$status"' ERR
+
+die() {
+  local message=$*
+  printf 'loki-compose-acceptance: %s\n' "$message" >&2
+  printf '::error title=Compose acceptance failed::%s\n' "$(annotation_escape "stage=$stage $message")" >&2
+  exit 1
+}
 
 compose() {
   LOKI_IMAGE=$image \
@@ -81,7 +100,7 @@ cleanup() {
   trap - EXIT HUP INT TERM
   if test "$result" -ne 0; then
     compose --profile browser --profile signing ps >&2 || true
-    compose --profile browser --profile signing logs --tail 100 browser browser-proxy signing >&2 || true
+    compose --profile browser --profile signing logs --tail 100 egress launcher executor runtime mcp browser browser-proxy signing >&2 || true
   fi
   compose --profile browser --profile signing down --volumes --remove-orphans >/dev/null 2>&1 || true
   "$docker" image rm "$derived_image" >/dev/null 2>&1 || true
@@ -90,6 +109,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+stage=preflight
 command -v "$docker" >/dev/null || die "Docker is required"
 "$docker" buildx version >/dev/null 2>&1 || die "Docker Buildx with BuildKit is required"
 command -v setfacl >/dev/null || die "setfacl is required"
@@ -102,9 +122,12 @@ token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 printf %s "$token" >"$token_file"
 chmod 0444 "$token_file"
 
+stage=compose-config
 snapshot_invariants "$before"
 compose config --quiet
+stage=core-start
 compose up -d --remove-orphans
+stage=core-health
 for service in egress launcher executor runtime mcp; do
   wait_healthy "$service" || die "$service is unhealthy"
 done
@@ -115,6 +138,7 @@ done
 for service in browser browser-proxy signing; do
   if grep -qx "$service" <<<"$services"; then die "optional service started in the core profile: $service"; fi
 done
+stage=core-contracts
 compose exec -T --user 10000:10000 runtime /usr/local/bin/devtools version >/dev/null
 assert_networks runtime "${project}_private"
 assert_networks mcp "${project}_private"
@@ -125,11 +149,13 @@ assert_no_mount executor /run/docker.sock
 assert_not_inspectable mcp "$token"
 assert_not_inspectable egress "$token"
 
+stage=core-restart
 compose restart
 for service in egress launcher executor runtime mcp; do
   wait_healthy "$service" || die "$service is unhealthy after restart"
 done
 
+stage=derived-image
 base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
 "$docker" buildx build --quiet --load \
   --build-arg "LOKI_BASE=$image" \
@@ -138,6 +164,7 @@ base_id=$("$docker" image inspect --format '{{.Id}}' "$image")
   --tag "$derived_image" "$repo" >/dev/null
 "$repo/scripts/verify/verify-derived-image.sh" "$image" "$derived_image"
 
+stage=browser-profile
 if test -n "$browser_image"; then
   compose --profile browser up -d browser browser-proxy
   wait_healthy browser-proxy || die "browser proxy is unhealthy"
@@ -151,6 +178,7 @@ if test -n "$browser_image"; then
   done
 fi
 
+stage=signing-profile
 if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
   test -f "$LOKI_SIGNING_KEY_FILE" || die "signing key does not exist"
   LOKI_SIGNING_KEY_FILE=$LOKI_SIGNING_KEY_FILE compose --profile signing up -d signing
@@ -160,6 +188,7 @@ if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
   assert_not_inspectable signing "$token"
 fi
 
+stage=final-invariants
 snapshot_invariants "$after"
 cmp "$before" "$after" || die "an invariant source or state path changed"
 printf 'loki-compose-acceptance: passed topology/isolation smoke on %s\n' "$host"
