@@ -288,6 +288,15 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 func (p Plan) workloadCreateRequest(authToken string) dockerCreateRequest {
 	request := p.create
 	request.Env = append([]string(nil), p.create.Env...)
+	if p.NeedsGateway() {
+		internalNetwork := p.resource.InternalNetworkName()
+		request.HostConfig.NetworkMode = internalNetwork
+		request.NetworkingConfig = &dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				internalNetwork: {Aliases: []string{domainWorkloadAlias}},
+			},
+		}
+	}
 	if p.network == NetworkDependencyInstall {
 		proxyURL := "http://loki:" + authToken + "@" + domainGatewayAlias + ":" + strconv.Itoa(p.gateway.proxyPort)
 		request.Env = append(request.Env,
@@ -636,9 +645,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	workloadID = workloadCandidate
 
-	if err = e.connectNetwork(ctx, version, internalID, workloadID, []string{domainWorkloadAlias}); err != nil {
-		return fail(err)
-	}
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
 		return fail(err)
 	}

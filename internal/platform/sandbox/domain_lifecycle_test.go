@@ -207,8 +207,15 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"Id": state.gatewayID})
 			case resource.Name():
 				if !resource.owns(request.Labels) || request.NetworkDisabled ||
-					request.HostConfig.NetworkMode != "none" {
+					request.HostConfig.NetworkMode != resource.InternalNetworkName() {
 					t.Errorf("workload create = %#v", request)
+				}
+				if request.NetworkingConfig == nil {
+					t.Fatal("workload create omitted networking config")
+				}
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
+				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainWorkloadAlias {
+					t.Errorf("workload networking config = %#v", request.NetworkingConfig)
 				}
 				wantProxy := "http://loki:" + state.proxyToken + "@loki-gateway:18766"
 				environment := strings.Join(request.Env, "\n")
@@ -349,9 +356,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 		started.EndpointBindings[1] != (EndpointBinding{Name: "web", Port: 5173, HostPort: 43002}) {
 		t.Fatalf("endpoint bindings = %#v", started.EndpointBindings)
 	}
-	if len(state.connects) != 2 ||
-		!strings.Contains(state.connects[0], "/networks/"+state.internalID+"/connect="+state.gatewayID) ||
-		!strings.Contains(state.connects[1], "/networks/"+state.internalID+"/connect="+state.workloadID) {
+	if len(state.connects) != 1 ||
+		!strings.Contains(state.connects[0], "/networks/"+state.internalID+"/connect="+state.gatewayID) {
 		t.Fatalf("network connects = %#v", state.connects)
 	}
 	stateView, err := engine.InspectJob(t.Context(), resource, started.InstanceRef)
