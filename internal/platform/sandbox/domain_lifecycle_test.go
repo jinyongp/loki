@@ -245,7 +245,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 						t.Errorf("gateway did not expose endpoint %s", key)
 					}
 					bindings := request.HostConfig.PortBindings[key]
-					if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "" {
+					if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "0" {
 						t.Errorf("gateway binding %s = %#v", key, bindings)
 					}
 				}

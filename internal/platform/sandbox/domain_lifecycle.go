@@ -330,7 +330,7 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			)
 			key := strconv.Itoa(endpoint.Port) + "/tcp"
 			exposedPorts[key] = struct{}{}
-			portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
+			portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "0"}}
 		}
 	}
 	outboundNetwork := p.resource.OutboundNetworkName()
