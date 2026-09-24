@@ -278,12 +278,26 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/connect"):
 			var request struct {
-				Container string
+				Container      string
+				EndpointConfig struct {
+					Aliases    []string
+					GwPriority int
+				}
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Errorf("decode connect: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
+			}
+			if request.Container == state.gatewayID {
+				if !state.gatewayRunning {
+					t.Error("gateway connected to internal network before port-publishing startup")
+				}
+				if request.EndpointConfig.GwPriority != -1 ||
+					len(request.EndpointConfig.Aliases) != 1 ||
+					request.EndpointConfig.Aliases[0] != domainGatewayAlias {
+					t.Errorf("gateway internal attachment = %#v", request.EndpointConfig)
+				}
 			}
 			state.connects = append(state.connects, r.URL.Path+"="+request.Container)
 			w.WriteHeader(http.StatusOK)

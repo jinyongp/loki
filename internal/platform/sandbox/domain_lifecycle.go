@@ -433,7 +433,7 @@ func (e *Engine) inspectNetwork(
 }
 
 func (e *Engine) connectNetwork(
-	ctx context.Context, version, networkID, containerID string, aliases []string,
+	ctx context.Context, version, networkID, containerID string, aliases []string, gatewayPriority int,
 ) error {
 	if !containerIDPattern.MatchString(networkID) || !containerIDPattern.MatchString(containerID) {
 		return errors.New("sandbox network connection identity is invalid")
@@ -441,10 +441,12 @@ func (e *Engine) connectNetwork(
 	request := struct {
 		Container      string `json:"Container"`
 		EndpointConfig struct {
-			Aliases []string `json:"Aliases,omitempty"`
+			Aliases    []string `json:"Aliases,omitempty"`
+			GwPriority int      `json:"GwPriority,omitempty"`
 		} `json:"EndpointConfig"`
 	}{Container: containerID}
 	request.EndpointConfig.Aliases = append([]string(nil), aliases...)
+	request.EndpointConfig.GwPriority = gatewayPriority
 	return e.controlJSON(
 		ctx, http.MethodPost, "/v"+version+"/networks/"+url.PathEscape(networkID)+"/connect",
 		request, http.StatusOK, nil,
@@ -662,7 +664,10 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	gatewayID = gatewayCandidate
 
-	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}); err != nil {
+	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
+		return fail(err)
+	}
+	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}, -1); err != nil {
 		return fail(err)
 	}
 
@@ -686,9 +691,6 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	workloadID = workloadCandidate
 
-	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
-		return fail(err)
-	}
 	if err = e.startRef(ctx, version, workloadID, resource); err != nil {
 		return fail(err)
 	}
