@@ -320,7 +320,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		"--auth-token-env", "LOKI_JOB_PROXY_TOKEN",
 	}
 	exposedPorts := map[string]struct{}{}
-	portBindings := map[string][]dockerPortBinding{}
 	if len(p.endpoints) > 0 {
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
@@ -330,7 +329,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			)
 			key := strconv.Itoa(endpoint.Port) + "/tcp"
 			exposedPorts[key] = struct{}{}
-			portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: "0"}}
 		}
 	}
 	outboundNetwork := p.resource.OutboundNetworkName()
@@ -345,15 +343,15 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		ExposedPorts:    exposedPorts,
 		Labels:          p.resource.labelsFor(resourceComponentGateway),
 		HostConfig: dockerHostConfig{
-			ReadonlyRootfs: true,
-			CapDrop:        []string{"ALL"},
-			SecurityOpt:    []string{"no-new-privileges:true"},
-			NetworkMode:    outboundNetwork,
-			Memory:         p.gateway.memoryBytes,
-			PidsLimit:      p.gateway.pids,
-			Tmpfs:          map[string]string{"/tmp": gatewayTmpfs},
-			PortBindings:   portBindings,
-			Init:           true,
+			ReadonlyRootfs:  true,
+			CapDrop:         []string{"ALL"},
+			SecurityOpt:     []string{"no-new-privileges:true"},
+			NetworkMode:     outboundNetwork,
+			Memory:          p.gateway.memoryBytes,
+			PidsLimit:       p.gateway.pids,
+			Tmpfs:           map[string]string{"/tmp": gatewayTmpfs},
+			PublishAllPorts: len(p.endpoints) > 0,
+			Init:            true,
 		},
 		NetworkingConfig: &dockerNetworkingConfig{
 			EndpointsConfig: map[string]dockerEndpointSettings{
@@ -389,17 +387,24 @@ func (p Plan) workloadCreateRequest(authToken string) dockerCreateRequest {
 
 func (e *Engine) createNetwork(
 	ctx context.Context, version, name string, resource Resource, component string, internal bool,
+	options map[string]string,
 ) (string, error) {
 	if name == "" || !resource.Valid() || !validResourceComponent(component) {
 		return "", errors.New("sandbox network identity is invalid")
+	}
+	copiedOptions := make(map[string]string, len(options))
+	for key, value := range options {
+		copiedOptions[key] = value
 	}
 	request := struct {
 		Name           string            `json:"Name"`
 		CheckDuplicate bool              `json:"CheckDuplicate"`
 		Internal       bool              `json:"Internal"`
 		Labels         map[string]string `json:"Labels"`
+		Options        map[string]string `json:"Options,omitempty"`
 	}{
-		Name: name, CheckDuplicate: true, Internal: internal, Labels: resource.labelsFor(component),
+		Name: name, CheckDuplicate: true, Internal: internal,
+		Labels: resource.labelsFor(component), Options: copiedOptions,
 	}
 	var result struct {
 		ID string `json:"Id"`
@@ -645,7 +650,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 
 	internalCandidate, err := e.createNetwork(
-		ctx, version, resource.InternalNetworkName(), resource, resourceComponentInternalNetwork, true,
+		ctx, version, resource.InternalNetworkName(), resource, resourceComponentInternalNetwork, true, nil,
 	)
 	if err != nil {
 		return result, err
@@ -665,6 +670,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if plan.NeedsOutboundNetwork() {
 		outboundCandidate, createErr := e.createNetwork(
 			ctx, version, resource.OutboundNetworkName(), resource, resourceComponentOutboundNetwork, false,
+			map[string]string{"com.docker.network.bridge.host_binding_ipv4": "127.0.0.1"},
 		)
 		if createErr != nil {
 			return fail(createErr)

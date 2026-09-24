@@ -157,6 +157,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				Name     string
 				Internal bool
 				Labels   map[string]string
+				Options  map[string]string
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Errorf("decode network create: %v", err)
@@ -165,13 +166,15 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			}
 			switch request.Name {
 			case resource.InternalNetworkName():
-				if !request.Internal || !resource.ownsComponent(request.Labels, resourceComponentInternalNetwork) {
+				if !request.Internal || !resource.ownsComponent(request.Labels, resourceComponentInternalNetwork) ||
+					len(request.Options) != 0 {
 					t.Errorf("internal network request = %#v", request)
 				}
 				w.WriteHeader(http.StatusCreated)
 				_ = json.NewEncoder(w).Encode(map[string]any{"Id": state.internalID})
 			case resource.OutboundNetworkName():
-				if request.Internal || !resource.ownsComponent(request.Labels, resourceComponentOutboundNetwork) {
+				if request.Internal || !resource.ownsComponent(request.Labels, resourceComponentOutboundNetwork) ||
+					request.Options["com.docker.network.bridge.host_binding_ipv4"] != "127.0.0.1" {
 					t.Errorf("outbound network request = %#v", request)
 				}
 				w.WriteHeader(http.StatusCreated)
@@ -239,14 +242,13 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=loki-workload:5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
+				if !request.HostConfig.PublishAllPorts || len(request.HostConfig.PortBindings) != 0 {
+					t.Errorf("gateway dynamic publication config = %#v", request.HostConfig)
+				}
 				for _, port := range []int{3000, 5173} {
 					key := strconv.Itoa(port) + "/tcp"
 					if _, ok := request.ExposedPorts[key]; !ok {
 						t.Errorf("gateway did not expose endpoint %s", key)
-					}
-					bindings := request.HostConfig.PortBindings[key]
-					if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "0" {
-						t.Errorf("gateway binding %s = %#v", key, bindings)
 					}
 				}
 				w.WriteHeader(http.StatusCreated)
