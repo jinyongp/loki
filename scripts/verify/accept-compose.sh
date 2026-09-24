@@ -61,14 +61,19 @@ snapshot_invariants() {
 }
 
 wait_healthy() {
-  local service=$1 attempt id status
+  local service=$1 attempt id status service_logs
   for attempt in $(seq 1 60); do
     id=$(compose ps -q "$service")
     if test -n "$id"; then
       status=$("$docker" inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
       case "$status" in
         healthy) return 0 ;;
-        unhealthy|exited|dead) die "$service entered terminal state before healthy: $status" ;;
+        unhealthy|exited|dead)
+          service_logs=$(compose logs --no-color --tail 30 "$service" 2>&1 || true)
+          printf '%s\n' "$service_logs" >&2
+          service_logs=$(printf '%s\n' "$service_logs" | tail -n 30 | tr '\r\n' '  ' | cut -c1-1800)
+          die "$service entered terminal state before healthy: $status logs=${service_logs:-none}"
+          ;;
       esac
     fi
     sleep 1
@@ -172,8 +177,8 @@ assert_not_inspectable mcp "$token"
 assert_not_inspectable egress "$token"
 
 stage=core-restart
-compose restart
 for service in egress launcher executor runtime mcp; do
+  compose restart "$service"
   wait_healthy "$service" || die "$service is unhealthy after restart"
 done
 
