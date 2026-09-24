@@ -12,6 +12,11 @@ import (
 // ProtocolVersion describes command schemas independently of EnvelopeVersion.
 const ProtocolVersion = 3
 
+const (
+	reviewedDevtoolsVersion = "0.18.0"
+	reviewedDevtoolsCommit  = "6d93f0a3c24976a108cf9c4aa374dbe6c467559e"
+)
+
 // This reviewed consumer subset is not a captured full release catalog.
 //
 //go:embed testdata/catalog-protocol-v3.json

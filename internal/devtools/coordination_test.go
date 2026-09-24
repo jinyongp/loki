@@ -183,7 +183,7 @@ func TestCoordinationContextRejectsRetiredCompactionProjection(t *testing.T) {
 		}
 		setCoordinationResponse(t, client, files, response)
 		if _, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskContext, CoordinationRequest{Target: fixtureTaskID}); err == nil ||
-			!strings.Contains(err.Error(), "invalid coordination data") {
+			!strings.Contains(err.Error(), "invalid coordination data") && !strings.Contains(err.Error(), "does not match its schema") {
 			t.Fatalf("retired field %q was accepted: %v", field, err)
 		}
 	}

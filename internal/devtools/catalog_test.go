@@ -2,7 +2,10 @@ package devtools
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -54,5 +57,21 @@ func TestParseCatalogRejectsDrift(t *testing.T) {
 
 	if _, err = ParseCatalog([]byte(`{"schema_version":1,"ok":false,"error":{"code":"failed","message":"no"}}`)); err == nil {
 		t.Fatal("failure envelope accepted")
+	}
+}
+
+func TestReleaseDevtoolsPinMatchesReviewedBaseline(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "release-inputs", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, expected := range []string{
+		"ARG DEVTOOLS_VERSION=" + reviewedDevtoolsVersion,
+		"ARG DEVTOOLS_COMMIT=" + reviewedDevtoolsCommit,
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("release devtools pin does not match reviewed baseline: %s", expected)
+		}
 	}
 }
