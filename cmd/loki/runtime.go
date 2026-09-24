@@ -37,11 +37,11 @@ func runRuntime(args []string, stderr io.Writer) int {
 	}
 	var layout runtimeLayout
 	if err := daemon.ReadJSON(*layoutPath, &layout); err != nil {
-		fmt.Fprintln(stderr, "invalid runtime layout")
+		fmt.Fprintln(stderr, "invalid runtime layout:", err)
 		return 2
 	}
 	if !filepath.IsAbs(layout.ExecutionContract) {
-		fmt.Fprintln(stderr, "invalid runtime execution contract")
+		fmt.Fprintln(stderr, "invalid runtime execution contract path:", layout.ExecutionContract)
 		return 2
 	}
 	options := layout.RuntimeOptions
@@ -50,17 +50,17 @@ func runRuntime(args []string, stderr io.Writer) int {
 	}
 	configuration, err := config.LoadWithGitHub(*configPath, *githubConfigPath)
 	if err != nil {
-		fmt.Fprintln(stderr, "cannot load runtime configuration")
+		fmt.Fprintln(stderr, "cannot load runtime configuration:", err)
 		return 1
 	}
 	contract, err := loadExecutionContract(layout.ExecutionContract)
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid runtime execution contract")
+		fmt.Fprintln(stderr, "invalid runtime execution contract:", err)
 		return 2
 	}
 	generation, err := hostpolicy.Compile(configuration, contract)
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid runtime effective policy")
+		fmt.Fprintln(stderr, "invalid runtime effective policy:", err)
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

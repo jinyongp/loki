@@ -77,22 +77,22 @@ wait_healthy() {
 }
 
 compose_up() {
-  local output status summary launcher_logs
+  local output status summary core_logs
   if output=$(compose up -d --remove-orphans 2>&1); then
     return 0
   else
     status=$?
   fi
   printf '%s\n' "$output" >&2
-  summary=$(printf '%s\n' "$output" | tail -n 12 | tr '\r\n' '  ' | cut -c1-1800)
-  launcher_logs=$(compose logs --no-color --tail 30 launcher 2>&1 || true)
-  if test -n "$launcher_logs"; then
-    printf '%s\n' "$launcher_logs" >&2
-    launcher_logs=$(printf '%s\n' "$launcher_logs" | tail -n 30 | tr '\r\n' '  ' | cut -c1-1200)
+  summary=$(printf '%s\n' "$output" | tail -n 12 | tr '\r\n' '  ' | cut -c1-1600)
+  core_logs=$(compose logs --no-color --tail 40 launcher executor runtime egress 2>&1 || true)
+  if test -n "$core_logs"; then
+    printf '%s\n' "$core_logs" >&2
+    core_logs=$(printf '%s\n' "$core_logs" | tail -n 60 | tr '\r\n' '  ' | cut -c1-2200)
   else
-    launcher_logs=none
+    core_logs=none
   fi
-  die "compose up failed with exit $status: $summary launcher_logs=$launcher_logs"
+  die "compose up failed with exit $status: $summary core_logs=$core_logs"
 }
 
 container_id() { compose ps -q "$1"; }
