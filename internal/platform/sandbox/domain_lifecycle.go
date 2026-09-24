@@ -334,7 +334,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		"--auth-token-env", "LOKI_JOB_PROXY_TOKEN",
 	}
 	exposedPorts := map[string]struct{}{}
-	portBindings := map[string][]dockerPortBinding{}
 	if len(p.endpoints) > 0 {
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
@@ -344,7 +343,6 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			)
 			key := strconv.Itoa(endpoint.Port) + "/tcp"
 			exposedPorts[key] = struct{}{}
-			portBindings[key] = []dockerPortBinding{{}}
 		}
 	}
 	outboundNetwork := p.resource.OutboundNetworkName()
@@ -359,15 +357,16 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		ExposedPorts:    exposedPorts,
 		Labels:          p.resource.labelsFor(resourceComponentGateway),
 		HostConfig: dockerHostConfig{
-			ReadonlyRootfs: true,
-			CapDrop:        []string{"ALL"},
-			SecurityOpt:    []string{"no-new-privileges:true"},
-			NetworkMode:    outboundNetwork,
-			Memory:         p.gateway.memoryBytes,
-			PidsLimit:      p.gateway.pids,
-			Tmpfs:          map[string]string{"/tmp": gatewayTmpfs},
-			PortBindings:   portBindings,
-			Init:           true,
+			ReadonlyRootfs:  true,
+			CapDrop:         []string{"ALL"},
+			SecurityOpt:     []string{"no-new-privileges:true"},
+			NetworkMode:     outboundNetwork,
+			Memory:          p.gateway.memoryBytes,
+			PidsLimit:       p.gateway.pids,
+			Tmpfs:           map[string]string{"/tmp": gatewayTmpfs},
+			PortBindings:    map[string][]dockerPortBinding{},
+			PublishAllPorts: len(p.endpoints) > 0,
+			Init:            true,
 		},
 		NetworkingConfig: &dockerNetworkingConfig{
 			EndpointsConfig: map[string]dockerEndpointSettings{

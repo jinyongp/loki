@@ -159,17 +159,18 @@ type dockerCreateRequest struct {
 }
 
 type dockerHostConfig struct {
-	ReadonlyRootfs bool                           `json:"ReadonlyRootfs"`
-	CapDrop        []string                       `json:"CapDrop"`
-	SecurityOpt    []string                       `json:"SecurityOpt"`
-	NetworkMode    string                         `json:"NetworkMode"`
-	Memory         int64                          `json:"Memory"`
-	PidsLimit      int64                          `json:"PidsLimit"`
-	Mounts         []dockerMount                  `json:"Mounts"`
-	Tmpfs          map[string]string              `json:"Tmpfs"`
-	LogConfig      dockerLogConfig                `json:"LogConfig"`
-	PortBindings   map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
-	Init           bool                           `json:"Init"`
+	ReadonlyRootfs  bool                           `json:"ReadonlyRootfs"`
+	CapDrop         []string                       `json:"CapDrop"`
+	SecurityOpt     []string                       `json:"SecurityOpt"`
+	NetworkMode     string                         `json:"NetworkMode"`
+	Memory          int64                          `json:"Memory"`
+	PidsLimit       int64                          `json:"PidsLimit"`
+	Mounts          []dockerMount                  `json:"Mounts"`
+	Tmpfs           map[string]string              `json:"Tmpfs"`
+	LogConfig       dockerLogConfig                `json:"LogConfig"`
+	PortBindings    map[string][]dockerPortBinding `json:"PortBindings"`
+	PublishAllPorts bool                           `json:"PublishAllPorts"`
+	Init            bool                           `json:"Init"`
 }
 
 type dockerPortBinding struct {
@@ -552,8 +553,9 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 					Propagation: "rprivate",
 				},
 			}},
-			Tmpfs: map[string]string{"/tmp": tmpfs},
-			Init:  true,
+			Tmpfs:        map[string]string{"/tmp": tmpfs},
+			PortBindings: map[string][]dockerPortBinding{},
+			Init:         true,
 		},
 	}
 	for _, toolchain := range toolchains {
