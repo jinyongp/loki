@@ -58,6 +58,51 @@ func domainNetworkJSON(
 	}
 }
 
+func TestDomainReferenceCompletenessUsesContainerAttachments(t *testing.T) {
+	workloadID := strings.Repeat("1", 64)
+	gatewayID := strings.Repeat("2", 64)
+	internalID := strings.Repeat("3", 64)
+	outboundID := strings.Repeat("4", 64)
+	referenceRaw := domainInstanceReference(workloadID, gatewayID, internalID, outboundID)
+	reference, ok := parseDomainReference(referenceRaw)
+	if !ok {
+		t.Fatal("domain reference did not parse")
+	}
+	snapshot := domainSnapshot{
+		workload: inspectedResource{
+			id: workloadID, state: ResourceState{Exists: true, Running: true},
+			networkIDs: map[string]bool{internalID: true},
+		},
+		gateway: inspectedResource{
+			id: gatewayID, state: ResourceState{Exists: true, Running: true},
+			networkIDs: map[string]bool{internalID: true, outboundID: true},
+		},
+		internal: inspectedNetwork{
+			id: internalID, exists: true, internal: true,
+			members: map[string]bool{gatewayID: true},
+		},
+		outbound: inspectedNetwork{
+			id: outboundID, exists: true,
+			members: map[string]bool{gatewayID: true},
+		},
+	}
+	if !reference.complete(snapshot) {
+		t.Fatal("configured container attachments were rejected because an expected active endpoint was absent")
+	}
+
+	rogueID := strings.Repeat("5", 64)
+	snapshot.internal.members[rogueID] = true
+	if reference.complete(snapshot) {
+		t.Fatal("unexpected active internal network member was accepted")
+	}
+	delete(snapshot.internal.members, rogueID)
+
+	snapshot.workload.networkIDs[outboundID] = true
+	if reference.complete(snapshot) {
+		t.Fatal("workload attachment to the outbound network was accepted")
+	}
+}
+
 func TestEndpointBindingsRequireLoopbackUniqueHostPorts(t *testing.T) {
 	endpoints := []EndpointSpec{{Name: "api", Port: 3000}, {Name: "web", Port: 5173}}
 	snapshot := domainSnapshot{
@@ -280,9 +325,14 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					status = "running"
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{
-					"Id":              state.workloadID,
-					"Config":          map[string]any{"Labels": resource.labels()},
-					"NetworkSettings": map[string]any{"Ports": map[string]any{}},
+					"Id":     state.workloadID,
+					"Config": map[string]any{"Labels": resource.labels()},
+					"NetworkSettings": map[string]any{
+						"Ports": map[string]any{},
+						"Networks": map[string]any{
+							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
+						},
+					},
 					"State": map[string]any{
 						"Status": status, "Running": state.workloadRunning,
 						"OOMKilled": false, "ExitCode": 0,
@@ -300,10 +350,16 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"Id":     state.gatewayID,
 					"Config": map[string]any{"Labels": resource.labelsFor(resourceComponentGateway)},
-					"NetworkSettings": map[string]any{"Ports": map[string]any{
-						"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
-						"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
-					}},
+					"NetworkSettings": map[string]any{
+						"Ports": map[string]any{
+							"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
+							"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
+						},
+						"Networks": map[string]any{
+							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
+							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},
+						},
+					},
 					"State": map[string]any{
 						"Status": status, "Running": state.gatewayRunning,
 						"OOMKilled": false, "ExitCode": 0,

@@ -261,6 +261,7 @@ type inspectedResource struct {
 	id             string
 	state          ResourceState
 	publishedPorts map[string][]dockerPortBinding
+	networkIDs     map[string]bool
 }
 
 func (e *Engine) inspect(ctx context.Context, version string, resource Resource) (ResourceState, error) {
@@ -317,7 +318,10 @@ func (e *Engine) inspectComponentRef(
 			Labels map[string]string `json:"Labels"`
 		} `json:"Config"`
 		NetworkSettings struct {
-			Ports map[string][]dockerPortBinding `json:"Ports"`
+			Ports    map[string][]dockerPortBinding `json:"Ports"`
+			Networks map[string]struct {
+				NetworkID string `json:"NetworkID"`
+			} `json:"Networks"`
 		} `json:"NetworkSettings"`
 		State struct {
 			Status    string `json:"Status"`
@@ -360,7 +364,17 @@ func (e *Engine) inspectComponentRef(
 		copyBindings := append([]dockerPortBinding(nil), bindings...)
 		ports[key] = copyBindings
 	}
-	return inspectedResource{id: decoded.ID, state: state, publishedPorts: ports}, nil
+	networkIDs := make(map[string]bool, len(decoded.NetworkSettings.Networks))
+	for _, settings := range decoded.NetworkSettings.Networks {
+		if settings.NetworkID == "" {
+			continue
+		}
+		if !containerIDPattern.MatchString(settings.NetworkID) {
+			return inspectedResource{}, errors.New("sandbox Docker daemon returned an invalid network identity")
+		}
+		networkIDs[settings.NetworkID] = true
+	}
+	return inspectedResource{id: decoded.ID, state: state, publishedPorts: ports, networkIDs: networkIDs}, nil
 }
 
 func (e *Engine) apiVersion(ctx context.Context) (string, error) {

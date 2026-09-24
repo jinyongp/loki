@@ -152,12 +152,25 @@ func (r domainReference) matchesPresent(snapshot domainSnapshot) bool {
 	return true
 }
 
-func exactNetworkMembers(members map[string]bool, ids ...string) bool {
-	if len(members) != len(ids) {
+func exactNetworkIDs(actual map[string]bool, ids ...string) bool {
+	if len(actual) != len(ids) {
 		return false
 	}
 	for _, id := range ids {
-		if !members[id] {
+		if !actual[id] {
+			return false
+		}
+	}
+	return true
+}
+
+func networkMembersAllowed(members map[string]bool, ids ...string) bool {
+	allowed := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		allowed[id] = true
+	}
+	for id := range members {
+		if !allowed[id] {
 			return false
 		}
 	}
@@ -171,10 +184,20 @@ func (r domainReference) complete(snapshot domainSnapshot) bool {
 	if r.expectsOutbound() != snapshot.outbound.exists {
 		return false
 	}
-	if !exactNetworkMembers(snapshot.internal.members, snapshot.workload.id, snapshot.gateway.id) {
+	if !exactNetworkIDs(snapshot.workload.networkIDs, snapshot.internal.id) {
 		return false
 	}
-	if snapshot.outbound.exists && !exactNetworkMembers(snapshot.outbound.members, snapshot.gateway.id) {
+	gatewayNetworks := []string{snapshot.internal.id}
+	if snapshot.outbound.exists {
+		gatewayNetworks = append(gatewayNetworks, snapshot.outbound.id)
+	}
+	if !exactNetworkIDs(snapshot.gateway.networkIDs, gatewayNetworks...) {
+		return false
+	}
+	if !networkMembersAllowed(snapshot.internal.members, snapshot.workload.id, snapshot.gateway.id) {
+		return false
+	}
+	if snapshot.outbound.exists && !networkMembersAllowed(snapshot.outbound.members, snapshot.gateway.id) {
 		return false
 	}
 	return r.matches(
