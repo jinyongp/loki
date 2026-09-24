@@ -66,11 +66,25 @@ wait_healthy() {
     id=$(compose ps -q "$service")
     if test -n "$id"; then
       status=$("$docker" inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
-      test "$status" = healthy && return 0
+      case "$status" in
+        healthy) return 0 ;;
+        unhealthy|exited|dead) die "$service entered terminal state before healthy: $status" ;;
+      esac
     fi
     sleep 1
   done
   return 1
+}
+
+compose_up() {
+  local output status summary
+  if output=$(compose up -d --remove-orphans 2>&1); then
+    return 0
+  fi
+  status=$?
+  printf '%s\n' "$output" >&2
+  summary=$(printf '%s\n' "$output" | tail -n 12 | tr '\r\n' '  ' | cut -c1-3000)
+  die "compose up failed with exit $status: $summary"
 }
 
 container_id() { compose ps -q "$1"; }
@@ -126,7 +140,7 @@ stage=compose-config
 snapshot_invariants "$before"
 compose config --quiet
 stage=core-start
-compose up -d --remove-orphans
+compose_up
 stage=core-health
 for service in egress launcher executor runtime mcp; do
   wait_healthy "$service" || die "$service is unhealthy"
