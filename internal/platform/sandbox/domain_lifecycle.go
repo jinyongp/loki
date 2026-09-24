@@ -395,7 +395,7 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			)
 		}
 	}
-	outboundNetwork := p.resource.OutboundNetworkName()
+	internalNetwork := p.resource.InternalNetworkName()
 	return dockerCreateRequest{
 		Image:           p.gateway.image,
 		Cmd:             command,
@@ -409,13 +409,18 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 			ReadonlyRootfs:  true,
 			CapDrop:         []string{"ALL"},
 			SecurityOpt:     []string{"no-new-privileges:true"},
-			NetworkMode:     outboundNetwork,
+			NetworkMode:     internalNetwork,
 			Memory:          p.gateway.memoryBytes,
 			PidsLimit:       p.gateway.pids,
 			Tmpfs:           map[string]string{"/tmp": gatewayTmpfs},
 			PortBindings:    map[string][]dockerPortBinding{},
 			PublishAllPorts: false,
 			Init:            true,
+		},
+		NetworkingConfig: &dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				internalNetwork: {Aliases: []string{domainGatewayAlias}},
+			},
 		},
 	}
 }
@@ -429,7 +434,7 @@ func (p Plan) publisherCreateRequest() dockerCreateRequest {
 	portBindings := make(map[string][]dockerPortBinding, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
 		port := strconv.Itoa(endpoint.Port)
-		command = append(command, "--forward", port+"="+p.resource.GatewayName()+":"+port)
+		command = append(command, "--forward", port+"="+domainGatewayAlias+":"+port)
 		key := port + "/tcp"
 		exposedPorts[key] = struct{}{}
 		portBindings[key] = []dockerPortBinding{{HostIP: "127.0.0.1", HostPort: ""}}
@@ -810,10 +815,10 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	}
 	gatewayID = gatewayCandidate
 
-	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
+	if err = e.connectNetwork(ctx, version, outboundID, gatewayID, []string{domainGatewayAlias}, 1); err != nil {
 		return fail(err)
 	}
-	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}, -1); err != nil {
+	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
 		return fail(err)
 	}
 

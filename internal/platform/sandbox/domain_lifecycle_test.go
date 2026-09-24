@@ -233,11 +233,15 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			case resource.GatewayName():
 				if request.Image != plan.gateway.image ||
 					!resource.ownsComponent(request.Labels, resourceComponentGateway) ||
-					request.HostConfig.NetworkMode != resource.OutboundNetworkName() || request.NetworkDisabled {
+					request.HostConfig.NetworkMode != resource.InternalNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
-				if request.NetworkingConfig != nil {
-					t.Errorf("gateway create unexpectedly included networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig == nil {
+					t.Fatal("gateway create omitted networking config")
+				}
+				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.InternalNetworkName()]
+				if !ok || len(endpoint.Aliases) != 1 || endpoint.Aliases[0] != domainGatewayAlias {
+					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -265,8 +269,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				}
 				command := strings.Join(request.Cmd, " ")
 				if !strings.Contains(command, "endpoint-publisher --host 0.0.0.0") ||
-					!strings.Contains(command, "--forward 3000="+resource.GatewayName()+":3000") ||
-					!strings.Contains(command, "--forward 5173="+resource.GatewayName()+":5173") {
+					!strings.Contains(command, "--forward 3000="+domainGatewayAlias+":3000") ||
+					!strings.Contains(command, "--forward 5173="+domainGatewayAlias+":5173") {
 					t.Errorf("publisher command = %#v", request.Cmd)
 				}
 				for _, port := range []int{3000, 5173} {
@@ -321,13 +325,14 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				return
 			}
 			if request.Container == state.gatewayID {
-				if !state.gatewayRunning {
-					t.Error("gateway connected to internal network before startup")
+				if state.gatewayRunning {
+					t.Error("gateway connected to outbound network after startup")
 				}
-				if request.EndpointConfig.GwPriority != -1 ||
+				if r.URL.Path != "/v"+version+"/networks/"+state.outboundID+"/connect" ||
+					request.EndpointConfig.GwPriority != 1 ||
 					len(request.EndpointConfig.Aliases) != 1 ||
 					request.EndpointConfig.Aliases[0] != domainGatewayAlias {
-					t.Errorf("gateway internal attachment = %#v", request.EndpointConfig)
+					t.Errorf("gateway outbound attachment = path %q config %#v", r.URL.Path, request.EndpointConfig)
 				}
 			}
 			state.connects = append(state.connects, r.URL.Path+"="+request.Container)
@@ -431,7 +436,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"Id": state.publisherID,
 					"Config": map[string]any{
-						"Labels": resource.labelsFor(resourceComponentPublisher),
+						"Labels":       resource.labelsFor(resourceComponentPublisher),
 						"ExposedPorts": map[string]any{"3000/tcp": map[string]any{}, "5173/tcp": map[string]any{}},
 					},
 					"HostConfig": map[string]any{
@@ -502,7 +507,7 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 		t.Fatalf("endpoint bindings = %#v", started.EndpointBindings)
 	}
 	if len(state.connects) != 1 ||
-		!strings.Contains(state.connects[0], "/networks/"+state.internalID+"/connect="+state.gatewayID) {
+		!strings.Contains(state.connects[0], "/networks/"+state.outboundID+"/connect="+state.gatewayID) {
 		t.Fatalf("network connects = %#v", state.connects)
 	}
 	stateView, err := engine.InspectJob(t.Context(), resource, started.InstanceRef)
