@@ -177,32 +177,50 @@ func networkMembersAllowed(members map[string]bool, ids ...string) bool {
 	return true
 }
 
-func (r domainReference) complete(snapshot domainSnapshot) bool {
-	if !snapshot.workload.state.Exists || !snapshot.gateway.state.Exists || !snapshot.internal.exists {
-		return false
+func (r domainReference) completenessError(snapshot domainSnapshot) error {
+	if !snapshot.workload.state.Exists {
+		return errors.New("sandbox resource domain is missing workload")
+	}
+	if !snapshot.gateway.state.Exists {
+		return errors.New("sandbox resource domain is missing gateway")
+	}
+	if !snapshot.internal.exists {
+		return errors.New("sandbox resource domain is missing internal network")
 	}
 	if r.expectsOutbound() != snapshot.outbound.exists {
-		return false
+		return errors.New("sandbox resource domain outbound network presence changed")
 	}
 	if !exactNetworkIDs(snapshot.workload.networkIDs, snapshot.internal.id) {
-		return false
+		return errors.New(
+			"sandbox workload network set mismatch: count=" + strconv.Itoa(len(snapshot.workload.networkIDs)) +
+				" internal=" + strconv.FormatBool(snapshot.workload.networkIDs[snapshot.internal.id]),
+		)
 	}
 	gatewayNetworks := []string{snapshot.internal.id}
 	if snapshot.outbound.exists {
 		gatewayNetworks = append(gatewayNetworks, snapshot.outbound.id)
 	}
 	if !exactNetworkIDs(snapshot.gateway.networkIDs, gatewayNetworks...) {
-		return false
+		return errors.New(
+			"sandbox gateway network set mismatch: count=" + strconv.Itoa(len(snapshot.gateway.networkIDs)) +
+				" internal=" + strconv.FormatBool(snapshot.gateway.networkIDs[snapshot.internal.id]) +
+				" outbound=" + strconv.FormatBool(snapshot.gateway.networkIDs[snapshot.outbound.id]),
+		)
 	}
 	if !networkMembersAllowed(snapshot.internal.members, snapshot.workload.id, snapshot.gateway.id) {
-		return false
+		return errors.New("sandbox internal network has unexpected members: count=" + strconv.Itoa(len(snapshot.internal.members)))
 	}
 	if snapshot.outbound.exists && !networkMembersAllowed(snapshot.outbound.members, snapshot.gateway.id) {
-		return false
+		return errors.New("sandbox outbound network has unexpected members: count=" + strconv.Itoa(len(snapshot.outbound.members)))
 	}
-	return r.matches(
-		snapshot.workload.id, snapshot.gateway.id, snapshot.internal.id, snapshot.outbound.id,
-	)
+	if !r.matches(snapshot.workload.id, snapshot.gateway.id, snapshot.internal.id, snapshot.outbound.id) {
+		return errors.New("sandbox resource domain identity changed")
+	}
+	return nil
+}
+
+func (r domainReference) complete(snapshot domainSnapshot) bool {
+	return r.completenessError(snapshot) == nil
 }
 
 func endpointBindingsFromSnapshot(snapshot domainSnapshot, endpoints []EndpointSpec) ([]EndpointBinding, error) {
@@ -683,8 +701,8 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return fail(err)
 	}
 	reference, _ := parseDomainReference(instanceRef)
-	if !reference.complete(snapshot) {
-		return fail(errors.New("sandbox resource domain changed after start"))
+	if completeErr := reference.completenessError(snapshot); completeErr != nil {
+		return fail(completeErr)
 	}
 	bindings, err := endpointBindingsFromSnapshot(snapshot, plan.endpoints)
 	if err != nil {
