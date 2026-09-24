@@ -258,10 +258,14 @@ func (e *Engine) Inspect(ctx context.Context, resource Resource) (ResourceState,
 }
 
 type inspectedResource struct {
-	id             string
-	state          ResourceState
-	publishedPorts map[string][]dockerPortBinding
-	networkIDs     map[string]bool
+	id                    string
+	state                 ResourceState
+	publishedPorts        map[string][]dockerPortBinding
+	networkPortKeys       int
+	exposedPortKeys       int
+	requestedPortBindings map[string][]dockerPortBinding
+	publishAllPorts       bool
+	networkIDs            map[string]bool
 }
 
 func (e *Engine) inspect(ctx context.Context, version string, resource Resource) (ResourceState, error) {
@@ -315,8 +319,13 @@ func (e *Engine) inspectComponentRef(
 	var decoded struct {
 		ID     string `json:"Id"`
 		Config struct {
-			Labels map[string]string `json:"Labels"`
+			Labels       map[string]string   `json:"Labels"`
+			ExposedPorts map[string]struct{} `json:"ExposedPorts"`
 		} `json:"Config"`
+		HostConfig struct {
+			PortBindings    map[string][]dockerPortBinding `json:"PortBindings"`
+			PublishAllPorts bool                           `json:"PublishAllPorts"`
+		} `json:"HostConfig"`
 		NetworkSettings struct {
 			Ports    map[string][]dockerPortBinding `json:"Ports"`
 			Networks map[string]struct {
@@ -367,6 +376,10 @@ func (e *Engine) inspectComponentRef(
 		copyBindings := append([]dockerPortBinding(nil), bindings...)
 		ports[key] = copyBindings
 	}
+	requestedBindings := make(map[string][]dockerPortBinding, len(decoded.HostConfig.PortBindings))
+	for key, bindings := range decoded.HostConfig.PortBindings {
+		requestedBindings[key] = append([]dockerPortBinding(nil), bindings...)
+	}
 	networkIDs := make(map[string]bool, len(decoded.NetworkSettings.Networks))
 	for _, settings := range decoded.NetworkSettings.Networks {
 		if settings.NetworkID == "" {
@@ -377,7 +390,14 @@ func (e *Engine) inspectComponentRef(
 		}
 		networkIDs[settings.NetworkID] = true
 	}
-	return inspectedResource{id: decoded.ID, state: state, publishedPorts: ports, networkIDs: networkIDs}, nil
+	return inspectedResource{
+		id: decoded.ID, state: state, publishedPorts: ports,
+		networkPortKeys:       len(decoded.NetworkSettings.Ports),
+		exposedPortKeys:       len(decoded.Config.ExposedPorts),
+		requestedPortBindings: requestedBindings,
+		publishAllPorts:       decoded.HostConfig.PublishAllPorts,
+		networkIDs:            networkIDs,
+	}, nil
 }
 
 func (e *Engine) apiVersion(ctx context.Context) (string, error) {

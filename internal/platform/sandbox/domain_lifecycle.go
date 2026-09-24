@@ -267,7 +267,7 @@ func (e *Engine) waitGatewayEndpointBindings(
 	if len(endpoints) == 0 {
 		return nil
 	}
-	timeout := 2 * time.Second
+	timeout := 10 * time.Second
 	if e.controlTimeout < timeout {
 		timeout = e.controlTimeout
 	}
@@ -303,7 +303,13 @@ func (e *Engine) waitGatewayEndpointBindings(
 		select {
 		case <-waitCtx.Done():
 			timer.Stop()
-			return errors.New("sandbox gateway endpoint publication did not stabilize: " + lastErr.Error())
+			return errors.New(
+				"sandbox gateway endpoint publication did not stabilize: " + lastErr.Error() +
+					" publish_all=" + strconv.FormatBool(gateway.publishAllPorts) +
+					" requested_bindings=" + strconv.Itoa(len(gateway.requestedPortBindings)) +
+					" exposed_ports=" + strconv.Itoa(gateway.exposedPortKeys) +
+					" network_port_keys=" + strconv.Itoa(gateway.networkPortKeys),
+			)
 		case <-timer.C:
 		}
 	}
