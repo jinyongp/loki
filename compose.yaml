@@ -19,7 +19,7 @@ services:
         /var/lib/loki/runner/state /var/lib/loki/runner/config
         /var/lib/loki/runner/gh-config /var/lib/loki/runner/data
         /var/lib/loki/runner/xdg-state /var/lib/loki/runner/snapshots
-        /var/lib/loki/runner/agents/skills
+        /var/lib/loki/runner/agents/skills /var/lib/loki/toolchains
         /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
         /var/cache/loki/playwright /var/cache/loki/go-build
         /var/cache/loki/go-mod /var/cache/loki/pip;
@@ -39,6 +39,7 @@ services:
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
       - launcher-state:/var/lib/loki/launcher
+      - toolchain-store:/var/lib/loki/toolchains
       - launcher-socket:/run/loki/launcher
       - executor-socket:/run/loki/executor
     mem_limit: 32m
@@ -144,6 +145,7 @@ services:
       prepare: {condition: service_completed_successfully}
     volumes:
       - launcher-state:/var/lib/loki/launcher
+      - toolchain-store:/var/lib/loki/toolchains
       - launcher-socket:/run/loki/launcher
       - /run/docker.sock:/run/docker.sock
     configs:
@@ -234,6 +236,7 @@ services:
     volumes:
       - ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}:/workspace
       - runner-state:/var/lib/loki/runner
+      - toolchain-store:/var/lib/loki/toolchains:ro
       - user-skills:/home/runner/.agents:ro
       - sockets:/run/loki
       - executor-socket:/run/loki/executor
@@ -264,6 +267,7 @@ volumes:
   launcher-state: {}
   runtime-state: {}
   runner-state: {}
+  toolchain-store: {}
   user-skills: {}
   runner-cache: {}
   signing-state: {}

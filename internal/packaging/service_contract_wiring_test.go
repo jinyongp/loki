@@ -81,6 +81,9 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if containerLauncher["MaxConcurrentJobs"] != float64(8) {
 		t.Fatalf("container launcher concurrent Job limit = %#v", containerLauncher["MaxConcurrentJobs"])
 	}
+	if containerLauncher["ToolchainStore"] != "/var/lib/loki/toolchains" {
+		t.Fatalf("container launcher toolchain store = %#v", containerLauncher["ToolchainStore"])
+	}
 
 	containerContract := "/usr/share/doc/loki/container-execution-contract.json"
 	var containerLayout map[string]any
@@ -100,6 +103,23 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 	if containerLayout["ExecutorSocket"] != "/run/loki/executor/control.sock" {
 		t.Fatalf("container MCP executor socket = %#v", containerLayout["ExecutorSocket"])
 	}
+	if containerLayout["ToolchainStore"] != "/var/lib/loki/toolchains" ||
+		containerLayout["ToolchainCatalog"] != "/usr/share/doc/loki/toolchain-catalog.json" {
+		t.Fatalf(
+			"container MCP managed toolchains = store %#v catalog %#v",
+			containerLayout["ToolchainStore"], containerLayout["ToolchainCatalog"],
+		)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(root, "packaging/images/Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(
+		string(dockerfile),
+		"packaging/native/toolchain-catalog.json /usr/share/doc/loki/",
+	) {
+		t.Fatal("container image does not include the managed toolchain catalog")
+	}
 	composeRaw, err := os.ReadFile(filepath.Join(root, "compose.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -114,6 +134,8 @@ func TestServicePortPolicyUsesExecutionContractInputs(t *testing.T) {
 		"user-skills:/home/runner/.agents:ro",
 		"launcher-socket:/run/loki/launcher",
 		"executor-socket:/run/loki/executor",
+		"toolchain-store:/var/lib/loki/toolchains",
+		"toolchain-store:/var/lib/loki/toolchains:ro",
 	} {
 		if !strings.Contains(string(composeRaw), command) {
 			t.Fatalf("Compose service does not bind execution contract: %s", command)

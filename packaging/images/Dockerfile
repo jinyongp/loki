@@ -103,7 +103,7 @@ COPY --from=artifacts /metadata/provenance.json /usr/share/doc/loki/provenance.j
 COPY --chmod=0755 scripts/maintainer/devtools-launch /opt/loki/libexec/devtools
 COPY bundled_skills/ /opt/loki/share/skills/
 COPY config/runtime.toml config/gitconfig /usr/share/doc/loki/
-COPY packaging/native/execution-contract.json packaging/native/egress-policy.json packaging/native/deployment-contract.json /usr/share/doc/loki/
+COPY packaging/native/execution-contract.json packaging/native/egress-policy.json packaging/native/deployment-contract.json packaging/native/toolchain-catalog.json /usr/share/doc/loki/
 COPY packaging/images/config/ /etc/loki/
 COPY packaging/images/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json
 

@@ -3,6 +3,7 @@
   "SocketGID": 10001,
   "ExecutorUID": 10004,
   "StateDirectory": "/var/lib/loki/launcher",
+  "ToolchainStore": "/var/lib/loki/toolchains",
   "DockerSocket": "/run/docker.sock",
   "DockerPeerUID": 0,
   "GatewayBinary": "/opt/loki/bin/loki",
