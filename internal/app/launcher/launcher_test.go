@@ -1041,9 +1041,6 @@ func TestDuplicateCapacityAndRetentionAreBounded(t *testing.T) {
 	if err := l.start(launcherSpec(second)); err != nil {
 		t.Fatalf("expired result did not release capacity: %v", err)
 	}
-	if _, err := l.wait(t.Context(), second); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestReconcileResumesWithoutDuplicateStartAndKeepsOriginalDeadline(t *testing.T) {

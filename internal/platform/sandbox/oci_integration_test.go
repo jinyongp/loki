@@ -329,7 +329,11 @@ func TestRealOCIJobNetworkEndpointPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !state.Exists || !state.Running {
-		t.Fatalf("recovered domain state = %#v", state)
+		output, truncated, outputErr := recovered.OutputJob(t.Context(), plan.Resource(), started.InstanceRef)
+		t.Fatalf(
+			"recovered domain state = %#v output=%q truncated=%v output_error=%v",
+			state, output, truncated, outputErr,
+		)
 	}
 	recoveredBindings, err := recovered.EndpointBindings(
 		t.Context(), plan.Resource(), started.InstanceRef, []EndpointSpec{endpoint},
