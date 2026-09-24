@@ -43,6 +43,10 @@ type egressForward struct {
 	target string
 }
 
+func legacyEgressForwardRequested(port int, target string) bool {
+	return port != 0 || target != ""
+}
+
 func validEnvironmentName(value string) bool {
 	if value == "" {
 		return false
@@ -138,7 +142,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		}
 	}
 
-	legacyForward := *forwardHost != "" || *forwardPort != 0 || *forwardTarget != ""
+	legacyForward := legacyEgressForwardRequested(*forwardPort, *forwardTarget)
 	if legacyForward {
 		if *forwardHost == "" || *forwardPort == 0 || *forwardTarget == "" {
 			fmt.Fprintln(stderr, "TCP forward requires a listen address, port, and target")

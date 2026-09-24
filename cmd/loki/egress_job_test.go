@@ -36,6 +36,15 @@ func TestParseEgressForwardsBoundsAndCanonicalizes(t *testing.T) {
 	}
 }
 
+func TestLegacyEgressForwardDetectionIgnoresSharedForwardHost(t *testing.T) {
+	if legacyEgressForwardRequested(0, "") {
+		t.Fatal("shared forward host incorrectly enabled legacy forwarding")
+	}
+	if !legacyEgressForwardRequested(3000, "") || !legacyEgressForwardRequested(0, "target:3000") {
+		t.Fatal("legacy forward fields did not enable legacy forwarding")
+	}
+}
+
 func TestValidEnvironmentNameForProxyCredential(t *testing.T) {
 	for _, value := range []string{"LOKI_JOB_PROXY_TOKEN", "_TOKEN", "A1"} {
 		if !validEnvironmentName(value) {
