@@ -234,7 +234,10 @@ func endpointBindingsFromSnapshot(snapshot domainSnapshot, endpoints []EndpointS
 		return nil, nil
 	}
 	if len(snapshot.gateway.publishedPorts) != len(endpoints) {
-		return nil, errors.New("sandbox gateway endpoint publication is incomplete")
+		return nil, errors.New(
+			"sandbox gateway endpoint publication is incomplete: expected=" + strconv.Itoa(len(endpoints)) +
+				" observed=" + strconv.Itoa(len(snapshot.gateway.publishedPorts)),
+		)
 	}
 	result := make([]EndpointBinding, 0, len(endpoints))
 	seenHostPorts := map[int]bool{}
@@ -277,6 +280,17 @@ func (e *Engine) waitGatewayEndpointBindings(
 		)
 		if err != nil {
 			return err
+		}
+		if !gateway.state.Running {
+			detail := "sandbox gateway stopped before endpoint publication: exit=" +
+				strconv.FormatInt(gateway.state.ExitCode, 10)
+			if output, truncated, logErr := e.readLogsLimit(version, gatewayID, 8<<10); logErr == nil && len(output) > 0 {
+				detail += " output=" + strings.TrimSpace(string(output))
+				if truncated {
+					detail += " [truncated]"
+				}
+			}
+			return errors.New(detail)
 		}
 		if _, bindingErr := endpointBindingsFromSnapshot(
 			domainSnapshot{gateway: gateway}, endpoints,
