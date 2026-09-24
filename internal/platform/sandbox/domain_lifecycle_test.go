@@ -224,12 +224,8 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					request.HostConfig.NetworkMode != resource.OutboundNetworkName() || request.NetworkDisabled {
 					t.Errorf("gateway create = %#v", request)
 				}
-				if request.NetworkingConfig == nil {
-					t.Fatal("gateway create omitted networking config")
-				}
-				endpoint, ok := request.NetworkingConfig.EndpointsConfig[resource.OutboundNetworkName()]
-				if !ok || len(endpoint.Aliases) != 0 {
-					t.Errorf("gateway networking config = %#v", request.NetworkingConfig)
+				if request.NetworkingConfig != nil {
+					t.Errorf("gateway create unexpectedly included networking config = %#v", request.NetworkingConfig)
 				}
 				for _, value := range request.Env {
 					if strings.HasPrefix(value, "LOKI_JOB_PROXY_TOKEN=") {
@@ -242,14 +238,17 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=loki-workload:5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
-				if !request.HostConfig.PublishAllPorts || request.HostConfig.PortBindings == nil ||
-					len(request.HostConfig.PortBindings) != 0 {
-					t.Errorf("gateway publish-all config = %#v", request.HostConfig)
+				if request.HostConfig.PublishAllPorts {
+					t.Errorf("gateway unexpectedly enabled publish-all = %#v", request.HostConfig)
 				}
 				for _, port := range []int{3000, 5173} {
 					key := strconv.Itoa(port) + "/tcp"
 					if _, ok := request.ExposedPorts[key]; !ok {
 						t.Errorf("gateway did not expose endpoint %s", key)
+					}
+					bindings := request.HostConfig.PortBindings[key]
+					if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "" {
+						t.Errorf("gateway publish binding %s = %#v", key, bindings)
 					}
 				}
 				w.WriteHeader(http.StatusCreated)
