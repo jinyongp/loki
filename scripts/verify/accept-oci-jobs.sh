@@ -147,8 +147,8 @@ run_oci_test() {
   return 1
 }
 
+run_oci_test TestRealOCIJobNetworkEndpointPreview
 run_oci_test TestRealOCIJobLifecycle
 run_oci_test TestRealOCIJobRecoveryAndBoundedOutput
-run_oci_test TestRealOCIJobNetworkEndpointPreview
 
 printf 'loki OCI Job acceptance: passed\n'
