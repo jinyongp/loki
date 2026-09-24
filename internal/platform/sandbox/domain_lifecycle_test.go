@@ -242,13 +242,14 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					!strings.Contains(strings.Join(request.Cmd, " "), "--forward 5173=loki-workload:5173") {
 					t.Errorf("gateway auth/forward config = env %#v cmd %#v", request.Env, request.Cmd)
 				}
-				if !request.HostConfig.PublishAllPorts || len(request.HostConfig.PortBindings) != 0 {
-					t.Errorf("gateway dynamic publication config = %#v", request.HostConfig)
-				}
 				for _, port := range []int{3000, 5173} {
 					key := strconv.Itoa(port) + "/tcp"
 					if _, ok := request.ExposedPorts[key]; !ok {
 						t.Errorf("gateway did not expose endpoint %s", key)
+					}
+					bindings := request.HostConfig.PortBindings[key]
+					if len(bindings) != 1 || bindings[0].HostIP != "" || bindings[0].HostPort != "" {
+						t.Errorf("gateway dynamic binding %s = %#v", key, bindings)
 					}
 				}
 				w.WriteHeader(http.StatusCreated)
