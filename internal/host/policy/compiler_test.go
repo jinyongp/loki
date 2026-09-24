@@ -109,6 +109,21 @@ func TestCompileCanonicalizesSetsAndMaps(t *testing.T) {
 	}
 }
 
+func TestCompileContainerComposePolicyInputs(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	generation, contract, err := CompileFiles(
+		filepath.Join(root, "packaging", "images", "config", "loki.toml"),
+		filepath.Join(root, "config", "github.compose.toml"),
+		filepath.Join(root, "packaging", "images", "config", "execution-contract.json"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !generation.Valid() || contract.Directories["workspace"].Path != "/workspace" {
+		t.Fatalf("container effective policy = %#v", generation.Metadata())
+	}
+}
+
 func TestCompileRejectsCrossInputDrift(t *testing.T) {
 	c, contract := shippedInputs(t)
 	c.Root = "/different-workspace"

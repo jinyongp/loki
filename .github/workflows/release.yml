@@ -60,6 +60,7 @@ jobs:
           ./internal/app/launcher
           ./internal/platform/sandbox
           ./internal/packaging
+          ./internal/host/policy
           ./internal/host/releases
           ./tools/release/bootstrapbuild
           ./tools/release/evidencebuild
