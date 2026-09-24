@@ -18,12 +18,13 @@ type domainFixtureState struct {
 	internalID string
 	outboundID string
 
-	workloadRunning bool
-	gatewayRunning  bool
-	workloadRemoved bool
-	gatewayRemoved  bool
-	internalRemoved bool
-	outboundRemoved bool
+	workloadRunning        bool
+	gatewayRunning         bool
+	gatewayRunningInspects int
+	workloadRemoved        bool
+	gatewayRemoved         bool
+	internalRemoved        bool
+	outboundRemoved        bool
 
 	connects   []string
 	proxyToken string
@@ -293,6 +294,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				if !state.gatewayRunning {
 					t.Error("gateway connected to internal network before port-publishing startup")
 				}
+				if state.gatewayRunningInspects < 2 {
+					t.Error("gateway connected to internal network before endpoint publication stabilized")
+				}
 				if request.EndpointConfig.GwPriority != -1 ||
 					len(request.EndpointConfig.Aliases) != 1 ||
 					request.EndpointConfig.Aliases[0] != domainGatewayAlias {
@@ -358,17 +362,22 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					return
 				}
 				status := "created"
+				ports := map[string]any{}
 				if state.gatewayRunning {
 					status = "running"
+					state.gatewayRunningInspects++
+					if state.gatewayRunningInspects >= 2 {
+						ports = map[string]any{
+							"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
+							"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
+						}
+					}
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"Id":     state.gatewayID,
 					"Config": map[string]any{"Labels": resource.labelsFor(resourceComponentGateway)},
 					"NetworkSettings": map[string]any{
-						"Ports": map[string]any{
-							"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
-							"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
-						},
+						"Ports": ports,
 						"Networks": map[string]any{
 							resource.InternalNetworkName(): map[string]any{"NetworkID": state.internalID},
 							resource.OutboundNetworkName(): map[string]any{"NetworkID": state.outboundID},

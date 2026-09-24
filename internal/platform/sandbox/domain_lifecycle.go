@@ -258,6 +258,43 @@ func endpointBindingsFromSnapshot(snapshot domainSnapshot, endpoints []EndpointS
 	return result, nil
 }
 
+func (e *Engine) waitGatewayEndpointBindings(
+	ctx context.Context, version string, resource Resource, gatewayID string, endpoints []EndpointSpec,
+) error {
+	if len(endpoints) == 0 {
+		return nil
+	}
+	timeout := 2 * time.Second
+	if e.controlTimeout < timeout {
+		timeout = e.controlTimeout
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var lastErr error
+	for {
+		gateway, err := e.inspectComponentRef(
+			waitCtx, version, gatewayID, resource, resourceComponentGateway,
+		)
+		if err != nil {
+			return err
+		}
+		if _, bindingErr := endpointBindingsFromSnapshot(
+			domainSnapshot{gateway: gateway}, endpoints,
+		); bindingErr == nil {
+			return nil
+		} else {
+			lastErr = bindingErr
+		}
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-waitCtx.Done():
+			timer.Stop()
+			return errors.New("sandbox gateway endpoint publication did not stabilize: " + lastErr.Error())
+		case <-timer.C:
+		}
+	}
+}
+
 func (s domainSnapshot) allAbsent() bool {
 	return !s.workload.state.Exists && !s.gateway.state.Exists && !s.internal.exists && !s.outbound.exists
 }
@@ -665,6 +702,9 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	gatewayID = gatewayCandidate
 
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
+		return fail(err)
+	}
+	if err = e.waitGatewayEndpointBindings(ctx, version, resource, gatewayID, plan.endpoints); err != nil {
 		return fail(err)
 	}
 	if err = e.connectNetwork(ctx, version, internalID, gatewayID, []string{domainGatewayAlias}, -1); err != nil {
