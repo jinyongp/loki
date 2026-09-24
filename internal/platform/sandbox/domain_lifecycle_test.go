@@ -368,8 +368,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 					state.gatewayRunningInspects++
 					if state.gatewayRunningInspects >= 2 {
 						ports = map[string]any{
-							"3000/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
-							"5173/tcp": []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
+							"18766/tcp": nil,
+							"3000/tcp":  []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43001"}},
+							"5173/tcp":  []map[string]string{{"HostIp": "127.0.0.1", "HostPort": "43002"}},
 						}
 					}
 				}

@@ -361,6 +361,9 @@ func (e *Engine) inspectComponentRef(
 	}
 	ports := make(map[string][]dockerPortBinding, len(decoded.NetworkSettings.Ports))
 	for key, bindings := range decoded.NetworkSettings.Ports {
+		if len(bindings) == 0 {
+			continue
+		}
 		copyBindings := append([]dockerPortBinding(nil), bindings...)
 		ports[key] = copyBindings
 	}
