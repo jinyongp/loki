@@ -19,7 +19,10 @@ import (
 	"loki/internal/egress"
 )
 
-const maxEgressForwards = 8
+const (
+	maxEgressForwards    = 8
+	egressProxyReadyLine = "loki-egress-ready=1"
+)
 
 type repeatedFlag []string
 
@@ -194,6 +197,7 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		return 1
 	}
 	defer listener.Close()
+	fmt.Fprintln(stderr, egressProxyReadyLine)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()

@@ -21,6 +21,7 @@ import (
 const (
 	domainInstanceRefPrefix = "oci-domain-v2:"
 	domainWorkloadAlias     = "loki-workload"
+	gatewayReadyLine        = "loki-egress-ready=1"
 )
 
 type domainReference struct {
@@ -357,6 +358,54 @@ func (e *Engine) waitPublisherEndpointBindings(
 					" exposed_ports=" + strconv.Itoa(publisher.exposedPortKeys) +
 					" network_port_keys=" + strconv.Itoa(publisher.networkPortKeys),
 			)
+		case <-timer.C:
+		}
+	}
+}
+
+func (e *Engine) waitGatewayReady(
+	ctx context.Context, version string, resource Resource, gatewayID string,
+) (inspectedResource, error) {
+	timeout := 5 * time.Second
+	if e.controlTimeout < timeout {
+		timeout = e.controlTimeout
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var lastOutput string
+	for {
+		gateway, err := e.inspectComponentRef(
+			waitCtx, version, gatewayID, resource, resourceComponentGateway,
+		)
+		if err != nil {
+			return inspectedResource{}, err
+		}
+		if !gateway.state.Running {
+			detail := "sandbox gateway stopped before readiness: exit=" +
+				strconv.FormatInt(gateway.state.ExitCode, 10)
+			if output, truncated, logErr := e.readLogsLimit(version, gatewayID, 8<<10); logErr == nil && len(output) > 0 {
+				detail += " output=" + strings.TrimSpace(string(output))
+				if truncated {
+					detail += " [truncated]"
+				}
+			}
+			return inspectedResource{}, errors.New(detail)
+		}
+		if output, _, logErr := e.readLogsLimit(version, gatewayID, 8<<10); logErr == nil {
+			lastOutput = strings.TrimSpace(string(output))
+			if strings.Contains(lastOutput, gatewayReadyLine) {
+				return gateway, nil
+			}
+		}
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-waitCtx.Done():
+			timer.Stop()
+			detail := "sandbox gateway readiness did not stabilize"
+			if lastOutput != "" {
+				detail += ": output=" + lastOutput
+			}
+			return inspectedResource{}, errors.New(detail)
 		case <-timer.C:
 		}
 	}
@@ -824,13 +873,8 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	if err = e.startRef(ctx, version, gatewayID, resource); err != nil {
 		return fail(fmt.Errorf("sandbox gateway start: %w", err))
 	}
-	gatewayReady, err := e.inspectComponentRef(
-		ctx, version, gatewayID, resource, resourceComponentGateway,
-	)
-	if err != nil || !gatewayReady.state.Running {
-		if err == nil {
-			err = errors.New("sandbox gateway did not remain running after start")
-		}
+	gatewayReady, err := e.waitGatewayReady(ctx, version, resource, gatewayID)
+	if err != nil {
 		return fail(err)
 	}
 	gatewayInternalIPv4, err := requiredNetworkIPv4(gatewayReady, internalID)

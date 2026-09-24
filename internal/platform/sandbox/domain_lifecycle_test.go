@@ -21,6 +21,7 @@ type domainFixtureState struct {
 
 	workloadRunning  bool
 	gatewayRunning   bool
+	gatewayLogReads  int
 	publisherRunning bool
 	workloadRemoved  bool
 	gatewayRemoved   bool
@@ -346,6 +347,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 			case state.publisherID:
 				state.publisherRunning = true
 			case state.workloadID:
+				if state.gatewayLogReads < 2 {
+					t.Error("workload started before gateway readiness marker")
+				}
 				state.workloadRunning = true
 			default:
 				t.Errorf("unexpected start %q", ref)
@@ -365,6 +369,16 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				t.Errorf("unexpected stop %q", ref)
 			}
 			w.WriteHeader(http.StatusNoContent)
+
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/logs"):
+			ref := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v"+version+"/containers/"), "/logs")
+			w.WriteHeader(http.StatusOK)
+			if ref == state.gatewayID && state.gatewayRunning {
+				state.gatewayLogReads++
+				if state.gatewayLogReads >= 2 {
+					_, _ = w.Write(dockerLogFrame(2, gatewayReadyLine+"\n"))
+				}
+			}
 
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json"):
 			ref := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v"+version+"/containers/"), "/json")
