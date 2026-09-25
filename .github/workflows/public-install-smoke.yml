@@ -39,6 +39,20 @@ jobs:
           set -e
           cat "$install_log"
           if test "$status" -ne 0; then
+            prepare_log="$RUNNER_TEMP/loki-prepare.log"
+            {
+              echo '--- Docker after installer failure ---'
+              docker version --format 'server={{.Server.Version}}' || true
+              docker compose version --short || true
+              echo '--- prepare container state ---'
+              docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' loki-prepare-1 || true
+              echo '--- prepare container logs ---'
+              docker logs loki-prepare-1 || true
+            } >"$prepare_log" 2>&1
+            cat "$prepare_log"
+            prepare_detail=$(tr '\r\n' '  ' <"$prepare_log" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
+            printf '::error title=Loki prepare failure::%s\n' "$prepare_detail"
+
             filtered="$RUNNER_TEMP/loki-install.filtered.log"
             tr '\r' '\n' <"$install_log" | sed -E \
               -e '/(Pulling|Downloading|Waiting|Extracting|Pull complete|Download complete|Already exists| Pulled$| Creating$| Created$)/d' \
