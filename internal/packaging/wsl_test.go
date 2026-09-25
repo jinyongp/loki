@@ -38,6 +38,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"systemctl enable docker.service containerd.service loki-appliance-provision.service",
 		"rm -f /var/lib/dbus/machine-id",
 		"truncate -s 0 /etc/machine-id",
+		"FROM scratch",
+		"COPY --from=rootfs --exclude=etc/resolv.conf / /",
 	} {
 		if !strings.Contains(dockerfile, required) {
 			t.Errorf("WSL Dockerfile lacks %q", required)
@@ -105,10 +107,6 @@ func TestWSLApplianceContract(t *testing.T) {
 		"--platform linux/amd64",
 		"--build-context \"release=$release\"",
 		"type=tar,dest=$raw",
-		`grep -E '^(\./)?etc/resolv\.conf$'`,
-		`if test -n "$resolv_entry"; then`,
-		`tar --delete --file="$raw" "$resolv_entry"`,
-		"WSL rootfs still contains /etc/resolv.conf after export cleanup",
 		"gzip -n -9",
 		"verify-wsl.sh",
 		".host_binary.sha256",

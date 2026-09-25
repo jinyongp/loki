@@ -88,15 +88,6 @@ docker buildx build \
   --output "type=tar,dest=$raw" \
   "$repo"
 
-resolv_entry=$(tar -tf "$raw" | grep -E '^(\./)?etc/resolv\.conf$' | head -n 1 || true)
-if test -n "$resolv_entry"; then
-  tar --delete --file="$raw" "$resolv_entry"
-fi
-if tar -tf "$raw" | sed 's#^\./##' | grep -Fxq etc/resolv.conf; then
-  echo "WSL rootfs still contains /etc/resolv.conf after export cleanup" >&2
-  exit 1
-fi
-
 gzip -n -9 <"$raw" >"$packed"
 chmod 0644 "$packed"
 sh "$repo/scripts/verify/verify-wsl.sh" "$packed" "$host" "$manifest"
