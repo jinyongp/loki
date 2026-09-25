@@ -40,10 +40,11 @@ jobs:
           cat "$install_log"
           if test "$status" -ne 0; then
             filtered="$RUNNER_TEMP/loki-install.filtered.log"
-            sed -E \
+            tr '\r' '\n' <"$install_log" | sed -E \
               -e '/(Pulling|Downloading|Waiting|Extracting|Pull complete|Download complete|Already exists| Pulled$| Creating$| Created$)/d' \
               -e '/^[[:space:]]*[0-9a-f]{12}[[:space:]]/d' \
-              "$install_log" >"$filtered"
+              -e '/^[[:space:]]*$/d' \
+              >"$filtered"
             printf '%s\n' '--- filtered installer diagnostics ---'
             tail -n 120 "$filtered"
             detail=$(tail -n 120 "$filtered" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
