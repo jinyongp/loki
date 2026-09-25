@@ -30,6 +30,55 @@ function Invoke-NativeStdoutCapture([string]$Executable, [string[]]$Arguments) {
     return $text
 }
 
+function Assert-WindowsMCPReachability([string]$Endpoint, [string]$Token) {
+    $uri = [Uri]$Endpoint
+    if ($uri.Scheme -ne "http" -or $uri.Host -ne "127.0.0.1" -or $uri.Port -le 0) {
+        Fail "Windows MCP endpoint is not the expected loopback HTTP endpoint."
+    }
+
+    $reachable = $false
+    $tcp = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connect = $tcp.ConnectAsync($uri.Host, $uri.Port)
+        if ($connect.Wait(10000) -and $tcp.Connected) { $reachable = $true }
+    } catch {
+        $reachable = $false
+    } finally {
+        $tcp.Dispose()
+    }
+    if (-not $reachable) { Fail "Windows cannot reach the WSL MCP endpoint through localhost forwarding." }
+
+    $initialize = @{
+        jsonrpc = "2.0"
+        id = 1
+        method = "initialize"
+        params = @{
+            protocolVersion = "2025-11-25"
+            capabilities = @{}
+            clientInfo = @{ name = "loki-wsl-acceptance"; version = "1" }
+        }
+    } | ConvertTo-Json -Depth 6 -Compress
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $Endpoint -Method Post -Headers @{ Authorization = "Bearer $Token"; Accept = "application/json, text/event-stream" } -ContentType "application/json" -Body $initialize -SkipHttpErrorCheck -TimeoutSec 10
+    } catch {
+        Fail "Windows could not complete an authenticated MCP initialize probe."
+    }
+    $status = [int]$response.StatusCode
+    if ($status -lt 200 -or $status -ge 300) {
+        Fail "Windows MCP initialize probe returned status $status."
+    }
+}
+
+function Resolve-AccountSID([string]$Account) {
+    if (-not $Account) { return "" }
+    if ($Account -match "^S-1-") { return $Account }
+    try {
+        return ([Security.Principal.NTAccount]$Account).Translate([Security.Principal.SecurityIdentifier]).Value
+    } catch {
+        return ""
+    }
+}
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $candidateRoot = (Resolve-Path $Candidate).Path
 $evidencePath = Join-Path $candidateRoot "evidence.json"
@@ -79,6 +128,10 @@ try {
     $groups = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/id", "-nG", "ubuntu")
     if (($groups -split "\s+") -contains "docker") { Fail "default WSL user received Docker group authority" }
 
+    & wsl.exe -d $distributionName --exec /bin/sh -c "if command -v sudo >/dev/null 2>&1 && sudo -n /usr/local/bin/loki version >/dev/null 2>&1; then exit 23; fi" *> $null
+    if ($LASTEXITCODE -eq 23) { Fail "default WSL user received passwordless root authority" }
+    if ($LASTEXITCODE -ne 0) { Fail "passwordless root-authority probe failed with code $LASTEXITCODE" }
+
     $workspaceOwner = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/stat", "-c", "%U:%G", "/home/ubuntu/workspace")
     if ($workspaceOwner -ne "ubuntu:ubuntu") { Fail "workspace ownership is $workspaceOwner" }
 
@@ -91,6 +144,11 @@ try {
     $windowsToken = [IO.File]::ReadAllText($tokenFile).Trim()
     $internalToken = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/cat", "/var/lib/loki/lifecycle/mcp-token")
     if ($windowsToken -ne $internalToken) { Fail "Windows MCP token copy does not match the installed appliance" }
+    $windowsConnection = Get-Content -LiteralPath $connectionFile -Raw | ConvertFrom-Json
+    if ([string]$windowsConnection.authentication -ne "bearer-token-file" -or [string]$windowsConnection.token_file -ne $tokenFile -or [string]$windowsConnection.distribution -ne $distributionName) {
+        Fail "Windows MCP connection metadata does not match the accepted appliance."
+    }
+    Assert-WindowsMCPReachability ([string]$windowsConnection.endpoint) $windowsToken
 
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $acl = Get-Acl -LiteralPath $tokenFile
@@ -104,6 +162,12 @@ try {
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
     if (-not $task.Actions.Arguments.Contains($distributionName) -or -not $task.Actions.Arguments.Contains("/usr/bin/sleep infinity")) { Fail "autostart task action does not target the accepted distribution" }
     if ([string]$task.Settings.ExecutionTimeLimit -ne "PT0S") { Fail "autostart task has a finite execution time limit" }
+    $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $triggerSid = Resolve-AccountSID ([string]$task.Triggers[0].UserId)
+    $principalSid = Resolve-AccountSID ([string]$task.Principal.UserId)
+    if ($triggerSid -ne $currentSid) { Fail "autostart task trigger is not bound to the current user" }
+    if ($principalSid -ne $currentSid) { Fail "autostart task principal is not the current user" }
+    if ([string]$task.Principal.RunLevel -ne "Limited") { Fail "autostart task requests elevated run level" }
 
     Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
     Start-Sleep -Seconds 2
@@ -115,6 +179,7 @@ try {
         Start-Sleep -Seconds 2
     }
     if (-not $recovered) { Fail "Loki did not recover after WSL termination and restart" }
+    Assert-WindowsMCPReachability ([string]$windowsConnection.endpoint) $windowsToken
 
     Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName"
 }

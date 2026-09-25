@@ -130,6 +130,9 @@ wsl -d loki-mcp --user root -- /usr/local/bin/loki host status --system
 wsl -d loki-mcp --user root -- /usr/local/bin/loki host doctor --system
 ```
 
+The appliance does not grant the default `ubuntu` user passwordless sudo.
+Administrative maintenance uses the explicit WSL root boundary shown above.
+
 ### Windows troubleshooting
 
 If the installer says WSL is too old, run `wsl --update` manually. A WSL

@@ -63,6 +63,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 	for _, relative := range []string{
 		"packaging/images/Dockerfile",
 		"packaging/images/browser.Dockerfile",
+		"packaging/wsl/apt-delta.lock",
 		"packaging/native/execution-contract.json",
 		"packaging/native/systemd/host.target",
 		"scripts/build/build-oci.sh",

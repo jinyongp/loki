@@ -116,9 +116,22 @@ loki host rollback
 loki host restore BACKUP_ID
 ```
 
-The Windows appliance uses the same Loki host lifecycle internally. WSL is the
-Windows packaging and boot boundary, not a separate implementation of Loki
-updates or rollback.
+The Windows appliance uses the same Loki host lifecycle internally, but it is
+installed in system scope. From PowerShell, perform appliance maintenance
+through the explicit WSL root boundary (substitute the distribution name if
+you changed it):
+
+```powershell
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host update status --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host update prepare --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host update apply --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host backup --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host rollback --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host restore --system BACKUP_ID
+```
+
+WSL is the Windows packaging and boot boundary, not a separate implementation
+of Loki updates or rollback.
 
 ## Linux unattended installation
 

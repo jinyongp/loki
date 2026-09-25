@@ -56,7 +56,7 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("etc/wsl-distribution.conf", 0644, "[oobe]\ndefaultUid=1000\ndefaultName=loki-mcp\n")
 	write("etc/passwd", 0644, "root:x:0:0:root:/root:/bin/bash\nubuntu:x:1000:1000:ubuntu:/home/ubuntu:/bin/bash\n")
 	write("etc/group", 0644, "root:x:0:\nubuntu:x:1000:\ndocker:x:999:\n")
-	write("etc/shadow", 0600, "root:*:20000:0:99999:7:::\nubuntu:!:20000:0:99999:7:::\n")
+	write("etc/shadow", 0600, "root:*:20000:0:99999:7:::\nubuntu:!::0:99999:7:::\n")
 	write("usr/lib/loki-appliance/loki", 0755, "fixture-host-binary\n")
 	write("usr/lib/loki-appliance/release-manifest.json", 0600, "{\"fixture\":true}\n")
 	write("usr/lib/loki-appliance/provision", 0755, "#!/bin/sh\nhost install --system --workspace \"$workspace\"\nhost doctor --system\n")

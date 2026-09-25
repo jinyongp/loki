@@ -60,6 +60,29 @@ func TestAssembleBuildsReleaseBoundArtifactSet(t *testing.T) {
 			t.Fatalf("release output %s invalid: info=%v err=%v", name, info, statErr)
 		}
 	}
+	noticesRaw, err := os.ReadFile(filepath.Join(output, "notices.tar.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	noticeManifest, err := releases.VerifyNoticeBundle(noticesRaw, []releases.NoticeRequirement{{Component: "loki", Version: "0.1.0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wslInventory, err := buildWSLPackageInventory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawWSLInventory bool
+	for _, entry := range noticeManifest.Entries {
+		if entry.Path != "notices/loki/WSL-PACKAGES.txt" {
+			continue
+		}
+		sawWSLInventory = entry.Length == int64(len(wslInventory)) && entry.SHA256 == digest(wslInventory)
+	}
+	if !sawWSLInventory {
+		t.Fatalf("release notices do not bind the WSL package inventory: %#v", noticeManifest.Entries)
+	}
+
 	manifestRaw, err := os.ReadFile(filepath.Join(output, "release-manifest.json"))
 	if err != nil {
 		t.Fatal(err)

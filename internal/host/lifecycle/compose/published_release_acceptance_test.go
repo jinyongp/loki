@@ -79,6 +79,33 @@ func containsOrderedArgs(args []string, values ...string) bool {
 	return false
 }
 
+func writePublishedVolumeSentinel(t *testing.T, runner Runner, image, volume, value string) {
+	t.Helper()
+	if _, err := runner.Run(t.Context(), nil,
+		"run", "--rm", "--network", "none", "--user", "0:0",
+		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--entrypoint", "/bin/sh",
+		"--mount", "type=volume,src="+volume+",dst=/state",
+		image, "-ec", `printf '%s' "$1" > /state/.loki-release-acceptance-sentinel`, "sh", value,
+	); err != nil {
+		t.Fatalf("write %s sentinel: %v", volume, err)
+	}
+}
+
+func assertPublishedVolumeSentinel(t *testing.T, runner Runner, image, volume, want string) {
+	t.Helper()
+	raw, err := runner.Run(t.Context(), nil,
+		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
+		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--entrypoint", "/bin/sh",
+		"--mount", "type=volume,src="+volume+",dst=/state,readonly",
+		image, "-ec", `cat /state/.loki-release-acceptance-sentinel`,
+	)
+	if err != nil || string(raw) != want {
+		t.Fatalf("volume %s sentinel = %q err=%v, want %q", volume, raw, err, want)
+	}
+}
+
 func publishedLifecycleGeneration(t *testing.T, path string) lifecycle.Generation {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -203,6 +230,14 @@ func TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance(t 
 	if err = backend.Health(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	volumeSentinels := map[string]string{}
+	for _, name := range persistentVolumes {
+		value := "published-release-state-" + name
+		volume := backend.volumeName(name)
+		writePublishedVolumeSentinel(t, runner.base, defaultCoreRepository+"@"+releaseA.Spec.CoreImageDigest, volume, value)
+		assertPublishedVolumeSentinel(t, runner.base, defaultCoreRepository+"@"+releaseA.Spec.CoreImageDigest, volume, value)
+		volumeSentinels[name] = value
+	}
 
 	if err = store.SaveAvailable(t.Context(), releaseB); err != nil {
 		t.Fatal(err)
@@ -239,6 +274,9 @@ func TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance(t 
 	if err = backend.Health(t.Context()); err != nil {
 		t.Fatalf("release A health after failed B apply: %v", err)
 	}
+	for name, value := range volumeSentinels {
+		assertPublishedVolumeSentinel(t, runner.base, recoveredRuntime.CoreImage, backend.volumeName(name), value)
+	}
 
 	successPlan, err := manager.Prepare(t.Context())
 	if err != nil {
@@ -258,6 +296,9 @@ func TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance(t 
 	}
 	if err = backend.Health(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	for name, value := range volumeSentinels {
+		assertPublishedVolumeSentinel(t, runner.base, runtimeB.CoreImage, backend.volumeName(name), value)
 	}
 
 	if err = manager.Rollback(t.Context(), lifecycle.MutationOptions{}); err != nil {
@@ -279,6 +320,9 @@ func TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance(t 
 	}
 	if err = backend.Health(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	for name, value := range volumeSentinels {
+		assertPublishedVolumeSentinel(t, runner.base, runtimeA.CoreImage, backend.volumeName(name), value)
 	}
 	if raw, readErr := os.ReadFile(preservePath); readErr != nil ||
 		string(raw) != "published-release-workspace-data" {

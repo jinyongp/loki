@@ -57,6 +57,12 @@ done
 
 for forbidden in \
   etc/resolv.conf \
+  etc/apt/keyrings/docker.asc \
+  etc/apt/sources.list.d/docker.sources \
+  var/log/apt/history.log \
+  var/log/apt/term.log \
+  var/log/dpkg.log \
+  var/log/alternatives.log \
   var/lib/loki/lifecycle/mcp-token \
   var/lib/loki-appliance/provisioned
 do
@@ -111,10 +117,22 @@ if grep -E '^docker:' "$root/etc/group" | grep -Eq '(^|,)ubuntu(,|$)'; then
   echo "default WSL user must not belong to the docker group" >&2
   exit 1
 fi
+if test -e "$root/etc/sudoers.d/loki-operator"; then
+  echo "default WSL user must use the explicit WSL root boundary, not passwordless Loki sudo" >&2
+  exit 1
+fi
+if grep -R -E '^[[:space:]]*ubuntu[[:space:]].*NOPASSWD' "$root/etc/sudoers" "$root/etc/sudoers.d" 2>/dev/null; then
+  echo "default WSL user must not receive passwordless sudo authority" >&2
+  exit 1
+fi
 if awk -F: '$2 ~ /^\$/ { found=1 } END { exit found ? 0 : 1 }' "$root/etc/shadow"; then
   echo "WSL appliance contains a password hash" >&2
   exit 1
 fi
+grep -Eq '^ubuntu:[^:]*::' "$root/etc/shadow" || {
+  echo "default WSL user shadow last-change field is not normalized" >&2
+  exit 1
+}
 
 for unit in \
   systemd-resolved.service \

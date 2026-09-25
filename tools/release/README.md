@@ -22,7 +22,9 @@ and the accepted digest-pinned core/browser OCI images. It builds the Linux
 amd64 host binary and release-bound bootstrap, renders the immutable release
 manifest/index, materializes the embedded host assets, compiles the effective
 policy/config evidence, and creates provenance, notices, toolchain-catalog and
-release-note targets. The output is atomically published as one directory and
+release-note targets. The notice bundle includes the digest-pinned WSL base
+identity plus the exact locked Ubuntu/Docker package delta that the appliance
+builder must reproduce. The output is atomically published as one directory and
 then consumed by `evidencebuild`.
 
 ## Bootstrap builder

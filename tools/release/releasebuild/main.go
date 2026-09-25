@@ -205,9 +205,16 @@ func assemble(ctx context.Context, cfg options, runner buildRunner) error {
 	if err != nil {
 		return err
 	}
+	wslPackageInventory, err := buildWSLPackageInventory(root)
+	if err != nil {
+		return err
+	}
 	noticesRaw, _, err := releases.BuildNoticeBundle(
 		[]releases.NoticeRequirement{{Component: "loki", Version: version}},
-		[]releases.NoticeMaterial{{Component: "loki", Version: version, Kind: "license", Filename: "LICENSE", Data: licenseRaw}},
+		[]releases.NoticeMaterial{
+			{Component: "loki", Version: version, Kind: "license", Filename: "LICENSE", Data: licenseRaw},
+			{Component: "loki", Version: version, Kind: "notice", Filename: "WSL-PACKAGES.txt", Data: wslPackageInventory},
+		},
 	)
 	if err != nil {
 		return err
@@ -341,6 +348,41 @@ func assemble(ctx context.Context, cfg options, runner buildRunner) error {
 	}
 	cleanup = false
 	return syncDirectory(parent)
+}
+
+func buildWSLPackageInventory(root string) ([]byte, error) {
+	dockerfileRaw, err := os.ReadFile(filepath.Join(root, "packaging", "wsl", "Dockerfile"))
+	if err != nil {
+		return nil, err
+	}
+	const prefix = "FROM --platform=linux/amd64 "
+	const suffix = " AS rootfs"
+	baseImage := ""
+	for _, line := range strings.Split(string(dockerfileRaw), "\n") {
+		if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, suffix) {
+			continue
+		}
+		if baseImage != "" {
+			return nil, errors.New("WSL Dockerfile contains multiple rootfs base images")
+		}
+		baseImage = strings.TrimSuffix(strings.TrimPrefix(line, prefix), suffix)
+	}
+	if baseImage == "" || strings.Contains(baseImage, "://") ||
+		!strings.Contains(baseImage, "@sha256:") {
+		return nil, errors.New("WSL Dockerfile rootfs base image is not digest pinned")
+	}
+	lockRaw, err := os.ReadFile(filepath.Join(root, "packaging", "wsl", "apt-delta.lock"))
+	if err != nil {
+		return nil, err
+	}
+	if len(lockRaw) == 0 || lockRaw[len(lockRaw)-1] != '\n' || len(bytes.TrimSpace(lockRaw)) == 0 {
+		return nil, errors.New("WSL apt package inventory is empty or non-canonical")
+	}
+	var output bytes.Buffer
+	fmt.Fprintf(&output, "base_image=%s\n", baseImage)
+	output.WriteString("added_or_updated_packages:\n")
+	output.Write(lockRaw)
+	return output.Bytes(), nil
 }
 
 func buildHostAssets() ([]byte, error) {
