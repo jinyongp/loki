@@ -593,6 +593,13 @@ jobs:
           name: ${{ needs.build.outputs.candidate_artifact }}
           path: ${{ runner.temp }}\candidate
 
+      - name: Install current WSL package for acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          wsl.exe --update --web-download
+          if ($LASTEXITCODE -ne 0) { throw "WSL package update failed" }
+
       - name: Require current WSL2
         shell: pwsh
         run: |
