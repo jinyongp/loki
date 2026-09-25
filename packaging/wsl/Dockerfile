@@ -78,7 +78,7 @@ RUN chown root:root \
       systemd-tmpfiles-setup-dev-early.service \
       systemd-tmpfiles-setup-dev.service \
       tmp.mount \
- && rm -f /etc/resolv.conf /var/lib/dbus/machine-id \
+ && rm -f /var/lib/dbus/machine-id \
  && truncate -s 0 /etc/machine-id \
  && find /boot -maxdepth 1 -type f \( -name 'vmlinuz*' -o -name 'initrd*' -o -name 'initramfs*' \) -delete \
  && test "$(id -u ubuntu)" = 1000 \

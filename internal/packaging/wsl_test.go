@@ -36,7 +36,7 @@ func TestWSLApplianceContract(t *testing.T) {
 		"COPY --from=release --chmod=0755 loki-linux-amd64 /usr/lib/loki-appliance/loki",
 		"COPY --from=release --chmod=0600 release-manifest.json /usr/lib/loki-appliance/release-manifest.json",
 		"systemctl enable docker.service containerd.service loki-appliance-provision.service",
-		"rm -f /etc/resolv.conf",
+		"rm -f /var/lib/dbus/machine-id",
 		"truncate -s 0 /etc/machine-id",
 	} {
 		if !strings.Contains(dockerfile, required) {
@@ -105,6 +105,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"--platform linux/amd64",
 		"--build-context \"release=$release\"",
 		"type=tar,dest=$raw",
+		`tar --delete --file="$raw" "$resolv_entry"`,
+		"WSL rootfs still contains /etc/resolv.conf after export cleanup",
 		"gzip -n -9",
 		"verify-wsl.sh",
 		".host_binary.sha256",
