@@ -664,6 +664,38 @@ jobs:
       - name: Restore candidate executable modes
         run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap"
 
+      - name: Run MCP client-neutral recovery acceptance
+        run: >-
+          go test
+          ./internal/app/mcp
+          ./internal/contract
+          ./internal/integrations/sharing/artifacts
+          -run
+          'TestProjectContextRecoversAcrossMCPRestartAfterPostCheckpointChange|TestWorkspaceEditUsesGeneratedActionContract|TestGitStageUsesGeneratedActionContract|TestSecretMutationContractsAreGuardedAndDiscriminated|TestArtifactPublishUsesDiscriminatedReplaySafeContract|TestBrowserInteractUsesGenerationGuardedDiscriminatedContract|TestStore|TestReplay'
+          -v -count=1
+
+      - name: Run published release lifecycle recovery acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PREVIOUS_TAG"
+          release_json=$(gh release view "$PREVIOUS_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable)
+          jq -e '.isDraft == false and .isImmutable == true' <<<"$release_json" >/dev/null
+          previous="$RUNNER_TEMP/previous-release"
+          mkdir -p "$previous"
+          gh release download "$PREVIOUS_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern loki-release-manifest.json \
+            --dir "$previous"
+          LOKI_ACCEPTANCE_RELEASE_A_MANIFEST="$previous/loki-release-manifest.json" \
+          LOKI_ACCEPTANCE_RELEASE_B_MANIFEST="$RUNNER_TEMP/candidate/inputs/release-manifest.json" \
+            go test ./internal/host/lifecycle/compose \
+              -run '^TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance$' \
+              -v -count=1
+
       - name: Verify candidate publication projection
         env:
           TAG: ${{ needs.preflight.outputs.tag }}
