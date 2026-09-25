@@ -19,11 +19,12 @@ services:
         /var/lib/loki/runner/state /var/lib/loki/runner/config
         /var/lib/loki/runner/gh-config /var/lib/loki/runner/data
         /var/lib/loki/runner/xdg-state /var/lib/loki/runner/snapshots
-        /var/lib/loki/runner/agents/skills /var/lib/loki/toolchains
+        /var/lib/loki/runner/agents/skills
         /var/cache/loki/runner /var/cache/loki/npm /var/cache/loki/pnpm
         /var/cache/loki/playwright /var/cache/loki/go-build
         /var/cache/loki/go-mod /var/cache/loki/pip;
         do install -d -o 10000 -g 10000 -m 0700 "$$path"; done;
+        install -d -o 0 -g 0 -m 0755 /var/lib/loki/toolchains;
         install -d -o 0 -g 10001 -m 0750 /run/loki/signing;
         install -d -o 10003 -g 10001 -m 0750 /run/loki/browser;
         install -d -o 0 -g 10001 -m 0750 /run/loki/launcher;

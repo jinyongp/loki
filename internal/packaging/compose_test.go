@@ -71,6 +71,11 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if compose.Services["prepare"].NetworkMode != "none" {
 		t.Fatal("prepare service has network access")
 	}
+	prepareCommand := strings.Join(compose.Services["prepare"].Command, "\n")
+	if !strings.Contains(prepareCommand, "install -d -o 0 -g 0 -m 0755 /var/lib/loki/toolchains") ||
+		strings.Contains(prepareCommand, "/var/lib/loki/runner/agents/skills /var/lib/loki/toolchains") {
+		t.Fatal("prepare does not expose the managed toolchain store to the trusted launcher")
+	}
 	launcher := compose.Services["launcher"]
 	executor := compose.Services["executor"]
 	if launcher.NetworkMode != "none" || executor.NetworkMode != "none" ||
