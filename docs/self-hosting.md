@@ -2,20 +2,28 @@
 
 This page is for source-tree development, release engineering, topology
 acceptance, and specialized self-hosting. It is **not** the ordinary
-first-install procedure. Normal installation starts from the public installer:
+first-install procedure.
+
+Normal Windows installation uses the release-built WSL appliance:
+
+```powershell
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+Normal Ubuntu installation uses the native Linux bootstrap:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-That installer owns release selection and verification, then lets
-`loki host install` handle Docker/Compose prerequisite checks, workspace
-onboarding, embedded assets, and persistent host-management CLI installation.
+Both frontends are release-bound. The Windows path verifies and registers the
+accepted `.wsl` appliance; the Linux path verifies and executes the accepted
+bootstrap. Loki lifecycle behavior ultimately remains owned by `loki host`.
 See [First install](first-install.md).
 
-The portable container topology targets Linux and WSL2. The repository
-`compose.yaml` is the maintainer/developer view of that contract, not an
-end-user deployment file. Browser and signing remain optional profiles.
+The repository `compose.yaml` is the maintainer/developer view of the portable
+Linux-container runtime contract, not an end-user Windows or Linux deployment
+file. Browser and signing remain optional profiles.
 
 ## Requirements for source-tree work
 

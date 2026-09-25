@@ -52,7 +52,7 @@ func TestPortableContainerContractsKeepHostAdapterSeam(t *testing.T) {
 	}
 	docs := readPortabilityFile(t, filepath.Join(root, "docs", "self-hosting.md"))
 	for _, required := range []string{
-		"The portable container topology targets Linux and WSL2.",
+		"not an end-user Windows or Linux deployment",
 		"macOS execution is outside the current support and acceptance gate.",
 		"scripts/verify/accept-compose-macos.sh",
 		"Docker Desktop or Colima",

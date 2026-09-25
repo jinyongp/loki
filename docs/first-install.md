@@ -1,30 +1,165 @@
 # First install
 
-The normal Loki installation path is the public installer:
+Loki has separate one-line entry points for Windows and native Linux. Windows
+uses a release-built WSL2 appliance; native Ubuntu uses the Linux bootstrap.
+
+## Windows
+
+Run this in PowerShell:
+
+```powershell
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The installer downloads one immutable `loki-wsl-amd64.wsl` artifact from the
+accepted Loki release, verifies its exact length and SHA-256, and registers it
+with WSL. The appliance is already configured with:
+
+- Ubuntu 24.04 amd64 userspace;
+- systemd;
+- Docker Engine, Buildx, and Docker Compose;
+- the release-bound Loki host binary and release manifest;
+- a precreated `ubuntu` user with UID/GID 1000;
+- an initial `/home/ubuntu/workspace`;
+- a first-boot service that provisions the normal Loki system-scoped host
+  lifecycle.
+
+There is no Ubuntu first-run account prompt. You do not choose a Linux username
+or password, install Docker, edit `/etc/wsl.conf`, or create a Windows startup
+task manually.
+
+Runtime secrets are not embedded in the appliance. The MCP token and Loki
+lifecycle state are generated on the installed machine during first boot.
+
+### Windows requirements
+
+The Windows installer requires WSL2 with custom `.wsl` distribution support.
+It checks for the WSL `--from-file`, `--name`, and `--no-launch` install
+options before making changes.
+
+The installer does **not** run `wsl --update` automatically. If the installed
+WSL is too old, it stops with an error and asks you to update WSL manually:
+
+```powershell
+wsl --update
+```
+
+Rerun the Loki installer after the WSL update succeeds.
+
+### Choose the WSL distribution name
+
+The default local registration name is:
+
+```text
+loki-mcp
+```
+
+The name is local Windows configuration; Loki does not depend on it. To use a
+different name:
+
+```powershell
+$env:LOKI_WSL_NAME = "my-loki"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The installer fails before mutation if that distribution name already exists.
+
+### Choose the WSL storage location
+
+By default WSL chooses the distribution storage location. To choose an explicit
+Windows path:
+
+```powershell
+$env:LOKI_WSL_NAME = "my-loki"
+$env:LOKI_WSL_LOCATION = "D:\WSL\my-loki"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The requested location must be an absolute path and must not already exist.
+
+### Windows startup behavior
+
+The installer registers a per-user Scheduled Task by default. At Windows logon
+the task starts the installed Loki WSL distribution and keeps it alive with a
+benign `sleep infinity` process. The task uses an unlimited execution-time
+setting so Windows does not stop the keep-alive after the normal Task Scheduler
+limit.
+
+Set this before installation if you do not want the startup task:
+
+```powershell
+$env:LOKI_WSL_AUTOSTART = "0"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The appliance itself enables systemd and Docker. Once WSL is running, systemd
+starts Docker and Docker restores Loki's managed containers.
+
+### Windows installation completion
+
+The installer waits for first-boot provisioning and does not report success
+until both of these checks pass inside the appliance:
+
+```text
+loki host status --system
+loki host doctor --system
+```
+
+On success it writes Windows-side connection material below:
+
+```text
+%LOCALAPPDATA%\Loki\<distribution-name>\
+├── connection.json
+└── mcp-token
+```
+
+The token file ACL is restricted to the current Windows user and SYSTEM. Loki
+does not print the token value.
+
+The default appliance workspace is:
+
+```text
+/home/ubuntu/workspace
+```
+
+To inspect the installation directly from PowerShell, substitute your
+distribution name if you changed it:
+
+```powershell
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host status --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host doctor --system
+```
+
+### Windows troubleshooting
+
+If the installer says WSL is too old, run `wsl --update` manually. A WSL
+update failure is a Windows/WSL prerequisite problem; the Loki installer does
+not attempt to repair Windows Installer or Windows optional features.
+
+If a distribution with the requested name already exists, choose a different
+name with `LOKI_WSL_NAME`. The installer never unregisters or overwrites an
+existing distribution.
+
+If first-boot Loki provisioning fails, the installer reports the recent
+`loki-appliance-provision.service` journal. The service is retryable and the
+normal Loki lifecycle journal remains authoritative; a failed attempt is not
+reported as a successful installation.
+
+Manual creation of a generic Ubuntu WSL distribution is not part of the normal
+Loki Windows installation path.
+
+## Ubuntu Linux
+
+On Ubuntu 24.04 amd64:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-Run it inside an Ubuntu shell. On Windows with WSL2, open the Ubuntu
-distribution first; do not run the command directly in PowerShell.
-
-The public installer is generated from one accepted immutable release. It
-downloads that release's `loki-bootstrap-linux-amd64`, verifies the exact
-SHA-256 embedded in the installer, and then executes the verified bootstrap.
-The bootstrap is itself bound to one release manifest and verifies the matching
-`loki-linux-amd64` host binary before installation.
-
-## Host requirements
-
-Current host targets are:
-
-- Ubuntu 24.04 amd64;
-- WSL2 running Ubuntu 24.04 amd64.
-
-The release pipeline performs a source-free installation on Ubuntu 24.04.
-Clean-host WSL2 acceptance is still being completed, but the installer includes
-WSL2 host detection and specific systemd guidance.
+The public shell installer is generated for one accepted immutable release. It
+downloads the release-bound `loki-bootstrap-linux-amd64`, verifies its exact
+SHA-256, and executes it. The bootstrap verifies the matching host binary and
+hands lifecycle changes to `loki host install`.
 
 You need `curl` to fetch the public installer. If a minimal Ubuntu image does
 not have it:
@@ -34,230 +169,54 @@ sudo apt-get update
 sudo apt-get install -y curl ca-certificates
 ```
 
-You do **not** need a Loki source checkout, Go, Node.js, pnpm, Python, uv, Rust,
-Chromium, Docker Compose files, or project development toolchains before
-installing Loki.
+You do **not** need a Loki source checkout, Go, Node.js, pnpm, Python, Rust,
+Chromium, or project development toolchain before installation.
 
-Docker Engine and Docker Compose are runtime prerequisites, but you normally do
-not need to install them yourself. The installer checks the existing runtime and
-can offer the supported Ubuntu installation/update commands when required.
+Docker Engine and Docker Compose are runtime prerequisites, but on supported
+Ubuntu hosts the installer can offer the approved installation/update commands
+when they are missing or incompatible. Privileged mutations are shown before
+approval, and Loki does not silently add the operator to the Docker group.
 
-## Recommended WSL2 server setup
+### Linux interactive installation
 
-For a Windows machine that will run Loki regularly, use a dedicated WSL2
-distribution named `Loki`. This avoids mixing Loki's Docker/runtime state with
-an existing development distribution and makes backup, reset, and startup
-behavior easier to reason about.
-
-From an Administrator PowerShell:
-
-```powershell
-wsl --update
-wsl --set-default-version 2
-wsl --list --online
-```
-
-Find the Ubuntu 24.04 distribution identifier in the list, then install it with a
-dedicated name. On current WSL installations the identifier is typically
-`Ubuntu-24.04`:
-
-```powershell
-wsl --install Ubuntu-24.04 --name Loki
-```
-
-If the `--name` option is unavailable, run `wsl --update` and retry. You may
-also add `--location D:\WSL\Loki` if you deliberately want the distribution
-stored outside WSL's default location.
-
-Launch the new distribution:
-
-```powershell
-wsl -d Loki
-```
-
-On first launch, complete Ubuntu's user setup. Then run the public Loki installer
-inside that Ubuntu shell.
-
-The dedicated distribution is an operational separation boundary, not a
-separate hardware VM. WSL2 distributions owned by the same Windows user share
-the WSL virtual machine and Linux kernel.
-
-## WSL2 systemd and Docker
-
-If a compatible Docker daemon is already available inside WSL2, Loki can use it.
-
-Current Ubuntu distributions installed with `wsl --install` normally start with
-systemd. If Loki needs to install Docker Engine and reports that systemd is
-disabled, edit `/etc/wsl.conf`:
-
-```ini
-[boot]
-systemd=true
-```
-
-Then run this from Windows PowerShell or Command Prompt:
-
-```powershell
-wsl.exe --shutdown
-```
-
-Reopen the dedicated distribution:
-
-```powershell
-wsl -d Loki
-```
-
-You can confirm systemd before retrying the installer:
-
-```sh
-systemctl is-system-running
-```
-
-## Start the Loki WSL distribution with Windows
-
-WSL distributions start on demand. The `systemd=true` setting controls how a
-distribution initializes **after it starts**; it does not make Windows launch
-that distribution automatically.
-
-For most desktop and workstation installations, start the dedicated `Loki`
-distribution automatically when you sign in to Windows. Run this once in
-PowerShell as the Windows user that owns the distribution:
-
-```powershell
-$action = New-ScheduledTaskAction `
-  -Execute "$env:SystemRoot\System32\wsl.exe" `
-  -Argument "-d Loki --exec /usr/bin/sleep infinity"
-
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-
-$settings = New-ScheduledTaskSettingsSet `
-  -ExecutionTimeLimit ([TimeSpan]::Zero) `
-  -StartWhenAvailable `
-  -AllowStartIfOnBatteries `
-  -DontStopIfGoingOnBatteries
-
-Register-ScheduledTask `
-  -TaskName "Loki WSL" `
-  -Action $action `
-  -Trigger $trigger `
-  -Settings $settings `
-  -Description "Keep the dedicated Loki WSL2 distribution running." `
-  -Force
-```
-
-Task Scheduler normally applies a finite execution limit to long-running tasks.
-The explicit zero `ExecutionTimeLimit` makes this keep-alive task indefinite.
-
-Test the task immediately:
-
-```powershell
-Start-ScheduledTask -TaskName "Loki WSL"
-wsl.exe --list --running
-```
-
-The `sleep infinity` process keeps the WSL distribution awake. This is needed
-because systemd services alone do not keep a WSL instance alive. Once the
-distribution is running, systemd starts enabled Linux services. Loki's installer
-enables Docker when it installs the Docker prerequisite, and Loki-managed
-containers use a restart policy that lets Docker restore them after the daemon
-returns.
-
-To inspect Loki from Windows after the task starts:
-
-```powershell
-wsl.exe -d Loki --exec /bin/sh -lc 'export PATH="$HOME/.local/bin:$PATH"; loki host status'
-```
-
-If you need the WSL distribution to start before any interactive Windows
-sign-in, create an equivalent Task Scheduler task with the **At startup**
-trigger. Run it as the Windows account that owns the `Loki` WSL distribution,
-not as `SYSTEM`. WSL user distributions belong to a Windows user context, and
-Windows may require storing that user's credentials for a pre-login task. The
-logon-triggered setup above is therefore the simpler default.
-
-To remove the automatic-start task:
-
-```powershell
-Unregister-ScheduledTask -TaskName "Loki WSL" -Confirm:$false
-```
-
-## Interactive install
-
-Start with the one-line installer:
-
-```sh
-curl -fsSL https://jinyongp.dev/loki/install.sh | sh
-```
-
-Although the shell script is piped through stdin, the release bootstrap opens
-the terminal directly for interactive questions.
-
-During installation, Loki may ask you to:
-
-1. approve Docker Engine or Compose changes when the existing runtime is
-   missing or incompatible;
-2. choose the workspace directory;
-3. approve creating the workspace if it does not exist;
-4. approve the minimal POSIX ACL required by the container runtime identity;
-5. approve sudo-backed Docker lifecycle access when the current user cannot
-   directly access an otherwise compatible daemon.
-
-Use a clean absolute workspace path, for example:
+The installer asks for a clean absolute workspace path when it is not supplied,
+for example:
 
 ```text
 /home/alice/workspace
 ```
 
-Do not enter `~/workspace` or a relative path. Loki does not expand shell
-syntax in the workspace prompt. Existing workspace contents are preserved.
+If the directory does not exist, Loki can create it after approval. If the
+container runtime needs a minimal POSIX ACL, Loki shows the exact change before
+applying it. Existing workspace contents are preserved.
 
-The installer shows privileged changes before approval. It does not silently add
-the operator to the `docker` group.
-
-## Verify the installation
-
-A successful user-scoped install persists the host CLI at:
+A successful user-scoped installation puts the host CLI at:
 
 ```text
 ~/.local/bin/loki
 ```
 
-If `loki` is not on your current shell `PATH`, run:
+Add it to the current shell path if necessary:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then check the release and runtime:
+Then verify:
 
 ```sh
 loki --version
 loki host status
 loki host doctor
-```
-
-`loki host status` reports the installed generation and runtime state.
-`loki host doctor` checks the host/runtime prerequisites and reports
-actionable failures.
-
-## Connect an MCP client
-
-Get the installed connection information with:
-
-```sh
 loki host connection
 ```
 
-The command reports the loopback MCP endpoint, transport, authentication mode,
-and token-file path. It deliberately does not print the secret token value.
+`loki host connection` reports the loopback MCP endpoint, transport,
+authentication mode, and token-file path without printing the token value.
 
-The default installation publishes MCP only on loopback. Configure the MCP
-client from an environment that can reach that endpoint.
+### Linux non-interactive installation
 
-## Non-interactive install
-
-Automation must explicitly approve each mutation class it permits. Pass
-installation options through the public installer after `sh -s --`:
+Automation must explicitly approve every allowed mutation class:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
@@ -269,15 +228,14 @@ curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
   --allow-sudo-docker
 ```
 
-Omit approvals that are not needed on the target host. Missing required input or
-approval fails instead of prompting when interactive input is unavailable.
+Omit approvals not needed by the target host. Missing required input or approval
+fails rather than silently changing the host. Add `--json` for a
+machine-readable result.
 
-Add `--json` when the caller needs a machine-readable installation result.
+### Linux system-scoped installation
 
-## System-scoped install
-
-System scope is intended for machine-wide host-management ownership. Download
-the public installer, then execute it as root with `--system`:
+For machine-wide host-management ownership, download the public installer and
+run it with `--system`:
 
 ```sh
 installer=$(mktemp)
@@ -287,79 +245,33 @@ sudo "$installer" --system
 rm -f "$installer"
 ```
 
-System scope installs the CLI at:
+System scope installs the CLI at `/usr/local/bin/loki`. It changes lifecycle
+ownership and paths, not MCP/project authority.
 
-```text
-/usr/local/bin/loki
-```
+## Shared safety boundaries
 
-It changes host-management ownership and paths. It does not broaden MCP
-authorization, project filesystem access, network grants, or project Docker
-authority.
+Neither installation path:
 
-## What the installer handles
+- resolves a mutable `latest` runtime artifact;
+- accepts release bytes that fail the release identity checks;
+- gives MCP or project jobs the raw Docker socket;
+- embeds runtime MCP tokens in a public release artifact;
+- silently broadens project filesystem or credential authority.
 
-The public installer, release-bound bootstrap, and host manager together:
-
-1. verify the installer-selected immutable bootstrap;
-2. detect the host and validate the release-bound host support contract;
-3. verify the matching immutable host binary;
-4. validate Docker Engine and Compose requirements;
-5. request approval for supported host prerequisite changes;
-6. select, create, and minimally prepare the workspace;
-7. materialize versioned runtime configuration and a private MCP token;
-8. apply the immutable release images through the host lifecycle;
-9. persist the verified host CLI;
-10. report the installed state and MCP connection information.
-
-You do not need to manage Compose YAML, internal service identities, fixed
-container UID/GID values, token generation, Docker socket mounts, or
-Loki-managed language toolchains.
-
-## Troubleshooting
-
-If the one-line installer fails, keep the complete terminal output. The most
-useful follow-up checks are:
-
-```sh
-~/.local/bin/loki host status
-~/.local/bin/loki host doctor
-```
-
-Run those commands only if the CLI was installed. If installation stopped
-before the CLI was persisted, rerun the installer after correcting the reported
-host prerequisite.
-
-Common first-install cases:
-
-- **`curl: command not found`** — install `curl` and `ca-certificates` with
-  apt, then rerun the installer.
-- **WSL2 systemd is disabled** — enable `systemd=true` in `/etc/wsl.conf`,
-  run `wsl.exe --shutdown` from Windows, reopen Ubuntu, and retry.
-- **`loki: command not found` after success** — add
-  `$HOME/.local/bin` to the current shell `PATH`.
-- **Docker access requires elevation** — use the installer's explicit
-  sudo-backed Docker option when prompted; do not manually add broad host
-  privileges just to bypass the check.
-
-## Safety boundaries
-
-The installer does not:
-
-- resolve a mutable `latest` bootstrap;
-- execute a bootstrap or host binary that fails its release identity checks;
-- recursively `chmod` the workspace;
-- silently add the operator to the Docker group;
-- expose the Docker socket to MCP, executor, or project jobs;
-- configure a specific MCP client;
-- silently install packages or elevate privileges in non-interactive mode;
-- require a source checkout or local development toolchain.
-
-Lifecycle mutation remains owned by `loki host`.
+The Windows appliance is a packaging/bootstrap boundary. After first boot, Loki
+host lifecycle behavior remains owned by the same `loki host` implementation
+used by native Linux.
 
 ## Release publication
 
-`https://jinyongp.dev/loki/install.sh` is the stable public entry point. An
-accepted release updates this URL only after immutable release publication
-succeeds. The release workflow then verifies the published installer bytes and
-runs a public source-free installation smoke test.
+The stable public entry points are:
+
+```text
+https://jinyongp.dev/loki/install.ps1
+https://jinyongp.dev/loki/install.sh
+```
+
+Each accepted release binds `install.ps1` to the exact
+`loki-wsl-amd64.wsl` length and SHA-256, and binds `install.sh` to the exact
+Linux bootstrap SHA-256. Publication occurs only after required release
+acceptance succeeds.

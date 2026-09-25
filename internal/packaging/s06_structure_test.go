@@ -104,8 +104,13 @@ func TestPublicOneLineInstallerRemainsCanonical(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := string(raw)
-		if !strings.Contains(body, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") {
-			t.Fatalf("%s no longer documents the canonical public one-line installer", path)
+		for _, installer := range []string{
+			"curl -fsSL https://jinyongp.dev/loki/install.sh | sh",
+			"irm https://jinyongp.dev/loki/install.ps1 | iex",
+		} {
+			if !strings.Contains(body, installer) {
+				t.Fatalf("%s no longer documents canonical public installer %q", path, installer)
+			}
 		}
 	}
 	firstInstall, err := os.ReadFile(filepath.Join(root, "docs", "first-install.md"))
@@ -113,22 +118,25 @@ func TestPublicOneLineInstallerRemainsCanonical(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
+		"irm https://jinyongp.dev/loki/install.ps1 | iex",
 		"curl -fsSL https://jinyongp.dev/loki/install.sh | sh",
+		"loki-wsl-amd64.wsl",
+		"LOKI_WSL_NAME",
+		"LOKI_WSL_LOCATION",
+		"LOKI_WSL_AUTOSTART",
+		"does **not** run",
+		"wsl --update",
+		"There is no Ubuntu first-run account prompt",
+		"/home/ubuntu/workspace",
+		"%LOCALAPPDATA%\\Loki\\<distribution-name>\\",
 		"loki-bootstrap-linux-amd64",
-		"You do **not** need a Loki source checkout",
-		"wsl --install Ubuntu-24.04 --name Loki",
-		"wsl.exe --shutdown",
-		"New-ScheduledTaskAction",
-		"New-ScheduledTaskSettingsSet",
-		"ExecutionTimeLimit ([TimeSpan]::Zero)",
-		"wsl.exe --list --running",
 		"loki --version",
 		"loki host status",
 		"loki host doctor",
 		"loki host connection",
 		"sh -s --",
 		"--install-prerequisites",
-		"stable public entry point",
+		"stable public entry points",
 	} {
 		if !strings.Contains(string(firstInstall), required) {
 			t.Fatalf("first-install documentation lacks %q", required)

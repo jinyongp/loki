@@ -40,12 +40,17 @@ The existing native systemd/Go-candidate deployment remains an advanced and main
 
 ## Supported hosts
 
-The initial clean-host acceptance targets for the new installer are:
+The release has two supported first-install targets:
 
-- Ubuntu 24.04 amd64
-- WSL2 running Ubuntu 24.04 amd64
+- native Ubuntu 24.04 amd64 through the Linux bootstrap;
+- Windows with current WSL2 custom-distribution support through the release-built
+  Ubuntu 24.04 amd64 Loki appliance.
 
-Other Linux distributions may run Loki when a compatible Docker Engine and Docker Compose are already available. Loki does not initially automate package-manager changes on those distributions.
+The Windows appliance owns its Ubuntu userspace, systemd and Docker prerequisites,
+so the operator does not prepare a generic Ubuntu WSL distribution first. Other
+Linux distributions may run Loki when a compatible Docker Engine and Docker
+Compose are already available, but Loki does not initially automate package-manager
+changes on those distributions.
 
 ## License and public distribution
 
@@ -55,9 +60,26 @@ Public installation artifacts must be readable without requiring a GitHub login 
 
 - immutable public release assets and acceptance evidence: GitHub Releases
 - OCI images: `ghcr.io/jinyongp/loki`
-- stable installer frontend: `https://jinyongp.dev/loki/install.sh`
+- stable Linux installer frontend: `https://jinyongp.dev/loki/install.sh`
+- stable Windows installer frontend: `https://jinyongp.dev/loki/install.ps1`
 
-The normal first-install command is `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`. During release validation, the same flow can start from the release-bound `loki-bootstrap-linux-amd64` artifact described in [First install](first-install.md). The bootstrap embeds one exact release manifest and tag, downloads the matching host binary from that immutable GitHub Release, and verifies its manifest-bound length and SHA-256 before execution. The publication pipeline consumes the accepted candidate bundle: `releaseway/actions` publishes the exact public asset set as an immutable GitHub Release, and only after that succeeds does the Loki project Pages deployment update `jinyongp.dev/loki/install.sh`. The Pages installer is bound to the same exact Git tag and the exact SHA-256 of `loki-bootstrap-linux-amd64`; no mutable release lookup occurs during first install.
+The native Linux first-install command is
+`curl -fsSL https://jinyongp.dev/loki/install.sh | sh`. The shell frontend is
+bound to one exact release tag and the SHA-256 of
+`loki-bootstrap-linux-amd64`.
+
+The Windows first-install command is
+`irm https://jinyongp.dev/loki/install.ps1 | iex`. The PowerShell frontend is
+bound to the same exact release tag and to the accepted
+`loki-wsl-amd64.wsl` length and SHA-256. The appliance contains the supported
+Ubuntu userspace, systemd/Docker prerequisites and release-bound Loki bootstrap
+inputs, but no runtime secrets or installed lifecycle state.
+
+The publication pipeline consumes one accepted candidate bundle containing both
+bootstrap paths. `releaseway/actions` publishes the exact public asset set as
+an immutable GitHub Release, and only after required Linux and Windows acceptance
+succeeds does Pages update both stable installer frontends. No mutable release
+lookup occurs during first install.
 
 Released OCI images must preserve the licenses and required notices of bundled third-party software such as Chromium and toolchains. Loki's Apache-2.0 license does not replace third-party licenses.
 
@@ -74,7 +96,12 @@ The source-free bootstrap is deliberately small. It:
 
 The reserved public shell frontend is a release-rendered thin downloader. It detects the supported host, downloads one exact `loki-bootstrap` artifact from one immutable GitHub Release tag, verifies the SHA-256 embedded into that rendered installer, and executes the bootstrap with the caller's arguments. It contains no lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
 
-The canonical first-install procedure is [docs/first-install.md](first-install.md). The stable public entry point is `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`; the URL is populated only by the accepted release publication workflow after the corresponding immutable GitHub Release succeeds.
+The canonical first-install procedure is [docs/first-install.md](first-install.md).
+The stable public entry points are
+`irm https://jinyongp.dev/loki/install.ps1 | iex` for Windows and
+`curl -fsSL https://jinyongp.dev/loki/install.sh | sh` for native Linux.
+Both URLs are populated only by the accepted release publication workflow after
+the corresponding immutable GitHub Release succeeds.
 
 ## Installation scope
 
@@ -110,7 +137,11 @@ If Docker is installed but the current user cannot access the Docker socket, Lok
 
 The installer may offer direct Docker-group membership only as an explicit operator alternative, not the default architecture. It must show the exact command and security consequence, and the workload isolation contract remains identical either way.
 
-On WSL2, Loki first accepts any already-working Docker integration. If Loki would need a local Docker Engine and WSL systemd is disabled, it explains the required `/etc/wsl.conf` change and `wsl.exe --shutdown` restart rather than forcibly shutting down the running WSL instance.
+The ordinary Windows path does not configure an existing general-purpose WSL
+distribution. It installs the immutable Loki WSL appliance, whose systemd,
+Docker packages, default non-root user, workspace and first-boot provisioning
+are fixed by the accepted release. Manual WSL setup remains an engineering or
+recovery path, not the normal installation experience.
 
 ## Host CLI
 
