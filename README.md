@@ -38,12 +38,43 @@ Use an absolute workspace path when prompted, for example:
 If the directory does not exist, Loki can create it after showing the command it
 will run.
 
-### WSL2 and Docker
+### Recommended WSL2 layout
+
+For a Windows machine that will run Loki regularly, use a dedicated WSL2
+distribution instead of installing Loki into your everyday development
+distribution. This keeps Loki's packages, Docker state, and workspace lifecycle
+separate from unrelated Linux work.
+
+From an Administrator PowerShell:
+
+```powershell
+wsl --update
+wsl --set-default-version 2
+wsl --list --online
+wsl --install Ubuntu-24.04 --name Loki
+```
+
+If `Ubuntu-24.04` is not the exact identifier shown by
+`wsl --list --online`, use the Ubuntu 24.04 identifier from that list. Then
+launch the dedicated distribution and complete its first-user setup:
+
+```powershell
+wsl -d Loki
+```
+
+Run the Loki installer inside that Ubuntu shell.
+
+A dedicated distribution is an operational boundary, not a separate hardware VM.
+WSL2 distributions owned by the same Windows user still share the WSL virtual
+machine and kernel.
+
+### WSL2, systemd, and Docker
 
 You do not need to install Docker manually before trying Loki. If a compatible
 Docker daemon is already available, Loki uses it. If Loki needs to install
 Docker Engine inside WSL2, WSL systemd must be enabled.
 
+Current Ubuntu installations created by `wsl --install` normally use systemd.
 If the installer reports that WSL2 systemd is disabled, add this to
 `/etc/wsl.conf`:
 
@@ -60,6 +91,36 @@ wsl.exe --shutdown
 ```
 
 Run the installer again after WSL restarts.
+
+### Start the Loki WSL distribution automatically
+
+WSL distributions normally start on demand. Enabling systemd does not by itself
+launch the distribution when Windows starts.
+
+For a desktop or workstation, the simplest reliable setup is to start the
+dedicated `Loki` distribution when you sign in to Windows. Run this in
+PowerShell as the Windows user that owns the distribution:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\wsl.exe" -Argument "-d Loki --exec /usr/bin/sleep infinity"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "Loki WSL" -Action $action -Trigger $trigger -Settings $settings -Description "Keep the dedicated Loki WSL2 distribution running." -Force
+Start-ScheduledTask -TaskName "Loki WSL"
+wsl.exe --list --running
+```
+
+The explicit zero execution-time limit matters because Task Scheduler otherwise
+stops long-running tasks after its default time limit. The `sleep infinity`
+process keeps the WSL distribution awake. Once the distribution starts, systemd
+starts enabled Linux services; Docker can then restore Loki's
+`restart: unless-stopped` containers.
+
+For a machine that must start Loki before any interactive Windows sign-in, use
+Task Scheduler's **At startup** trigger and run the task as the Windows account
+that owns the `Loki` WSL distribution. Do not run it as `SYSTEM`. That setup
+can require stored Windows credentials, so the logon-triggered task above is the
+recommended default.
 
 ## Verify the installation
 
