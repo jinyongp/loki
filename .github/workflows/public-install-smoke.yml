@@ -1,0 +1,48 @@
+name: public-install-smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify public source-free install
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Run public source-free installation
+        shell: bash
+        run: |
+          set -uo pipefail
+          printf 'runner docker: '
+          docker version --format '{{.Server.Version}}' || true
+          printf 'runner compose: '
+          docker compose version --short || true
+
+          workspace="$RUNNER_TEMP/loki-workspace"
+          installer="$RUNNER_TEMP/loki-install.sh"
+          install_log="$RUNNER_TEMP/loki-install.log"
+          curl -fsSL https://jinyongp.dev/loki/install.sh -o "$installer"
+          chmod 0755 "$installer"
+
+          set +e
+          "$installer" \
+            --workspace "$workspace" \
+            --create-workspace \
+            --prepare-workspace \
+            --install-prerequisites \
+            --allow-sudo-workspace \
+            --allow-sudo-docker \
+            --json >"$install_log" 2>&1
+          status=$?
+          set -e
+          cat "$install_log"
+          if test "$status" -ne 0; then
+            detail=$(tail -n 60 "$install_log" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g' | cut -c1-5000)
+            printf '::error title=Public source-free install failed::exit=%s %s\n' "$status" "$detail"
+            exit "$status"
+          fi
+
+          "$HOME/.local/bin/loki" host status
+          "$HOME/.local/bin/loki" host doctor
