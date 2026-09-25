@@ -1,0 +1,156 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$releaseTag = "@@LOKI_RELEASE_TAG@@"
+$applianceSha256 = "@@LOKI_WSL_SHA256@@"
+$applianceLength = [Int64]"@@LOKI_WSL_LENGTH@@"
+$applianceAsset = "loki-wsl-amd64.wsl"
+$releaseUrl = "https://github.com/jinyongp/loki/releases/download/$releaseTag/$applianceAsset"
+$minimumWSL = "2.4.4"
+
+$distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else { "loki-mcp" }
+$installLocation = if ($env:LOKI_WSL_LOCATION) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
+$autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
+
+function Fail([string]$Message) {
+    throw "Loki Windows installer: $Message"
+}
+
+function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments) {
+    $output = & $Executable @Arguments 2>&1
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+        Fail "$Executable exited with code $code. $($output -join [Environment]::NewLine)"
+    }
+    return ($output -join [Environment]::NewLine).Trim()
+}
+
+if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+    Fail "WSL is required. Install WSL, then rerun this command."
+}
+if ($distributionName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
+    Fail "LOKI_WSL_NAME must be 1-64 characters using letters, digits, dot, underscore, or hyphen."
+}
+if ($installLocation) {
+    if (-not [IO.Path]::IsPathRooted($installLocation)) {
+        Fail "LOKI_WSL_LOCATION must be an absolute Windows path."
+    }
+    if (Test-Path -LiteralPath $installLocation) {
+        Fail "LOKI_WSL_LOCATION already exists: $installLocation"
+    }
+}
+
+$help = Invoke-NativeCapture "wsl.exe" @("--help")
+foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
+    if (-not $help.Contains($requiredOption)) {
+        Fail "WSL $minimumWSL or newer is required for custom .wsl distributions. Run 'wsl --update' manually, then retry."
+    }
+}
+
+$existing = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { "$_".Trim([char]0).Trim() } | Where-Object { $_ }
+if ($LASTEXITCODE -ne 0) {
+    Fail "Could not list installed WSL distributions."
+}
+if ($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
+    Fail "A WSL distribution named '$distributionName' already exists. Choose another name with LOKI_WSL_NAME."
+}
+$taskName = "Loki WSL ($distributionName)"
+if ($autoStart -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
+    Fail "Scheduled Task '$taskName' already exists."
+}
+
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("loki-wsl-" + [Guid]::NewGuid().ToString("N"))
+$appliance = Join-Path $tempRoot $applianceAsset
+New-Item -ItemType Directory -Path $tempRoot | Out-Null
+try {
+    Invoke-WebRequest -UseBasicParsing -Uri $releaseUrl -OutFile $appliance
+    $file = Get-Item -LiteralPath $appliance
+    if ($file.Length -ne $applianceLength) {
+        Fail "Downloaded WSL appliance length does not match the accepted release."
+    }
+    $actualSha = (Get-FileHash -LiteralPath $appliance -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha -ne $applianceSha256) {
+        Fail "Downloaded WSL appliance SHA-256 does not match the accepted release."
+    }
+
+    $installArgs = @("--install", "--from-file", $appliance, "--name", $distributionName, "--no-launch")
+    if ($installLocation) {
+        $installArgs += @("--location", $installLocation)
+    }
+    Invoke-NativeCapture "wsl.exe" $installArgs | Out-Null
+
+    $keepAlive = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
+
+    $ready = $false
+    for ($attempt = 0; $attempt -lt 300; $attempt++) {
+        & wsl.exe -d $distributionName --user root --exec /usr/bin/test -f /var/lib/loki-appliance/provisioned 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $ready = $true
+            break
+        }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $ready) {
+        $diagnostics = & wsl.exe -d $distributionName --user root --exec /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80 2>&1
+        Fail "Loki appliance provisioning did not complete. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
+    }
+
+    Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "status", "--system", "--json") | Out-Null
+    Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "doctor", "--system") | Out-Null
+    $connectionRaw = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "connection", "--system", "--json")
+    $connection = $connectionRaw | ConvertFrom-Json
+
+    $token = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/cat", "/var/lib/loki/lifecycle/mcp-token")
+    if (-not $token -or $token.Contains([Environment]::NewLine)) {
+        Fail "Loki MCP token material is invalid."
+    }
+
+    $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
+    New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    & icacls.exe $stateDir /inheritance:r /grant:r "${identity}:(OI)(CI)(F)" "SYSTEM:(OI)(CI)(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Could not restrict the Windows Loki state directory ACL."
+    }
+
+    $tokenFile = Join-Path $stateDir "mcp-token"
+    $connectionFile = Join-Path $stateDir "connection.json"
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($tokenFile, $token, $utf8)
+    & icacls.exe $tokenFile /inheritance:r /grant:r "${identity}:(F)" "SYSTEM:(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $tokenFile -Force -ErrorAction SilentlyContinue
+        Fail "Could not restrict the Windows MCP token ACL."
+    }
+
+    $publicConnection = [ordered]@{
+        endpoint = [string]$connection.endpoint
+        transport = [string]$connection.transport
+        authentication = "bearer-token-file"
+        token_file = $tokenFile
+        distribution = $distributionName
+    }
+    [IO.File]::WriteAllText($connectionFile, ($publicConnection | ConvertTo-Json -Depth 4), $utf8)
+
+    if ($autoStart) {
+        $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\wsl.exe" -Argument "-d $distributionName --exec /usr/bin/sleep infinity"
+        $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
+        $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Description "Keep the Loki WSL2 appliance running." -Force | Out-Null
+    }
+
+    Write-Host "Loki installed successfully."
+    Write-Host "  Release: $releaseTag"
+    Write-Host "  WSL distribution: $distributionName"
+    Write-Host "  MCP endpoint: $($publicConnection.endpoint)"
+    Write-Host "  Connection file: $connectionFile"
+    Write-Host "  Token file: $tokenFile"
+    if ($autoStart) {
+        Write-Host "  Windows logon startup: enabled"
+    } else {
+        Write-Host "  Windows logon startup: disabled"
+    }
+}
+finally {
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
