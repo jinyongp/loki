@@ -26,6 +26,11 @@ func main() {
 	}
 
 	path := os.Args[1]
+	initial, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	command := exec.Command(os.Args[0], childFlag, path)
 	command.Stdin = nil
 	command.Stdout = io.Discard
@@ -37,6 +42,20 @@ func main() {
 	}
 	if err := command.Process.Release(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		raw, readErr := os.ReadFile(path)
+		if readErr == nil && string(raw) != string(initial) {
+			ready = true
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if !ready {
+		fmt.Fprintln(os.Stderr, "detached child heartbeat did not start")
 		os.Exit(1)
 	}
 	fmt.Println("detached-child-ready")
