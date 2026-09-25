@@ -96,6 +96,8 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 		"CHROMIUM_VERSION=152.0.7977.82-r0",
 		"golang:1.27.1-bookworm@sha256:",
 		"alpine:3.24.2@sha256:",
+		"COPY packaging/images/config/loki.toml /etc/loki/loki.toml",
+		"COPY packaging/images/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json",
 		"USER 10003:10003",
 		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",
 	} {

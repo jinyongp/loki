@@ -40,6 +40,8 @@ RUN apk add --no-cache "chromium=$CHROMIUM_VERSION" font-opensans \
  && install -d -m 0755 /opt/loki/bin
 
 COPY --from=build /out/loki /opt/loki/bin/loki
+COPY packaging/images/config/loki.toml /etc/loki/loki.toml
+COPY packaging/images/config/execution-contract.json /usr/share/doc/loki/container-execution-contract.json
 
 ENV PATH=/opt/loki/bin:/usr/bin:/bin \
     LANG=C.UTF-8 \
