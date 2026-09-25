@@ -78,5 +78,18 @@ jobs:
             exit "$status"
           fi
 
-          "$HOME/.local/bin/loki" host status
-          "$HOME/.local/bin/loki" host doctor
+          post_install_failed=0
+          for check in status doctor; do
+            output="$RUNNER_TEMP/loki-host-$check.log"
+            set +e
+            "$HOME/.local/bin/loki" host "$check" >"$output" 2>&1
+            check_status=$?
+            set -e
+            cat "$output"
+            if test "$check_status" -ne 0; then
+              detail=$(tr '\r\n' '  ' <"$output" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
+              printf '::error title=Loki host %s failed::exit=%s %s\n' "$check" "$check_status" "$detail"
+              post_install_failed=1
+            fi
+          done
+          test "$post_install_failed" -eq 0
