@@ -88,7 +88,7 @@ docker buildx build \
   --output "type=tar,dest=$raw" \
   "$repo"
 
-resolv_entry=$(tar -tf "$raw" | grep -E '^\./?etc/resolv\.conf$' | head -n 1 || true)
+resolv_entry=$(tar -tf "$raw" | grep -E '^(\./)?etc/resolv\.conf$' | head -n 1 || true)
 if test -n "$resolv_entry"; then
   tar --delete --file="$raw" "$resolv_entry"
 fi

@@ -105,6 +105,7 @@ func TestWSLApplianceContract(t *testing.T) {
 		"--platform linux/amd64",
 		"--build-context \"release=$release\"",
 		"type=tar,dest=$raw",
+		`grep -E '^(\./)?etc/resolv\.conf$'`,
 		`if test -n "$resolv_entry"; then`,
 		`tar --delete --file="$raw" "$resolv_entry"`,
 		"WSL rootfs still contains /etc/resolv.conf after export cleanup",
