@@ -17,11 +17,11 @@ function Fail([string]$Message) {
     throw "Loki Windows installer: $Message"
 }
 
-function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments) {
+function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments, [int[]]$AllowedExitCodes = @(0)) {
     $output = & $Executable @Arguments 2>&1
     $code = $LASTEXITCODE
     $text = (($output -join [Environment]::NewLine) -replace "`0", "").Trim()
-    if ($code -ne 0) {
+    if ($AllowedExitCodes -notcontains $code) {
         Fail "$Executable exited with code $code. $text"
     }
     return $text
@@ -42,7 +42,7 @@ if ($installLocation) {
     }
 }
 
-$help = Invoke-NativeCapture "wsl.exe" @("--help")
+$help = Invoke-NativeCapture "wsl.exe" @("--help") @(0, 1)
 foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
     if (-not $help.Contains($requiredOption)) {
         Fail "WSL $minimumWSL or newer is required for custom .wsl distributions. Run 'wsl --update' manually, then retry."

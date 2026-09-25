@@ -606,10 +606,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           wsl.exe --version
           if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
-          $help = (wsl.exe --help | Out-String) -replace "`0", ""
+          $help = (wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
           foreach ($option in @("--from-file", "--name", "--no-launch")) {
             if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
           }
+          $global:LASTEXITCODE = 0
 
       - name: Run exact-candidate WSL appliance acceptance
         shell: pwsh
