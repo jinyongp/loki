@@ -110,7 +110,9 @@ jobs:
           if test -n "$latest_tag"; then
             tag_commit=$(git rev-list -n 1 "$latest_tag")
             release_state=missing
-            if release_json=$(gh release view "$latest_tag" --json isDraft 2>/dev/null); then
+            release_immutable=false
+            if release_json=$(gh release view "$latest_tag" --json isDraft,isImmutable 2>/dev/null); then
+              release_immutable=$(jq -r '.isImmutable' <<<"$release_json")
               if test "$(jq -r '.isDraft' <<<"$release_json")" = true; then
                 release_state=draft
               else
@@ -125,8 +127,11 @@ jobs:
                   previous_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | sed -n '2p')
                   ;;
                 published)
-                  echo "current commit is already published as $latest_tag" >&2
-                  exit 1
+                  if test "$release_immutable" = true; then
+                    echo "current commit is already published immutably as $latest_tag" >&2
+                    exit 1
+                  fi
+                  echo "current commit has a mutable failed release at $latest_tag; advancing to the next version" >&2
                   ;;
               esac
             elif test "$release_state" != published; then
