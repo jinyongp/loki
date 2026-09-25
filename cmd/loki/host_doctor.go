@@ -522,46 +522,73 @@ func inspectDoctorToolchains(catalogPath string, layout *hostLauncherLayout) []h
 	}
 	ids := uniqueDoctorStrings(catalog.GenerationIDs())
 	store := toolchain.GenerationStore{Root: layout.ToolchainStore, Protected: ids}
-	usage, usageErr := store.Usage()
 	policy, policyErr := store.StoragePolicy()
-	if usageErr != nil || policyErr != nil {
+	if policyErr != nil {
 		return []hostdiagnostics.Check{hostdiagnostics.Blocked(
 			"toolchains", "toolchain_store_unavailable",
 			"managed toolchain storage could not be validated",
 		)}
 	}
-	missing := 0
+	usage, usageErr := store.Usage()
+	storeInitialized := true
+	if usageErr != nil {
+		if !errors.Is(usageErr, os.ErrNotExist) {
+			return []hostdiagnostics.Check{hostdiagnostics.Blocked(
+				"toolchains", "toolchain_store_unavailable",
+				"managed toolchain storage could not be validated",
+			)}
+		}
+		storeInitialized = false
+		if info, statErr := os.Lstat(layout.ToolchainStore); statErr == nil {
+			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return []hostdiagnostics.Check{hostdiagnostics.Blocked(
+					"toolchains", "toolchain_store_unavailable",
+					"managed toolchain storage could not be validated",
+				)}
+			}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return []hostdiagnostics.Check{hostdiagnostics.Blocked(
+				"toolchains", "toolchain_store_unavailable",
+				"managed toolchain storage could not be validated",
+			)}
+		}
+		usage = toolchain.GenerationUsage{}
+	}
+	provisioned := 0
+	unprovisioned := 0
 	for _, id := range ids {
-		if _, lookupErr := store.Lookup(id); lookupErr != nil {
-			missing++
+		if _, lookupErr := store.Lookup(id); lookupErr == nil {
+			provisioned++
+		} else if errors.Is(lookupErr, os.ErrNotExist) {
+			unprovisioned++
+		} else {
+			return []hostdiagnostics.Check{hostdiagnostics.Blocked(
+				"toolchains", "toolchain_generation_invalid",
+				"an installed managed toolchain generation could not be validated",
+			)}
 		}
 	}
 	evidence := []hostdiagnostics.Evidence{
 		{Name: "catalog_generations", Value: strconv.Itoa(len(ids))},
-		{Name: "missing_generations", Value: strconv.Itoa(missing)},
+		{Name: "provisioned_catalog_generations", Value: strconv.Itoa(provisioned)},
+		{Name: "unprovisioned_catalog_generations", Value: strconv.Itoa(unprovisioned)},
 		{Name: "installed_generations", Value: strconv.Itoa(usage.Generations)},
 		{Name: "referenced_generations", Value: strconv.Itoa(usage.Referenced)},
 		{Name: "retained_bytes", Value: strconv.FormatInt(usage.Bytes, 10)},
 		{Name: "max_bytes", Value: strconv.FormatInt(policy.MaxBytes, 10)},
 		{Name: "max_generations", Value: strconv.Itoa(policy.MaxGenerations)},
+		{Name: "store_initialized", Value: strconv.FormatBool(storeInitialized)},
 	}
-	switch {
-	case missing > 0:
-		return []hostdiagnostics.Check{hostdiagnostics.Blocked(
-			"toolchains", "toolchains_missing",
-			"one or more administrator-approved toolchain generations are not provisioned", evidence...,
-		)}
-	case usage.Bytes > policy.MaxBytes || usage.Generations > policy.MaxGenerations:
+	if usage.Bytes > policy.MaxBytes || usage.Generations > policy.MaxGenerations {
 		return []hostdiagnostics.Check{hostdiagnostics.Blocked(
 			"toolchains", "toolchain_storage_over_quota",
 			"managed toolchain storage exceeds its configured budget", evidence...,
 		)}
-	default:
-		return []hostdiagnostics.Check{hostdiagnostics.Healthy(
-			"toolchains", "toolchains_ready",
-			"administrator-approved managed toolchains are provisioned", evidence...,
-		)}
 	}
+	return []hostdiagnostics.Check{hostdiagnostics.Healthy(
+		"toolchains", "toolchains_ready",
+		"managed toolchain catalog and storage state are valid", evidence...,
+	)}
 }
 
 func loadDoctorToolchainCatalog(path string) (toolchain.Catalog, error) {

@@ -157,6 +157,36 @@ func hostDoctorFixture(t *testing.T) (hostDoctorOptions, *fakeHostDoctorRuntime,
 	}, runtime, now
 }
 
+func TestDoctorToolchainsAcceptsLazyUninitializedStore(t *testing.T) {
+	options, _, _ := hostDoctorFixture(t)
+	var layout hostLauncherLayout
+	raw, err := os.ReadFile(options.LauncherLayout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &layout); err != nil {
+		t.Fatal(err)
+	}
+	layout.ToolchainStore = filepath.Join(t.TempDir(), "toolchains")
+	if err = os.Mkdir(layout.ToolchainStore, 0700); err != nil {
+		t.Fatal(err)
+	}
+	checks := inspectDoctorToolchains(options.ToolchainCatalog, &layout)
+	if len(checks) != 1 || checks[0].Status != hostdiagnostics.StatusHealthy ||
+		checks[0].Code != "toolchains_ready" {
+		t.Fatalf("lazy store checks = %#v", checks)
+	}
+	evidence := map[string]string{}
+	for _, item := range checks[0].Evidence {
+		evidence[item.Name] = item.Value
+	}
+	if evidence["store_initialized"] != "false" ||
+		evidence["provisioned_catalog_generations"] != "0" ||
+		evidence["unprovisioned_catalog_generations"] == "0" {
+		t.Fatalf("lazy store evidence = %#v", evidence)
+	}
+}
+
 func TestHostDoctorUsesRuntimeProbeForComposeState(t *testing.T) {
 	options, runtime, now := hostDoctorFixture(t)
 	options.LauncherLayout = filepath.Join(t.TempDir(), "missing-launcher.json")
