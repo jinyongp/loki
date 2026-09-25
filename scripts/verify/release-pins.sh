@@ -175,7 +175,7 @@ verify_alpine_runtime() {
 verify_ubuntu_runtime() {
   file=$1
   label=$2
-  ubuntu=$(sed -n 's/^FROM --platform=linux\/amd64 \(ubuntu:24\.04@sha256:[0-9a-f]*\)$/\1/p' "$file" | head -n 1)
+  ubuntu=$(sed -n 's/^FROM --platform=linux\/amd64 \(ubuntu:24\.04@sha256:[0-9a-f]*\)\( AS .*\)\?$/\1/p' "$file" | head -n 1)
   test -n "$ubuntu" || fail "$label Ubuntu runtime image pin is missing"
   verify_ref "$ubuntu" ubuntu:24.04 "$label Ubuntu runtime image"
 }
