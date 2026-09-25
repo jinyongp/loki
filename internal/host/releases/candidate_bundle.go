@@ -46,7 +46,7 @@ func VerifyCandidateBundle(root string) (CandidateEvidence, error) {
 	}
 	files := []FileEvidence{
 		evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
+		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
 		evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
 	}
 	for _, item := range files {

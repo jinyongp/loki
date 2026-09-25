@@ -12,7 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
-const CandidateEvidenceVersion = 3
+const CandidateEvidenceVersion = 4
 
 var sourceRevisionPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
@@ -34,6 +34,7 @@ type CandidateEvidence struct {
 	HostBinary       FileEvidence `json:"host_binary"`
 	Bootstrap        FileEvidence `json:"bootstrap"`
 	HostAssets       FileEvidence `json:"host_assets"`
+	WSLAppliance     FileEvidence `json:"wsl_appliance"`
 	ToolchainCatalog FileEvidence `json:"toolchain_catalog"`
 	Provenance       FileEvidence `json:"provenance"`
 	Notices          FileEvidence `json:"notices"`
@@ -53,6 +54,7 @@ type CandidateEvidenceInput struct {
 	HostBinary       FileEvidence
 	Bootstrap        FileEvidence
 	HostAssets       FileEvidence
+	WSLAppliance     FileEvidence
 	ToolchainCatalog FileEvidence
 	Provenance       FileEvidence
 	Notices          FileEvidence
@@ -72,6 +74,7 @@ type candidateEvidencePayload struct {
 	HostBinary       FileEvidence `json:"host_binary"`
 	Bootstrap        FileEvidence `json:"bootstrap"`
 	HostAssets       FileEvidence `json:"host_assets"`
+	WSLAppliance     FileEvidence `json:"wsl_appliance"`
 	ToolchainCatalog FileEvidence `json:"toolchain_catalog"`
 	Provenance       FileEvidence `json:"provenance"`
 	Notices          FileEvidence `json:"notices"`
@@ -104,7 +107,7 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 	}
 
 	if err = validateCanonicalEvidencePaths(input.ReleaseIndex, input.ReleaseManifest, input.HostBinary, input.Bootstrap,
-		input.HostAssets, input.ToolchainCatalog, input.Provenance, input.Notices, input.ReleaseNotes,
+		input.HostAssets, input.WSLAppliance, input.ToolchainCatalog, input.Provenance, input.Notices, input.ReleaseNotes,
 		input.EffectivePolicy, input.EffectiveConfig); err != nil {
 		return CandidateEvidence{}, err
 	}
@@ -118,6 +121,7 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		"host binary":       {input.HostBinary, &manifest.HostBinary},
 		"bootstrap":         {input.Bootstrap, nil},
 		"host assets":       {input.HostAssets, &manifest.HostAssets},
+		"WSL appliance":     {input.WSLAppliance, nil},
 		"toolchain catalog": {input.ToolchainCatalog, &manifest.ToolchainCatalog},
 		"provenance":        {input.Provenance, &manifest.Provenance},
 		"notices":           {input.Notices, &manifest.Notices},
@@ -144,7 +148,7 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		Version: CandidateEvidenceVersion, SourceRevision: sourceRevision, Generation: manifest.Generation,
 		CoreImage: input.CoreImage, BrowserImage: input.BrowserImage,
 		ReleaseIndex: input.ReleaseIndex, ReleaseManifest: input.ReleaseManifest,
-		HostBinary: input.HostBinary, Bootstrap: input.Bootstrap, HostAssets: input.HostAssets,
+		HostBinary: input.HostBinary, Bootstrap: input.Bootstrap, HostAssets: input.HostAssets, WSLAppliance: input.WSLAppliance,
 		ToolchainCatalog: input.ToolchainCatalog, Provenance: input.Provenance, Notices: input.Notices,
 		ReleaseNotes: input.ReleaseNotes, EffectivePolicy: input.EffectivePolicy, EffectiveConfig: input.EffectiveConfig,
 	}
@@ -156,7 +160,7 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		Version: payload.Version, ID: id, SourceRevision: payload.SourceRevision, Generation: payload.Generation,
 		CoreImage: payload.CoreImage, BrowserImage: payload.BrowserImage,
 		ReleaseIndex: payload.ReleaseIndex, ReleaseManifest: payload.ReleaseManifest,
-		HostBinary: payload.HostBinary, Bootstrap: payload.Bootstrap, HostAssets: payload.HostAssets,
+		HostBinary: payload.HostBinary, Bootstrap: payload.Bootstrap, HostAssets: payload.HostAssets, WSLAppliance: payload.WSLAppliance,
 		ToolchainCatalog: payload.ToolchainCatalog, Provenance: payload.Provenance, Notices: payload.Notices,
 		ReleaseNotes: payload.ReleaseNotes, EffectivePolicy: payload.EffectivePolicy, EffectiveConfig: payload.EffectiveConfig,
 	}, nil
@@ -175,14 +179,14 @@ func LoadCandidateEvidence(raw []byte) (CandidateEvidence, error) {
 		return CandidateEvidence{}, err
 	}
 	if err := validateCanonicalEvidencePaths(evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices, evidence.ReleaseNotes,
+		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices, evidence.ReleaseNotes,
 		evidence.EffectivePolicy, evidence.EffectiveConfig); err != nil {
 		return CandidateEvidence{}, err
 	}
 	seenPaths := map[string]bool{}
 	for _, item := range []FileEvidence{
 		evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
+		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
 		evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
 	} {
 		if err := validateFileEvidence(item); err != nil {
@@ -197,7 +201,7 @@ func LoadCandidateEvidence(raw []byte) (CandidateEvidence, error) {
 		Version: evidence.Version, SourceRevision: evidence.SourceRevision, Generation: evidence.Generation,
 		CoreImage: evidence.CoreImage, BrowserImage: evidence.BrowserImage,
 		ReleaseIndex: evidence.ReleaseIndex, ReleaseManifest: evidence.ReleaseManifest,
-		HostBinary: evidence.HostBinary, Bootstrap: evidence.Bootstrap, HostAssets: evidence.HostAssets,
+		HostBinary: evidence.HostBinary, Bootstrap: evidence.Bootstrap, HostAssets: evidence.HostAssets, WSLAppliance: evidence.WSLAppliance,
 		ToolchainCatalog: evidence.ToolchainCatalog, Provenance: evidence.Provenance, Notices: evidence.Notices,
 		ReleaseNotes: evidence.ReleaseNotes, EffectivePolicy: evidence.EffectivePolicy, EffectiveConfig: evidence.EffectiveConfig,
 	}
@@ -232,7 +236,7 @@ func candidateEvidenceID(payload candidateEvidencePayload) (string, error) {
 }
 
 func validateCanonicalEvidencePaths(
-	releaseIndex, releaseManifest, hostBinary, bootstrap, hostAssets, toolchainCatalog,
+	releaseIndex, releaseManifest, hostBinary, bootstrap, hostAssets, wslAppliance, toolchainCatalog,
 	provenance, notices, releaseNotes, effectivePolicy, effectiveConfig FileEvidence,
 ) error {
 	expected := map[string]string{
@@ -241,6 +245,7 @@ func validateCanonicalEvidencePaths(
 		"host binary":       hostBinary.Path,
 		"bootstrap":         bootstrap.Path,
 		"host assets":       hostAssets.Path,
+		"WSL appliance":     wslAppliance.Path,
 		"toolchain catalog": toolchainCatalog.Path,
 		"provenance":        provenance.Path,
 		"notices":           notices.Path,
@@ -254,6 +259,7 @@ func validateCanonicalEvidencePaths(
 		"host binary":       "inputs/loki",
 		"bootstrap":         "inputs/loki-bootstrap",
 		"host assets":       "inputs/host-assets.tar.gz",
+		"WSL appliance":     "inputs/loki-wsl-amd64.wsl",
 		"toolchain catalog": "inputs/toolchain-catalog.json",
 		"provenance":        "inputs/provenance.bundle.json",
 		"notices":           "inputs/notices.tar.gz",

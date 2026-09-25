@@ -43,6 +43,9 @@ func candidateEvidenceFixture(t *testing.T) CandidateEvidenceInput {
 		HostAssets: candidateFile(
 			"inputs/host-assets.tar.gz", manifest.HostAssets.Length, manifest.HostAssets.SHA256,
 		),
+		WSLAppliance: candidateFile(
+			"inputs/loki-wsl-amd64.wsl", 789, strings.Repeat("5", 64),
+		),
 		ToolchainCatalog: candidateFile(
 			"inputs/toolchain-catalog.json", manifest.ToolchainCatalog.Length, manifest.ToolchainCatalog.SHA256,
 		),
@@ -121,6 +124,9 @@ func TestCandidateEvidenceRejectsReleaseIdentityDrift(t *testing.T) {
 		},
 		"manifest": func(input *CandidateEvidenceInput) {
 			input.ReleaseManifest.Length++
+		},
+		"wsl-appliance-path": func(input *CandidateEvidenceInput) {
+			input.WSLAppliance.Path = "inputs/other.wsl"
 		},
 		"duplicate-path": func(input *CandidateEvidenceInput) {
 			input.EffectiveConfig.Path = input.EffectivePolicy.Path

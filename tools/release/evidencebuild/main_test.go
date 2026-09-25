@@ -40,6 +40,7 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	hostBody := "#!/bin/sh\nexit 0\n"
 	bootstrapBody := "#!/bin/sh\nexit 0\n"
 	assetsBody := "host-assets"
+	wslBody := "synthetic-wsl-appliance"
 	toolchainBody := "{\"version\":1}\n"
 	provenanceBody := "{\"_type\":\"https://in-toto.io/Statement/v1\"}\n"
 	noticesBody := "notices"
@@ -50,6 +51,7 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	host := writeFixtureFile(t, root, "host/loki", hostBody, 0755)
 	bootstrap := writeFixtureFile(t, root, "host/loki-bootstrap", bootstrapBody, 0755)
 	assets := writeFixtureFile(t, root, "host/assets.tar.gz", assetsBody, 0644)
+	wsl := writeFixtureFile(t, root, "host/loki-wsl-amd64.wsl", wslBody, 0644)
 	toolchain := writeFixtureFile(t, root, "host/toolchain.json", toolchainBody, 0644)
 	provenance := writeFixtureFile(t, root, "host/provenance.json", provenanceBody, 0644)
 	notices := writeFixtureFile(t, root, "host/notices.tar.gz", noticesBody, 0644)
@@ -132,7 +134,7 @@ func evidenceAssemblerFixture(t *testing.T) options {
 		Output:         filepath.Join(root, "candidate-evidence"),
 		SourceRevision: strings.Repeat("a", 40),
 		ReleaseIndex:   indexPath, ReleaseManifest: manifestPath,
-		HostBinary: host, Bootstrap: bootstrap, HostAssets: assets,
+		HostBinary: host, Bootstrap: bootstrap, HostAssets: assets, WSLAppliance: wsl,
 		ToolchainCatalog: toolchain, Provenance: provenance, Notices: notices,
 		ReleaseNotes: notes, EffectivePolicy: policy, EffectiveConfig: config,
 		CoreImage:    "ghcr.io/example/loki@sha256:" + strings.Repeat("b", 64),
@@ -162,7 +164,7 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	}
 	for _, relative := range []string{
 		"evidence.json", "SHA256SUMS", "inputs/release-index.json", "inputs/release-manifest.json",
-		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz", "inputs/toolchain-catalog.json",
+		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz", "inputs/loki-wsl-amd64.wsl", "inputs/toolchain-catalog.json",
 		"inputs/provenance.bundle.json", "inputs/notices.tar.gz", "inputs/release-notes.md",
 		"inputs/effective-policy.json", "inputs/effective-config.toml",
 	} {
@@ -174,7 +176,7 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/release-manifest.json"} {
+	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/loki-wsl-amd64.wsl", "inputs/release-manifest.json"} {
 		if !strings.Contains(string(checksums), "  "+required+"\n") {
 			t.Fatalf("SHA256SUMS lacks %s", required)
 		}
@@ -194,7 +196,7 @@ func TestAssembleNormalizesBundleModesDespiteUmask(t *testing.T) {
 	}
 	for relative, want := range map[string]os.FileMode{
 		".": 0755, "inputs": 0755, "inputs/loki": 0755, "inputs/loki-bootstrap": 0755,
-		"inputs/release-index.json": 0644, "inputs/effective-policy.json": 0644,
+		"inputs/release-index.json": 0644, "inputs/loki-wsl-amd64.wsl": 0644, "inputs/effective-policy.json": 0644,
 		"evidence.json": 0644, "SHA256SUMS": 0644,
 	} {
 		info, statErr := os.Stat(filepath.Join(cfg.Output, filepath.FromSlash(relative)))

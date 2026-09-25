@@ -34,6 +34,7 @@ type options struct {
 	HostBinary       string
 	Bootstrap        string
 	HostAssets       string
+	WSLAppliance     string
 	ToolchainCatalog string
 	Provenance       string
 	Notices          string
@@ -62,6 +63,7 @@ func run(args []string, stderr io.Writer) error {
 	flags.StringVar(&cfg.HostBinary, "host-binary", "", "Loki host binary")
 	flags.StringVar(&cfg.Bootstrap, "bootstrap", "", "standalone bootstrap binary")
 	flags.StringVar(&cfg.HostAssets, "host-assets", "", "host asset bundle")
+	flags.StringVar(&cfg.WSLAppliance, "wsl-appliance", "", "WSL appliance archive")
 	flags.StringVar(&cfg.ToolchainCatalog, "toolchain-catalog", "", "managed toolchain catalog")
 	flags.StringVar(&cfg.Provenance, "provenance", "", "release provenance bundle")
 	flags.StringVar(&cfg.Notices, "notices", "", "third-party notice bundle")
@@ -90,6 +92,7 @@ func assemble(cfg options) error {
 		"host binary":       &cfg.HostBinary,
 		"bootstrap":         &cfg.Bootstrap,
 		"host assets":       &cfg.HostAssets,
+		"WSL appliance":     &cfg.WSLAppliance,
 		"toolchain catalog": &cfg.ToolchainCatalog,
 		"provenance":        &cfg.Provenance,
 		"notices":           &cfg.Notices,
@@ -186,6 +189,10 @@ func assemble(cfg options) error {
 	if err != nil {
 		return err
 	}
+	wslEvidence, err := copyEvidence(cfg.WSLAppliance, temp, "inputs/loki-wsl-amd64.wsl", nil, 0644)
+	if err != nil {
+		return err
+	}
 	toolchainEvidence, err := copyEvidence(cfg.ToolchainCatalog, temp, "inputs/toolchain-catalog.json", &manifest.ToolchainCatalog, 0644)
 	if err != nil {
 		return err
@@ -215,7 +222,7 @@ func assemble(cfg options) error {
 		SourceRevision: cfg.SourceRevision, Manifest: manifest, IndexEntry: entry,
 		CoreImage: cfg.CoreImage, BrowserImage: cfg.BrowserImage,
 		ReleaseIndex: releaseIndexEvidence, ReleaseManifest: releaseManifestEvidence,
-		HostBinary: hostBinaryEvidence, Bootstrap: bootstrapEvidence, HostAssets: hostAssetsEvidence,
+		HostBinary: hostBinaryEvidence, Bootstrap: bootstrapEvidence, HostAssets: hostAssetsEvidence, WSLAppliance: wslEvidence,
 		ToolchainCatalog: toolchainEvidence, Provenance: provenanceEvidence, Notices: noticesEvidence,
 		ReleaseNotes: releaseNotesEvidence, EffectivePolicy: policyEvidence, EffectiveConfig: configEvidence,
 	})
@@ -232,7 +239,7 @@ func assemble(cfg options) error {
 	}
 
 	files := []releases.FileEvidence{
-		releaseIndexEvidence, releaseManifestEvidence, hostBinaryEvidence, bootstrapEvidence, hostAssetsEvidence,
+		releaseIndexEvidence, releaseManifestEvidence, hostBinaryEvidence, bootstrapEvidence, hostAssetsEvidence, wslEvidence,
 		toolchainEvidence, provenanceEvidence, noticesEvidence, releaseNotesEvidence, policyEvidence, configEvidence,
 	}
 	checksums := make([]string, 0, len(files)+1)
