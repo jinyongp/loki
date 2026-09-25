@@ -78,10 +78,11 @@ fi
 printf 'authority-shell=ok\n'
 `
 	plan, err := policy.Plan(WorkloadSpec{
-		ID:           randomOCIJobID(t),
-		PolicySHA256: policyDigest,
-		CWD:          ".",
-		Argv:         []string{"/bin/sh", "-c", script, "authority-shell", hostCanary},
+		ID:             randomOCIJobID(t),
+		PolicySHA256:   policyDigest,
+		CWD:            ".",
+		Argv:           []string{"/bin/sh", "-c", script, "authority-shell", hostCanary},
+		MaxOutputBytes: 1 << 10,
 	})
 	if err != nil {
 		t.Fatal(err)
