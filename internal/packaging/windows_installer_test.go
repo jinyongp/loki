@@ -29,6 +29,8 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$env:LOKI_WSL_NAME`,
 		`$env:LOKI_WSL_LOCATION`,
 		`$env:LOKI_WSL_AUTOSTART`,
+		`$env:LOKI_WSL_APPLIANCE_FILE`,
+		`Copy-Item -LiteralPath $localAppliance -Destination $appliance`,
 		`"--from-file", $appliance, "--name", $distributionName, "--no-launch"`,
 		`Get-FileHash -LiteralPath $appliance -Algorithm SHA256`,
 		`$file.Length -ne $applianceLength`,
@@ -80,5 +82,35 @@ func TestWindowsInstallerPreflightsConflictsBeforeDistributionMutation(t *testin
 	}
 	if conflict > install || taskConflict > install {
 		t.Fatal("Windows installer mutates WSL before conflict preflight")
+	}
+}
+
+func TestWindowsWSLAcceptanceRequiresExactCandidateAndRecovery(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "accept-wsl.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, required := range []string{
+		"evidence.wsl_appliance.path",
+		"evidence.wsl_appliance.length",
+		"evidence.wsl_appliance.sha256",
+		"loki-accept-$suffix",
+		"LOKI_WSL_APPLIANCE_FILE",
+		`if ($whoami -ne "ubuntu" -or $uid -ne "1000")`,
+		"default WSL user received Docker group authority",
+		"/home/ubuntu/workspace",
+		`"host", "doctor", "--system"`,
+		"Windows MCP token copy does not match",
+		"AreAccessRulesProtected",
+		"ExecutionTimeLimit",
+		`wsl.exe --terminate $distributionName`,
+		"Loki did not recover after WSL termination and restart",
+		`wsl.exe --unregister $distributionName`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Errorf("Windows WSL acceptance lacks %q", required)
+		}
 	}
 }

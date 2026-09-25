@@ -11,6 +11,7 @@ $minimumWSL = "2.4.4"
 $distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else { "loki-mcp" }
 $installLocation = if ($env:LOKI_WSL_LOCATION) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
 $autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
+$localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
 
 function Fail([string]$Message) {
     throw "Loki Windows installer: $Message"
@@ -63,7 +64,14 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("loki-wsl-" + [Guid]::NewGuid(
 $appliance = Join-Path $tempRoot $applianceAsset
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 try {
-    Invoke-WebRequest -UseBasicParsing -Uri $releaseUrl -OutFile $appliance
+    if ($localAppliance) {
+        if (-not (Test-Path -LiteralPath $localAppliance -PathType Leaf)) {
+            Fail "LOKI_WSL_APPLIANCE_FILE does not exist: $localAppliance"
+        }
+        Copy-Item -LiteralPath $localAppliance -Destination $appliance
+    } else {
+        Invoke-WebRequest -UseBasicParsing -Uri $releaseUrl -OutFile $appliance
+    }
     $file = Get-Item -LiteralPath $appliance
     if ($file.Length -ne $applianceLength) {
         Fail "Downloaded WSL appliance length does not match the accepted release."

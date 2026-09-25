@@ -29,6 +29,7 @@ func TestS06CanonicalReleaseStructure(t *testing.T) {
 		"scripts/verify/verify-wsl.sh",
 		"scripts/verify/release-pins.sh",
 		"scripts/verify/accept-compose.sh",
+		"scripts/verify/accept-wsl.ps1",
 		"scripts/maintainer/render-layouts.sh",
 		"tools/release/bootstrapbuild/main.go",
 		"tools/release/releasebuild/main.go",
