@@ -95,11 +95,17 @@ func TestOpenLauncherJournalOwnsConfiguredPrivateState(t *testing.T) {
 	if err = journal.Close(); err != nil {
 		t.Fatal(err)
 	}
+	if err = os.Mkdir(filepath.Join(layout.StateDirectory, "run-inputs"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	reopened, err := openLauncherJournal(layout)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(layout.StateDirectory, "journal")); err != nil {
 		t.Fatal(err)
 	}
 }

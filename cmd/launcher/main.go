@@ -138,7 +138,11 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 }
 
 func openLauncherJournal(layout launcherLayout) (*jobs.Journal, error) {
-	return jobs.OpenJournal(layout.StateDirectory, jobs.JournalLimits{
+	journalDirectory := filepath.Join(layout.StateDirectory, "journal")
+	if err := daemon.PrivateDirectory(journalDirectory); err != nil {
+		return nil, fmt.Errorf("prepare launcher journal directory: %w", err)
+	}
+	return jobs.OpenJournal(journalDirectory, jobs.JournalLimits{
 		MaxRecords:     layout.MaxJobs,
 		MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
 		MaxOutputBytes: layout.MaxOutputBytes,
