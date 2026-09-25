@@ -38,7 +38,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		"-replace \"`0\", \"\"",
 		`[int[]]$AllowedExitCodes = @(0)`,
 		`$AllowedExitCodes -notcontains $code`,
-		`Invoke-NativeCapture "wsl.exe" @("--help") @(0, 1)`,
+		`Invoke-NativeCapture "wsl.exe" @("--help") @(-1, 0, 1)`,
 		`/var/lib/loki-appliance/provisioned`,
 		`"host", "status", "--system", "--json"`,
 		`"host", "doctor", "--system"`,

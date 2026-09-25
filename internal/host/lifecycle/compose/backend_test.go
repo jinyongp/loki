@@ -290,6 +290,7 @@ func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
 		joined := strings.Join(call.args, " ")
 		if !strings.Contains(joined, "run --rm --network none --user 0:0") ||
 			!strings.Contains(joined, "--cap-drop ALL") ||
+			!strings.Contains(joined, "--cap-add DAC_OVERRIDE") ||
 			!strings.Contains(joined, "--security-opt no-new-privileges") {
 			t.Fatalf("snapshot helper authority = %#v", call.args)
 		}

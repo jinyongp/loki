@@ -42,7 +42,7 @@ if ($installLocation) {
     }
 }
 
-$help = Invoke-NativeCapture "wsl.exe" @("--help") @(0, 1)
+$help = Invoke-NativeCapture "wsl.exe" @("--help") @(-1, 0, 1)
 foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
     if (-not $help.Contains($requiredOption)) {
         Fail "WSL $minimumWSL or newer is required for custom .wsl distributions. Run 'wsl --update' manually, then retry."

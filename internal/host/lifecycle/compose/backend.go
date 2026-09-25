@@ -729,7 +729,7 @@ func (b *Backend) archiveVolume(ctx context.Context, state runtimeState, volume,
 	uid, gid := fmt.Sprint(os.Getuid()), fmt.Sprint(os.Getgid())
 	_, err := b.runner.Run(ctx, nil,
 		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
-		"--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--cap-add", "CHOWN",
+		"--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--cap-add", "DAC_OVERRIDE", "--cap-add", "CHOWN",
 		"--security-opt", "no-new-privileges",
 		"--entrypoint", "/bin/sh",
 		"--mount", "type=volume,src="+volume+",dst=/source,readonly",
