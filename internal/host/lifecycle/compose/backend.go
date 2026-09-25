@@ -728,7 +728,7 @@ func (b *Backend) volumeExists(ctx context.Context, name string) (bool, error) {
 func (b *Backend) archiveVolume(ctx context.Context, state runtimeState, volume, dir, archive string) error {
 	uid, gid := fmt.Sprint(os.Getuid()), fmt.Sprint(os.Getgid())
 	_, err := b.runner.Run(ctx, nil,
-		"run", "--rm", "--network", "none", "--read-only",
+		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
 		"--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--cap-add", "CHOWN",
 		"--security-opt", "no-new-privileges",
 		"--entrypoint", "/bin/sh",
@@ -743,7 +743,7 @@ func (b *Backend) archiveVolume(ctx context.Context, state runtimeState, volume,
 
 func (b *Backend) restoreVolume(ctx context.Context, state runtimeState, volume, dir, archive string) error {
 	_, err := b.runner.Run(ctx, nil,
-		"run", "--rm", "--network", "none",
+		"run", "--rm", "--network", "none", "--user", "0:0",
 		"--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--cap-add", "CHOWN",
 		"--security-opt", "no-new-privileges",
 		"--entrypoint", "/bin/sh",

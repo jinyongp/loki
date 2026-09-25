@@ -268,6 +268,34 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	}
 }
 
+func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupDir := t.TempDir()
+	if err = backend.archiveVolume(t.Context(), state, "fixture-volume", backupDir, "fixture.tar"); err != nil {
+		t.Fatal(err)
+	}
+	if err = backend.restoreVolume(t.Context(), state, "fixture-volume", backupDir, "fixture.tar"); err != nil {
+		t.Fatal(err)
+	}
+	calls := runner.snapshot()
+	if len(calls) != 2 {
+		t.Fatalf("snapshot helper calls = %#v", calls)
+	}
+	for _, call := range calls {
+		joined := strings.Join(call.args, " ")
+		if !strings.Contains(joined, "run --rm --network none --user 0:0") ||
+			!strings.Contains(joined, "--cap-drop ALL") ||
+			!strings.Contains(joined, "--security-opt no-new-privileges") {
+			t.Fatalf("snapshot helper authority = %#v", call.args)
+		}
+	}
+}
+
 func TestBackendSnapshotFailureResumesStoppedRuntime(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
