@@ -152,7 +152,8 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 		if strings.Contains(joined, " compose ") {
 			if !slices.Contains(call.env, "LOKI_IMAGE="+state.CoreImage) ||
 				!slices.Contains(call.env, "LOKI_WORKSPACE="+workspace) ||
-				!slices.Contains(call.env, "LOKI_BROWSER_IMAGE="+state.BrowserImage) {
+				!slices.Contains(call.env, "LOKI_BROWSER_IMAGE="+state.BrowserImage) ||
+				!slices.Contains(call.env, "LOKI_MCP_TOKEN_FILE="+backend.containerTokenPath()) {
 				t.Fatalf("compose environment = %#v", call.env)
 			}
 			profileIndex := slices.Index(call.args, "--profile")
@@ -168,12 +169,24 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	for path, wantMode := range map[string]os.FileMode{
 		filepath.Join(backend.runtimeRoot, "assets", "compose.yaml"):        0600,
 		filepath.Join(backend.runtimeRoot, "assets", "github.compose.toml"): 0644,
-		backend.tokenPath():                                                0600,
+		backend.tokenPath():          0600,
+		backend.containerTokenPath(): 0444,
 	} {
 		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != wantMode {
 			t.Fatalf("runtime asset %s = %v, %v; want %04o", path, info, statErr, wantMode)
 		}
+	}
+	canonicalToken, err := os.ReadFile(backend.tokenPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerToken, err := os.ReadFile(backend.containerTokenPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(canonicalToken, containerToken) {
+		t.Fatal("container MCP token projection differs from canonical token")
 	}
 }
 

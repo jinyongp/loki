@@ -388,7 +388,7 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 	}
 	composePath := filepath.Join(b.runtimeRoot, "assets", "compose.yaml")
 	githubPath := filepath.Join(b.runtimeRoot, "assets", "github.compose.toml")
-	for _, path := range []string{composePath, githubPath, b.tokenPath()} {
+	for _, path := range []string{composePath, githubPath, b.tokenPath(), b.containerTokenPath()} {
 		info, statErr := os.Lstat(path)
 		if statErr != nil {
 			return RuntimeReadiness{}, statErr
@@ -401,7 +401,7 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 		"LOKI_IMAGE=" + state.CoreImage,
 		"LOKI_JOB_IMAGE=" + state.CoreImage,
 		"LOKI_WORKSPACE=" + state.Workspace,
-		"LOKI_MCP_TOKEN_FILE=" + b.tokenPath(),
+		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
 		"LOKI_GITHUB_CONFIG_FILE=" + githubPath,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
 		"LOKI_SIGNING_KEY_FILE=/dev/null",
@@ -612,7 +612,7 @@ func (b *Backend) compose(ctx context.Context, state runtimeState, command ...st
 		"LOKI_IMAGE=" + state.CoreImage,
 		"LOKI_JOB_IMAGE=" + state.CoreImage,
 		"LOKI_WORKSPACE=" + state.Workspace,
-		"LOKI_MCP_TOKEN_FILE=" + b.tokenPath(),
+		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
 		"LOKI_GITHUB_CONFIG_FILE=" + materialized.GitHubConfig,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
 		"LOKI_SIGNING_KEY_FILE=/dev/null",
@@ -637,16 +637,30 @@ func (b *Backend) ensureAssetsAndToken() error {
 		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
 			return errors.New("compose MCP token must be a private regular file")
 		}
-		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
+	} else {
+		raw := make([]byte, 32)
+		if _, err = rand.Read(raw); err != nil {
+			return err
+		}
+		token := []byte(base64.RawURLEncoding.EncodeToString(raw))
+		if err = safeio.PublishPrivate(path, token, false); err != nil {
+			return err
+		}
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, err := os.ReadFile(path)
+	if err != nil {
 		return err
 	}
-	token := []byte(base64.RawURLEncoding.EncodeToString(raw))
-	return safeio.PublishPrivate(path, token, false)
+	projection := b.containerTokenPath()
+	if err = safeio.PublishPrivate(projection, token, true); err != nil {
+		return err
+	}
+	// Local Compose file secrets are bind mounts. The private parent directory
+	// protects the host-side projection while this mode lets the unprivileged
+	// MCP container UID read the mounted token.
+	return os.Chmod(projection, 0444)
 }
 
 func (b *Backend) loadRuntime() (runtimeState, bool, error) {
@@ -670,8 +684,11 @@ func (b *Backend) saveRuntime(state runtimeState) error {
 	return writePrivateJSON(b.runtimeStatePath(), state)
 }
 
-func (b *Backend) runtimeStatePath() string      { return filepath.Join(b.runtimeRoot, "runtime.json") }
-func (b *Backend) tokenPath() string             { return filepath.Join(b.root, "mcp-token") }
+func (b *Backend) runtimeStatePath() string { return filepath.Join(b.runtimeRoot, "runtime.json") }
+func (b *Backend) tokenPath() string        { return filepath.Join(b.root, "mcp-token") }
+func (b *Backend) containerTokenPath() string {
+	return filepath.Join(b.runtimeRoot, "assets", "mcp-token")
+}
 func (b *Backend) volumeName(name string) string { return b.project + "_" + name }
 
 func (b *Backend) volumeExists(ctx context.Context, name string) (bool, error) {
