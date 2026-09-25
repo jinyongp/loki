@@ -33,8 +33,17 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --gid 1000 ubuntu \
- && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash ubuntu \
+RUN if getent group ubuntu >/dev/null; then \
+      test "$(getent group ubuntu | cut -d: -f3)" = 1000; \
+    else \
+      groupadd --gid 1000 ubuntu; \
+    fi \
+ && if getent passwd ubuntu >/dev/null; then \
+      test "$(id -u ubuntu)" = 1000 \
+      && test "$(id -g ubuntu)" = 1000; \
+    else \
+      useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash ubuntu; \
+    fi \
  && usermod --lock ubuntu \
  && install -d -o ubuntu -g ubuntu -m 0750 /home/ubuntu/workspace \
  && printf '%s\n' 'ubuntu ALL=(root) NOPASSWD: /usr/local/bin/loki' > /etc/sudoers.d/loki-operator \
