@@ -39,19 +39,31 @@ jobs:
           set -e
           cat "$install_log"
           if test "$status" -ne 0; then
-            prepare_log="$RUNNER_TEMP/loki-prepare.log"
+            runtime_log="$RUNNER_TEMP/loki-runtime-state.log"
             {
               echo '--- Docker after installer failure ---'
               docker version --format 'server={{.Server.Version}}' || true
               docker compose version --short || true
-              echo '--- prepare container state ---'
-              docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' loki-prepare-1 || true
-              echo '--- prepare container logs ---'
-              docker logs loki-prepare-1 || true
-            } >"$prepare_log" 2>&1
-            cat "$prepare_log"
-            prepare_detail=$(tr '\r\n' '  ' <"$prepare_log" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
-            printf '::error title=Loki prepare failure::%s\n' "$prepare_detail"
+              echo '--- Loki container states ---'
+              ids=$(docker ps -aq --filter label=com.docker.compose.project=loki)
+              for id in $ids; do
+                docker inspect --format 'name={{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" || true
+              done
+              echo '--- terminal Loki container logs ---'
+              for id in $ids; do
+                state=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || true)
+                case "$state" in
+                  *exited*|*dead*|*unhealthy*)
+                    name=$(docker inspect --format '{{.Name}}' "$id" 2>/dev/null || echo "$id")
+                    echo "--- $name ---"
+                    docker logs --tail 80 "$id" || true
+                    ;;
+                esac
+              done
+            } >"$runtime_log" 2>&1
+            cat "$runtime_log"
+            runtime_detail=$(tr '\r\n' '  ' <"$runtime_log" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
+            printf '::error title=Loki runtime failure::%s\n' "$runtime_detail"
 
             filtered="$RUNNER_TEMP/loki-install.filtered.log"
             tr '\r' '\n' <"$install_log" | sed -E \
