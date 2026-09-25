@@ -2,14 +2,20 @@
 
 This page is for source-tree development, release engineering, topology
 acceptance, and specialized self-hosting. It is **not** the ordinary
-first-install procedure. A normal supported-host installation starts from the
-release-bound `loki-bootstrap` artifact and lets `loki host install` handle
-Docker/Compose prerequisite checks, workspace onboarding, embedded assets, and
-persistent host-management CLI installation. See [First install](first-install.md).
+first-install procedure. Normal installation starts from the public installer:
 
-The current verified host targets are Linux and WSL2. The repository
-`compose.yaml` is the developer view of the portable Linux-container contract.
-Browser and signing remain optional profiles.
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh
+```
+
+That installer owns release selection and verification, then lets
+`loki host install` handle Docker/Compose prerequisite checks, workspace
+onboarding, embedded assets, and persistent host-management CLI installation.
+See [First install](first-install.md).
+
+The portable container topology targets Linux and WSL2. The repository
+`compose.yaml` is the maintainer/developer view of that contract, not an
+end-user deployment file. Browser and signing remain optional profiles.
 
 ## Requirements for source-tree work
 

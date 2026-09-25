@@ -231,7 +231,12 @@ func TestInstallerDocumentationKeepsCanonicalOneLineInstall(t *testing.T) {
 	}
 	if !strings.Contains(firstInstall, "curl -fsSL https://jinyongp.dev/loki/install.sh | sh") ||
 		!strings.Contains(firstInstall, "loki-bootstrap-linux-amd64") {
-		t.Fatal("first-install documentation no longer presents the canonical one-line installer and pre-release fallback")
+		t.Fatal("first-install documentation no longer presents the canonical one-line installer and release-bound bootstrap")
+	}
+	for _, stale := range []string{"first public release has not been published", "pre-release build"} {
+		if strings.Contains(strings.ToLower(firstInstall), stale) {
+			t.Fatalf("first-install documentation contains stale release-state copy %q", stale)
+		}
 	}
 }
 

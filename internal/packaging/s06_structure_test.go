@@ -104,16 +104,24 @@ func TestPublicOneLineInstallerRemainsCanonical(t *testing.T) {
 	for _, required := range []string{
 		"curl -fsSL https://jinyongp.dev/loki/install.sh | sh",
 		"loki-bootstrap-linux-amd64",
-		"./loki-bootstrap-linux-amd64",
-		"does not need a Loki source checkout",
-		"you do not need to install them manually",
+		"You do **not** need a Loki source checkout",
+		"wsl.exe --shutdown",
+		"loki --version",
 		"loki host status",
+		"loki host doctor",
 		"loki host connection",
+		"sh -s --",
 		"--install-prerequisites",
-		"stable frontend",
+		"stable public entry point",
 	} {
 		if !strings.Contains(string(firstInstall), required) {
 			t.Fatalf("first-install documentation lacks %q", required)
+		}
+	}
+	lower := strings.ToLower(string(firstInstall))
+	for _, stale := range []string{"first public release has not been published", "pre-release build"} {
+		if strings.Contains(lower, stale) {
+			t.Fatalf("first-install documentation contains stale release-state copy %q", stale)
 		}
 	}
 }

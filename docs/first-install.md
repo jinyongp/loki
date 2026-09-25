@@ -1,99 +1,147 @@
 # First install
 
-The normal Loki installation entry point is:
+The normal Loki installation path is the public installer:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-The installer served at that URL is generated for one immutable release. It
-contains that release's exact Git tag and the SHA-256 of
-`loki-bootstrap-linux-amd64`, verifies the downloaded bootstrap, and only then
-executes it.
+Run it inside an Ubuntu shell. On Windows with WSL2, open the Ubuntu
+distribution first; do not run the command directly in PowerShell.
 
-The first public release has not been published yet. Until it is available,
-pre-release builds can be installed by running the supplied
-`loki-bootstrap-linux-amd64` artifact directly.
+The public installer is generated from one accepted immutable release. It
+downloads that release's `loki-bootstrap-linux-amd64`, verifies the exact
+SHA-256 embedded in the installer, and then executes the verified bootstrap.
+The bootstrap is itself bound to one release manifest and verifies the matching
+`loki-linux-amd64` host binary before installation.
 
-## What you need
+## Host requirements
 
-On a supported clean host, you need only:
+Current host targets are:
 
-- Ubuntu 24.04 amd64, or WSL2 running Ubuntu 24.04 amd64;
-- the `loki-bootstrap-linux-amd64` artifact when using a pre-release build;
-- a directory you want Loki to use as its workspace.
+- Ubuntu 24.04 amd64;
+- WSL2 running Ubuntu 24.04 amd64.
 
-The target host does not need a Loki source checkout or a local Go, Node.js,
-pnpm, Python, uv, Rust, Chromium, or other development toolchain.
+The release pipeline performs a source-free installation on Ubuntu 24.04.
+Clean-host WSL2 acceptance is still being completed, but the installer includes
+WSL2 host detection and specific systemd guidance.
 
-Docker Engine and Docker Compose are runtime prerequisites, but on supported
-Ubuntu hosts you do not need to install them manually. If the release needs
-Docker changes, Loki shows the exact prerequisite commands and asks for approval
-before changing packages or services. Loki never adds the operator to the
-`docker` group automatically.
+You need `curl` to fetch the public installer. If a minimal Ubuntu image does
+not have it:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates
+```
+
+You do **not** need a Loki source checkout, Go, Node.js, pnpm, Python, uv, Rust,
+Chromium, Docker Compose files, or project development toolchains before
+installing Loki.
+
+Docker Engine and Docker Compose are runtime prerequisites, but you normally do
+not need to install them yourself. The installer checks the existing runtime and
+can offer the supported Ubuntu installation/update commands when required.
+
+## WSL2 prerequisite
+
+If a compatible Docker daemon is already available inside WSL2, Loki can use it.
+
+If Loki needs to install Docker Engine inside WSL2, systemd must be enabled. If
+the installer reports that WSL2 systemd is disabled, edit `/etc/wsl.conf`:
+
+```ini
+[boot]
+systemd=true
+```
+
+Then run this from Windows PowerShell or Command Prompt:
+
+```powershell
+wsl.exe --shutdown
+```
+
+Reopen Ubuntu and run the installer again.
 
 ## Interactive install
 
-Make the supplied bootstrap executable and run it:
+Start with the one-line installer:
 
 ```sh
-chmod 0755 ./loki-bootstrap-linux-amd64
-./loki-bootstrap-linux-amd64
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-The bootstrap is built for one exact release. It contains that release's
-manifest, downloads `loki-linux-amd64` from the same immutable GitHub Release,
-verifies its manifest-bound length and SHA-256, stages it privately, and invokes
-`loki host install`.
+Although the shell script is piped through stdin, the release bootstrap opens
+the terminal directly for interactive questions.
 
-The installer asks for the workspace when it is not supplied. If the directory
-does not exist, it shows the exact creation command before asking to create it.
-If Loki needs a minimal POSIX ACL for the container runtime identity, it shows
-that exact ACL change before applying it.
+During installation, Loki may ask you to:
 
-If Docker Engine or Compose does not satisfy the release requirements,
-supported Ubuntu installations show the official Docker
-apt-repository/package commands before asking whether to run them. An existing
-compatible Docker installation is left unchanged.
+1. approve Docker Engine or Compose changes when the existing runtime is
+   missing or incompatible;
+2. choose the workspace directory;
+3. approve creating the workspace if it does not exist;
+4. approve the minimal POSIX ACL required by the container runtime identity;
+5. approve sudo-backed Docker lifecycle access when the current user cannot
+   directly access an otherwise compatible daemon.
 
-If the current user cannot access an otherwise compatible Docker daemon, Loki
-does not silently change group membership. Interactive installation can instead
-offer an explicit sudo-backed host-lifecycle Docker boundary. MCP, executor, and
-project jobs still do not receive the raw Docker socket.
+Use a clean absolute workspace path, for example:
 
-A successful user-scoped install persists the verified host CLI at:
+```text
+/home/alice/workspace
+```
+
+Do not enter `~/workspace` or a relative path. Loki does not expand shell
+syntax in the workspace prompt. Existing workspace contents are preserved.
+
+The installer shows privileged changes before approval. It does not silently add
+the operator to the `docker` group.
+
+## Verify the installation
+
+A successful user-scoped install persists the host CLI at:
 
 ```text
 ~/.local/bin/loki
 ```
 
-The installed Compose runtime remains bound to the operator-approved workspace
-and publishes MCP only on loopback.
-
-## System-scoped install
-
-For machine-wide host-management ownership:
+If `loki` is not on your current shell `PATH`, run:
 
 ```sh
-sudo ./loki-bootstrap-linux-amd64 --system
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-System scope installs the host CLI at:
+Then check the release and runtime:
 
-```text
-/usr/local/bin/loki
+```sh
+loki --version
+loki host status
+loki host doctor
 ```
 
-The scope changes host-management ownership and paths. It does not broaden MCP
-authorization, project execution authority, filesystem access, network grants,
-or Docker authority.
+`loki host status` reports the installed generation and runtime state.
+`loki host doctor` checks the host/runtime prerequisites and reports
+actionable failures.
+
+## Connect an MCP client
+
+Get the installed connection information with:
+
+```sh
+loki host connection
+```
+
+The command reports the loopback MCP endpoint, transport, authentication mode,
+and token-file path. It deliberately does not print the secret token value.
+
+The default installation publishes MCP only on loopback. Configure the MCP
+client from an environment that can reach that endpoint.
 
 ## Non-interactive install
 
-Automation must make every privileged mutation class explicit:
+Automation must explicitly approve each mutation class it permits. Pass
+installation options through the public installer after `sh -s --`:
 
 ```sh
-./loki-bootstrap-linux-amd64 \
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
   --workspace /srv/workspace \
   --create-workspace \
   --prepare-workspace \
@@ -102,74 +150,97 @@ Automation must make every privileged mutation class explicit:
   --allow-sudo-docker
 ```
 
-Omit approvals that are not needed by the target host. Missing required input or
-approval fails instead of prompting when stdin is not interactive.
+Omit approvals that are not needed on the target host. Missing required input or
+approval fails instead of prompting when interactive input is unavailable.
 
-Use `--json` when the caller needs a machine-readable installation result.
+Add `--json` when the caller needs a machine-readable installation result.
 
-A bootstrap cannot be redirected to another release with a command-line flag.
-Release identity is fixed when the bootstrap is built.
+## System-scoped install
 
-## After installation
-
-For user scope:
+System scope is intended for machine-wide host-management ownership. Download
+the public installer, then execute it as root with `--system`:
 
 ```sh
-~/.local/bin/loki host status
-~/.local/bin/loki host connection
-~/.local/bin/loki host doctor
+installer=$(mktemp)
+curl -fsSL https://jinyongp.dev/loki/install.sh -o "$installer"
+chmod 0755 "$installer"
+sudo "$installer" --system
+rm -f "$installer"
 ```
 
-For system scope:
+System scope installs the CLI at:
 
-```sh
-sudo /usr/local/bin/loki host status --system
-sudo /usr/local/bin/loki host connection --system
-sudo /usr/local/bin/loki host doctor --system
+```text
+/usr/local/bin/loki
 ```
 
-`loki host connection` reports the loopback MCP endpoint, transport,
-authentication mode, and token-file path. It does not print the token value.
+It changes host-management ownership and paths. It does not broaden MCP
+authorization, project filesystem access, network grants, or project Docker
+authority.
 
 ## What the installer handles
 
-The release-bound bootstrap and host manager together:
+The public installer, release-bound bootstrap, and host manager together:
 
-1. detect the supported host;
-2. validate the embedded release manifest and exact release tag;
-3. download the matching immutable GitHub Release host binary and verify its
-   length/SHA-256;
-4. validate the release-declared Docker Engine and Compose minimum versions;
-5. request approval for supported Ubuntu prerequisite changes;
-6. select, create, and minimally prepare the operator-approved workspace;
-7. materialize versioned Compose/configuration assets and a private MCP token;
-8. apply immutable release images through the transactional host lifecycle;
-9. persist the verified host-management CLI;
-10. report status and connection information.
+1. verify the installer-selected immutable bootstrap;
+2. detect the host and validate the release-bound host support contract;
+3. verify the matching immutable host binary;
+4. validate Docker Engine and Compose requirements;
+5. request approval for supported host prerequisite changes;
+6. select, create, and minimally prepare the workspace;
+7. materialize versioned runtime configuration and a private MCP token;
+8. apply the immutable release images through the host lifecycle;
+9. persist the verified host CLI;
+10. report the installed state and MCP connection information.
 
-The operator does not need to manage Compose YAML, internal service identities,
-fixed UID/GID values, token generation, Docker socket mounts, or Loki-managed
-language toolchains.
+You do not need to manage Compose YAML, internal service identities, fixed
+container UID/GID values, token generation, Docker socket mounts, or
+Loki-managed language toolchains.
+
+## Troubleshooting
+
+If the one-line installer fails, keep the complete terminal output. The most
+useful follow-up checks are:
+
+```sh
+~/.local/bin/loki host status
+~/.local/bin/loki host doctor
+```
+
+Run those commands only if the CLI was installed. If installation stopped
+before the CLI was persisted, rerun the installer after correcting the reported
+host prerequisite.
+
+Common first-install cases:
+
+- **`curl: command not found`** — install `curl` and `ca-certificates` with
+  apt, then rerun the installer.
+- **WSL2 systemd is disabled** — enable `systemd=true` in `/etc/wsl.conf`,
+  run `wsl.exe --shutdown` from Windows, reopen Ubuntu, and retry.
+- **`loki: command not found` after success** — add
+  `$HOME/.local/bin` to the current shell `PATH`.
+- **Docker access requires elevation** — use the installer's explicit
+  sudo-backed Docker option when prompted; do not manually add broad host
+  privileges just to bypass the check.
 
 ## Safety boundaries
 
 The installer does not:
 
-- resolve a mutable `latest` release;
-- execute a bootstrap or host binary whose bytes differ from the accepted
-  release identities;
+- resolve a mutable `latest` bootstrap;
+- execute a bootstrap or host binary that fails its release identity checks;
 - recursively `chmod` the workspace;
-- add the operator to the Docker group automatically;
+- silently add the operator to the Docker group;
 - expose the Docker socket to MCP, executor, or project jobs;
 - configure a specific MCP client;
 - silently install packages or elevate privileges in non-interactive mode;
-- require a source checkout or development toolchain.
+- require a source checkout or local development toolchain.
 
 Lifecycle mutation remains owned by `loki host`.
 
-## Public installer publication
+## Release publication
 
-The stable frontend is `https://jinyongp.dev/loki/install.sh`. Each accepted
-release publication replaces it with a release-bound installer only after the
-immutable GitHub Release succeeds. Until the first release is published, use a
-supplied pre-release bootstrap for validation.
+`https://jinyongp.dev/loki/install.sh` is the stable public entry point. An
+accepted release updates this URL only after immutable release publication
+succeeds. The release workflow then verifies the published installer bytes and
+runs a public source-free installation smoke test.

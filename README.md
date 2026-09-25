@@ -1,108 +1,120 @@
 # Loki
 
-Loki is a local service that gives AI assistants controlled access to a
-development workspace through the Model Context Protocol (MCP).
+Loki is a local MCP server for AI-assisted development. It gives an MCP client
+controlled access to a workspace for file editing, Git, isolated development
+jobs, previews, artifacts, and optional browser or Git-signing workflows without
+giving project code the host's Docker socket or machine credentials.
 
-It can work with files and Git, run isolated development jobs, inspect running
-work, publish local previews, collect artifacts, and use optional browser or Git
-signing capabilities. Loki keeps host management and privileged operations
-outside the workspace so project code does not automatically gain access to
-machine credentials or the Docker socket.
+## Install on Ubuntu or WSL2
 
-> **Release status**
->
-> The first public release has not been published yet. The stable installation
-> entry point is already fixed at `https://jinyongp.dev/loki/install.sh`; it
-> becomes usable when the first accepted release is published.
-
-## Supported systems
-
-The first supported hosts are:
-
-- Ubuntu 24.04 on amd64
-- WSL2 with Ubuntu 24.04 on amd64
-
-Loki uses Docker Engine and Docker Compose for its runtime. On supported
-Ubuntu systems, the installer can offer to install or update the required Docker
-components after showing the exact changes and asking for approval.
-
-You do not need a Loki source checkout or a local Go, Node.js, Python, Rust, or
-browser toolchain to install a released build.
-
-## Install
-
-The normal installation command is:
+The public installer is live. Run this command **inside the Ubuntu shell**:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-The installer is tied to one immutable Loki release. It downloads the matching
-bootstrap, verifies its SHA-256 before running it, then asks which directory Loki
-may use as its workspace. Any Docker or filesystem changes that require host
-privileges are shown before approval.
+That is the normal installation path. You do not need a Loki source checkout,
+Go, Node.js, pnpm, Python, Rust, Chromium, Docker Compose files, or other
+development tooling beforehand.
 
-The first public release has not been published yet. Until then, if you have
-been given a pre-release build, run its bootstrap directly:
+The current host targets are:
 
-```sh
-chmod +x loki-bootstrap-linux-amd64
-./loki-bootstrap-linux-amd64
+- Ubuntu 24.04 on amd64. The release pipeline verifies a source-free install on
+  this host.
+- WSL2 with Ubuntu 24.04 on amd64. The installer has WSL-specific detection and
+  prerequisite guidance; clean-host WSL acceptance is still being completed.
+
+The installer downloads a bootstrap bound to one immutable release, verifies its
+SHA-256, verifies the matching host binary, then starts the host installation.
+It asks for the workspace directory and shows any privileged Docker or
+filesystem changes before asking for approval.
+
+Use an absolute workspace path when prompted, for example:
+
+```text
+/home/alice/workspace
 ```
 
-For a machine-wide pre-release installation:
+If the directory does not exist, Loki can create it after showing the command it
+will run.
 
-```sh
-sudo ./loki-bootstrap-linux-amd64 --system
+### WSL2 and Docker
+
+You do not need to install Docker manually before trying Loki. If a compatible
+Docker daemon is already available, Loki uses it. If Loki needs to install
+Docker Engine inside WSL2, WSL systemd must be enabled.
+
+If the installer reports that WSL2 systemd is disabled, add this to
+`/etc/wsl.conf`:
+
+```ini
+[boot]
+systemd=true
 ```
 
-For unattended installation and the available approval flags, see
-[First install](docs/first-install.md).
+Then run the following from Windows PowerShell or Command Prompt and reopen the
+Ubuntu shell:
 
-## Check the installation
+```powershell
+wsl.exe --shutdown
+```
 
-After a normal user-scoped install:
+Run the installer again after WSL restarts.
+
+## Verify the installation
+
+A normal user-scoped install places the CLI at `~/.local/bin/loki`. If your
+shell does not find `loki` immediately, run:
 
 ```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then verify the installed release and runtime:
+
+```sh
+loki --version
 loki host status
 loki host doctor
+```
+
+`host status` reports the installed generation and service state.
+`host doctor` checks the host/runtime prerequisites and reports actionable
+failures.
+
+## Connect an MCP client
+
+Once the runtime is healthy, run:
+
+```sh
 loki host connection
 ```
 
-If `loki` is not yet on your shell's `PATH`, the user-scoped executable is
-installed at:
+This prints the MCP endpoint, transport, authentication mode, and token-file
+path needed to configure an MCP client. The secret token value is not printed to
+the terminal.
 
-```text
-~/.local/bin/loki
-```
-
-A system-scoped install uses `/usr/local/bin/loki`.
-
-`loki host connection` shows the connection information needed by an AI tool
-that supports MCP. It does not print the authentication token itself.
+The installed MCP endpoint is loopback-only by default. Keep it local unless you
+deliberately add a trusted transport in front of it.
 
 ## What Loki can do
 
-Once connected, an assistant can use Loki to work inside the workspace you
-selected during installation. Available capabilities include:
+Once connected, an assistant can:
 
-- reading and editing workspace files;
-- inspecting Git status, diffs, history, and staging precise changes;
-- running development commands and isolated jobs;
-- inspecting job output and runtime state;
-- publishing local previews and collecting artifacts;
-- using encrypted application secrets without returning their values through
-  the MCP interface;
-- enabling optional browser automation and isolated Git signing when needed.
+- read and edit files inside the selected workspace;
+- inspect Git status, diffs, history, and stage precise changes;
+- run finite commands and longer-lived development jobs in isolated runtime
+  resources;
+- inspect job state and output, and explicitly cancel jobs;
+- publish local previews and collect artifacts;
+- use encrypted application secrets without returning their values through MCP;
+- use optional browser automation and isolated Git signing when enabled.
 
 Optional components are not required for the base installation.
 
 ## Updates and recovery
 
-Host lifecycle commands are explicit. Loki does not silently update itself in
-the background.
-
-Useful commands include:
+Loki does not silently update itself. Host lifecycle changes are explicit:
 
 ```sh
 loki host update status
@@ -114,31 +126,47 @@ loki host rollback
 loki host restore BACKUP_ID
 ```
 
-Update, rollback, restore, and uninstall operations preserve the selected
-workspace by default.
+Install, update, rollback, restore, and uninstall preserve the selected workspace
+by default.
+
+## Unattended installation
+
+For automation, pass the approvals explicitly through the public installer:
+
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
+  --workspace /srv/workspace \
+  --create-workspace \
+  --prepare-workspace \
+  --install-prerequisites \
+  --allow-sudo-workspace \
+  --allow-sudo-docker
+```
+
+Missing required input or approval fails instead of silently changing the host.
+See [First install](docs/first-install.md) for the full installation behavior,
+system-scoped installation, and troubleshooting.
 
 ## Safety
 
-Loki is designed so that giving an assistant access to a workspace does not
-automatically give it full access to the host.
+Loki separates host management from project execution. Normal MCP/project jobs
+do not receive the raw Docker socket, host-management state, or platform
+credentials. The installer does not silently add the current user to the
+`docker` group and does not recursively change workspace permissions.
 
-In particular, the normal project execution path does not receive the raw
-Docker socket, machine credentials, or Loki's host-management state. The
-installer also does not silently add your user to the `docker` group or apply
-broad recursive permission changes to the workspace.
-
-When a privileged host change is required, Loki shows the proposed action and
-requires explicit approval.
+When a host mutation needs elevated privileges, Loki shows the action and
+requires approval.
 
 ## Documentation
 
-- [First install](docs/first-install.md) — installation options and supported
-  host behavior
-- [Self-hosting](docs/self-hosting.md) — advanced and maintainer-oriented
-  deployment paths
+- [First install](docs/first-install.md) — Ubuntu/WSL installation, verification,
+  non-interactive options, and troubleshooting.
+- [Self-hosting](docs/self-hosting.md) — source-tree, Compose, and
+  maintainer-oriented deployment paths.
+- [GitHub App integration](docs/github-app.md) — optional GitHub integration.
 
-Developer and release-engineering details live under [docs](docs/) and are kept
-out of the normal installation path.
+Developer, architecture, validation, and release-engineering records are under
+[docs](docs/) and are not required for normal installation.
 
 ## License
 
