@@ -2,7 +2,6 @@
   "name": "loki-project-e2e-fixture",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@12.5.1",
   "devDependencies": {
     "@playwright/test": "1.63.0"
   }

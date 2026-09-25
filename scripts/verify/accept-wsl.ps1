@@ -20,6 +20,16 @@ function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments) {
     return $text
 }
 
+function Invoke-NativeStdoutCapture([string]$Executable, [string[]]$Arguments) {
+    $output = & $Executable @Arguments 2>$null
+    $code = $LASTEXITCODE
+    $text = (($output -join [Environment]::NewLine) -replace "`0", "").Trim()
+    if ($code -ne 0) {
+        Fail "$Executable exited with code $code while capturing stdout."
+    }
+    return $text
+}
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $candidateRoot = (Resolve-Path $Candidate).Path
 $evidencePath = Join-Path $candidateRoot "evidence.json"
@@ -62,8 +72,8 @@ $env:LOKI_WSL_AUTOSTART = "1"
 try {
     & $installer
 
-    $whoami = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
-    $uid = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
+    $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
+    $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
     if ($whoami -ne "ubuntu" -or $uid -ne "1000") { Fail "default WSL user is $whoami/$uid, expected ubuntu/1000" }
 
     $groups = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/id", "-nG", "ubuntu")
