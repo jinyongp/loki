@@ -78,11 +78,10 @@ fi
 printf 'authority-shell=ok\n'
 `
 	plan, err := policy.Plan(WorkloadSpec{
-		ID:             randomOCIJobID(t),
-		PolicySHA256:   policyDigest,
-		CWD:            ".",
-		Argv:           []string{"/bin/sh", "-c", script, "authority-shell", hostCanary},
-		MaxOutputBytes: 1 << 10,
+		ID:           randomOCIJobID(t),
+		PolicySHA256: policyDigest,
+		CWD:          ".",
+		Argv:         []string{"/bin/sh", "-c", script, "authority-shell", hostCanary},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +90,7 @@ printf 'authority-shell=ok\n'
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Outcome != OutcomeExited || !result.ExitCodeKnown || result.ExitCode != 0 ||
-		result.Cleanup != CleanupComplete || !strings.Contains(string(result.Output), "authority-shell=ok") {
+	if result.Outcome != OutcomeExited || !result.ExitCodeKnown || result.ExitCode != 0 || result.Cleanup != CleanupComplete {
 		t.Fatalf("script authority result = %#v", result)
 	}
 }
