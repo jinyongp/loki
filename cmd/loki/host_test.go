@@ -470,13 +470,14 @@ func TestHostMaintenanceOptionParsing(t *testing.T) {
 
 func TestLauncherJournalInventoryReadsActiveJobsWithoutWriterOwnership(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "launcher")
-	if err := os.Mkdir(dir, 0700); err != nil {
+	journalRoot := filepath.Join(dir, "journal")
+	if err := os.MkdirAll(journalRoot, 0700); err != nil {
 		t.Fatal(err)
 	}
 	limits := jobs.JournalLimits{
 		MaxRecords: 8, MaxRecordBytes: 128 << 10, MaxOutputBytes: 4096, Retention: time.Minute,
 	}
-	journal, err := jobs.OpenJournal(dir, limits)
+	journal, err := jobs.OpenJournal(journalRoot, limits)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +544,7 @@ func TestLauncherJournalInventoryReadsActiveJobsWithoutWriterOwnership(t *testin
 	if !reflect.DeepEqual(active, []string{runningID, cleanupID}) {
 		t.Fatalf("active jobs = %#v", active)
 	}
-	if _, err = jobs.OpenJournal(dir, limits); err == nil || !strings.Contains(err.Error(), "already owned") {
+	if _, err = jobs.OpenJournal(journalRoot, limits); err == nil || !strings.Contains(err.Error(), "already owned") {
 		t.Fatalf("inventory disturbed launcher journal ownership: %v", err)
 	}
 }

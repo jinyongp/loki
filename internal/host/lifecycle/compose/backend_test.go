@@ -190,6 +190,42 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	}
 }
 
+func TestBackendDoctorProbeExecutesTrustedLauncherProbe(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	if err := backend.Activate(t.Context(), generation, lifecycle.InstallationState{
+		Scope: "user", Workspace: workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backend.DoctorProbe(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	state, found, err := backend.loadRuntime()
+	if err != nil || !found {
+		t.Fatalf("runtime state found=%v err=%v", found, err)
+	}
+	foundProbe := false
+	for _, call := range runner.snapshot() {
+		joined := strings.Join(call.args, " ")
+		if !strings.Contains(joined, " exec -T launcher /opt/loki/bin/loki host runtime-probe ") {
+			continue
+		}
+		foundProbe = true
+		if !strings.Contains(joined, "--launcher-layout /etc/loki/launcher.json") ||
+			!strings.Contains(joined, "--toolchain-catalog /usr/share/doc/loki/toolchain-catalog.json") {
+			t.Fatalf("doctor probe args = %#v", call.args)
+		}
+		if !slices.Contains(call.env, "LOKI_IMAGE="+state.CoreImage) ||
+			!slices.Contains(call.env, "LOKI_MCP_TOKEN_FILE="+backend.containerTokenPath()) {
+			t.Fatalf("doctor probe environment = %#v", call.env)
+		}
+	}
+	if !foundProbe {
+		t.Fatalf("launcher doctor probe was not executed: %#v", runner.snapshot())
+	}
+}
+
 func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *testing.T) {
 	backend, _, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")

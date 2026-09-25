@@ -83,7 +83,7 @@ func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout
 		layout.ResultRetentionSeconds < 1 {
 		return nil, errors.New("launcher layout contains invalid job journal settings")
 	}
-	records, err := jobs.ReadJournalSnapshot(layout.StateDirectory, jobs.JournalLimits{
+	records, err := jobs.ReadJournalSnapshot(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{
 		MaxRecords:     layout.MaxJobs,
 		MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
 		MaxOutputBytes: layout.MaxOutputBytes,
@@ -117,6 +117,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostConnection(args[1:], stdout, stderr)
 	case "doctor":
 		return runHostDoctor(args[1:], stdout, stderr)
+	case "runtime-probe":
+		return runHostRuntimeProbe(args[1:], stdout, stderr)
 	case "backup", "restore", "rollback", "enable", "disable", "uninstall":
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}

@@ -24,6 +24,16 @@ type fakeHostDoctorRuntime struct {
 	snapshots    []lifecycle.RuntimeSnapshotInfo
 }
 
+type fakeProbedHostDoctorRuntime struct {
+	*fakeHostDoctorRuntime
+	raw []byte
+	err error
+}
+
+func (f *fakeProbedHostDoctorRuntime) DoctorProbe(context.Context) ([]byte, error) {
+	return append([]byte(nil), f.raw...), f.err
+}
+
 func (f *fakeHostDoctorRuntime) Readiness(context.Context) (lifecyclecompose.RuntimeReadiness, error) {
 	return f.readiness, f.readinessErr
 }
@@ -126,7 +136,7 @@ func hostDoctorFixture(t *testing.T) (hostDoctorOptions, *fakeHostDoctorRuntime,
 	}
 
 	journalDir := filepath.Join(t.TempDir(), "launcher")
-	if err = os.Mkdir(journalDir, 0700); err != nil {
+	if err = os.MkdirAll(filepath.Join(journalDir, "journal"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	launcherPath := filepath.Join(t.TempDir(), "launcher.json")
@@ -145,6 +155,64 @@ func hostDoctorFixture(t *testing.T) (hostDoctorOptions, *fakeHostDoctorRuntime,
 	return hostDoctorOptions{
 		StateRoot: stateRoot, LauncherLayout: launcherPath, ToolchainCatalog: catalogPath,
 	}, runtime, now
+}
+
+func TestHostDoctorUsesRuntimeProbeForComposeState(t *testing.T) {
+	options, runtime, now := hostDoctorFixture(t)
+	options.LauncherLayout = filepath.Join(t.TempDir(), "missing-launcher.json")
+	options.ToolchainCatalog = filepath.Join(t.TempDir(), "missing-toolchain-catalog.json")
+	probe := hostdiagnostics.RuntimeProbe{
+		MaxConcurrentJobs: 8,
+		ToolchainChecks: []hostdiagnostics.Check{
+			hostdiagnostics.Healthy(
+				"toolchains", "toolchains_ready",
+				"administrator-approved managed toolchains are provisioned",
+				hostdiagnostics.Evidence{Name: "catalog_generations", Value: "1"},
+			),
+		},
+	}
+	raw, err := json.Marshal(probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probed := &fakeProbedHostDoctorRuntime{fakeHostDoctorRuntime: runtime, raw: raw}
+	report, err := inspectHostDoctor(t.Context(), options, hostDoctorDependencies{
+		OpenRuntime: func(*lifecycle.FileStore) (hostDoctorRuntime, error) { return probed, nil },
+		Now:         func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Healthy() {
+		t.Fatalf("runtime-probed report = %#v", report)
+	}
+	for _, check := range report.Checks {
+		if check.Code == "launcher_layout_unavailable" || check.Code == "toolchain_layout_unavailable" {
+			t.Fatalf("runtime probe fell back to host layout: %#v", report.Checks)
+		}
+	}
+}
+
+func TestHostRuntimeProbeEmitsValidatedRuntimeState(t *testing.T) {
+	options, _, _ := hostDoctorFixture(t)
+	var stdout, stderr bytes.Buffer
+	if code := runHostRuntimeProbe([]string{
+		"--launcher-layout", options.LauncherLayout,
+		"--toolchain-catalog", options.ToolchainCatalog,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("runtime probe code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var probe hostdiagnostics.RuntimeProbe
+	if err := json.Unmarshal(stdout.Bytes(), &probe); err != nil {
+		t.Fatal(err)
+	}
+	if err := probe.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(probe.ActiveJobs) != 0 || probe.MaxConcurrentJobs != 8 ||
+		len(probe.ToolchainChecks) != 1 || probe.ToolchainChecks[0].Status != hostdiagnostics.StatusHealthy {
+		t.Fatalf("runtime probe = %#v", probe)
+	}
 }
 
 func TestHostDoctorHealthyReportIsBoundedAndRedacted(t *testing.T) {
@@ -190,7 +258,7 @@ func TestHostDoctorBlocksWhenRecoveredActiveJobsExceedLimit(t *testing.T) {
 	if err = json.Unmarshal(raw, &layout); err != nil {
 		t.Fatal(err)
 	}
-	journal, err := jobs.OpenJournal(layout.StateDirectory, jobs.JournalLimits{
+	journal, err := jobs.OpenJournal(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{
 		MaxRecords: layout.MaxJobs, MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
 		MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second,
 	})

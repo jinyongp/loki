@@ -37,6 +37,10 @@ type hostDoctorRuntime interface {
 	lifecycle.RuntimeSnapshotStorage
 }
 
+type hostDoctorRuntimeProber interface {
+	DoctorProbe(context.Context) ([]byte, error)
+}
+
 type hostDoctorDependencies struct {
 	OpenRuntime func(*lifecycle.FileStore) (hostDoctorRuntime, error)
 	Now         func() time.Time
@@ -125,6 +129,52 @@ func resolveHostDoctorOptions(options hostDoctorOptions) (hostDoctorOptions, err
 		}
 	}
 	return options, nil
+}
+
+func runHostRuntimeProbe(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("host runtime-probe", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	launcherLayout := flags.String("launcher-layout", "/etc/loki/launcher.json", "launcher service layout")
+	toolchainCatalog := flags.String("toolchain-catalog", defaultHostToolchainCatalog, "managed toolchain catalog")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: loki host runtime-probe [--launcher-layout PATH] [--toolchain-catalog PATH]")
+		return 2
+	}
+	for name, value := range map[string]string{
+		"--launcher-layout":   *launcherLayout,
+		"--toolchain-catalog": *toolchainCatalog,
+	} {
+		if !filepath.IsAbs(value) || filepath.Clean(value) != value ||
+			value == string(filepath.Separator) || strings.ContainsRune(value, 0) {
+			fmt.Fprintf(stderr, "%s must be a clean absolute non-root path\n", name)
+			return 2
+		}
+	}
+
+	var layout hostLauncherLayout
+	if err := daemon.ReadJSON(*launcherLayout, &layout); err != nil {
+		fmt.Fprintln(stderr, "launcher layout is unavailable or invalid")
+		return 1
+	}
+	activeJobs, err := activeJobsFromLauncherLayout(context.Background(), layout)
+	if err != nil {
+		fmt.Fprintln(stderr, "job journal could not be validated")
+		return 1
+	}
+	probe := hostdiagnostics.RuntimeProbe{
+		ActiveJobs:        append([]string(nil), activeJobs...),
+		MaxConcurrentJobs: layout.MaxConcurrentJobs,
+		ToolchainChecks:   inspectDoctorToolchains(*toolchainCatalog, &layout),
+	}
+	if err = probe.Validate(); err != nil {
+		fmt.Fprintln(stderr, "runtime diagnostic probe is invalid")
+		return 1
+	}
+	if err = json.NewEncoder(stdout).Encode(probe); err != nil {
+		fmt.Fprintln(stderr, "cannot encode runtime diagnostic probe")
+		return 1
+	}
+	return 0
 }
 
 func runHostDoctor(args []string, stdout, stderr io.Writer) int {
@@ -320,44 +370,48 @@ func inspectHostDoctor(
 		}
 	}
 
-	var layout hostLauncherLayout
-	if err = daemon.ReadJSON(options.LauncherLayout, &layout); err != nil {
-		checks = append(checks, hostdiagnostics.Blocked(
-			"jobs", "launcher_layout_unavailable",
-			"launcher layout is unavailable or invalid",
-		))
-	} else {
-		launcherLayout = &layout
-		activeJobs, jobsErr := activeJobsFromLauncherLayout(ctx, layout)
-		evidence := []hostdiagnostics.Evidence{
-			{Name: "active_jobs", Value: strconv.Itoa(len(activeJobs))},
-			{Name: "max_concurrent_jobs", Value: strconv.Itoa(layout.MaxConcurrentJobs)},
+	probeSupported := false
+	if prober, ok := runtime.(hostDoctorRuntimeProber); ok {
+		probeSupported = true
+		raw, probeErr := prober.DoctorProbe(ctx)
+		var probe hostdiagnostics.RuntimeProbe
+		if probeErr == nil {
+			probeErr = json.Unmarshal(raw, &probe)
 		}
-		switch {
-		case jobsErr != nil:
-			checks = append(checks, hostdiagnostics.Blocked(
-				"jobs", "job_journal_unavailable",
-				"job journal could not be validated",
-			))
-		case len(activeJobs) > layout.MaxConcurrentJobs:
-			checks = append(checks, hostdiagnostics.Blocked(
-				"jobs", "active_jobs_over_limit",
-				"active jobs exceed the configured launcher concurrency limit", evidence...,
-			))
-		case len(activeJobs) > 0:
-			checks = append(checks, hostdiagnostics.Degraded(
-				"jobs", "active_jobs_present",
-				"active jobs currently block non-interrupting host maintenance", evidence...,
-			))
-		default:
-			checks = append(checks, hostdiagnostics.Healthy(
-				"jobs", "jobs_idle",
-				"no active jobs block host maintenance", evidence...,
-			))
+		if probeErr == nil {
+			probeErr = probe.Validate()
+		}
+		if probeErr != nil {
+			checks = append(checks,
+				hostdiagnostics.Blocked(
+					"jobs", "runtime_probe_unavailable",
+					"runtime job diagnostics could not be validated",
+				),
+				hostdiagnostics.Blocked(
+					"toolchains", "runtime_probe_unavailable",
+					"runtime toolchain diagnostics could not be validated",
+				),
+			)
+		} else {
+			checks = append(checks, jobDoctorCheck(probe.ActiveJobs, probe.MaxConcurrentJobs, nil))
+			checks = append(checks, probe.ToolchainChecks...)
 		}
 	}
 
-	checks = append(checks, inspectDoctorToolchains(options.ToolchainCatalog, launcherLayout)...)
+	if !probeSupported {
+		var layout hostLauncherLayout
+		if err = daemon.ReadJSON(options.LauncherLayout, &layout); err != nil {
+			checks = append(checks, hostdiagnostics.Blocked(
+				"jobs", "launcher_layout_unavailable",
+				"launcher layout is unavailable or invalid",
+			))
+		} else {
+			launcherLayout = &layout
+			activeJobs, jobsErr := activeJobsFromLauncherLayout(ctx, layout)
+			checks = append(checks, jobDoctorCheck(activeJobs, layout.MaxConcurrentJobs, jobsErr))
+		}
+		checks = append(checks, inspectDoctorToolchains(options.ToolchainCatalog, launcherLayout)...)
+	}
 
 	if store == nil || runtime == nil {
 		checks = append(checks, hostdiagnostics.Blocked(
@@ -408,6 +462,41 @@ func inspectHostDoctor(
 	)
 
 	return hostdiagnostics.NewReport(dependencies.Now(), checks...)
+}
+
+func jobDoctorCheck(activeJobs []string, maxConcurrentJobs int, err error) hostdiagnostics.Check {
+	if err != nil {
+		return hostdiagnostics.Blocked(
+			"jobs", "job_journal_unavailable",
+			"job journal could not be validated",
+		)
+	}
+	evidence := []hostdiagnostics.Evidence{
+		{Name: "active_jobs", Value: strconv.Itoa(len(activeJobs))},
+		{Name: "max_concurrent_jobs", Value: strconv.Itoa(maxConcurrentJobs)},
+	}
+	switch {
+	case maxConcurrentJobs < 1:
+		return hostdiagnostics.Blocked(
+			"jobs", "launcher_concurrency_invalid",
+			"launcher concurrency limit is invalid", evidence...,
+		)
+	case len(activeJobs) > maxConcurrentJobs:
+		return hostdiagnostics.Blocked(
+			"jobs", "active_jobs_over_limit",
+			"active jobs exceed the configured launcher concurrency limit", evidence...,
+		)
+	case len(activeJobs) > 0:
+		return hostdiagnostics.Degraded(
+			"jobs", "active_jobs_present",
+			"active jobs currently block non-interrupting host maintenance", evidence...,
+		)
+	default:
+		return hostdiagnostics.Healthy(
+			"jobs", "jobs_idle",
+			"no active jobs block host maintenance", evidence...,
+		)
+	}
 }
 
 func inspectDoctorToolchains(catalogPath string, layout *hostLauncherLayout) []hostdiagnostics.Check {

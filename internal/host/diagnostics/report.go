@@ -38,6 +38,32 @@ type Report struct {
 	Checks      []Check `json:"checks"`
 }
 
+type RuntimeProbe struct {
+	ActiveJobs        []string `json:"active_jobs"`
+	MaxConcurrentJobs int      `json:"max_concurrent_jobs"`
+	ToolchainChecks   []Check  `json:"toolchain_checks"`
+}
+
+func (p RuntimeProbe) Validate() error {
+	if p.MaxConcurrentJobs < 1 || p.MaxConcurrentJobs > 1024 || len(p.ActiveJobs) > 4096 ||
+		len(p.ToolchainChecks) < 1 || len(p.ToolchainChecks) > 8 {
+		return errors.New("runtime diagnostic probe bounds are invalid")
+	}
+	seenJobs := map[string]bool{}
+	for _, id := range p.ActiveJobs {
+		if !safeIdentifier(id, 128) || seenJobs[id] {
+			return errors.New("runtime diagnostic probe contains an invalid job identity")
+		}
+		seenJobs[id] = true
+	}
+	for _, check := range p.ToolchainChecks {
+		if err := validateCheck(check); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func Healthy(name, code, summary string, evidence ...Evidence) Check {
 	return Check{Name: name, Status: StatusHealthy, Code: code, Summary: summary, Evidence: evidence}
 }

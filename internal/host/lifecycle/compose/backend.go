@@ -450,6 +450,27 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 	}, nil
 }
 
+func (b *Backend) DoctorProbe(ctx context.Context) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	state, found, err := b.loadRuntime()
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("compose lifecycle runtime is not activated")
+	}
+	return b.compose(
+		ctx,
+		state,
+		"exec", "-T", "launcher",
+		"/opt/loki/bin/loki", "host", "runtime-probe",
+		"--launcher-layout", "/etc/loki/launcher.json",
+		"--toolchain-catalog", "/usr/share/doc/loki/toolchain-catalog.json",
+	)
+}
+
 func compactRuntimeServices(values []string) []string {
 	if len(values) < 2 {
 		return values
