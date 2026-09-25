@@ -165,14 +165,14 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 		t.Fatalf("compose calls restart=%v health=%v stop=%v verify=%v: %#v", sawRestart, sawHealth, sawStop, sawVerify, calls)
 	}
 
-	for _, path := range []string{
-		filepath.Join(backend.runtimeRoot, "assets", "compose.yaml"),
-		filepath.Join(backend.runtimeRoot, "assets", "github.compose.toml"),
-		backend.tokenPath(),
+	for path, wantMode := range map[string]os.FileMode{
+		filepath.Join(backend.runtimeRoot, "assets", "compose.yaml"):        0600,
+		filepath.Join(backend.runtimeRoot, "assets", "github.compose.toml"): 0644,
+		backend.tokenPath():                                                0600,
 	} {
 		info, statErr := os.Stat(path)
-		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-			t.Fatalf("private runtime asset %s = %v, %v", path, info, statErr)
+		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != wantMode {
+			t.Fatalf("runtime asset %s = %v, %v; want %04o", path, info, statErr, wantMode)
 		}
 	}
 }

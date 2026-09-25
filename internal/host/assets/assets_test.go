@@ -25,7 +25,7 @@ func TestCanonicalAssetsMatchDeveloperViews(t *testing.T) {
 	}
 }
 
-func TestMaterializeCreatesPrivateHostAssets(t *testing.T) {
+func TestMaterializeUsesPrivateRootAndContainerReadablePublicConfig(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "assets")
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
@@ -45,9 +45,14 @@ func TestMaterializeCreatesPrivateHostAssets(t *testing.T) {
 		if !bytes.Equal(raw, want) {
 			t.Fatalf("materialized asset %s differs", path)
 		}
+	}
+	for path, wantMode := range map[string]os.FileMode{
+		result.ComposePath:  0600,
+		result.GitHubConfig: 0644,
+	} {
 		info, statErr := os.Stat(path)
-		if statErr != nil || info.Mode().Perm() != 0600 {
-			t.Fatalf("materialized asset mode %s = %v, %v", path, info, statErr)
+		if statErr != nil || info.Mode().Perm() != wantMode {
+			t.Fatalf("materialized asset mode %s = %v, %v; want %04o", path, info, statErr, wantMode)
 		}
 	}
 }

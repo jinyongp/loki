@@ -57,6 +57,12 @@ func Materialize(root string) (Materialized, error) {
 	if err = safeio.PublishPrivate(githubPath, GitHubConfig(), true); err != nil {
 		return Materialized{}, err
 	}
+	// Compose mounts this non-secret operator configuration directly into
+	// capability-dropped service containers. Keep the parent directory private
+	// on the host while making the bind-mounted file readable in-container.
+	if err = os.Chmod(githubPath, 0644); err != nil {
+		return Materialized{}, err
+	}
 	return Materialized{Root: root, ComposePath: composePath, GitHubConfig: githubPath}, nil
 }
 
