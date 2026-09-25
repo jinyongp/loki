@@ -35,6 +35,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Get-FileHash -LiteralPath $appliance -Algorithm SHA256`,
 		`$file.Length -ne $applianceLength`,
 		`Run 'wsl --update' manually, then retry.`,
+		"-replace \"`0\", \"\"",
 		`/var/lib/loki-appliance/provisioned`,
 		`"host", "status", "--system", "--json"`,
 		`"host", "doctor", "--system"`,
@@ -108,6 +109,7 @@ func TestWindowsWSLAcceptanceRequiresExactCandidateAndRecovery(t *testing.T) {
 		`wsl.exe --terminate $distributionName`,
 		"Loki did not recover after WSL termination and restart",
 		`wsl.exe --unregister $distributionName`,
+		"-replace \"`0\", \"\"",
 	} {
 		if !strings.Contains(body, required) {
 			t.Errorf("Windows WSL acceptance lacks %q", required)

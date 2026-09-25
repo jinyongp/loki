@@ -20,10 +20,11 @@ function Fail([string]$Message) {
 function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments) {
     $output = & $Executable @Arguments 2>&1
     $code = $LASTEXITCODE
+    $text = (($output -join [Environment]::NewLine) -replace "`0", "").Trim()
     if ($code -ne 0) {
-        Fail "$Executable exited with code $code. $($output -join [Environment]::NewLine)"
+        Fail "$Executable exited with code $code. $text"
     }
-    return ($output -join [Environment]::NewLine).Trim()
+    return $text
 }
 
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
@@ -48,7 +49,7 @@ foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
     }
 }
 
-$existing = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { "$_".Trim([char]0).Trim() } | Where-Object { $_ }
+$existing = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
 if ($LASTEXITCODE -ne 0) {
     Fail "Could not list installed WSL distributions."
 }

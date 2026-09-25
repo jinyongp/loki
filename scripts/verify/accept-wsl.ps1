@@ -13,10 +13,11 @@ function Fail([string]$Message) {
 function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments) {
     $output = & $Executable @Arguments 2>&1
     $code = $LASTEXITCODE
+    $text = (($output -join [Environment]::NewLine) -replace "`0", "").Trim()
     if ($code -ne 0) {
-        Fail "$Executable exited with code $code. $($output -join [Environment]::NewLine)"
+        Fail "$Executable exited with code $code. $text"
     }
-    return ($output -join [Environment]::NewLine).Trim()
+    return $text
 }
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -116,7 +117,7 @@ finally {
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     }
-    $installed = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { "$_".Trim([char]0).Trim() } | Where-Object { $_ }
+    $installed = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
     if ($installed | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
         & wsl.exe --terminate $distributionName 2>$null | Out-Null
         & wsl.exe --unregister $distributionName 2>$null | Out-Null

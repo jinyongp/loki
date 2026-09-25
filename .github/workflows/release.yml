@@ -599,7 +599,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           wsl.exe --version
           if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
-          $help = wsl.exe --help | Out-String
+          $help = (wsl.exe --help | Out-String) -replace "`0", ""
           foreach ($option in @("--from-file", "--name", "--no-launch")) {
             if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
           }
