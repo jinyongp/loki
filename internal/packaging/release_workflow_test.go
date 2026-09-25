@@ -79,7 +79,12 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"LOKI_IMAGE: ${{ needs.build.outputs.core_image }}",
 		"bash ./scripts/verify/accept-authority-matrix.sh",
 		"./scripts/verify/accept-oci-jobs.sh",
-		"./scripts/verify/accept-compose.sh",
+		"Run MCP-only project execution acceptance",
+		"./scripts/verify/accept-project-execution.sh",
+		"Run provider release contract acceptance",
+		"go test ./internal/integrations/github -v -count=1",
+		"Run release Compose, browser and signing acceptance",
+		`LOKI_SIGNING_KEY_FILE="$key" ./scripts/verify/accept-compose.sh`,
 		"./scripts/verify/accept-bootstrap.sh",
 		"./scripts/build/build-toolchain-bundle.sh",
 		"Create or verify release tag",
@@ -117,6 +122,33 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	for _, match := range uses {
 		if !fullPin.MatchString(match[1]) {
 			t.Fatalf("release workflow action is not pinned to a full commit SHA: %s", match[1])
+		}
+	}
+}
+
+func TestProjectExecutionReleaseAcceptanceUsesExactCandidateToolchains(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "accept-project-execution.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"CORE_IMAGE must be pinned by a sha256 digest",
+		"sha256sum -c SHA256SUMS",
+		`.artifacts[] | select(.name == "node")`,
+		`.artifacts[] | select(.name == "pnpm")`,
+		`.artifacts[] | select(.name == "chromium")`,
+		`$docker" cp "$container:/opt/loki/bin/devtools" "$devtools"`,
+		"io.loki.devtools.$arch.sha256",
+		"LOKI_E2E_DEVTOOLS",
+		"LOKI_E2E_PNPM",
+		"LOKI_E2E_NODE",
+		"LOKI_E2E_CHROMIUM",
+		"go test ./internal/e2e -run '^TestProjectExecutionContract$' -v -count=1",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("project execution acceptance lacks %q", required)
 		}
 	}
 }

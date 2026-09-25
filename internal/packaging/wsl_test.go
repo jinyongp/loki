@@ -23,7 +23,7 @@ func TestWSLApplianceContract(t *testing.T) {
 		"# syntax=docker/dockerfile:1@sha256:",
 		"ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3",
 		"DOCKER_CE_VERSION=5:29.8.1-1~ubuntu.24.04~noble",
-		"CONTAINERD_VERSION=2.3.5-1~ubuntu.24.04~noble",
+		"CONTAINERD_VERSION=2.3.6-1~ubuntu.24.04~noble",
 		"DOCKER_BUILDX_VERSION=0.37.1-1~ubuntu.24.04~noble",
 		"DOCKER_COMPOSE_VERSION=5.5.1-1~ubuntu.24.04~noble",
 		"getent group ubuntu",

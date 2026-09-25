@@ -656,7 +656,7 @@ jobs:
       - name: Install acceptance prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install --yes acl
+          sudo apt-get install --yes acl libarchive-tools openssh-client
 
       - name: Run runner/vault OS permission acceptance
         run: |
@@ -672,6 +672,22 @@ jobs:
       - name: Restore candidate executable modes
         run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap"
 
+      - name: Build canonical toolchain bundle
+        run: ./scripts/build/build-toolchain-bundle.sh "$RUNNER_TEMP/toolchain-bundle"
+
+      - name: Install candidate toolchain runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(jq -r '.apt_packages[].name' packaging/native/toolchain-manifest.json)
+          test "${#packages[@]}" -gt 0
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Run MCP-only project execution acceptance
+        env:
+          LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
+        run: bash ./scripts/verify/accept-project-execution.sh "$LOKI_IMAGE" "$RUNNER_TEMP/toolchain-bundle"
+
       - name: Run MCP client-neutral recovery acceptance
         run: >-
           go test
@@ -681,6 +697,9 @@ jobs:
           -run
           'TestProjectContextRecoversAcrossMCPRestartAfterPostCheckpointChange|TestWorkspaceEditUsesGeneratedActionContract|TestGitStageUsesGeneratedActionContract|TestSecretMutationContractsAreGuardedAndDiscriminated|TestArtifactPublishUsesDiscriminatedReplaySafeContract|TestBrowserInteractUsesGenerationGuardedDiscriminatedContract|TestStore|TestReplay'
           -v -count=1
+
+      - name: Run provider release contract acceptance
+        run: go test ./internal/integrations/github -v -count=1
 
       - name: Run published release lifecycle recovery acceptance
         env:
@@ -727,17 +746,26 @@ jobs:
           LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
         run: bash ./scripts/verify/accept-authority-matrix.sh
 
-      - name: Run release Compose and browser acceptance
+      - name: Run release Compose, browser and signing acceptance
         env:
           LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
           LOKI_BROWSER_IMAGE: ${{ needs.build.outputs.browser_image }}
-        run: ./scripts/verify/accept-compose.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/signing-key"
+          ssh-keygen -q -t ed25519 -N "" -C "loki release acceptance" -f "$key"
+          sudo chown root:root "$key"
+          sudo chmod 0600 "$key"
+          cleanup() {
+            sudo rm -f "$key"
+            rm -f "$key.pub"
+          }
+          trap cleanup EXIT
+          LOKI_SIGNING_KEY_FILE="$key" ./scripts/verify/accept-compose.sh
 
       - name: Run bootstrap acceptance
         run: ./scripts/verify/accept-bootstrap.sh
-
-      - name: Verify canonical toolchain bundle
-        run: ./scripts/build/build-toolchain-bundle.sh "$RUNNER_TEMP/toolchain-bundle"
 
   publish:
     name: Publish immutable release
