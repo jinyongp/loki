@@ -12,6 +12,11 @@ on:
           - patch
           - minor
           - major
+      publish:
+        description: Publish the accepted release after validation.
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -769,6 +774,7 @@ jobs:
 
   publish:
     name: Publish immutable release
+    if: ${{ inputs.publish }}
     needs:
       - preflight
       - build

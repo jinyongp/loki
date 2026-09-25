@@ -21,6 +21,10 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	for _, required := range []string{
 		"workflow_dispatch:",
 		"bump:",
+		"Publish the accepted release after validation.",
+		"type: boolean",
+		"default: true",
+		"if: ${{ inputs.publish }}",
 		"actions-up@1.21.0",
 		"npm view actions-up version",
 		`gh release view "$latest_tag" --json isDraft,isImmutable`,
