@@ -34,6 +34,9 @@ func TestS06CanonicalReleaseStructure(t *testing.T) {
 		"tools/release/releasebuild/main.go",
 		"tools/release/version/main.go",
 		"tools/release/evidencebuild/main.go",
+		"tools/release/publishprep/main.go",
+		"tools/release/install.sh.tmpl",
+		"tools/release/install.ps1.tmpl",
 		"tools/release/README.md",
 		"docs/first-install.md",
 	} {

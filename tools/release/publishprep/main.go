@@ -31,11 +31,12 @@ var (
 )
 
 type options struct {
-	Candidate         string
-	Output            string
-	Tag               string
-	Commit            string
-	InstallerTemplate string
+	Candidate                string
+	Output                   string
+	Tag                      string
+	Commit                   string
+	InstallerTemplate        string
+	WindowsInstallerTemplate string
 }
 
 type publicationAsset struct {
@@ -51,6 +52,7 @@ func main() {
 	flag.StringVar(&cfg.Tag, "tag", "", "existing Git release tag")
 	flag.StringVar(&cfg.Commit, "commit", "", "full source commit SHA")
 	flag.StringVar(&cfg.InstallerTemplate, "installer-template", "", "install.sh template path")
+	flag.StringVar(&cfg.WindowsInstallerTemplate, "windows-installer-template", "", "install.ps1 template path")
 	flag.Parse()
 	if flag.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "unexpected positional arguments")
@@ -72,6 +74,10 @@ func preparePublication(cfg options) error {
 		return err
 	}
 	templatePath, err := cleanAbsolutePath(cfg.InstallerTemplate, "installer template")
+	if err != nil {
+		return err
+	}
+	windowsTemplatePath, err := cleanAbsolutePath(cfg.WindowsInstallerTemplate, "Windows installer template")
 	if err != nil {
 		return err
 	}
@@ -140,6 +146,14 @@ func preparePublication(cfg options) error {
 	if err != nil {
 		return err
 	}
+	windowsTemplate, err := readRegularBounded(windowsTemplatePath, maxInstallerTemplateBytes)
+	if err != nil {
+		return fmt.Errorf("read Windows installer template: %w", err)
+	}
+	windowsInstaller, err := renderWindowsInstaller(windowsTemplate, expectedTag, evidence.WSLAppliance.SHA256, evidence.WSLAppliance.Length)
+	if err != nil {
+		return err
+	}
 
 	parent := filepath.Dir(output)
 	if err = ensureRealDirectory(parent); err != nil {
@@ -173,6 +187,7 @@ func preparePublication(cfg options) error {
 		{Name: "loki-linux-amd64", Evidence: evidence.HostBinary, Mode: 0755},
 		{Name: "loki-bootstrap-linux-amd64", Evidence: evidence.Bootstrap, Mode: 0755},
 		{Name: "loki-host-assets.tar.gz", Evidence: evidence.HostAssets, Mode: 0644},
+		{Name: "loki-wsl-amd64.wsl", Evidence: evidence.WSLAppliance, Mode: 0644},
 		{Name: "loki-release-index.json", Evidence: evidence.ReleaseIndex, Mode: 0644},
 		{Name: "loki-release-manifest.json", Evidence: evidence.ReleaseManifest, Mode: 0644},
 		{Name: "loki-toolchain-catalog.json", Evidence: evidence.ToolchainCatalog, Mode: 0644},
@@ -199,7 +214,13 @@ func preparePublication(cfg options) error {
 	if err = writeSyncedFile(filepath.Join(assetsDir, "loki-install.sh"), installer, 0755); err != nil {
 		return err
 	}
+	if err = writeSyncedFile(filepath.Join(assetsDir, "loki-install.ps1"), windowsInstaller, 0644); err != nil {
+		return err
+	}
 	if err = writeSyncedFile(filepath.Join(pagesDir, "install.sh"), installer, 0644); err != nil {
+		return err
+	}
+	if err = writeSyncedFile(filepath.Join(pagesDir, "install.ps1"), windowsInstaller, 0644); err != nil {
 		return err
 	}
 	if err = writeAssetChecksums(assetsDir); err != nil {
@@ -254,6 +275,31 @@ func renderInstaller(template []byte, tag, bootstrapSHA256 string) ([]byte, erro
 	text = strings.Replace(text, digestPlaceholder, bootstrapSHA256, 1)
 	if strings.Contains(text, "@@LOKI_") {
 		return nil, errors.New("installer template contains unresolved Loki placeholders")
+	}
+	return []byte(text), nil
+}
+
+func renderWindowsInstaller(template []byte, tag, applianceSHA256 string, applianceLength int64) ([]byte, error) {
+	const tagPlaceholder = "@@LOKI_RELEASE_TAG@@"
+	const digestPlaceholder = "@@LOKI_WSL_SHA256@@"
+	const lengthPlaceholder = "@@LOKI_WSL_LENGTH@@"
+	text := string(template)
+	for _, placeholder := range []string{tagPlaceholder, digestPlaceholder, lengthPlaceholder} {
+		if strings.Count(text, placeholder) != 1 {
+			return nil, errors.New("Windows installer template must contain each release placeholder exactly once")
+		}
+	}
+	if !fullCommitSafeToken(tag) || len(applianceSHA256) != sha256.Size*2 || applianceLength <= 0 {
+		return nil, errors.New("Windows installer release identity is invalid")
+	}
+	if _, err := hex.DecodeString(applianceSHA256); err != nil {
+		return nil, errors.New("Windows installer appliance digest is invalid")
+	}
+	text = strings.Replace(text, tagPlaceholder, tag, 1)
+	text = strings.Replace(text, digestPlaceholder, applianceSHA256, 1)
+	text = strings.Replace(text, lengthPlaceholder, fmt.Sprintf("%d", applianceLength), 1)
+	if strings.Contains(text, "@@LOKI_") {
+		return nil, errors.New("Windows installer template contains unresolved Loki placeholders")
 	}
 	return []byte(text), nil
 }

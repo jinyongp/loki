@@ -526,6 +526,14 @@ jobs:
             --release-notes "$RUNNER_TEMP/release-notes.md" \
             --source-root "$GITHUB_WORKSPACE"
 
+      - name: Build WSL appliance
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/build/build-wsl.sh \
+            "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
+            "$RUNNER_TEMP/release"
+
       - name: Assemble candidate evidence
         id: candidate
         env:
@@ -544,6 +552,7 @@ jobs:
             --host-binary "$release/loki-linux-amd64" \
             --bootstrap "$release/loki-bootstrap-linux-amd64" \
             --host-assets "$release/host-assets.tar.gz" \
+            --wsl-appliance "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
             --toolchain-catalog "$release/toolchain-catalog.json" \
             --provenance "$release/provenance.bundle.json" \
             --notices "$release/notices.tar.gz" \
@@ -626,7 +635,8 @@ jobs:
             --output "$RUNNER_TEMP/publication-check" \
             --tag "$TAG" \
             --commit "$GITHUB_SHA" \
-            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl"
+            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl" \
+            --windows-installer-template "$GITHUB_WORKSPACE/tools/release/install.ps1.tmpl"
           sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
 
       - name: Run release OCI authority acceptance
@@ -707,7 +717,8 @@ jobs:
             --output "$GITHUB_WORKSPACE/publication" \
             --tag "$TAG" \
             --commit "$GITHUB_SHA" \
-            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl"
+            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl" \
+            --windows-installer-template "$GITHUB_WORKSPACE/tools/release/install.ps1.tmpl"
 
       - name: Promote accepted OCI image tags
         env:
@@ -792,19 +803,26 @@ jobs:
           gh release download "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern loki-install.sh \
+            --pattern loki-install.ps1 \
             --dir "$RUNNER_TEMP/release"
           for attempt in $(seq 1 20); do
             if curl --fail --location --silent --show-error \
               https://jinyongp.dev/loki/install.sh \
               --output "$RUNNER_TEMP/install.sh" &&
-              cmp -s "$RUNNER_TEMP/release/loki-install.sh" "$RUNNER_TEMP/install.sh"; then
+              curl --fail --location --silent --show-error \
+              https://jinyongp.dev/loki/install.ps1 \
+              --output "$RUNNER_TEMP/install.ps1" &&
+              cmp -s "$RUNNER_TEMP/release/loki-install.sh" "$RUNNER_TEMP/install.sh" &&
+              cmp -s "$RUNNER_TEMP/release/loki-install.ps1" "$RUNNER_TEMP/install.ps1"; then
               break
             fi
             test "$attempt" -lt 20
             sleep 15
           done
           cmp "$RUNNER_TEMP/release/loki-install.sh" "$RUNNER_TEMP/install.sh"
+          cmp "$RUNNER_TEMP/release/loki-install.ps1" "$RUNNER_TEMP/install.ps1"
           sh -n "$RUNNER_TEMP/install.sh"
+          ! grep -q '@@LOKI_' "$RUNNER_TEMP/install.ps1"
 
       - name: Run public source-free installation
         shell: bash

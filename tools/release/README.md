@@ -112,6 +112,7 @@ Accepted bytes are copied into stable public names including:
 - `loki-linux-amd64`;
 - `loki-bootstrap-linux-amd64`;
 - `loki-host-assets.tar.gz`;
+- `loki-wsl-amd64.wsl`;
 - `loki-release-manifest.json`;
 - `loki-release-index.json`;
 - `loki-toolchain-catalog.json`;
@@ -122,12 +123,15 @@ Accepted bytes are copied into stable public names including:
 Public artifacts retain the `loki-` product namespace even though repository
 entrypoints use local role names such as `cmd/bootstrap`.
 
-The same preparation renders `install.sh` from `install.sh.tmpl`. The script
-contains one exact immutable Git tag and the exact SHA-256 of
-`loki-bootstrap-linux-amd64`; it never resolves a mutable `latest` bootstrap.
-It downloads that bootstrap over HTTPS, verifies the digest, and forwards the
-caller's arguments. Lifecycle behavior remains in the release-bound bootstrap
-and `loki host`.
+The same preparation renders both installer frontends. `install.sh` is
+rendered from `install.sh.tmpl` with one exact immutable Git tag and the exact
+SHA-256 of `loki-bootstrap-linux-amd64`. `install.ps1` is rendered from
+`install.ps1.tmpl` with that same release tag plus the accepted
+`loki-wsl-amd64.wsl` length and SHA-256. Neither frontend resolves a mutable
+`latest` artifact. The shell installer delegates lifecycle behavior to the
+release-bound bootstrap; the Windows installer verifies and registers the
+accepted WSL appliance, whose first-boot service delegates Loki lifecycle
+behavior to `loki host`.
 
 ## GitHub publication
 
@@ -142,20 +146,24 @@ the workflow performs the release without a second operator handoff:
 4. builds required external CLI inputs from exact upstream source commits on native amd64 and arm64 GitHub runners in parallel;
 5. builds and pushes the core and browser OCI images and records their immutable
    digests;
-6. assembles release metadata, bootstrap and candidate evidence;
+6. assembles release metadata/bootstrap, builds the release-bound WSL appliance,
+   and binds it into candidate evidence;
 7. runs deterministic Go gates plus real OCI, Compose/browser, bootstrap,
    devtools and toolchain acceptance;
 8. creates the release Git tag only after acceptance succeeds;
 9. publishes the exact accepted assets with `releaseway/actions`, pinned to the latest stable release's full commit SHA;
-10. deploys the release-bound `install.sh` through GitHub Pages; and
-11. compares the public installer to the archived release asset and runs a
-    source-free installation smoke test.
+10. deploys the release-bound `install.sh` and `install.ps1` through GitHub
+    Pages; and
+11. compares both public installers to their archived release assets and runs
+    the Linux source-free installation smoke test. Windows WSL boot acceptance
+    is a separate exact-candidate release gate.
 
 Every cross-repository GitHub Action remains pinned to a full commit SHA. The
 adjacent version comment is maintained by `actions-up`.
 
-The deployed installer path is
-`https://jinyongp.dev/loki/install.sh`. GitHub Pages must use GitHub Actions
+The deployed installer paths are
+`https://jinyongp.dev/loki/install.sh` and
+`https://jinyongp.dev/loki/install.ps1`. GitHub Pages must use GitHub Actions
 as its source. GHCR container packages must also be public for anonymous
 source-free installation; GitHub currently exposes package visibility as a
 package setting rather than a supported visibility-mutation REST endpoint, so

@@ -39,6 +39,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 	hostRaw := []byte("#!/bin/sh\nexit 0\n")
 	bootstrapRaw := []byte("#!/bin/sh\nexit 0\n")
 	hostAssetsRaw := []byte("host-assets")
+	wslRaw := []byte("synthetic-wsl-appliance")
 	toolchainRaw := []byte("{\"version\":1}\n")
 	provenanceRaw := []byte("{\"_type\":\"https://in-toto.io/Statement/v1\"}\n")
 	noticesRaw := []byte("notices")
@@ -117,6 +118,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		"loki":                   {hostRaw, 0755},
 		"loki-bootstrap":         {bootstrapRaw, 0755},
 		"host-assets.tar.gz":     {hostAssetsRaw, 0644},
+		"loki-wsl-amd64.wsl":     {wslRaw, 0644},
 		"toolchain-catalog.json": {toolchainRaw, 0644},
 		"provenance.bundle.json": {provenanceRaw, 0644},
 		"notices.tar.gz":         {noticesRaw, 0644},
@@ -139,6 +141,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		HostBinary:       publicationFile("inputs/loki", hostRaw),
 		Bootstrap:        publicationFile("inputs/loki-bootstrap", bootstrapRaw),
 		HostAssets:       publicationFile("inputs/host-assets.tar.gz", hostAssetsRaw),
+		WSLAppliance:     publicationFile("inputs/loki-wsl-amd64.wsl", wslRaw),
 		ToolchainCatalog: publicationFile("inputs/toolchain-catalog.json", toolchainRaw),
 		Provenance:       publicationFile("inputs/provenance.bundle.json", provenanceRaw),
 		Notices:          publicationFile("inputs/notices.tar.gz", noticesRaw),
@@ -183,21 +186,31 @@ func installerTemplatePath(t *testing.T) string {
 	return filepath.Join(root, "tools", "release", "install.sh.tmpl")
 }
 
+func windowsInstallerTemplatePath(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(root, "tools", "release", "install.ps1.tmpl")
+}
+
 func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 	commit := strings.Repeat("a", 40)
 	candidate := writePublicationCandidate(t, commit)
 	output := filepath.Join(t.TempDir(), "publication")
 	if err := preparePublication(options{
-		Candidate: candidate, Output: output, Tag: "v1.2.3", Commit: commit, InstallerTemplate: installerTemplatePath(t),
+		Candidate: candidate, Output: output, Tag: "v1.2.3", Commit: commit,
+		InstallerTemplate: installerTemplatePath(t), WindowsInstallerTemplate: windowsInstallerTemplatePath(t),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	want := []string{
 		"SHA256SUMS", "loki-bootstrap-linux-amd64", "loki-candidate-evidence.json",
-		"loki-host-assets.tar.gz", "loki-install.sh", "loki-linux-amd64", "loki-notices.tar.gz",
+		"loki-host-assets.tar.gz", "loki-install.ps1", "loki-install.sh", "loki-linux-amd64", "loki-notices.tar.gz",
 		"loki-provenance.bundle.json", "loki-release-index.json", "loki-release-manifest.json",
-		"loki-release-notes.md", "loki-toolchain-catalog.json",
+		"loki-release-notes.md", "loki-toolchain-catalog.json", "loki-wsl-amd64.wsl",
 	}
 	entries, err := os.ReadDir(filepath.Join(output, "assets"))
 	if err != nil {
@@ -222,11 +235,22 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 	if string(releaseInstaller) != string(pageInstaller) {
 		t.Fatal("release installer and Pages installer differ")
 	}
+	windowsReleaseInstaller, err := os.ReadFile(filepath.Join(output, "assets", "loki-install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowsPageInstaller, err := os.ReadFile(filepath.Join(output, "pages", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(windowsReleaseInstaller) != string(windowsPageInstaller) {
+		t.Fatal("release Windows installer and Pages Windows installer differ")
+	}
 	pageEntries, err := os.ReadDir(filepath.Join(output, "pages"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pageEntries) != 1 || pageEntries[0].Name() != "install.sh" {
+	if len(pageEntries) != 2 || pageEntries[0].Name() != "install.ps1" || pageEntries[1].Name() != "install.sh" {
 		t.Fatalf("unexpected Pages publication = %#v", pageEntries)
 	}
 
@@ -253,12 +277,35 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 		t.Fatalf("installer syntax: %v %s", err, outputRaw)
 	}
 
+	wslRaw, err := os.ReadFile(filepath.Join(candidate, "inputs", "loki-wsl-amd64.wsl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wslSum := sha256.Sum256(wslRaw)
+	windowsInstaller := string(windowsReleaseInstaller)
+	windowsRequired := []string{
+		"$releaseTag = \"v1.2.3\"",
+		"$applianceSha256 = \"" + hex.EncodeToString(wslSum[:]) + "\"",
+		fmt.Sprintf("$applianceLength = [Int64]\"%d\"", len(wslRaw)),
+		"$applianceAsset = \"loki-wsl-amd64.wsl\"",
+	}
+	for _, required := range windowsRequired {
+		if !strings.Contains(windowsInstaller, required) {
+			t.Fatalf("Windows installer lacks %q", required)
+		}
+	}
+	if strings.Contains(windowsInstaller, "@@LOKI_") {
+		t.Fatal("rendered Windows installer contains unresolved placeholders")
+	}
+
 	checksums, err := os.ReadFile(filepath.Join(output, "assets", "SHA256SUMS"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(checksums), "  loki-bootstrap-linux-amd64\n") ||
-		!strings.Contains(string(checksums), "  loki-install.sh\n") {
+		!strings.Contains(string(checksums), "  loki-install.sh\n") ||
+		!strings.Contains(string(checksums), "  loki-install.ps1\n") ||
+		!strings.Contains(string(checksums), "  loki-wsl-amd64.wsl\n") {
 		t.Fatalf("public checksums = %s", checksums)
 	}
 }
@@ -267,9 +314,12 @@ func TestPreparePublicationRejectsIdentityDrift(t *testing.T) {
 	commit := strings.Repeat("a", 40)
 	candidate := writePublicationCandidate(t, commit)
 	template := installerTemplatePath(t)
+	windowsTemplate := windowsInstallerTemplatePath(t)
 	tests := map[string]options{
-		"tag":    {Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v9.9.9", Commit: commit, InstallerTemplate: template},
-		"commit": {Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v1.2.3", Commit: strings.Repeat("b", 40), InstallerTemplate: template},
+		"tag": {Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v9.9.9", Commit: commit,
+			InstallerTemplate: template, WindowsInstallerTemplate: windowsTemplate},
+		"commit": {Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v1.2.3", Commit: strings.Repeat("b", 40),
+			InstallerTemplate: template, WindowsInstallerTemplate: windowsTemplate},
 	}
 	for name, cfg := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -289,7 +339,8 @@ func TestPreparePublicationRejectsBootstrapReleaseBindingDrift(t *testing.T) {
 	}
 	defer func() { inspectPublicationBootstrap = previous }()
 	if err := preparePublication(options{
-		Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v1.2.3", Commit: commit, InstallerTemplate: installerTemplatePath(t),
+		Candidate: candidate, Output: filepath.Join(t.TempDir(), "out"), Tag: "v1.2.3", Commit: commit,
+		InstallerTemplate: installerTemplatePath(t), WindowsInstallerTemplate: windowsInstallerTemplatePath(t),
 	}); err == nil {
 		t.Fatal("bootstrap release binding drift was accepted")
 	}
@@ -306,5 +357,23 @@ func TestRenderInstallerRequiresExactPlaceholders(t *testing.T) {
 	}
 	if _, err = renderInstaller([]byte("@@LOKI_RELEASE_TAG@@"), "v1.2.3", digest); err == nil {
 		t.Fatal("template missing digest placeholder was accepted")
+	}
+}
+
+func TestRenderWindowsInstallerRequiresExactPlaceholders(t *testing.T) {
+	digest := strings.Repeat("b", 64)
+	template := []byte("tag=@@LOKI_RELEASE_TAG@@\nsum=@@LOKI_WSL_SHA256@@\nlength=@@LOKI_WSL_LENGTH@@\n")
+	rendered, err := renderWindowsInstaller(template, "v1.2.3", digest, 1234)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rendered) != "tag=v1.2.3\nsum="+digest+"\nlength=1234\n" {
+		t.Fatalf("rendered Windows installer = %q", rendered)
+	}
+	if _, err = renderWindowsInstaller([]byte("@@LOKI_RELEASE_TAG@@"), "v1.2.3", digest, 1234); err == nil {
+		t.Fatal("Windows template missing WSL placeholders was accepted")
+	}
+	if _, err = renderWindowsInstaller(template, "v1.2.3", digest, 0); err == nil {
+		t.Fatal("Windows installer accepted an empty WSL artifact")
 	}
 }
