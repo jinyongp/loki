@@ -603,6 +603,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes acl
 
+      - name: Run runner/vault OS permission acceptance
+        run: |
+          go test -c -o "$RUNNER_TEMP/execution-permission.test" ./internal/execution
+          sudo "$RUNNER_TEMP/execution-permission.test" -test.run '^TestLinuxRunnerCanWriteStateButCannotReadVaultKey$' -test.v
+
       - name: Download release candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -623,6 +628,16 @@ jobs:
             --commit "$GITHUB_SHA" \
             --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl"
           sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
+
+      - name: Run release OCI authority acceptance
+        env:
+          LOKI_OCI_ACCEPTANCE_IMAGE: ${{ needs.build.outputs.core_image }}
+        run: ./scripts/verify/accept-oci-jobs.sh
+
+      - name: Run protected-resource cross-path authority matrix
+        env:
+          LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
+        run: bash ./scripts/verify/accept-authority-matrix.sh
 
       - name: Run release Compose and browser acceptance
         env:

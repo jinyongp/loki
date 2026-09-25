@@ -62,15 +62,14 @@ else
 fi
 
 run_id="$$-$(date +%s)"
+release_image=${LOKI_OCI_ACCEPTANCE_IMAGE:-}
 registry_image=${LOKI_OCI_ACCEPTANCE_REGISTRY_IMAGE:-registry:3.1.1@sha256:fd374bae807c225661adfe2c0c1f9970a0b8fab1761fd7dfb91e0fd9a8748f9b}
 registry_container=
 registry_image_preexisting=0
+registry_image_used=0
+fixture_image_owned=0
 image_tag=
 image_digest=
-
-if docker_cmd image inspect "$registry_image" >/dev/null 2>&1; then
-  registry_image_preexisting=1
-fi
 
 cleanup() {
   result=$?
@@ -78,13 +77,13 @@ cleanup() {
   if test -n "$registry_container"; then
     docker_cmd rm -f "$registry_container" >/dev/null 2>&1 || true
   fi
-  if test -n "$image_tag"; then
+  if test "$fixture_image_owned" -eq 1 && test -n "$image_tag"; then
     docker_cmd image rm "$image_tag" >/dev/null 2>&1 || true
   fi
-  if test -n "$image_digest"; then
+  if test "$fixture_image_owned" -eq 1 && test -n "$image_digest"; then
     docker_cmd image rm "$image_digest" >/dev/null 2>&1 || true
   fi
-  if test "$registry_image_preexisting" -eq 0; then
+  if test "$registry_image_used" -eq 1 && test "$registry_image_preexisting" -eq 0; then
     docker_cmd image rm "$registry_image" >/dev/null 2>&1 || true
   fi
   if test "$workspace_owned" -eq 1; then
@@ -94,33 +93,48 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-registry_container=$(docker_cmd run --detach \
-  --name "loki-oci-job-registry-$run_id" \
-  --publish 127.0.0.1::5000 \
-  "$registry_image")
+if test -n "$release_image"; then
+  printf '%s\n' "$release_image" |
+    grep -Eq '^.+@sha256:[0-9a-f]{64}$' ||
+    fail "LOKI_OCI_ACCEPTANCE_IMAGE must be an immutable repo@sha256 reference"
+  docker_cmd pull "$release_image" >/dev/null ||
+    fail "cannot pull release acceptance image: $release_image"
+  image_digest=$release_image
+else
+  registry_image_used=1
+  if docker_cmd image inspect "$registry_image" >/dev/null 2>&1; then
+    registry_image_preexisting=1
+  fi
 
-registry_endpoint=$(docker_cmd port "$registry_container" 5000/tcp | sed -n '/^127\.0\.0\.1:[0-9][0-9]*$/p' | head -n 1)
-printf '%s\n' "$registry_endpoint" | grep -Eq '^127\.0\.0\.1:[0-9]+$' ||
-  fail "temporary registry did not publish an IPv4 loopback port"
+  registry_container=$(docker_cmd run --detach \
+    --name "loki-oci-job-registry-$run_id" \
+    --publish 127.0.0.1::5000 \
+    "$registry_image")
 
-image_tag="$registry_endpoint/loki-oci-job-fixture:$run_id"
-docker_cmd buildx build \
-  --load \
-  --file "$SOURCE_DIR/internal/platform/sandbox/testdata/oci-image/Dockerfile" \
-  --tag "$image_tag" \
-  "$SOURCE_DIR"
+  registry_endpoint=$(docker_cmd port "$registry_container" 5000/tcp | sed -n '/^127\.0\.0\.1:[0-9][0-9]*$/p' | head -n 1)
+  printf '%s\n' "$registry_endpoint" | grep -Eq '^127\.0\.0\.1:[0-9]+$' ||
+    fail "temporary registry did not publish an IPv4 loopback port"
 
-attempt=1
-while ! docker_cmd push "$image_tag"; do
-  test "$attempt" -lt 20 || fail "temporary registry did not accept the fixture image"
-  attempt=$((attempt + 1))
-  sleep 1
-done
+  image_tag="$registry_endpoint/loki-oci-job-fixture:$run_id"
+  docker_cmd buildx build \
+    --load \
+    --file "$SOURCE_DIR/internal/platform/sandbox/testdata/oci-image/Dockerfile" \
+    --tag "$image_tag" \
+    "$SOURCE_DIR"
 
-image_digest=$(docker_cmd image inspect --format '{{index .RepoDigests 0}}' "$image_tag")
-printf '%s\n' "$image_digest" |
-  grep -Eq '^127\.0\.0\.1:[0-9]+/loki-oci-job-fixture@sha256:[0-9a-f]{64}$' ||
-  fail "fixture image did not resolve to an immutable repository digest"
+  attempt=1
+  while ! docker_cmd push "$image_tag"; do
+    test "$attempt" -lt 20 || fail "temporary registry did not accept the fixture image"
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  image_digest=$(docker_cmd image inspect --format '{{index .RepoDigests 0}}' "$image_tag")
+  printf '%s\n' "$image_digest" |
+    grep -Eq '^127\.0\.0\.1:[0-9]+/loki-oci-job-fixture@sha256:[0-9a-f]{64}$' ||
+    fail "fixture image did not resolve to an immutable repository digest"
+  fixture_image_owned=1
+fi
 
 printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s\n' \
   "$socket" "$image_digest" "$allowed_authority"
@@ -149,6 +163,8 @@ run_oci_test() {
 
 run_oci_test TestRealOCIJobNetworkEndpointPreview
 run_oci_test TestRealOCIJobLifecycle
+run_oci_test TestRealOCIJobScriptAuthorityBoundary
+run_oci_test TestRealOCIJobDetachedDescendantCleanup
 run_oci_test TestRealOCIJobRecoveryAndBoundedOutput
 
 printf 'loki OCI Job acceptance: passed\n'

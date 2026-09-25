@@ -455,6 +455,7 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 	internalNetwork := p.resource.InternalNetworkName()
 	return dockerCreateRequest{
 		Image:           p.gateway.image,
+		Entrypoint:      []string{""},
 		Cmd:             command,
 		Env:             []string{"LOKI_JOB_PROXY_TOKEN=" + authToken},
 		User:            p.create.User,
@@ -493,6 +494,7 @@ func (p Plan) publisherCreateRequest(gatewayOutboundIPv4 string) dockerCreateReq
 	}
 	return dockerCreateRequest{
 		Image:           p.gateway.image,
+		Entrypoint:      []string{""},
 		Cmd:             command,
 		User:            p.create.User,
 		NetworkDisabled: false,

@@ -262,8 +262,9 @@ func TestPlanUsesOnlyFixedSecurityEnvelope(t *testing.T) {
 		t.Fatalf("plan metadata = %#v", plan)
 	}
 	create := plan.create
-	if create.Image != options.Image || create.WorkingDir != "/workspace/repo/subdir" ||
-		create.User != "10000:10000" || !create.NetworkDisabled || !create.AttachStdout || !create.AttachStderr {
+	if create.Image != options.Image || len(create.Entrypoint) != 1 || create.Entrypoint[0] != "" ||
+		create.WorkingDir != "/workspace/repo/subdir" || create.User != "10000:10000" ||
+		!create.NetworkDisabled || !create.AttachStdout || !create.AttachStderr {
 		t.Fatalf("create request = %#v", create)
 	}
 	if got := create.Env; len(got) != 2 || got[0] != "A=first" || got[1] != "Z=last" {

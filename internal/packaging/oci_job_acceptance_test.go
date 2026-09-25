@@ -80,6 +80,8 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	goCall := mustRead(t, goLog)
 	for _, required := range []string{
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobScriptAuthorityBoundary$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobDetachedDescendantCleanup$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobNetworkEndpointPreview$ -v -count=1",
 		"LOKI_REQUIRE_OCI_JOB_TESTS=1",
@@ -102,6 +104,77 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	}
 	if _, err := os.Stat(workspace); !os.IsNotExist(err) {
 		t.Fatalf("temporary workspace was not cleaned: %v", err)
+	}
+}
+
+func TestOCIJobAcceptanceRunnerUsesImmutableReleaseImage(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("runner is Linux-only")
+	}
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(root, "scripts", "verify", "accept-oci-jobs.sh")
+	bin := t.TempDir()
+	dockerLog := filepath.Join(t.TempDir(), "docker.log")
+	goLog := filepath.Join(t.TempDir(), "go.log")
+	writeExecutable(t, filepath.Join(bin, "docker"), fakeOCIJobDocker)
+	writeExecutable(t, filepath.Join(bin, "go"), fakeOCIJobGo)
+
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	image := "ghcr.io/jinyongp/loki@sha256:" + strings.Repeat("b", 64)
+	command := exec.Command("sh", script)
+	command.Dir = root
+	command.Env = append(os.Environ(),
+		"PATH="+bin+":"+os.Getenv("PATH"),
+		"TMPDIR="+t.TempDir(),
+		"LOKI_TEST_DOCKER_SOCKET="+socket,
+		"LOKI_OCI_ACCEPTANCE_IMAGE="+image,
+		"LOKI_FAKE_DOCKER_LOG="+dockerLog,
+		"LOKI_FAKE_GO_LOG="+goLog,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("release-image runner failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "loki OCI Job acceptance: passed") {
+		t.Fatalf("runner output = %q", output)
+	}
+
+	dockerCalls := mustRead(t, dockerLog)
+	if !strings.Contains(dockerCalls, "pull "+image) {
+		t.Fatalf("release image was not pulled:\n%s", dockerCalls)
+	}
+	for _, forbidden := range []string{
+		"run --detach --name loki-oci-job-registry-",
+		"internal/platform/sandbox/testdata/oci-image/Dockerfile",
+		"push 127.0.0.1:",
+	} {
+		if strings.Contains(dockerCalls, forbidden) {
+			t.Fatalf("release-image mode used fixture path %q:\n%s", forbidden, dockerCalls)
+		}
+	}
+
+	goCalls := mustRead(t, goLog)
+	for _, required := range []string{
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobNetworkEndpointPreview$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobScriptAuthorityBoundary$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobDetachedDescendantCleanup$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
+		"LOKI_TEST_DOCKER_IMAGE=" + image,
+	} {
+		if !strings.Contains(goCalls, required) {
+			t.Errorf("release-image invocation missing %q:\n%s", required, goCalls)
+		}
 	}
 }
 
@@ -167,7 +240,7 @@ case "$1" in
       *) exit 2 ;;
     esac
     ;;
-  push|rm)
+  pull|push|rm)
     exit 0
     ;;
   image)

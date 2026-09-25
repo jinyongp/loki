@@ -63,6 +63,14 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"Verify architecture policy",
 		"Verify Go module tidiness",
 		"Verify Git diff hygiene",
+		"Run runner/vault OS permission acceptance",
+		"go test -c -o \"$RUNNER_TEMP/execution-permission.test\" ./internal/execution",
+		"sudo \"$RUNNER_TEMP/execution-permission.test\" -test.run '^TestLinuxRunnerCanWriteStateButCannotReadVaultKey$' -test.v",
+		"Run release OCI authority acceptance",
+		"LOKI_OCI_ACCEPTANCE_IMAGE: ${{ needs.build.outputs.core_image }}",
+		"Run protected-resource cross-path authority matrix",
+		"LOKI_IMAGE: ${{ needs.build.outputs.core_image }}",
+		"bash ./scripts/verify/accept-authority-matrix.sh",
 		"./scripts/verify/accept-oci-jobs.sh",
 		"./scripts/verify/accept-compose.sh",
 		"./scripts/verify/accept-bootstrap.sh",
@@ -160,7 +168,6 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		}
 	}
 }
-
 
 func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
 	root := filepath.Join("..", "..")

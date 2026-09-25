@@ -144,6 +144,7 @@ type Plan struct {
 
 type dockerCreateRequest struct {
 	Image            string                  `json:"Image"`
+	Entrypoint       []string                `json:"Entrypoint"`
 	Cmd              []string                `json:"Cmd"`
 	Env              []string                `json:"Env"`
 	outputBytes      int                     `json:"-"`
@@ -528,6 +529,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	needsGateway := network == NetworkDependencyInstall || len(endpoints) > 0
 	create := dockerCreateRequest{
 		Image:           p.image,
+		Entrypoint:      []string{""},
 		Cmd:             argv,
 		Env:             environment,
 		outputBytes:     spec.MaxOutputBytes,

@@ -143,6 +143,141 @@ func TestRealOCIJobLifecycle(t *testing.T) {
 	}
 }
 
+func TestRealOCIJobDetachedDescendantCleanup(t *testing.T) {
+	if os.Getenv("LOKI_REQUIRE_OCI_JOB_TESTS") != "1" {
+		t.Skip("set LOKI_REQUIRE_OCI_JOB_TESTS=1 with explicit Docker socket, pinned image, and shared workspace fixtures")
+	}
+	if runtime.GOOS != "linux" {
+		t.Fatal("real OCI detached-descendant acceptance requires Linux")
+	}
+	socket := requiredOCIEnv(t, "LOKI_TEST_DOCKER_SOCKET")
+	image := requiredOCIEnv(t, "LOKI_TEST_DOCKER_IMAGE")
+	workspace := requiredOCIEnv(t, "LOKI_TEST_DOCKER_WORKSPACE")
+	if !filepath.IsAbs(socket) || !filepath.IsAbs(workspace) {
+		t.Fatal("OCI fixture paths must be absolute")
+	}
+	info, err := os.Stat(workspace)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("OCI workspace fixture must be an existing directory: %v", err)
+	}
+
+	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	policyDigest := strings.Repeat("d", 64)
+	policy, err := NewPolicy(PolicyOptions{
+		GenerationSHA256: policyDigest,
+		Image:            image,
+		Gateway: GatewayPolicyOptions{
+			Image: image, Binary: "/opt/loki/bin/loki",
+			ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
+			EgressPolicy:      "/usr/share/doc/loki/egress-policy.json", ProxyPort: 18766,
+			MemoryBytes: 64 << 20, PIDs: 16, TmpfsBytes: 16 << 20,
+		},
+		Workspace:   workspace,
+		UID:         workloadUID,
+		GID:         workloadGID,
+		Environment: []string{"PATH=/usr/bin:/bin"},
+		MemoryBytes: 128 << 20,
+		PIDs:        32,
+		TmpfsBytes:  16 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id := randomOCIJobID(t)
+	probe := buildOCIDetachedProbe(t, workspace, id)
+	heartbeatName := ".loki-oci-detached-" + id + ".heartbeat"
+	hostHeartbeat := filepath.Join(workspace, heartbeatName)
+	if err = os.WriteFile(hostHeartbeat, []byte("0\n"), 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(hostHeartbeat, 0666); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(hostHeartbeat) })
+
+	plan, err := policy.Plan(WorkloadSpec{
+		ID:           id,
+		PolicySHA256: policyDigest,
+		CWD:          ".",
+		Argv:         []string{probe, "/workspace/" + heartbeatName},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := realOCIEngine(t, socket, peerUID)
+	started, err := engine.StartJob(t.Context(), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !started.Created || !started.Started || started.InstanceRef == "" {
+		t.Fatalf("detached start result = %#v", started)
+	}
+	cleaned := false
+	t.Cleanup(func() {
+		if cleaned {
+			return
+		}
+		_, _ = engine.CleanupJob(context.Background(), plan.Resource(), started.InstanceRef)
+	})
+
+	const initialHeartbeat = "0\n"
+	var first string
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, readErr := os.ReadFile(hostHeartbeat)
+		if readErr == nil && string(raw) != initialHeartbeat {
+			first = string(raw)
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if first == "" {
+		output, _, outputErr := engine.OutputJob(t.Context(), plan.Resource(), started.InstanceRef)
+		t.Fatalf("detached child did not start: output=%q error=%v", output, outputErr)
+	}
+	advanced := false
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, readErr := os.ReadFile(hostHeartbeat)
+		if readErr == nil && string(raw) != first {
+			advanced = true
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if !advanced {
+		t.Fatal("detached child heartbeat did not advance before cleanup")
+	}
+
+	cleanup, err := engine.CleanupJob(t.Context(), plan.Resource(), started.InstanceRef)
+	if err != nil || cleanup != CleanupComplete {
+		t.Fatalf("detached cleanup = %s, %v", cleanup, err)
+	}
+	cleaned = true
+	stoppedAt, err := os.ReadFile(hostHeartbeat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	after, err := os.ReadFile(hostHeartbeat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(stoppedAt) {
+		t.Fatalf("detached descendant survived container cleanup: before=%q after=%q", stoppedAt, after)
+	}
+	state, err := engine.InspectJob(t.Context(), plan.Resource(), started.InstanceRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Exists {
+		t.Fatalf("detached workload resource remained after cleanup: %#v", state)
+	}
+}
+
 func TestRealOCIJobRecoveryAndBoundedOutput(t *testing.T) {
 	if os.Getenv("LOKI_REQUIRE_OCI_JOB_TESTS") != "1" {
 		t.Skip("set LOKI_REQUIRE_OCI_JOB_TESTS=1 with explicit Docker socket, pinned image, and shared workspace fixtures")
@@ -492,6 +627,30 @@ func realOCIEngine(t *testing.T, socket string, peerUID uint32) *Engine {
 		t.Fatal(err)
 	}
 	return engine
+}
+
+func buildOCIDetachedProbe(t *testing.T, workspace, id string) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := ".loki-oci-detached-probe-" + id
+	target := filepath.Join(workspace, name)
+	command := exec.Command(
+		"go", "build", "-trimpath", "-o", target,
+		"./internal/platform/sandbox/testdata/oci-detached-probe",
+	)
+	command.Dir = root
+	command.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
+	if output, buildErr := command.CombinedOutput(); buildErr != nil {
+		t.Fatalf("build OCI detached probe: %v\n%s", buildErr, output)
+	}
+	if err = os.Chmod(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(target) })
+	return "/workspace/" + name
 }
 
 func buildOCIFixtureServer(t *testing.T, workspace, id string) string {

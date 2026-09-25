@@ -235,6 +235,9 @@ func TestDomainLifecycleCreatesAndCleansExactResourceDomain(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if len(request.Entrypoint) != 1 || request.Entrypoint[0] != "" {
+				t.Errorf("container %q inherited image entrypoint: %#v", name, request.Entrypoint)
+			}
 			switch name {
 			case resource.GatewayName():
 				if request.Image != plan.gateway.image ||
