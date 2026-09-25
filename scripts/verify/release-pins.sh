@@ -112,10 +112,25 @@ verify_metadata() {
 
   docker_latest=$(latest_package_version docker-ce)
   compose_latest=$(latest_package_version docker-compose-plugin)
+  buildx_latest=$(latest_package_version docker-buildx-plugin)
+  containerd_latest=$(latest_package_version containerd.io)
   test -n "$docker_latest" && test "$docker_min" = "$docker_latest" ||
     fail "Docker Engine minimum $docker_min is stale; latest official noble/stable package is $docker_latest"
   test -n "$compose_latest" && test "$compose_min" = "$compose_latest" ||
     fail "Docker Compose minimum $compose_min is stale; latest official noble/stable package is $compose_latest"
+
+  wsl_docker=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_CE_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
+  wsl_compose=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_COMPOSE_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
+  wsl_buildx=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_BUILDX_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
+  wsl_containerd=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" CONTAINERD_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
+  test "$wsl_docker" = "$docker_latest" ||
+    fail "WSL Docker Engine pin $wsl_docker is stale; latest is $docker_latest"
+  test "$wsl_compose" = "$compose_latest" ||
+    fail "WSL Docker Compose pin $wsl_compose is stale; latest is $compose_latest"
+  test -n "$buildx_latest" && test "$wsl_buildx" = "$buildx_latest" ||
+    fail "WSL Docker Buildx pin $wsl_buildx is stale; latest is $buildx_latest"
+  test -n "$containerd_latest" && test "$wsl_containerd" = "$containerd_latest" ||
+    fail "WSL containerd pin $wsl_containerd is stale; latest is $containerd_latest"
 }
 
 inspect_digest() {
@@ -157,6 +172,14 @@ verify_alpine_runtime() {
   verify_ref "$alpine" "${alpine%@*}" "$label Alpine runtime image"
 }
 
+verify_ubuntu_runtime() {
+  file=$1
+  label=$2
+  ubuntu=$(sed -n 's/^FROM --platform=linux\/amd64 \(ubuntu:24\.04@sha256:[0-9a-f]*\)$/\1/p' "$file" | head -n 1)
+  test -n "$ubuntu" || fail "$label Ubuntu runtime image pin is missing"
+  verify_ref "$ubuntu" ubuntu:24.04 "$label Ubuntu runtime image"
+}
+
 verify_containers() {
   require docker
   docker buildx version >/dev/null 2>&1 ||
@@ -175,6 +198,8 @@ verify_containers() {
 
   verify_alpine_runtime "$source_dir/packaging/images/Dockerfile" core
   verify_alpine_runtime "$source_dir/packaging/images/browser.Dockerfile" browser
+  verify_frontend "$source_dir/packaging/wsl/Dockerfile" wsl
+  verify_ubuntu_runtime "$source_dir/packaging/wsl/Dockerfile" wsl
 
   git_image=$(sed -n \
     's/^FROM \(alpine\/git:[^ ]*@sha256:[0-9a-f]*\) AS git-root$/\1/p' \
