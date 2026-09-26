@@ -72,14 +72,13 @@ func HostPolicy(port int, publicHosts []string, next http.Handler) http.Handler 
 	_ = port
 	allowed := map[string]bool{}
 	for _, host := range publicHosts {
-		allowed[host] = true
+		if canonical := canonicalPublicHost(host); canonical != "" {
+			allowed[canonical] = true
+		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		valid := loopbackHost(r.Host)
-		if allowed[r.Host] {
-			valid = true
-		}
-		if host, _, err := net.SplitHostPort(r.Host); err == nil && allowed[host] {
+		if allowed[canonicalPublicHost(r.Host)] {
 			valid = true
 		}
 		if !valid {
@@ -92,6 +91,15 @@ func HostPolicy(port int, publicHosts []string, next http.Handler) http.Handler 
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func canonicalPublicHost(value string) string {
+	host := strings.TrimSpace(value)
+	if splitHost, _, err := net.SplitHostPort(host); err == nil {
+		host = splitHost
+	}
+	host = strings.TrimSuffix(strings.Trim(host, "[]"), ".")
+	return strings.ToLower(host)
 }
 
 func loopbackHost(value string) bool {

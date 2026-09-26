@@ -55,6 +55,8 @@ func TestHostPolicy(t *testing.T) {
 		{"[::1]:19000", "", 204},
 		{"mcp.example.com", "", 204},
 		{"mcp.example.com:443", "", 204},
+		{"MCP.Example.COM", "", 204},
+		{"MCP.Example.COM.:443", "", 204},
 		{"evil.example", "", 421},
 		{"192.0.2.1:19000", "", 421},
 		{"mcp.example.com", "https://evil.example", 403},
