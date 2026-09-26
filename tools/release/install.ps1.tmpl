@@ -236,7 +236,7 @@ catch {
         Write-Host "[Loki] Collecting diagnostics before rollback..."
         $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
         $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
-        if ($diagnostics.Count -gt 0) {
+        if ($diagnostics) {
             Write-Host "[Loki] Recent provisioning diagnostics:"
             Write-Host ($diagnostics -join [Environment]::NewLine)
         }

@@ -63,6 +63,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Step "Writing protected Windows MCP connection files..."`,
 		`Step "Configuring Windows startup integration..."`,
 		`[Loki] Collecting diagnostics before rollback...`,
+		`if ($diagnostics) {`,
 		`[Loki] Rolling back incomplete installation...`,
 		`[Loki] Rollback complete. Removed incomplete WSL distribution '$distributionName'.`,
 		`[Loki] You can rerun the installer with the same command.`,
@@ -97,6 +98,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`& wsl.exe -d $distributionName --user root --exec /usr/bin/test`,
 		`Write-Host $token`,
 		`Write-Output $token`,
+		`$diagnostics.Count`,
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("Windows installer contains forbidden %q", forbidden)
