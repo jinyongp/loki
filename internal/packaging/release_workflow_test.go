@@ -85,6 +85,8 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"./scripts/verify/accept-oci-jobs.sh",
 		"Run MCP-only project execution acceptance",
 		"./scripts/verify/accept-project-execution.sh",
+		"Run provider-neutral MCP ingress acceptance",
+		"TestProviderNeutralExternalIngressAcceptance",
 		"Run provider release contract acceptance",
 		"go test ./internal/integrations/github -v -count=1",
 		"Run release Compose, browser and signing acceptance",

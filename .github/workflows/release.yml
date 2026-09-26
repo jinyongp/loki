@@ -703,6 +703,9 @@ jobs:
           'TestProjectContextRecoversAcrossMCPRestartAfterPostCheckpointChange|TestWorkspaceEditUsesGeneratedActionContract|TestGitStageUsesGeneratedActionContract|TestSecretMutationContractsAreGuardedAndDiscriminated|TestArtifactPublishUsesDiscriminatedReplaySafeContract|TestBrowserInteractUsesGenerationGuardedDiscriminatedContract|TestStore|TestReplay'
           -v -count=1
 
+      - name: Run provider-neutral MCP ingress acceptance
+        run: go test ./internal/app/mcp -run '^TestProviderNeutralExternalIngressAcceptance$' -v -count=1
+
       - name: Run provider release contract acceptance
         run: go test ./internal/integrations/github -v -count=1
 
