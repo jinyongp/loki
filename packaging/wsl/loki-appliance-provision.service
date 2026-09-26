@@ -4,6 +4,8 @@ Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
 ConditionPathExists=!/var/lib/loki-appliance/provisioned
+StartLimitIntervalSec=120
+StartLimitBurst=4
 
 [Service]
 Type=oneshot

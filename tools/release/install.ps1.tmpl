@@ -62,6 +62,19 @@ function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments, [int[]]
     return $result.Stdout
 }
 
+function Get-ProvisionJournalText([int]$Tail = 80) {
+    $result = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", [string]$Tail)
+    return ((@($result.Stdout, $result.Stderr) | Where-Object { $_ }) -join [Environment]::NewLine)
+}
+
+function Get-ProvisionFailureMessage([string]$Fallback) {
+    $journal = Get-ProvisionJournalText 40
+    if ($journal.Contains("failed to bind host port 127.0.0.1:18765/tcp: address already in use")) {
+        return "Loki MCP port 18765 is already in use. Another process or container is listening on 127.0.0.1:18765 in the WSL networking environment. Stop the existing listener before installing Loki, then rerun this command."
+    }
+    return $Fallback
+}
+
 try {
 Step "Checking Windows and WSL prerequisites..."
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
@@ -141,26 +154,61 @@ try {
     $keepAlive = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
 
     $ready = $false
+    $lastRestartCount = 0
+    $maxProvisionRestarts = 3
     for ($attempt = 0; $attempt -lt 300; $attempt++) {
-        # Probe the systemd unit as the normal appliance user. This avoids
-        # repeatedly opening a root WSL user session while first boot is still
-        # converging; administrative calls are made only after provisioning.
-        # Do not treat a transient failed state as terminal here: this unit is
-        # configured with Restart=on-failure and is intentionally retryable.
-        $probe = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/systemctl", "is-active", "--quiet", "loki-appliance-provision.service")
+        # Query the system service as the normal appliance user. systemctl show
+        # remains read-only and lets us distinguish a long first boot from a
+        # service that is repeatedly failing and auto-restarting.
+        $probe = Invoke-NativeResult "wsl.exe" @(
+            "-d", $distributionName, "--exec", "/usr/bin/systemctl", "show",
+            "loki-appliance-provision.service", "--no-pager",
+            "--property=ActiveState", "--property=SubState", "--property=Result",
+            "--property=NRestarts", "--property=ExecMainStatus"
+        )
         if ($probe.ExitCode -eq 0) {
-            $ready = $true
-            break
-        }
-        if ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
-            Write-Host "[Loki]   First-boot provisioning is still running ($($attempt * 2)s elapsed)..."
+            $service = @{}
+            foreach ($line in ($probe.Stdout -split '\r?\n')) {
+                $parts = $line -split "=", 2
+                if ($parts.Count -eq 2) {
+                    $service[$parts[0]] = $parts[1]
+                }
+            }
+
+            $activeState = [string]$service["ActiveState"]
+            $subState = [string]$service["SubState"]
+            $serviceResult = [string]$service["Result"]
+            $execMainStatus = [string]$service["ExecMainStatus"]
+            $restartCount = 0
+            if ([string]$service["NRestarts"] -match '^[0-9]+$') {
+                $restartCount = [int]$service["NRestarts"]
+            }
+
+            if ($activeState -eq "active") {
+                $ready = $true
+                break
+            }
+
+            if ($restartCount -gt $lastRestartCount) {
+                Write-Host "[Loki]   Provisioning attempt failed; systemd restart $restartCount/$maxProvisionRestarts..."
+                $lastRestartCount = $restartCount
+            }
+
+            if ($activeState -eq "failed" -or $restartCount -ge $maxProvisionRestarts) {
+                $reason = "Loki appliance provisioning failed repeatedly (state=$activeState/$subState, result=$serviceResult, exit=$execMainStatus, restarts=$restartCount)."
+                Fail (Get-ProvisionFailureMessage $reason)
+            }
+
+            if ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
+                Write-Host "[Loki]   First-boot provisioning state: $activeState/$subState; restarts=$restartCount ($($attempt * 2)s elapsed)..."
+            }
+        } elseif ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
+            Write-Host "[Loki]   Waiting for first-boot systemd state ($($attempt * 2)s elapsed)..."
         }
         Start-Sleep -Seconds 2
     }
     if (-not $ready) {
-        $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
-        $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
-        Fail "Loki appliance provisioning did not complete within 10 minutes. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
+        Fail (Get-ProvisionFailureMessage "Loki appliance provisioning did not complete within 10 minutes.")
     }
     Write-Host "[Loki] First-boot provisioning complete."
 

@@ -179,10 +179,17 @@ the current invocation.
 
 If installation fails, the installer prints one `[Loki] ERROR:` line that
 includes the active installation stage instead of exposing a raw PowerShell
-native-command stack. A first-boot timeout also includes the recent
-`loki-appliance-provision.service` journal. The service is retryable and the
-normal Loki lifecycle journal remains authoritative; a failed attempt is not
-reported as a successful installation.
+native-command stack. During first boot it also reports the systemd unit state
+and restart count, so repeated provisioning failures are not presented as one
+long-running install. The provision service has a bounded restart rate; after
+repeated failures the installer stops early, prints recent service diagnostics,
+and rolls back the fresh install instead of waiting the full timeout.
+
+A bind failure on `127.0.0.1:18765` is reported explicitly as an MCP endpoint
+port conflict. Another process or container is already using Loki's default MCP
+port in the WSL networking environment; stop that listener before retrying the
+install. A genuinely long first boot with no repeated service failure may still
+wait up to the normal provisioning timeout.
 
 For a fresh install, resources created by the current installer invocation are
 transactional. If a later provisioning, health, connection-file, or startup-task

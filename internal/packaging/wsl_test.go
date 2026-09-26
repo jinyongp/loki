@@ -122,6 +122,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"Requires=docker.service",
 		"After=docker.service network-online.target",
 		"ConditionPathExists=!/var/lib/loki-appliance/provisioned",
+		"StartLimitIntervalSec=120",
+		"StartLimitBurst=4",
 		"ExecStart=/usr/lib/loki-appliance/provision",
 		"Restart=on-failure",
 	} {
