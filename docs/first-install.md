@@ -161,9 +161,21 @@ If the installer says WSL is too old, run `wsl --update` manually. A WSL
 update failure is a Windows/WSL prerequisite problem; the Loki installer does
 not attempt to repair Windows Installer or Windows optional features.
 
-If a distribution with the requested name already exists, choose a different
-name with `LOKI_WSL_NAME`. The installer never unregisters or overwrites an
-existing distribution.
+If a distribution with the requested name already exists, the normal installer
+stops without modifying it. If it may be an interrupted Loki install, inspect
+the first-boot service and recent journal directly from the appliance:
+
+```powershell
+wsl -d loki-mcp --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager
+wsl -d loki-mcp --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80
+```
+
+The appliance binary is present at `/usr/lib/loki-appliance/loki` from the
+initial image. The normal `/usr/local/bin/loki` CLI is published by host
+provisioning and may not exist in an interrupted installation. If the existing
+distribution is unrelated, choose a different name with `LOKI_WSL_NAME`. The
+installer never unregisters or overwrites a distribution that existed before
+the current invocation.
 
 If installation fails, the installer prints one `[Loki] ERROR:` line that
 includes the active installation stage instead of exposing a raw PowerShell

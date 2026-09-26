@@ -89,7 +89,7 @@ foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
 $existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
 $existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
-    Fail "A WSL distribution named '$distributionName' already exists. If it came from a previous Loki install attempt, inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'. Loki will not remove it automatically; otherwise choose another name with LOKI_WSL_NAME."
+    Fail "A WSL distribution named '$distributionName' already exists. Loki will not modify or remove pre-existing distributions automatically. If this may be an interrupted Loki install, inspect 'wsl -d $distributionName --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager' and 'wsl -d $distributionName --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80'. The appliance binary, when present, is /usr/lib/loki-appliance/loki; /usr/local/bin/loki may not exist until provisioning succeeds. Otherwise choose another name with LOKI_WSL_NAME."
 }
 if (Test-Path -LiteralPath $stateDir) {
     Fail "Windows Loki state already exists for '$distributionName': $stateDir. Loki will not overwrite or remove pre-existing state automatically."

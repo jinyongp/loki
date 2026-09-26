@@ -115,6 +115,14 @@ func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t
 	body := string(raw)
 
 	existingConflict := strings.Index(body, `A WSL distribution named '$distributionName' already exists.`)
+	if !strings.Contains(body, `/usr/bin/systemctl status loki-appliance-provision.service --no-pager`) ||
+		!strings.Contains(body, `/usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80`) ||
+		!strings.Contains(body, `The appliance binary, when present, is /usr/lib/loki-appliance/loki; /usr/local/bin/loki may not exist until provisioning succeeds.`) {
+		t.Fatal("Windows installer existing-distribution guidance does not cover incomplete appliance provisioning")
+	}
+	if strings.Contains(body, `inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'`) {
+		t.Fatal("Windows installer still assumes the published CLI exists for interrupted installs")
+	}
 	stateConflict := strings.Index(body, `Windows Loki state already exists for '$distributionName'`)
 	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
 	markCreated := strings.Index(body, `$createdDistribution = $true`)
