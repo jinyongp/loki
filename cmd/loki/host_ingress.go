@@ -15,12 +15,20 @@ import (
 )
 
 type hostIngressOptions struct {
-	System         bool
-	StateRoot      string
-	LauncherLayout string
-	InterruptJobs  bool
-	JSON           bool
-	Host           string
+	System        bool
+	StateRoot     string
+	InterruptJobs bool
+	JSON          bool
+	Host          string
+}
+
+type hostIngressBackend interface {
+	lifecycle.TransactionBackend
+	lifecycle.JobInventory
+}
+
+var openHostIngressBackend = func(store *lifecycle.FileStore) (hostIngressBackend, error) {
+	return newHostComposeBackend(store)
 }
 
 type hostIngressReport struct {
@@ -35,7 +43,6 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 	flags.SetOutput(stderr)
 	system := flags.Bool("system", false, "operate on the system-wide host installation")
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
-	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	if err := flags.Parse(args); err != nil {
@@ -50,7 +57,7 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 	}
 	result := hostIngressOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
-		LauncherLayout: strings.TrimSpace(*launcherLayout), InterruptJobs: *interrupt, JSON: *jsonOutput,
+		InterruptJobs: *interrupt, JSON: *jsonOutput,
 	}
 	if wantArgs == 1 {
 		result.Host = strings.ToLower(strings.TrimSpace(flags.Arg(0)))
@@ -58,13 +65,9 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 	if action == "list" && result.InterruptJobs {
 		return hostIngressOptions{}, errors.New("--interrupt-active-jobs is valid only for allow/remove")
 	}
-	for name, value := range map[string]string{
-		"--state-root": result.StateRoot, "--launcher-layout": result.LauncherLayout,
-	} {
-		if value != "" && (!filepath.IsAbs(value) || filepath.Clean(value) != value ||
-			value == string(filepath.Separator) || strings.ContainsRune(value, 0)) {
-			return hostIngressOptions{}, fmt.Errorf("%s must be a clean absolute non-root path", name)
-		}
+	if result.StateRoot != "" && (!filepath.IsAbs(result.StateRoot) || filepath.Clean(result.StateRoot) != result.StateRoot ||
+		result.StateRoot == string(filepath.Separator) || strings.ContainsRune(result.StateRoot, 0)) {
+		return hostIngressOptions{}, errors.New("--state-root must be a clean absolute non-root path")
 	}
 	return result, nil
 }
@@ -89,13 +92,6 @@ func runHostIngress(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
-		}
-	}
-	if options.LauncherLayout == "" {
-		if options.System {
-			options.LauncherLayout = defaultLauncherLayout
-		} else {
-			options.LauncherLayout = filepath.Join(filepath.Dir(options.StateRoot), "launcher.json")
 		}
 	}
 	store, err := lifecycle.OpenFileStore(options.StateRoot)
@@ -138,7 +134,7 @@ func runHostIngress(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	backend, err := newHostRuntimeBackend(store)
+	backend, err := openHostIngressBackend(store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -146,7 +142,7 @@ func runHostIngress(args []string, stdout, stderr io.Writer) int {
 	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
 	manager := lifecycle.Manager{
 		Store:      store,
-		Jobs:       launcherJournalInventory{LayoutPath: options.LauncherLayout},
+		Jobs:       backend,
 		Maintainer: engine,
 		Now:        lifecycleTimeNow,
 	}
