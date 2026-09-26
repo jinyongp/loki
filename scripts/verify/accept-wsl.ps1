@@ -108,25 +108,32 @@ $installParent = Join-Path $env:RUNNER_TEMP "loki-wsl-acceptance"
 $installLocation = Join-Path $installParent $distributionName
 New-Item -ItemType Directory -Path $installParent -Force | Out-Null
 $installer = Join-Path $env:RUNNER_TEMP "loki-install.ps1"
+$rollbackInstaller = Join-Path $env:RUNNER_TEMP "loki-install-rollback.ps1"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($installer, $rendered, $utf8)
 
+$rollbackMarker = '    $createdDistribution = $true'
+if ($rendered.IndexOf($rollbackMarker, [StringComparison]::Ordinal) -lt 0 -or
+    $rendered.IndexOf($rollbackMarker, [StringComparison]::Ordinal) -ne $rendered.LastIndexOf($rollbackMarker, [StringComparison]::Ordinal)) {
+    Fail "Windows installer rollback injection marker changed"
+}
+$rollbackRendered = $rendered.Replace(
+    $rollbackMarker,
+    $rollbackMarker + [Environment]::NewLine + '    Fail "synthetic acceptance failure after WSL registration"'
+)
+[IO.File]::WriteAllText($rollbackInstaller, $rollbackRendered, $utf8)
+
 $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
 $taskName = "Loki WSL ($distributionName)"
-$originalLocalAppData = $env:LOCALAPPDATA
-$blockedLocalAppData = Join-Path $env:RUNNER_TEMP "loki-blocked-localappdata-$suffix"
 $env:LOKI_WSL_NAME = $distributionName
 $env:LOKI_WSL_LOCATION = $installLocation
 $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
 $env:LOKI_WSL_AUTOSTART = "1"
 
 try {
-    Set-Content -LiteralPath $blockedLocalAppData -Value "block" -NoNewline
-    $env:LOCALAPPDATA = $blockedLocalAppData
     $global:LASTEXITCODE = 0
-    & $installer
+    & $rollbackInstaller
     $rollbackProbeCode = $LASTEXITCODE
-    $env:LOCALAPPDATA = $originalLocalAppData
     if ($rollbackProbeCode -eq 0) { Fail "Windows installer rollback probe unexpectedly succeeded" }
 
     $installedAfterRollback = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
@@ -204,8 +211,6 @@ try {
     Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName"
 }
 finally {
-    $env:LOCALAPPDATA = $originalLocalAppData
-    Remove-Item -LiteralPath $blockedLocalAppData -Force -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_APPLIANCE_FILE -ErrorAction SilentlyContinue
@@ -222,4 +227,5 @@ finally {
     Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $rollbackInstaller -Force -ErrorAction SilentlyContinue
 }
