@@ -20,6 +20,7 @@ $createdDistribution = $false
 $createdStateDir = $false
 $createdTask = $false
 $installationComplete = $false
+$showRollbackDiagnostics = $true
 
 function Step([string]$Message) {
     $script:currentStage = $Message
@@ -68,9 +69,15 @@ function Get-ProvisionJournalText([int]$Tail = 80) {
 }
 
 function Get-ProvisionFailureMessage([string]$Fallback) {
-    $journal = Get-ProvisionJournalText 40
+    $journal = Get-ProvisionJournalText 24
     if ($journal.Contains("failed to bind host port 127.0.0.1:18765/tcp: address already in use")) {
-        return "Loki MCP port 18765 is already in use. Another process or container is listening on 127.0.0.1:18765 in the WSL networking environment. Stop the existing listener before installing Loki, then rerun this command."
+        $script:showRollbackDiagnostics = $false
+        return (@(
+            "Cause: Loki MCP port 18765 is already in use."
+            ""
+            "Action: Resolve the local 18765 port conflict, then rerun the Loki installer."
+            "If the conflict is not visible from Windows, also check WSL networking mode and other running WSL distributions."
+        ) -join [Environment]::NewLine)
     }
     return $Fallback
 }
@@ -102,7 +109,19 @@ foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
 $existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
 $existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
-    Fail "A WSL distribution named '$distributionName' already exists. Loki will not modify or remove pre-existing distributions automatically. If this may be an interrupted Loki install, inspect 'wsl -d $distributionName --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager' and 'wsl -d $distributionName --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80'. The appliance binary, when present, is /usr/lib/loki-appliance/loki; /usr/local/bin/loki may not exist until provisioning succeeds. Otherwise choose another name with LOKI_WSL_NAME."
+    Fail (@(
+        "A WSL distribution named '$distributionName' already exists."
+        "No changes were made."
+        ""
+        "If this is an interrupted Loki install:"
+        "  1. Inspect provisioning state:"
+        "     wsl -d $distributionName --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager"
+        "  2. Inspect the recent provisioning log:"
+        "     wsl -d $distributionName --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80"
+        ""
+        "If this distribution is unrelated to Loki, choose another name with LOKI_WSL_NAME."
+        "The appliance binary, when present, is /usr/lib/loki-appliance/loki; /usr/local/bin/loki may not exist until provisioning succeeds."
+    ) -join [Environment]::NewLine)
 }
 if (Test-Path -LiteralPath $stateDir) {
     Fail "Windows Loki state already exists for '$distributionName': $stateDir. Loki will not overwrite or remove pre-existing state automatically."
@@ -281,12 +300,13 @@ finally {
 catch {
     Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)" -ForegroundColor Red
     if ($createdDistribution -and -not $installationComplete) {
-        Write-Host "[Loki] Collecting diagnostics before rollback..."
-        $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
-        $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
-        if ($diagnostics) {
-            Write-Host "[Loki] Recent provisioning diagnostics:"
-            Write-Host ($diagnostics -join [Environment]::NewLine)
+        if ($showRollbackDiagnostics) {
+            Write-Host "[Loki] Collecting diagnostics before rollback..."
+            $diagnostics = Get-ProvisionJournalText 24
+            if ($diagnostics) {
+                Write-Host "[Loki] Recent provisioning diagnostics:"
+                Write-Host $diagnostics
+            }
         }
 
         Write-Host "[Loki] Rolling back incomplete installation..."

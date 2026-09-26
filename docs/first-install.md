@@ -186,10 +186,13 @@ repeated failures the installer stops early, prints recent service diagnostics,
 and rolls back the fresh install instead of waiting the full timeout.
 
 A bind failure on `127.0.0.1:18765` is reported explicitly as an MCP endpoint
-port conflict. Another process or container is already using Loki's default MCP
-port in the WSL networking environment; stop that listener before retrying the
-install. A genuinely long first boot with no repeated service failure may still
-wait up to the normal provisioning timeout.
+port conflict. The installer keeps the stage and cause concise, then puts
+follow-up guidance on separate lines instead of embedding commands in one long
+error sentence. For a recognized port conflict it suppresses the repetitive
+service journal and proceeds directly to fresh-install rollback; unknown
+provisioning failures still include a bounded recent journal for diagnosis. A
+genuinely long first boot with no repeated service failure may still wait up to
+the normal provisioning timeout.
 
 For a fresh install, resources created by the current installer invocation are
 transactional. If a later provisioning, health, connection-file, or startup-task
