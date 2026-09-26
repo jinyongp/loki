@@ -98,8 +98,12 @@ function Wait-LokiHealthy([string]$Distribution, [int]$Attempts = 90) {
 
 function Invoke-InstallerNonInteractive([string]$Path) {
     $escaped = $Path.Replace("'", "''")
-    & pwsh -NoProfile -NonInteractive -Command "& '$escaped'; exit `$global:LASTEXITCODE"
-    return $LASTEXITCODE
+    $output = @(& pwsh -NoProfile -NonInteractive -Command "& '$escaped'; exit `$global:LASTEXITCODE")
+    $code = $LASTEXITCODE
+    foreach ($line in $output) {
+        Write-Host $line
+    }
+    return $code
 }
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
