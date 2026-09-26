@@ -155,7 +155,7 @@ func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t
 	}
 	body := string(raw)
 
-	distroClassification := strings.Index(body, `$distroState = Get-LokiDistributionState $distroPresent`)
+	distroClassification := strings.Index(body, `$preflight = Get-LokiPreflightSnapshot`)
 	if !strings.Contains(body, `/usr/bin/systemctl status loki-appliance-provision.service --no-pager`) ||
 		!strings.Contains(body, `/usr/lib/loki-appliance/release-manifest.json`) ||
 		!strings.Contains(body, `/usr/lib/loki-appliance/loki", "version"`) {
@@ -165,9 +165,12 @@ func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t
 	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
 	markCreated := strings.Index(body, `$createdDistribution = $true`)
 	rollbackGuard := strings.Index(body, `if ($createdDistribution -and -not $installationComplete)`)
-	unregister := strings.Index(body, `Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
-	if distroClassification < 0 || stateConflict < 0 || install < 0 || markCreated < 0 || rollbackGuard < 0 || unregister < 0 {
-		t.Fatal("Windows installer transactional rollback markers are missing")
+	recoveryApproval := strings.Index(body, `Confirm-LokiStaleReinstall $distroState $windowsState $startupTask`)
+	recoveryUnregister := strings.Index(body, `$unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
+	rollbackUnregister := strings.LastIndex(body, `$unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
+	if distroClassification < 0 || stateConflict < 0 || install < 0 || markCreated < 0 || rollbackGuard < 0 ||
+		recoveryApproval < 0 || recoveryUnregister < 0 || rollbackUnregister < 0 {
+		t.Fatal("Windows installer transactional rollback/recovery markers are missing")
 	}
 	if distroClassification > install || stateConflict > install {
 		t.Fatal("Windows installer mutates WSL before pre-existing resource conflicts are rejected")
@@ -175,11 +178,14 @@ func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t
 	if markCreated < install {
 		t.Fatal("Windows installer claims ownership of the distribution before successful registration")
 	}
-	if unregister < rollbackGuard {
-		t.Fatal("Windows installer can unregister a distribution outside the current-invocation rollback guard")
+	if recoveryUnregister < recoveryApproval || recoveryUnregister > install {
+		t.Fatal("Windows installer stale-distro unregister is not gated by recovery approval before fresh install")
 	}
-	if strings.Count(body, `@("--unregister", $distributionName)`) != 1 {
-		t.Fatal("Windows installer must have exactly one guarded automatic unregister path")
+	if rollbackUnregister < rollbackGuard {
+		t.Fatal("Windows installer fresh-install rollback unregister is outside the current-invocation rollback guard")
+	}
+	if strings.Count(body, `@("--unregister", $distributionName)`) != 2 {
+		t.Fatal("Windows installer must have exactly one approved recovery unregister and one fresh-install rollback unregister")
 	}
 }
 
@@ -202,6 +208,57 @@ func TestWindowsInstallerPreflightsConflictsBeforeDistributionMutation(t *testin
 	}
 	if distroConflict > prepare || taskConflict > prepare || stateConflict > prepare || portConflict > prepare || prepare > install {
 		t.Fatal("Windows installer downloads or mutates WSL before conflict preflight")
+	}
+}
+
+func TestWindowsInstallerRecoveryRequiresOwnershipAndExplicitDestructiveApproval(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "tools", "release", "install.ps1.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+
+	for _, required := range []string{
+		`$env:LOKI_WSL_REINSTALL`,
+		`function Test-InteractiveConsole`,
+		`Read-Host "Reinstall Loki? [y/N]"`,
+		`Non-interactive recovery will not unregister a WSL distribution without explicit approval.`,
+		`function Apply-LokiPreservedSettings`,
+		`mcp_port = [int]$mcpPort`,
+		`function Remove-LokiOwnedStartupTask`,
+		`function Remove-LokiOwnedWindowsState`,
+		`Refusing to remove unverified Scheduled Task`,
+		`Refusing to remove unverified Windows state`,
+		`WSL still reports '$distributionName' after unregister; owned Windows state was not removed.`,
+		`Removing verified orphaned Loki Windows integration...`,
+		`Assert-LokiFreshPreflight $preflight`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Errorf("Windows installer recovery lacks %q", required)
+		}
+	}
+
+	interactive := strings.Index(body, `if (Test-InteractiveConsole)`)
+	nonInteractiveApproval := strings.Index(body, `if ($reinstallRequested)`)
+	confirm := strings.Index(body, `Confirm-LokiStaleReinstall $distroState $windowsState $startupTask`)
+	removeTask := strings.Index(body, `Remove-LokiOwnedStartupTask $startupTask`)
+	terminate := strings.Index(body, `$terminateResult = Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName)`)
+	unregister := strings.Index(body, `$unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
+	verifyAbsent := strings.Index(body, `$stillPresent = @($afterUnregister`)
+	removeState := strings.Index(body, `Remove-LokiOwnedWindowsState $windowsState`)
+	fresh := strings.Index(body, `Assert-LokiFreshPreflight $preflight`)
+	prepare := strings.Index(body, `Step "Preparing Loki $releaseTag WSL appliance..."`)
+	if interactive < 0 || nonInteractiveApproval < 0 || confirm < 0 || removeTask < 0 || terminate < 0 ||
+		unregister < 0 || verifyAbsent < 0 || removeState < 0 || fresh < 0 || prepare < 0 {
+		t.Fatal("Windows installer recovery ordering markers are missing")
+	}
+	if interactive > nonInteractiveApproval {
+		t.Fatal("interactive recovery must prompt before considering non-interactive approval")
+	}
+	if !(confirm < removeTask && removeTask < terminate && terminate < unregister && unregister < verifyAbsent &&
+		verifyAbsent < removeState && removeState < fresh && fresh < prepare) {
+		t.Fatal("Windows installer stale recovery ordering is unsafe")
 	}
 }
 

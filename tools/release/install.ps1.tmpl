@@ -9,11 +9,15 @@ $releaseUrl = "https://github.com/jinyongp/loki/releases/download/$releaseTag/$a
 $minimumWSL = "2.4.4"
 
 $distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else { "loki-mcp" }
-$installLocation = if ($env:LOKI_WSL_LOCATION) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
+$installLocationExplicit = [bool]$env:LOKI_WSL_LOCATION
+$installLocation = if ($installLocationExplicit) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
+$autoStartExplicit = $null -ne $env:LOKI_WSL_AUTOSTART
 $autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
 $localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
-$mcpPortText = if ($env:LOKI_MCP_PORT) { $env:LOKI_MCP_PORT.Trim() } else { "18765" }
+$mcpPortExplicit = [bool]$env:LOKI_MCP_PORT
+$mcpPortText = if ($mcpPortExplicit) { $env:LOKI_MCP_PORT.Trim() } else { "18765" }
 $mcpPort = 0
+$reinstallRequested = $env:LOKI_WSL_REINSTALL -eq "1"
 
 $currentStage = "initializing"
 $taskName = "Loki WSL ($distributionName)"
@@ -144,6 +148,163 @@ function Test-PathEqual([string]$Left, [string]$Right) {
     }
 }
 
+function Test-SafeOwnedInstallLocation([string]$Path) {
+    if (-not $Path -or -not [IO.Path]::IsPathRooted($Path)) {
+        return $false
+    }
+    try {
+        $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+        $root = [IO.Path]::GetPathRoot($full).TrimEnd('\')
+        $stateFull = [IO.Path]::GetFullPath($stateDir).TrimEnd('\')
+        if ($full.Equals($root, [StringComparison]::OrdinalIgnoreCase) -or
+            $full.Equals($stateFull, [StringComparison]::OrdinalIgnoreCase) -or
+            $full.StartsWith($stateFull + "\", [StringComparison]::OrdinalIgnoreCase) -or
+            $stateFull.StartsWith($full + "\", [StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-InteractiveConsole {
+    if (-not [Environment]::UserInteractive) {
+        return $false
+    }
+    foreach ($arg in [Environment]::GetCommandLineArgs()) {
+        if ($arg.Equals("-NonInteractive", [StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+    try {
+        if ([Console]::IsInputRedirected) {
+            return $false
+        }
+    }
+    catch {
+        return $false
+    }
+    return $true
+}
+
+function Confirm-LokiStaleReinstall($DistroState, $WindowsState, $StartupTask) {
+    Write-Host "[Loki] A verified stale Loki installation requires destructive recovery." -ForegroundColor Yellow
+    Write-Host "[Loki] Reinstalling will remove:"
+    Write-Host "  - WSL distribution '$distributionName' (including its internal data)"
+    if ($StartupTask.Present) {
+        Write-Host "  - Scheduled Task '$taskName'"
+    }
+    if ($WindowsState.Present) {
+        Write-Host "  - Windows state '$stateDir'"
+    }
+    if ($WindowsState.Kind -eq "manifest" -and $WindowsState.InstallLocation) {
+        Write-Host "  - Custom WSL location '$($WindowsState.InstallLocation)'"
+    }
+
+    if (Test-InteractiveConsole) {
+        try {
+            $answer = Read-Host "Reinstall Loki? [y/N]"
+        }
+        catch {
+            Fail "Interactive recovery approval is unavailable. No destructive recovery was performed."
+        }
+        return $answer.Trim().ToLowerInvariant() -in @("y", "yes")
+    }
+    if ($reinstallRequested) {
+        return $true
+    }
+    Fail (@(
+        "Existing Loki installation '$distributionName' requires destructive recovery."
+        "Non-interactive recovery will not unregister a WSL distribution without explicit approval."
+        'Set $env:LOKI_WSL_REINSTALL = "1" and rerun the installer.'
+    ) -join [Environment]::NewLine)
+}
+
+function Apply-LokiPreservedSettings($WindowsState) {
+    if (-not $WindowsState.Owned) {
+        return
+    }
+    if (-not $mcpPortExplicit -and $WindowsState.MCPPort -ge 1024 -and $WindowsState.MCPPort -le 65535) {
+        $script:mcpPort = [int]$WindowsState.MCPPort
+        $script:mcpPortText = [string]$WindowsState.MCPPort
+    }
+    if ($WindowsState.Kind -eq "manifest") {
+        if (-not $autoStartExplicit) {
+            $script:autoStart = [bool]$WindowsState.AutoStart
+        }
+        if (-not $installLocationExplicit -and $WindowsState.InstallLocation) {
+            $script:installLocation = [IO.Path]::GetFullPath([string]$WindowsState.InstallLocation)
+        }
+    }
+}
+
+function Remove-LokiOwnedStartupTask($StartupTask) {
+    if (-not $StartupTask.Present) {
+        return
+    }
+    if (-not $StartupTask.Owned) {
+        Fail "Refusing to remove unverified Scheduled Task '$taskName'."
+    }
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+}
+
+function Remove-LokiOwnedWindowsState($WindowsState) {
+    if (-not $WindowsState.Present) {
+        return
+    }
+    if (-not $WindowsState.Owned) {
+        Fail "Refusing to remove unverified Windows state '$stateDir'."
+    }
+    $ownedLocation = if ($WindowsState.Kind -eq "manifest") { [string]$WindowsState.InstallLocation } else { "" }
+    if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
+        if (-not (Test-SafeOwnedInstallLocation $ownedLocation)) {
+            Fail "Refusing to remove unsafe manifest-owned WSL location '$ownedLocation'."
+        }
+        $ownedLocationItem = Get-Item -LiteralPath $ownedLocation -Force
+        if (-not $ownedLocationItem.PSIsContainer -or ($ownedLocationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            Fail "Refusing to remove manifest-owned WSL location because it is not a real directory: $ownedLocation"
+        }
+    }
+    Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction Stop
+    if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
+        if (-not (Test-SafeOwnedInstallLocation $ownedLocation)) {
+            Fail "Refusing to remove unsafe manifest-owned WSL location '$ownedLocation'."
+        }
+        $locationItem = Get-Item -LiteralPath $ownedLocation -Force
+        if (-not $locationItem.PSIsContainer -or ($locationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            Fail "Refusing to remove manifest-owned WSL location because it is not a real directory: $ownedLocation"
+        }
+        Remove-Item -LiteralPath $ownedLocation -Recurse -Force -ErrorAction Stop
+    }
+}
+
+function Get-LokiPreflightSnapshot {
+    $existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
+    $existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $present = @($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+    $windows = Get-LokiWindowsStateOwnership
+    $task = Get-LokiStartupTaskOwnership
+    $distro = Get-LokiDistributionState $present
+    return [PSCustomObject]@{
+        DistroPresent = $present
+        DistroState = $distro
+        WindowsState = $windows
+        StartupTask = $task
+    }
+}
+
+function Assert-LokiFreshPreflight($Snapshot) {
+    if ($Snapshot.DistroState.State -ne "absent" -or $Snapshot.WindowsState.Present -or $Snapshot.StartupTask.Present) {
+        Fail "Loki recovery did not converge to a clean fresh-install state."
+    }
+    if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
+        Fail "LOKI_WSL_LOCATION still exists after recovery: $installLocation"
+    }
+}
+
 function Get-LokiStartupTaskOwnership {
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if (-not $task) {
@@ -165,6 +326,7 @@ function Get-LokiWindowsStateOwnership {
             Kind = "absent"
             InstallLocation = ""
             AutoStart = $false
+            MCPPort = 0
         }
     }
 
@@ -192,8 +354,18 @@ function Get-LokiWindowsStateOwnership {
                 throw "ownership manifest does not match the requested Loki installation"
             }
             $ownedLocation = [string]$ownership.install_location
-            if ($ownedLocation -and -not [IO.Path]::IsPathRooted($ownedLocation)) {
-                throw "ownership manifest contains a non-absolute install location"
+            $ownedPort = [int]$ownership.mcp_port
+            if ($ownedLocation -and -not (Test-SafeOwnedInstallLocation $ownedLocation)) {
+                throw "ownership manifest contains an unsafe install location"
+            }
+            if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
+                $ownedLocationItem = Get-Item -LiteralPath $ownedLocation -Force
+                if (-not $ownedLocationItem.PSIsContainer -or ($ownedLocationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    throw "ownership manifest install location is not a real directory"
+                }
+            }
+            if ($ownedPort -lt 1024 -or $ownedPort -gt 65535) {
+                throw "ownership manifest contains an invalid MCP port"
             }
             return [PSCustomObject]@{
                 Present = $true
@@ -201,6 +373,7 @@ function Get-LokiWindowsStateOwnership {
                 Kind = "manifest"
                 InstallLocation = $ownedLocation
                 AutoStart = [bool]$ownership.autostart
+                MCPPort = $ownedPort
             }
         }
 
@@ -231,6 +404,7 @@ function Get-LokiWindowsStateOwnership {
             Kind = "legacy"
             InstallLocation = ""
             AutoStart = $null
+            MCPPort = $origin.Port
         }
     }
     catch {
@@ -240,6 +414,7 @@ function Get-LokiWindowsStateOwnership {
             Kind = "unverified"
             InstallLocation = ""
             AutoStart = $false
+            MCPPort = 0
         }
     }
 }
@@ -334,6 +509,7 @@ function Write-LokiOwnershipManifest([string]$Identity) {
         state_dir = [IO.Path]::GetFullPath($stateDir)
         install_location = if ($installLocation) { [IO.Path]::GetFullPath($installLocation) } else { "" }
         autostart = [bool]$autoStart
+        mcp_port = [int]$mcpPort
         task_name = $taskName
         task_executable = $expectedTaskExecutable
         task_arguments = $expectedTaskArguments
@@ -356,13 +532,11 @@ if ($distributionName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
 if (-not [int]::TryParse($mcpPortText, [ref]$mcpPort) -or $mcpPort -lt 1024 -or $mcpPort -gt 65535) {
     Fail "LOKI_MCP_PORT must be an integer between 1024 and 65535."
 }
-$requestedInstallLocationExists = $false
 if ($installLocation) {
     if (-not [IO.Path]::IsPathRooted($installLocation)) {
         Fail "LOKI_WSL_LOCATION must be an absolute Windows path."
     }
     $installLocation = [IO.Path]::GetFullPath($installLocation)
-    $requestedInstallLocationExists = Test-Path -LiteralPath $installLocation
 }
 
 $help = Invoke-NativeCapture "wsl.exe" @("--help") @(-1, 0, 1)
@@ -372,18 +546,30 @@ foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
     }
 }
 
-$existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
-$existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$distroPresent = @($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
-$windowsState = Get-LokiWindowsStateOwnership
-$startupTask = Get-LokiStartupTaskOwnership
-$distroState = Get-LokiDistributionState $distroPresent
+$preflight = Get-LokiPreflightSnapshot
+$windowsState = $preflight.WindowsState
+$startupTask = $preflight.StartupTask
+$distroState = $preflight.DistroState
 
 if ($windowsState.Present -and -not $windowsState.Owned) {
     Fail "Windows state exists at '$stateDir' but does not prove Loki ownership. No changes were made."
 }
 if ($startupTask.Present -and -not $startupTask.Owned) {
     Fail "Scheduled Task '$taskName' exists but does not match Loki's managed startup action. No changes were made."
+}
+
+Apply-LokiPreservedSettings $windowsState
+
+if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
+    $ownedRequestedLocation = $windowsState.Kind -eq "manifest" -and $windowsState.InstallLocation -and
+        (Test-PathEqual $installLocation ([string]$windowsState.InstallLocation))
+    if (-not $ownedRequestedLocation) {
+        Fail "LOKI_WSL_LOCATION already exists and is not proven as the current Loki installation location: $installLocation"
+    }
+}
+if ($distroState.State -eq "stale" -and $mcpPortExplicit -and $windowsState.MCPPort -gt 0 -and
+    $mcpPort -ne $windowsState.MCPPort -and -not (Test-LoopbackPortAvailable $mcpPort)) {
+    Fail (Get-PortConflictMessage $mcpPort)
 }
 
 switch ($distroState.State) {
@@ -437,29 +623,49 @@ switch ($distroState.State) {
         return
     }
     "stale" {
-        Fail (@(
-            "A verified Loki appliance named '$distributionName' exists but is not healthy."
-            "No changes were made."
-            "Recovery requires explicit destructive approval because unregistering this distro deletes its internal data."
-            "Interactive recovery will ask for confirmation; non-interactive recovery requires LOKI_WSL_REINSTALL=1."
-        ) -join [Environment]::NewLine)
+        if (-not (Confirm-LokiStaleReinstall $distroState $windowsState $startupTask)) {
+            Fail "Loki reinstall cancelled. No changes were made."
+        }
+        Write-Host "[Loki] Removing verified stale Loki installation..."
+        Remove-LokiOwnedStartupTask $startupTask
+        $terminateResult = Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName)
+        if ($terminateResult.ExitCode -ne 0) {
+            $detail = if ($terminateResult.Stderr) { $terminateResult.Stderr } else { $terminateResult.Stdout }
+            Fail "Could not terminate stale Loki distribution '$distributionName'. $detail"
+        }
+        $unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)
+        if ($unregisterResult.ExitCode -ne 0) {
+            $detail = if ($unregisterResult.Stderr) { $unregisterResult.Stderr } else { $unregisterResult.Stdout }
+            Fail "Could not unregister stale Loki distribution '$distributionName'. $detail"
+        }
+        $afterUnregister = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
+        $stillPresent = @($afterUnregister -split '\r?\n' | ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -and $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+        if ($stillPresent) {
+            Fail "WSL still reports '$distributionName' after unregister; owned Windows state was not removed."
+        }
+        Remove-LokiOwnedWindowsState $windowsState
+        $preflight = Get-LokiPreflightSnapshot
+        Assert-LokiFreshPreflight $preflight
+        Write-Host "[Loki] Stale Loki installation removed; continuing with a fresh install."
     }
     "absent" {
         if ($windowsState.Present -or $startupTask.Present) {
-            Fail (@(
-                "The Loki WSL distribution '$distributionName' is absent, but verified Loki-owned Windows integration remains."
-                "Windows state: $(if ($windowsState.Present) { $stateDir } else { "absent" })"
-                "Startup task: $(if ($startupTask.Present) { $taskName } else { "absent" })"
-                "No changes were made."
-            ) -join [Environment]::NewLine)
-        }
-        if ($requestedInstallLocationExists) {
-            Fail "LOKI_WSL_LOCATION already exists and is not proven as Loki-owned by an ownership manifest: $installLocation"
+            Write-Host "[Loki] Removing verified orphaned Loki Windows integration..."
+            Remove-LokiOwnedStartupTask $startupTask
+            Remove-LokiOwnedWindowsState $windowsState
+            $preflight = Get-LokiPreflightSnapshot
+            Assert-LokiFreshPreflight $preflight
+            Write-Host "[Loki] Orphaned Loki Windows integration removed."
         }
     }
     default {
         Fail "Unsupported Loki WSL preflight state '$($distroState.State)'."
     }
+}
+
+if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
+    Fail "LOKI_WSL_LOCATION already exists and is not available for a fresh Loki install: $installLocation"
 }
 if (-not (Test-LoopbackPortAvailable $mcpPort)) {
     Fail (Get-PortConflictMessage $mcpPort)
