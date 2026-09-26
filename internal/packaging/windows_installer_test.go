@@ -232,6 +232,10 @@ func TestWindowsInstallerRecoveryRequiresOwnershipAndExplicitDestructiveApproval
 		`Refusing to remove unverified Windows state`,
 		`WSL still reports '$distributionName' after unregister; owned Windows state was not removed.`,
 		`Removing verified orphaned Loki Windows integration...`,
+		`$connection.PSObject.Properties["authentication"]`,
+		`$connection.PSObject.Properties["token_file"]`,
+		`$connection.PSObject.Properties["endpoint"]`,
+		`$connection.PSObject.Properties["transport"]`,
 		`Assert-LokiFreshPreflight $preflight`,
 	} {
 		if !strings.Contains(body, required) {
@@ -315,6 +319,7 @@ func TestWindowsWSLAcceptanceRequiresExactCandidateAndRecovery(t *testing.T) {
 		"denied stale reinstall removed the Loki distribution",
 		"explicit non-interactive stale reinstall failed with code",
 		"legacy orphan fixture still has a registered WSL distribution",
+		"$preCompatibilityConnection = [ordered]@{",
 		"legacy orphan recovery failed with code",
 		"legacy orphan recovery did not publish a new ownership manifest",
 		`LOKI_WSL_REINSTALL`,

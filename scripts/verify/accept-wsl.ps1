@@ -311,6 +311,13 @@ try {
         Fail "stale reinstall did not recreate Windows ownership state"
     }
 
+    $currentConnection = Get-Content -LiteralPath $connectionFile -Raw | ConvertFrom-Json
+    $preCompatibilityConnection = [ordered]@{
+        schema_version = [int]$currentConnection.schema_version
+        local_origin = $currentConnection.local_origin
+        distribution = [string]$currentConnection.distribution
+    }
+    [IO.File]::WriteAllText($connectionFile, ($preCompatibilityConnection | ConvertTo-Json -Depth 4), $utf8)
     Remove-Item -LiteralPath $ownershipFile -Force
     Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
     Invoke-NativeCapture "wsl.exe" @("--unregister", $distributionName) | Out-Null
