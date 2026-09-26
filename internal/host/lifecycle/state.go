@@ -55,6 +55,10 @@ func (s *FileStore) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	var availableMetadata AvailableReleaseMetadata
+	if err = readPrivateJSON(s.path("available-metadata.json"), &availableMetadata, false); err != nil {
+		return Snapshot{}, err
+	}
 	prepared, err := readOptionalPlan(s.path("prepared.json"))
 	if err != nil {
 		return Snapshot{}, err
@@ -65,6 +69,14 @@ func (s *FileStore) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	snapshot.Installed = installed
 	snapshot.Available = available
+	if availableMetadata.GenerationID != "" {
+		if !availableMetadata.Valid() {
+			return Snapshot{}, errors.New("available release metadata is invalid")
+		}
+		if available != nil && availableMetadata.GenerationID == available.ID {
+			snapshot.AvailableMetadata = &availableMetadata
+		}
+	}
 	snapshot.Prepared = prepared
 	if installation.Scope != "" || installation.Workspace != "" {
 		snapshot.Installation = &installation

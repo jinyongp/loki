@@ -138,6 +138,19 @@ loki host rollback
 loki host restore BACKUP_ID
 ```
 
+`update status` is local and read-only. `update prepare` discovers the current
+published immutable release, verifies its release-bound bootstrap, manifest,
+release index, release notes, and host binary, stages the verified management CLI
+by generation, prefetches the digest-pinned required/enabled OCI images, and
+records the candidate without switching the running runtime or CLI link. Status
+includes the verified release notes and Docker/Compose minimum requirements.
+`update apply` is the mutation boundary. On an interactive terminal it prints
+the prepared impact and requires confirmation. Non-interactive automation must
+pass `--approve`; `--interrupt-active-jobs` remains a separate approval for job
+interruption. Runtime generation and the persistent managed CLI then switch
+together under the lifecycle journal and recovery snapshot, so a failed or
+interrupted apply restores the previous release.
+
 The Windows appliance uses the same Loki host lifecycle internally, but it is
 installed in system scope. From PowerShell, perform appliance maintenance
 through the explicit WSL root boundary (substitute the distribution name if

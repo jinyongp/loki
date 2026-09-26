@@ -161,11 +161,12 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
 	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs during apply")
+	approve := flags.Bool("approve", false, "explicitly approve a non-interactive update apply")
 	if flags.Parse(args[2:]) != nil || flags.NArg() != 0 {
 		return 2
 	}
-	if action != "apply" && *interrupt {
-		fmt.Fprintln(stderr, "--interrupt-active-jobs is valid only for apply")
+	if action != "apply" && (*interrupt || *approve) {
+		fmt.Fprintln(stderr, "--interrupt-active-jobs and --approve are valid only for apply")
 		return 2
 	}
 	if *system && os.Geteuid() != 0 {
@@ -197,18 +198,80 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	manager := lifecycle.Manager{Store: store}
+	if action == "prepare" {
+		if _, err = prepareHostUpdateCandidate(context.Background(), store); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	if action == "apply" {
+		if !*approve {
+			prompter := defaultHostInstallPrompter(stdout)
+			if !prompter.interactive {
+				fmt.Fprintln(stderr, "non-interactive host update apply requires --approve")
+				return 2
+			}
+			status, statusErr := manager.Status(context.Background())
+			if statusErr != nil {
+				fmt.Fprintln(stderr, statusErr)
+				return 1
+			}
+			if status.Prepared == nil {
+				fmt.Fprintln(stderr, "host update apply requires a prepared update")
+				return 1
+			}
+			if err = printHostUpdateImpact(stdout, status); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			confirmed, confirmErr := prompter.confirm("Apply this Loki update?")
+			if confirmErr != nil {
+				fmt.Fprintln(stderr, confirmErr)
+				return 1
+			}
+			if !confirmed {
+				fmt.Fprintln(stderr, "host update apply cancelled")
+				return 1
+			}
+		}
 		backend, backendErr := newHostComposeBackend(store)
 		if backendErr != nil {
 			fmt.Fprintln(stderr, backendErr)
 			return 1
 		}
+		releaseAssets, assetsErr := managedHostCLIReleaseAssetsForStore(context.Background(), store)
+		if assetsErr != nil {
+			fmt.Fprintln(stderr, assetsErr)
+			return 1
+		}
 		manager.Jobs = backend
-		manager.Applier = &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
+		manager.Applier = &lifecycle.TransactionEngine{
+			Store: store, Backend: backend, ReleaseAssets: releaseAssets, Now: lifecycleTimeNow,
+		}
 	}
 	return runHostUpdateWith(context.Background(), manager, action, lifecycle.ApplyOptions{
 		InterruptActiveJobs: *interrupt,
 	}, stdout, stderr)
+}
+
+func printHostUpdateImpact(output io.Writer, status lifecycle.UpdateStatus) error {
+	if status.Prepared == nil || status.Available == nil {
+		return errors.New("host update impact requires a prepared update")
+	}
+	_, err := fmt.Fprintf(output,
+		"Update %s -> %s\nRestart required: %t\nMigration required: %t\nRollback compatible: %t\n",
+		func() string {
+			if status.Installed == nil {
+				return "not-installed"
+			}
+			return status.Installed.Spec.Version
+		}(),
+		status.Available.Spec.Version,
+		status.Prepared.Impact.RestartRequired,
+		status.Prepared.Impact.MigrationRequired,
+		status.Prepared.Impact.RollbackCompatible,
+	)
+	return err
 }
 
 func runHostUpdateWith(

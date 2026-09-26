@@ -2,6 +2,8 @@ package lifecycle
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -9,12 +11,36 @@ import (
 	"time"
 )
 
+type AvailableReleaseMetadata struct {
+	GenerationID       string `json:"generation_id"`
+	DockerMin          string `json:"docker_min"`
+	ComposeMin         string `json:"compose_min"`
+	ReleaseNotesPath   string `json:"release_notes_path"`
+	ReleaseNotesLength int64  `json:"release_notes_length"`
+	ReleaseNotesSHA256 string `json:"release_notes_sha256"`
+	ReleaseNotes       string `json:"release_notes"`
+}
+
+func (m AvailableReleaseMetadata) Valid() bool {
+	notesSum := sha256.Sum256([]byte(m.ReleaseNotes))
+	return digestPattern.MatchString(m.GenerationID) &&
+		m.DockerMin != "" && m.DockerMin == strings.TrimSpace(m.DockerMin) &&
+		m.ComposeMin != "" && m.ComposeMin == strings.TrimSpace(m.ComposeMin) &&
+		m.ReleaseNotesPath != "" && m.ReleaseNotesPath == strings.TrimSpace(m.ReleaseNotesPath) &&
+		strings.HasPrefix(m.ReleaseNotesPath, "releases/") && !strings.ContainsAny(m.ReleaseNotesPath, "\\\x00") &&
+		m.ReleaseNotesLength > 0 && m.ReleaseNotesLength == int64(len(m.ReleaseNotes)) &&
+		digestPattern.MatchString("sha256:"+m.ReleaseNotesSHA256) &&
+		hex.EncodeToString(notesSum[:]) == m.ReleaseNotesSHA256 &&
+		strings.TrimSpace(m.ReleaseNotes) != "" && len(m.ReleaseNotes) <= 1<<20 && !strings.ContainsRune(m.ReleaseNotes, 0)
+}
+
 type Snapshot struct {
-	Installed    *Generation        `json:"installed,omitempty"`
-	Available    *Generation        `json:"available,omitempty"`
-	Prepared     *PreparedPlan      `json:"prepared,omitempty"`
-	Installation *InstallationState `json:"installation,omitempty"`
-	Host         HostState          `json:"host"`
+	Installed         *Generation               `json:"installed,omitempty"`
+	Available         *Generation               `json:"available,omitempty"`
+	AvailableMetadata *AvailableReleaseMetadata `json:"available_metadata,omitempty"`
+	Prepared          *PreparedPlan             `json:"prepared,omitempty"`
+	Installation      *InstallationState        `json:"installation,omitempty"`
+	Host              HostState                 `json:"host"`
 }
 
 type Store interface {
@@ -90,7 +116,12 @@ func (m Manager) Status(ctx context.Context) (UpdateStatus, error) {
 	if err != nil {
 		return UpdateStatus{}, err
 	}
-	return Status(snapshot.Installed, snapshot.Available, snapshot.Prepared, snapshot.Host)
+	status, err := Status(snapshot.Installed, snapshot.Available, snapshot.Prepared, snapshot.Host)
+	if err != nil {
+		return UpdateStatus{}, err
+	}
+	status.AvailableMetadata = snapshot.AvailableMetadata
+	return status, nil
 }
 
 func (m Manager) Prepare(ctx context.Context) (PreparedPlan, error) {

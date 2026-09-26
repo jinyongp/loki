@@ -436,6 +436,36 @@ func (b *Backend) ImportLegacyVault(ctx context.Context, source string) (raw []b
 	return raw, err
 }
 
+func (b *Backend) Prefetch(ctx context.Context, generation lifecycle.Generation, installation lifecycle.InstallationState, enabled []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !generation.Valid() || !installation.Valid() {
+		return errors.New("compose lifecycle prefetch input is invalid")
+	}
+	state, err := b.stateFor(generation, installation, enabled)
+	if err != nil {
+		return err
+	}
+	images := []string{state.CoreImage}
+	browserEnabled := false
+	for _, name := range enabled {
+		if name == "browser" {
+			browserEnabled = true
+			break
+		}
+	}
+	if browserEnabled && state.BrowserImage != "" {
+		images = append(images, state.BrowserImage)
+	}
+	for _, image := range images {
+		if _, err = b.runner.Run(ctx, nil, "image", "pull", image); err != nil {
+			return fmt.Errorf("prefetch immutable release image %s: %w", image, err)
+		}
+	}
+	return ctx.Err()
+}
+
 func (b *Backend) Restart(ctx context.Context) error {
 	state, found, err := b.loadRuntime()
 	if err != nil {

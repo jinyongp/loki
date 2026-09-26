@@ -99,6 +99,23 @@ func publishHostCLI(paths hostCLIInstallPaths, generation lifecycle.Generation) 
 	return publishManagedCLILink(paths)
 }
 
+func stageHostCLI(paths hostCLIInstallPaths, generation lifecycle.Generation, binary []byte) error {
+	if !generation.Valid() {
+		return errors.New("host CLI release generation is invalid")
+	}
+	if err := preflightHostCLIInstall(paths); err != nil {
+		return err
+	}
+	if err := ensureHostCLIDirectory(paths.ReleaseRoot, 0755); err != nil {
+		return err
+	}
+	versionDir := filepath.Dir(paths.Binary)
+	if err := ensureHostCLIDirectory(versionDir, 0755); err != nil {
+		return err
+	}
+	return publishVerifiedExecutable(paths.Binary, binary, generation.Spec.HostBinaryDigest)
+}
+
 func ensureHostCLIDirectory(path string, mode os.FileMode) error {
 	if err := os.MkdirAll(path, mode); err != nil {
 		return err
@@ -159,6 +176,48 @@ func publishCurrentExecutable(destination, expectedDigest string) error {
 	got := "sha256:" + hex.EncodeToString(hash.Sum(nil))
 	if got != expectedDigest {
 		return errors.New("running host binary no longer matches the verified release")
+	}
+	if err = unix.Renameat2(unix.AT_FDCWD, tempName, unix.AT_FDCWD, destination, unix.RENAME_NOREPLACE); err != nil {
+		if errors.Is(err, unix.EEXIST) {
+			return verifyFileDigest(destination, expectedDigest)
+		}
+		return err
+	}
+	return syncHostCLIDirectory(filepath.Dir(destination))
+}
+
+func publishVerifiedExecutable(destination string, raw []byte, expectedDigest string) error {
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0111 == 0 {
+			return errors.New("managed host CLI binary path contains an invalid object")
+		}
+		return verifyFileDigest(destination, expectedDigest)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	sum := sha256.Sum256(raw)
+	if "sha256:"+hex.EncodeToString(sum[:]) != expectedDigest {
+		return errors.New("verified host CLI binary digest does not match the release")
+	}
+	temp, err := os.CreateTemp(filepath.Dir(destination), ".loki-host-binary-")
+	if err != nil {
+		return err
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+	if err = temp.Chmod(0755); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err = temp.Write(raw); err == nil {
+		err = temp.Sync()
+	}
+	closeErr := temp.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	if err = unix.Renameat2(unix.AT_FDCWD, tempName, unix.AT_FDCWD, destination, unix.RENAME_NOREPLACE); err != nil {
 		if errors.Is(err, unix.EEXIST) {

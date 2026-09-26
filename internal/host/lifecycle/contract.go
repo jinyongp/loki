@@ -466,11 +466,12 @@ func coversOptionalState(coverage, enabled []string) bool {
 }
 
 type UpdateStatus struct {
-	Installed       *Generation   `json:"installed,omitempty"`
-	Available       *Generation   `json:"available,omitempty"`
-	Prepared        *PreparedPlan `json:"prepared,omitempty"`
-	Host            HostState     `json:"host"`
-	UpdateAvailable bool          `json:"update_available"`
+	Installed         *Generation               `json:"installed,omitempty"`
+	Available         *Generation               `json:"available,omitempty"`
+	AvailableMetadata *AvailableReleaseMetadata `json:"available_metadata,omitempty"`
+	Prepared          *PreparedPlan             `json:"prepared,omitempty"`
+	Host              HostState                 `json:"host"`
+	UpdateAvailable   bool                      `json:"update_available"`
 }
 
 func Status(installed, available *Generation, prepared *PreparedPlan, host HostState) (UpdateStatus, error) {
