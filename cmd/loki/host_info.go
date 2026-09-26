@@ -56,8 +56,12 @@ type hostLocalOriginReport struct {
 }
 
 type hostConnectionReport struct {
-	SchemaVersion int                   `json:"schema_version"`
-	LocalOrigin   hostLocalOriginReport `json:"local_origin"`
+	SchemaVersion  int                   `json:"schema_version"`
+	LocalOrigin    hostLocalOriginReport `json:"local_origin"`
+	Endpoint       string                `json:"endpoint"`
+	Transport      string                `json:"transport"`
+	Authentication string                `json:"authentication"`
+	TokenFile      string                `json:"token_file"`
 }
 
 type hostInstallResult struct {
@@ -215,12 +219,17 @@ func runHostConnection(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Loki MCP authentication state is unavailable.")
 		return 1
 	}
+	localOriginURL := mcpLocalOriginURL(snapshot.Installation.EffectiveMCPPort())
 	report := hostConnectionReport{
 		SchemaVersion: 1,
 		LocalOrigin: hostLocalOriginReport{
-			URL: mcpLocalOriginURL(snapshot.Installation.EffectiveMCPPort()), Transport: "streamable-http", Reachability: "loopback",
+			URL: localOriginURL, Transport: "streamable-http", Reachability: "loopback",
 			Authentication: hostConnectionAuthenticationReport{Type: "bearer-token-file", TokenFile: tokenFile},
 		},
+		// Compatibility aliases preserve the pre-schema v0.1.14 connection
+		// contract while consumers migrate to local_origin.
+		Endpoint: localOriginURL, Transport: "streamable-http",
+		Authentication: "bearer-token-file", TokenFile: tokenFile,
 	}
 	if options.JSON {
 		if err = json.NewEncoder(stdout).Encode(report); err != nil {

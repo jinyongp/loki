@@ -333,6 +333,12 @@ try {
                 token_file = $tokenFile
             }
         }
+        # Compatibility aliases for v0.1.14-era local clients. New consumers
+        # should use local_origin.
+        endpoint = [string]$connection.local_origin.url
+        transport = [string]$connection.local_origin.transport
+        authentication = "bearer-token-file"
+        token_file = $tokenFile
         distribution = $distributionName
     }
     [IO.File]::WriteAllText($connectionFile, ($publicConnection | ConvertTo-Json -Depth 4), $utf8)

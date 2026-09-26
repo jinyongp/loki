@@ -158,10 +158,14 @@ does not print the token value.
 
 The generated connection data describes a **local MCP origin**. It is reachable
 only through the local loopback interface by default and is not a public MCP
-URL. Loki does not create or own DNS, TLS certificates, tunnels, reverse
-proxies, VPN routes, OAuth providers, or hosted MCP endpoints. If a remote MCP
-client must reach Loki, the operator chooses and manages that external ingress
-and forwards it to the local origin.
+URL. `schema_version` and `local_origin` are the current contract. During the
+pre-1.0 migration from v0.1.14, the JSON also retains the legacy flat
+`endpoint`, `transport`, `authentication`, and `token_file` aliases so existing
+local clients do not break immediately; new consumers should use `local_origin`.
+Loki does not create or own DNS, TLS certificates, tunnels, reverse proxies, VPN
+routes, OAuth providers, or hosted MCP endpoints. If a remote MCP client must
+reach Loki, the operator chooses and manages that external ingress and forwards
+it to the local origin.
 
 The default appliance workspace is:
 

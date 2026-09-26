@@ -95,7 +95,9 @@ func TestRunHostConnectionDoesNotDiscloseToken(t *testing.T) {
 	if report.SchemaVersion != 1 || report.LocalOrigin.URL != defaultMCPLocalOriginURL ||
 		report.LocalOrigin.Transport != "streamable-http" || report.LocalOrigin.Reachability != "loopback" ||
 		report.LocalOrigin.Authentication.Type != "bearer-token-file" ||
-		report.LocalOrigin.Authentication.TokenFile != filepath.Join(stateRoot, "mcp-token") {
+		report.LocalOrigin.Authentication.TokenFile != filepath.Join(stateRoot, "mcp-token") ||
+		report.Endpoint != defaultMCPLocalOriginURL || report.Transport != "streamable-http" ||
+		report.Authentication != "bearer-token-file" || report.TokenFile != filepath.Join(stateRoot, "mcp-token") {
 		t.Fatalf("connection report = %#v", report)
 	}
 	if strings.Contains(stdout.String(), "super-secret-token") {
