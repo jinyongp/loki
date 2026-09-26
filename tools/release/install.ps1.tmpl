@@ -12,7 +12,6 @@ $distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else {
 $installLocation = if ($env:LOKI_WSL_LOCATION) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
 $autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
 $localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
-$runningFromFile = -not [string]::IsNullOrEmpty($PSCommandPath)
 
 $currentStage = "initializing"
 
@@ -22,7 +21,7 @@ function Step([string]$Message) {
 }
 
 function Fail([string]$Message) {
-    throw "Loki Windows installer [$script:currentStage]: $Message"
+    throw $Message
 }
 
 function Invoke-NativeResult([string]$Executable, [string[]]$Arguments) {
@@ -150,7 +149,7 @@ try {
     if (-not $ready) {
         $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
         $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
-        Fail "Loki appliance provisioning did not complete. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
+        Fail "Loki appliance provisioning did not complete within 10 minutes. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
     }
     Write-Host "[Loki] First-boot provisioning complete."
 
@@ -220,8 +219,5 @@ finally {
 }
 catch {
     $global:LASTEXITCODE = 1
-    Write-Host "[Loki] ERROR: $($_.Exception.Message)" -ForegroundColor Red
-    if ($runningFromFile) {
-        exit 1
-    }
+    Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)" -ForegroundColor Red
 }
