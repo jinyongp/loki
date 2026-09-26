@@ -82,10 +82,9 @@ foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
 }
 
 $existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
-$existing = @($existingRaw -split "[
-]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
-    Fail "A WSL distribution named '$distributionName' already exists. If it came from a previous Loki install attempt, inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'. Remove it only if you intend to discard that distribution with 'wsl --unregister $distributionName'; otherwise choose another name with LOKI_WSL_NAME."
+    Fail "A WSL distribution named '$distributionName' already exists. If it came from a previous Loki install attempt, inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'. Loki will not remove it automatically; otherwise choose another name with LOKI_WSL_NAME."
 }
 $taskName = "Loki WSL ($distributionName)"
 if ($autoStart -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {

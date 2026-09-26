@@ -80,6 +80,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Invoke-NativeCapture "wsl.exe" @("--update")`,
 		`& wsl.exe --update`,
 		`wsl.exe --unregister`,
+		`wsl --unregister $distributionName`,
 		`--name Loki`,
 		`& wsl.exe -d $distributionName --user root --exec /usr/bin/test`,
 		`Write-Host $token`,
