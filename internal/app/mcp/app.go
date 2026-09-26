@@ -46,7 +46,8 @@ type MCPOptions struct {
 	Policy                                               controlpolicy.Generation
 	Ports                                                portguard.Policy
 	Token                                                string
-	Access, PreviewAccess                                auth.Verifier
+	ExternalAuth, PreviewExternalAuth                    auth.RequestVerifier
+	RequireExternalAuth, RequirePreviewExternalAuth      bool
 }
 
 // MCPApp owns local command sessions, share stores and pinned workspace roots.
@@ -77,11 +78,11 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if !errors.Is(options.Ports.Validate(c.Port), portguard.ErrProtected) {
 		return nil, errors.New("MCP protected-port policy does not include listener")
 	}
-	if c.CloudflareTeamDomain != "" && options.Access == nil {
-		return nil, errors.New("MCP Access verifier is required")
+	if options.RequireExternalAuth && options.ExternalAuth == nil {
+		return nil, errors.New("MCP external request verifier is required")
 	}
-	if c.PreviewAccessAudience != "" && options.PreviewAccess == nil {
-		return nil, errors.New("preview Access verifier is required")
+	if options.RequirePreviewExternalAuth && options.PreviewExternalAuth == nil {
+		return nil, errors.New("preview external request verifier is required")
 	}
 	if options.GitJobs == nil {
 		return nil, errors.New("MCP requires confined Git Job execution")
@@ -223,16 +224,13 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		}
 		transport.ServeHTTP(w, r)
 	})
-	protected := auth.Gate{Token: options.Token, Access: options.Access}.Handler(auth.HostPolicy(c.Port, listenerHosts, mcpRoute))
+	protected := auth.Gate{Token: options.Token, External: options.ExternalAuth}.Handler(auth.HostPolicy(c.Port, listenerHosts, mcpRoute))
 	app.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if app.Previews != nil {
 			if _, ok := app.Previews.ResolveHost(r.Host); ok {
-				if options.PreviewAccess != nil {
-					values := r.Header.Values("Cf-Access-Jwt-Assertion")
-					if len(values) != 1 || !options.PreviewAccess.Verify(values[0]) {
-						auth.Unauthorized(w)
-						return
-					}
+				if options.PreviewExternalAuth != nil && !options.PreviewExternalAuth.VerifyRequest(r) {
+					auth.Unauthorized(w)
+					return
 				}
 				app.preview.ServeHTTP(w, r)
 				return

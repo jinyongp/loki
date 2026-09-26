@@ -33,7 +33,10 @@ func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 type accessFixture string
 
-func (v accessFixture) Verify(token string) bool { return token == string(v) }
+func (v accessFixture) VerifyRequest(r *http.Request) bool {
+	values := r.Header.Values("X-External-Assertion")
+	return len(values) == 1 && values[0] == string(v)
+}
 func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
@@ -70,7 +73,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	generation := policyGenerationFixture(t)
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, IngressHosts: []string{"operator.example.test"}, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, IngressHosts: []string{"operator.example.test"}, ExternalAuth: accessFixture("mcp-access"), PreviewExternalAuth: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +88,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	for _, assertion := range []string{"", "mcp-access", "preview-access"} {
 		r := httptest.NewRequest("GET", previewURL.String(), nil)
 		r.Header.Set("Authorization", "Bearer "+token)
-		r.Header.Set("Cf-Access-Jwt-Assertion", assertion)
+		r.Header.Set("X-External-Assertion", assertion)
 		w := httptest.NewRecorder()
 		app.ServeHTTP(w, r)
 		if assertion == "preview-access" {
@@ -113,7 +116,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 			r.Header.Set("Origin", test.origin)
 		}
 		if test.access != "" {
-			r.Header.Set("Cf-Access-Jwt-Assertion", test.access)
+			r.Header.Set("X-External-Assertion", test.access)
 		}
 		w := httptest.NewRecorder()
 		app.ServeHTTP(w, r)

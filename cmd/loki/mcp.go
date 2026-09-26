@@ -20,6 +20,7 @@ import (
 	"loki/internal/config"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
+	cloudflareaccess "loki/internal/integrations/access/cloudflare"
 	"loki/internal/rpc"
 	jobsremote "loki/internal/work/jobs/remote"
 )
@@ -169,10 +170,12 @@ func runMCP(args []string, stderr io.Writer) int {
 		return 2
 	}
 	if c.CloudflareTeamDomain != "" {
-		options.Access = auth.Access{TeamDomain: c.CloudflareTeamDomain, Audience: c.CloudflareAudience, JWKSPath: *jwksPath}
+		options.RequireExternalAuth = true
+		options.ExternalAuth = cloudflareaccess.Access{TeamDomain: c.CloudflareTeamDomain, Audience: c.CloudflareAudience, JWKSPath: *jwksPath}
 	}
 	if c.PreviewAccessAudience != "" {
-		options.PreviewAccess = auth.Access{TeamDomain: c.CloudflareTeamDomain, Audience: c.PreviewAccessAudience, JWKSPath: *jwksPath}
+		options.RequirePreviewExternalAuth = true
+		options.PreviewExternalAuth = cloudflareaccess.Access{TeamDomain: c.CloudflareTeamDomain, Audience: c.PreviewAccessAudience, JWKSPath: *jwksPath}
 	}
 	options.OnAuditError = func(error) { fmt.Fprintln(stderr, "MCP audit write failed") }
 	listenIP := net.ParseIP(c.Host)

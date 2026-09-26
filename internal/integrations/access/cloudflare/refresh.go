@@ -1,4 +1,4 @@
-package auth
+package cloudflare
 
 import (
 	"context"

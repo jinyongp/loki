@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"loki/internal/auth"
 	"loki/internal/config"
+	cloudflareaccess "loki/internal/integrations/access/cloudflare"
 )
 
 func runJWKSRefresh(args []string, stderr io.Writer) int {
@@ -32,7 +32,7 @@ func runJWKSRefresh(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	if err = auth.RefreshKeys(ctx, c.CloudflareTeamDomain, *output, *gid, nil); err != nil {
+	if err = cloudflareaccess.RefreshKeys(ctx, c.CloudflareTeamDomain, *output, *gid, nil); err != nil {
 		fmt.Fprintln(stderr, "JWKS refresh failed:", err)
 		return 1
 	}

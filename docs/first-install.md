@@ -364,6 +364,13 @@ origin using credentials controlled by the operator. Loki must still validate
 the inbound Host and its own local-origin authentication policy. Provider-
 specific integrations are optional adapters, not installation prerequisites.
 
+Cloudflare Access remains supported for operators who explicitly configure its
+existing team-domain/audience settings. Its assertion header, JWT validation,
+JWKS loading, and JWKS refresh implementation live in the optional Cloudflare
+integration boundary; core bearer/request authentication does not depend on
+Cloudflare. Loki does not create or manage a Cloudflare Tunnel or Access
+application.
+
 When an ingress preserves a public Host header, explicitly allow that hostname
 in Loki. For a native Linux installation:
 
