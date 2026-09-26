@@ -12,6 +12,8 @@ $distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else {
 $installLocation = if ($env:LOKI_WSL_LOCATION) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
 $autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
 $localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
+$mcpPortText = if ($env:LOKI_MCP_PORT) { $env:LOKI_MCP_PORT.Trim() } else { "18765" }
+$mcpPort = 0
 
 $currentStage = "initializing"
 $taskName = "Loki WSL ($distributionName)"
@@ -68,16 +70,62 @@ function Get-ProvisionJournalText([int]$Tail = 80) {
     return ((@($result.Stdout, $result.Stderr) | Where-Object { $_ }) -join [Environment]::NewLine)
 }
 
+function Test-LoopbackPortAvailable([int]$Port) {
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
+    try {
+        $listener.Start()
+        return $true
+    }
+    catch [Net.Sockets.SocketException] {
+        if ($_.Exception.SocketErrorCode -eq [Net.Sockets.SocketError]::AddressAlreadyInUse) {
+            return $false
+        }
+        throw
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
+function Get-LoopbackPortOwner([int]$Port) {
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+        return ""
+    }
+    $connection = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalAddress -in @("127.0.0.1", "0.0.0.0", "::1", "::") } |
+        Select-Object -First 1)
+    if ($connection.Count -eq 0) {
+        return ""
+    }
+    $pidValue = [int]$connection[0].OwningProcess
+    $process = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
+    if ($process) {
+        return "$($process.ProcessName) (PID $pidValue)"
+    }
+    return "PID $pidValue"
+}
+
+function Get-PortConflictMessage([int]$Port) {
+    $owner = Get-LoopbackPortOwner $Port
+    $ownerLine = if ($owner) { "Current listener: $owner" } else { "Current listener: another local process or WSL relay" }
+    return (@(
+        "MCP local-origin port $Port is already in use."
+        $ownerLine
+        ""
+        "Choose another unused local port and rerun:"
+        '  $env:LOKI_MCP_PORT = "19000"'
+        "  irm https://jinyongp.dev/loki/install.ps1 | iex"
+        ""
+        "Loki will not stop or reconfigure the existing listener automatically."
+    ) -join [Environment]::NewLine)
+}
+
 function Get-ProvisionFailureMessage([string]$Fallback) {
     $journal = Get-ProvisionJournalText 24
-    if ($journal.Contains("failed to bind host port 127.0.0.1:18765/tcp: address already in use")) {
+    $needle = "failed to bind host port 127.0.0.1:$mcpPort/tcp: address already in use"
+    if ($journal.Contains($needle)) {
         $script:showRollbackDiagnostics = $false
-        return (@(
-            "Cause: Loki MCP port 18765 is already in use."
-            ""
-            "Action: Resolve the local 18765 port conflict, then rerun the Loki installer."
-            "If the conflict is not visible from Windows, also check WSL networking mode and other running WSL distributions."
-        ) -join [Environment]::NewLine)
+        return Get-PortConflictMessage $mcpPort
     }
     return $Fallback
 }
@@ -89,6 +137,9 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
 }
 if ($distributionName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
     Fail "LOKI_WSL_NAME must be 1-64 characters using letters, digits, dot, underscore, or hyphen."
+}
+if (-not [int]::TryParse($mcpPortText, [ref]$mcpPort) -or $mcpPort -lt 1024 -or $mcpPort -gt 65535) {
+    Fail "LOKI_MCP_PORT must be an integer between 1024 and 65535."
 }
 if ($installLocation) {
     if (-not [IO.Path]::IsPathRooted($installLocation)) {
@@ -129,7 +180,11 @@ if (Test-Path -LiteralPath $stateDir) {
 if ($autoStart -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
     Fail "Scheduled Task '$taskName' already exists."
 }
+if (-not (Test-LoopbackPortAvailable $mcpPort)) {
+    Fail (Get-PortConflictMessage $mcpPort)
+}
 Write-Host "[Loki] Preflight complete. Target distribution: $distributionName"
+Write-Host "[Loki] MCP local-origin port: $mcpPort"
 
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("loki-wsl-" + [Guid]::NewGuid().ToString("N"))
 $appliance = Join-Path $tempRoot $applianceAsset
@@ -171,6 +226,11 @@ try {
     Step "Starting WSL and provisioning Docker + Loki runtime..."
     Write-Host "[Loki] This can take several minutes."
     $keepAlive = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
+    Invoke-NativeCapture "wsl.exe" @(
+        "-d", $distributionName, "--user", "root", "--exec",
+        "/usr/lib/loki-appliance/configure-install", [string]$mcpPort
+    ) | Out-Null
+    Write-Host "[Loki] MCP local-origin port configured: $mcpPort"
 
     $ready = $false
     $lastRestartCount = 0

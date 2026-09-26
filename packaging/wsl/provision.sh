@@ -8,10 +8,23 @@ result=$state_root/install-result.json
 host=/usr/lib/loki-appliance/loki
 manifest=/usr/lib/loki-appliance/release-manifest.json
 workspace=/home/ubuntu/workspace
+port_file=$state_root/mcp-port
 
 test ! -e "$marker" || exit 0
 test -x "$host"
 test -f "$manifest"
+test -f "$port_file"
+mcp_port=$(cat "$port_file")
+case "$mcp_port" in
+  ''|*[!0-9]*)
+    echo "loki-appliance: invalid MCP port configuration" >&2
+    exit 1
+    ;;
+esac
+if test "$mcp_port" -lt 1024 || test "$mcp_port" -gt 65535; then
+  echo "loki-appliance: invalid MCP port configuration" >&2
+  exit 1
+fi
 install -d -m 0700 "$state_root"
 
 attempt=0
@@ -31,6 +44,7 @@ trap cleanup EXIT HUP INT TERM
 "$host" host install \
   --system \
   --workspace "$workspace" \
+  --mcp-port "$mcp_port" \
   --prepare-workspace \
   --bootstrap-release-manifest "$manifest" \
   --json >"$tmp"

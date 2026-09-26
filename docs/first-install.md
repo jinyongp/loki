@@ -80,6 +80,24 @@ irm https://jinyongp.dev/loki/install.ps1 | iex
 
 The installer fails before mutation if that distribution name already exists.
 
+### Choose the local MCP port
+
+The Windows local MCP origin uses port `18765` by default. The installer checks
+the selected loopback port before it downloads the appliance or registers a WSL
+distribution. It never stops an existing listener automatically.
+
+If the default port is already in use, choose another unused port:
+
+```powershell
+$env:LOKI_MCP_PORT = "19000"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The selected port is passed into first-boot host provisioning, stored in Loki
+lifecycle state, and written to the Windows `connection.json` local-origin URL.
+The container-internal MCP service still uses its private fixed port; only the
+Windows/WSL host-side loopback publication changes.
+
 ### Choose the WSL storage location
 
 By default WSL chooses the distribution storage location. To choose an explicit

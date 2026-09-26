@@ -3,6 +3,7 @@ Description=Provision the Loki WSL appliance
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+ConditionPathExists=/var/lib/loki-appliance/mcp-port
 ConditionPathExists=!/var/lib/loki-appliance/provisioned
 StartLimitIntervalSec=120
 StartLimitBurst=4

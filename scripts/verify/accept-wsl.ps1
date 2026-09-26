@@ -130,6 +130,41 @@ $env:LOKI_WSL_LOCATION = $installLocation
 $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
 $env:LOKI_WSL_AUTOSTART = "1"
 
+$defaultPortBlocker = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 18765)
+$defaultPortBlockerStarted = $false
+try {
+    try {
+        $defaultPortBlocker.Start()
+        $defaultPortBlockerStarted = $true
+    } catch [System.Net.Sockets.SocketException] {
+        if ($_.Exception.SocketErrorCode -ne [System.Net.Sockets.SocketError]::AddressAlreadyInUse) {
+            throw
+        }
+    }
+    Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 0
+    & $installer
+    $portProbeCode = $LASTEXITCODE
+    if ($portProbeCode -eq 0) { Fail "Windows installer accepted an occupied default MCP port" }
+    $installedAfterPortProbe = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
+    if ($installedAfterPortProbe | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
+        Fail "Windows MCP port preflight mutated WSL before failing"
+    }
+    if (Test-Path -LiteralPath $installLocation) {
+        Fail "Windows MCP port preflight created the custom WSL location"
+    }
+} finally {
+    if ($defaultPortBlockerStarted) {
+        $defaultPortBlocker.Stop()
+    }
+}
+
+$portSelector = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$portSelector.Start()
+$mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port
+$portSelector.Stop()
+$env:LOKI_MCP_PORT = [string]$mcpPort
+
 try {
     $global:LASTEXITCODE = 0
     & $rollbackInstaller
@@ -172,10 +207,19 @@ try {
     $internalToken = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/cat", "/var/lib/loki/lifecycle/mcp-token")
     if ($windowsToken -ne $internalToken) { Fail "Windows MCP token copy does not match the installed appliance" }
     $windowsConnection = Get-Content -LiteralPath $connectionFile -Raw | ConvertFrom-Json
-    if ([string]$windowsConnection.authentication -ne "bearer-token-file" -or [string]$windowsConnection.token_file -ne $tokenFile -or [string]$windowsConnection.distribution -ne $distributionName) {
+    if ([int]$windowsConnection.schema_version -ne 1 -or
+        [string]$windowsConnection.local_origin.transport -ne "streamable-http" -or
+        [string]$windowsConnection.local_origin.reachability -ne "loopback" -or
+        [string]$windowsConnection.local_origin.authentication.type -ne "bearer-token-file" -or
+        [string]$windowsConnection.local_origin.authentication.token_file -ne $tokenFile -or
+        [string]$windowsConnection.distribution -ne $distributionName) {
         Fail "Windows MCP connection metadata does not match the accepted appliance."
     }
-    Assert-WindowsMCPReachability ([string]$windowsConnection.endpoint) $windowsToken
+    $localOrigin = [Uri][string]$windowsConnection.local_origin.url
+    if ($localOrigin.Host -ne "127.0.0.1" -or $localOrigin.Port -ne $mcpPort -or $localOrigin.AbsolutePath -ne "/mcp") {
+        Fail "Windows MCP local origin does not use the selected port."
+    }
+    Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken
 
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $acl = Get-Acl -LiteralPath $tokenFile
@@ -206,15 +250,16 @@ try {
         Start-Sleep -Seconds 2
     }
     if (-not $recovered) { Fail "Loki did not recover after WSL termination and restart" }
-    Assert-WindowsMCPReachability ([string]$windowsConnection.endpoint) $windowsToken
+    Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken
 
-    Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName"
+    Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName on MCP port $mcpPort"
 }
 finally {
     Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_APPLIANCE_FILE -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
+    Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue

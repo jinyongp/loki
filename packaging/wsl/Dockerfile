@@ -85,6 +85,7 @@ RUN if getent group ubuntu >/dev/null; then \
 
 COPY --chmod=0644 packaging/wsl/wsl.conf /etc/wsl.conf
 COPY --chmod=0644 packaging/wsl/wsl-distribution.conf /etc/wsl-distribution.conf
+COPY --chmod=0755 packaging/wsl/configure-install.sh /usr/lib/loki-appliance/configure-install
 COPY --chmod=0755 packaging/wsl/provision.sh /usr/lib/loki-appliance/provision
 COPY --chmod=0644 packaging/wsl/loki-appliance-provision.service /usr/lib/systemd/system/loki-appliance-provision.service
 COPY --from=release --chmod=0755 loki-linux-amd64 /usr/lib/loki-appliance/loki
@@ -93,12 +94,13 @@ COPY --from=release --chmod=0600 release-manifest.json /usr/lib/loki-appliance/r
 RUN chown root:root \
       /etc/wsl.conf \
       /etc/wsl-distribution.conf \
+      /usr/lib/loki-appliance/configure-install \
       /usr/lib/loki-appliance/provision \
       /usr/lib/loki-appliance/loki \
       /usr/lib/loki-appliance/release-manifest.json \
       /usr/lib/systemd/system/loki-appliance-provision.service \
  && chmod 0644 /etc/wsl.conf /etc/wsl-distribution.conf \
- && chmod 0755 /usr/lib/loki-appliance/provision /usr/lib/loki-appliance/loki \
+ && chmod 0755 /usr/lib/loki-appliance/configure-install /usr/lib/loki-appliance/provision /usr/lib/loki-appliance/loki \
  && chmod 0600 /usr/lib/loki-appliance/release-manifest.json \
  && systemctl enable docker.service containerd.service loki-appliance-provision.service \
  && systemctl mask \

@@ -59,6 +59,7 @@ func TestWSLApplianceContract(t *testing.T) {
 		"useradd --uid 1000 --gid 1000",
 		"chage --lastday -1 ubuntu",
 		"/home/ubuntu/workspace",
+		"COPY --chmod=0755 packaging/wsl/configure-install.sh /usr/lib/loki-appliance/configure-install",
 		"COPY --from=release --chmod=0755 loki-linux-amd64 /usr/lib/loki-appliance/loki",
 		"COPY --from=release --chmod=0600 release-manifest.json /usr/lib/loki-appliance/release-manifest.json",
 		"systemctl enable docker.service containerd.service loki-appliance-provision.service",
@@ -121,6 +122,7 @@ func TestWSLApplianceContract(t *testing.T) {
 	for _, required := range []string{
 		"Requires=docker.service",
 		"After=docker.service network-online.target",
+		"ConditionPathExists=/var/lib/loki-appliance/mcp-port",
 		"ConditionPathExists=!/var/lib/loki-appliance/provisioned",
 		"StartLimitIntervalSec=120",
 		"StartLimitBurst=4",
@@ -132,15 +134,28 @@ func TestWSLApplianceContract(t *testing.T) {
 		}
 	}
 
+	configure := read("packaging/wsl/configure-install.sh")
+	for _, required := range []string{
+		"port_file=$state_root/mcp-port",
+		"MCP port must be between 1024 and 65535",
+		"systemctl start --no-block loki-appliance-provision.service",
+	} {
+		if !strings.Contains(configure, required) {
+			t.Errorf("WSL install configurator lacks %q", required)
+		}
+	}
+
 	provision := read("packaging/wsl/provision.sh")
 	for _, required := range []string{
 		"host install",
 		"--system",
 		"--workspace \"$workspace\"",
+		"--mcp-port \"$mcp_port\"",
 		"--prepare-workspace",
 		"--bootstrap-release-manifest \"$manifest\"",
 		"host status --system --json",
 		"host doctor --system",
+		"port_file=$state_root/mcp-port",
 	} {
 		if !strings.Contains(provision, required) {
 			t.Errorf("WSL provisioner lacks %q", required)

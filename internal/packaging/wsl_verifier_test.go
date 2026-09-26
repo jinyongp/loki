@@ -14,6 +14,7 @@ import (
 func TestWSLShellScriptsParse(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, relative := range []string{
+		"packaging/wsl/configure-install.sh",
 		"packaging/wsl/provision.sh",
 		"scripts/build/build-wsl.sh",
 		"scripts/verify/verify-wsl.sh",
@@ -59,8 +60,9 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("etc/shadow", 0600, "root:*:20000:0:99999:7:::\nubuntu:!::0:99999:7:::\n")
 	write("usr/lib/loki-appliance/loki", 0755, "fixture-host-binary\n")
 	write("usr/lib/loki-appliance/release-manifest.json", 0600, "{\"fixture\":true}\n")
-	write("usr/lib/loki-appliance/provision", 0755, "#!/bin/sh\nhost install --system --workspace \"$workspace\"\nhost doctor --system\n")
-	write("usr/lib/systemd/system/loki-appliance-provision.service", 0644, "[Service]\nType=oneshot\n")
+	write("usr/lib/loki-appliance/configure-install", 0755, "#!/bin/sh\nsystemctl start --no-block loki-appliance-provision.service\n")
+	write("usr/lib/loki-appliance/provision", 0755, "#!/bin/sh\nmcp_port=19000\nhost install --system --workspace \"$workspace\" --mcp-port \"$mcp_port\"\nhost doctor --system\n")
+	write("usr/lib/systemd/system/loki-appliance-provision.service", 0644, "[Unit]\nConditionPathExists=/var/lib/loki-appliance/mcp-port\n[Service]\nType=oneshot\n")
 	mkdir("home/ubuntu/workspace", 0750)
 
 	mkdir("etc/systemd/system/multi-user.target.wants", 0755)

@@ -30,6 +30,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$env:LOKI_WSL_LOCATION`,
 		`$env:LOKI_WSL_AUTOSTART`,
 		`$env:LOKI_WSL_APPLIANCE_FILE`,
+		`$env:LOKI_MCP_PORT`,
 		`Copy-Item -LiteralPath $localAppliance -Destination $appliance`,
 		`"--from-file", $appliance, "--name", $distributionName, "--no-launch"`,
 		`Get-FileHash -LiteralPath $appliance -Algorithm SHA256`,
@@ -41,8 +42,13 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Invoke-NativeCapture "wsl.exe" @("--help") @(-1, 0, 1)`,
 		`function Invoke-NativeResult`,
 		`function Get-ProvisionJournalText`,
+		`function Test-LoopbackPortAvailable`,
+		`function Get-LoopbackPortOwner`,
+		`function Get-PortConflictMessage`,
 		`function Get-ProvisionFailureMessage`,
-		`Loki MCP port 18765 is already in use.`,
+		`Get-NetTCPConnection -LocalPort $Port -State Listen`,
+		`LOKI_MCP_PORT must be an integer between 1024 and 65535.`,
+		`Choose another unused local port and rerun:`,
 		`$ErrorActionPreference = "Continue"`,
 		`2> $stderrPath`,
 		`Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)"`,
@@ -52,11 +58,15 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$installationComplete = $false`,
 		`Windows Loki state already exists for '$distributionName'`,
 		`Step "Checking Windows and WSL prerequisites..."`,
+		`Test-LoopbackPortAvailable $mcpPort`,
+		`MCP local-origin port: $mcpPort`,
 		`Step "Preparing Loki $releaseTag WSL appliance..."`,
 		`Step "Verifying WSL appliance integrity..."`,
 		`Step "Registering WSL distribution '$distributionName'..."`,
 		`Step "Starting WSL and provisioning Docker + Loki runtime..."`,
 		`[Loki] This can take several minutes.`,
+		`"/usr/lib/loki-appliance/configure-install", [string]$mcpPort`,
+		`MCP local-origin port configured: $mcpPort`,
 		`"/usr/bin/systemctl", "show"`,
 		`"--property=NRestarts"`,
 		`"--property=ExecMainStatus"`,
@@ -173,12 +183,14 @@ func TestWindowsInstallerPreflightsConflictsBeforeDistributionMutation(t *testin
 
 	conflict := strings.Index(body, `A WSL distribution named '$distributionName' already exists.`)
 	taskConflict := strings.Index(body, `Scheduled Task '$taskName' already exists.`)
+	portConflict := strings.Index(body, `if (-not (Test-LoopbackPortAvailable $mcpPort))`)
+	prepare := strings.Index(body, `Step "Preparing Loki $releaseTag WSL appliance..."`)
 	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
-	if conflict < 0 || taskConflict < 0 || install < 0 {
+	if conflict < 0 || taskConflict < 0 || portConflict < 0 || prepare < 0 || install < 0 {
 		t.Fatal("Windows installer conflict/install markers are missing")
 	}
-	if conflict > install || taskConflict > install {
-		t.Fatal("Windows installer mutates WSL before conflict preflight")
+	if conflict > prepare || taskConflict > prepare || portConflict > prepare || prepare > install {
+		t.Fatal("Windows installer downloads or mutates WSL before conflict preflight")
 	}
 }
 
@@ -209,7 +221,13 @@ func TestWindowsWSLAcceptanceRequiresExactCandidateAndRecovery(t *testing.T) {
 		`protocolVersion = "2025-11-25"`,
 		`method = "initialize"`,
 		"Windows MCP initialize probe returned status",
-		"Assert-WindowsMCPReachability ([string]$windowsConnection.endpoint) $windowsToken",
+		"Windows installer accepted an occupied default MCP port",
+		"Windows MCP port preflight mutated WSL before failing",
+		"LOKI_MCP_PORT",
+		"$mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port",
+		"local_origin.authentication.type",
+		"Windows MCP local origin does not use the selected port.",
+		"Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken",
 		`$whoami = Invoke-NativeStdoutCapture "wsl.exe"`,
 		`$uid = Invoke-NativeStdoutCapture "wsl.exe"`,
 		`if ($whoami -ne "ubuntu" -or $uid -ne "1000")`,

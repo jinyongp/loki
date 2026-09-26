@@ -44,6 +44,7 @@ for required in \
   etc/shadow \
   usr/lib/loki-appliance/loki \
   usr/lib/loki-appliance/release-manifest.json \
+  usr/lib/loki-appliance/configure-install \
   usr/lib/loki-appliance/provision \
   usr/lib/systemd/system/loki-appliance-provision.service \
   etc/systemd/system/multi-user.target.wants/loki-appliance-provision.service \
@@ -64,6 +65,7 @@ for forbidden in \
   var/log/dpkg.log \
   var/log/alternatives.log \
   var/lib/loki/lifecycle/mcp-token \
+  var/lib/loki-appliance/mcp-port \
   var/lib/loki-appliance/provisioned
 do
   if grep -Fxq "$forbidden" "$listing"; then
@@ -81,7 +83,8 @@ for root_owned in \
   etc/wsl.conf \
   etc/wsl-distribution.conf \
   usr/lib/loki-appliance/loki \
-  usr/lib/loki-appliance/release-manifest.json
+  usr/lib/loki-appliance/release-manifest.json \
+  usr/lib/loki-appliance/configure-install
 do
   awk -v path="$root_owned" '$NF == path && $2 == "0/0" { ok=1 } END { exit ok ? 0 : 1 }' "$metadata" || {
     echo "WSL archive path is not root-owned: $root_owned" >&2
@@ -101,6 +104,7 @@ test "$(stat -c '%a' "$root/etc/wsl.conf")" = 644
 test "$(stat -c '%a' "$root/etc/wsl-distribution.conf")" = 644
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/release-manifest.json")" = 600
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/loki")" = 755
+test "$(stat -c '%a' "$root/usr/lib/loki-appliance/configure-install")" = 755
 test "$(stat -c '%a' "$root/home/ubuntu/workspace")" = 750
 
 grep -Fxq 'systemd=true' "$root/etc/wsl.conf"
@@ -160,4 +164,7 @@ test -L "$root/etc/systemd/system/multi-user.target.wants/loki-appliance-provisi
 grep -Fq 'host install' "$root/usr/lib/loki-appliance/provision"
 grep -Fq -- '--system' "$root/usr/lib/loki-appliance/provision"
 grep -Fq -- '--workspace "$workspace"' "$root/usr/lib/loki-appliance/provision"
+grep -Fq -- '--mcp-port "$mcp_port"' "$root/usr/lib/loki-appliance/provision"
 grep -Fq 'host doctor --system' "$root/usr/lib/loki-appliance/provision"
+grep -Fq 'systemctl start --no-block loki-appliance-provision.service' "$root/usr/lib/loki-appliance/configure-install"
+grep -Fq 'ConditionPathExists=/var/lib/loki-appliance/mcp-port' "$root/usr/lib/systemd/system/loki-appliance-provision.service"
