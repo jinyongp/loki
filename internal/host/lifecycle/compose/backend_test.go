@@ -101,6 +101,15 @@ func composeBackendFixture(t *testing.T) (*Backend, *fakeRunner, string) {
 	return backend, runner, workspace
 }
 
+func privateTempDir(t *testing.T) string {
+	t.Helper()
+	path := t.TempDir()
+	if err := os.Chmod(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
@@ -307,7 +316,7 @@ func TestBackendImportsOfflineLegacyVaultIntoRuntimeVolume(t *testing.T) {
 	if err = backend.saveRuntime(state); err != nil {
 		t.Fatal(err)
 	}
-	source := t.TempDir()
+	source := privateTempDir(t)
 	if err = os.Chmod(source, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +383,7 @@ func TestBackendLegacyVaultImportFailureRestartsRuntime(t *testing.T) {
 	if err = backend.saveRuntime(state); err != nil {
 		t.Fatal(err)
 	}
-	source := t.TempDir()
+	source := privateTempDir(t)
 	if err = os.Chmod(source, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +432,7 @@ func TestBackendLegacyVaultVerifyStoppedFailureRestartsRuntime(t *testing.T) {
 	if err = backend.saveRuntime(state); err != nil {
 		t.Fatal(err)
 	}
-	source := t.TempDir()
+	source := privateTempDir(t)
 	if err = os.Chmod(source, 0700); err != nil {
 		t.Fatal(err)
 	}
