@@ -191,18 +191,23 @@ func TestHostInstallOptionParsing(t *testing.T) {
 	var stderr bytes.Buffer
 	options, err := parseHostInstallOptions([]string{
 		"--system", "--workspace", "/srv/workspace", "--state-root", "/var/lib/loki/test-lifecycle",
+		"--mcp-port", "19000",
 	}, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !options.System || options.Workspace != "/srv/workspace" || options.StateRoot != "/var/lib/loki/test-lifecycle" {
+	if !options.System || options.Workspace != "/srv/workspace" || options.StateRoot != "/var/lib/loki/test-lifecycle" ||
+		options.MCPPort != 19000 {
 		t.Fatalf("install options = %#v", options)
 	}
 	if _, err = parseHostInstallOptions([]string{"--workspace", "relative"}, &stderr); err == nil {
 		t.Fatal("relative workspace was accepted")
 	}
+	if _, err = parseHostInstallOptions([]string{"--mcp-port", "1023"}, &stderr); err == nil {
+		t.Fatal("invalid MCP port was accepted")
+	}
 	interactive, err := parseHostInstallOptions(nil, &stderr)
-	if err != nil || interactive.Workspace != "" {
+	if err != nil || interactive.Workspace != "" || interactive.MCPPort != lifecycle.DefaultMCPPort {
 		t.Fatalf("interactive install options = %#v err=%v", interactive, err)
 	}
 	approved, err := parseHostInstallOptions([]string{
@@ -237,6 +242,7 @@ func TestRunHostInstallWithInitializesTransactionalState(t *testing.T) {
 		StateRoot:    stateRoot,
 		Workspace:    workspace,
 		DockerAccess: hostDockerAccessSudo,
+		MCPPort:      19000,
 	}, candidate, backend, &stdout, &stderr)
 	if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "Loki installed successfully.") {
 		t.Fatalf("install code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -251,7 +257,8 @@ func TestRunHostInstallWithInitializesTransactionalState(t *testing.T) {
 	}
 	if backend.active != candidate.ID || snapshot.Installed == nil || snapshot.Installed.ID != candidate.ID ||
 		snapshot.Installation == nil || snapshot.Installation.Scope != "user" ||
-		snapshot.Installation.Workspace != workspace || snapshot.Installation.DockerAccess != hostDockerAccessSudo {
+		snapshot.Installation.Workspace != workspace || snapshot.Installation.DockerAccess != hostDockerAccessSudo ||
+		snapshot.Installation.MCPPort != 19000 {
 		t.Fatalf("installed snapshot=%#v backend=%q", snapshot, backend.active)
 	}
 	if raw, err := os.ReadFile(filepath.Join(workspace, "keep.txt")); err != nil || string(raw) != "keep" {

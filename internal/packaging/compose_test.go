@@ -111,7 +111,7 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if got := compose.Services["egress"].Networks; !slices.Equal(got, []string{"private", "outbound"}) {
 		t.Fatalf("egress networks = %v", got)
 	}
-	if got := compose.Services["egress"].Ports; !slices.Equal(got, []string{"127.0.0.1:18765:18765"}) {
+	if got := compose.Services["egress"].Ports; !slices.Equal(got, []string{"127.0.0.1:${LOKI_MCP_HOST_PORT:-18765}:18765"}) {
 		t.Fatalf("host MCP port = %v", got)
 	}
 	if !slices.Contains(compose.Services["egress"].Command, "mcp:18765") {

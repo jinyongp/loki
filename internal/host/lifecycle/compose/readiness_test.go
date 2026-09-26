@@ -3,6 +3,7 @@ package compose
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestRuntimeReadinessUsesReadOnlyComposePS(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
 	if err := backend.Activate(t.Context(), generation, lifecycle.InstallationState{
-		Scope: "user", Workspace: workspace,
+		Scope: "user", Workspace: workspace, MCPPort: 19000,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +46,9 @@ func TestRuntimeReadinessUsesReadOnlyComposePS(t *testing.T) {
 	calls := runner.snapshot()
 	if len(calls) != 1 || !strings.HasSuffix(strings.Join(calls[0].args, " "), "ps --status running --services") {
 		t.Fatalf("readiness performed mutating compose calls: %#v", calls)
+	}
+	if !slices.Contains(calls[0].env, "LOKI_MCP_HOST_PORT=19000") {
+		t.Fatalf("readiness MCP port environment = %#v", calls[0].env)
 	}
 }
 

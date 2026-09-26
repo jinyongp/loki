@@ -61,6 +61,7 @@ type hostInstallOptions struct {
 	PersistCLI           bool
 	CLIPaths             hostCLIInstallPaths
 	DockerAccess         string
+	MCPPort              int
 }
 
 func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOptions, error) {
@@ -75,16 +76,20 @@ func parseHostInstallOptions(args []string, stderr io.Writer) (hostInstallOption
 	createWorkspace := flags.Bool("create-workspace", false, "explicitly approve creating a missing workspace")
 	prepareWorkspace := flags.Bool("prepare-workspace", false, "explicitly approve the minimal Loki workspace POSIX ACL")
 	allowSudoWorkspace := flags.Bool("allow-sudo-workspace", false, "explicitly allow sudo for approved workspace creation or ACL changes")
+	mcpPort := flags.Int("mcp-port", lifecycle.DefaultMCPPort, "loopback TCP port for the local MCP origin")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable installation result")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return hostInstallOptions{}, errors.New("usage: loki host install [--system] [--workspace PATH] [--create-workspace] [--prepare-workspace] [--allow-sudo-workspace] [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH] [--json]")
+		return hostInstallOptions{}, errors.New("usage: loki host install [--system] [--workspace PATH] [--mcp-port PORT] [--create-workspace] [--prepare-workspace] [--allow-sudo-workspace] [--install-prerequisites] [--allow-sudo-docker] [--state-root PATH] [--json]")
 	}
 	result := hostInstallOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot), Workspace: strings.TrimSpace(*workspace),
 		ReleaseManifest: strings.TrimSpace(*releaseManifest), InstallPrerequisites: *installPrerequisites,
 		AllowSudoDocker: *allowSudoDocker, CreateWorkspace: *createWorkspace,
 		PrepareWorkspace: *prepareWorkspace, AllowSudoWorkspace: *allowSudoWorkspace,
-		JSON: *jsonOutput,
+		MCPPort: *mcpPort, JSON: *jsonOutput,
+	}
+	if result.MCPPort < 1024 || result.MCPPort > 65535 {
+		return hostInstallOptions{}, errors.New("--mcp-port must be an integer between 1024 and 65535")
 	}
 	if result.Workspace != "" {
 		if _, err := cleanInstallWorkspacePath(result.Workspace); err != nil {
@@ -202,6 +207,13 @@ func runHostInstallWith(
 		fmt.Fprintln(stderr, "host runtime adapter is not configured")
 		return 1
 	}
+	if options.MCPPort == 0 {
+		options.MCPPort = lifecycle.DefaultMCPPort
+	}
+	if options.MCPPort < 1024 || options.MCPPort > 65535 {
+		fmt.Fprintln(stderr, "MCP local-origin port must be between 1024 and 65535")
+		return 1
+	}
 	store, err := lifecycle.EnsureFileStore(options.StateRoot)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -212,7 +224,7 @@ func runHostInstallWith(
 		scope = "system"
 	}
 	installation := lifecycle.InstallationState{
-		Scope: scope, Workspace: options.Workspace, DockerAccess: options.DockerAccess,
+		Scope: scope, Workspace: options.Workspace, DockerAccess: options.DockerAccess, MCPPort: options.MCPPort,
 	}
 	if _, statErr := os.Stat(filepath.Join(options.StateRoot, "host.json")); statErr == nil {
 		snapshot, snapshotErr := store.Snapshot(ctx)
@@ -221,7 +233,7 @@ func runHostInstallWith(
 			return 1
 		}
 		if snapshot.Installed != nil && snapshot.Installed.ID == candidate.ID &&
-			snapshot.Installation != nil && *snapshot.Installation == installation {
+			snapshot.Installation != nil && snapshot.Installation.Equivalent(installation) {
 			if err = backend.Health(ctx); err != nil {
 				fmt.Fprintln(stderr, err)
 				return 1

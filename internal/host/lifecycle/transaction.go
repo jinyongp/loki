@@ -15,10 +15,29 @@ import (
 	"loki/internal/platform/safeio"
 )
 
+const DefaultMCPPort = 18765
+
 type InstallationState struct {
 	Scope        string `json:"scope"`
 	Workspace    string `json:"workspace"`
 	DockerAccess string `json:"docker_access,omitempty"`
+	MCPPort      int    `json:"mcp_port,omitempty"`
+}
+
+func (s InstallationState) EffectiveMCPPort() int {
+	if s.MCPPort == 0 {
+		return DefaultMCPPort
+	}
+	return s.MCPPort
+}
+
+func (s InstallationState) Normalized() InstallationState {
+	s.MCPPort = s.EffectiveMCPPort()
+	return s
+}
+
+func (s InstallationState) Equivalent(other InstallationState) bool {
+	return s.Normalized() == other.Normalized()
 }
 
 func (s InstallationState) Valid() bool {
@@ -26,6 +45,9 @@ func (s InstallationState) Valid() bool {
 		return false
 	}
 	if s.DockerAccess != "" && s.DockerAccess != "direct" && s.DockerAccess != "sudo" {
+		return false
+	}
+	if s.MCPPort != 0 && (s.MCPPort < 1024 || s.MCPPort > 65535) {
 		return false
 	}
 	return filepath.IsAbs(s.Workspace) &&
@@ -682,6 +704,7 @@ func (s *FileStore) InitializeInstall(ctx context.Context, candidate Generation,
 	if s == nil || !candidate.Valid() || !installation.Valid() {
 		return errors.New("host lifecycle install initialization is invalid")
 	}
+	installation = installation.Normalized()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -691,7 +714,7 @@ func (s *FileStore) InitializeInstall(ctx context.Context, candidate Generation,
 			return snapshotErr
 		}
 		if snapshot.Installed == nil && snapshot.Available != nil && snapshot.Available.ID == candidate.ID &&
-			snapshot.Installation != nil && *snapshot.Installation == installation {
+			snapshot.Installation != nil && snapshot.Installation.Equivalent(installation) {
 			return nil
 		}
 		if snapshot.Installed != nil || snapshot.Available != nil || snapshot.Host.ActiveGenerationID != "" {
@@ -700,7 +723,7 @@ func (s *FileStore) InitializeInstall(ctx context.Context, candidate Generation,
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	revision := lifecycleRevision("", candidate.ID, installation.Scope, installation.Workspace, now)
+	revision := lifecycleRevision("", candidate.ID, installation.Scope, installation.Workspace, installation.MCPPort, now)
 	host := HostState{
 		ConfigSchema: candidate.Spec.ConfigSchema, PolicySchema: candidate.Spec.PolicySchema,
 		ToolchainSchema: candidate.Spec.ToolchainSchema, StateSchema: candidate.Spec.StateSchema,

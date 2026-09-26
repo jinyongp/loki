@@ -286,6 +286,18 @@ authentication mode, and token-file path without printing the token value. It
 also makes clear that remote exposure is operator-managed and outside the Loki
 installation boundary.
 
+The local-origin port defaults to `18765` but is operator configuration, not a
+public protocol constant. Choose another port during installation when needed:
+
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
+  --workspace /srv/workspace \
+  --mcp-port 19000
+```
+
+The selected port is stored in Loki host lifecycle state, survives update and
+backup/restore operations, and is reported by `loki host connection`.
+
 ### Linux non-interactive installation
 
 Automation must explicitly approve every allowed mutation class:

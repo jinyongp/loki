@@ -18,6 +18,13 @@ import (
 
 const defaultMCPLocalOriginURL = "http://127.0.0.1:18765/mcp"
 
+func mcpLocalOriginURL(port int) string {
+	if port == 0 {
+		port = lifecycle.DefaultMCPPort
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+}
+
 type hostInfoOptions struct {
 	System    bool
 	StateRoot string
@@ -211,7 +218,7 @@ func runHostConnection(args []string, stdout, stderr io.Writer) int {
 	report := hostConnectionReport{
 		SchemaVersion: 1,
 		LocalOrigin: hostLocalOriginReport{
-			URL: defaultMCPLocalOriginURL, Transport: "streamable-http", Reachability: "loopback",
+			URL: mcpLocalOriginURL(snapshot.Installation.EffectiveMCPPort()), Transport: "streamable-http", Reachability: "loopback",
 			Authentication: hostConnectionAuthenticationReport{Type: "bearer-token-file", TokenFile: tokenFile},
 		},
 	}
@@ -249,7 +256,7 @@ func writeHostInstallResult(
 		Installed: true, AlreadyInstalled: alreadyInstalled,
 		Release: candidate.Spec.Version, GenerationID: candidate.ID,
 		Workspace: options.Workspace, CLI: cli,
-		LocalOrigin: defaultMCPLocalOriginURL, PlanID: planID,
+		LocalOrigin: mcpLocalOriginURL(options.MCPPort), PlanID: planID,
 	}
 	if options.JSON {
 		return json.NewEncoder(stdout).Encode(report)

@@ -51,7 +51,7 @@ services:
     command: [egress-proxy, --host, 0.0.0.0, --port, "18766", --execution-contract, /usr/share/doc/loki/container-execution-contract.json, --policy, /usr/share/doc/loki/egress-policy.json, --profile, dependency-install, --audit, /var/log/loki/audit.jsonl, --forward-host, 0.0.0.0, --forward-port, "18765", --forward-target, "mcp:18765"]
     user: "10002:10002"
     networks: [private, outbound]
-    ports: ["127.0.0.1:18765:18765"]
+    ports: ["127.0.0.1:${LOKI_MCP_HOST_PORT:-18765}:18765"]
     tmpfs:
       - /tmp:uid=10002,gid=10002,mode=0700
       - /var/log/loki:uid=10002,gid=10002,mode=0700

@@ -478,6 +478,24 @@ func TestOptionalComponentTargetRejectsUnknownAndRequiredComponents(t *testing.T
 	}
 }
 
+func TestInstallationStateMCPPortDefaultsAndValidation(t *testing.T) {
+	legacy := InstallationState{Scope: "user", Workspace: "/workspace"}
+	explicit := InstallationState{Scope: "user", Workspace: "/workspace", MCPPort: DefaultMCPPort}
+	if !legacy.Valid() || legacy.EffectiveMCPPort() != DefaultMCPPort || !legacy.Equivalent(explicit) {
+		t.Fatalf("legacy/default MCP port normalization failed: legacy=%#v explicit=%#v", legacy, explicit)
+	}
+	for _, port := range []int{1, 1023, 65536} {
+		state := InstallationState{Scope: "user", Workspace: "/workspace", MCPPort: port}
+		if state.Valid() {
+			t.Fatalf("invalid MCP port %d accepted", port)
+		}
+	}
+	if state := (InstallationState{Scope: "user", Workspace: "/workspace", MCPPort: 19000}); !state.Valid() ||
+		state.EffectiveMCPPort() != 19000 || state.Equivalent(explicit) {
+		t.Fatalf("custom MCP port state = %#v", state)
+	}
+}
+
 func TestInitializeInstallUsesWorkspaceWithoutDeletingIt(t *testing.T) {
 	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 	candidate := generationFixture(t, "1.0.0", now.Add(-time.Hour), 1)
@@ -511,7 +529,7 @@ func TestInitializeInstallUsesWorkspaceWithoutDeletingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if snapshot.Installed == nil || snapshot.Installed.ID != candidate.ID || snapshot.Installation == nil ||
-		snapshot.Installation.Workspace != workspace {
+		snapshot.Installation.Workspace != workspace || snapshot.Installation.MCPPort != DefaultMCPPort {
 		t.Fatalf("installed snapshot = %#v", snapshot)
 	}
 	if raw, err := os.ReadFile(filepath.Join(workspace, "keep.txt")); err != nil || string(raw) != "existing" {

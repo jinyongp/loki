@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,7 +98,15 @@ type runtimeState struct {
 	CoreImage    string   `json:"core_image"`
 	BrowserImage string   `json:"browser_image,omitempty"`
 	Workspace    string   `json:"workspace"`
+	MCPPort      int      `json:"mcp_port,omitempty"`
 	Profiles     []string `json:"profiles,omitempty"`
+}
+
+func (s runtimeState) effectiveMCPPort() int {
+	if s.MCPPort == 0 {
+		return lifecycle.DefaultMCPPort
+	}
+	return s.MCPPort
 }
 
 type snapshotVolume struct {
@@ -288,7 +297,7 @@ func (b *Backend) Activate(_ context.Context, generation lifecycle.Generation, i
 	if found {
 		profiles = append(profiles, current.Profiles...)
 	}
-	state, err := b.stateFor(generation, installation.Workspace, profiles)
+	state, err := b.stateFor(generation, installation, profiles)
 	if err != nil {
 		return err
 	}
@@ -470,6 +479,7 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 		"LOKI_IMAGE=" + state.CoreImage,
 		"LOKI_JOB_IMAGE=" + state.CoreImage,
 		"LOKI_WORKSPACE=" + state.Workspace,
+		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
 		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
 		"LOKI_GITHUB_CONFIG_FILE=" + githubPath,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
@@ -630,7 +640,7 @@ func (b *Backend) VerifyStopped(ctx context.Context) error {
 	return nil
 }
 
-func (b *Backend) stateFor(generation lifecycle.Generation, workspace string, profiles []string) (runtimeState, error) {
+func (b *Backend) stateFor(generation lifecycle.Generation, installation lifecycle.InstallationState, profiles []string) (runtimeState, error) {
 	profiles = append([]string(nil), profiles...)
 	sort.Strings(profiles)
 	core := b.coreRepository + "@" + generation.Spec.CoreImageDigest
@@ -642,7 +652,7 @@ func (b *Backend) stateFor(generation lifecycle.Generation, workspace string, pr
 	}
 	state := runtimeState{
 		Version: 1, GenerationID: generation.ID, CoreImage: core, BrowserImage: browser,
-		Workspace: workspace, Profiles: profiles,
+		Workspace: installation.Workspace, MCPPort: installation.EffectiveMCPPort(), Profiles: profiles,
 	}
 	if err := state.validate(); err != nil {
 		return runtimeState{}, err
@@ -657,6 +667,9 @@ func (s runtimeState) validate() error {
 	}
 	if s.BrowserImage != "" && !validImageRef(s.BrowserImage) {
 		return errors.New("compose lifecycle browser image is invalid")
+	}
+	if s.MCPPort != 0 && (s.MCPPort < 1024 || s.MCPPort > 65535) {
+		return errors.New("compose lifecycle MCP port is invalid")
 	}
 	if !sort.StringsAreSorted(s.Profiles) {
 		return errors.New("compose lifecycle profiles are not canonical")
@@ -702,6 +715,7 @@ func (b *Backend) compose(ctx context.Context, state runtimeState, command ...st
 		"LOKI_IMAGE=" + state.CoreImage,
 		"LOKI_JOB_IMAGE=" + state.CoreImage,
 		"LOKI_WORKSPACE=" + state.Workspace,
+		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
 		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
 		"LOKI_GITHUB_CONFIG_FILE=" + materialized.GitHubConfig,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",

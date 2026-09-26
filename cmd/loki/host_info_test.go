@@ -103,6 +103,38 @@ func TestRunHostConnectionDoesNotDiscloseToken(t *testing.T) {
 	}
 }
 
+func TestRunHostConnectionUsesInstalledMCPPort(t *testing.T) {
+	now := time.Date(2026, 9, 22, 11, 15, 0, 0, time.UTC)
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	if err := os.Mkdir(workspace, 0700); err != nil {
+		t.Fatal(err)
+	}
+	stateRoot := filepath.Join(t.TempDir(), "state")
+	candidate := hostGenerationFixture(t, now)
+	var installOut, installErr bytes.Buffer
+	if code := runHostInstallWith(t.Context(), hostInstallOptions{
+		StateRoot: stateRoot, Workspace: workspace, DockerAccess: hostDockerAccessDirect,
+		MCPPort: 19000, JSON: true,
+	}, candidate, &fakeHostRuntimeBackend{}, &installOut, &installErr); code != 0 {
+		t.Fatalf("install code=%d stderr=%q", code, installErr.String())
+	}
+	if err := os.WriteFile(filepath.Join(stateRoot, "mcp-token"), []byte("super-secret-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runHostConnection([]string{"--state-root", stateRoot, "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("connection code=%d stderr=%q", code, stderr.String())
+	}
+	var report hostConnectionReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.LocalOrigin.URL != "http://127.0.0.1:19000/mcp" {
+		t.Fatalf("local origin = %#v", report.LocalOrigin)
+	}
+}
+
 func TestRunHostConnectionRejectsUnsafeTokenFile(t *testing.T) {
 	stateRoot, _, _ := installedHostInfoFixture(t)
 	token := filepath.Join(stateRoot, "mcp-token")

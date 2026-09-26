@@ -113,8 +113,9 @@ func privateTempDir(t *testing.T) string {
 func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
+	const mcpPort = 19000
 	if err := backend.Activate(t.Context(), generation, lifecycle.InstallationState{
-		Scope: "user", Workspace: workspace,
+		Scope: "user", Workspace: workspace, MCPPort: mcpPort,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +126,7 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	if state.GenerationID != generation.ID ||
 		state.CoreImage != defaultCoreRepository+"@"+generation.Spec.CoreImageDigest ||
 		state.BrowserImage != defaultBrowserRepo+"@"+generation.Spec.Components[0].Digest ||
-		state.Workspace != workspace || len(state.Profiles) != 0 {
+		state.Workspace != workspace || state.MCPPort != mcpPort || len(state.Profiles) != 0 {
 		t.Fatalf("runtime state = %#v", state)
 	}
 	if err = backend.SetComponent(t.Context(), generation, "browser", true); err != nil {
@@ -161,6 +162,7 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 		if strings.Contains(joined, " compose ") {
 			if !slices.Contains(call.env, "LOKI_IMAGE="+state.CoreImage) ||
 				!slices.Contains(call.env, "LOKI_WORKSPACE="+workspace) ||
+				!slices.Contains(call.env, "LOKI_MCP_HOST_PORT=19000") ||
 				!slices.Contains(call.env, "LOKI_BROWSER_IMAGE="+state.BrowserImage) ||
 				!slices.Contains(call.env, "LOKI_MCP_TOKEN_FILE="+backend.containerTokenPath()) {
 				t.Fatalf("compose environment = %#v", call.env)
@@ -239,7 +241,7 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	backend, _, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
 	if err := backend.Activate(t.Context(), generation, lifecycle.InstallationState{
-		Scope: "system", Workspace: workspace,
+		Scope: "system", Workspace: workspace, MCPPort: 19000,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +255,7 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	}
 	runtime, err := backend.Snapshot(t.Context(), lifecycle.OperationBackup, lifecycle.Snapshot{
 		Installed: &generation, Host: host,
-		Installation: &lifecycle.InstallationState{Scope: "system", Workspace: workspace},
+		Installation: &lifecycle.InstallationState{Scope: "system", Workspace: workspace, MCPPort: 19000},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +274,7 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 		t.Fatal(err)
 	}
 	state, found, err := backend.loadRuntime()
-	if err != nil || !found || !slices.Equal(state.Profiles, []string{"browser"}) {
+	if err != nil || !found || state.MCPPort != 19000 || !slices.Equal(state.Profiles, []string{"browser"}) {
 		t.Fatalf("restored runtime = %#v found=%v err=%v", state, found, err)
 	}
 }
@@ -280,7 +282,7 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
-	state, err := backend.stateFor(generation, workspace, nil)
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +311,7 @@ func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
 func TestBackendImportsOfflineLegacyVaultIntoRuntimeVolume(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
-	state, err := backend.stateFor(generation, workspace, nil)
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +378,7 @@ func TestBackendImportsOfflineLegacyVaultIntoRuntimeVolume(t *testing.T) {
 func TestBackendLegacyVaultImportFailureRestartsRuntime(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
-	state, err := backend.stateFor(generation, workspace, nil)
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +427,7 @@ func TestBackendLegacyVaultImportFailureRestartsRuntime(t *testing.T) {
 func TestBackendLegacyVaultVerifyStoppedFailureRestartsRuntime(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")
-	state, err := backend.stateFor(generation, workspace, nil)
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
