@@ -119,7 +119,9 @@ $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
 $env:LOKI_WSL_AUTOSTART = "1"
 
 try {
+    $global:LASTEXITCODE = 0
     & $installer
+    if ($LASTEXITCODE -ne 0) { Fail "Windows installer reported failure with code $LASTEXITCODE" }
 
     $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
     $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
