@@ -190,21 +190,54 @@ If the installer says WSL is too old, run `wsl --update` manually. A WSL
 update failure is a Windows/WSL prerequisite problem; the Loki installer does
 not attempt to repair Windows Installer or Windows optional features.
 
-If a distribution with the requested name already exists, the normal installer
-stops without modifying it. If it may be an interrupted Loki install, inspect
-the first-boot service and recent journal directly from the appliance:
+Rerunning the installer first reconciles the requested WSL distribution,
+protected Windows connection state, and the managed startup task. Ownership is
+not inferred from the distribution or task name alone.
+
+If the requested distribution is a verified healthy Loki appliance, the
+installer reports the existing installation and exits without reinstalling it.
+If Loki provisioning is still in progress, the installer leaves it untouched
+and asks you to wait. You can inspect that state directly:
 
 ```powershell
 wsl -d loki-mcp --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager
 wsl -d loki-mcp --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80
 ```
 
+If the WSL distribution no longer exists but its verified Loki-owned
+`%LOCALAPPDATA%\Loki\<name>` connection state or exact Loki startup task
+remains, those orphaned Windows resources are removed automatically and the
+installer continues with a fresh install. This covers the common case where
+`wsl --unregister` was run manually but `connection.json`, `mcp-token`, or
+the startup task remained.
+
+A verified stale Loki appliance is destructive recovery because unregistering
+it deletes data inside that WSL distribution. From an interactive PowerShell
+console the installer lists the resources that will be removed and requires
+`[y/N]` confirmation. A genuinely non-interactive invocation fails closed
+unless you explicitly opt in:
+
+```powershell
+$env:LOKI_WSL_REINSTALL = "1"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+The opt-in is not a generic force switch: it applies only after the installer
+has verified Loki appliance identity. An unrelated or unverifiable
+distribution, Windows state directory, Scheduled Task, or custom install
+location is never deleted automatically.
+
+New installations write a protected non-secret `ownership.json` next to the
+Windows connection files so later recovery can bind the WSL distribution,
+state directory, startup task, release, port, and any custom WSL location.
+Older installations without that manifest use only the strict legacy
+`connection.json` and startup-task signatures; a legacy custom WSL location
+is not auto-deleted because its ownership was not recorded durably.
+
 The appliance binary is present at `/usr/lib/loki-appliance/loki` from the
 initial image. The normal `/usr/local/bin/loki` CLI is published by host
-provisioning and may not exist in an interrupted installation. If the existing
-distribution is unrelated, choose a different name with `LOKI_WSL_NAME`. The
-installer never unregisters or overwrites a distribution that existed before
-the current invocation.
+provisioning and may not exist in an interrupted installation. If an existing
+distribution is unrelated, choose a different name with `LOKI_WSL_NAME`.
 
 If installation fails, the installer prints one `[Loki] ERROR:` line that
 includes the active installation stage instead of exposing a raw PowerShell
@@ -225,17 +258,16 @@ the normal provisioning timeout.
 
 For a fresh install, resources created by the current installer invocation are
 transactional. If a later provisioning, health, connection-file, or startup-task
-step fails, the installer prints recent provisioning diagnostics, removes any
-Windows connection state or startup task it created, unregisters the incomplete
-WSL distribution, and reports that the same install command can be retried.
-Resources that existed before the installer started are never removed or
-overwritten automatically.
+step fails, the installer prints recent provisioning diagnostics, removes the
+Windows resources and WSL distribution created by that failed attempt, and
+reports that the same install command can be retried.
 
-An externally interrupted installer (for example a terminated PowerShell
-process or Windows restart) cannot run its rollback handler and may leave a
-distribution behind. That is a recovery case: the next normal install still
-treats the existing distribution as pre-existing state and stops without
-modifying it.
+Recovery of resources from an earlier invocation is narrower. Verified
+Windows-only orphans are disposable integration state and can be reconciled
+automatically. An existing WSL distribution is never removed merely because its
+name matches: it must first prove Loki appliance identity and be classified as
+stale, and destructive recovery then requires the approval described above.
+Unverified resources are left untouched.
 
 Manual creation of a generic Ubuntu WSL distribution is not part of the normal
 Loki Windows installation path.

@@ -79,6 +79,29 @@ function Resolve-AccountSID([string]$Account) {
     }
 }
 
+function Get-RegisteredDistributions {
+    return @(& wsl.exe --list --quiet 2>$null) |
+        ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
+        Where-Object { $_ }
+}
+
+function Wait-LokiHealthy([string]$Distribution, [int]$Attempts = 90) {
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        & wsl.exe -d $Distribution --user root --exec /usr/local/bin/loki host doctor --system *> $null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+    Fail "Loki did not become healthy for distribution $Distribution"
+}
+
+function Invoke-InstallerNonInteractive([string]$Path) {
+    $escaped = $Path.Replace("'", "''")
+    & pwsh -NoProfile -NonInteractive -Command "& '$escaped'; exit `$global:LASTEXITCODE"
+    return $LASTEXITCODE
+}
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $candidateRoot = (Resolve-Path $Candidate).Path
 $evidencePath = Join-Path $candidateRoot "evidence.json"
@@ -239,6 +262,75 @@ try {
     if ($triggerSid -ne $currentSid) { Fail "autostart task trigger is not bound to the current user" }
     if ($principalSid -ne $currentSid) { Fail "autostart task principal is not the current user" }
     if ([string]$task.Principal.RunLevel -ne "Limited") { Fail "autostart task requests elevated run level" }
+
+    $ownershipFile = Join-Path $stateDir "ownership.json"
+    if (-not (Test-Path -LiteralPath $ownershipFile -PathType Leaf)) { Fail "Windows ownership manifest is missing" }
+    $ownership = Get-Content -LiteralPath $ownershipFile -Raw | ConvertFrom-Json
+    if ([int]$ownership.schema_version -ne 1 -or
+        [string]$ownership.distribution -ne $distributionName -or
+        [string]$ownership.release_tag -ne $Tag -or
+        [string]$ownership.task_name -ne $taskName -or
+        [int]$ownership.mcp_port -ne $mcpPort) {
+        Fail "Windows ownership manifest does not match the accepted installation"
+    }
+
+    Remove-Item Env:LOKI_WSL_REINSTALL -ErrorAction SilentlyContinue
+    $healthyRerunCode = Invoke-InstallerNonInteractive $installer
+    if ($healthyRerunCode -ne 0) { Fail "healthy non-interactive installer rerun failed with code $healthyRerunCode" }
+    if (-not ((Get-RegisteredDistributions) | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) })) {
+        Fail "healthy installer rerun removed the Loki distribution"
+    }
+
+    Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/rm", "-rf", "/var/lib/loki/lifecycle") | Out-Null
+    & wsl.exe -d $distributionName --user root --exec /usr/local/bin/loki host doctor --system *> $null
+    if ($LASTEXITCODE -eq 0) { Fail "stale-recovery fixture unexpectedly remained healthy" }
+
+    Remove-Item Env:LOKI_WSL_REINSTALL -ErrorAction SilentlyContinue
+    $staleDeniedCode = Invoke-InstallerNonInteractive $installer
+    if ($staleDeniedCode -eq 0) { Fail "non-interactive stale reinstall succeeded without explicit approval" }
+    if (-not ((Get-RegisteredDistributions) | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) })) {
+        Fail "denied stale reinstall removed the Loki distribution"
+    }
+    if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) {
+        Fail "denied stale reinstall removed Windows state"
+    }
+    if (-not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
+        Fail "denied stale reinstall removed the startup task"
+    }
+
+    $env:LOKI_WSL_REINSTALL = "1"
+    $staleApprovedCode = Invoke-InstallerNonInteractive $installer
+    Remove-Item Env:LOKI_WSL_REINSTALL -ErrorAction SilentlyContinue
+    if ($staleApprovedCode -ne 0) { Fail "explicit non-interactive stale reinstall failed with code $staleApprovedCode" }
+    Wait-LokiHealthy $distributionName
+    if (-not (Test-Path -LiteralPath $ownershipFile -PathType Leaf)) {
+        Fail "stale reinstall did not recreate Windows ownership state"
+    }
+
+    Remove-Item -LiteralPath $ownershipFile -Force
+    Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
+    Invoke-NativeCapture "wsl.exe" @("--unregister", $distributionName) | Out-Null
+    if ((Get-RegisteredDistributions) | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
+        Fail "legacy orphan fixture still has a registered WSL distribution"
+    }
+    if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) {
+        Fail "legacy orphan fixture lost Windows connection state"
+    }
+    if (-not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
+        Fail "legacy orphan fixture lost the startup task"
+    }
+
+    Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
+    Remove-Item Env:LOKI_WSL_REINSTALL -ErrorAction SilentlyContinue
+    $orphanRecoveryCode = Invoke-InstallerNonInteractive $installer
+    if ($orphanRecoveryCode -ne 0) { Fail "legacy orphan recovery failed with code $orphanRecoveryCode" }
+    Wait-LokiHealthy $distributionName
+    if (-not (Test-Path -LiteralPath $ownershipFile -PathType Leaf)) {
+        Fail "legacy orphan recovery did not publish a new ownership manifest"
+    }
+    if (-not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
+        Fail "legacy orphan recovery did not recreate the startup task"
+    }
 
     Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
     Start-Sleep -Seconds 2

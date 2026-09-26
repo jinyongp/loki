@@ -59,6 +59,16 @@ irm https://jinyongp.dev/loki/install.ps1 | iex
 Windows logon startup is enabled by default. Set
 `LOKI_WSL_AUTOSTART=0` before installation to disable it.
 
+Rerunning the Windows installer reconciles Loki-owned WSL and Windows state.
+A healthy Loki appliance is left unchanged. If the WSL distribution is already
+gone but its verified Loki connection state or startup task remains, those
+orphaned Windows resources are cleaned automatically before a fresh install.
+A verified stale Loki appliance requires confirmation because recovery
+unregisters that distribution and deletes its internal data. Interactive runs
+prompt with `[y/N]`; genuinely non-interactive runs fail closed unless
+`LOKI_WSL_REINSTALL=1` is set. That opt-in never authorizes deletion of an
+unverified distribution or unrelated Windows state.
+
 The Windows installer requires a current WSL with custom `.wsl` distribution
 support. It does not update WSL automatically. If your installed WSL is too old,
 the installer stops and tells you to run `wsl --update` yourself.
