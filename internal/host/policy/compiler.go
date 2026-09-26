@@ -39,6 +39,11 @@ type Sharing struct {
 	PreviewBaseDomain string `json:"preview_base_domain"`
 }
 
+// Access preserves schema-v1 provider configuration in the effective-policy
+// digest for rollback/config identity only. New providers must not extend this
+// compatibility payload. Remove it only with an explicit config-schema migration
+// that drops v1 read/rollback compatibility; provider-specific verification
+// remains outside the policy/compiler.
 type Access struct {
 	CloudflareTeamDomain  string `json:"cloudflare_team_domain"`
 	CloudflareAudience    string `json:"cloudflare_audience"`

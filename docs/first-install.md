@@ -369,11 +369,17 @@ the inbound Host and its own local-origin authentication policy. Provider-
 specific integrations are optional adapters, not installation prerequisites.
 
 Cloudflare Access remains supported for operators who explicitly configure its
-existing team-domain/audience settings. Its assertion header, JWT validation,
-JWKS loading, and JWKS refresh implementation live in the optional Cloudflare
-integration boundary; core bearer/request authentication does not depend on
-Cloudflare. Loki does not create or manage a Cloudflare Tunnel or Access
-application.
+existing team-domain/audience settings. Those two settings are compatibility-only
+config-schema-v1 inputs: they remain in core configuration and the effective-policy
+digest so current installations and rollback paths keep the same configuration
+identity. New access providers must not add provider-specific fields to those core
+contracts. Removing the Cloudflare compatibility fields requires an explicit
+config-schema migration that drops v1 read/rollback compatibility.
+
+The assertion header, JWT validation, JWKS loading, and JWKS refresh
+implementation live in the optional Cloudflare integration boundary; core
+bearer/request authentication does not depend on Cloudflare. Loki does not create
+or manage a Cloudflare Tunnel or Access application.
 
 When an ingress preserves a public Host header, explicitly allow that hostname
 in Loki. For a native Linux installation:

@@ -26,9 +26,14 @@ type GitHubInstallation struct {
 }
 
 type Config struct {
-	Root, AuditLog, Host                                         string
-	Port                                                         int
-	PublicHosts                                                  []string
+	Root, AuditLog, Host string
+	Port                 int
+	PublicHosts          []string
+	// CloudflareTeamDomain and CloudflareAudience are compatibility-only
+	// config-schema-v1 inputs. New access providers must not add provider fields
+	// here. Retain these until an explicit config-schema migration drops v1
+	// read/rollback compatibility; request/JWT/JWKS behavior is owned exclusively
+	// by the optional access integration.
 	CloudflareTeamDomain, CloudflareAudience                     string
 	ArtifactBaseURL, PreviewBaseDomain, PreviewAccessAudience    string
 	MaxFileBytes, MaxWriteBytes, MaxOutputBytes, MaxListEntries  int
