@@ -43,6 +43,11 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$ErrorActionPreference = "Continue"`,
 		`2> $stderrPath`,
 		`Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)"`,
+		`$createdDistribution = $false`,
+		`$createdStateDir = $false`,
+		`$createdTask = $false`,
+		`$installationComplete = $false`,
+		`Windows Loki state already exists for '$distributionName'`,
 		`Step "Checking Windows and WSL prerequisites..."`,
 		`Step "Preparing Loki $releaseTag WSL appliance..."`,
 		`Step "Verifying WSL appliance integrity..."`,
@@ -57,6 +62,13 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Step "Reading MCP connection information..."`,
 		`Step "Writing protected Windows MCP connection files..."`,
 		`Step "Configuring Windows startup integration..."`,
+		`[Loki] Collecting diagnostics before rollback...`,
+		`[Loki] Rolling back incomplete installation...`,
+		`[Loki] Rollback complete. Removed incomplete WSL distribution '$distributionName'.`,
+		`[Loki] You can rerun the installer with the same command.`,
+		`Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName)`,
+		`Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`,
+		`Unregister-ScheduledTask -TaskName $taskName -Confirm:$false`,
 		`[Loki] Installation complete.`,
 		`$global:LASTEXITCODE = 0`,
 		`$global:LASTEXITCODE = 1`,
@@ -79,8 +91,6 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 	for _, forbidden := range []string{
 		`Invoke-NativeCapture "wsl.exe" @("--update")`,
 		`& wsl.exe --update`,
-		`wsl.exe --unregister`,
-		`wsl --unregister $distributionName`,
 		`--name Loki`,
 		`"/usr/bin/systemctl", "is-failed"`,
 		`& wsl.exe -d $distributionName --user root --exec /usr/bin/test`,
@@ -90,6 +100,37 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		if strings.Contains(body, forbidden) {
 			t.Errorf("Windows installer contains forbidden %q", forbidden)
 		}
+	}
+}
+
+func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "tools", "release", "install.ps1.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+
+	existingConflict := strings.Index(body, `A WSL distribution named '$distributionName' already exists.`)
+	stateConflict := strings.Index(body, `Windows Loki state already exists for '$distributionName'`)
+	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
+	markCreated := strings.Index(body, `$createdDistribution = $true`)
+	rollbackGuard := strings.Index(body, `if ($createdDistribution -and -not $installationComplete)`)
+	unregister := strings.Index(body, `Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
+	if existingConflict < 0 || stateConflict < 0 || install < 0 || markCreated < 0 || rollbackGuard < 0 || unregister < 0 {
+		t.Fatal("Windows installer transactional rollback markers are missing")
+	}
+	if existingConflict > install || stateConflict > install {
+		t.Fatal("Windows installer mutates WSL before pre-existing resource conflicts are rejected")
+	}
+	if markCreated < install {
+		t.Fatal("Windows installer claims ownership of the distribution before successful registration")
+	}
+	if unregister < rollbackGuard {
+		t.Fatal("Windows installer can unregister a distribution outside the current-invocation rollback guard")
+	}
+	if strings.Count(body, `@("--unregister", $distributionName)`) != 1 {
+		t.Fatal("Windows installer must have exactly one guarded automatic unregister path")
 	}
 }
 

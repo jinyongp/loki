@@ -172,10 +172,19 @@ native-command stack. A first-boot timeout also includes the recent
 normal Loki lifecycle journal remains authoritative; a failed attempt is not
 reported as a successful installation.
 
-A distribution registered before a later failure is left intact for diagnosis;
-the installer never unregisters it automatically. Before retrying with the same
-name, inspect that distribution and explicitly remove it only if you are sure it
-contains no data you need. Alternatively, use a different `LOKI_WSL_NAME`.
+For a fresh install, resources created by the current installer invocation are
+transactional. If a later provisioning, health, connection-file, or startup-task
+step fails, the installer prints recent provisioning diagnostics, removes any
+Windows connection state or startup task it created, unregisters the incomplete
+WSL distribution, and reports that the same install command can be retried.
+Resources that existed before the installer started are never removed or
+overwritten automatically.
+
+An externally interrupted installer (for example a terminated PowerShell
+process or Windows restart) cannot run its rollback handler and may leave a
+distribution behind. That is a recovery case: the next normal install still
+treats the existing distribution as pre-existing state and stops without
+modifying it.
 
 Manual creation of a generic Ubuntu WSL distribution is not part of the normal
 Loki Windows installation path.

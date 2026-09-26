@@ -14,6 +14,12 @@ $autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
 $localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
 
 $currentStage = "initializing"
+$taskName = "Loki WSL ($distributionName)"
+$stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
+$createdDistribution = $false
+$createdStateDir = $false
+$createdTask = $false
+$installationComplete = $false
 
 function Step([string]$Message) {
     $script:currentStage = $Message
@@ -85,7 +91,9 @@ $existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where
 if ($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
     Fail "A WSL distribution named '$distributionName' already exists. If it came from a previous Loki install attempt, inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'. Loki will not remove it automatically; otherwise choose another name with LOKI_WSL_NAME."
 }
-$taskName = "Loki WSL ($distributionName)"
+if (Test-Path -LiteralPath $stateDir) {
+    Fail "Windows Loki state already exists for '$distributionName': $stateDir. Loki will not overwrite or remove pre-existing state automatically."
+}
 if ($autoStart -and (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
     Fail "Scheduled Task '$taskName' already exists."
 }
@@ -125,6 +133,7 @@ try {
         $installArgs += @("--location", $installLocation)
     }
     Invoke-NativeCapture "wsl.exe" $installArgs | Out-Null
+    $createdDistribution = $true
     Write-Host "[Loki] WSL distribution registered."
 
     Step "Starting WSL and provisioning Docker + Loki runtime..."
@@ -169,8 +178,8 @@ try {
     }
 
     Step "Writing protected Windows MCP connection files..."
-    $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
     New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    $createdStateDir = $true
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     Invoke-NativeCapture "icacls.exe" @($stateDir, "/inheritance:r", "/grant:r", "${identity}:(OI)(CI)(F)", "SYSTEM:(OI)(CI)(F)") | Out-Null
 
@@ -202,11 +211,13 @@ try {
         $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
         $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
         Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Description "Keep the Loki WSL2 appliance running." -Force | Out-Null
+        $createdTask = $true
         Write-Host "[Loki] Windows logon startup enabled."
     } else {
         Write-Host "[Loki] Windows logon startup disabled by LOKI_WSL_AUTOSTART=0."
     }
 
+    $installationComplete = $true
     Write-Host "[Loki] Installation complete."
     $global:LASTEXITCODE = 0
     Write-Host "  Release: $releaseTag"
@@ -220,6 +231,33 @@ finally {
 }
 }
 catch {
-    $global:LASTEXITCODE = 1
     Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)" -ForegroundColor Red
+    if ($createdDistribution -and -not $installationComplete) {
+        Write-Host "[Loki] Collecting diagnostics before rollback..."
+        $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
+        $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
+        if ($diagnostics.Count -gt 0) {
+            Write-Host "[Loki] Recent provisioning diagnostics:"
+            Write-Host ($diagnostics -join [Environment]::NewLine)
+        }
+
+        Write-Host "[Loki] Rolling back incomplete installation..."
+        if ($createdTask) {
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        if ($createdStateDir) {
+            Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName) | Out-Null
+        $unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)
+        if ($unregisterResult.ExitCode -eq 0) {
+            Write-Host "[Loki] Rollback complete. Removed incomplete WSL distribution '$distributionName'."
+            Write-Host "[Loki] You can rerun the installer with the same command."
+        } else {
+            $rollbackDetail = if ($unregisterResult.Stderr) { $unregisterResult.Stderr } else { $unregisterResult.Stdout }
+            Write-Host "[Loki] WARNING [rollback]: Could not remove incomplete WSL distribution '$distributionName'. $rollbackDetail" -ForegroundColor Yellow
+        }
+    }
+    $global:LASTEXITCODE = 1
 }
