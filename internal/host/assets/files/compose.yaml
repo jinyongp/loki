@@ -227,7 +227,7 @@ services:
 
   mcp:
     <<: *loki-service
-    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
+    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --ingress-config, /etc/loki/ingress.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
     user: "10000:10000"
     group_add: ["10001"]
     networks: [private]
@@ -244,6 +244,8 @@ services:
     configs:
       - source: github_config
         target: /etc/loki/github.toml
+      - source: ingress_config
+        target: /etc/loki/ingress.toml
     secrets: [mcp_token]
     tmpfs:
       - /tmp:uid=10000,gid=10000,mode=0700
@@ -277,6 +279,8 @@ volumes:
 configs:
   github_config:
     file: ${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}
+  ingress_config:
+    file: ${LOKI_INGRESS_CONFIG_FILE:-./config/ingress.compose.toml}
 
 secrets:
   mcp_token:

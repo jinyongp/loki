@@ -164,7 +164,8 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 				!slices.Contains(call.env, "LOKI_WORKSPACE="+workspace) ||
 				!slices.Contains(call.env, "LOKI_MCP_HOST_PORT=19000") ||
 				!slices.Contains(call.env, "LOKI_BROWSER_IMAGE="+state.BrowserImage) ||
-				!slices.Contains(call.env, "LOKI_MCP_TOKEN_FILE="+backend.containerTokenPath()) {
+				!slices.Contains(call.env, "LOKI_MCP_TOKEN_FILE="+backend.containerTokenPath()) ||
+				!slices.Contains(call.env, "LOKI_INGRESS_CONFIG_FILE="+backend.ingressConfigPath()) {
 				t.Fatalf("compose environment = %#v", call.env)
 			}
 			profileIndex := slices.Index(call.args, "--profile")
@@ -180,8 +181,9 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	for path, wantMode := range map[string]os.FileMode{
 		filepath.Join(backend.runtimeRoot, "assets", "compose.yaml"):        0600,
 		filepath.Join(backend.runtimeRoot, "assets", "github.compose.toml"): 0644,
-		backend.tokenPath():          0600,
-		backend.containerTokenPath(): 0444,
+		backend.ingressConfigPath():                                         0644,
+		backend.tokenPath():                                                 0600,
+		backend.containerTokenPath():                                        0444,
 	} {
 		info, statErr := os.Stat(path)
 		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != wantMode {
@@ -198,6 +200,45 @@ func TestBackendActivatesCanonicalAssetsAndComposeProfiles(t *testing.T) {
 	}
 	if !slices.Equal(canonicalToken, containerToken) {
 		t.Fatal("container MCP token projection differs from canonical token")
+	}
+}
+
+func TestBackendSetIngressHostsProjectsOperatorConfig(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	if err := backend.Activate(t.Context(), generation, lifecycle.InstallationState{
+		Scope: "user", Workspace: workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.SetIngressHosts(t.Context(), []string{"MCP.Example.com", "a.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	state, found, err := backend.loadRuntime()
+	if err != nil || !found || !slices.Equal(state.IngressHosts, []string{"a.example.com", "mcp.example.com"}) {
+		t.Fatalf("runtime ingress state = %#v found=%v err=%v", state.IngressHosts, found, err)
+	}
+	raw, err := os.ReadFile(backend.ingressConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "a.example.com") || !strings.Contains(text, "mcp.example.com") ||
+		strings.Contains(text, "port") {
+		t.Fatalf("projected ingress config = %q", text)
+	}
+	info, err := os.Stat(backend.ingressConfigPath())
+	if err != nil || info.Mode().Perm() != 0644 {
+		t.Fatalf("ingress projection mode = %v err=%v", info, err)
+	}
+	sawIngressEnv := false
+	for _, call := range runner.snapshot() {
+		if slices.Contains(call.env, "LOKI_INGRESS_CONFIG_FILE="+backend.ingressConfigPath()) {
+			sawIngressEnv = true
+		}
+	}
+	if !sawIngressEnv {
+		t.Fatalf("compose calls did not receive ingress projection: %#v", runner.snapshot())
 	}
 }
 
@@ -248,10 +289,13 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	if err := backend.SetComponent(t.Context(), generation, "browser", true); err != nil {
 		t.Fatal(err)
 	}
+	if err := backend.SetIngressHosts(t.Context(), []string{"mcp.example.com"}); err != nil {
+		t.Fatal(err)
+	}
 	host := lifecycle.HostState{
 		ActiveGenerationID: generation.ID,
 		ConfigSchema:       1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
-		EnabledComponents: []string{"browser"}, Revision: "revision-1",
+		EnabledComponents: []string{"browser"}, IngressHosts: []string{"mcp.example.com"}, Revision: "revision-1",
 	}
 	runtime, err := backend.Snapshot(t.Context(), lifecycle.OperationBackup, lifecycle.Snapshot{
 		Installed: &generation, Host: host,
@@ -270,11 +314,15 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	if err = backend.SetComponent(t.Context(), generation, "browser", false); err != nil {
 		t.Fatal(err)
 	}
+	if err = backend.SetIngressHosts(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
 	if err = backend.Restore(t.Context(), runtime.Ref); err != nil {
 		t.Fatal(err)
 	}
 	state, found, err := backend.loadRuntime()
-	if err != nil || !found || state.MCPPort != 19000 || !slices.Equal(state.Profiles, []string{"browser"}) {
+	if err != nil || !found || state.MCPPort != 19000 || !slices.Equal(state.Profiles, []string{"browser"}) ||
+		!slices.Equal(state.IngressHosts, []string{"mcp.example.com"}) {
 		t.Fatalf("restored runtime = %#v found=%v err=%v", state, found, err)
 	}
 }

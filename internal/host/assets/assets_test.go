@@ -23,6 +23,13 @@ func TestCanonicalAssetsMatchDeveloperViews(t *testing.T) {
 	if !bytes.Equal(github, GitHubConfig()) {
 		t.Fatal("config/github.compose.toml drifted from canonical embedded host asset")
 	}
+	ingress, err := os.ReadFile(filepath.Join(root, "config", "ingress.compose.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(ingress, IngressConfig()) {
+		t.Fatal("config/ingress.compose.toml drifted from canonical embedded host asset")
+	}
 }
 
 func TestMaterializeUsesPrivateRootAndContainerReadablePublicConfig(t *testing.T) {
@@ -35,8 +42,9 @@ func TestMaterializeUsesPrivateRootAndContainerReadablePublicConfig(t *testing.T
 		t.Fatal(err)
 	}
 	for path, want := range map[string][]byte{
-		result.ComposePath:  Compose(),
-		result.GitHubConfig: GitHubConfig(),
+		result.ComposePath:   Compose(),
+		result.GitHubConfig:  GitHubConfig(),
+		result.IngressConfig: IngressConfig(),
 	} {
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
@@ -47,8 +55,9 @@ func TestMaterializeUsesPrivateRootAndContainerReadablePublicConfig(t *testing.T
 		}
 	}
 	for path, wantMode := range map[string]os.FileMode{
-		result.ComposePath:  0600,
-		result.GitHubConfig: 0644,
+		result.ComposePath:   0600,
+		result.GitHubConfig:  0644,
+		result.IngressConfig: 0644,
 	} {
 		info, statErr := os.Stat(path)
 		if statErr != nil || info.Mode().Perm() != wantMode {

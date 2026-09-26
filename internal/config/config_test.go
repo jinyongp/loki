@@ -190,6 +190,24 @@ func TestGitHubInstallationBounds(t *testing.T) {
 	}
 }
 
+func TestLoadIngressPublicHostsIsStrictAndSeparate(t *testing.T) {
+	directory := t.TempDir()
+	ingress := filepath.Join(directory, "ingress.toml")
+	if err := os.WriteFile(ingress, []byte("public_hosts=[\"Ingress.Example.com\",\"ingress.example.com\"]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hosts, err := LoadIngressPublicHosts(ingress)
+	if err != nil || len(hosts) != 1 || hosts[0] != "ingress.example.com" {
+		t.Fatalf("MCP ingress hosts = %#v err=%v", hosts, err)
+	}
+	if err = os.WriteFile(ingress, []byte("public_hosts=[]\nport=19000\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = LoadIngressPublicHosts(ingress); err == nil {
+		t.Fatal("MCP ingress fragment changed non-Host configuration")
+	}
+}
+
 func TestLoadWithGitHub(t *testing.T) {
 	directory := t.TempDir()
 	base := filepath.Join(directory, "loki.toml")

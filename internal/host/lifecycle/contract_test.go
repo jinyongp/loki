@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +57,26 @@ func hostFixture(active Generation, stateSchema uint32) HostState {
 		StateSchema:        stateSchema,
 		EnabledComponents:  []string{"browser"},
 		Revision:           "host-revision-7",
+	}
+}
+
+func TestNormalizeIngressHostsCanonicalizesAndBounds(t *testing.T) {
+	hosts, err := NormalizeIngressHosts([]string{"B.Example.com", "a.example.com", "b.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 2 || hosts[0] != "a.example.com" || hosts[1] != "b.example.com" {
+		t.Fatalf("normalized ingress hosts = %#v", hosts)
+	}
+	if _, err = NormalizeIngressHosts([]string{"https://bad.example"}); err == nil {
+		t.Fatal("invalid ingress hostname was accepted")
+	}
+	tooMany := make([]string, 65)
+	for index := range tooMany {
+		tooMany[index] = fmt.Sprintf("host-%d.example.com", index)
+	}
+	if _, err = NormalizeIngressHosts(tooMany); err == nil {
+		t.Fatal("oversized ingress host allowlist was accepted")
 	}
 }
 

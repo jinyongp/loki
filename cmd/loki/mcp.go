@@ -111,6 +111,7 @@ func runMCP(args []string, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki TOML configuration")
 	githubConfigPath := flags.String("github-config", "", "deployment-provided public GitHub TOML configuration")
+	ingressConfigPath := flags.String("ingress-config", "", "operator-owned MCP ingress Host allowlist")
 	layoutPath := flags.String("layout", "", "administrator-owned MCP JSON layout")
 	tokenPath := flags.String("token-file", "/etc/loki-go/token", "MCP bearer token file")
 	jwksPath := flags.String("jwks-file", "/etc/loki-go/cloudflare-jwks.json", "Cloudflare verification keys")
@@ -124,6 +125,11 @@ func runMCP(args []string, stderr io.Writer) int {
 	c, err := config.LoadWithGitHub(*configPath, *githubConfigPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot load MCP configuration")
+		return 1
+	}
+	ingressHosts, err := config.LoadIngressPublicHosts(*ingressConfigPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot load MCP ingress configuration")
 		return 1
 	}
 	var layout mcpLayout
@@ -141,6 +147,7 @@ func runMCP(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	options.IngressHosts = ingressHosts
 	options.JobToolchains, err = newMCPToolchainResolver(c.Root, layout.ToolchainStore, layout.ToolchainCatalog)
 	if err != nil {
 		fmt.Fprintln(stderr, "invalid MCP toolchain configuration")

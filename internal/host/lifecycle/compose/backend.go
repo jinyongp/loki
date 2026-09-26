@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"loki/internal/host/assets"
+	hostingress "loki/internal/host/ingress"
 	"loki/internal/host/lifecycle"
 	"loki/internal/platform/safeio"
 )
@@ -100,6 +101,7 @@ type runtimeState struct {
 	Workspace    string   `json:"workspace"`
 	MCPPort      int      `json:"mcp_port,omitempty"`
 	Profiles     []string `json:"profiles,omitempty"`
+	IngressHosts []string `json:"ingress_hosts,omitempty"`
 }
 
 func (s runtimeState) effectiveMCPPort() int {
@@ -235,6 +237,7 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 	if found {
 		copy := current
 		copy.Profiles = append([]string(nil), current.Profiles...)
+		copy.IngressHosts = append([]string(nil), current.IngressHosts...)
 		manifest.Runtime = &copy
 		for _, name := range persistentVolumes {
 			volume := b.volumeName(name)
@@ -293,15 +296,58 @@ func (b *Backend) Activate(_ context.Context, generation lifecycle.Generation, i
 	if err != nil {
 		return err
 	}
-	var profiles []string
+	var profiles, ingressHosts []string
 	if found {
 		profiles = append(profiles, current.Profiles...)
+		ingressHosts = append(ingressHosts, current.IngressHosts...)
 	}
 	state, err := b.stateFor(generation, installation, profiles)
 	if err != nil {
 		return err
 	}
+	state.IngressHosts = ingressHosts
+	if err = state.validate(); err != nil {
+		return err
+	}
 	return b.saveRuntime(state)
+}
+
+func (b *Backend) SetIngressHosts(ctx context.Context, hosts []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	normalized, err := lifecycle.NormalizeIngressHosts(hosts)
+	if err != nil {
+		return err
+	}
+	current, found, err := b.loadRuntime()
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("compose lifecycle runtime is not activated")
+	}
+	previous := current
+	current.IngressHosts = normalized
+	if err = current.validate(); err != nil {
+		return err
+	}
+	if err = b.saveRuntime(current); err != nil {
+		return err
+	}
+	if err = b.restartAndHealth(ctx); err == nil {
+		return nil
+	}
+	applyErr := err
+	if restoreErr := b.saveRuntime(previous); restoreErr != nil {
+		return errors.Join(applyErr, fmt.Errorf("restore previous ingress runtime state: %w", restoreErr))
+	}
+	recoveryCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if recoveryErr := b.restartAndHealth(recoveryCtx); recoveryErr != nil {
+		return errors.Join(applyErr, fmt.Errorf("restore previous ingress runtime: %w", recoveryErr))
+	}
+	return applyErr
 }
 
 func (b *Backend) SetComponent(_ context.Context, generation lifecycle.Generation, name string, enabled bool) error {
@@ -466,7 +512,11 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 	}
 	composePath := filepath.Join(b.runtimeRoot, "assets", "compose.yaml")
 	githubPath := filepath.Join(b.runtimeRoot, "assets", "github.compose.toml")
-	for _, path := range []string{composePath, githubPath, b.tokenPath(), b.containerTokenPath()} {
+	ingressPath, err := b.materializeIngressConfig(state.IngressHosts)
+	if err != nil {
+		return RuntimeReadiness{}, err
+	}
+	for _, path := range []string{composePath, githubPath, ingressPath, b.tokenPath(), b.containerTokenPath()} {
 		info, statErr := os.Lstat(path)
 		if statErr != nil {
 			return RuntimeReadiness{}, statErr
@@ -481,6 +531,7 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 		"LOKI_WORKSPACE=" + state.Workspace,
 		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
 		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
+		"LOKI_INGRESS_CONFIG_FILE=" + ingressPath,
 		"LOKI_GITHUB_CONFIG_FILE=" + githubPath,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
 		"LOKI_SIGNING_KEY_FILE=/dev/null",
@@ -671,6 +722,15 @@ func (s runtimeState) validate() error {
 	if s.MCPPort != 0 && (s.MCPPort < 1024 || s.MCPPort > 65535) {
 		return errors.New("compose lifecycle MCP port is invalid")
 	}
+	normalizedHosts, err := lifecycle.NormalizeIngressHosts(s.IngressHosts)
+	if err != nil || len(normalizedHosts) != len(s.IngressHosts) {
+		return errors.New("compose lifecycle ingress hosts are invalid")
+	}
+	for index := range normalizedHosts {
+		if normalizedHosts[index] != s.IngressHosts[index] {
+			return errors.New("compose lifecycle ingress hosts are not canonical")
+		}
+	}
 	if !sort.StringsAreSorted(s.Profiles) {
 		return errors.New("compose lifecycle profiles are not canonical")
 	}
@@ -703,11 +763,30 @@ func validSHA256(value string) bool {
 	return err == nil
 }
 
+func (b *Backend) materializeIngressConfig(hosts []string) (string, error) {
+	raw, err := hostingress.Render(hosts)
+	if err != nil {
+		return "", err
+	}
+	path := b.ingressConfigPath()
+	if err = safeio.PublishPrivate(path, raw, true); err != nil {
+		return "", err
+	}
+	if err = os.Chmod(path, 0644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 func (b *Backend) compose(ctx context.Context, state runtimeState, command ...string) ([]byte, error) {
 	if err := b.ensureAssetsAndToken(); err != nil {
 		return nil, err
 	}
 	materialized, err := assets.Materialize(filepath.Join(b.runtimeRoot, "assets"))
+	if err != nil {
+		return nil, err
+	}
+	ingressPath, err := b.materializeIngressConfig(state.IngressHosts)
 	if err != nil {
 		return nil, err
 	}
@@ -717,6 +796,7 @@ func (b *Backend) compose(ctx context.Context, state runtimeState, command ...st
 		"LOKI_WORKSPACE=" + state.Workspace,
 		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
 		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
+		"LOKI_INGRESS_CONFIG_FILE=" + ingressPath,
 		"LOKI_GITHUB_CONFIG_FILE=" + materialized.GitHubConfig,
 		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
 		"LOKI_SIGNING_KEY_FILE=/dev/null",
@@ -790,6 +870,9 @@ func (b *Backend) saveRuntime(state runtimeState) error {
 
 func (b *Backend) runtimeStatePath() string { return filepath.Join(b.runtimeRoot, "runtime.json") }
 func (b *Backend) tokenPath() string        { return filepath.Join(b.root, "mcp-token") }
+func (b *Backend) ingressConfigPath() string {
+	return filepath.Join(b.runtimeRoot, "assets", hostingress.FileName)
+}
 func (b *Backend) containerTokenPath() string {
 	return filepath.Join(b.runtimeRoot, "assets", "mcp-token")
 }

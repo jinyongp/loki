@@ -42,6 +42,7 @@ type MCPOptions struct {
 	PackagedSkillRoot                                    string
 	GitTemplateRoots                                     []string
 	Environment                                          map[string]string
+	IngressHosts                                         []string
 	Policy                                               controlpolicy.Generation
 	Ports                                                portguard.Policy
 	Token                                                string
@@ -208,8 +209,12 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if err != nil {
 		return nil, err
 	}
+	listenerHosts, err := config.NormalizePublicHosts(append(append([]string(nil), c.PublicHosts...), options.IngressHosts...))
+	if err != nil {
+		return nil, errors.New("MCP ingress Host allowlist is invalid")
+	}
 	// The configured host allowlist below replaces the SDK's localhost-only
-	// default, allowing the explicitly configured reverse-proxy public hosts.
+	// default, allowing release-configured and operator-configured ingress hosts.
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return app.Server }, mcpTransportOptions())
 	mcpRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/mcp" {
@@ -218,7 +223,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		}
 		transport.ServeHTTP(w, r)
 	})
-	protected := auth.Gate{Token: options.Token, Access: options.Access}.Handler(auth.HostPolicy(c.Port, c.PublicHosts, mcpRoute))
+	protected := auth.Gate{Token: options.Token, Access: options.Access}.Handler(auth.HostPolicy(c.Port, listenerHosts, mcpRoute))
 	app.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if app.Previews != nil {
 			if _, ok := app.Previews.ResolveHost(r.Host); ok {

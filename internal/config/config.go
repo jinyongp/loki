@@ -92,6 +92,53 @@ func LoadWithGitHub(path, githubPath string) (Config, error) {
 	return Parse(merged)
 }
 
+// LoadIngressPublicHosts reads the operator-owned MCP ingress fragment. The
+// fragment is deliberately limited to Host header allowlisting and is kept
+// separate from the release-owned effective policy configuration.
+func LoadIngressPublicHosts(path string) ([]string, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw map[string]any
+	if toml.Unmarshal(data, &raw) != nil || len(raw) != 1 {
+		return nil, errors.New("invalid MCP ingress configuration")
+	}
+	value, ok := raw["public_hosts"]
+	if !ok {
+		return nil, errors.New("MCP ingress configuration must contain only public_hosts")
+	}
+	hosts, err := stringList(value)
+	if err != nil {
+		return nil, errors.New("MCP ingress public_hosts must be an array of hostnames")
+	}
+	hosts, err = NormalizePublicHosts(hosts)
+	if err != nil {
+		return nil, err
+	}
+	if len(hosts) > 64 {
+		return nil, errors.New("MCP ingress allowlist exceeds 64 hosts")
+	}
+	return hosts, nil
+}
+
+func NormalizePublicHosts(hosts []string) ([]string, error) {
+	result := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if !Hostname(host) {
+			return nil, errors.New("invalid public hostname")
+		}
+		if !slices.Contains(result, host) {
+			result = append(result, host)
+		}
+	}
+	return result, nil
+}
+
 func Hostname(host string) bool {
 	if len(host) < 1 || len(host) > 253 {
 		return false
@@ -159,14 +206,9 @@ func Parse(data []byte) (Config, error) {
 		if err != nil {
 			return c, errors.New("public_hosts must be an array of hostnames")
 		}
-		for _, host := range hosts {
-			host = strings.ToLower(strings.TrimSpace(host))
-			if !Hostname(host) {
-				return c, errors.New("invalid public hostname")
-			}
-			if !slices.Contains(c.PublicHosts, host) {
-				c.PublicHosts = append(c.PublicHosts, host)
-			}
+		c.PublicHosts, err = NormalizePublicHosts(hosts)
+		if err != nil {
+			return c, err
 		}
 	}
 	c.CloudflareTeamDomain = strings.ToLower(strings.TrimSpace(c.CloudflareTeamDomain))

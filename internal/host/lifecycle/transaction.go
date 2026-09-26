@@ -898,6 +898,34 @@ func (s *FileStore) CommitComponents(ctx context.Context, enabled []string, now 
 	return writePrivateJSON(s.path("host.json"), host)
 }
 
+func (s *FileStore) CommitIngressHosts(ctx context.Context, hosts []string, now time.Time) error {
+	if s == nil {
+		return errors.New("host lifecycle store is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	snapshot, err := s.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("host ingress change requires an installed release")
+	}
+	normalized, err := NormalizeIngressHosts(hosts)
+	if err != nil {
+		return err
+	}
+	host := snapshot.Host
+	host.IngressHosts = normalized
+	host.Revision = lifecycleRevision(snapshot.Host.Revision, snapshot.Installed.ID, "ingress-hosts", normalized, now)
+	normalizedHost, err := host.normalized()
+	if err != nil {
+		return err
+	}
+	return writePrivateJSON(s.path("host.json"), normalizedHost)
+}
+
 func (s *FileStore) RestoreBackup(ctx context.Context, backup BackupRecord) error {
 	if s == nil || !backup.Valid() {
 		return errors.New("host lifecycle backup record is invalid")

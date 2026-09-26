@@ -105,7 +105,7 @@ func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout
 
 func runHost(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	switch args[0] {
@@ -117,13 +117,15 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostConnection(args[1:], stdout, stderr)
 	case "doctor":
 		return runHostDoctor(args[1:], stdout, stderr)
+	case "ingress":
+		return runHostIngress(args[1:], stdout, stderr)
 	case "runtime-probe":
 		return runHostRuntimeProbe(args[1:], stdout, stderr)
 	case "backup", "restore", "rollback", "enable", "disable", "uninstall":
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}
 	if args[0] != "update" || len(args) < 2 {
-		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	action := args[1]

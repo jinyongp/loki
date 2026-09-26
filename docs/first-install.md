@@ -364,6 +364,30 @@ origin using credentials controlled by the operator. Loki must still validate
 the inbound Host and its own local-origin authentication policy. Provider-
 specific integrations are optional adapters, not installation prerequisites.
 
+When an ingress preserves a public Host header, explicitly allow that hostname
+in Loki. For a native Linux installation:
+
+```sh
+loki host ingress allow mcp.example.com
+loki host ingress list
+```
+
+For the system-scoped Windows WSL appliance, run the same operator command
+inside the appliance:
+
+```powershell
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host ingress allow --system mcp.example.com
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host ingress list --system
+```
+
+Remove a hostname with `host ingress remove`. These commands only update the
+bounded Host-header allowlist and reconcile the local MCP runtime; they do not
+create DNS records, certificates, tunnels, proxies, firewall rules, OAuth
+clients, or accounts with an external provider. The allowlist is stored in host
+lifecycle state and participates in backup/restore. Repeating an allow/remove
+operation also re-reconciles the runtime, which makes an interrupted fail-closed
+configuration change recoverable.
+
 `jinyongp.dev` is only the distribution location for immutable Loki installers
 and release artifacts. It is not an MCP hosting service or control plane for
 installed Loki instances.

@@ -22,11 +22,15 @@ import (
 )
 
 func newHostRuntimeBackend(store *lifecycle.FileStore) (lifecycle.TransactionBackend, error) {
+	return newHostComposeBackend(store)
+}
+
+func newHostComposeBackend(store *lifecycle.FileStore) (*lifecyclecompose.Backend, error) {
 	if store == nil || store.Root == "" {
 		return nil, errors.New("host lifecycle store is not configured")
 	}
 	if docker := strings.TrimSpace(os.Getenv("LOKI_DOCKER")); docker != "" {
-		return newHostRuntimeBackendWithRunner(store, lifecyclecompose.ExecRunner{Executable: docker})
+		return newHostComposeBackendWithRunner(store, lifecyclecompose.ExecRunner{Executable: docker})
 	}
 	access := hostDockerAccessDirect
 	if snapshot, err := store.Snapshot(context.Background()); err == nil && snapshot.Installation != nil &&
@@ -37,10 +41,14 @@ func newHostRuntimeBackend(store *lifecycle.FileStore) (lifecycle.TransactionBac
 	if err != nil {
 		return nil, err
 	}
-	return newHostRuntimeBackendWithRunner(store, runner)
+	return newHostComposeBackendWithRunner(store, runner)
 }
 
 func newHostRuntimeBackendWithRunner(store *lifecycle.FileStore, runner lifecyclecompose.Runner) (lifecycle.TransactionBackend, error) {
+	return newHostComposeBackendWithRunner(store, runner)
+}
+
+func newHostComposeBackendWithRunner(store *lifecycle.FileStore, runner lifecyclecompose.Runner) (*lifecyclecompose.Backend, error) {
 	if store == nil || store.Root == "" {
 		return nil, errors.New("host lifecycle store is not configured")
 	}

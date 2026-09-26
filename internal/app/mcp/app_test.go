@@ -70,7 +70,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	generation := policyGenerationFixture(t)
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, IngressHosts: []string{"operator.example.test"}, Access: accessFixture("mcp-access"), PreviewAccess: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +121,15 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 			t.Fatal(test, w.Code, w.Body.String())
 		}
 	}
+	operatorIngress := httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(`{}`))
+	operatorIngress.Host = "operator.example.test"
+	operatorIngress.Header.Set("Authorization", "Bearer "+token)
+	operatorRecorder := httptest.NewRecorder()
+	app.ServeHTTP(operatorRecorder, operatorIngress)
+	if operatorRecorder.Code == http.StatusMisdirectedRequest {
+		t.Fatalf("operator ingress host was rejected: %d %s", operatorRecorder.Code, operatorRecorder.Body.String())
+	}
+
 	client, err := mcp.NewClient(&mcp.Implementation{Name: "assembled-test", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token}}}, nil)
 	if err != nil {
 		t.Fatal(err)

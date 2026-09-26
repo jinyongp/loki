@@ -13,7 +13,7 @@ import (
 )
 
 //go:generate go run ../../../tools/renderhostassets
-//go:embed files/compose.yaml files/github.compose.toml
+//go:embed files/compose.yaml files/github.compose.toml files/ingress.compose.toml
 var files embed.FS
 
 func Compose() []byte {
@@ -32,10 +32,19 @@ func GitHubConfig() []byte {
 	return append([]byte(nil), raw...)
 }
 
+func IngressConfig() []byte {
+	raw, err := files.ReadFile("files/ingress.compose.toml")
+	if err != nil {
+		panic(err)
+	}
+	return append([]byte(nil), raw...)
+}
+
 type Materialized struct {
-	Root         string
-	ComposePath  string
-	GitHubConfig string
+	Root          string
+	ComposePath   string
+	GitHubConfig  string
+	IngressConfig string
 }
 
 func Materialize(root string) (Materialized, error) {
@@ -51,10 +60,14 @@ func Materialize(root string) (Materialized, error) {
 	}
 	composePath := filepath.Join(root, "compose.yaml")
 	githubPath := filepath.Join(root, "github.compose.toml")
+	ingressPath := filepath.Join(root, "ingress.compose.toml")
 	if err = safeio.PublishPrivate(composePath, Compose(), true); err != nil {
 		return Materialized{}, err
 	}
 	if err = safeio.PublishPrivate(githubPath, GitHubConfig(), true); err != nil {
+		return Materialized{}, err
+	}
+	if err = safeio.PublishPrivate(ingressPath, IngressConfig(), true); err != nil {
 		return Materialized{}, err
 	}
 	// Compose mounts this non-secret operator configuration directly into
@@ -63,7 +76,10 @@ func Materialize(root string) (Materialized, error) {
 	if err = os.Chmod(githubPath, 0644); err != nil {
 		return Materialized{}, err
 	}
-	return Materialized{Root: root, ComposePath: composePath, GitHubConfig: githubPath}, nil
+	if err = os.Chmod(ingressPath, 0644); err != nil {
+		return Materialized{}, err
+	}
+	return Materialized{Root: root, ComposePath: composePath, GitHubConfig: githubPath, IngressConfig: ingressPath}, nil
 }
 
 func WriteDeveloperViews(repositoryRoot string) error {
@@ -77,5 +93,8 @@ func WriteDeveloperViews(repositoryRoot string) error {
 	if err := os.MkdirAll(configRoot, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configRoot, "github.compose.toml"), GitHubConfig(), 0644)
+	if err := os.WriteFile(filepath.Join(configRoot, "github.compose.toml"), GitHubConfig(), 0644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(configRoot, "ingress.compose.toml"), IngressConfig(), 0644)
 }

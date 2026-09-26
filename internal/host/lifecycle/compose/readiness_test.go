@@ -47,8 +47,9 @@ func TestRuntimeReadinessUsesReadOnlyComposePS(t *testing.T) {
 	if len(calls) != 1 || !strings.HasSuffix(strings.Join(calls[0].args, " "), "ps --status running --services") {
 		t.Fatalf("readiness performed mutating compose calls: %#v", calls)
 	}
-	if !slices.Contains(calls[0].env, "LOKI_MCP_HOST_PORT=19000") {
-		t.Fatalf("readiness MCP port environment = %#v", calls[0].env)
+	if !slices.Contains(calls[0].env, "LOKI_MCP_HOST_PORT=19000") ||
+		!slices.Contains(calls[0].env, "LOKI_INGRESS_CONFIG_FILE="+backend.ingressConfigPath()) {
+		t.Fatalf("readiness MCP environment = %#v", calls[0].env)
 	}
 }
 

@@ -130,10 +130,11 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		!slices.Equal(secretNames(compose.Services["runtime"].Configs), []string{"github_config"}) ||
 		!slices.Equal(secretNames(compose.Services["launcher"].Configs), []string{"github_config"}) ||
 		!slices.Equal(secretNames(compose.Services["executor"].Configs), []string{"github_config"}) ||
-		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{"github_config"}) {
+		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{"github_config", "ingress_config"}) {
 		t.Fatal("GitHub config and private key injection boundary is invalid")
 	}
 	if compose.Configs["github_config"].File != "${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}" ||
+		compose.Configs["ingress_config"].File != "${LOKI_INGRESS_CONFIG_FILE:-./config/ingress.compose.toml}" ||
 		compose.Secrets["github_app_private_key"].File != "${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}" {
 		t.Fatal("GitHub Compose sources are invalid")
 	}
@@ -148,8 +149,10 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		secretTarget(compose.Services["runtime"].Secrets, "github_app_private_key") != "/run/loki-private/github-app-private-key" ||
 		secretTarget(compose.Services["runtime"].Configs, "github_config") != "/etc/loki/github.toml" ||
 		secretTarget(compose.Services["mcp"].Configs, "github_config") != "/etc/loki/github.toml" ||
+		secretTarget(compose.Services["mcp"].Configs, "ingress_config") != "/etc/loki/ingress.toml" ||
 		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
-		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
+		!slices.Contains(compose.Services["mcp"].Command, "--github-config") ||
+		!slices.Contains(compose.Services["mcp"].Command, "--ingress-config") {
 		t.Fatal("GitHub Compose arguments are incomplete")
 	}
 	if hasMount(compose.Services["mcp"].Volumes, "/var/lib/loki/runtime") || !hasMount(compose.Services["runtime"].Volumes, "/var/lib/loki/runtime") {

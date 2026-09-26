@@ -15,8 +15,9 @@ import (
 const ContractVersion = 1
 
 var (
-	releaseNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-	digestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	releaseNamePattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	digestPattern           = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	ingressHostLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 )
 
 type SchemaRange struct {
@@ -200,7 +201,30 @@ type HostState struct {
 	ToolchainSchema    uint32   `json:"toolchain_schema"`
 	StateSchema        uint32   `json:"state_schema"`
 	EnabledComponents  []string `json:"enabled_components,omitempty"`
+	IngressHosts       []string `json:"ingress_hosts,omitempty"`
 	Revision           string   `json:"revision"`
+}
+
+func NormalizeIngressHosts(hosts []string) ([]string, error) {
+	if len(hosts) > 64 {
+		return nil, errors.New("ingress host allowlist exceeds 64 entries")
+	}
+	normalized := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if len(host) < 1 || len(host) > 253 {
+			return nil, errors.New("ingress hostname is invalid")
+		}
+		labels := strings.Split(host, ".")
+		for _, label := range labels {
+			if !ingressHostLabelPattern.MatchString(label) {
+				return nil, errors.New("ingress hostname is invalid")
+			}
+		}
+		normalized = append(normalized, host)
+	}
+	slices.Sort(normalized)
+	return slices.Compact(normalized), nil
 }
 
 func (s HostState) normalized() (HostState, error) {
@@ -223,6 +247,11 @@ func (s HostState) normalized() (HostState, error) {
 	}
 	slices.Sort(components)
 	s.EnabledComponents = slices.Compact(components)
+	hosts, err := NormalizeIngressHosts(s.IngressHosts)
+	if err != nil {
+		return HostState{}, err
+	}
+	s.IngressHosts = hosts
 	return s, nil
 }
 

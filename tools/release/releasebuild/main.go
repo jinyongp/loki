@@ -400,6 +400,7 @@ func buildHostAssets() ([]byte, error) {
 	}{
 		{"compose.yaml", assets.Compose()},
 		{"config/github.compose.toml", assets.GitHubConfig()},
+		{"config/ingress.compose.toml", assets.IngressConfig()},
 	} {
 		header := &tar.Header{Name: file.name, Mode: 0644, Size: int64(len(file.raw)), ModTime: time.Unix(0, 0).UTC(), Typeflag: tar.TypeReg}
 		if err = tw.WriteHeader(header); err != nil {
