@@ -73,9 +73,10 @@ func TestRunHostConnectionDoesNotDiscloseToken(t *testing.T) {
 	if code := runHostConnection([]string{"--state-root", stateRoot}, &stdout, &stderr); code != 0 || stderr.Len() != 0 {
 		t.Fatalf("connection code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), defaultMCPConnectionEndpoint) ||
+	if !strings.Contains(stdout.String(), defaultMCPLocalOriginURL) ||
 		!strings.Contains(stdout.String(), filepath.Join(stateRoot, "mcp-token")) ||
-		!strings.Contains(stdout.String(), "Bearer token") {
+		!strings.Contains(stdout.String(), "Bearer token") ||
+		!strings.Contains(stdout.String(), "local origin, not a public MCP URL") {
 		t.Fatalf("connection output = %q", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "super-secret-token") {
@@ -91,8 +92,10 @@ func TestRunHostConnectionDoesNotDiscloseToken(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.Endpoint != defaultMCPConnectionEndpoint || report.Authentication != "bearer-token-file" ||
-		report.TokenFile != filepath.Join(stateRoot, "mcp-token") {
+	if report.SchemaVersion != 1 || report.LocalOrigin.URL != defaultMCPLocalOriginURL ||
+		report.LocalOrigin.Transport != "streamable-http" || report.LocalOrigin.Reachability != "loopback" ||
+		report.LocalOrigin.Authentication.Type != "bearer-token-file" ||
+		report.LocalOrigin.Authentication.TokenFile != filepath.Join(stateRoot, "mcp-token") {
 		t.Fatalf("connection report = %#v", report)
 	}
 	if strings.Contains(stdout.String(), "super-secret-token") {
@@ -239,7 +242,8 @@ func TestHostInstallTextAndJSONOutput(t *testing.T) {
 	}
 	text := run(false)
 	if !strings.Contains(text, "Loki installed successfully.") ||
-		!strings.Contains(text, "MCP endpoint: "+defaultMCPConnectionEndpoint) ||
+		!strings.Contains(text, "MCP local origin: "+defaultMCPLocalOriginURL) ||
+		!strings.Contains(text, "External access: user-managed") ||
 		!strings.Contains(text, "Connection details: loki host connection") {
 		t.Fatalf("install text output = %q", text)
 	}

@@ -263,10 +263,16 @@ try {
     }
 
     $publicConnection = [ordered]@{
-        endpoint = [string]$connection.endpoint
-        transport = [string]$connection.transport
-        authentication = "bearer-token-file"
-        token_file = $tokenFile
+        schema_version = 1
+        local_origin = [ordered]@{
+            url = [string]$connection.local_origin.url
+            transport = [string]$connection.local_origin.transport
+            reachability = [string]$connection.local_origin.reachability
+            authentication = [ordered]@{
+                type = [string]$connection.local_origin.authentication.type
+                token_file = $tokenFile
+            }
+        }
         distribution = $distributionName
     }
     [IO.File]::WriteAllText($connectionFile, ($publicConnection | ConvertTo-Json -Depth 4), $utf8)
@@ -289,9 +295,13 @@ try {
     $global:LASTEXITCODE = 0
     Write-Host "  Release: $releaseTag"
     Write-Host "  WSL distribution: $distributionName"
-    Write-Host "  MCP endpoint: $($publicConnection.endpoint)"
+    Write-Host "  MCP local origin: $($publicConnection.local_origin.url)"
+    Write-Host "  Reachability: loopback only"
+    Write-Host "  External access: user-managed"
     Write-Host "  Connection file: $connectionFile"
     Write-Host "  Token file: $tokenFile"
+    Write-Host "[Loki] To use Loki from a remote MCP client, expose the local origin with a tunnel, reverse proxy, VPN, or gateway you manage."
+    Write-Host "[Loki] Loki does not create or manage a public MCP endpoint."
 }
 finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue

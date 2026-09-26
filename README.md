@@ -92,15 +92,18 @@ loki host connection
 A user-scoped Linux install places the CLI at `~/.local/bin/loki`. Add that
 directory to `PATH` if needed.
 
-On Windows, the installer writes MCP connection material below:
+On Windows, the installer writes local MCP origin material below:
 
 ```text
 %LOCALAPPDATA%\Loki\<distribution-name>\
 ```
 
-`connection.json` contains the endpoint and the path to the private token
-file. The token value is not printed to the terminal. The installer restricts
-the Windows token file to the current Windows user and SYSTEM.
+`connection.json` describes the loopback-only local origin, its Streamable HTTP
+transport, and the path to the private bearer-token file. It is not a public MCP
+URL. Loki does not create DNS, TLS, tunnels, reverse proxies, VPN routes, OAuth
+providers, or hosted MCP endpoints; remote exposure is controlled by the
+operator. The token value is not printed to the terminal, and the installer
+restricts the Windows token file to the current Windows user and SYSTEM.
 
 The WSL appliance uses `/home/ubuntu/workspace` as its initial Loki workspace.
 The internal `ubuntu` user is precreated with UID 1000 and is not given Docker

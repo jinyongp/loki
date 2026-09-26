@@ -16,7 +16,7 @@ import (
 	"loki/internal/host/lifecycle"
 )
 
-const defaultMCPConnectionEndpoint = "http://127.0.0.1:18765/mcp"
+const defaultMCPLocalOriginURL = "http://127.0.0.1:18765/mcp"
 
 type hostInfoOptions struct {
 	System    bool
@@ -36,11 +36,21 @@ type hostStatusReport struct {
 	UpdatePrepared    bool     `json:"update_prepared"`
 }
 
+type hostConnectionAuthenticationReport struct {
+	Type      string `json:"type"`
+	TokenFile string `json:"token_file"`
+}
+
+type hostLocalOriginReport struct {
+	URL            string                             `json:"url"`
+	Transport      string                             `json:"transport"`
+	Reachability   string                             `json:"reachability"`
+	Authentication hostConnectionAuthenticationReport `json:"authentication"`
+}
+
 type hostConnectionReport struct {
-	Endpoint       string `json:"endpoint"`
-	Transport      string `json:"transport"`
-	Authentication string `json:"authentication"`
-	TokenFile      string `json:"token_file"`
+	SchemaVersion int                   `json:"schema_version"`
+	LocalOrigin   hostLocalOriginReport `json:"local_origin"`
 }
 
 type hostInstallResult struct {
@@ -50,7 +60,7 @@ type hostInstallResult struct {
 	GenerationID     string `json:"generation_id"`
 	Workspace        string `json:"workspace"`
 	CLI              string `json:"cli,omitempty"`
-	Endpoint         string `json:"endpoint"`
+	LocalOrigin      string `json:"local_origin"`
 	PlanID           string `json:"plan_id,omitempty"`
 }
 
@@ -199,8 +209,11 @@ func runHostConnection(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	report := hostConnectionReport{
-		Endpoint: defaultMCPConnectionEndpoint, Transport: "streamable-http",
-		Authentication: "bearer-token-file", TokenFile: tokenFile,
+		SchemaVersion: 1,
+		LocalOrigin: hostLocalOriginReport{
+			URL: defaultMCPLocalOriginURL, Transport: "streamable-http", Reachability: "loopback",
+			Authentication: hostConnectionAuthenticationReport{Type: "bearer-token-file", TokenFile: tokenFile},
+		},
 	}
 	if options.JSON {
 		if err = json.NewEncoder(stdout).Encode(report); err != nil {
@@ -209,12 +222,15 @@ func runHostConnection(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintln(stdout, "Loki MCP connection")
-	fmt.Fprintf(stdout, "  Endpoint: %s\n", report.Endpoint)
+	fmt.Fprintln(stdout, "Loki MCP local origin")
+	fmt.Fprintf(stdout, "  URL: %s\n", report.LocalOrigin.URL)
+	fmt.Fprintln(stdout, "  Reachability: loopback only")
 	fmt.Fprintln(stdout, "  Transport: Streamable HTTP")
 	fmt.Fprintln(stdout, "  Authentication: Bearer token")
-	fmt.Fprintf(stdout, "  Token file: %s\n", report.TokenFile)
-	fmt.Fprintln(stdout, "The token value is not printed. Configure your MCP client to read it from the file above.")
+	fmt.Fprintf(stdout, "  Token file: %s\n", report.LocalOrigin.Authentication.TokenFile)
+	fmt.Fprintln(stdout, "This is a local origin, not a public MCP URL.")
+	fmt.Fprintln(stdout, "Expose it with a tunnel, reverse proxy, VPN, or gateway of your choice if remote access is required.")
+	fmt.Fprintln(stdout, "Loki does not create or manage a public MCP endpoint.")
 	return 0
 }
 
@@ -233,7 +249,7 @@ func writeHostInstallResult(
 		Installed: true, AlreadyInstalled: alreadyInstalled,
 		Release: candidate.Spec.Version, GenerationID: candidate.ID,
 		Workspace: options.Workspace, CLI: cli,
-		Endpoint: defaultMCPConnectionEndpoint, PlanID: planID,
+		LocalOrigin: defaultMCPLocalOriginURL, PlanID: planID,
 	}
 	if options.JSON {
 		return json.NewEncoder(stdout).Encode(report)
@@ -245,7 +261,8 @@ func writeHostInstallResult(
 	}
 	fmt.Fprintf(stdout, "  Release: %s\n", report.Release)
 	fmt.Fprintf(stdout, "  Workspace: %s\n", report.Workspace)
-	fmt.Fprintf(stdout, "  MCP endpoint: %s\n", report.Endpoint)
+	fmt.Fprintf(stdout, "  MCP local origin: %s\n", report.LocalOrigin)
+	fmt.Fprintln(stdout, "  External access: user-managed")
 
 	commandCLI := "loki"
 	if report.CLI != "" {

@@ -138,6 +138,13 @@ On success it writes Windows-side connection material below:
 The token file ACL is restricted to the current Windows user and SYSTEM. Loki
 does not print the token value.
 
+The generated connection data describes a **local MCP origin**. It is reachable
+only through the local loopback interface by default and is not a public MCP
+URL. Loki does not create or own DNS, TLS certificates, tunnels, reverse
+proxies, VPN routes, OAuth providers, or hosted MCP endpoints. If a remote MCP
+client must reach Loki, the operator chooses and manages that external ingress
+and forwards it to the local origin.
+
 The default appliance workspace is:
 
 ```text
@@ -274,8 +281,10 @@ loki host doctor
 loki host connection
 ```
 
-`loki host connection` reports the loopback MCP endpoint, transport,
-authentication mode, and token-file path without printing the token value.
+`loki host connection` reports the loopback-only MCP local origin, transport,
+authentication mode, and token-file path without printing the token value. It
+also makes clear that remote exposure is operator-managed and outside the Loki
+installation boundary.
 
 ### Linux non-interactive installation
 
@@ -310,6 +319,24 @@ rm -f "$installer"
 
 System scope installs the CLI at `/usr/local/bin/loki`. It changes lifecycle
 ownership and paths, not MCP/project authority.
+
+## MCP connectivity boundary
+
+Loki installation owns the local MCP origin and its local bearer-authentication
+material. The operator owns any external exposure. Supported operator choices
+may include a reverse proxy, Cloudflare Tunnel, OpenAI Secure MCP Tunnel,
+Tailscale or another VPN, SSH forwarding, or another gateway, but none of those
+providers are required by Loki core and the installer does not provision them.
+
+A user-managed ingress may preserve the Loki bearer token end to end or
+terminate a separate external authentication scheme and forward to the local
+origin using credentials controlled by the operator. Loki must still validate
+the inbound Host and its own local-origin authentication policy. Provider-
+specific integrations are optional adapters, not installation prerequisites.
+
+`jinyongp.dev` is only the distribution location for immutable Loki installers
+and release artifacts. It is not an MCP hosting service or control plane for
+installed Loki instances.
 
 ## Shared safety boundaries
 
