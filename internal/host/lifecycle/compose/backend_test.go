@@ -308,6 +308,9 @@ func TestBackendImportsOfflineLegacyVaultIntoRuntimeVolume(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := t.TempDir()
+	if err = os.Chmod(source, 0700); err != nil {
+		t.Fatal(err)
+	}
 	volume := backend.volumeName("runtime-state")
 	volumeKey := strings.Join([]string{
 		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
@@ -372,6 +375,9 @@ func TestBackendLegacyVaultImportFailureRestartsRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := t.TempDir()
+	if err = os.Chmod(source, 0700); err != nil {
+		t.Fatal(err)
+	}
 	volume := backend.volumeName("runtime-state")
 	runner.outputs[strings.Join([]string{
 		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
@@ -418,6 +424,9 @@ func TestBackendLegacyVaultVerifyStoppedFailureRestartsRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := t.TempDir()
+	if err = os.Chmod(source, 0700); err != nil {
+		t.Fatal(err)
+	}
 	volume := backend.volumeName("runtime-state")
 	runner.outputs[strings.Join([]string{
 		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
