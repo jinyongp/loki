@@ -83,7 +83,7 @@ func writePublishedVolumeSentinel(t *testing.T, runner Runner, image, volume, va
 	t.Helper()
 	if _, err := runner.Run(t.Context(), nil,
 		"run", "--rm", "--network", "none", "--user", "0:0",
-		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges",
 		"--entrypoint", "/bin/sh",
 		"--mount", "type=volume,src="+volume+",dst=/state",
 		image, "-ec", `printf '%s' "$1" > /state/.loki-release-acceptance-sentinel`, "sh", value,
@@ -96,7 +96,7 @@ func assertPublishedVolumeSentinel(t *testing.T, runner Runner, image, volume, w
 	t.Helper()
 	raw, err := runner.Run(t.Context(), nil,
 		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
-		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges",
 		"--entrypoint", "/bin/sh",
 		"--mount", "type=volume,src="+volume+",dst=/state,readonly",
 		image, "-ec", `cat /state/.loki-release-acceptance-sentinel`,
