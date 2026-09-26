@@ -113,6 +113,12 @@ starts Docker and Docker restores Loki's managed containers.
 
 ### Windows installation completion
 
+The installer prints persistent `[Loki]` stage messages while it checks WSL,
+downloads and verifies the appliance, registers the distribution, waits for
+first-boot provisioning, verifies Loki health, writes connection files, and
+configures logon startup. Long first-boot provisioning also emits periodic
+elapsed-time messages instead of appearing idle.
+
 The installer waits for first-boot provisioning and does not report success
 until both of these checks pass inside the appliance:
 
@@ -159,10 +165,17 @@ If a distribution with the requested name already exists, choose a different
 name with `LOKI_WSL_NAME`. The installer never unregisters or overwrites an
 existing distribution.
 
-If first-boot Loki provisioning fails, the installer reports the recent
+If installation fails, the installer prints one `[Loki] ERROR:` line that
+includes the active installation stage instead of exposing a raw PowerShell
+native-command stack. A first-boot timeout also includes the recent
 `loki-appliance-provision.service` journal. The service is retryable and the
 normal Loki lifecycle journal remains authoritative; a failed attempt is not
 reported as a successful installation.
+
+A distribution registered before a later failure is left intact for diagnosis;
+the installer never unregisters it automatically. Before retrying with the same
+name, inspect that distribution and explicitly remove it only if you are sure it
+contains no data you need. Alternatively, use a different `LOKI_WSL_NAME`.
 
 Manual creation of a generic Ubuntu WSL distribution is not part of the normal
 Loki Windows installation path.
