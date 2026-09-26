@@ -151,9 +151,11 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		secretTarget(compose.Services["mcp"].Configs, "github_config") != "/etc/loki/github.toml" ||
 		secretTarget(compose.Services["mcp"].Configs, "ingress_config") != "/etc/loki/ingress.toml" ||
 		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
-		!slices.Contains(compose.Services["mcp"].Command, "--github-config") ||
-		!slices.Contains(compose.Services["mcp"].Command, "--ingress-config") {
-		t.Fatal("GitHub Compose arguments are incomplete")
+		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
+		t.Fatal("GitHub/ingress Compose configuration is incomplete")
+	}
+	if slices.Contains(compose.Services["mcp"].Command, "--ingress-config") {
+		t.Fatal("MCP ingress config must not require a generation-specific CLI flag; published rollback images must ignore the additive config mount")
 	}
 	if hasMount(compose.Services["mcp"].Volumes, "/var/lib/loki/runtime") || !hasMount(compose.Services["runtime"].Volumes, "/var/lib/loki/runtime") {
 		t.Fatal("runtime vault mount is not isolated")

@@ -227,7 +227,7 @@ services:
 
   mcp:
     <<: *loki-service
-    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --ingress-config, /etc/loki/ingress.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
+    command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
     user: "10000:10000"
     group_add: ["10001"]
     networks: [private]

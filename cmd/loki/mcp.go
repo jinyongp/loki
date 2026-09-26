@@ -123,6 +123,14 @@ func runMCP(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "mcp requires --layout PATH")
 		return 2
 	}
+	if *ingressConfigPath == "" {
+		if _, statErr := os.Stat("/etc/loki/ingress.toml"); statErr == nil {
+			*ingressConfigPath = "/etc/loki/ingress.toml"
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			fmt.Fprintln(stderr, "cannot inspect MCP ingress configuration")
+			return 1
+		}
+	}
 	c, err := config.LoadWithGitHub(*configPath, *githubConfigPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot load MCP configuration")
