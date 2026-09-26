@@ -327,27 +327,11 @@ func (b *Backend) SetIngressHosts(ctx context.Context, hosts []string) error {
 	if !found {
 		return errors.New("compose lifecycle runtime is not activated")
 	}
-	previous := current
 	current.IngressHosts = normalized
 	if err = current.validate(); err != nil {
 		return err
 	}
-	if err = b.saveRuntime(current); err != nil {
-		return err
-	}
-	if err = b.restartAndHealth(ctx); err == nil {
-		return nil
-	}
-	applyErr := err
-	if restoreErr := b.saveRuntime(previous); restoreErr != nil {
-		return errors.Join(applyErr, fmt.Errorf("restore previous ingress runtime state: %w", restoreErr))
-	}
-	recoveryCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	if recoveryErr := b.restartAndHealth(recoveryCtx); recoveryErr != nil {
-		return errors.Join(applyErr, fmt.Errorf("restore previous ingress runtime: %w", recoveryErr))
-	}
-	return applyErr
+	return b.saveRuntime(current)
 }
 
 func (b *Backend) SetComponent(_ context.Context, generation lifecycle.Generation, name string, enabled bool) error {
@@ -599,6 +583,47 @@ func (b *Backend) DoctorProbe(ctx context.Context) ([]byte, error) {
 		"--launcher-layout", "/etc/loki/launcher.json",
 		"--toolchain-catalog", "/usr/share/doc/loki/toolchain-catalog.json",
 	)
+}
+
+func (b *Backend) ActiveJobs(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	state, found, err := b.loadRuntime()
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("compose lifecycle runtime is not activated")
+	}
+	volume := b.volumeName("launcher-state")
+	exists, err := b.volumeExists(ctx, volume)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("compose launcher state volume is unavailable")
+	}
+	raw, err := b.runner.Run(
+		ctx, nil,
+		"run", "--rm", "--pull", "never", "--network", "none", "--user", "0:0", "--read-only",
+		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--entrypoint", "/opt/loki/bin/loki",
+		"--mount", "type=volume,src="+volume+",dst=/var/lib/loki/launcher,readonly",
+		state.CoreImage,
+		"host", "runtime-active-jobs",
+		"--launcher-layout", "/etc/loki/launcher.json",
+	)
+	if err != nil {
+		return nil, err
+	}
+	var report struct {
+		Jobs []string
+	}
+	if err = json.Unmarshal(raw, &report); err != nil {
+		return nil, errors.New("compose launcher job inventory returned invalid JSON")
+	}
+	return append([]string(nil), report.Jobs...), nil
 }
 
 func compactRuntimeServices(values []string) []string {

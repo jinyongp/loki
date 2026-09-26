@@ -105,6 +105,7 @@ func (b *fakeHostRuntimeBackend) Activate(_ context.Context, generation lifecycl
 func (*fakeHostRuntimeBackend) SetComponent(context.Context, lifecycle.Generation, string, bool) error {
 	return nil
 }
+func (*fakeHostRuntimeBackend) SetIngressHosts(context.Context, []string) error { return nil }
 
 func (*fakeHostRuntimeBackend) Migrate(context.Context, []lifecycle.MigrationStep) error { return nil }
 func (*fakeHostRuntimeBackend) Restart(context.Context) error                            { return nil }

@@ -53,6 +53,7 @@ type Maintainer interface {
 	Rollback(context.Context) error
 	Uninstall(context.Context) error
 	SetComponent(context.Context, string, bool) error
+	SetIngressHosts(context.Context, []string) error
 }
 
 type BlockedJobsError struct {
@@ -208,6 +209,16 @@ func (m Manager) SetComponent(ctx context.Context, name string, enabled bool, op
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
 	return m.Maintainer.SetComponent(ctx, name, enabled)
+}
+
+func (m Manager) SetIngressHosts(ctx context.Context, hosts []string, options MutationOptions) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	if m.Maintainer == nil {
+		return errors.New("host lifecycle maintenance engine is not configured")
+	}
+	return m.Maintainer.SetIngressHosts(ctx, hosts)
 }
 
 func (m Manager) mutationJobs(ctx context.Context, options MutationOptions) ([]string, error) {

@@ -9,25 +9,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"loki/internal/host/lifecycle"
 )
 
 type hostIngressOptions struct {
-	System    bool
-	StateRoot string
-	JSON      bool
-	Host      string
-}
-
-type hostIngressRuntime interface {
-	SetIngressHosts(context.Context, []string) error
-}
-
-var openHostIngressRuntime = func(store *lifecycle.FileStore) (hostIngressRuntime, error) {
-	return newHostComposeBackend(store)
+	System         bool
+	StateRoot      string
+	LauncherLayout string
+	InterruptJobs  bool
+	JSON           bool
+	Host           string
 }
 
 type hostIngressReport struct {
@@ -42,6 +35,8 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 	flags.SetOutput(stderr)
 	system := flags.Bool("system", false, "operate on the system-wide host installation")
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
+	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
+	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	if err := flags.Parse(args); err != nil {
 		return hostIngressOptions{}, err
@@ -54,14 +49,22 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 		return hostIngressOptions{}, errors.New("usage: loki host ingress list|allow|remove [--system] [--state-root PATH] [--json] [HOST]")
 	}
 	result := hostIngressOptions{
-		System: *system, StateRoot: strings.TrimSpace(*stateRoot), JSON: *jsonOutput,
+		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
+		LauncherLayout: strings.TrimSpace(*launcherLayout), InterruptJobs: *interrupt, JSON: *jsonOutput,
 	}
 	if wantArgs == 1 {
 		result.Host = strings.ToLower(strings.TrimSpace(flags.Arg(0)))
 	}
-	if result.StateRoot != "" && (!filepath.IsAbs(result.StateRoot) || filepath.Clean(result.StateRoot) != result.StateRoot ||
-		result.StateRoot == string(filepath.Separator) || strings.ContainsRune(result.StateRoot, 0)) {
-		return hostIngressOptions{}, errors.New("--state-root must be a clean absolute non-root path")
+	if action == "list" && result.InterruptJobs {
+		return hostIngressOptions{}, errors.New("--interrupt-active-jobs is valid only for allow/remove")
+	}
+	for name, value := range map[string]string{
+		"--state-root": result.StateRoot, "--launcher-layout": result.LauncherLayout,
+	} {
+		if value != "" && (!filepath.IsAbs(value) || filepath.Clean(value) != value ||
+			value == string(filepath.Separator) || strings.ContainsRune(value, 0)) {
+			return hostIngressOptions{}, fmt.Errorf("%s must be a clean absolute non-root path", name)
+		}
 	}
 	return result, nil
 }
@@ -86,6 +89,13 @@ func runHostIngress(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
+		}
+	}
+	if options.LauncherLayout == "" {
+		if options.System {
+			options.LauncherLayout = defaultLauncherLayout
+		} else {
+			options.LauncherLayout = filepath.Join(filepath.Dir(options.StateRoot), "launcher.json")
 		}
 	}
 	store, err := lifecycle.OpenFileStore(options.StateRoot)
@@ -128,46 +138,25 @@ func runHostIngress(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	runtime, err := openHostIngressRuntime(store)
+	backend, err := newHostRuntimeBackend(store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = applyHostIngressState(context.Background(), store, runtime, current, next); err != nil {
+	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
+	manager := lifecycle.Manager{
+		Store:      store,
+		Jobs:       launcherJournalInventory{LayoutPath: options.LauncherLayout},
+		Maintainer: engine,
+		Now:        lifecycleTimeNow,
+	}
+	if err = manager.SetIngressHosts(context.Background(), next, lifecycle.MutationOptions{
+		InterruptActiveJobs: options.InterruptJobs,
+	}); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return writeHostIngressState(stdout, stderr, options.JSON, next)
-}
-
-func applyHostIngressState(
-	ctx context.Context,
-	store *lifecycle.FileStore,
-	runtime hostIngressRuntime,
-	current, next []string,
-) error {
-	if store == nil || runtime == nil {
-		return errors.New("host ingress runtime is not configured")
-	}
-	changed := !slices.Equal(current, next)
-	if changed {
-		if err := store.CommitIngressHosts(ctx, next, lifecycleTimeNow()); err != nil {
-			return err
-		}
-	}
-	if err := runtime.SetIngressHosts(ctx, next); err == nil {
-		return nil
-	} else {
-		applyErr := err
-		if !changed {
-			return applyErr
-		}
-		rollbackErr := store.CommitIngressHosts(context.Background(), current, lifecycleTimeNow())
-		if rollbackErr != nil {
-			return errors.Join(applyErr, fmt.Errorf("restore previous MCP ingress host state: %w", rollbackErr))
-		}
-		return applyErr
-	}
 }
 
 func writeHostIngressState(stdout, stderr io.Writer, jsonOutput bool, hosts []string) int {

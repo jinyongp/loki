@@ -103,6 +103,30 @@ func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout
 	return active, ctx.Err()
 }
 
+func runHostRuntimeActiveJobs(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("host runtime-active-jobs", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	launcherLayout := flags.String("launcher-layout", "/etc/loki/launcher.json", "launcher service layout")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if !filepath.IsAbs(*launcherLayout) || filepath.Clean(*launcherLayout) != *launcherLayout ||
+		*launcherLayout == string(filepath.Separator) || strings.ContainsRune(*launcherLayout, 0) {
+		fmt.Fprintln(stderr, "--launcher-layout must be a clean absolute non-root path")
+		return 2
+	}
+	active, err := (launcherJournalInventory{LayoutPath: *launcherLayout}).ActiveJobs(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err = json.NewEncoder(stdout).Encode(map[string]any{"jobs": active}); err != nil {
+		fmt.Fprintln(stderr, "cannot encode active job inventory")
+		return 1
+	}
+	return 0
+}
+
 func runHost(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall ... | update status|prepare|apply [OPTIONS]")
@@ -121,6 +145,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostIngress(args[1:], stdout, stderr)
 	case "runtime-probe":
 		return runHostRuntimeProbe(args[1:], stdout, stderr)
+	case "runtime-active-jobs":
+		return runHostRuntimeActiveJobs(args[1:], stdout, stderr)
 	case "backup", "restore", "rollback", "enable", "disable", "uninstall":
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}
@@ -172,12 +198,12 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 	}
 	manager := lifecycle.Manager{Store: store}
 	if action == "apply" {
-		backend, backendErr := newHostRuntimeBackend(store)
+		backend, backendErr := newHostComposeBackend(store)
 		if backendErr != nil {
 			fmt.Fprintln(stderr, backendErr)
 			return 1
 		}
-		manager.Jobs = launcherJournalInventory{LayoutPath: *launcherLayout}
+		manager.Jobs = backend
 		manager.Applier = &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
 	}
 	return runHostUpdateWith(context.Background(), manager, action, lifecycle.ApplyOptions{

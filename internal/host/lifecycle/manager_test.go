@@ -72,6 +72,7 @@ type fakeMaintainer struct {
 	rollbackCalls  int
 	uninstallCalls int
 	componentCalls []fakeComponentCall
+	ingressCalls   [][]string
 }
 
 func (m *fakeMaintainer) Backup(context.Context) (BackupRecord, error) {
@@ -96,6 +97,11 @@ func (m *fakeMaintainer) Uninstall(context.Context) error {
 
 func (m *fakeMaintainer) SetComponent(_ context.Context, name string, enabled bool) error {
 	m.componentCalls = append(m.componentCalls, fakeComponentCall{name: name, enabled: enabled})
+	return nil
+}
+
+func (m *fakeMaintainer) SetIngressHosts(_ context.Context, hosts []string) error {
+	m.ingressCalls = append(m.ingressCalls, append([]string(nil), hosts...))
 	return nil
 }
 
@@ -224,8 +230,12 @@ func TestManagerMaintenanceUsesSharedActiveJobPolicy(t *testing.T) {
 	if err := manager.SetComponent(t.Context(), "browser", false, MutationOptions{}); err == nil {
 		t.Fatal("component disable with active jobs was accepted")
 	}
+	if err := manager.SetIngressHosts(t.Context(), []string{"mcp.example.com"}, MutationOptions{}); err == nil {
+		t.Fatal("ingress change with active jobs was accepted")
+	}
 	if maintainer.backupCalls != 0 || len(maintainer.restoreCalls) != 0 ||
-		maintainer.rollbackCalls != 0 || maintainer.uninstallCalls != 0 || len(maintainer.componentCalls) != 0 {
+		maintainer.rollbackCalls != 0 || maintainer.uninstallCalls != 0 ||
+		len(maintainer.componentCalls) != 0 || len(maintainer.ingressCalls) != 0 {
 		t.Fatalf("blocked maintenance reached engine: %#v", maintainer)
 	}
 
@@ -245,9 +255,13 @@ func TestManagerMaintenanceUsesSharedActiveJobPolicy(t *testing.T) {
 	if err := manager.SetComponent(t.Context(), "browser", true, options); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.SetIngressHosts(t.Context(), []string{"mcp.example.com"}, options); err != nil {
+		t.Fatal(err)
+	}
 	if maintainer.backupCalls != 1 || !reflect.DeepEqual(maintainer.restoreCalls, []string{"sha256:" + strings.Repeat("b", 64)}) ||
 		maintainer.rollbackCalls != 1 || maintainer.uninstallCalls != 1 ||
-		!reflect.DeepEqual(maintainer.componentCalls, []fakeComponentCall{{name: "browser", enabled: true}}) {
+		!reflect.DeepEqual(maintainer.componentCalls, []fakeComponentCall{{name: "browser", enabled: true}}) ||
+		!reflect.DeepEqual(maintainer.ingressCalls, [][]string{{"mcp.example.com"}}) {
 		t.Fatalf("approved maintenance calls = %#v", maintainer)
 	}
 }

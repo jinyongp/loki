@@ -188,6 +188,7 @@ type TransactionBackend interface {
 	Snapshot(context.Context, OperationKind, Snapshot) (RuntimeSnapshot, error)
 	Activate(context.Context, Generation, InstallationState) error
 	SetComponent(context.Context, Generation, string, bool) error
+	SetIngressHosts(context.Context, []string) error
 	Migrate(context.Context, []MigrationStep) error
 	Restart(context.Context) error
 	Health(context.Context) error
@@ -350,6 +351,72 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
 	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	_, err = journal.MarkSucceeded(record.ID, e.now())
+	return err
+}
+
+func (e *TransactionEngine) SetIngressHosts(ctx context.Context, hosts []string) error {
+	if e == nil || e.Store == nil || e.Backend == nil {
+		return errors.New("host lifecycle transaction engine is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target, err := NormalizeIngressHosts(hosts)
+	if err != nil {
+		return err
+	}
+	lock, journal, err := e.openJournal(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err = e.recoverInterrupted(ctx, journal); err != nil {
+		return err
+	}
+	snapshot, err := e.Store.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("host ingress change requires an installed release")
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, e.now())
+	if err != nil {
+		return err
+	}
+	record, err := journal.Begin(OperationSetIngressHosts, plan, e.now())
+	if err != nil {
+		return err
+	}
+	backup, err := e.captureBackup(ctx, journal, record, snapshot)
+	if err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, nil, err)
+	}
+	if err = e.Backend.SetIngressHosts(ctx, target); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseMigrate, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Restart(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseRestart, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Health(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Store.CommitIngressHosts(ctx, target, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
 	_, err = journal.MarkSucceeded(record.ID, e.now())

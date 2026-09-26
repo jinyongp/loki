@@ -5,22 +5,26 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
 
 type fakeRuntimeState struct {
-	current    string
-	components map[string]bool
+	current      string
+	components   map[string]bool
+	ingressHosts []string
 }
 
 type fakeTransactionBackend struct {
 	current        string
 	components     map[string]bool
+	ingressHosts   []string
 	snapshots      map[string]fakeRuntimeState
 	nextSnapshot   int
 	componentCalls int
+	ingressCalls   int
 	restartCalls   int
 	healthCalls    int
 	healthErr      error
@@ -38,7 +42,9 @@ func (b *fakeTransactionBackend) Snapshot(_ context.Context, _ OperationKind, sn
 	for name, enabled := range b.components {
 		components[name] = enabled
 	}
-	b.snapshots[ref] = fakeRuntimeState{current: b.current, components: components}
+	b.snapshots[ref] = fakeRuntimeState{
+		current: b.current, components: components, ingressHosts: append([]string(nil), b.ingressHosts...),
+	}
 	return RuntimeSnapshot{
 		Ref: ref,
 		Coverage: BackupCoverage{
@@ -61,6 +67,12 @@ func (b *fakeTransactionBackend) SetComponent(_ context.Context, _ Generation, n
 	}
 	b.componentCalls++
 	b.components[name] = enabled
+	return nil
+}
+
+func (b *fakeTransactionBackend) SetIngressHosts(_ context.Context, hosts []string) error {
+	b.ingressCalls++
+	b.ingressHosts = append([]string(nil), hosts...)
 	return nil
 }
 
@@ -89,6 +101,7 @@ func (b *fakeTransactionBackend) Restore(_ context.Context, ref string) error {
 	for name, enabled := range value.components {
 		b.components[name] = enabled
 	}
+	b.ingressHosts = append([]string(nil), value.ingressHosts...)
 	b.stopped = false
 	return nil
 }
@@ -534,5 +547,135 @@ func TestInitializeInstallUsesWorkspaceWithoutDeletingIt(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(filepath.Join(workspace, "keep.txt")); err != nil || string(raw) != "existing" {
 		t.Fatalf("workspace content after install = %q err=%v", raw, err)
+	}
+}
+
+func TestTransactionSetIngressHostsUsesLifecycleLock(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+
+	lock, err := AcquireOperationLock(store.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+
+	err = engine.SetIngressHosts(t.Context(), []string{"mcp.example.com"})
+	if err == nil || !strings.Contains(err.Error(), "another host lifecycle operation owns the lock") {
+		t.Fatalf("ingress mutation lock error = %v", err)
+	}
+	if backend.ingressCalls != 0 || backend.restartCalls != 0 || backend.healthCalls != 0 {
+		t.Fatalf("locked ingress mutation reached runtime: ingress=%d restart=%d health=%d",
+			backend.ingressCalls, backend.restartCalls, backend.healthCalls)
+	}
+}
+
+func TestTransactionSetIngressHostsRecoversInterruptedRuntimeSwitch(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, journal, err := engine.openJournal(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := journal.Begin(OperationSetIngressHosts, plan, now)
+	if err != nil {
+		lock.Close()
+		t.Fatal(err)
+	}
+	backup, err := engine.captureBackup(t.Context(), journal, record, snapshot)
+	if err != nil {
+		lock.Close()
+		t.Fatal(err)
+	}
+	if backup.ID == "" {
+		lock.Close()
+		t.Fatal("interrupted ingress operation did not record a recovery backup")
+	}
+	if err = backend.SetIngressHosts(t.Context(), []string{"partial.example.com"}); err != nil {
+		lock.Close()
+		t.Fatal(err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseSwitch, now.Add(time.Second)); err != nil {
+		lock.Close()
+		t.Fatal(err)
+	}
+	if err = lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = engine.Backup(t.Context()); err != nil {
+		t.Fatalf("next lifecycle operation did not recover interrupted ingress mutation: %v", err)
+	}
+	recovered, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered.Host.IngressHosts) != 0 || len(backend.ingressHosts) != 0 {
+		t.Fatalf("interrupted ingress mutation recovery host=%#v runtime=%#v", recovered.Host.IngressHosts, backend.ingressHosts)
+	}
+	readLock, err := AcquireOperationLock(store.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readLock.Close()
+	records, err := OpenOperationJournal(store.Root, readLock, OperationJournalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := records.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundRollback := false
+	for _, item := range history {
+		if item.ID == record.ID && item.Kind == OperationSetIngressHosts && item.State == OperationRolledBack {
+			foundRollback = true
+			break
+		}
+	}
+	if !foundRollback {
+		t.Fatalf("interrupted ingress operation was not durably marked rolled back: %#v", history)
+	}
+}
+
+func TestTransactionSetIngressHostsCommitsAndRecovers(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+
+	first := []string{"mcp.example.com"}
+	if err := engine.SetIngressHosts(t.Context(), first); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(snapshot.Host.IngressHosts, first) || !slices.Equal(backend.ingressHosts, first) ||
+		backend.ingressCalls != 1 || backend.restartCalls != 1 || backend.healthCalls != 1 {
+		t.Fatalf("ingress commit host=%#v runtime=%#v calls=%d/%d/%d",
+			snapshot.Host.IngressHosts, backend.ingressHosts, backend.ingressCalls, backend.restartCalls, backend.healthCalls)
+	}
+
+	backend.healthErr = errors.New("synthetic ingress health failure")
+	err = engine.SetIngressHosts(t.Context(), []string{"new.example.com"})
+	if err == nil || !strings.Contains(err.Error(), "synthetic ingress health failure") {
+		t.Fatalf("ingress recovery error = %v", err)
+	}
+	snapshot, err = store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(snapshot.Host.IngressHosts, first) || !slices.Equal(backend.ingressHosts, first) {
+		t.Fatalf("failed ingress mutation did not recover: host=%#v runtime=%#v",
+			snapshot.Host.IngressHosts, backend.ingressHosts)
 	}
 }

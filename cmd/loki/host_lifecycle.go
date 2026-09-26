@@ -381,7 +381,7 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	backend, err := newHostRuntimeBackend(store)
+	backend, err := newHostComposeBackend(store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -389,7 +389,7 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
 	manager := lifecycle.Manager{
 		Store:      store,
-		Jobs:       launcherJournalInventory{LayoutPath: options.LauncherLayout},
+		Jobs:       backend,
 		Maintainer: engine,
 		Now:        lifecycleTimeNow,
 	}

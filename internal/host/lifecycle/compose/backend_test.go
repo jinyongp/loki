@@ -214,6 +214,9 @@ func TestBackendSetIngressHostsProjectsOperatorConfig(t *testing.T) {
 	if err := backend.SetIngressHosts(t.Context(), []string{"MCP.Example.com", "a.example.com"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := backend.Restart(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	state, found, err := backend.loadRuntime()
 	if err != nil || !found || !slices.Equal(state.IngressHosts, []string{"a.example.com", "mcp.example.com"}) {
 		t.Fatalf("runtime ingress state = %#v found=%v err=%v", state.IngressHosts, found, err)

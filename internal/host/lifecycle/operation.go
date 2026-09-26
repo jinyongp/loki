@@ -40,12 +40,13 @@ const (
 	OperationUninstall        OperationKind = "uninstall"
 	OperationEnableComponent  OperationKind = "enable_component"
 	OperationDisableComponent OperationKind = "disable_component"
+	OperationSetIngressHosts  OperationKind = "set_ingress_hosts"
 )
 
 func (k OperationKind) Valid() bool {
 	switch k {
 	case OperationApply, OperationBackup, OperationInstall, OperationRollback, OperationRestore, OperationUninstall,
-		OperationEnableComponent, OperationDisableComponent:
+		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts:
 		return true
 	default:
 		return false

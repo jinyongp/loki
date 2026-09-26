@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -13,78 +11,24 @@ import (
 	"loki/internal/host/lifecycle"
 )
 
-type fakeHostIngressRuntime struct {
-	hosts []string
-	err   error
-	calls int
-}
-
-func (f *fakeHostIngressRuntime) SetIngressHosts(_ context.Context, hosts []string) error {
-	f.calls++
-	f.hosts = append([]string(nil), hosts...)
-	return f.err
-}
-
-func TestHostIngressApplyCommitsAndRollsBackState(t *testing.T) {
-	stateRoot, _, _ := installedHostInfoFixture(t)
-	store, err := lifecycle.OpenFileStore(stateRoot)
+func TestParseHostIngressMutationOptions(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), "state")
+	launcher := filepath.Join(t.TempDir(), "launcher.json")
+	options, err := parseHostIngressOptions("allow", []string{
+		"--state-root", stateRoot,
+		"--launcher-layout", launcher,
+		"--interrupt-active-jobs",
+		"mcp.example.com",
+	}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	runtime := &fakeHostIngressRuntime{}
-	next := []string{"mcp.example.com"}
-	if err = applyHostIngressState(t.Context(), store, runtime, nil, next); err != nil {
-		t.Fatal(err)
+	if options.StateRoot != stateRoot || options.LauncherLayout != launcher ||
+		!options.InterruptJobs || options.Host != "mcp.example.com" {
+		t.Fatalf("mutation options = %#v", options)
 	}
-	snapshot, err := store.Snapshot(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(snapshot.Host.IngressHosts, next) || !reflect.DeepEqual(runtime.hosts, next) {
-		t.Fatalf("applied ingress state host=%#v runtime=%#v", snapshot.Host.IngressHosts, runtime.hosts)
-	}
-
-	runtime.err = errors.New("synthetic ingress runtime failure")
-	if err = applyHostIngressState(t.Context(), store, runtime, next, []string{"new.example.com"}); err == nil {
-		t.Fatal("runtime ingress failure returned success")
-	}
-	snapshot, err = store.Snapshot(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(snapshot.Host.IngressHosts, next) {
-		t.Fatalf("failed ingress update changed durable host state: %#v", snapshot.Host.IngressHosts)
-	}
-}
-
-func TestHostIngressIdempotentApplyReconcilesRuntimeWithoutRevisionChurn(t *testing.T) {
-	stateRoot, _, _ := installedHostInfoFixture(t)
-	store, err := lifecycle.OpenFileStore(stateRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 9, 26, 7, 0, 0, 0, time.UTC)
-	if err = store.CommitIngressHosts(t.Context(), []string{"mcp.example.com"}, now); err != nil {
-		t.Fatal(err)
-	}
-	before, err := store.Snapshot(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtime := &fakeHostIngressRuntime{}
-	if err = applyHostIngressState(t.Context(), store, runtime, before.Host.IngressHosts, before.Host.IngressHosts); err != nil {
-		t.Fatal(err)
-	}
-	after, err := store.Snapshot(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.calls != 1 || !reflect.DeepEqual(runtime.hosts, []string{"mcp.example.com"}) {
-		t.Fatalf("runtime reconcile calls=%d hosts=%#v", runtime.calls, runtime.hosts)
-	}
-	if after.Host.Revision != before.Host.Revision {
-		t.Fatalf("idempotent reconcile changed host revision: %q != %q", after.Host.Revision, before.Host.Revision)
+	if _, err = parseHostIngressOptions("list", []string{"--interrupt-active-jobs"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("list accepted --interrupt-active-jobs")
 	}
 }
 
