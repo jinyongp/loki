@@ -113,15 +113,33 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
 $taskName = "Loki WSL ($distributionName)"
+$originalLocalAppData = $env:LOCALAPPDATA
+$blockedLocalAppData = Join-Path $env:RUNNER_TEMP "loki-blocked-localappdata-$suffix"
 $env:LOKI_WSL_NAME = $distributionName
 $env:LOKI_WSL_LOCATION = $installLocation
 $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
 $env:LOKI_WSL_AUTOSTART = "1"
 
 try {
+    Set-Content -LiteralPath $blockedLocalAppData -Value "block" -NoNewline
+    $env:LOCALAPPDATA = $blockedLocalAppData
     $global:LASTEXITCODE = 0
     & $installer
-    if ($LASTEXITCODE -ne 0) { Fail "Windows installer reported failure with code $LASTEXITCODE" }
+    $rollbackProbeCode = $LASTEXITCODE
+    $env:LOCALAPPDATA = $originalLocalAppData
+    if ($rollbackProbeCode -eq 0) { Fail "Windows installer rollback probe unexpectedly succeeded" }
+
+    $installedAfterRollback = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
+    if ($installedAfterRollback | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
+        Fail "Windows installer rollback left the failed WSL distribution registered"
+    }
+    if (Test-Path -LiteralPath $installLocation) {
+        Fail "Windows installer rollback left the failed custom WSL location behind"
+    }
+
+    $global:LASTEXITCODE = 0
+    & $installer
+    if ($LASTEXITCODE -ne 0) { Fail "Windows installer retry after rollback failed with code $LASTEXITCODE" }
 
     $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
     $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
@@ -186,6 +204,8 @@ try {
     Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName"
 }
 finally {
+    $env:LOCALAPPDATA = $originalLocalAppData
+    Remove-Item -LiteralPath $blockedLocalAppData -Force -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_APPLIANCE_FILE -ErrorAction SilentlyContinue

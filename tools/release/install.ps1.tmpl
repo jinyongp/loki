@@ -252,6 +252,9 @@ catch {
         Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName) | Out-Null
         $unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)
         if ($unregisterResult.ExitCode -eq 0) {
+            if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
+                Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
+            }
             Write-Host "[Loki] Rollback complete. Removed incomplete WSL distribution '$distributionName'."
             Write-Host "[Loki] You can rerun the installer with the same command."
         } else {
