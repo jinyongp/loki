@@ -458,6 +458,180 @@ func ImportLegacyWithTransform(ctx context.Context, source, destination string, 
 	return dir.Sync()
 }
 
+// ImportLegacyIntoExistingWithTransform imports an isolated Python v1 copy
+// into an existing state directory such as a mounted runtime volume. Existing
+// non-vault files are preserved. Vault files are published with no-replace
+// semantics and the migration marker is published last, so a completed marker
+// always describes a fully published migrated vault.
+func ImportLegacyIntoExistingWithTransform(
+	ctx context.Context,
+	source, destination string,
+	validator Validator,
+	transform Transformer,
+) error {
+	source, err := filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+	destination, err = filepath.Abs(destination)
+	if err != nil {
+		return err
+	}
+	if source == destination {
+		return errors.New("migration requires a separate destination")
+	}
+	info, err := os.Lstat(destination)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("migration destination must be a real directory")
+	}
+
+	key, err := readPrivate(filepath.Join(source, "master.key"), 32)
+	if err != nil {
+		return err
+	}
+	encoded, err := readPrivate(filepath.Join(source, "store.json"), maxBytes)
+	if err != nil {
+		return err
+	}
+	snapshot, version, err := decrypt(key, encoded)
+	if err != nil {
+		return err
+	}
+	if version != 1 {
+		return errors.New("migration source must be Python version 1")
+	}
+	if transform != nil {
+		snapshot.Data, err = transform(bytes.Clone(snapshot.Data))
+		if err != nil {
+			return err
+		}
+	}
+	if validator != nil {
+		if err = validator(snapshot.Data); err != nil {
+			return err
+		}
+	}
+	fingerprint := legacyFingerprint(key, encoded)
+
+	markerPath := filepath.Join(destination, "migration.json")
+	if _, markerErr := os.Lstat(markerPath); markerErr == nil {
+		marker, readErr := readPrivate(markerPath, 4096)
+		if readErr != nil {
+			return readErr
+		}
+		var metadata struct {
+			SourceSHA256 string `json:"source_sha256"`
+		}
+		if json.Unmarshal(marker, &metadata) != nil || metadata.SourceSHA256 != fingerprint {
+			return errors.New("destination belongs to a different migration")
+		}
+		if _, loadErr := (Store{destination, validator}).Load(ctx); loadErr != nil {
+			return loadErr
+		}
+		legacyKey, keyErr := readPrivate(filepath.Join(destination, "legacy", "master.key"), 32)
+		legacyStore, storeErr := readPrivate(filepath.Join(destination, "legacy", "store.json"), maxBytes)
+		if keyErr != nil || storeErr != nil || legacyFingerprint(legacyKey, legacyStore) != fingerprint {
+			return errors.New("destination legacy backup differs from migration marker")
+		}
+		return nil
+	} else if !errors.Is(markerErr, os.ErrNotExist) {
+		return markerErr
+	}
+	for _, name := range []string{"master.key", "store.json", "legacy"} {
+		if _, entryErr := os.Lstat(filepath.Join(destination, name)); entryErr == nil {
+			return errors.New("migration destination already contains vault state")
+		} else if !errors.Is(entryErr, os.ErrNotExist) {
+			return entryErr
+		}
+	}
+
+	stage, err := os.MkdirTemp(destination, ".loki-migrate-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+
+	snapshot.Revision = 1
+	v2, err := seal(key, snapshot)
+	if err != nil {
+		return err
+	}
+	for name, data := range map[string][]byte{"master.key": key, "store.json": v2} {
+		if err = safeio.PublishPrivate(filepath.Join(stage, name), data, false); err != nil {
+			return err
+		}
+	}
+	if err = os.Mkdir(filepath.Join(stage, "legacy"), 0700); err != nil {
+		return err
+	}
+	for name, data := range map[string][]byte{"master.key": key, "store.json": encoded} {
+		if err = safeio.PublishPrivate(filepath.Join(stage, "legacy", name), data, false); err != nil {
+			return err
+		}
+	}
+	loaded, err := (Store{stage, validator}).Load(ctx)
+	if err != nil {
+		return err
+	}
+	var want, got any
+	for _, item := range []struct {
+		data  []byte
+		value *any
+	}{{snapshot.Data, &want}, {loaded.Data, &got}} {
+		decoder := json.NewDecoder(bytes.NewReader(item.data))
+		decoder.UseNumber()
+		if err = decoder.Decode(item.value); err != nil {
+			return err
+		}
+	}
+	if !reflect.DeepEqual(want, got) {
+		return errors.New("migration readback differs")
+	}
+	marker, _ := json.Marshal(map[string]any{
+		"source_version": 1,
+		"target_version": 2,
+		"source_sha256": fingerprint,
+	})
+	if err = safeio.PublishPrivate(filepath.Join(stage, "migration.json"), marker, false); err != nil {
+		return err
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+
+	published := make([]string, 0, 4)
+	cleanupPublished := func() {
+		for index := len(published) - 1; index >= 0; index-- {
+			_ = os.RemoveAll(filepath.Join(destination, published[index]))
+		}
+	}
+	for _, name := range []string{"master.key", "store.json", "legacy", "migration.json"} {
+		if err = unix.Renameat2(
+			unix.AT_FDCWD, filepath.Join(stage, name),
+			unix.AT_FDCWD, filepath.Join(destination, name),
+			unix.RENAME_NOREPLACE,
+		); err != nil {
+			cleanupPublished()
+			return err
+		}
+		published = append(published, name)
+	}
+	dir, err := os.Open(destination)
+	if err != nil {
+		cleanupPublished()
+		return err
+	}
+	defer dir.Close()
+	if err = dir.Sync(); err != nil {
+		cleanupPublished()
+		return err
+	}
+	return nil
+}
+
 // RestoreLegacy recreates a Python v1 vault from a migration's immutable
 // backup. It never changes the migrated vault or its embedded backup.
 func RestoreLegacy(ctx context.Context, migration, destination string) error {

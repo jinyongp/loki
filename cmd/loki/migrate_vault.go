@@ -56,7 +56,8 @@ func runMigrateVault(args []string, stdout, stderr io.Writer) int {
 		flags := flag.NewFlagSet("migrate-vault import", flag.ContinueOnError)
 		flags.SetOutput(stderr)
 		source := flags.String("source-copy", "", "private offline copy of the Python v1 vault")
-		destination := flags.String("destination", "", "new Go vault directory")
+		destination := flags.String("destination", "", "Go vault directory")
+		existingDestination := flags.Bool("existing-destination", false, "import into an existing runtime state directory without replacing unrelated files")
 		if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !cleanAbsolute(*source) || !cleanAbsolute(*destination) {
 			return 2
 		}
@@ -64,12 +65,26 @@ func runMigrateVault(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "loki: source-copy must not be the live Python vault")
 			return 1
 		}
-		_, statErr := os.Lstat(*destination)
-		reused := statErr == nil
-		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-			err = statErr
+		reused := false
+		if *existingDestination {
+			if _, markerErr := os.Lstat(filepath.Join(*destination, "migration.json")); markerErr == nil {
+				reused = true
+			} else if !errors.Is(markerErr, os.ErrNotExist) {
+				err = markerErr
+			}
+			if err == nil {
+				err = state.ImportLegacyIntoExistingWithTransform(
+					ctx, *source, *destination, secret.Validate, secret.MigrateLegacyDocument,
+				)
+			}
 		} else {
-			err = state.ImportLegacyWithTransform(ctx, *source, *destination, secret.Validate, secret.MigrateLegacyDocument)
+			_, statErr := os.Lstat(*destination)
+			reused = statErr == nil
+			if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+				err = statErr
+			} else {
+				err = state.ImportLegacyWithTransform(ctx, *source, *destination, secret.Validate, secret.MigrateLegacyDocument)
+			}
 		}
 		if err == nil {
 			var marker migrationMarker
@@ -89,7 +104,11 @@ func runMigrateVault(args []string, stdout, stderr io.Writer) int {
 					for _, profile := range document.Profiles {
 						count += len(profile.Secrets)
 					}
-					result = map[string]any{"migrated": true, "reused": reused, "source_fingerprint": marker.SourceSHA256, "profiles": len(document.Profiles), "secrets": count, "target_revision": snapshot.Revision}
+					result = map[string]any{
+						"migrated": true, "reused": reused, "existing_destination": *existingDestination,
+						"source_fingerprint": marker.SourceSHA256, "profiles": len(document.Profiles),
+						"secrets": count, "target_revision": snapshot.Revision,
+					}
 				}
 			}
 		}

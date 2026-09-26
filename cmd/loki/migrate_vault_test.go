@@ -89,6 +89,44 @@ func TestMigrateVaultCLIImportsAndRestoresWithoutSecretOutput(t *testing.T) {
 	}
 }
 
+func TestMigrateVaultCLIImportsIntoExistingRuntimeDirectory(t *testing.T) {
+	parent := t.TempDir()
+	source := filepath.Join(parent, "python-copy")
+	destination := filepath.Join(parent, "runtime-state")
+	pythonVaultCopy(t, source)
+	if err := os.Mkdir(destination, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destination, "audit.jsonl"), []byte("preserve\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	arguments := []string{
+		"migrate-vault", "import",
+		"--source-copy", source,
+		"--destination", destination,
+		"--existing-destination",
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(arguments, &stdout, &stderr); code != 0 {
+		t.Fatalf("existing import code = %d, stderr = %s", code, stderr.String())
+	}
+	var result map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["migrated"] != true || result["reused"] != false || result["existing_destination"] != true {
+		t.Fatalf("existing migration result = %#v", result)
+	}
+	if got, err := os.ReadFile(filepath.Join(destination, "audit.jsonl")); err != nil || string(got) != "preserve\n" {
+		t.Fatalf("unrelated runtime state changed: %q %v", got, err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(arguments, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "\"reused\": true") {
+		t.Fatalf("existing idempotent import code = %d, stdout = %s, stderr = %s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestMigrateVaultCLIRequiresOfflineCopyAndCleanPaths(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"migrate-vault", "import", "--source-copy", "/var/lib/loki/runtime", "--destination", "/tmp/go-vault"}, &stdout, &stderr); code != 1 {

@@ -331,6 +331,80 @@ func TestLegacyMigrationTransformsAndRestoresWithoutChangingSource(t *testing.T)
 	}
 }
 
+func TestLegacyMigrationIntoExistingDirectoryPreservesUnrelatedState(t *testing.T) {
+	key, encoded, want := legacyFixture(t)
+	parent := t.TempDir()
+	source := filepath.Join(parent, "python-copy")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "master.key"), key, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "store.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(parent, "runtime-state")
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	audit := filepath.Join(target, "audit.jsonl")
+	if err := os.WriteFile(audit, []byte("preserve\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ImportLegacyIntoExistingWithTransform(t.Context(), source, target, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(audit); err != nil || string(got) != "preserve\n" {
+		t.Fatalf("unrelated runtime state changed: %q %v", got, err)
+	}
+	migrated, err := (Store{Dir: target}).Load(t.Context())
+	if err != nil || migrated.Revision != 1 {
+		t.Fatalf("migrated state = %#v err=%v", migrated, err)
+	}
+	var a, b any
+	if json.Unmarshal(migrated.Data, &a) != nil || json.Unmarshal(want, &b) != nil || !reflect.DeepEqual(a, b) {
+		t.Fatal("existing-directory migration changed data")
+	}
+	if _, err = (Store{Dir: target}).Update(t.Context(), nil, func(data json.RawMessage) (json.RawMessage, error) {
+		return data, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err = ImportLegacyIntoExistingWithTransform(t.Context(), source, target, nil, nil); err != nil {
+		t.Fatalf("idempotent existing-directory migration: %v", err)
+	}
+	migrated, err = (Store{Dir: target}).Load(t.Context())
+	if err != nil || migrated.Revision != 2 {
+		t.Fatalf("idempotent migration reset state: %#v err=%v", migrated, err)
+	}
+	restored := filepath.Join(parent, "restored-python")
+	if err = RestoreLegacy(t.Context(), target, restored); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"master.key", "store.json"} {
+		left, readErr := os.ReadFile(filepath.Join(source, name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		right, readErr := os.ReadFile(filepath.Join(restored, name))
+		if readErr != nil || !bytes.Equal(left, right) {
+			t.Fatalf("restored %s differs: %v", name, readErr)
+		}
+	}
+
+	conflict := filepath.Join(parent, "conflict")
+	if err = os.Mkdir(conflict, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(conflict, "master.key"), []byte("occupied"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = ImportLegacyIntoExistingWithTransform(t.Context(), source, conflict, nil, nil); err == nil {
+		t.Fatal("existing vault state was overwritten")
+	}
+}
+
 func TestLegacyMigrationCancellationAndCorruptRestoreAreAtomic(t *testing.T) {
 	key, encoded, _ := legacyFixture(t)
 	parent := t.TempDir()
