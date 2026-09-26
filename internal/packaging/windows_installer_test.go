@@ -31,6 +31,16 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$env:LOKI_WSL_AUTOSTART`,
 		`$env:LOKI_WSL_APPLIANCE_FILE`,
 		`$env:LOKI_MCP_PORT`,
+		`function Get-LokiWindowsStateOwnership`,
+		`function Get-LokiStartupTaskOwnership`,
+		`function Get-LokiDistributionState`,
+		`function Write-LokiOwnershipManifest`,
+		`ownership.json`,
+		`/usr/lib/loki-appliance/release-manifest.json`,
+		`/usr/lib/loki-appliance/loki", "version"`,
+		`Loki is already installed and healthy.`,
+		`is still provisioning.`,
+		`exists but is not a verified Loki appliance.`,
 		`Copy-Item -LiteralPath $localAppliance -Destination $appliance`,
 		`"--from-file", $appliance, "--name", $distributionName, "--no-launch"`,
 		`Get-FileHash -LiteralPath $appliance -Algorithm SHA256`,
@@ -56,7 +66,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`$createdStateDir = $false`,
 		`$createdTask = $false`,
 		`$installationComplete = $false`,
-		`Windows Loki state already exists for '$distributionName'`,
+		`Windows state exists at '$stateDir' but does not prove Loki ownership.`,
 		`Step "Checking Windows and WSL prerequisites..."`,
 		`Test-LoopbackPortAvailable $mcpPort`,
 		`MCP local-origin port: $mcpPort`,
@@ -145,24 +155,21 @@ func TestWindowsInstallerRollsBackOnlyFreshResourcesCreatedByCurrentInvocation(t
 	}
 	body := string(raw)
 
-	existingConflict := strings.Index(body, `A WSL distribution named '$distributionName' already exists.`)
+	distroClassification := strings.Index(body, `$distroState = Get-LokiDistributionState $distroPresent`)
 	if !strings.Contains(body, `/usr/bin/systemctl status loki-appliance-provision.service --no-pager`) ||
-		!strings.Contains(body, `/usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80`) ||
-		!strings.Contains(body, `The appliance binary, when present, is /usr/lib/loki-appliance/loki; /usr/local/bin/loki may not exist until provisioning succeeds.`) {
-		t.Fatal("Windows installer existing-distribution guidance does not cover incomplete appliance provisioning")
+		!strings.Contains(body, `/usr/lib/loki-appliance/release-manifest.json`) ||
+		!strings.Contains(body, `/usr/lib/loki-appliance/loki", "version"`) {
+		t.Fatal("Windows installer existing-distribution classification does not verify appliance identity and provisioning state")
 	}
-	if strings.Contains(body, `inspect it with 'wsl -d $distributionName --user root -- /usr/local/bin/loki host doctor --system'`) {
-		t.Fatal("Windows installer still assumes the published CLI exists for interrupted installs")
-	}
-	stateConflict := strings.Index(body, `Windows Loki state already exists for '$distributionName'`)
+	stateConflict := strings.Index(body, `Windows state exists at '$stateDir' but does not prove Loki ownership.`)
 	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
 	markCreated := strings.Index(body, `$createdDistribution = $true`)
 	rollbackGuard := strings.Index(body, `if ($createdDistribution -and -not $installationComplete)`)
 	unregister := strings.Index(body, `Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)`)
-	if existingConflict < 0 || stateConflict < 0 || install < 0 || markCreated < 0 || rollbackGuard < 0 || unregister < 0 {
+	if distroClassification < 0 || stateConflict < 0 || install < 0 || markCreated < 0 || rollbackGuard < 0 || unregister < 0 {
 		t.Fatal("Windows installer transactional rollback markers are missing")
 	}
-	if existingConflict > install || stateConflict > install {
+	if distroClassification > install || stateConflict > install {
 		t.Fatal("Windows installer mutates WSL before pre-existing resource conflicts are rejected")
 	}
 	if markCreated < install {
@@ -184,15 +191,16 @@ func TestWindowsInstallerPreflightsConflictsBeforeDistributionMutation(t *testin
 	}
 	body := string(raw)
 
-	conflict := strings.Index(body, `A WSL distribution named '$distributionName' already exists.`)
-	taskConflict := strings.Index(body, `Scheduled Task '$taskName' already exists.`)
+	distroConflict := strings.Index(body, `exists but is not a verified Loki appliance.`)
+	taskConflict := strings.Index(body, `Scheduled Task '$taskName' exists but does not match Loki's managed startup action.`)
+	stateConflict := strings.Index(body, `Windows state exists at '$stateDir' but does not prove Loki ownership.`)
 	portConflict := strings.Index(body, `if (-not (Test-LoopbackPortAvailable $mcpPort))`)
 	prepare := strings.Index(body, `Step "Preparing Loki $releaseTag WSL appliance..."`)
 	install := strings.Index(body, `$installArgs = @("--install", "--from-file"`)
-	if conflict < 0 || taskConflict < 0 || portConflict < 0 || prepare < 0 || install < 0 {
+	if distroConflict < 0 || taskConflict < 0 || stateConflict < 0 || portConflict < 0 || prepare < 0 || install < 0 {
 		t.Fatal("Windows installer conflict/install markers are missing")
 	}
-	if conflict > prepare || taskConflict > prepare || portConflict > prepare || prepare > install {
+	if distroConflict > prepare || taskConflict > prepare || stateConflict > prepare || portConflict > prepare || prepare > install {
 		t.Fatal("Windows installer downloads or mutates WSL before conflict preflight")
 	}
 }
