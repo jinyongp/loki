@@ -42,10 +42,13 @@ func TestCoreAuthDoesNotOwnCloudflareAccessImplementation(t *testing.T) {
 	for _, required := range []string{
 		"Cf-Access-Jwt-Assertion",
 		"github.com/golang-jwt/jwt",
-		"var _ auth.RequestVerifier = Access{}",
+		"VerifyRequest(r *http.Request) bool",
 	} {
 		if !strings.Contains(adapterBody, required) {
 			t.Fatalf("Cloudflare adapter lacks %q", required)
 		}
+	}
+	if strings.Contains(adapterBody, "loki/internal/auth") {
+		t.Fatal("Cloudflare adapter imports core auth instead of satisfying the request-verifier contract structurally")
 	}
 }

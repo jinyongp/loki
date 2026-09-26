@@ -10,14 +10,15 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	hostingress "loki/internal/host/ingress"
 )
 
 const ContractVersion = 1
 
 var (
-	releaseNamePattern      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-	digestPattern           = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	ingressHostLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+	releaseNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	digestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
 type SchemaRange struct {
@@ -206,25 +207,7 @@ type HostState struct {
 }
 
 func NormalizeIngressHosts(hosts []string) ([]string, error) {
-	if len(hosts) > 64 {
-		return nil, errors.New("ingress host allowlist exceeds 64 entries")
-	}
-	normalized := make([]string, 0, len(hosts))
-	for _, host := range hosts {
-		host = strings.ToLower(strings.TrimSpace(host))
-		if len(host) < 1 || len(host) > 253 {
-			return nil, errors.New("ingress hostname is invalid")
-		}
-		labels := strings.Split(host, ".")
-		for _, label := range labels {
-			if !ingressHostLabelPattern.MatchString(label) {
-				return nil, errors.New("ingress hostname is invalid")
-			}
-		}
-		normalized = append(normalized, host)
-	}
-	slices.Sort(normalized)
-	return slices.Compact(normalized), nil
+	return hostingress.Normalize(hosts)
 }
 
 func (s HostState) normalized() (HostState, error) {

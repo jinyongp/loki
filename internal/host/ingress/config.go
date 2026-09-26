@@ -3,10 +3,10 @@ package ingress
 
 import (
 	"errors"
-
-	"github.com/pelletier/go-toml/v2"
-
-	"loki/internal/host/lifecycle"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -14,12 +14,27 @@ const (
 	MaxPublicHosts = 64
 )
 
-type Config struct {
-	PublicHosts []string `toml:"public_hosts"`
-}
+var hostLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 
 func Normalize(hosts []string) ([]string, error) {
-	return lifecycle.NormalizeIngressHosts(hosts)
+	if len(hosts) > MaxPublicHosts {
+		return nil, errors.New("ingress host allowlist exceeds 64 entries")
+	}
+	normalized := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if len(host) < 1 || len(host) > 253 {
+			return nil, errors.New("ingress hostname is invalid")
+		}
+		for _, label := range strings.Split(host, ".") {
+			if !hostLabelPattern.MatchString(label) {
+				return nil, errors.New("ingress hostname is invalid")
+			}
+		}
+		normalized = append(normalized, host)
+	}
+	slices.Sort(normalized)
+	return slices.Compact(normalized), nil
 }
 
 func Render(hosts []string) ([]byte, error) {
@@ -27,9 +42,9 @@ func Render(hosts []string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := toml.Marshal(Config{PublicHosts: normalized})
-	if err != nil {
-		return nil, errors.New("cannot encode MCP ingress configuration")
+	quoted := make([]string, 0, len(normalized))
+	for _, host := range normalized {
+		quoted = append(quoted, strconv.Quote(host))
 	}
-	return raw, nil
+	return []byte("public_hosts = [" + strings.Join(quoted, ", ") + "]\n"), nil
 }

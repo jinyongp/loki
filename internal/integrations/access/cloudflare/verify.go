@@ -11,8 +11,6 @@ import (
 	"os"
 
 	"github.com/golang-jwt/jwt/v5"
-
-	"loki/internal/auth"
 )
 
 type Access struct {
@@ -20,8 +18,6 @@ type Access struct {
 	Audience   string
 	JWKSPath   string
 }
-
-var _ auth.RequestVerifier = Access{}
 
 func (a Access) VerifyRequest(r *http.Request) bool {
 	if r == nil {
