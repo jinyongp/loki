@@ -124,7 +124,17 @@ func TestHostPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		host, origin string
 		status       int
-	}{{"127.0.0.1:8765", "", 204}, {"mcp.example.com", "", 204}, {"mcp.example.com:443", "", 204}, {"evil.example", "", 421}, {"mcp.example.com", "https://evil.example", 403}} {
+	}{
+		{"127.0.0.1:8765", "", 204},
+		{"127.0.0.1:19000", "", 204},
+		{"localhost:19000", "", 204},
+		{"[::1]:19000", "", 204},
+		{"mcp.example.com", "", 204},
+		{"mcp.example.com:443", "", 204},
+		{"evil.example", "", 421},
+		{"192.0.2.1:19000", "", 421},
+		{"mcp.example.com", "https://evil.example", 403},
+	} {
 		r := httptest.NewRequest("POST", "http://"+tc.host+"/mcp", nil)
 		r.Header.Set("Origin", tc.origin)
 		w := httptest.NewRecorder()

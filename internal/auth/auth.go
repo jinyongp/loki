@@ -136,14 +136,17 @@ func LoadToken(path string) (string, error) {
 }
 
 // HostPolicy stores the configured host allowlist and rejects any Origin.
+// Loopback hosts accept any valid TCP port because a host-side forwarder may
+// publish the fixed container listener on an operator-selected local port.
 // Preview and opaque artifact routes have their own checks before this handler.
 func HostPolicy(port int, publicHosts []string, next http.Handler) http.Handler {
+	_ = port
 	allowed := map[string]bool{}
 	for _, host := range publicHosts {
 		allowed[host] = true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		valid := r.Host == "127.0.0.1:"+strconv.Itoa(port) || r.Host == "localhost:"+strconv.Itoa(port)
+		valid := loopbackHost(r.Host)
 		if allowed[r.Host] {
 			valid = true
 		}
@@ -160,4 +163,20 @@ func HostPolicy(port int, publicHosts []string, next http.Handler) http.Handler 
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func loopbackHost(value string) bool {
+	host := value
+	if splitHost, splitPort, err := net.SplitHostPort(value); err == nil {
+		port, portErr := strconv.Atoi(splitPort)
+		if portErr != nil || port < 1 || port > 65535 {
+			return false
+		}
+		host = splitHost
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
