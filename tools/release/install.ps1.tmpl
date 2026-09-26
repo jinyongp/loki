@@ -132,6 +132,7 @@ try {
     $keepAlive = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
 
     $ready = $false
+    $provisionFailed = $false
     for ($attempt = 0; $attempt -lt 300; $attempt++) {
         # Probe the systemd unit as the normal appliance user. This avoids
         # repeatedly opening a root WSL user session while first boot is still
@@ -139,6 +140,11 @@ try {
         $probe = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/systemctl", "is-active", "--quiet", "loki-appliance-provision.service")
         if ($probe.ExitCode -eq 0) {
             $ready = $true
+            break
+        }
+        $failedProbe = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/systemctl", "is-failed", "--quiet", "loki-appliance-provision.service")
+        if ($failedProbe.ExitCode -eq 0) {
+            $provisionFailed = $true
             break
         }
         if ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
@@ -149,7 +155,8 @@ try {
     if (-not $ready) {
         $diagnosticResult = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "80")
         $diagnostics = @($diagnosticResult.Stdout, $diagnosticResult.Stderr) | Where-Object { $_ }
-        Fail "Loki appliance provisioning did not complete within 10 minutes. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
+        $reason = if ($provisionFailed) { "failed" } else { "did not complete within 10 minutes" }
+        Fail "Loki appliance provisioning $reason. Service diagnostics:$([Environment]::NewLine)$($diagnostics -join [Environment]::NewLine)"
     }
     Write-Host "[Loki] First-boot provisioning complete."
 

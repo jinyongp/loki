@@ -50,6 +50,7 @@ func TestWindowsInstallerTemplateOwnsWSLBootstrapWithoutUpdatingWSL(t *testing.T
 		`Step "Starting WSL and provisioning Docker + Loki runtime..."`,
 		`[Loki] This can take several minutes.`,
 		`"/usr/bin/systemctl", "is-active", "--quiet", "loki-appliance-provision.service"`,
+		`"/usr/bin/systemctl", "is-failed", "--quiet", "loki-appliance-provision.service"`,
 		`First-boot provisioning is still running`,
 		`did not complete within 10 minutes`,
 		`Step "Verifying Loki host health..."`,
