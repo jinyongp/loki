@@ -5,6 +5,25 @@ controlled access to a development workspace for files, Git, isolated jobs,
 previews, artifacts, and optional integrations without giving project code the
 host's Docker socket or machine credentials.
 
+## Quick start
+
+For a new installation, normal users only need the installer and the generated
+MCP connection information:
+
+- Windows: run the PowerShell installer below. Loki installs as a preconfigured
+  WSL2 appliance; you do not set up Ubuntu, Docker, systemd, or Task Scheduler
+  manually.
+- Ubuntu 24.04 amd64: run the shell installer below.
+- After installation, use the generated MCP connection information and work in
+  the configured workspace. Host updates are explicit and Loki keeps a rollback
+  path instead of silently replacing the running release.
+
+An **operational cutover** is not part of a normal fresh installation. It is the
+maintainer procedure for switching an existing legacy Python-based Loki
+deployment to the reviewed Go runtime after backup/state migration and health
+verification. Removing the legacy Python recovery path is a later, separate
+retirement step.
+
 ## Install
 
 ### Windows

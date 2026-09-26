@@ -3,6 +3,22 @@
 Loki has separate one-line entry points for Windows and native Linux. Windows
 uses a release-built WSL2 appliance; native Ubuntu uses the Linux bootstrap.
 
+## Normal installation in one minute
+
+For a new installation:
+
+1. Run the Windows or Ubuntu one-line installer below.
+2. Wait until the installer reports Loki healthy.
+3. Connect your MCP client using the generated connection information.
+4. Use the configured workspace. You do not need to manage Loki's internal
+   containers directly for normal development.
+
+Fresh installs do not require an operational cutover. That term is reserved for
+maintainers moving an already-running legacy Python Loki deployment to the Go
+runtime: take/verify recovery data, migrate required state, switch the active
+service, and verify health/client connectivity. Legacy Python deletion is not
+part of that switch and remains a separate retirement operation.
+
 ## Windows
 
 Run this in PowerShell:
