@@ -335,6 +335,13 @@ try {
     if (-not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
         Fail "legacy orphan recovery did not recreate the startup task"
     }
+    $windowsToken = [IO.File]::ReadAllText($tokenFile).Trim()
+    $windowsConnection = Get-Content -LiteralPath $connectionFile -Raw | ConvertFrom-Json
+    $internalToken = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/cat", "/var/lib/loki/lifecycle/mcp-token")
+    if ($windowsToken -ne $internalToken) {
+        Fail "legacy orphan recovery Windows token does not match the reinstalled appliance"
+    }
+    Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken
 
     Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
     Start-Sleep -Seconds 2
