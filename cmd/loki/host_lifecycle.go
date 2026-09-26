@@ -387,6 +387,14 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
+	if action == "restore" || action == "rollback" {
+		releaseAssets, assetsErr := managedHostCLIReleaseAssetsForStore(context.Background(), store)
+		if assetsErr != nil {
+			fmt.Fprintln(stderr, assetsErr)
+			return 1
+		}
+		engine.ReleaseAssets = releaseAssets
+	}
 	manager := lifecycle.Manager{
 		Store:      store,
 		Jobs:       backend,

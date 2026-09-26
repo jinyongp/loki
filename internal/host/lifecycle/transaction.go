@@ -197,10 +197,21 @@ type TransactionBackend interface {
 	VerifyStopped(context.Context) error
 }
 
+// ManagedReleaseAssets binds host-resident release artifacts, such as the
+// persistent management CLI, to the same lifecycle transaction as the runtime.
+// ValidateCurrent must not mutate state. Activate and Restore must be
+// replay-safe because interrupted operations are recovered from the journal.
+type ManagedReleaseAssets interface {
+	ValidateCurrent(context.Context, Generation) error
+	Activate(context.Context, Generation) error
+	Restore(context.Context, Generation) error
+}
+
 type TransactionEngine struct {
-	Store   *FileStore
-	Backend TransactionBackend
-	Now     func() time.Time
+	Store         *FileStore
+	Backend       TransactionBackend
+	ReleaseAssets ManagedReleaseAssets
+	Now           func() time.Time
 }
 
 func (e *TransactionEngine) now() time.Time {
@@ -253,6 +264,11 @@ func (e *TransactionEngine) Apply(ctx context.Context, request ApplyRequest) (Ap
 
 	if err = e.Backend.Activate(ctx, *snapshot.Available, *snapshot.Installation); err != nil {
 		return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if e.ReleaseAssets != nil {
+		if err = e.ReleaseAssets.Activate(ctx, *snapshot.Available); err != nil {
+			return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
 	}
 	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
 		return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
@@ -590,6 +606,11 @@ func (e *TransactionEngine) restoreTo(ctx context.Context, kind OperationKind, t
 	if err = e.Backend.Restore(ctx, target.RuntimeRef); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &safety, err)
 	}
+	if e.ReleaseAssets != nil && target.Installed != nil {
+		if err = e.ReleaseAssets.Restore(ctx, *target.Installed); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &safety, err)
+		}
+	}
 	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &safety, err)
 	}
@@ -616,6 +637,11 @@ func (e *TransactionEngine) restoreTo(ctx context.Context, kind OperationKind, t
 }
 
 func (e *TransactionEngine) captureBackup(ctx context.Context, journal *OperationJournal, record OperationRecord, snapshot Snapshot) (BackupRecord, error) {
+	if e.ReleaseAssets != nil && snapshot.Installed != nil && releaseAssetsMutate(record.Kind) {
+		if err := e.ReleaseAssets.ValidateCurrent(ctx, *snapshot.Installed); err != nil {
+			return BackupRecord{}, err
+		}
+	}
 	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
 		if _, err := e.collectStorageLocked(ctx, journal, nil); err != nil {
 			return BackupRecord{}, err
@@ -668,6 +694,11 @@ func (e *TransactionEngine) openJournal(ctx context.Context) (*OperationLock, *O
 func (e *TransactionEngine) restoreRecoveryBackup(ctx context.Context, backup BackupRecord) error {
 	if err := e.Backend.Restore(ctx, backup.RuntimeRef); err != nil {
 		return err
+	}
+	if e.ReleaseAssets != nil && backup.Installed != nil {
+		if err := e.ReleaseAssets.Restore(ctx, *backup.Installed); err != nil {
+			return err
+		}
 	}
 	if err := e.Store.RestoreBackup(ctx, backup); err != nil {
 		return err
@@ -732,6 +763,15 @@ func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *Operati
 		return errors.Join(original, err)
 	}
 	return original
+}
+
+func releaseAssetsMutate(kind OperationKind) bool {
+	switch kind {
+	case OperationApply, OperationRestore, OperationRollback:
+		return true
+	default:
+		return false
+	}
 }
 
 func maintenancePlan(snapshot Snapshot, candidateID string, now time.Time) (PreparedPlan, error) {
@@ -808,6 +848,19 @@ func (s *FileStore) InitializeInstall(ctx context.Context, candidate Generation,
 	return ctx.Err()
 }
 
+func (s *FileStore) SaveAvailableMetadata(ctx context.Context, metadata AvailableReleaseMetadata) error {
+	if s == nil || !metadata.Valid() {
+		return errors.New("available release metadata is invalid")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := s.Snapshot(ctx); err != nil {
+		return err
+	}
+	return writePrivateJSON(s.path("available-metadata.json"), metadata)
+}
+
 func (s *FileStore) SaveAvailable(ctx context.Context, candidate Generation) error {
 	if s == nil || !candidate.Valid() {
 		return errors.New("available release generation is invalid")
@@ -815,8 +868,14 @@ func (s *FileStore) SaveAvailable(ctx context.Context, candidate Generation) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if _, err := s.Snapshot(ctx); err != nil {
+	snapshot, err := s.Snapshot(ctx)
+	if err != nil {
 		return err
+	}
+	if snapshot.Available == nil || snapshot.Available.ID != candidate.ID {
+		if err = removeIfPresent(s.path("prepared.json")); err != nil {
+			return err
+		}
 	}
 	return writePrivateJSON(s.path("available.json"), candidate)
 }
@@ -1037,7 +1096,7 @@ func (s *FileStore) CommitUninstall(ctx context.Context, now time.Time) error {
 	if err = writePrivateJSON(s.path("host.json"), host); err != nil {
 		return err
 	}
-	for _, name := range []string{"installed.json", "available.json", "prepared.json"} {
+	for _, name := range []string{"installed.json", "available.json", "available-metadata.json", "prepared.json"} {
 		if err = removeIfPresent(s.path(name)); err != nil {
 			return err
 		}
