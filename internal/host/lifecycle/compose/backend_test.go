@@ -297,6 +297,156 @@ func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
 	}
 }
 
+func TestBackendImportsOfflineLegacyVaultIntoRuntimeVolume(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = backend.saveRuntime(state); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	volume := backend.volumeName("runtime-state")
+	volumeKey := strings.Join([]string{
+		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
+	}, "\x00")
+	runner.outputs[volumeKey] = []byte(volume + "\n")
+	importArgs := []string{
+		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
+		"--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+		"--security-opt", "no-new-privileges",
+		"--mount", "type=bind,src=" + source + ",dst=/source,readonly",
+		"--mount", "type=volume,src=" + volume + ",dst=/target",
+		state.CoreImage,
+		"migrate-vault", "import",
+		"--source-copy", "/source",
+		"--destination", "/target",
+		"--existing-destination",
+	}
+	runner.outputs[strings.Join(importArgs, "\x00")] = []byte("{\"migrated\":true}\n")
+	raw, err := backend.ImportLegacyVault(t.Context(), source)
+	if err != nil || !strings.Contains(string(raw), "\"migrated\":true") {
+		t.Fatalf("legacy import = %q err=%v", raw, err)
+	}
+	var sawImport, sawStop, sawVerifyStopped, sawRestart, sawHealth bool
+	for _, call := range runner.snapshot() {
+		joined := strings.Join(call.args, " ")
+		switch {
+		case slices.Equal(call.args, importArgs):
+			sawImport = true
+		case strings.Contains(joined, " down --remove-orphans"):
+			sawStop = true
+		case strings.HasSuffix(joined, " ps -q"):
+			sawVerifyStopped = true
+		case strings.Contains(joined, " up -d --remove-orphans --wait --wait-timeout 60"):
+			sawHealth = true
+		case strings.Contains(joined, " up -d --remove-orphans"):
+			sawRestart = true
+		}
+	}
+	if !sawImport || !sawStop || !sawVerifyStopped || !sawRestart || !sawHealth {
+		t.Fatalf(
+			"legacy import calls import=%v stop=%v stopped=%v restart=%v health=%v: %#v",
+			sawImport, sawStop, sawVerifyStopped, sawRestart, sawHealth, runner.snapshot(),
+		)
+	}
+	if err = os.Chmod(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = backend.ImportLegacyVault(t.Context(), source); err == nil ||
+		!strings.Contains(err.Error(), "private real directory") {
+		t.Fatalf("public legacy source accepted: %v", err)
+	}
+}
+
+func TestBackendLegacyVaultImportFailureRestartsRuntime(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = backend.saveRuntime(state); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	volume := backend.volumeName("runtime-state")
+	runner.outputs[strings.Join([]string{
+		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
+	}, "\x00")] = []byte(volume + "\n")
+	importArgs := []string{
+		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
+		"--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+		"--security-opt", "no-new-privileges",
+		"--mount", "type=bind,src=" + source + ",dst=/source,readonly",
+		"--mount", "type=volume,src=" + volume + ",dst=/target",
+		state.CoreImage,
+		"migrate-vault", "import",
+		"--source-copy", "/source",
+		"--destination", "/target",
+		"--existing-destination",
+	}
+	runner.errs[strings.Join(importArgs, "\x00")] = errors.New("synthetic legacy import failure")
+	if _, err = backend.ImportLegacyVault(t.Context(), source); err == nil ||
+		!strings.Contains(err.Error(), "synthetic legacy import failure") {
+		t.Fatalf("legacy import failure = %v", err)
+	}
+	var sawRestart, sawHealth bool
+	for _, call := range runner.snapshot() {
+		joined := strings.Join(call.args, " ")
+		if strings.Contains(joined, " up -d --remove-orphans --wait --wait-timeout 60") {
+			sawHealth = true
+		} else if strings.Contains(joined, " up -d --remove-orphans") {
+			sawRestart = true
+		}
+	}
+	if !sawRestart || !sawHealth {
+		t.Fatalf("legacy import failure did not restore runtime process state: %#v", runner.snapshot())
+	}
+}
+
+func TestBackendLegacyVaultVerifyStoppedFailureRestartsRuntime(t *testing.T) {
+	backend, runner, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = backend.saveRuntime(state); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	volume := backend.volumeName("runtime-state")
+	runner.outputs[strings.Join([]string{
+		"volume", "ls", "--quiet", "--filter", "name=^" + volume + "$",
+	}, "\x00")] = []byte(volume + "\n")
+	psKey := strings.Join([]string{
+		"compose", "--project-name", backend.project,
+		"--file", filepath.Join(backend.runtimeRoot, "assets", "compose.yaml"),
+		"ps", "-q",
+	}, "\x00")
+	runner.outputs[psKey] = []byte("still-running\n")
+
+	if _, err = backend.ImportLegacyVault(t.Context(), source); err == nil ||
+		!strings.Contains(err.Error(), "services are still running") {
+		t.Fatalf("verify-stopped failure = %v", err)
+	}
+	var sawRestart, sawHealth bool
+	for _, call := range runner.snapshot() {
+		joined := strings.Join(call.args, " ")
+		if strings.Contains(joined, " up -d --remove-orphans --wait --wait-timeout 60") {
+			sawHealth = true
+		} else if strings.Contains(joined, " up -d --remove-orphans") {
+			sawRestart = true
+		}
+	}
+	if !sawRestart || !sawHealth {
+		t.Fatalf("verify-stopped failure left runtime down: %#v", runner.snapshot())
+	}
+}
+
 func TestBackendSnapshotFailureResumesStoppedRuntime(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")

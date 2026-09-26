@@ -328,6 +328,75 @@ func (b *Backend) Migrate(_ context.Context, steps []lifecycle.MigrationStep) er
 	return nil
 }
 
+// ImportLegacyVault imports a private offline Python v1 vault copy into the
+// active runtime-state volume. The Compose runtime is stopped for the mutation
+// and always restarted before returning, even when the caller is cancelled.
+// Callers are responsible for taking a lifecycle backup first and restoring it
+// if this operation returns an error.
+func (b *Backend) ImportLegacyVault(ctx context.Context, source string) (raw []byte, err error) {
+	source = strings.TrimSpace(source)
+	if !filepath.IsAbs(source) || filepath.Clean(source) != source || source == string(filepath.Separator) ||
+		strings.ContainsAny(source, ",\r\n\x00") {
+		return nil, errors.New("legacy vault source must be a clean absolute private path")
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("legacy vault source must be a private real directory")
+	}
+	state, found, err := b.loadRuntime()
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("compose lifecycle runtime is not activated")
+	}
+	volume := b.volumeName("runtime-state")
+	exists, err := b.volumeExists(ctx, volume)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("compose runtime-state volume is unavailable")
+	}
+	if err = b.Stop(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		recoveryCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		restartErr := b.restartAndHealth(recoveryCtx)
+		if restartErr == nil {
+			return
+		}
+		raw = nil
+		resumeErr := fmt.Errorf("resume compose runtime after legacy vault import: %w", restartErr)
+		if err == nil {
+			err = resumeErr
+		} else {
+			err = errors.Join(err, resumeErr)
+		}
+	}()
+	if err = b.VerifyStopped(ctx); err != nil {
+		return nil, err
+	}
+	raw, err = b.runner.Run(ctx, nil,
+		"run", "--rm", "--network", "none", "--user", "0:0", "--read-only",
+		"--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+		"--security-opt", "no-new-privileges",
+		"--mount", "type=bind,src="+source+",dst=/source,readonly",
+		"--mount", "type=volume,src="+volume+",dst=/target",
+		state.CoreImage,
+		"migrate-vault", "import",
+		"--source-copy", "/source",
+		"--destination", "/target",
+		"--existing-destination",
+	)
+	return raw, err
+}
+
 func (b *Backend) Restart(ctx context.Context) error {
 	state, found, err := b.loadRuntime()
 	if err != nil {
