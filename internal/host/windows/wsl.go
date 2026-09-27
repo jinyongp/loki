@@ -15,6 +15,13 @@ type NativeRunner interface {
 
 type ExecNativeRunner struct{}
 
+func normalizeNativeExitCode(code int) int {
+	if int64(code) == int64(^uint32(0)) {
+		return -1
+	}
+	return code
+}
+
 func (ExecNativeRunner) Run(ctx context.Context, executable string, arguments []string) (NativeProbe, error) {
 	command := exec.CommandContext(ctx, executable, arguments...)
 	var stdout, stderr bytes.Buffer
@@ -31,7 +38,7 @@ func (ExecNativeRunner) Run(ctx context.Context, executable string, arguments []
 	}
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		probe.ExitCode = exitError.ExitCode()
+		probe.ExitCode = normalizeNativeExitCode(exitError.ExitCode())
 		return probe, nil
 	}
 	return NativeProbe{}, fmt.Errorf("start %s: %w", executable, err)
@@ -73,6 +80,7 @@ func (client WSLClient) RequireInstallCapabilities(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	result.ExitCode = normalizeNativeExitCode(result.ExitCode)
 	if result.ExitCode != -1 && result.ExitCode != 0 && result.ExitCode != 1 {
 		return nativeFailure("inspect WSL capabilities", result)
 	}

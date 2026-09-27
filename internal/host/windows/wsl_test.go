@@ -51,11 +51,31 @@ func TestWSLInstallCapabilityGate(t *testing.T) {
 	if err := client.RequireInstallCapabilities(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+
+	windowsHelp := NativeProbe{
+		ExitCode: int(uint64(^uint32(0))),
+		Stdout:   "--from-file --name --no-launch",
+	}
+	runner = &fakeNativeRunner{helpResult: &windowsHelp}
+	client.Runner = runner
+	if err := client.RequireInstallCapabilities(context.Background()); err != nil {
+		t.Fatalf("Windows unsigned -1 help exit was rejected: %v", err)
+	}
+
 	missing := NativeProbe{Stdout: "--from-file --no-launch"}
 	runner = &fakeNativeRunner{helpResult: &missing}
 	client.Runner = runner
 	if err := client.RequireInstallCapabilities(context.Background()); err == nil {
 		t.Fatal("missing WSL --name capability was accepted")
+	}
+}
+
+func TestNormalizeNativeExitCodeHandlesWindowsUnsignedMinusOne(t *testing.T) {
+	if got := normalizeNativeExitCode(int(uint64(^uint32(0)))); got != -1 {
+		t.Fatalf("normalized exit code = %d, want -1", got)
+	}
+	if got := normalizeNativeExitCode(7); got != 7 {
+		t.Fatalf("normalized ordinary exit code = %d, want 7", got)
 	}
 }
 
