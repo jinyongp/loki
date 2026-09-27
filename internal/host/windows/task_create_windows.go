@@ -35,10 +35,6 @@ func (source PowerShellStartupTaskSource) CreateOwned(ctx context.Context, expec
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		probe, probeErr := source.Probe(ctx, expected.TaskName)
-		if probeErr == nil && ClassifyStartupTask(probe, expected).Owned {
-			return true, fmt.Errorf("create Scheduled Task %q: %w", expected.TaskName, err)
-		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = strings.TrimSpace(stdout.String())

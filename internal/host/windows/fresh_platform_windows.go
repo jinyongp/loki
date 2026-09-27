@@ -172,7 +172,7 @@ func (platform WindowsFreshPlatform) RollbackFresh(
 	if unregistered && transaction.InstallLocation != "" {
 		if !SafeOwnedInstallLocation(transaction.InstallLocation, expected.StateDir) {
 			failures = append(failures, errors.New("refusing to remove unsafe created WSL location"))
-		} else if err := removeEmptyCreatedDirectory(transaction.InstallLocation); err != nil {
+		} else if err := removeCreatedDirectoryTree(transaction.InstallLocation); err != nil {
 			failures = append(failures, fmt.Errorf("remove created WSL location: %w", err))
 		}
 	}
@@ -263,8 +263,9 @@ func removeCreatedStateDirectory(target string) error {
 	return nil
 }
 
-func removeEmptyCreatedDirectory(target string) error {
-	info, err := (OSStateFilesystem{}).Lstat(target)
+func removeCreatedDirectoryTree(target string) error {
+	filesystem := OSStateFilesystem{}
+	info, err := filesystem.Lstat(target)
 	if err != nil {
 		return err
 	}
@@ -274,8 +275,34 @@ func removeEmptyCreatedDirectory(target string) error {
 	if !info.Directory || info.Reparse {
 		return errors.New("created path is no longer a real directory")
 	}
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		entryPath := filepath.Join(target, entry.Name())
+		entryInfo, statErr := filesystem.Lstat(entryPath)
+		if statErr != nil {
+			return statErr
+		}
+		if !entryInfo.Exists || entryInfo.Reparse {
+			return fmt.Errorf("created directory entry %q changed type", entry.Name())
+		}
+		if entryInfo.Directory {
+			if err := removeCreatedDirectoryTree(entryPath); err != nil {
+				return err
+			}
+			continue
+		}
+		if !entryInfo.Regular {
+			return fmt.Errorf("created directory entry %q is not a regular file", entry.Name())
+		}
+		if err := os.Remove(entryPath); err != nil {
+			return fmt.Errorf("remove created directory entry %q: %w", entry.Name(), err)
+		}
+	}
 	if err := os.Remove(target); err != nil {
-		return fmt.Errorf("created directory is not empty or cannot be removed: %w", err)
+		return fmt.Errorf("remove created directory: %w", err)
 	}
 	return nil
 }
