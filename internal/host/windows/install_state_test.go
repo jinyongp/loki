@@ -255,6 +255,20 @@ func TestClassifyDistribution(t *testing.T) {
 	}
 }
 
+func TestClassifyDistributionRejectsVersionPrefixCollision(t *testing.T) {
+	probe := DistributionProbe{
+		Present:     true,
+		Manifest:    NativeProbe{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+		Version:     NativeProbe{Stdout: "loki 0.1.190 deadbeef"},
+		Provisioned: NativeProbe{ExitCode: 0},
+		Doctor:      NativeProbe{ExitCode: 0},
+		Connection:  NativeProbe{ExitCode: 0},
+	}
+	if got := ClassifyDistribution(probe); got.State != DistributionForeign {
+		t.Fatalf("prefix-collision version was accepted: %#v", got)
+	}
+}
+
 func TestAssessExistingInstallation(t *testing.T) {
 	manifest := WindowsState{Present: true, Owned: true, Kind: WindowsStateManifest, AutoStart: true}
 	legacy := WindowsState{Present: true, Owned: true, Kind: WindowsStateLegacy}

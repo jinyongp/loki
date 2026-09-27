@@ -366,8 +366,9 @@ func distributionIdentity(manifestProbe, versionProbe NativeProbe) (string, bool
 		return "", false
 	}
 	version := manifest.Generation.Spec.Version
-	if !applianceVersionPattern.MatchString(version) ||
-		!strings.HasPrefix(versionProbe.Stdout, "loki "+version) {
+	fields := strings.Fields(versionProbe.Stdout)
+	if !applianceVersionPattern.MatchString(version) || len(fields) < 2 ||
+		fields[0] != "loki" || fields[1] != version {
 		return "", false
 	}
 	return version, true
