@@ -1,0 +1,138 @@
+package windows
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"testing"
+)
+
+type fakeTaskManager struct {
+	probe   StartupTaskProbe
+	removed int
+	err     error
+}
+
+func (manager *fakeTaskManager) Probe(context.Context, string) (StartupTaskProbe, error) {
+	return manager.probe, nil
+}
+
+func (manager *fakeTaskManager) RemoveOwned(context.Context, ExpectedInstallation) error {
+	manager.removed++
+	return manager.err
+}
+
+type fakeRemover struct {
+	paths []string
+	err   error
+}
+
+func (remover *fakeRemover) RemoveAll(path string) error {
+	remover.paths = append(remover.paths, path)
+	return remover.err
+}
+
+func TestRecoveryExecutorDoesNotMutateBlockedState(t *testing.T) {
+	expected := fixtureExpected()
+	tasks := &fakeTaskManager{}
+	remover := &fakeRemover{}
+	runner := &fakeNativeRunner{}
+	executor := RecoveryExecutor{
+		Collector: PreflightCollector{
+			Filesystem: fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}},
+			Tasks:      tasks,
+			WSL:        WSLClient{Runner: runner},
+		},
+		Tasks:      tasks,
+		Filesystem: fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}},
+		Remover:    remover,
+	}
+	snapshot := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionAbsent},
+		Windows:      WindowsState{Present: true, Kind: WindowsStateUnverified},
+	}
+	plan, err := executor.Recover(context.Background(), expected, snapshot, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 0 || tasks.removed != 0 || len(remover.paths) != 0 || len(runner.calls) != 0 {
+		t.Fatalf("blocked recovery mutated state: plan=%#v tasks=%d paths=%#v calls=%#v", plan, tasks.removed, remover.paths, runner.calls)
+	}
+}
+
+func TestRemoveOwnedWindowsStateRevalidatesPaths(t *testing.T) {
+	expected := fixtureExpected()
+	location := `D:\Loki\loki-mcp`
+	fs := fakeStateFilesystem{
+		paths: map[string]StatePath{
+			expected.StateDir: {Exists: true, Directory: true},
+			location:          {Exists: true, Directory: true},
+		},
+		dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{},
+	}
+	remover := &fakeRemover{}
+	state := WindowsState{
+		Present: true, Owned: true, Kind: WindowsStateManifest,
+		InstallLocation: location,
+	}
+	if err := RemoveOwnedWindowsState(fs, remover, expected, state); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(remover.paths, []string{expected.StateDir, location}) {
+		t.Fatalf("removed %#v", remover.paths)
+	}
+	fs.paths[location] = StatePath{Exists: true, Directory: true, Reparse: true}
+	remover.paths = nil
+	if err := RemoveOwnedWindowsState(fs, remover, expected, state); err == nil {
+		t.Fatal("reparse install location accepted")
+	}
+	if len(remover.paths) != 0 {
+		t.Fatalf("unsafe state mutated: %#v", remover.paths)
+	}
+}
+
+func TestRemoveOwnedWindowsStateRejectsUnverifiedState(t *testing.T) {
+	expected := fixtureExpected()
+	if err := RemoveOwnedWindowsState(
+		fakeStateFilesystem{}, &fakeRemover{}, expected,
+		WindowsState{Present: true, Kind: WindowsStateUnverified},
+	); err == nil {
+		t.Fatal("unverified state removal accepted")
+	}
+}
+
+func TestBuildRollbackPlanOnlyContainsCreatedResources(t *testing.T) {
+	if steps := BuildRollbackPlan(InstallTransaction{}); len(steps) != 0 {
+		t.Fatalf("empty transaction generated rollback %#v", steps)
+	}
+	got := BuildRollbackPlan(InstallTransaction{
+		CreatedDistribution: true,
+		CreatedStateDir:     true,
+		CreatedStartupTask:  true,
+		InstallLocation:     `D:\Loki\loki-mcp`,
+	})
+	want := []RollbackStep{
+		RollbackRemoveStartupTask,
+		RollbackRemoveStateDir,
+		RollbackTerminateDistro,
+		RollbackUnregisterDistro,
+		RollbackRemoveInstallLocation,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("rollback=%#v want=%#v", got, want)
+	}
+}
+
+func TestRecoveryExecutorStopsOnMutationFailure(t *testing.T) {
+	expected := fixtureExpected()
+	tasks := &fakeTaskManager{err: errors.New("task changed")}
+	executor := RecoveryExecutor{Tasks: tasks}
+	snapshot := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionStale},
+		StartupTask:  StartupTaskState{Present: true, Owned: true},
+	}
+	plan, err := executor.Recover(context.Background(), expected, snapshot, true)
+	if err == nil || len(plan.Steps) == 0 {
+		t.Fatalf("expected mutation failure, plan=%#v err=%v", plan, err)
+	}
+}

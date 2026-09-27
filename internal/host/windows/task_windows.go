@@ -49,14 +49,24 @@ func (source PowerShellStartupTaskSource) Probe(ctx context.Context, taskName st
 	return probe, nil
 }
 
-func withoutEnvironment(environment []string, name string) []string {
-	prefix := strings.ToUpper(name) + "="
+func withoutEnvironment(environment []string, names ...string) []string {
+	prefixes := make([]string, 0, len(names))
+	for _, name := range names {
+		prefixes = append(prefixes, strings.ToUpper(name)+"=")
+	}
 	filtered := make([]string, 0, len(environment))
 	for _, entry := range environment {
-		if strings.HasPrefix(strings.ToUpper(entry), prefix) {
-			continue
+		upper := strings.ToUpper(entry)
+		blocked := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(upper, prefix) {
+				blocked = true
+				break
+			}
 		}
-		filtered = append(filtered, entry)
+		if !blocked {
+			filtered = append(filtered, entry)
+		}
 	}
 	return filtered
 }
