@@ -70,15 +70,20 @@ func ParseOwnershipManifest(raw []byte, expected ExpectedInstallation) (WindowsS
 		!windowsReleaseTagPattern.MatchString(manifest.ReleaseTag) {
 		return WindowsState{}, errors.New("ownership manifest does not match the requested Loki installation")
 	}
-	if manifest.InstallLocation != "" && !SafeOwnedInstallLocation(manifest.InstallLocation, expected.StateDir) {
-		return WindowsState{}, errors.New("ownership manifest contains an unsafe install location")
+	installLocation := ""
+	if manifest.InstallLocation != "" {
+		normalized, ok := normalizeWindowsPath(manifest.InstallLocation)
+		if !ok || !SafeOwnedInstallLocation(normalized, expected.StateDir) {
+			return WindowsState{}, errors.New("ownership manifest contains an unsafe install location")
+		}
+		installLocation = strings.ReplaceAll(normalized, "/", "\\")
 	}
 	if manifest.MCPPort < 1024 || manifest.MCPPort > 65535 {
 		return WindowsState{}, errors.New("ownership manifest contains an invalid MCP port")
 	}
 	return WindowsState{
 		Present: true, Owned: true, Kind: WindowsStateManifest,
-		InstallLocation: manifest.InstallLocation,
+		InstallLocation: installLocation,
 		AutoStart:       manifest.AutoStart, AutoStartKnown: true,
 		MCPPort: manifest.MCPPort,
 	}, nil

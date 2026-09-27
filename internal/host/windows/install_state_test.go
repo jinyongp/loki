@@ -17,6 +17,29 @@ func fixtureExpected() ExpectedInstallation {
 	}
 }
 
+func TestParseOwnershipManifestCanonicalizesInstallLocation(t *testing.T) {
+	expected := fixtureExpected()
+	raw := []byte(fmt.Sprintf(`{
+		"schema_version":1,
+		"distribution":"loki-mcp",
+		"release_tag":"v0.1.19",
+		"state_dir":"C:/Users/dev/AppData/Local/Loki/loki-mcp",
+		"install_location":"D:/Loki/./loki-mcp/",
+		"autostart":true,
+		"mcp_port":18765,
+		"task_name":%q,
+		"task_executable":"C:/Windows/System32/wsl.exe",
+		"task_arguments":%q
+	}`, expected.TaskName, expected.TaskArguments))
+	state, err := ParseOwnershipManifest(raw, expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.InstallLocation != `D:\Loki\loki-mcp` {
+		t.Fatalf("install location was not canonicalized: %q", state.InstallLocation)
+	}
+}
+
 func TestParseOwnershipManifest(t *testing.T) {
 	expected := fixtureExpected()
 	raw := []byte(fmt.Sprintf(`{

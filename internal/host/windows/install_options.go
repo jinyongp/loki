@@ -93,18 +93,26 @@ func (options *InstallOptions) ApplyPreserved(state WindowsState) {
 }
 
 func ExpectedFromOptions(options InstallOptions, localAppData, systemRoot string) (ExpectedInstallation, error) {
-	localAppData = strings.TrimSpace(localAppData)
-	systemRoot = strings.TrimSpace(systemRoot)
-	if localAppData == "" || systemRoot == "" {
-		return ExpectedInstallation{}, errors.New("Windows LOCALAPPDATA and SystemRoot are required")
+	if !distributionNamePattern.MatchString(options.Distribution) {
+		return ExpectedInstallation{}, errors.New("Windows Loki distribution name is invalid")
 	}
-	stateDir := joinWindowsPath(joinWindowsPath(localAppData, "Loki"), options.Distribution)
+	localRoot, ok := normalizeWindowsPath(localAppData)
+	if !ok {
+		return ExpectedInstallation{}, errors.New("Windows LOCALAPPDATA must be an absolute Windows path")
+	}
+	systemRootPath, ok := normalizeWindowsPath(systemRoot)
+	if !ok {
+		return ExpectedInstallation{}, errors.New("Windows SystemRoot must be an absolute Windows path")
+	}
+	localRoot = strings.ReplaceAll(localRoot, "/", "\\")
+	systemRootPath = strings.ReplaceAll(systemRootPath, "/", "\\")
+	stateDir := joinWindowsPath(joinWindowsPath(localRoot, "Loki"), options.Distribution)
 	taskName := "Loki WSL (" + options.Distribution + ")"
 	return ExpectedInstallation{
 		Distribution:   options.Distribution,
 		StateDir:       stateDir,
 		TaskName:       taskName,
-		TaskExecutable: joinWindowsPath(systemRoot, "System32\\wsl.exe"),
+		TaskExecutable: joinWindowsPath(systemRootPath, "System32\\wsl.exe"),
 		TaskArguments:  fmt.Sprintf("-d %s --exec /usr/bin/sleep infinity", options.Distribution),
 	}, nil
 }

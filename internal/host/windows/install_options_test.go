@@ -61,3 +61,21 @@ func TestExpectedFromOptionsPreservesLegacyTaskSignature(t *testing.T) {
 		t.Fatalf("unexpected expected installation %#v", expected)
 	}
 }
+
+func TestExpectedFromOptionsRejectsUntrustedWindowsRoots(t *testing.T) {
+	for name, localAndSystem := range map[string][2]string{
+		"relative-local":  {"relative", `C:\Windows`},
+		"relative-system": {`C:\Users\dev\AppData\Local`, "relative"},
+		"invalid-name":    {`C:\Users\dev\AppData\Local`, `C:\Windows`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options := InstallOptions{Distribution: "loki-mcp"}
+			if name == "invalid-name" {
+				options.Distribution = "../bad"
+			}
+			if _, err := ExpectedFromOptions(options, localAndSystem[0], localAndSystem[1]); err == nil {
+				t.Fatal("invalid Windows root/name was accepted")
+			}
+		})
+	}
+}
