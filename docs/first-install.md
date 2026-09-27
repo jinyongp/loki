@@ -150,7 +150,8 @@ On success it writes Windows-side connection material below:
 ```text
 %LOCALAPPDATA%\Loki\<distribution-name>\
 ├── connection.json
-└── mcp-token
+├── mcp-token
+└── ownership.json
 ```
 
 The token file ACL is restricted to the current Windows user and SYSTEM. Loki
@@ -166,6 +167,8 @@ Loki does not create or own DNS, TLS certificates, tunnels, reverse proxies, VPN
 routes, OAuth providers, or hosted MCP endpoints. If a remote MCP client must
 reach Loki, the operator chooses and manages that external ingress and forwards
 it to the local origin.
+
+See [Connect an MCP client](connect-mcp-client.md) for client-specific setup.
 
 The default appliance workspace is:
 

@@ -5,217 +5,109 @@ controlled access to a development workspace for files, Git, isolated jobs,
 previews, artifacts, and optional integrations without giving project code the
 host's Docker socket or machine credentials.
 
-## Quick start
-
-For a new installation, normal users only need the installer and the generated
-MCP connection information:
-
-- Windows: run the PowerShell installer below. Loki installs as a preconfigured
-  WSL2 appliance; you do not set up Ubuntu, Docker, systemd, or Task Scheduler
-  manually.
-- Ubuntu 24.04 amd64: run the shell installer below.
-- After installation, use the generated MCP connection information and work in
-  the configured workspace. Host updates are explicit and Loki keeps a rollback
-  path instead of silently replacing the running release.
-
-An **operational cutover** is not part of a normal fresh installation. It is the
-maintainer procedure for switching an existing legacy Python-based Loki
-deployment to the reviewed Go runtime after backup/state migration and health
-verification. Removing the legacy Python recovery path is a later, separate
-retirement step.
-
 ## Install
 
 ### Windows
 
-Run this in PowerShell:
+Run in PowerShell:
 
 ```powershell
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The Windows installer downloads and verifies one immutable Loki WSL2 appliance.
-The appliance already contains its Ubuntu userspace, systemd configuration,
-Docker Engine and Compose, Loki host/runtime components, and the initial
-workspace. You do not create an Ubuntu user, install Docker, edit
-`/etc/wsl.conf`, or configure Task Scheduler yourself.
+Loki installs as a preconfigured WSL2 appliance. You do not need to install
+Ubuntu, Docker, Compose, or systemd manually.
 
-The default WSL distribution name is `loki-mcp`. To choose a different local
-name:
+### Ubuntu
 
-```powershell
-$env:LOKI_WSL_NAME = "my-loki"
-irm https://jinyongp.dev/loki/install.ps1 | iex
-```
-
-To choose where Windows stores the distribution:
-
-```powershell
-$env:LOKI_WSL_NAME = "my-loki"
-$env:LOKI_WSL_LOCATION = "D:\WSL\my-loki"
-irm https://jinyongp.dev/loki/install.ps1 | iex
-```
-
-Windows logon startup is enabled by default. Set
-`LOKI_WSL_AUTOSTART=0` before installation to disable it.
-
-Rerunning the Windows installer reconciles Loki-owned WSL and Windows state.
-A healthy Loki appliance is left unchanged. If the WSL distribution is already
-gone but its verified Loki connection state or startup task remains, those
-orphaned Windows resources are cleaned automatically before a fresh install.
-A verified stale Loki appliance requires confirmation because recovery
-unregisters that distribution and deletes its internal data. Interactive runs
-prompt with `[y/N]`; genuinely non-interactive runs fail closed unless
-`LOKI_WSL_REINSTALL=1` is set. That opt-in never authorizes deletion of an
-unverified distribution or unrelated Windows state.
-
-The Windows installer requires a current WSL with custom `.wsl` distribution
-support. It does not update WSL automatically. If your installed WSL is too old,
-the installer stops and tells you to run `wsl --update` yourself.
-
-### Ubuntu Linux
-
-On a supported Ubuntu host, run:
+On Ubuntu 24.04 amd64:
 
 ```sh
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-The Linux installer is also bound to one immutable release. It verifies the
-release bootstrap and host binary, then handles Docker prerequisites, workspace
-onboarding, and Loki runtime installation with explicit approval for privileged
-host changes.
+The installer verifies the release, prepares the workspace, and handles required
+host prerequisites with explicit approval.
 
-The current native Linux target is Ubuntu 24.04 amd64.
+## Connect an MCP client
 
-## Verify the installation
+Loki exposes a **local Streamable HTTP MCP origin** protected by a bearer token.
+
+On Windows, the installer writes connection information here:
+
+```text
+%LOCALAPPDATA%\Loki\<distribution-name>\
+├── connection.json
+├── mcp-token
+└── ownership.json
+```
+
+Inspect the non-secret connection metadata with:
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\Loki\loki-mcp\connection.json" -Raw
+```
 
 On Linux:
 
 ```sh
-loki --version
-loki host status
-loki host doctor
 loki host connection
 ```
 
-A user-scoped Linux install places the CLI at `~/.local/bin/loki`. Add that
-directory to `PATH` if needed.
+A client running on the same machine can use the local origin directly if it
+supports Streamable HTTP and bearer authentication.
 
-On Windows, the installer writes local MCP origin material below:
+**ChatGPT cannot connect directly to a localhost MCP server.** The simplest
+private path is OpenAI Secure MCP Tunnel, which keeps Loki on loopback and uses
+an outbound tunnel instead of exposing Loki publicly.
 
-```text
-%LOCALAPPDATA%\Loki\<distribution-name>\
-```
+See [Connect an MCP client](docs/connect-mcp-client.md) for ChatGPT, local
+clients, and other remote-access options.
 
-`connection.json` describes the loopback-only local origin, its Streamable HTTP
-transport, and the path to the private bearer-token file. It is not a public MCP
-URL. Loki does not create DNS, TLS, tunnels, reverse proxies, VPN routes, OAuth
-providers, or hosted MCP endpoints; remote exposure is controlled by the
-operator. The token value is not printed to the terminal, and the installer
-restricts the Windows token file to the current Windows user and SYSTEM.
+## Verify
 
-The WSL appliance uses `/home/ubuntu/workspace` as its initial Loki workspace.
-The internal `ubuntu` user is precreated with UID 1000 and is not given Docker
-group membership.
-
-## What Loki can do
-
-Once connected, an assistant can:
-
-- read and edit files inside the selected workspace;
-- inspect Git status, diffs, history, and stage precise changes;
-- run finite commands and longer-lived development jobs in isolated runtime
-  resources;
-- inspect job state and output, and explicitly cancel jobs;
-- publish local previews and collect artifacts;
-- use encrypted application secrets without returning their values through MCP;
-- use optional browser automation and isolated Git signing when enabled.
-
-Optional components are not required for the base installation.
-
-## Updates and recovery
-
-Loki does not silently update itself. Host lifecycle changes are explicit:
-
-```sh
-loki host update status
-loki host update prepare
-loki host update apply
-
-loki host backup
-loki host rollback
-loki host restore BACKUP_ID
-```
-
-`update status` is local and read-only. `update prepare` discovers the current
-published immutable release, verifies its release-bound bootstrap, manifest,
-release index, release notes, and host binary, stages the verified management CLI
-by generation, prefetches the digest-pinned required/enabled OCI images, and
-records the candidate without switching the running runtime or CLI link. Status
-includes the verified release notes and Docker/Compose minimum requirements.
-`update apply` is the mutation boundary. On an interactive terminal it prints
-the prepared impact and requires confirmation. Non-interactive automation must
-pass `--approve`; `--interrupt-active-jobs` remains a separate approval for job
-interruption. Runtime generation and the persistent managed CLI then switch
-together under the lifecycle journal and recovery snapshot, so a failed or
-interrupted apply restores the previous release.
-
-The Windows appliance uses the same Loki host lifecycle internally, but it is
-installed in system scope. From PowerShell, perform appliance maintenance
-through the explicit WSL root boundary (substitute the distribution name if
-you changed it):
+Windows:
 
 ```powershell
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host update status --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host update prepare --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host update apply --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host backup --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host rollback --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host restore --system BACKUP_ID
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host status --system
+wsl -d loki-mcp --user root -- /usr/local/bin/loki host doctor --system
 ```
 
-WSL is the Windows packaging and boot boundary, not a separate implementation
-of Loki updates or rollback.
-
-## Linux unattended installation
-
-For Linux automation, pass every permitted host mutation explicitly:
+Linux:
 
 ```sh
-curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
-  --workspace /srv/workspace \
-  --create-workspace \
-  --prepare-workspace \
-  --install-prerequisites \
-  --allow-sudo-workspace \
-  --allow-sudo-docker
+loki host status
+loki host doctor
 ```
 
-Missing required input or approval fails instead of silently changing the host.
+## What Loki provides
 
-## Safety
+Once connected, an MCP client can work through Loki to:
 
-Loki separates host management from project execution. Normal MCP/project jobs
+- read and edit files inside the selected workspace;
+- inspect and modify Git state;
+- run isolated development commands and jobs;
+- publish previews and collect artifacts;
+- use encrypted application secrets without exposing their values through MCP;
+- use optional browser, GitHub, and signing integrations when enabled.
+
+Loki keeps host management separate from project execution. Normal project jobs
 do not receive the raw Docker socket, host-management state, or platform
 credentials.
 
-The Windows appliance does not put its default human user in the Docker group.
-The Linux installer does not silently add the current user to that group either.
-Runtime secrets are generated after installation; they are not embedded in the
-public WSL appliance.
-
 ## Documentation
 
-- [First install](docs/first-install.md) — Windows appliance and native Linux
-  installation, verification, overrides, and troubleshooting.
-- [Self-hosting](docs/self-hosting.md) — source-tree, Compose, and
-  maintainer-oriented deployment paths.
+- [Connect an MCP client](docs/connect-mcp-client.md) — local clients, ChatGPT,
+  Secure MCP Tunnel, and remote access.
+- [First install](docs/first-install.md) — installer options, recovery,
+  troubleshooting, and updates.
+- [Self-hosting](docs/self-hosting.md) — source-tree and maintainer deployment
+  paths.
 - [GitHub App integration](docs/github-app.md) — optional GitHub integration.
 
-Developer, architecture, validation, and release-engineering records are under
+Architecture, migration, validation, and release-engineering records are under
 [docs](docs/) and are not required for normal installation.
 
 ## License
 
-Loki is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
