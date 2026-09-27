@@ -503,7 +503,7 @@ try {
 
     $connectionFile = Join-Path $stateDir "connection.json"
     $flatLegacy = [ordered]@{
-        endpoint = "http://127.0.0.1:$mcpPort/mcp"
+        endpoint = "http://127.0.0.1:18765/mcp"
         transport = "streamable-http"
         authentication = "bearer-token-file"
         token_file = $tokenPath

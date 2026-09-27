@@ -165,6 +165,7 @@ func TestWindowsFrontendPrecutoverAcceptanceCoversMigrationBoundaries(t *testing
 		"Windows status JSON does not preserve the operator schema boundary",
 		"restore did not refresh the Windows token replica from the live appliance",
 		"non-interactive stale reinstall succeeded without explicit approval",
+		"endpoint = \"http://127.0.0.1:18765/mcp\"",
 		"verified legacy orphan recovery failed",
 		"verified Windows uninstall failed",
 		"fresh reinstall after uninstall failed",
