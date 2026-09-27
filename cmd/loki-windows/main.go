@@ -56,5 +56,5 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func printUsage(stderr io.Writer) {
-	fmt.Fprintln(stderr, "usage: loki version [--json] | install [OPTIONS] | status [OPTIONS] | doctor [OPTIONS] | connection [OPTIONS] | update status|prepare|apply [OPTIONS] | backup [OPTIONS] | rollback [OPTIONS] | restore [OPTIONS] BACKUP_ID | uninstall [OPTIONS]")
+	fmt.Fprintln(stderr, "usage: loki version [--json] | install [OPTIONS] | status [OPTIONS] | doctor [OPTIONS] | connection [OPTIONS] | connect [COMMAND] | update status|prepare|apply [OPTIONS] | backup [OPTIONS] | rollback [OPTIONS] | restore [OPTIONS] BACKUP_ID | uninstall [OPTIONS]")
 }

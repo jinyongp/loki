@@ -220,6 +220,36 @@ func (manager ConnectionManager) Status(ctx context.Context, distribution, provi
 	return ManagedConnectionStatus{Configured: true, State: state, Runtime: status}, nil
 }
 
+func (manager ConnectionManager) ValidateEnabled(ctx context.Context, distribution string) (int, error) {
+	states, err := manager.Store.List(distribution)
+	if err != nil {
+		return 0, err
+	}
+	registry, err := manager.registry()
+	if err != nil {
+		return 0, err
+	}
+	enabled := 0
+	for _, state := range states {
+		if !state.Enabled {
+			continue
+		}
+		adapter, ok := registry[state.Provider]
+		if !ok {
+			return 0, fmt.Errorf("enabled managed connection uses unsupported provider %q", state.Provider)
+		}
+		runtime, runtimeErr := manager.runtime(ctx, distribution, adapter)
+		if runtimeErr != nil {
+			return 0, runtimeErr
+		}
+		if err = validateStateAgainstRuntime(state, runtime); err != nil {
+			return 0, err
+		}
+		enabled++
+	}
+	return enabled, nil
+}
+
 func (manager ConnectionManager) ReconcileEnabled(ctx context.Context, distribution string) error {
 	states, err := manager.Store.List(distribution)
 	if err != nil {
@@ -333,6 +363,9 @@ func (manager ConnectionManager) prepareSetup(
 	}
 	runtime, err := manager.runtime(ctx, distribution, adapter)
 	if err != nil {
+		if present {
+			return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
+		}
 		cleanupErr := manager.Store.Remove(ctx, distribution, provider)
 		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, errors.Join(err, cleanupErr)
 	}

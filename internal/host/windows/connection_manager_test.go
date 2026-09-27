@@ -26,8 +26,9 @@ func (helpers *fakeConnectionHelpers) Ensure(_ context.Context, id, platform str
 }
 
 type fakeConnectionStore struct {
-	states map[string]ConnectionState
-	roots  map[string]string
+	states      map[string]ConnectionState
+	roots       map[string]string
+	removeCalls []string
 }
 
 func newFakeConnectionStore() *fakeConnectionStore {
@@ -80,7 +81,10 @@ func (store *fakeConnectionStore) List(distribution string) ([]ConnectionState, 
 }
 
 func (store *fakeConnectionStore) Remove(_ context.Context, distribution, provider string) error {
-	delete(store.states, connectionKey(distribution, provider))
+	key := connectionKey(distribution, provider)
+	store.removeCalls = append(store.removeCalls, key)
+	delete(store.states, key)
+	delete(store.roots, key)
 	return nil
 }
 
@@ -265,6 +269,47 @@ func TestConnectionManagerActivationRollsBackWhenStartupTaskFails(t *testing.T) 
 	}
 	if got := adapter.calls; !reflect.DeepEqual(got, []string{"setup", "status", "stop"}) {
 		t.Fatalf("adapter rollback calls=%v", got)
+	}
+}
+
+func TestConnectionManagerHelperFailureCleansOnlyFreshProviderRoot(t *testing.T) {
+	manager, _, helpers, store, _ := connectionManagerFixture()
+	helpers.err = errors.New("helper unavailable")
+	if err := manager.Setup(t.Context(), "loki-mcp", "provider-one"); err == nil {
+		t.Fatal("helper failure ignored")
+	}
+	key := connectionKey("loki-mcp", "provider-one")
+	if !reflect.DeepEqual(store.removeCalls, []string{key}) {
+		t.Fatalf("fresh helper failure cleanup calls=%v", store.removeCalls)
+	}
+	if _, exists := store.roots[key]; exists {
+		t.Fatal("fresh helper failure left provider root")
+	}
+}
+
+func TestConnectionManagerHelperFailurePreservesExistingState(t *testing.T) {
+	manager, _, helpers, store, _ := connectionManagerFixture()
+	previous := ConnectionState{
+		SchemaVersion: 1, Distribution: "loki-mcp", Provider: "provider-one", Enabled: false,
+		HelperID: helpers.helper.Helper.ID, HelperVersion: helpers.helper.Helper.Version,
+		HelperPlatform: helpers.helper.Helper.Platform,
+	}
+	if err := store.Write(t.Context(), previous); err != nil {
+		t.Fatal(err)
+	}
+	helpers.err = errors.New("helper unavailable")
+	if err := manager.Setup(t.Context(), "loki-mcp", "provider-one"); err == nil {
+		t.Fatal("helper failure ignored")
+	}
+	current, present, err := store.Read("loki-mcp", "provider-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !present || current != previous {
+		t.Fatalf("existing state changed: present=%v current=%+v", present, current)
+	}
+	if len(store.removeCalls) != 0 {
+		t.Fatalf("existing state cleanup was attempted: %v", store.removeCalls)
 	}
 }
 

@@ -49,8 +49,7 @@ func runWindowsCommand(args []string, stdout, stderr io.Writer) int {
 	case "uninstall":
 		return runUninstall(args[1:], stdout, stderr)
 	case "connect":
-		fmt.Fprintln(stderr, "managed connection commands are not available in this release candidate")
-		return 2
+		return runConnect(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown Windows Loki command %q\n", args[0])
 		printUsage(stderr)
@@ -288,6 +287,226 @@ func runConnection(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func runConnect(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return runConnectOverview(args, stdout, stderr)
+	}
+	switch args[0] {
+	case "status":
+		return runConnectStatus(args[1:], stdout, stderr)
+	case "setup", "start", "stop", "remove":
+		return runConnectMutation(args[0], args[1:], stdout, stderr)
+	case "startup":
+		return runConnectStartup(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintln(stderr, "usage: loki connect [--distribution NAME] | connect status [OPTIONS] [PROVIDER] | connect setup|start|stop|remove [--distribution NAME] PROVIDER")
+		return 2
+	}
+}
+
+func runConnectOverview(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connect", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if code := runConnection([]string{"--distribution", *distribution}, stdout, stderr); code != 0 {
+		return code
+	}
+	adapters := windowshost.WindowsConnectionAdapters()
+	if len(adapters) == 0 {
+		fmt.Fprintln(stdout, "Managed remote providers: none in this release.")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Managed remote providers:")
+	for _, adapter := range adapters {
+		fmt.Fprintf(stdout, "  %s\n", adapter.Provider())
+	}
+	return 0
+}
+
+func runConnectStatus(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connect status", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
+	if err := flags.Parse(args); err != nil || flags.NArg() > 1 {
+		return 2
+	}
+	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	manager, err := newWindowsConnectionManager()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if flags.NArg() == 1 {
+		provider := flags.Arg(0)
+		status, statusErr := manager.Status(context.Background(), *distribution, provider)
+		if statusErr != nil {
+			fmt.Fprintln(stderr, statusErr)
+			return 1
+		}
+		if *jsonOutput {
+			if err = json.NewEncoder(stdout).Encode(struct {
+				Provider string                              `json:"provider"`
+				Status   windowshost.ManagedConnectionStatus `json:"status"`
+			}{Provider: provider, Status: status}); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			return 0
+		}
+		if !status.Configured {
+			fmt.Fprintf(stdout, "%s: not configured\n", provider)
+			return 0
+		}
+		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t)\n",
+			provider, status.Runtime.State, status.State.Enabled, status.Runtime.Healthy)
+		return 0
+	}
+
+	providers, err := manager.Providers()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	type providerStatus struct {
+		Provider string                              `json:"provider"`
+		Status   windowshost.ManagedConnectionStatus `json:"status"`
+	}
+	statuses := make([]providerStatus, 0, len(providers))
+	for _, provider := range providers {
+		status, statusErr := manager.Status(context.Background(), *distribution, provider)
+		if statusErr != nil {
+			fmt.Fprintln(stderr, statusErr)
+			return 1
+		}
+		statuses = append(statuses, providerStatus{Provider: provider, Status: status})
+	}
+	if *jsonOutput {
+		if err = json.NewEncoder(stdout).Encode(struct {
+			SchemaVersion int              `json:"schema_version"`
+			Distribution  string           `json:"distribution"`
+			Providers     []providerStatus `json:"providers"`
+		}{SchemaVersion: 1, Distribution: *distribution, Providers: statuses}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+	if len(statuses) == 0 {
+		fmt.Fprintln(stdout, "No managed remote connection providers are compiled into this release.")
+		return 0
+	}
+	for _, item := range statuses {
+		if !item.Status.Configured {
+			fmt.Fprintf(stdout, "%s: not configured\n", item.Provider)
+			continue
+		}
+		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t)\n",
+			item.Provider, item.Status.Runtime.State, item.Status.State.Enabled, item.Status.Runtime.Healthy)
+	}
+	return 0
+}
+
+func runConnectMutation(action string, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connect "+action, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
+		fmt.Fprintf(stderr, "usage: loki connect %s [--distribution NAME] PROVIDER\n", action)
+		return 2
+	}
+	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	provider := flags.Arg(0)
+	manager, err := newWindowsConnectionManager()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	ctx := context.Background()
+	switch action {
+	case "setup":
+		err = manager.Setup(ctx, *distribution, provider)
+	case "start":
+		err = manager.Start(ctx, *distribution, provider)
+	case "stop":
+		err = manager.Stop(ctx, *distribution, provider)
+	case "remove":
+		err = manager.Remove(ctx, *distribution, provider)
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Managed %s connection %s completed.\n", provider, action)
+	return 0
+}
+
+func runConnectStartup(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connect startup", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	manager, err := newWindowsConnectionManager()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	expected, err := expectedInstallation(*distribution, windowshost.InstallOptions{Distribution: *distribution})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	localAppData, _, err := windowsEnvironmentRoots()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	controller := windowshost.NewWindowsConnectionStartupController(localAppData, &manager)
+	result, err := controller.Run(context.Background(), expected)
+	if err != nil {
+		fmt.Fprintf(stderr, "managed connection startup failed after %d health attempts: %v\n", result.HealthAttempts, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Managed connection startup restored %d enabled connection(s); keepalive_started=%t health_attempts=%d.\n",
+		result.EnabledConnections, result.KeepaliveStarted, result.HealthAttempts)
+	return 0
+}
+
+func newWindowsConnectionManager() (windowshost.ConnectionManager, error) {
+	binding, err := windowshost.CurrentReleaseBinding()
+	if err != nil {
+		return windowshost.ConnectionManager{}, err
+	}
+	localAppData, _, err := windowsEnvironmentRoots()
+	if err != nil {
+		return windowshost.ConnectionManager{}, err
+	}
+	return windowshost.NewWindowsConnectionManager(
+		binding,
+		localAppData,
+		windowshost.WindowsConnectionAdapters(),
+	)
+}
+
 func runUpdate(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: loki update status|prepare|apply [--distribution NAME] [--approve] [--interrupt-active-jobs]")
@@ -421,7 +640,12 @@ func runUninstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = windowshost.NewWindowsUninstallController(nil).Run(context.Background(), expected, *approve); err != nil {
+	connections, err := newWindowsConnectionManager()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err = windowshost.NewWindowsUninstallController(&connections).Run(context.Background(), expected, *approve); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -436,7 +660,12 @@ func refreshAfterLifecycleMutation(distribution string, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	result, err := windowshost.NewWindowsReplicaSynchronizer(nil).Sync(context.Background(), expected)
+	connections, err := newWindowsConnectionManager()
+	if err != nil {
+		fmt.Fprintln(stderr, "appliance lifecycle mutation succeeded, but managed connection reconciliation is unavailable:", err)
+		return 1
+	}
+	result, err := windowshost.NewWindowsReplicaSynchronizer(&connections).Sync(context.Background(), expected)
 	if err != nil {
 		fmt.Fprintln(stderr, "appliance lifecycle mutation succeeded, but Windows connection resync failed:", err)
 		return 1
