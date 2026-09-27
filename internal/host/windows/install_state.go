@@ -234,14 +234,29 @@ func normalizeWindowsPath(raw string) (string, bool) {
 	}
 	if strings.HasPrefix(value, "//") {
 		parts := strings.Split(strings.TrimPrefix(value, "//"), "/")
-		if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		if len(parts) < 2 || parts[0] == "" || parts[1] == "" ||
+			parts[0] == "." || parts[0] == ".." || parts[1] == "." || parts[1] == ".." {
 			return "", false
 		}
-		cleanTail := path.Clean("/" + strings.Join(parts, "/"))
-		if cleanTail == "/" || strings.HasPrefix(cleanTail, "/../") {
-			return "", false
+		root := "//" + parts[0] + "/" + parts[1]
+		stack := make([]string, 0, len(parts)-2)
+		for _, component := range parts[2:] {
+			switch component {
+			case "", ".":
+				continue
+			case "..":
+				if len(stack) == 0 {
+					return "", false
+				}
+				stack = stack[:len(stack)-1]
+			default:
+				stack = append(stack, component)
+			}
 		}
-		return "//" + strings.TrimPrefix(cleanTail, "/"), true
+		if len(stack) == 0 {
+			return root, true
+		}
+		return root + "/" + strings.Join(stack, "/"), true
 	}
 	return "", false
 }
@@ -309,22 +324,8 @@ func ClassifyDistribution(probe DistributionProbe) DistributionState {
 	if !probe.Present {
 		return DistributionState{State: DistributionAbsent}
 	}
-	if probe.Manifest.ExitCode != 0 || probe.Version.ExitCode != 0 {
-		return DistributionState{State: DistributionForeign}
-	}
-	var manifest struct {
-		Generation struct {
-			Spec struct {
-				Version string `json:"version"`
-			} `json:"spec"`
-		} `json:"generation"`
-	}
-	if json.Unmarshal([]byte(probe.Manifest.Stdout), &manifest) != nil {
-		return DistributionState{State: DistributionForeign}
-	}
-	version := manifest.Generation.Spec.Version
-	if !applianceVersionPattern.MatchString(version) ||
-		!strings.HasPrefix(probe.Version.Stdout, "loki "+version) {
+	version, owned := distributionIdentity(probe.Manifest, probe.Version)
+	if !owned {
 		return DistributionState{State: DistributionForeign}
 	}
 	if probe.Provisioned.ExitCode == 0 {

@@ -181,9 +181,6 @@ func RemoveOwnedWindowsState(
 			return errors.New("refusing to remove manifest-owned WSL location because it is not a real directory")
 		}
 	}
-	if err := remover.RemoveAll(expected.StateDir); err != nil {
-		return fmt.Errorf("remove Windows state: %w", err)
-	}
 	if state.Kind == WindowsStateManifest && state.InstallLocation != "" {
 		locationInfo, statErr := filesystem.Lstat(state.InstallLocation)
 		if statErr != nil {
@@ -194,9 +191,14 @@ func RemoveOwnedWindowsState(
 				return errors.New("refusing to remove manifest-owned WSL location because it changed type")
 			}
 			if err := remover.RemoveAll(state.InstallLocation); err != nil {
+				// Keep stateDir/ownership.json until every manifest-owned external
+				// resource is gone so a later retry can still prove authority.
 				return fmt.Errorf("remove manifest-owned WSL location: %w", err)
 			}
 		}
+	}
+	if err := remover.RemoveAll(expected.StateDir); err != nil {
+		return fmt.Errorf("remove Windows state: %w", err)
 	}
 	return nil
 }

@@ -84,7 +84,7 @@ func TestRemoveOwnedWindowsStateRevalidatesPaths(t *testing.T) {
 	if err := RemoveOwnedWindowsState(fs, remover, expected, state); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(remover.paths, []string{expected.StateDir, location}) {
+	if !reflect.DeepEqual(remover.paths, []string{location, expected.StateDir}) {
 		t.Fatalf("removed %#v", remover.paths)
 	}
 	fs.paths[location] = StatePath{Exists: true, Directory: true, Reparse: true}
@@ -94,6 +94,36 @@ func TestRemoveOwnedWindowsStateRevalidatesPaths(t *testing.T) {
 	}
 	if len(remover.paths) != 0 {
 		t.Fatalf("unsafe state mutated: %#v", remover.paths)
+	}
+}
+
+func TestRemoveOwnedWindowsStatePreservesProofWhenCustomLocationRemovalFails(t *testing.T) {
+	expected := fixtureExpected()
+	location := `D:\Loki\loki-mcp`
+	ownership := joinWindowsPath(expected.StateDir, "ownership.json")
+	fs := fakeStateFilesystem{
+		paths: map[string]StatePath{
+			expected.StateDir: {Exists: true, Directory: true},
+			ownership:         {Exists: true, Regular: true},
+			location:          {Exists: true, Directory: true},
+		},
+		dirs:  map[string][]string{expected.StateDir: {"connection.json", "mcp-token", "ownership.json"}},
+		files: map[string][]byte{ownership: manifestFixture(t, expected)},
+		errs:  map[string]error{},
+	}
+	state, err := InspectWindowsState(fs, expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !WindowsPathEqual(state.InstallLocation, location) {
+		t.Fatalf("manifest location=%q want=%q", state.InstallLocation, location)
+	}
+	remover := &fakeRemover{err: errors.New("location locked")}
+	if err := RemoveOwnedWindowsState(fs, remover, expected, state); err == nil {
+		t.Fatal("custom location removal failure was ignored")
+	}
+	if !reflect.DeepEqual(remover.paths, []string{location}) {
+		t.Fatalf("ownership proof was removed before custom location: %#v", remover.paths)
 	}
 }
 

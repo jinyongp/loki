@@ -3,6 +3,7 @@ package windows
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -151,6 +152,94 @@ func TestInstallMatrixOrphanCleanupAndFreshInstall(t *testing.T) {
 	if result.Disposition != InstallCompleted || fresh.calls != 1 ||
 		len(remover.removed) != 1 || !WindowsPathEqual(remover.removed[0], expected.StateDir) {
 		t.Fatalf("orphan recovery result=%#v fresh=%d removed=%#v", result, fresh.calls, remover.removed)
+	}
+}
+
+func TestInstallMatrixFreshPortConflictDoesNotMutate(t *testing.T) {
+	expected := fixtureExpected()
+	fs := fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}}
+	runner := &fakeNativeRunner{results: []NativeProbe{{Stdout: ""}}}
+	tasks := &fakeTaskManager{}
+	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
+	fresh := &fakeFreshInstaller{}
+	port := &fakePortProbe{available: false}
+	controller := InstallController{
+		Collector:  collector,
+		Recovery:   RecoveryExecutor{Collector: collector, Tasks: tasks, Filesystem: fs, Remover: &fakeRemover{}},
+		Port:       port,
+		Fresh:      fresh,
+		Filesystem: fs,
+	}
+	_, err := controller.Run(context.Background(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}, nil)
+	var blocked InstallBlockedError
+	if !errors.As(err, &blocked) || blocked.Reason != "mcp-port-in-use" {
+		t.Fatalf("unexpected fresh port conflict: %v", err)
+	}
+	if fresh.calls != 0 || tasks.removed != 0 || len(runner.calls) != 2 ||
+		!reflect.DeepEqual(runner.calls[0].arguments, []string{"--help"}) ||
+		!reflect.DeepEqual(runner.calls[1].arguments, []string{"--list", "--quiet"}) {
+		t.Fatalf("fresh port conflict mutated state: fresh=%d tasks=%d calls=%#v", fresh.calls, tasks.removed, runner.calls)
+	}
+}
+
+func TestInstallMatrixHealthyKeepaliveTaskIsAdoptedUnchanged(t *testing.T) {
+	expected := fixtureExpected()
+	snapshot := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionHealthy},
+		Windows: WindowsState{
+			Present: true, Owned: true, Kind: WindowsStateManifest,
+			MCPPort: 18765, AutoStart: true, InstallLocation: `D:\Loki\loki-mcp`,
+		},
+		StartupTask: StartupTaskState{Present: true, Owned: true},
+	}
+	port := &fakePortProbe{available: true}
+	fresh := &fakeFreshInstaller{}
+	controller := controllerFixture(t, snapshot, port, fresh)
+	result, err := controller.Run(context.Background(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Disposition != InstallNoop || fresh.calls != 0 {
+		t.Fatalf("healthy adoption result=%#v fresh=%d", result, fresh.calls)
+	}
+	if len(port.calls) != 0 {
+		t.Fatalf("healthy adoption unexpectedly probed install port: %#v", port.calls)
+	}
+}
+
+func TestInstallMatrixTransactionalFreshRollbackAndRetry(t *testing.T) {
+	expected := fixtureExpected()
+	fs := fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}}
+	runner := &fakeNativeRunner{results: []NativeProbe{{Stdout: ""}, {Stdout: ""}}}
+	tasks := &fakeTaskManager{}
+	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
+	platform := &fakeFreshPlatform{failStage: "ownership"}
+	controller := InstallController{
+		Collector:  collector,
+		Recovery:   RecoveryExecutor{Collector: collector, Tasks: tasks, Filesystem: fs, Remover: &fakeRemover{}},
+		Port:       &fakePortProbe{available: true},
+		Fresh:      TransactionalFreshInstaller{Platform: platform},
+		Filesystem: fs,
+	}
+	options := InstallOptions{Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true}
+	if _, err := controller.Run(context.Background(), expected, options, nil); err == nil {
+		t.Fatal("transactional fresh failure was ignored")
+	}
+	if len(platform.rollback) != 1 || !platform.rollback[0].CreatedDistribution ||
+		!platform.rollback[0].CreatedStateDir || !platform.rollback[0].CreatedStartupTask {
+		t.Fatalf("rollback transaction=%#v calls=%#v", platform.rollback, platform.calls)
+	}
+	platform.failStage = ""
+	result, err := controller.Run(context.Background(), expected, options, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Disposition != InstallCompleted || len(platform.rollback) != 1 {
+		t.Fatalf("retry result=%#v rollback=%#v calls=%#v", result, platform.rollback, platform.calls)
 	}
 }
 

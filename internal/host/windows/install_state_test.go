@@ -192,6 +192,16 @@ func TestWindowsPathSafety(t *testing.T) {
 	if !SafeOwnedInstallLocation(`D:\Loki\loki-mcp`, state) {
 		t.Fatal("independent install location rejected")
 	}
+	if !WindowsPathEqual(`\\Server\Share\Loki\`, `//server/share/loki`) {
+		t.Fatal("UNC path equality failed")
+	}
+	if _, ok := normalizeWindowsPath(`\\server\share\..\escape`); ok {
+		t.Fatal("UNC path escaped above its share root")
+	}
+	if normalized, ok := normalizeWindowsPath(`\\server\share\folder\..\loki`); !ok ||
+		!strings.EqualFold(normalized, "//server/share/loki") {
+		t.Fatalf("UNC normalization failed: %q ok=%v", normalized, ok)
+	}
 }
 
 func TestClassifyDistribution(t *testing.T) {
