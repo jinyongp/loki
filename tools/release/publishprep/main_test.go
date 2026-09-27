@@ -73,6 +73,7 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		"synthetic-windows-frontend",
 		commit,
 		"1.2.3",
+		"2026-09-22T12:00:00Z",
 		hex.EncodeToString(wslSumForWindows[:]),
 		strconv.Itoa(len(wslRaw)),
 		hex.EncodeToString(catalogSumForWindows[:]),

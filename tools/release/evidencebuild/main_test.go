@@ -48,6 +48,7 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	windowsBody := strings.Join([]string{
 		"synthetic-windows-frontend",
 		"1.2.3",
+		"2026-09-22T07:30:00Z",
 		strings.Repeat("a", 40),
 		hex.EncodeToString(wslSumForWindows[:]),
 		strconv.Itoa(len(wslBody)),

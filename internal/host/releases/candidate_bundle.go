@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -109,6 +110,7 @@ func verifyCandidateWindowsFrontendBinding(root string, evidence CandidateEviden
 	required := []string{
 		evidence.SourceRevision,
 		evidence.Generation.Spec.Version,
+		evidence.Generation.Spec.ReleasedAt.UTC().Truncate(time.Second).Format(time.RFC3339),
 		evidence.WSLAppliance.SHA256,
 		fmt.Sprintf("%d", evidence.WSLAppliance.Length),
 		evidence.ConnectHelperCatalog.SHA256,

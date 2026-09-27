@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -227,6 +228,7 @@ func assemble(cfg options) error {
 	if err = verifyWindowsFrontendBinding(windowsFrontendRaw, windowsFrontendExpectation{
 		SourceRevision: strings.TrimSpace(cfg.SourceRevision),
 		Version:        manifest.Generation.Spec.Version,
+		ReleasedAt:     manifest.Generation.Spec.ReleasedAt.UTC().Truncate(time.Second).Format(time.RFC3339),
 		WSL:            wslEvidence,
 		HelperCatalog:  connectHelperCatalogEvidence,
 	}); err != nil {
@@ -330,6 +332,7 @@ func assemble(cfg options) error {
 type windowsFrontendExpectation struct {
 	SourceRevision string
 	Version        string
+	ReleasedAt     string
 	WSL            releases.FileEvidence
 	HelperCatalog  releases.FileEvidence
 }
@@ -338,6 +341,7 @@ func verifyWindowsFrontendBinding(raw []byte, expected windowsFrontendExpectatio
 	values := []string{
 		expected.SourceRevision,
 		expected.Version,
+		expected.ReleasedAt,
 		expected.WSL.SHA256,
 		fmt.Sprintf("%d", expected.WSL.Length),
 		expected.HelperCatalog.SHA256,

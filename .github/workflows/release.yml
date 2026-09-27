@@ -711,7 +711,7 @@ jobs:
           path: ${{ runner.temp }}/candidate
 
       - name: Restore candidate executable modes
-        run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap"
+        run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap" "$RUNNER_TEMP/candidate/inputs/loki-windows-amd64.exe"
 
       - name: Build canonical toolchain bundle
         run: ./scripts/build/build-toolchain-bundle.sh "$RUNNER_TEMP/toolchain-bundle"
@@ -858,7 +858,7 @@ jobs:
           path: ${{ runner.temp }}/candidate
 
       - name: Restore candidate executable modes
-        run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap"
+        run: chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap" "$RUNNER_TEMP/candidate/inputs/loki-windows-amd64.exe"
 
       - name: Prepare public assets and Pages installer
         env:
