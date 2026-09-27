@@ -67,7 +67,11 @@ func TestInstallMatrixStaleApprovalDeniedAndApproved(t *testing.T) {
 			stalePreflightResults(expected.Distribution)...,
 		)
 		results = append(results,
+			NativeProbe{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+			NativeProbe{Stdout: "loki 0.1.19"},
 			NativeProbe{},
+			NativeProbe{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+			NativeProbe{Stdout: "loki 0.1.19"},
 			NativeProbe{},
 			NativeProbe{Stdout: ""},
 			NativeProbe{Stdout: ""},
@@ -93,7 +97,7 @@ func TestInstallMatrixStaleApprovalDeniedAndApproved(t *testing.T) {
 		if result.Disposition != InstallCompleted || fresh.calls != 1 {
 			t.Fatalf("stale approved result=%#v fresh=%d", result, fresh.calls)
 		}
-		if len(runner.calls) != 17 {
+		if len(runner.calls) != 21 {
 			t.Fatalf("unexpected stale recovery calls=%#v", runner.calls)
 		}
 	})

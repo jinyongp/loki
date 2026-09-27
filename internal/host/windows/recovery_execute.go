@@ -53,10 +53,20 @@ func (executor RecoveryExecutor) Recover(
 				return plan, err
 			}
 		case RecoveryTerminateDistro:
+			if err := executor.Collector.WSL.VerifyDistributionIdentity(
+				ctx, expected.Distribution, live.Distribution.Version,
+			); err != nil {
+				return plan, err
+			}
 			if err := executor.Collector.WSL.Terminate(ctx, expected.Distribution); err != nil {
 				return plan, err
 			}
 		case RecoveryUnregisterDistro:
+			if err := executor.Collector.WSL.VerifyDistributionIdentity(
+				ctx, expected.Distribution, live.Distribution.Version,
+			); err != nil {
+				return plan, err
+			}
 			if err := executor.Collector.WSL.Unregister(ctx, expected.Distribution); err != nil {
 				return plan, err
 			}

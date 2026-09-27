@@ -351,6 +351,28 @@ func ClassifyDistribution(probe DistributionProbe) DistributionState {
 	return DistributionState{State: DistributionStale, Version: version}
 }
 
+func distributionIdentity(manifestProbe, versionProbe NativeProbe) (string, bool) {
+	if manifestProbe.ExitCode != 0 || versionProbe.ExitCode != 0 {
+		return "", false
+	}
+	var manifest struct {
+		Generation struct {
+			Spec struct {
+				Version string `json:"version"`
+			} `json:"spec"`
+		} `json:"generation"`
+	}
+	if json.Unmarshal([]byte(manifestProbe.Stdout), &manifest) != nil {
+		return "", false
+	}
+	version := manifest.Generation.Spec.Version
+	if !applianceVersionPattern.MatchString(version) ||
+		!strings.HasPrefix(versionProbe.Stdout, "loki "+version) {
+		return "", false
+	}
+	return version, true
+}
+
 func parseSystemdProperties(raw string) map[string]string {
 	values := map[string]string{}
 	for _, line := range strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n") {

@@ -144,3 +144,32 @@ func TestWSLRunnerStartErrorIsNotExitCode(t *testing.T) {
 		t.Fatal("runner start error was ignored")
 	}
 }
+
+func TestVerifyDistributionIdentityRequiresApprovedVersion(t *testing.T) {
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+		{Stdout: "loki 0.1.19"},
+	}}
+	client := WSLClient{Runner: runner, Exe: "wsl.exe"}
+	if err := client.VerifyDistributionIdentity(context.Background(), "loki-mcp", "0.1.19"); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"-d", "loki-mcp", "--user", "root", "--exec", "/bin/cat", "/usr/lib/loki-appliance/release-manifest.json"},
+		{"-d", "loki-mcp", "--user", "root", "--exec", "/usr/lib/loki-appliance/loki", "version"},
+	}
+	for index := range want {
+		if !reflect.DeepEqual(runner.calls[index].arguments, want[index]) {
+			t.Fatalf("call %d=%#v want %#v", index, runner.calls[index], want[index])
+		}
+	}
+
+	runner = &fakeNativeRunner{results: []NativeProbe{
+		{Stdout: `{"generation":{"spec":{"version":"0.1.20"}}}`},
+		{Stdout: "loki 0.1.20"},
+	}}
+	client.Runner = runner
+	if err := client.VerifyDistributionIdentity(context.Background(), "loki-mcp", "0.1.19"); err == nil {
+		t.Fatal("changed Loki distribution identity was accepted")
+	}
+}

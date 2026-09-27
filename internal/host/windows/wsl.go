@@ -97,6 +97,27 @@ func (client WSLClient) DistributionPresent(ctx context.Context, distribution st
 	return false, nil
 }
 
+func (client WSLClient) VerifyDistributionIdentity(ctx context.Context, distribution, expectedVersion string) error {
+	if strings.TrimSpace(expectedVersion) == "" {
+		return errors.New("expected Loki distribution version is empty")
+	}
+	manifest, err := client.run(ctx, "-d", distribution, "--user", "root", "--exec",
+		"/bin/cat", "/usr/lib/loki-appliance/release-manifest.json")
+	if err != nil {
+		return err
+	}
+	version, err := client.run(ctx, "-d", distribution, "--user", "root", "--exec",
+		"/usr/lib/loki-appliance/loki", "version")
+	if err != nil {
+		return err
+	}
+	actualVersion, owned := distributionIdentity(manifest, version)
+	if !owned || actualVersion != expectedVersion {
+		return fmt.Errorf("WSL distribution %q no longer matches approved Loki appliance identity", distribution)
+	}
+	return nil
+}
+
 func (client WSLClient) ProbeDistribution(ctx context.Context, distribution string, present bool) (DistributionProbe, error) {
 	probe := DistributionProbe{Present: present}
 	if !present {

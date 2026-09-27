@@ -195,6 +195,86 @@ func TestRecoveryExecutorRejectsOwnershipDriftBeforeMutation(t *testing.T) {
 	}
 }
 
+func TestRecoveryExecutorRevalidatesDistroIdentityBeforeTerminate(t *testing.T) {
+	expected := fixtureExpected()
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{Stdout: expected.Distribution},
+		{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+		{Stdout: "loki 0.1.19"},
+		{ExitCode: 0},
+		{ExitCode: 1},
+		{ExitCode: 0, Stdout: `{"schema_version":1}`},
+		{Stdout: `{"generation":{"spec":{"version":"9.9.9"}}}`},
+		{Stdout: "loki 9.9.9"},
+	}}
+	fs := fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}}
+	tasks := &fakeTaskManager{}
+	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
+	executor := RecoveryExecutor{Collector: collector, Tasks: tasks, Filesystem: fs, Remover: &fakeRemover{}}
+	approved := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionStale, Version: "0.1.19"},
+		Windows:      WindowsState{Kind: WindowsStateAbsent},
+	}
+
+	if _, err := executor.Recover(context.Background(), expected, approved, true); err == nil {
+		t.Fatal("changed WSL identity was accepted")
+	}
+	if len(runner.calls) < 8 {
+		t.Fatalf("identity revalidation was not reached: %#v", runner.calls)
+	}
+	for _, call := range runner.calls {
+		if reflect.DeepEqual(call.arguments, []string{"--terminate", expected.Distribution}) ||
+			reflect.DeepEqual(call.arguments, []string{"--unregister", expected.Distribution}) {
+			t.Fatalf("changed WSL identity was mutated: %#v", runner.calls)
+		}
+	}
+}
+
+func TestRecoveryExecutorRevalidatesDistroIdentityBeforeUnregister(t *testing.T) {
+	expected := fixtureExpected()
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{Stdout: expected.Distribution},
+		{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+		{Stdout: "loki 0.1.19"},
+		{ExitCode: 0},
+		{ExitCode: 1},
+		{ExitCode: 0, Stdout: `{"schema_version":1}`},
+		{Stdout: `{"generation":{"spec":{"version":"0.1.19"}}}`},
+		{Stdout: "loki 0.1.19"},
+		{ExitCode: 0},
+		{Stdout: `{"generation":{"spec":{"version":"9.9.9"}}}`},
+		{Stdout: "loki 9.9.9"},
+	}}
+	fs := fakeStateFilesystem{paths: map[string]StatePath{}, dirs: map[string][]string{}, files: map[string][]byte{}, errs: map[string]error{}}
+	tasks := &fakeTaskManager{}
+	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
+	executor := RecoveryExecutor{Collector: collector, Tasks: tasks, Filesystem: fs, Remover: &fakeRemover{}}
+	approved := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionStale, Version: "0.1.19"},
+		Windows:      WindowsState{Kind: WindowsStateAbsent},
+	}
+
+	if _, err := executor.Recover(context.Background(), expected, approved, true); err == nil {
+		t.Fatal("changed WSL identity was accepted before unregister")
+	}
+	if len(runner.calls) < 11 {
+		t.Fatalf("second identity revalidation was not reached: %#v", runner.calls)
+	}
+	terminateCalls := 0
+	unregisterCalls := 0
+	for _, call := range runner.calls {
+		if reflect.DeepEqual(call.arguments, []string{"--terminate", expected.Distribution}) {
+			terminateCalls++
+		}
+		if reflect.DeepEqual(call.arguments, []string{"--unregister", expected.Distribution}) {
+			unregisterCalls++
+		}
+	}
+	if terminateCalls != 1 || unregisterCalls != 0 {
+		t.Fatalf("destructive WSL calls after identity drift: terminate=%d unregister=%d calls=%#v", terminateCalls, unregisterCalls, runner.calls)
+	}
+}
+
 func TestBuildRollbackPlanOnlyContainsCreatedResources(t *testing.T) {
 	if steps := BuildRollbackPlan(InstallTransaction{}); len(steps) != 0 {
 		t.Fatalf("empty transaction generated rollback %#v", steps)
