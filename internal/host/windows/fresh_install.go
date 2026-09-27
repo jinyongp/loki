@@ -11,10 +11,11 @@ type PreparedAppliance struct {
 }
 
 type ConnectionMaterial struct {
-	LocalOrigin  string
-	Transport    string
-	Reachability string
-	Token        string
+	LocalOrigin        string
+	Transport          string
+	Reachability       string
+	AuthenticationType string
+	Token              string
 }
 
 type FreshInstallPlatform interface {
