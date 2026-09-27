@@ -54,15 +54,17 @@ On Linux:
 loki host connection
 ```
 
-A client running on the same machine can use the local origin directly if it
+A client that can reach Loki's loopback origin can connect directly if it
 supports Streamable HTTP and bearer authentication.
 
-**ChatGPT cannot connect directly to a localhost MCP server.** The simplest
-private path is OpenAI Secure MCP Tunnel, which keeps Loki on loopback and uses
-an outbound tunnel instead of exposing Loki publicly.
+A client running somewhere else cannot use the machine's `127.0.0.1` address
+directly. In that case, keep Loki on loopback and choose an ingress appropriate
+for the client: a client-specific tunnel or agent, a private VPN, an SSH or
+application tunnel, or a reverse proxy. Loki does not choose or provision that
+external ingress for you.
 
-See [Connect an MCP client](docs/connect-mcp-client.md) for ChatGPT, local
-clients, and other remote-access options.
+See [Connect an MCP client](docs/connect-mcp-client.md) for the general
+connection model and provider-specific examples.
 
 ## Verify
 
@@ -97,16 +99,20 @@ credentials.
 
 ## Documentation
 
-- [Connect an MCP client](docs/connect-mcp-client.md) — local clients, ChatGPT,
-  Secure MCP Tunnel, and remote access.
-- [First install](docs/first-install.md) — installer options, recovery,
+### User guides
+
+- [First install](docs/first-install.md) — installation, recovery,
   troubleshooting, and updates.
-- [Self-hosting](docs/self-hosting.md) — source-tree and maintainer deployment
-  paths.
+- [Connect an MCP client](docs/connect-mcp-client.md) — direct and remote
+  clients, ingress choices, and provider-specific examples.
 - [GitHub App integration](docs/github-app.md) — optional GitHub integration.
 
-Architecture, migration, validation, and release-engineering records are under
-[docs](docs/) and are not required for normal installation.
+### Maintainer and developer docs
+
+- [Self-hosting](docs/self-hosting.md) — source-tree and maintainer deployment
+  paths.
+- Architecture, migration, validation, and release-engineering records are under
+  [docs](docs/).
 
 ## License
 
