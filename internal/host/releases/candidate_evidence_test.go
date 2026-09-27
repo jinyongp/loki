@@ -46,6 +46,24 @@ func candidateEvidenceFixture(t *testing.T) CandidateEvidenceInput {
 		WSLAppliance: candidateFile(
 			"inputs/loki-wsl-amd64.wsl", 789, strings.Repeat("5", 64),
 		),
+		WindowsFrontend: candidateFile(
+			"inputs/loki-windows-amd64.exe", 790, strings.Repeat("1", 64),
+		),
+		ConnectHelperCatalog: candidateFile(
+			"inputs/connect-helpers.json", 791, strings.Repeat("2", 64),
+		),
+		ConnectHelperArchive: candidateFile(
+			"inputs/connect-helper-archive.zip", 792, strings.Repeat("3", 64),
+		),
+		ConnectHelperLicense: candidateFile(
+			"inputs/connect-helper-licenses.txt", 793, strings.Repeat("4", 64),
+		),
+		ConnectHelperNotice: candidateFile(
+			"inputs/connect-helper-NOTICE.txt", 794, strings.Repeat("a", 64),
+		),
+		ConnectHelperSPDX: candidateFile(
+			"inputs/connect-helper.spdx.json", 795, strings.Repeat("b", 64),
+		),
 		ToolchainCatalog: candidateFile(
 			"inputs/toolchain-catalog.json", manifest.ToolchainCatalog.Length, manifest.ToolchainCatalog.SHA256,
 		),

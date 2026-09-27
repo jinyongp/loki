@@ -46,15 +46,19 @@ func VerifyCandidateBundle(root string) (CandidateEvidence, error) {
 	}
 	files := []FileEvidence{
 		evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
-		evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
+		evidence.HostAssets, evidence.WSLAppliance, evidence.WindowsFrontend, evidence.ConnectHelperCatalog,
+		evidence.ConnectHelperArchive, evidence.ConnectHelperLicense, evidence.ConnectHelperNotice, evidence.ConnectHelperSPDX,
+		evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices, evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
 	}
 	for _, item := range files {
 		if err = verifyBundleFile(root, item); err != nil {
 			return CandidateEvidence{}, err
 		}
 	}
-	for _, executable := range []FileEvidence{evidence.HostBinary, evidence.Bootstrap} {
+	if err = verifyCandidateWindowsFrontendBinding(root, evidence); err != nil {
+		return CandidateEvidence{}, err
+	}
+	for _, executable := range []FileEvidence{evidence.HostBinary, evidence.Bootstrap, evidence.WindowsFrontend} {
 		file, info, openErr := openBundleRegular(filepath.Join(root, filepath.FromSlash(executable.Path)))
 		if openErr != nil {
 			return CandidateEvidence{}, openErr
@@ -87,6 +91,35 @@ func VerifyCandidateBundle(root string) (CandidateEvidence, error) {
 		return CandidateEvidence{}, errors.New("release candidate SHA256SUMS does not match evidence")
 	}
 	return evidence, nil
+}
+
+func verifyCandidateWindowsFrontendBinding(root string, evidence CandidateEvidence) error {
+	file, _, err := openBundleRegular(filepath.Join(root, filepath.FromSlash(evidence.WindowsFrontend.Path)))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, evidence.WindowsFrontend.Length+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(raw)) != evidence.WindowsFrontend.Length {
+		return errors.New("Windows frontend changed while verifying release binding")
+	}
+	required := []string{
+		evidence.SourceRevision,
+		evidence.Generation.Spec.Version,
+		evidence.WSLAppliance.SHA256,
+		fmt.Sprintf("%d", evidence.WSLAppliance.Length),
+		evidence.ConnectHelperCatalog.SHA256,
+		fmt.Sprintf("%d", evidence.ConnectHelperCatalog.Length),
+	}
+	for _, value := range required {
+		if value == "" || !bytes.Contains(raw, []byte(value)) {
+			return errors.New("Windows frontend release binding does not match candidate evidence")
+		}
+	}
+	return nil
 }
 
 func verifyBundleFile(root string, evidence FileEvidence) error {

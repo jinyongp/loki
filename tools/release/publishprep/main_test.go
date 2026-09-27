@@ -10,10 +10,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"loki/internal/host/connect"
 	"loki/internal/host/releases"
 	"loki/tools/release/internal/bootstrapinfo"
 )
@@ -40,6 +42,42 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 	bootstrapRaw := []byte("#!/bin/sh\nexit 0\n")
 	hostAssetsRaw := []byte("host-assets")
 	wslRaw := []byte("synthetic-wsl-appliance")
+	helperArchiveRaw := []byte("synthetic-helper-archive")
+	helperLicenseRaw := []byte("synthetic-helper-license")
+	helperNoticeRaw := []byte("synthetic-helper-notice")
+	helperSPDXRaw := []byte("{\"spdxVersion\":\"SPDX-2.3\"}\n")
+	helperAsset := func(sourceName, mirrorName string, raw []byte) connect.Asset {
+		sum := sha256.Sum256(raw)
+		return connect.Asset{
+			SourceURL:    "https://example.com/releases/v1.2.3/" + sourceName,
+			SourceSHA256: hex.EncodeToString(sum[:]), SourceLength: int64(len(raw)), MirrorAsset: mirrorName,
+		}
+	}
+	helperCatalogRaw, err := connect.EncodeCatalog(connect.Catalog{
+		SchemaVersion: 1,
+		Helpers: []connect.Helper{{
+			ID: "openai-tunnel-client", Provider: "openai", Version: "1.2.3", Platform: "windows-amd64",
+			Executable: "tunnel-client.exe", ArchiveMembers: []string{"NOTICE", "tunnel-client.exe"},
+			Archive:       helperAsset("client.zip", "loki-helper-client.zip", helperArchiveRaw),
+			LicenseReport: helperAsset("licenses.txt", "loki-helper-licenses.txt", helperLicenseRaw),
+			Notice:        helperAsset("NOTICE", "loki-helper-NOTICE.txt", helperNoticeRaw),
+			SPDX:          helperAsset("client.spdx.json", "loki-helper.spdx.json", helperSPDXRaw),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wslSumForWindows := sha256.Sum256(wslRaw)
+	catalogSumForWindows := sha256.Sum256(helperCatalogRaw)
+	windowsRaw := []byte(strings.Join([]string{
+		"synthetic-windows-frontend",
+		commit,
+		"1.2.3",
+		hex.EncodeToString(wslSumForWindows[:]),
+		strconv.Itoa(len(wslRaw)),
+		hex.EncodeToString(catalogSumForWindows[:]),
+		strconv.Itoa(len(helperCatalogRaw)),
+	}, "\n"))
 	toolchainRaw := []byte("{\"version\":1}\n")
 	provenanceRaw := []byte("{\"_type\":\"https://in-toto.io/Statement/v1\"}\n")
 	noticesRaw := []byte("notices")
@@ -113,18 +151,24 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 		raw  []byte
 		mode os.FileMode
 	}{
-		"release-index.json":     {indexRaw, 0644},
-		"release-manifest.json":  {manifestRaw, 0644},
-		"loki":                   {hostRaw, 0755},
-		"loki-bootstrap":         {bootstrapRaw, 0755},
-		"host-assets.tar.gz":     {hostAssetsRaw, 0644},
-		"loki-wsl-amd64.wsl":     {wslRaw, 0644},
-		"toolchain-catalog.json": {toolchainRaw, 0644},
-		"provenance.bundle.json": {provenanceRaw, 0644},
-		"notices.tar.gz":         {noticesRaw, 0644},
-		"release-notes.md":       {notesRaw, 0644},
-		"effective-policy.json":  {policyRaw, 0644},
-		"effective-config.toml":  {configRaw, 0644},
+		"release-index.json":          {indexRaw, 0644},
+		"release-manifest.json":       {manifestRaw, 0644},
+		"loki":                        {hostRaw, 0755},
+		"loki-bootstrap":              {bootstrapRaw, 0755},
+		"host-assets.tar.gz":          {hostAssetsRaw, 0644},
+		"loki-wsl-amd64.wsl":          {wslRaw, 0644},
+		"loki-windows-amd64.exe":      {windowsRaw, 0755},
+		"connect-helpers.json":        {helperCatalogRaw, 0644},
+		"connect-helper-archive.zip":  {helperArchiveRaw, 0644},
+		"connect-helper-licenses.txt": {helperLicenseRaw, 0644},
+		"connect-helper-NOTICE.txt":   {helperNoticeRaw, 0644},
+		"connect-helper.spdx.json":    {helperSPDXRaw, 0644},
+		"toolchain-catalog.json":      {toolchainRaw, 0644},
+		"provenance.bundle.json":      {provenanceRaw, 0644},
+		"notices.tar.gz":              {noticesRaw, 0644},
+		"release-notes.md":            {notesRaw, 0644},
+		"effective-policy.json":       {policyRaw, 0644},
+		"effective-config.toml":       {configRaw, 0644},
 	}
 	for name, body := range bodies {
 		if err = os.WriteFile(filepath.Join(inputs, name), body.raw, body.mode); err != nil {
@@ -134,20 +178,26 @@ func writePublicationCandidate(t *testing.T, commit string) string {
 
 	evidence, err := releases.NewCandidateEvidence(releases.CandidateEvidenceInput{
 		SourceRevision: commit, Manifest: manifest, IndexEntry: entry,
-		CoreImage:        "ghcr.io/jinyongp/loki@" + generation.Spec.CoreImageDigest,
-		BrowserImage:     "ghcr.io/jinyongp/loki-browser@sha256:" + strings.Repeat("c", 64),
-		ReleaseIndex:     publicationFile("inputs/release-index.json", indexRaw),
-		ReleaseManifest:  publicationFile("inputs/release-manifest.json", manifestRaw),
-		HostBinary:       publicationFile("inputs/loki", hostRaw),
-		Bootstrap:        publicationFile("inputs/loki-bootstrap", bootstrapRaw),
-		HostAssets:       publicationFile("inputs/host-assets.tar.gz", hostAssetsRaw),
-		WSLAppliance:     publicationFile("inputs/loki-wsl-amd64.wsl", wslRaw),
-		ToolchainCatalog: publicationFile("inputs/toolchain-catalog.json", toolchainRaw),
-		Provenance:       publicationFile("inputs/provenance.bundle.json", provenanceRaw),
-		Notices:          publicationFile("inputs/notices.tar.gz", noticesRaw),
-		ReleaseNotes:     publicationFile("inputs/release-notes.md", notesRaw),
-		EffectivePolicy:  publicationFile("inputs/effective-policy.json", policyRaw),
-		EffectiveConfig:  publicationFile("inputs/effective-config.toml", configRaw),
+		CoreImage:            "ghcr.io/jinyongp/loki@" + generation.Spec.CoreImageDigest,
+		BrowserImage:         "ghcr.io/jinyongp/loki-browser@sha256:" + strings.Repeat("c", 64),
+		ReleaseIndex:         publicationFile("inputs/release-index.json", indexRaw),
+		ReleaseManifest:      publicationFile("inputs/release-manifest.json", manifestRaw),
+		HostBinary:           publicationFile("inputs/loki", hostRaw),
+		Bootstrap:            publicationFile("inputs/loki-bootstrap", bootstrapRaw),
+		HostAssets:           publicationFile("inputs/host-assets.tar.gz", hostAssetsRaw),
+		WSLAppliance:         publicationFile("inputs/loki-wsl-amd64.wsl", wslRaw),
+		WindowsFrontend:      publicationFile("inputs/loki-windows-amd64.exe", windowsRaw),
+		ConnectHelperCatalog: publicationFile("inputs/connect-helpers.json", helperCatalogRaw),
+		ConnectHelperArchive: publicationFile("inputs/connect-helper-archive.zip", helperArchiveRaw),
+		ConnectHelperLicense: publicationFile("inputs/connect-helper-licenses.txt", helperLicenseRaw),
+		ConnectHelperNotice:  publicationFile("inputs/connect-helper-NOTICE.txt", helperNoticeRaw),
+		ConnectHelperSPDX:    publicationFile("inputs/connect-helper.spdx.json", helperSPDXRaw),
+		ToolchainCatalog:     publicationFile("inputs/toolchain-catalog.json", toolchainRaw),
+		Provenance:           publicationFile("inputs/provenance.bundle.json", provenanceRaw),
+		Notices:              publicationFile("inputs/notices.tar.gz", noticesRaw),
+		ReleaseNotes:         publicationFile("inputs/release-notes.md", notesRaw),
+		EffectivePolicy:      publicationFile("inputs/effective-policy.json", policyRaw),
+		EffectiveConfig:      publicationFile("inputs/effective-config.toml", configRaw),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -207,10 +257,11 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 	}
 
 	want := []string{
-		"SHA256SUMS", "loki-bootstrap-linux-amd64", "loki-candidate-evidence.json",
+		"SHA256SUMS", "loki-bootstrap-linux-amd64", "loki-candidate-evidence.json", "loki-connect-helpers.json",
+		"loki-helper-NOTICE.txt", "loki-helper-client.zip", "loki-helper-licenses.txt", "loki-helper.spdx.json",
 		"loki-host-assets.tar.gz", "loki-install.ps1", "loki-install.sh", "loki-linux-amd64", "loki-notices.tar.gz",
 		"loki-provenance.bundle.json", "loki-release-index.json", "loki-release-manifest.json",
-		"loki-release-notes.md", "loki-toolchain-catalog.json", "loki-wsl-amd64.wsl",
+		"loki-release-notes.md", "loki-toolchain-catalog.json", "loki-windows-amd64.exe", "loki-wsl-amd64.wsl",
 	}
 	entries, err := os.ReadDir(filepath.Join(output, "assets"))
 	if err != nil {

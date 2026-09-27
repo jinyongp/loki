@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "helpers": [
+    {
+      "id": "openai-tunnel-client",
+      "provider": "openai",
+      "version": "0.0.15",
+      "platform": "windows-amd64",
+      "executable": "tunnel-client.exe",
+      "archive_members": [
+        "LICENSE",
+        "NOTICE",
+        "cloudflared-manifest.json",
+        "cloudflared.exe",
+        "tunnel-client-v0.0.15-windows-amd64-licenses.txt",
+        "tunnel-client-v0.0.15-windows-amd64.spdx.json",
+        "tunnel-client.exe"
+      ],
+      "archive": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.15/tunnel-client-v0.0.15-windows-amd64.zip",
+        "source_sha256": "3b53133a1e24d43f63088d843860cb1701a4c3ed6390de2e19f69089e43bddc1",
+        "source_length": 28098744,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.15-windows-amd64.zip"
+      },
+      "license_report": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.15/tunnel-client-v0.0.15-windows-amd64-licenses.txt",
+        "source_sha256": "9b9132caf4971379fa24dae57ca75a9f2ec5571dc8b2a90e7fab71c791b42c17",
+        "source_length": 13456,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.15-windows-amd64-licenses.txt"
+      },
+      "notice": {
+        "source_url": "https://raw.githubusercontent.com/openai/tunnel-client/v0.0.15/NOTICE",
+        "source_sha256": "1364c020d86ecf948b78b7c655175032068203d13aece70fb0bfe112d7802dc2",
+        "source_length": 551,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.15-NOTICE.txt"
+      },
+      "spdx": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.15/tunnel-client-v0.0.15-windows-amd64.spdx.json",
+        "source_sha256": "a2dac32715b3f5c31039ceba61e2794fcdf7a3ca0dd00fcb90eb86445d83a1df",
+        "source_length": 234305,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.15-windows-amd64.spdx.json"
+      }
+    }
+  ]
+}

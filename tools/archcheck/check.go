@@ -23,6 +23,14 @@ func validatePolicy(policy Policy) error {
 		if variant.Name == "" || variant.GOOS == "" || variant.GOARCH == "" || variantNames[variant.Name] {
 			return fmt.Errorf("invalid or duplicate architecture variant %q", variant.Name)
 		}
+		if variant.Partial && len(variant.Patterns) == 0 {
+			return fmt.Errorf("partial architecture variant %q requires package patterns", variant.Name)
+		}
+		for _, pattern := range variant.Patterns {
+			if !strings.HasPrefix(pattern, "./") || strings.Contains(pattern, "..") {
+				return fmt.Errorf("architecture variant %q has invalid package pattern %q", variant.Name, pattern)
+			}
+		}
 		variantNames[variant.Name] = true
 	}
 	for name, item := range policy.Packages {
@@ -96,16 +104,18 @@ func importMatches(path, prefix string) bool {
 	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
 
-func checkVariant(policy Policy, graph Graph) []Violation {
+func checkVariant(policy Policy, graph Graph, variant Variant) []Violation {
 	var violations []Violation
 	for name := range graph.Packages {
 		if _, ok := policy.Packages[name]; !ok {
 			violations = append(violations, Violation{"package-classification", name, "package is not classified"})
 		}
 	}
-	for name := range policy.Packages {
-		if _, ok := graph.Packages[name]; !ok {
-			violations = append(violations, Violation{"package-classification", name, "classified package is absent from this supported variant"})
+	if !variant.Partial {
+		for name := range policy.Packages {
+			if _, ok := graph.Packages[name]; !ok {
+				violations = append(violations, Violation{"package-classification", name, "classified package is absent from this supported variant"})
+			}
 		}
 	}
 
@@ -140,7 +150,7 @@ func checkVariant(policy Policy, graph Graph) []Violation {
 		}
 		violations = append(violations, checkExportRules(policy, item)...)
 	}
-	violations = append(violations, checkRoles(policy, graph)...)
+	violations = append(violations, checkRoles(policy, graph, !variant.Partial)...)
 	return violations
 }
 
@@ -205,11 +215,11 @@ func internalImportAllowed(importer, dependency string) bool {
 	return importer == parent || strings.HasPrefix(importer, parent+"/")
 }
 
-func checkRoles(policy Policy, graph Graph) []Violation {
+func checkRoles(policy Policy, graph Graph, requireRoots bool) []Violation {
 	var violations []Violation
 	for _, role := range policy.Roles {
 		if _, ok := graph.Packages[role.Root]; !ok {
-			if !role.Optional {
+			if requireRoots && !role.Optional {
 				violations = append(violations, Violation{"role-root", role.Root, "required role root is absent"})
 			}
 			continue

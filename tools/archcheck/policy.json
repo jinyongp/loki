@@ -77,6 +77,14 @@
       "to": "loki/internal/buildinfo"
     },
     {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/host/windows"
+    },
+    {
       "from": "loki/cmd/loki",
       "to": "loki/internal/config"
     },
@@ -457,6 +465,22 @@
       "to": "loki/tools/release/internal/bootstrapinfo"
     },
     {
+      "from": "loki/tools/release/publishprep",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/tools/release/windowsbuild",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/tools/release/helperfetch",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/buildinfo"
+    },
+    {
       "from": "loki/tools/toolchainfetch",
       "to": "loki/internal/work/toolchains"
     },
@@ -802,6 +826,14 @@
       ],
       "target": "cmd/<role> + app/<role>"
     },
+    "loki/cmd/loki-windows": {
+      "kind": "role",
+      "owner": "windows-host",
+      "tags": [
+        "release-trust"
+      ],
+      "target": "cmd/loki-windows"
+    },
     "loki/internal/admin": {
       "kind": "legacy-mixed",
       "owner": "host-control",
@@ -1063,6 +1095,24 @@
       ],
       "target": "host/releases"
     },
+    "loki/internal/host/connect": {
+      "kind": "host",
+      "owner": "connect",
+      "tags": [
+        "host-state",
+        "release-trust"
+      ],
+      "target": "host/connect"
+    },
+    "loki/internal/host/windows": {
+      "kind": "host-adapter",
+      "owner": "windows-host",
+      "tags": [
+        "host-state",
+        "release-trust"
+      ],
+      "target": "host/windows"
+    },
     "loki/internal/work/workspace/git": {
       "kind": "work-adapter",
       "owner": "workspace",
@@ -1201,6 +1251,15 @@
       ],
       "target": "tools/release/evidencebuild"
     },
+    "loki/tools/release/helperfetch": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling",
+        "release-trust"
+      ],
+      "target": "tools/release/helperfetch"
+    },
     "loki/tools/release/publishprep": {
       "kind": "tooling",
       "owner": "releases",
@@ -1218,6 +1277,15 @@
         "release-trust"
       ],
       "target": "tools/release/releasebuild"
+    },
+    "loki/tools/release/windowsbuild": {
+      "kind": "tooling",
+      "owner": "releases",
+      "tags": [
+        "tooling",
+        "release-trust"
+      ],
+      "target": "tools/release/windowsbuild"
     },
     "loki/tools/release/version": {
       "kind": "tooling",
@@ -1326,6 +1394,19 @@
       "name": "launcher",
       "optional": false,
       "root": "loki/cmd/launcher"
+    },
+    {
+      "forbidden_tags": [
+        "launcher-implementation",
+        "project-execution-local",
+        "mcp-wire",
+        "browser-worker",
+        "provider-private-key",
+        "devtools"
+      ],
+      "name": "windows-host",
+      "optional": true,
+      "root": "loki/cmd/loki-windows"
     }
   ],
   "third_party_rules": [
@@ -1359,6 +1440,16 @@
       "goarch": "amd64",
       "goos": "linux",
       "name": "linux-amd64",
+      "tags": []
+    },
+    {
+      "goarch": "amd64",
+      "goos": "windows",
+      "name": "windows-amd64",
+      "partial": true,
+      "patterns": [
+        "./cmd/loki-windows"
+      ],
       "tags": []
     }
   ],

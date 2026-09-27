@@ -531,6 +531,14 @@ jobs:
             --release-notes "$RUNNER_TEMP/release-notes.md" \
             --source-root "$GITHUB_WORKSPACE"
 
+      - name: Fetch reviewed connection helper inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./tools/release/helperfetch \
+            --catalog "$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json" \
+            --output "$RUNNER_TEMP/connect-helpers"
+
       - name: Build WSL appliance
         shell: bash
         run: |
@@ -538,6 +546,22 @@ jobs:
           ./scripts/build/build-wsl.sh \
             "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
             "$RUNNER_TEMP/release"
+
+      - name: Build Windows frontend
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+          RELEASED_AT: ${{ needs.preflight.outputs.released_at }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./tools/release/windowsbuild \
+            --output "$RUNNER_TEMP/loki-windows-amd64.exe" \
+            --release-tag "v$VERSION" \
+            --source-revision "$GITHUB_SHA" \
+            --released-at "$RELEASED_AT" \
+            --wsl-appliance "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
+            --helper-catalog "$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json" \
+            --source-root "$GITHUB_WORKSPACE"
 
       - name: Assemble candidate evidence
         id: candidate
@@ -549,6 +573,12 @@ jobs:
           set -euo pipefail
           release="$RUNNER_TEMP/release"
           candidate="$RUNNER_TEMP/candidate"
+          helper_catalog="$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json"
+          test "$(jq -er '.helpers | length' "$helper_catalog")" -eq 1
+          helper_archive=$(jq -er '.helpers[0].archive.mirror_asset' "$helper_catalog")
+          helper_license=$(jq -er '.helpers[0].license_report.mirror_asset' "$helper_catalog")
+          helper_notice=$(jq -er '.helpers[0].notice.mirror_asset' "$helper_catalog")
+          helper_spdx=$(jq -er '.helpers[0].spdx.mirror_asset' "$helper_catalog")
           go run ./tools/release/evidencebuild \
             --output "$candidate" \
             --source-revision "$GITHUB_SHA" \
@@ -558,6 +588,12 @@ jobs:
             --bootstrap "$release/loki-bootstrap-linux-amd64" \
             --host-assets "$release/host-assets.tar.gz" \
             --wsl-appliance "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
+            --windows-frontend "$RUNNER_TEMP/loki-windows-amd64.exe" \
+            --connect-helper-catalog "$helper_catalog" \
+            --connect-helper-archive "$RUNNER_TEMP/connect-helpers/$helper_archive" \
+            --connect-helper-license "$RUNNER_TEMP/connect-helpers/$helper_license" \
+            --connect-helper-notice "$RUNNER_TEMP/connect-helpers/$helper_notice" \
+            --connect-helper-spdx "$RUNNER_TEMP/connect-helpers/$helper_spdx" \
             --toolchain-catalog "$release/toolchain-catalog.json" \
             --provenance "$release/provenance.bundle.json" \
             --notices "$release/notices.tar.gz" \

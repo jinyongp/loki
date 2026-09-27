@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"loki/internal/host/connect"
 	"loki/internal/host/releases"
 	"loki/tools/release/internal/bootstrapinfo"
 )
@@ -137,6 +138,21 @@ func preparePublication(cfg options) error {
 	if _, err = verifyIndexManifestBinding(index, manifest, manifestRaw); err != nil {
 		return err
 	}
+	helperCatalogRaw, err := readEvidenceBytes(candidate, evidence.ConnectHelperCatalog, 4<<20)
+	if err != nil {
+		return fmt.Errorf("read connect helper catalog: %w", err)
+	}
+	helperCatalog, err := connect.LoadCatalog(helperCatalogRaw)
+	if err != nil {
+		return err
+	}
+	if len(helperCatalog.Helpers) != 1 {
+		return errors.New("publication currently requires exactly one reviewed connect helper")
+	}
+	helper := helperCatalog.Helpers[0]
+	if err = verifyConnectHelperEvidence(helper, evidence); err != nil {
+		return err
+	}
 
 	template, err := readRegularBounded(templatePath, maxInstallerTemplateBytes)
 	if err != nil {
@@ -188,6 +204,12 @@ func preparePublication(cfg options) error {
 		{Name: "loki-bootstrap-linux-amd64", Evidence: evidence.Bootstrap, Mode: 0755},
 		{Name: "loki-host-assets.tar.gz", Evidence: evidence.HostAssets, Mode: 0644},
 		{Name: "loki-wsl-amd64.wsl", Evidence: evidence.WSLAppliance, Mode: 0644},
+		{Name: "loki-windows-amd64.exe", Evidence: evidence.WindowsFrontend, Mode: 0755},
+		{Name: "loki-connect-helpers.json", Evidence: evidence.ConnectHelperCatalog, Mode: 0644},
+		{Name: helper.Archive.MirrorAsset, Evidence: evidence.ConnectHelperArchive, Mode: 0644},
+		{Name: helper.LicenseReport.MirrorAsset, Evidence: evidence.ConnectHelperLicense, Mode: 0644},
+		{Name: helper.Notice.MirrorAsset, Evidence: evidence.ConnectHelperNotice, Mode: 0644},
+		{Name: helper.SPDX.MirrorAsset, Evidence: evidence.ConnectHelperSPDX, Mode: 0644},
 		{Name: "loki-release-index.json", Evidence: evidence.ReleaseIndex, Mode: 0644},
 		{Name: "loki-release-manifest.json", Evidence: evidence.ReleaseManifest, Mode: 0644},
 		{Name: "loki-toolchain-catalog.json", Evidence: evidence.ToolchainCatalog, Mode: 0644},
@@ -256,6 +278,25 @@ func verifyIndexManifestBinding(index releases.ReleaseIndex, manifest releases.R
 		return entry, nil
 	}
 	return releases.ReleaseIndexEntry{}, errors.New("release index does not contain the candidate release manifest")
+}
+
+func verifyConnectHelperEvidence(helper connect.Helper, evidence releases.CandidateEvidence) error {
+	checks := []struct {
+		name     string
+		asset    connect.Asset
+		evidence releases.FileEvidence
+	}{
+		{name: "archive", asset: helper.Archive, evidence: evidence.ConnectHelperArchive},
+		{name: "license report", asset: helper.LicenseReport, evidence: evidence.ConnectHelperLicense},
+		{name: "notice", asset: helper.Notice, evidence: evidence.ConnectHelperNotice},
+		{name: "SPDX", asset: helper.SPDX, evidence: evidence.ConnectHelperSPDX},
+	}
+	for _, check := range checks {
+		if check.asset.SourceLength != check.evidence.Length || check.asset.SourceSHA256 != check.evidence.SHA256 {
+			return fmt.Errorf("connect helper %s evidence does not match catalog identity", check.name)
+		}
+	}
+	return nil
 }
 
 func renderInstaller(template []byte, tag, bootstrapSHA256 string) ([]byte, error) {

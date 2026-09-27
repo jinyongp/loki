@@ -21,10 +21,12 @@ type Policy struct {
 }
 
 type Variant struct {
-	Name   string   `json:"name"`
-	GOOS   string   `json:"goos"`
-	GOARCH string   `json:"goarch"`
-	Tags   []string `json:"tags"`
+	Name     string   `json:"name"`
+	GOOS     string   `json:"goos"`
+	GOARCH   string   `json:"goarch"`
+	Tags     []string `json:"tags"`
+	Patterns []string `json:"patterns,omitempty"`
+	Partial  bool     `json:"partial,omitempty"`
 }
 
 type PackageRule struct {

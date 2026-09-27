@@ -17,11 +17,11 @@ func TestDirectDependencyPolicy(t *testing.T) {
 		"loki/internal/a": {ImportPath: "loki/internal/a", Imports: []string{"loki/internal/b"}},
 		"loki/internal/b": {ImportPath: "loki/internal/b"},
 	}}
-	if violations := checkVariant(policy, graph); len(violations) != 0 {
+	if violations := checkVariant(policy, graph, Variant{}); len(violations) != 0 {
 		t.Fatalf("allowed edge rejected: %v", violations)
 	}
 	policy.AllowedEdges = nil
-	if !hasViolation(checkVariant(policy, graph), "direct-dependency") {
+	if !hasViolation(checkVariant(policy, graph, Variant{}), "direct-dependency") {
 		t.Fatal("new direct dependency was accepted")
 	}
 }
@@ -36,7 +36,7 @@ func TestNestedInternalVisibility(t *testing.T) {
 		"loki/internal/work/other":                 {ImportPath: "loki/internal/work/other", Imports: []string{"loki/internal/work/jobs/internal/journal"}},
 		"loki/internal/work/jobs/internal/journal": {ImportPath: "loki/internal/work/jobs/internal/journal"},
 	}}
-	if !hasViolation(checkVariant(policy, graph), "private-package") {
+	if !hasViolation(checkVariant(policy, graph, Variant{}), "private-package") {
 		t.Fatal("cross-feature nested internal import was accepted")
 	}
 	if !internalImportAllowed("loki/internal/work/jobs/local", "loki/internal/work/jobs/internal/journal") {
@@ -53,7 +53,7 @@ func TestThirdPartyOwnershipAndExportLeakage(t *testing.T) {
 	graph := Graph{Packages: map[string]PackageInfo{
 		"loki/internal/adapter": {ImportPath: "loki/internal/adapter", Imports: []string{"example.test/sdk"}},
 	}}
-	violations := checkVariant(policy, graph)
+	violations := checkVariant(policy, graph, Variant{})
 	if hasViolation(violations, "third-party-owner") {
 		t.Fatalf("permitted adapter import rejected: %v", violations)
 	}
@@ -88,7 +88,7 @@ func TestTransitiveRoleClosure(t *testing.T) {
 		"loki/internal/adapter": {ImportPath: "loki/internal/adapter", Imports: []string{"loki/internal/store"}},
 		"loki/internal/store":   {ImportPath: "loki/internal/store"},
 	}}
-	if !hasViolation(checkVariant(policy, graph), "role-closure") {
+	if !hasViolation(checkVariant(policy, graph, Variant{}), "role-closure") {
 		t.Fatal("gateway transitively reached forbidden credential store")
 	}
 }
@@ -107,12 +107,40 @@ func TestUnclassifiedPackageAndExactExceptionMetadata(t *testing.T) {
 		"loki/internal/b": {ImportPath: "loki/internal/b"},
 		"loki/internal/c": {ImportPath: "loki/internal/c"},
 	}}
-	if !hasViolation(checkVariant(policy, graph), "package-classification") {
+	if !hasViolation(checkVariant(policy, graph, Variant{}), "package-classification") {
 		t.Fatal("unclassified package was accepted")
 	}
 	policy.EdgeExceptions[0].RemoveUnit = ""
 	if err := validatePolicy(policy); err == nil || !strings.Contains(err.Error(), "remove_unit") {
 		t.Fatalf("exception without removal unit accepted: %v", err)
+	}
+}
+
+func TestPartialVariantDoesNotRequireUnrelatedClassifiedPackages(t *testing.T) {
+	policy := fixturePolicy(map[string]PackageRule{
+		"loki/cmd/windows":      {Kind: "role", Owner: "windows", Target: "cmd/windows"},
+		"loki/internal/windows": {Kind: "host", Owner: "windows", Target: "host/windows"},
+		"loki/internal/linux":   {Kind: "host", Owner: "linux", Target: "host/linux"},
+	})
+	policy.AllowedEdges = []Edge{{From: "loki/cmd/windows", To: "loki/internal/windows"}}
+	graph := Graph{Packages: map[string]PackageInfo{
+		"loki/cmd/windows":      {ImportPath: "loki/cmd/windows", Imports: []string{"loki/internal/windows"}},
+		"loki/internal/windows": {ImportPath: "loki/internal/windows"},
+	}}
+	if violations := checkVariant(policy, graph, Variant{Partial: true}); len(violations) != 0 {
+		t.Fatalf("partial variant rejected absent unrelated packages: %v", violations)
+	}
+	if !hasViolation(checkVariant(policy, graph, Variant{}), "package-classification") {
+		t.Fatal("full variant accepted an absent classified package")
+	}
+}
+
+func TestVariantEnvironmentOverridesAmbientTarget(t *testing.T) {
+	got := variantEnvironment([]string{"A=1", "GOOS=linux", "GOARCH=arm64"}, Variant{GOOS: "windows", GOARCH: "amd64"})
+	joined := strings.Join(got, "\n")
+	if strings.Contains(joined, "GOOS=linux") || strings.Contains(joined, "GOARCH=arm64") ||
+		!strings.Contains(joined, "GOOS=windows") || !strings.Contains(joined, "GOARCH=amd64") {
+		t.Fatalf("variant environment = %#v", got)
 	}
 }
 

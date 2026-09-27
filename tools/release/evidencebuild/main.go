@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -27,22 +28,28 @@ const (
 var inspectBootstrapRelease = bootstrapinfo.Inspect
 
 type options struct {
-	Output           string
-	SourceRevision   string
-	ReleaseIndex     string
-	ReleaseManifest  string
-	HostBinary       string
-	Bootstrap        string
-	HostAssets       string
-	WSLAppliance     string
-	ToolchainCatalog string
-	Provenance       string
-	Notices          string
-	ReleaseNotes     string
-	EffectivePolicy  string
-	EffectiveConfig  string
-	CoreImage        string
-	BrowserImage     string
+	Output               string
+	SourceRevision       string
+	ReleaseIndex         string
+	ReleaseManifest      string
+	HostBinary           string
+	Bootstrap            string
+	HostAssets           string
+	WSLAppliance         string
+	WindowsFrontend      string
+	ConnectHelperCatalog string
+	ConnectHelperArchive string
+	ConnectHelperLicense string
+	ConnectHelperNotice  string
+	ConnectHelperSPDX    string
+	ToolchainCatalog     string
+	Provenance           string
+	Notices              string
+	ReleaseNotes         string
+	EffectivePolicy      string
+	EffectiveConfig      string
+	CoreImage            string
+	BrowserImage         string
 }
 
 func main() {
@@ -64,6 +71,12 @@ func run(args []string, stderr io.Writer) error {
 	flags.StringVar(&cfg.Bootstrap, "bootstrap", "", "standalone bootstrap binary")
 	flags.StringVar(&cfg.HostAssets, "host-assets", "", "host asset bundle")
 	flags.StringVar(&cfg.WSLAppliance, "wsl-appliance", "", "WSL appliance archive")
+	flags.StringVar(&cfg.WindowsFrontend, "windows-frontend", "", "Windows Loki frontend")
+	flags.StringVar(&cfg.ConnectHelperCatalog, "connect-helper-catalog", "", "connect helper catalog")
+	flags.StringVar(&cfg.ConnectHelperArchive, "connect-helper-archive", "", "mirrored connect helper archive")
+	flags.StringVar(&cfg.ConnectHelperLicense, "connect-helper-license", "", "mirrored connect helper license report")
+	flags.StringVar(&cfg.ConnectHelperNotice, "connect-helper-notice", "", "mirrored connect helper notice")
+	flags.StringVar(&cfg.ConnectHelperSPDX, "connect-helper-spdx", "", "mirrored connect helper SPDX")
 	flags.StringVar(&cfg.ToolchainCatalog, "toolchain-catalog", "", "managed toolchain catalog")
 	flags.StringVar(&cfg.Provenance, "provenance", "", "release provenance bundle")
 	flags.StringVar(&cfg.Notices, "notices", "", "third-party notice bundle")
@@ -87,18 +100,24 @@ func assemble(cfg options) error {
 		return err
 	}
 	inputs := map[string]*string{
-		"release index":     &cfg.ReleaseIndex,
-		"release manifest":  &cfg.ReleaseManifest,
-		"host binary":       &cfg.HostBinary,
-		"bootstrap":         &cfg.Bootstrap,
-		"host assets":       &cfg.HostAssets,
-		"WSL appliance":     &cfg.WSLAppliance,
-		"toolchain catalog": &cfg.ToolchainCatalog,
-		"provenance":        &cfg.Provenance,
-		"notices":           &cfg.Notices,
-		"release notes":     &cfg.ReleaseNotes,
-		"effective policy":  &cfg.EffectivePolicy,
-		"effective config":  &cfg.EffectiveConfig,
+		"release index":          &cfg.ReleaseIndex,
+		"release manifest":       &cfg.ReleaseManifest,
+		"host binary":            &cfg.HostBinary,
+		"bootstrap":              &cfg.Bootstrap,
+		"host assets":            &cfg.HostAssets,
+		"WSL appliance":          &cfg.WSLAppliance,
+		"Windows frontend":       &cfg.WindowsFrontend,
+		"connect helper catalog": &cfg.ConnectHelperCatalog,
+		"connect helper archive": &cfg.ConnectHelperArchive,
+		"connect helper license": &cfg.ConnectHelperLicense,
+		"connect helper notice":  &cfg.ConnectHelperNotice,
+		"connect helper SPDX":    &cfg.ConnectHelperSPDX,
+		"toolchain catalog":      &cfg.ToolchainCatalog,
+		"provenance":             &cfg.Provenance,
+		"notices":                &cfg.Notices,
+		"release notes":          &cfg.ReleaseNotes,
+		"effective policy":       &cfg.EffectivePolicy,
+		"effective config":       &cfg.EffectiveConfig,
 	}
 	for name, value := range inputs {
 		*value, err = cleanAbsolute(*value, name)
@@ -193,6 +212,42 @@ func assemble(cfg options) error {
 	if err != nil {
 		return err
 	}
+	windowsFrontendEvidence, err := copyEvidence(cfg.WindowsFrontend, temp, "inputs/loki-windows-amd64.exe", nil, 0755)
+	if err != nil {
+		return err
+	}
+	connectHelperCatalogEvidence, err := copyEvidence(cfg.ConnectHelperCatalog, temp, "inputs/connect-helpers.json", nil, 0644)
+	if err != nil {
+		return err
+	}
+	windowsFrontendRaw, err := readRegular(filepath.Join(temp, filepath.FromSlash(windowsFrontendEvidence.Path)), maxReleaseTargetBytes)
+	if err != nil {
+		return fmt.Errorf("read copied Windows frontend: %w", err)
+	}
+	if err = verifyWindowsFrontendBinding(windowsFrontendRaw, windowsFrontendExpectation{
+		SourceRevision: strings.TrimSpace(cfg.SourceRevision),
+		Version:        manifest.Generation.Spec.Version,
+		WSL:            wslEvidence,
+		HelperCatalog:  connectHelperCatalogEvidence,
+	}); err != nil {
+		return err
+	}
+	connectHelperArchiveEvidence, err := copyEvidence(cfg.ConnectHelperArchive, temp, "inputs/connect-helper-archive.zip", nil, 0644)
+	if err != nil {
+		return err
+	}
+	connectHelperLicenseEvidence, err := copyEvidence(cfg.ConnectHelperLicense, temp, "inputs/connect-helper-licenses.txt", nil, 0644)
+	if err != nil {
+		return err
+	}
+	connectHelperNoticeEvidence, err := copyEvidence(cfg.ConnectHelperNotice, temp, "inputs/connect-helper-NOTICE.txt", nil, 0644)
+	if err != nil {
+		return err
+	}
+	connectHelperSPDXEvidence, err := copyEvidence(cfg.ConnectHelperSPDX, temp, "inputs/connect-helper.spdx.json", nil, 0644)
+	if err != nil {
+		return err
+	}
 	toolchainEvidence, err := copyEvidence(cfg.ToolchainCatalog, temp, "inputs/toolchain-catalog.json", &manifest.ToolchainCatalog, 0644)
 	if err != nil {
 		return err
@@ -223,6 +278,9 @@ func assemble(cfg options) error {
 		CoreImage: cfg.CoreImage, BrowserImage: cfg.BrowserImage,
 		ReleaseIndex: releaseIndexEvidence, ReleaseManifest: releaseManifestEvidence,
 		HostBinary: hostBinaryEvidence, Bootstrap: bootstrapEvidence, HostAssets: hostAssetsEvidence, WSLAppliance: wslEvidence,
+		WindowsFrontend: windowsFrontendEvidence, ConnectHelperCatalog: connectHelperCatalogEvidence,
+		ConnectHelperArchive: connectHelperArchiveEvidence, ConnectHelperLicense: connectHelperLicenseEvidence,
+		ConnectHelperNotice: connectHelperNoticeEvidence, ConnectHelperSPDX: connectHelperSPDXEvidence,
 		ToolchainCatalog: toolchainEvidence, Provenance: provenanceEvidence, Notices: noticesEvidence,
 		ReleaseNotes: releaseNotesEvidence, EffectivePolicy: policyEvidence, EffectiveConfig: configEvidence,
 	})
@@ -240,7 +298,9 @@ func assemble(cfg options) error {
 
 	files := []releases.FileEvidence{
 		releaseIndexEvidence, releaseManifestEvidence, hostBinaryEvidence, bootstrapEvidence, hostAssetsEvidence, wslEvidence,
-		toolchainEvidence, provenanceEvidence, noticesEvidence, releaseNotesEvidence, policyEvidence, configEvidence,
+		windowsFrontendEvidence, connectHelperCatalogEvidence, connectHelperArchiveEvidence, connectHelperLicenseEvidence,
+		connectHelperNoticeEvidence, connectHelperSPDXEvidence, toolchainEvidence, provenanceEvidence, noticesEvidence,
+		releaseNotesEvidence, policyEvidence, configEvidence,
 	}
 	checksums := make([]string, 0, len(files)+1)
 	for _, file := range files {
@@ -265,6 +325,30 @@ func assemble(cfg options) error {
 		return err
 	}
 	return syncDirectory(parent)
+}
+
+type windowsFrontendExpectation struct {
+	SourceRevision string
+	Version        string
+	WSL            releases.FileEvidence
+	HelperCatalog  releases.FileEvidence
+}
+
+func verifyWindowsFrontendBinding(raw []byte, expected windowsFrontendExpectation) error {
+	values := []string{
+		expected.SourceRevision,
+		expected.Version,
+		expected.WSL.SHA256,
+		fmt.Sprintf("%d", expected.WSL.Length),
+		expected.HelperCatalog.SHA256,
+		fmt.Sprintf("%d", expected.HelperCatalog.Length),
+	}
+	for _, value := range values {
+		if value == "" || !bytes.Contains(raw, []byte(value)) {
+			return errors.New("Windows frontend release binding does not match candidate inputs")
+		}
+	}
+	return nil
 }
 
 func matchingIndexEntry(index releases.ReleaseIndex, manifest releases.ReleaseManifest) (releases.ReleaseIndexEntry, error) {

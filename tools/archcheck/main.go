@@ -53,7 +53,7 @@ func main() {
 		}
 		graphs = append(graphs, graph)
 		variantNames = append(variantNames, variant.Name)
-		violations = append(violations, checkVariant(policy, graph)...)
+		violations = append(violations, checkVariant(policy, graph, variant)...)
 	}
 	violations = append(violations, checkBaselineExact(policy, graphs)...)
 	violations = deduplicateViolations(violations)

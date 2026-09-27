@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,22 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	bootstrapBody := "#!/bin/sh\nexit 0\n"
 	assetsBody := "host-assets"
 	wslBody := "synthetic-wsl-appliance"
+	helperCatalogBody := "{\"schema_version\":1}\n"
+	wslSumForWindows := sha256.Sum256([]byte(wslBody))
+	catalogSumForWindows := sha256.Sum256([]byte(helperCatalogBody))
+	windowsBody := strings.Join([]string{
+		"synthetic-windows-frontend",
+		"1.2.3",
+		strings.Repeat("a", 40),
+		hex.EncodeToString(wslSumForWindows[:]),
+		strconv.Itoa(len(wslBody)),
+		hex.EncodeToString(catalogSumForWindows[:]),
+		strconv.Itoa(len(helperCatalogBody)),
+	}, "\n")
+	helperArchiveBody := "synthetic-helper-archive"
+	helperLicenseBody := "synthetic-helper-license"
+	helperNoticeBody := "synthetic-helper-notice"
+	helperSPDXBody := "{\"spdxVersion\":\"SPDX-2.3\"}\n"
 	toolchainBody := "{\"version\":1}\n"
 	provenanceBody := "{\"_type\":\"https://in-toto.io/Statement/v1\"}\n"
 	noticesBody := "notices"
@@ -52,6 +69,12 @@ func evidenceAssemblerFixture(t *testing.T) options {
 	bootstrap := writeFixtureFile(t, root, "host/loki-bootstrap", bootstrapBody, 0755)
 	assets := writeFixtureFile(t, root, "host/assets.tar.gz", assetsBody, 0644)
 	wsl := writeFixtureFile(t, root, "host/loki-wsl-amd64.wsl", wslBody, 0644)
+	windows := writeFixtureFile(t, root, "host/loki-windows-amd64.exe", windowsBody, 0755)
+	helperCatalog := writeFixtureFile(t, root, "host/connect-helpers.json", helperCatalogBody, 0644)
+	helperArchive := writeFixtureFile(t, root, "host/helper.zip", helperArchiveBody, 0644)
+	helperLicense := writeFixtureFile(t, root, "host/helper-licenses.txt", helperLicenseBody, 0644)
+	helperNotice := writeFixtureFile(t, root, "host/helper-NOTICE.txt", helperNoticeBody, 0644)
+	helperSPDX := writeFixtureFile(t, root, "host/helper.spdx.json", helperSPDXBody, 0644)
 	toolchain := writeFixtureFile(t, root, "host/toolchain.json", toolchainBody, 0644)
 	provenance := writeFixtureFile(t, root, "host/provenance.json", provenanceBody, 0644)
 	notices := writeFixtureFile(t, root, "host/notices.tar.gz", noticesBody, 0644)
@@ -135,6 +158,8 @@ func evidenceAssemblerFixture(t *testing.T) options {
 		SourceRevision: strings.Repeat("a", 40),
 		ReleaseIndex:   indexPath, ReleaseManifest: manifestPath,
 		HostBinary: host, Bootstrap: bootstrap, HostAssets: assets, WSLAppliance: wsl,
+		WindowsFrontend: windows, ConnectHelperCatalog: helperCatalog, ConnectHelperArchive: helperArchive,
+		ConnectHelperLicense: helperLicense, ConnectHelperNotice: helperNotice, ConnectHelperSPDX: helperSPDX,
 		ToolchainCatalog: toolchain, Provenance: provenance, Notices: notices,
 		ReleaseNotes: notes, EffectivePolicy: policy, EffectiveConfig: config,
 		CoreImage:    "ghcr.io/example/loki@sha256:" + strings.Repeat("b", 64),
@@ -164,8 +189,10 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	}
 	for _, relative := range []string{
 		"evidence.json", "SHA256SUMS", "inputs/release-index.json", "inputs/release-manifest.json",
-		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz", "inputs/loki-wsl-amd64.wsl", "inputs/toolchain-catalog.json",
-		"inputs/provenance.bundle.json", "inputs/notices.tar.gz", "inputs/release-notes.md",
+		"inputs/loki", "inputs/loki-bootstrap", "inputs/host-assets.tar.gz", "inputs/loki-wsl-amd64.wsl",
+		"inputs/loki-windows-amd64.exe", "inputs/connect-helpers.json", "inputs/connect-helper-archive.zip",
+		"inputs/connect-helper-licenses.txt", "inputs/connect-helper-NOTICE.txt", "inputs/connect-helper.spdx.json",
+		"inputs/toolchain-catalog.json", "inputs/provenance.bundle.json", "inputs/notices.tar.gz", "inputs/release-notes.md",
 		"inputs/effective-policy.json", "inputs/effective-config.toml",
 	} {
 		if _, err = os.Stat(filepath.Join(cfg.Output, filepath.FromSlash(relative))); err != nil {
@@ -176,7 +203,7 @@ func TestAssembleProducesSelfContainedImmutableEvidenceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/loki-wsl-amd64.wsl", "inputs/release-manifest.json"} {
+	for _, required := range []string{"evidence.json", "inputs/loki", "inputs/loki-bootstrap", "inputs/loki-wsl-amd64.wsl", "inputs/loki-windows-amd64.exe", "inputs/connect-helper-archive.zip", "inputs/release-manifest.json"} {
 		if !strings.Contains(string(checksums), "  "+required+"\n") {
 			t.Fatalf("SHA256SUMS lacks %s", required)
 		}
@@ -195,8 +222,8 @@ func TestAssembleNormalizesBundleModesDespiteUmask(t *testing.T) {
 		t.Fatal(err)
 	}
 	for relative, want := range map[string]os.FileMode{
-		".": 0755, "inputs": 0755, "inputs/loki": 0755, "inputs/loki-bootstrap": 0755,
-		"inputs/release-index.json": 0644, "inputs/loki-wsl-amd64.wsl": 0644, "inputs/effective-policy.json": 0644,
+		".": 0755, "inputs": 0755, "inputs/loki": 0755, "inputs/loki-bootstrap": 0755, "inputs/loki-windows-amd64.exe": 0755,
+		"inputs/release-index.json": 0644, "inputs/loki-wsl-amd64.wsl": 0644, "inputs/connect-helper-archive.zip": 0644, "inputs/effective-policy.json": 0644,
 		"evidence.json": 0644, "SHA256SUMS": 0644,
 	} {
 		info, statErr := os.Stat(filepath.Join(cfg.Output, filepath.FromSlash(relative)))
@@ -222,6 +249,17 @@ func TestAssembleRejectsReleaseBindingDrift(t *testing.T) {
 	defer func() { inspectBootstrapRelease = previous }()
 	if err := assemble(cfg); err == nil {
 		t.Fatal("assembler accepted bootstrap release binding drift")
+	}
+}
+
+func TestAssembleRejectsWindowsFrontendBindingDrift(t *testing.T) {
+	cfg := evidenceAssemblerFixture(t)
+	if err := os.WriteFile(cfg.WindowsFrontend, []byte("unbound-windows-frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := assemble(cfg)
+	if err == nil || !strings.Contains(err.Error(), "Windows frontend release binding") {
+		t.Fatalf("unexpected binding validation result: %v", err)
 	}
 }
 

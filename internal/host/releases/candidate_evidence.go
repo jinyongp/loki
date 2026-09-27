@@ -12,7 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
-const CandidateEvidenceVersion = 4
+const CandidateEvidenceVersion = 5
 
 var sourceRevisionPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
@@ -23,64 +23,82 @@ type FileEvidence struct {
 }
 
 type CandidateEvidence struct {
-	Version          int          `json:"version"`
-	ID               string       `json:"id"`
-	SourceRevision   string       `json:"source_revision"`
-	Generation       Generation   `json:"generation"`
-	CoreImage        string       `json:"core_image"`
-	BrowserImage     string       `json:"browser_image,omitempty"`
-	ReleaseIndex     FileEvidence `json:"release_index"`
-	ReleaseManifest  FileEvidence `json:"release_manifest"`
-	HostBinary       FileEvidence `json:"host_binary"`
-	Bootstrap        FileEvidence `json:"bootstrap"`
-	HostAssets       FileEvidence `json:"host_assets"`
-	WSLAppliance     FileEvidence `json:"wsl_appliance"`
-	ToolchainCatalog FileEvidence `json:"toolchain_catalog"`
-	Provenance       FileEvidence `json:"provenance"`
-	Notices          FileEvidence `json:"notices"`
-	ReleaseNotes     FileEvidence `json:"release_notes"`
-	EffectivePolicy  FileEvidence `json:"effective_policy"`
-	EffectiveConfig  FileEvidence `json:"effective_config"`
+	Version              int          `json:"version"`
+	ID                   string       `json:"id"`
+	SourceRevision       string       `json:"source_revision"`
+	Generation           Generation   `json:"generation"`
+	CoreImage            string       `json:"core_image"`
+	BrowserImage         string       `json:"browser_image,omitempty"`
+	ReleaseIndex         FileEvidence `json:"release_index"`
+	ReleaseManifest      FileEvidence `json:"release_manifest"`
+	HostBinary           FileEvidence `json:"host_binary"`
+	Bootstrap            FileEvidence `json:"bootstrap"`
+	HostAssets           FileEvidence `json:"host_assets"`
+	WSLAppliance         FileEvidence `json:"wsl_appliance"`
+	WindowsFrontend      FileEvidence `json:"windows_frontend"`
+	ConnectHelperCatalog FileEvidence `json:"connect_helper_catalog"`
+	ConnectHelperArchive FileEvidence `json:"connect_helper_archive"`
+	ConnectHelperLicense FileEvidence `json:"connect_helper_license"`
+	ConnectHelperNotice  FileEvidence `json:"connect_helper_notice"`
+	ConnectHelperSPDX    FileEvidence `json:"connect_helper_spdx"`
+	ToolchainCatalog     FileEvidence `json:"toolchain_catalog"`
+	Provenance           FileEvidence `json:"provenance"`
+	Notices              FileEvidence `json:"notices"`
+	ReleaseNotes         FileEvidence `json:"release_notes"`
+	EffectivePolicy      FileEvidence `json:"effective_policy"`
+	EffectiveConfig      FileEvidence `json:"effective_config"`
 }
 
 type CandidateEvidenceInput struct {
-	SourceRevision   string
-	Manifest         ReleaseManifest
-	IndexEntry       ReleaseIndexEntry
-	CoreImage        string
-	BrowserImage     string
-	ReleaseIndex     FileEvidence
-	ReleaseManifest  FileEvidence
-	HostBinary       FileEvidence
-	Bootstrap        FileEvidence
-	HostAssets       FileEvidence
-	WSLAppliance     FileEvidence
-	ToolchainCatalog FileEvidence
-	Provenance       FileEvidence
-	Notices          FileEvidence
-	ReleaseNotes     FileEvidence
-	EffectivePolicy  FileEvidence
-	EffectiveConfig  FileEvidence
+	SourceRevision       string
+	Manifest             ReleaseManifest
+	IndexEntry           ReleaseIndexEntry
+	CoreImage            string
+	BrowserImage         string
+	ReleaseIndex         FileEvidence
+	ReleaseManifest      FileEvidence
+	HostBinary           FileEvidence
+	Bootstrap            FileEvidence
+	HostAssets           FileEvidence
+	WSLAppliance         FileEvidence
+	WindowsFrontend      FileEvidence
+	ConnectHelperCatalog FileEvidence
+	ConnectHelperArchive FileEvidence
+	ConnectHelperLicense FileEvidence
+	ConnectHelperNotice  FileEvidence
+	ConnectHelperSPDX    FileEvidence
+	ToolchainCatalog     FileEvidence
+	Provenance           FileEvidence
+	Notices              FileEvidence
+	ReleaseNotes         FileEvidence
+	EffectivePolicy      FileEvidence
+	EffectiveConfig      FileEvidence
 }
 
 type candidateEvidencePayload struct {
-	Version          int          `json:"version"`
-	SourceRevision   string       `json:"source_revision"`
-	Generation       Generation   `json:"generation"`
-	CoreImage        string       `json:"core_image"`
-	BrowserImage     string       `json:"browser_image,omitempty"`
-	ReleaseIndex     FileEvidence `json:"release_index"`
-	ReleaseManifest  FileEvidence `json:"release_manifest"`
-	HostBinary       FileEvidence `json:"host_binary"`
-	Bootstrap        FileEvidence `json:"bootstrap"`
-	HostAssets       FileEvidence `json:"host_assets"`
-	WSLAppliance     FileEvidence `json:"wsl_appliance"`
-	ToolchainCatalog FileEvidence `json:"toolchain_catalog"`
-	Provenance       FileEvidence `json:"provenance"`
-	Notices          FileEvidence `json:"notices"`
-	ReleaseNotes     FileEvidence `json:"release_notes"`
-	EffectivePolicy  FileEvidence `json:"effective_policy"`
-	EffectiveConfig  FileEvidence `json:"effective_config"`
+	Version              int          `json:"version"`
+	SourceRevision       string       `json:"source_revision"`
+	Generation           Generation   `json:"generation"`
+	CoreImage            string       `json:"core_image"`
+	BrowserImage         string       `json:"browser_image,omitempty"`
+	ReleaseIndex         FileEvidence `json:"release_index"`
+	ReleaseManifest      FileEvidence `json:"release_manifest"`
+	HostBinary           FileEvidence `json:"host_binary"`
+	Bootstrap            FileEvidence `json:"bootstrap"`
+	HostAssets           FileEvidence `json:"host_assets"`
+	WSLAppliance         FileEvidence `json:"wsl_appliance"`
+	WindowsFrontend      FileEvidence `json:"windows_frontend"`
+	ConnectHelperCatalog FileEvidence `json:"connect_helper_catalog"`
+	ConnectHelperArchive FileEvidence `json:"connect_helper_archive"`
+	ConnectHelperLicense FileEvidence `json:"connect_helper_license"`
+	ConnectHelperNotice  FileEvidence `json:"connect_helper_notice"`
+	ConnectHelperSPDX    FileEvidence `json:"connect_helper_spdx"`
+	ToolchainCatalog     FileEvidence `json:"toolchain_catalog"`
+	Provenance           FileEvidence `json:"provenance"`
+	Notices              FileEvidence `json:"notices"`
+	ReleaseNotes         FileEvidence `json:"release_notes"`
+	EffectivePolicy      FileEvidence `json:"effective_policy"`
+	EffectiveConfig      FileEvidence `json:"effective_config"`
 }
 
 func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, error) {
@@ -106,9 +124,7 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		return CandidateEvidence{}, err
 	}
 
-	if err = validateCanonicalEvidencePaths(input.ReleaseIndex, input.ReleaseManifest, input.HostBinary, input.Bootstrap,
-		input.HostAssets, input.WSLAppliance, input.ToolchainCatalog, input.Provenance, input.Notices, input.ReleaseNotes,
-		input.EffectivePolicy, input.EffectiveConfig); err != nil {
+	if err = validateCanonicalEvidencePaths(candidateFilesFromInput(input)); err != nil {
 		return CandidateEvidence{}, err
 	}
 
@@ -116,18 +132,24 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		evidence FileEvidence
 		target   *TargetDescriptor
 	}{
-		"release index":     {input.ReleaseIndex, nil},
-		"release manifest":  {input.ReleaseManifest, &entry.Manifest},
-		"host binary":       {input.HostBinary, &manifest.HostBinary},
-		"bootstrap":         {input.Bootstrap, nil},
-		"host assets":       {input.HostAssets, &manifest.HostAssets},
-		"WSL appliance":     {input.WSLAppliance, nil},
-		"toolchain catalog": {input.ToolchainCatalog, &manifest.ToolchainCatalog},
-		"provenance":        {input.Provenance, &manifest.Provenance},
-		"notices":           {input.Notices, &manifest.Notices},
-		"release notes":     {input.ReleaseNotes, &manifest.ReleaseNotes},
-		"effective policy":  {input.EffectivePolicy, nil},
-		"effective config":  {input.EffectiveConfig, nil},
+		"release index":          {input.ReleaseIndex, nil},
+		"release manifest":       {input.ReleaseManifest, &entry.Manifest},
+		"host binary":            {input.HostBinary, &manifest.HostBinary},
+		"bootstrap":              {input.Bootstrap, nil},
+		"host assets":            {input.HostAssets, &manifest.HostAssets},
+		"WSL appliance":          {input.WSLAppliance, nil},
+		"Windows frontend":       {input.WindowsFrontend, nil},
+		"connect helper catalog": {input.ConnectHelperCatalog, nil},
+		"connect helper archive": {input.ConnectHelperArchive, nil},
+		"connect helper license": {input.ConnectHelperLicense, nil},
+		"connect helper notice":  {input.ConnectHelperNotice, nil},
+		"connect helper SPDX":    {input.ConnectHelperSPDX, nil},
+		"toolchain catalog":      {input.ToolchainCatalog, &manifest.ToolchainCatalog},
+		"provenance":             {input.Provenance, &manifest.Provenance},
+		"notices":                {input.Notices, &manifest.Notices},
+		"release notes":          {input.ReleaseNotes, &manifest.ReleaseNotes},
+		"effective policy":       {input.EffectivePolicy, nil},
+		"effective config":       {input.EffectiveConfig, nil},
 	}
 	seenPaths := map[string]bool{}
 	for name, item := range files {
@@ -149,6 +171,9 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		CoreImage: input.CoreImage, BrowserImage: input.BrowserImage,
 		ReleaseIndex: input.ReleaseIndex, ReleaseManifest: input.ReleaseManifest,
 		HostBinary: input.HostBinary, Bootstrap: input.Bootstrap, HostAssets: input.HostAssets, WSLAppliance: input.WSLAppliance,
+		WindowsFrontend: input.WindowsFrontend, ConnectHelperCatalog: input.ConnectHelperCatalog,
+		ConnectHelperArchive: input.ConnectHelperArchive, ConnectHelperLicense: input.ConnectHelperLicense,
+		ConnectHelperNotice: input.ConnectHelperNotice, ConnectHelperSPDX: input.ConnectHelperSPDX,
 		ToolchainCatalog: input.ToolchainCatalog, Provenance: input.Provenance, Notices: input.Notices,
 		ReleaseNotes: input.ReleaseNotes, EffectivePolicy: input.EffectivePolicy, EffectiveConfig: input.EffectiveConfig,
 	}
@@ -161,6 +186,9 @@ func NewCandidateEvidence(input CandidateEvidenceInput) (CandidateEvidence, erro
 		CoreImage: payload.CoreImage, BrowserImage: payload.BrowserImage,
 		ReleaseIndex: payload.ReleaseIndex, ReleaseManifest: payload.ReleaseManifest,
 		HostBinary: payload.HostBinary, Bootstrap: payload.Bootstrap, HostAssets: payload.HostAssets, WSLAppliance: payload.WSLAppliance,
+		WindowsFrontend: payload.WindowsFrontend, ConnectHelperCatalog: payload.ConnectHelperCatalog,
+		ConnectHelperArchive: payload.ConnectHelperArchive, ConnectHelperLicense: payload.ConnectHelperLicense,
+		ConnectHelperNotice: payload.ConnectHelperNotice, ConnectHelperSPDX: payload.ConnectHelperSPDX,
 		ToolchainCatalog: payload.ToolchainCatalog, Provenance: payload.Provenance, Notices: payload.Notices,
 		ReleaseNotes: payload.ReleaseNotes, EffectivePolicy: payload.EffectivePolicy, EffectiveConfig: payload.EffectiveConfig,
 	}, nil
@@ -178,16 +206,15 @@ func LoadCandidateEvidence(raw []byte) (CandidateEvidence, error) {
 	if err := validateEvidenceImages(evidence.Generation, evidence.CoreImage, evidence.BrowserImage); err != nil {
 		return CandidateEvidence{}, err
 	}
-	if err := validateCanonicalEvidencePaths(evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices, evidence.ReleaseNotes,
-		evidence.EffectivePolicy, evidence.EffectiveConfig); err != nil {
+	if err := validateCanonicalEvidencePaths(candidateFilesFromEvidence(evidence)); err != nil {
 		return CandidateEvidence{}, err
 	}
 	seenPaths := map[string]bool{}
 	for _, item := range []FileEvidence{
 		evidence.ReleaseIndex, evidence.ReleaseManifest, evidence.HostBinary, evidence.Bootstrap,
-		evidence.HostAssets, evidence.WSLAppliance, evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices,
-		evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
+		evidence.HostAssets, evidence.WSLAppliance, evidence.WindowsFrontend, evidence.ConnectHelperCatalog,
+		evidence.ConnectHelperArchive, evidence.ConnectHelperLicense, evidence.ConnectHelperNotice, evidence.ConnectHelperSPDX,
+		evidence.ToolchainCatalog, evidence.Provenance, evidence.Notices, evidence.ReleaseNotes, evidence.EffectivePolicy, evidence.EffectiveConfig,
 	} {
 		if err := validateFileEvidence(item); err != nil {
 			return CandidateEvidence{}, err
@@ -202,6 +229,9 @@ func LoadCandidateEvidence(raw []byte) (CandidateEvidence, error) {
 		CoreImage: evidence.CoreImage, BrowserImage: evidence.BrowserImage,
 		ReleaseIndex: evidence.ReleaseIndex, ReleaseManifest: evidence.ReleaseManifest,
 		HostBinary: evidence.HostBinary, Bootstrap: evidence.Bootstrap, HostAssets: evidence.HostAssets, WSLAppliance: evidence.WSLAppliance,
+		WindowsFrontend: evidence.WindowsFrontend, ConnectHelperCatalog: evidence.ConnectHelperCatalog,
+		ConnectHelperArchive: evidence.ConnectHelperArchive, ConnectHelperLicense: evidence.ConnectHelperLicense,
+		ConnectHelperNotice: evidence.ConnectHelperNotice, ConnectHelperSPDX: evidence.ConnectHelperSPDX,
 		ToolchainCatalog: evidence.ToolchainCatalog, Provenance: evidence.Provenance, Notices: evidence.Notices,
 		ReleaseNotes: evidence.ReleaseNotes, EffectivePolicy: evidence.EffectivePolicy, EffectiveConfig: evidence.EffectiveConfig,
 	}
@@ -235,37 +265,93 @@ func candidateEvidenceID(payload candidateEvidencePayload) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func validateCanonicalEvidencePaths(
-	releaseIndex, releaseManifest, hostBinary, bootstrap, hostAssets, wslAppliance, toolchainCatalog,
-	provenance, notices, releaseNotes, effectivePolicy, effectiveConfig FileEvidence,
-) error {
+type candidateEvidenceFiles struct {
+	ReleaseIndex         FileEvidence
+	ReleaseManifest      FileEvidence
+	HostBinary           FileEvidence
+	Bootstrap            FileEvidence
+	HostAssets           FileEvidence
+	WSLAppliance         FileEvidence
+	WindowsFrontend      FileEvidence
+	ConnectHelperCatalog FileEvidence
+	ConnectHelperArchive FileEvidence
+	ConnectHelperLicense FileEvidence
+	ConnectHelperNotice  FileEvidence
+	ConnectHelperSPDX    FileEvidence
+	ToolchainCatalog     FileEvidence
+	Provenance           FileEvidence
+	Notices              FileEvidence
+	ReleaseNotes         FileEvidence
+	EffectivePolicy      FileEvidence
+	EffectiveConfig      FileEvidence
+}
+
+func candidateFilesFromInput(input CandidateEvidenceInput) candidateEvidenceFiles {
+	return candidateEvidenceFiles{
+		ReleaseIndex: input.ReleaseIndex, ReleaseManifest: input.ReleaseManifest,
+		HostBinary: input.HostBinary, Bootstrap: input.Bootstrap, HostAssets: input.HostAssets,
+		WSLAppliance: input.WSLAppliance, WindowsFrontend: input.WindowsFrontend,
+		ConnectHelperCatalog: input.ConnectHelperCatalog, ConnectHelperArchive: input.ConnectHelperArchive,
+		ConnectHelperLicense: input.ConnectHelperLicense, ConnectHelperNotice: input.ConnectHelperNotice,
+		ConnectHelperSPDX: input.ConnectHelperSPDX, ToolchainCatalog: input.ToolchainCatalog,
+		Provenance: input.Provenance, Notices: input.Notices, ReleaseNotes: input.ReleaseNotes,
+		EffectivePolicy: input.EffectivePolicy, EffectiveConfig: input.EffectiveConfig,
+	}
+}
+
+func candidateFilesFromEvidence(evidence CandidateEvidence) candidateEvidenceFiles {
+	return candidateEvidenceFiles{
+		ReleaseIndex: evidence.ReleaseIndex, ReleaseManifest: evidence.ReleaseManifest,
+		HostBinary: evidence.HostBinary, Bootstrap: evidence.Bootstrap, HostAssets: evidence.HostAssets,
+		WSLAppliance: evidence.WSLAppliance, WindowsFrontend: evidence.WindowsFrontend,
+		ConnectHelperCatalog: evidence.ConnectHelperCatalog, ConnectHelperArchive: evidence.ConnectHelperArchive,
+		ConnectHelperLicense: evidence.ConnectHelperLicense, ConnectHelperNotice: evidence.ConnectHelperNotice,
+		ConnectHelperSPDX: evidence.ConnectHelperSPDX, ToolchainCatalog: evidence.ToolchainCatalog,
+		Provenance: evidence.Provenance, Notices: evidence.Notices, ReleaseNotes: evidence.ReleaseNotes,
+		EffectivePolicy: evidence.EffectivePolicy, EffectiveConfig: evidence.EffectiveConfig,
+	}
+}
+
+func validateCanonicalEvidencePaths(files candidateEvidenceFiles) error {
 	expected := map[string]string{
-		"release index":     releaseIndex.Path,
-		"release manifest":  releaseManifest.Path,
-		"host binary":       hostBinary.Path,
-		"bootstrap":         bootstrap.Path,
-		"host assets":       hostAssets.Path,
-		"WSL appliance":     wslAppliance.Path,
-		"toolchain catalog": toolchainCatalog.Path,
-		"provenance":        provenance.Path,
-		"notices":           notices.Path,
-		"release notes":     releaseNotes.Path,
-		"effective policy":  effectivePolicy.Path,
-		"effective config":  effectiveConfig.Path,
+		"release index":          files.ReleaseIndex.Path,
+		"release manifest":       files.ReleaseManifest.Path,
+		"host binary":            files.HostBinary.Path,
+		"bootstrap":              files.Bootstrap.Path,
+		"host assets":            files.HostAssets.Path,
+		"WSL appliance":          files.WSLAppliance.Path,
+		"Windows frontend":       files.WindowsFrontend.Path,
+		"connect helper catalog": files.ConnectHelperCatalog.Path,
+		"connect helper archive": files.ConnectHelperArchive.Path,
+		"connect helper license": files.ConnectHelperLicense.Path,
+		"connect helper notice":  files.ConnectHelperNotice.Path,
+		"connect helper SPDX":    files.ConnectHelperSPDX.Path,
+		"toolchain catalog":      files.ToolchainCatalog.Path,
+		"provenance":             files.Provenance.Path,
+		"notices":                files.Notices.Path,
+		"release notes":          files.ReleaseNotes.Path,
+		"effective policy":       files.EffectivePolicy.Path,
+		"effective config":       files.EffectiveConfig.Path,
 	}
 	canonical := map[string]string{
-		"release index":     "inputs/release-index.json",
-		"release manifest":  "inputs/release-manifest.json",
-		"host binary":       "inputs/loki",
-		"bootstrap":         "inputs/loki-bootstrap",
-		"host assets":       "inputs/host-assets.tar.gz",
-		"WSL appliance":     "inputs/loki-wsl-amd64.wsl",
-		"toolchain catalog": "inputs/toolchain-catalog.json",
-		"provenance":        "inputs/provenance.bundle.json",
-		"notices":           "inputs/notices.tar.gz",
-		"release notes":     "inputs/release-notes.md",
-		"effective policy":  "inputs/effective-policy.json",
-		"effective config":  "inputs/effective-config.toml",
+		"release index":          "inputs/release-index.json",
+		"release manifest":       "inputs/release-manifest.json",
+		"host binary":            "inputs/loki",
+		"bootstrap":              "inputs/loki-bootstrap",
+		"host assets":            "inputs/host-assets.tar.gz",
+		"WSL appliance":          "inputs/loki-wsl-amd64.wsl",
+		"Windows frontend":       "inputs/loki-windows-amd64.exe",
+		"connect helper catalog": "inputs/connect-helpers.json",
+		"connect helper archive": "inputs/connect-helper-archive.zip",
+		"connect helper license": "inputs/connect-helper-licenses.txt",
+		"connect helper notice":  "inputs/connect-helper-NOTICE.txt",
+		"connect helper SPDX":    "inputs/connect-helper.spdx.json",
+		"toolchain catalog":      "inputs/toolchain-catalog.json",
+		"provenance":             "inputs/provenance.bundle.json",
+		"notices":                "inputs/notices.tar.gz",
+		"release notes":          "inputs/release-notes.md",
+		"effective policy":       "inputs/effective-policy.json",
+		"effective config":       "inputs/effective-config.toml",
 	}
 	for name, path := range expected {
 		if path != canonical[name] {

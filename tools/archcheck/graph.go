@@ -27,13 +27,20 @@ func loadGraph(ctx context.Context, root string, policy Policy, variant Variant)
 		"list", "-mod=readonly",
 		"-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,TestGoFiles,TestImports,XTestGoFiles,XTestImports",
 	}
+	if variant.Partial {
+		arguments = append(arguments, "-deps")
+	}
 	if len(variant.Tags) > 0 {
 		arguments = append(arguments, "-tags", strings.Join(variant.Tags, ","))
 	}
-	arguments = append(arguments, "./...")
+	patterns := append([]string(nil), variant.Patterns...)
+	if len(patterns) == 0 {
+		patterns = []string{"./..."}
+	}
+	arguments = append(arguments, patterns...)
 	command := exec.CommandContext(ctx, "go", arguments...)
 	command.Dir = root
-	command.Env = append(os.Environ(), "GOOS="+variant.GOOS, "GOARCH="+variant.GOARCH)
+	command.Env = variantEnvironment(os.Environ(), variant)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -69,4 +76,15 @@ func sortedCopy(items []string) []string {
 	out := append([]string(nil), items...)
 	sort.Strings(out)
 	return out
+}
+
+func variantEnvironment(environment []string, variant Variant) []string {
+	filtered := make([]string, 0, len(environment)+2)
+	for _, entry := range environment {
+		if strings.HasPrefix(entry, "GOOS=") || strings.HasPrefix(entry, "GOARCH=") {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return append(filtered, "GOOS="+variant.GOOS, "GOARCH="+variant.GOARCH)
 }
