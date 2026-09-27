@@ -50,7 +50,7 @@ func (client WSLClient) executable() string {
 }
 
 func (client WSLClient) ListDistributions(ctx context.Context) ([]string, error) {
-	result, err := client.Runner.Run(ctx, client.executable(), []string{"--list", "--quiet"})
+	result, err := client.run(ctx, "--list", "--quiet")
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +66,22 @@ func (client WSLClient) ListDistributions(ctx context.Context) ([]string, error)
 		}
 	}
 	return out, nil
+}
+
+func (client WSLClient) RequireInstallCapabilities(ctx context.Context) error {
+	result, err := client.run(ctx, "--help")
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != -1 && result.ExitCode != 0 && result.ExitCode != 1 {
+		return nativeFailure("inspect WSL capabilities", result)
+	}
+	for _, required := range []string{"--from-file", "--name", "--no-launch"} {
+		if !strings.Contains(result.Stdout, required) {
+			return errors.New("WSL 2.4.4 or newer is required for custom .wsl distributions")
+		}
+	}
+	return nil
 }
 
 func (client WSLClient) DistributionPresent(ctx context.Context, distribution string) (bool, error) {
@@ -152,6 +168,9 @@ func (client WSLClient) Unregister(ctx context.Context, distribution string) err
 }
 
 func (client WSLClient) run(ctx context.Context, arguments ...string) (NativeProbe, error) {
+	if client.Runner == nil {
+		return NativeProbe{}, errors.New("WSL native runner is unavailable")
+	}
 	return client.Runner.Run(ctx, client.executable(), arguments)
 }
 

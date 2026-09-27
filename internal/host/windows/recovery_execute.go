@@ -29,6 +29,20 @@ func (executor RecoveryExecutor) Recover(
 	staleApproved bool,
 ) (RecoveryPlan, error) {
 	plan := BuildRecoveryPlan(snapshot, staleApproved)
+	if len(plan.Steps) == 0 {
+		return plan, nil
+	}
+	if err := validateRecoveryAdapters(executor, plan); err != nil {
+		return plan, err
+	}
+	live, err := executor.Collector.Collect(ctx, expected)
+	if err != nil {
+		return plan, err
+	}
+	if !sameRecoverySnapshot(snapshot, live) {
+		return plan, errors.New("Loki recovery state changed after approval; no destructive recovery was performed")
+	}
+	plan = BuildRecoveryPlan(live, staleApproved)
 	for _, step := range plan.Steps {
 		switch step {
 		case RecoveryRemoveStartupTask:
@@ -73,6 +87,55 @@ func (executor RecoveryExecutor) Recover(
 	return plan, nil
 }
 
+func validateRecoveryAdapters(executor RecoveryExecutor, plan RecoveryPlan) error {
+	for _, step := range plan.Steps {
+		switch step {
+		case RecoveryRemoveStartupTask:
+			if executor.Tasks == nil {
+				return errors.New("startup task manager is unavailable")
+			}
+		case RecoveryTerminateDistro, RecoveryUnregisterDistro, RecoveryVerifyDistroGone:
+			if executor.Collector.WSL.Runner == nil {
+				return errors.New("WSL recovery adapter is unavailable")
+			}
+		case RecoveryRemoveWindowsState:
+			if executor.Filesystem == nil || executor.Remover == nil {
+				return errors.New("Windows state removal adapters are unavailable")
+			}
+		case RecoveryVerifyFresh:
+			if executor.Collector.Filesystem == nil || executor.Collector.Tasks == nil || executor.Collector.WSL.Runner == nil {
+				return errors.New("Windows recovery verification adapters are unavailable")
+			}
+		}
+	}
+	return nil
+}
+
+func sameRecoverySnapshot(approved, live ExistingSnapshot) bool {
+	if approved.Distribution.State != live.Distribution.State ||
+		approved.Distribution.Version != live.Distribution.Version ||
+		approved.StartupTask != live.StartupTask {
+		return false
+	}
+	return sameWindowsState(approved.Windows, live.Windows)
+}
+
+func sameWindowsState(left, right WindowsState) bool {
+	if left.Present != right.Present || left.Owned != right.Owned || left.Kind != right.Kind ||
+		left.AutoStart != right.AutoStart || left.AutoStartKnown != right.AutoStartKnown ||
+		left.MCPPort != right.MCPPort {
+		return false
+	}
+	switch {
+	case left.InstallLocation == "" && right.InstallLocation == "":
+		return true
+	case left.InstallLocation == "" || right.InstallLocation == "":
+		return false
+	default:
+		return WindowsPathEqual(left.InstallLocation, right.InstallLocation)
+	}
+}
+
 func RemoveOwnedWindowsState(
 	filesystem StateFilesystem,
 	remover PathRemover,
@@ -88,12 +151,20 @@ func RemoveOwnedWindowsState(
 	if filesystem == nil || remover == nil {
 		return errors.New("Windows state removal adapters are unavailable")
 	}
-	stateInfo, err := filesystem.Lstat(expected.StateDir)
+	current, err := InspectWindowsState(filesystem, expected)
 	if err != nil {
 		return err
 	}
-	if !stateInfo.Exists {
+	if !current.Present {
 		return nil
+	}
+	if !current.Owned || !sameWindowsState(state, current) {
+		return errors.New("refusing to remove Windows state because ownership changed after preflight")
+	}
+	state = current
+	stateInfo, err := filesystem.Lstat(expected.StateDir)
+	if err != nil {
+		return err
 	}
 	if !stateInfo.Directory || stateInfo.Reparse {
 		return errors.New("refusing to remove Windows state because it is not a real directory")

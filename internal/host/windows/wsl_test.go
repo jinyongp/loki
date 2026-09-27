@@ -13,14 +13,27 @@ type runnerCall struct {
 }
 
 type fakeNativeRunner struct {
-	results []NativeProbe
-	errs    []error
-	calls   []runnerCall
+	results     []NativeProbe
+	errs        []error
+	calls       []runnerCall
+	resultIndex int
+	helpResult  *NativeProbe
+	helpErr     error
 }
 
 func (runner *fakeNativeRunner) Run(_ context.Context, executable string, arguments []string) (NativeProbe, error) {
 	runner.calls = append(runner.calls, runnerCall{executable: executable, arguments: append([]string(nil), arguments...)})
-	index := len(runner.calls) - 1
+	if reflect.DeepEqual(arguments, []string{"--help"}) {
+		if runner.helpErr != nil {
+			return NativeProbe{}, runner.helpErr
+		}
+		if runner.helpResult != nil {
+			return *runner.helpResult, nil
+		}
+		return NativeProbe{Stdout: "--from-file --name --no-launch"}, nil
+	}
+	index := runner.resultIndex
+	runner.resultIndex++
 	var result NativeProbe
 	if index < len(runner.results) {
 		result = runner.results[index]
@@ -30,6 +43,27 @@ func (runner *fakeNativeRunner) Run(_ context.Context, executable string, argume
 		err = runner.errs[index]
 	}
 	return result, err
+}
+
+func TestWSLInstallCapabilityGate(t *testing.T) {
+	runner := &fakeNativeRunner{}
+	client := WSLClient{Runner: runner}
+	if err := client.RequireInstallCapabilities(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	missing := NativeProbe{Stdout: "--from-file --no-launch"}
+	runner = &fakeNativeRunner{helpResult: &missing}
+	client.Runner = runner
+	if err := client.RequireInstallCapabilities(context.Background()); err == nil {
+		t.Fatal("missing WSL --name capability was accepted")
+	}
+}
+
+func TestWSLClientRejectsMissingRunner(t *testing.T) {
+	client := WSLClient{}
+	if _, err := client.ListDistributions(context.Background()); err == nil {
+		t.Fatal("nil WSL runner caused no error")
+	}
 }
 
 func TestWSLProbeUsesExactManagementArgv(t *testing.T) {

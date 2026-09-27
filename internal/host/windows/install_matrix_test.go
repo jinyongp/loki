@@ -56,13 +56,16 @@ func TestInstallMatrixStaleApprovalDeniedAndApproved(t *testing.T) {
 		if !errors.As(err, &blocked) || blocked.Reason != "stale-reinstall-approval-required" {
 			t.Fatalf("unexpected stale denial: %v", err)
 		}
-		if fresh.calls != 0 || len(runner.calls) != 6 {
+		if fresh.calls != 0 || len(runner.calls) != 7 {
 			t.Fatalf("denied stale recovery mutated state: fresh=%d calls=%#v", fresh.calls, runner.calls)
 		}
 	})
 
 	t.Run("approved", func(t *testing.T) {
 		results := append(stalePreflightResults(expected.Distribution),
+			stalePreflightResults(expected.Distribution)...,
+		)
+		results = append(results,
 			NativeProbe{},
 			NativeProbe{},
 			NativeProbe{Stdout: ""},
@@ -89,7 +92,7 @@ func TestInstallMatrixStaleApprovalDeniedAndApproved(t *testing.T) {
 		if result.Disposition != InstallCompleted || fresh.calls != 1 {
 			t.Fatalf("stale approved result=%#v fresh=%d", result, fresh.calls)
 		}
-		if len(runner.calls) != 10 {
+		if len(runner.calls) != 17 {
 			t.Fatalf("unexpected stale recovery calls=%#v", runner.calls)
 		}
 	})
@@ -127,7 +130,7 @@ func TestInstallMatrixOrphanCleanupAndFreshInstall(t *testing.T) {
 		files: map[string][]byte{connection: connectionRaw},
 		errs:  map[string]error{},
 	}
-	runner := &fakeNativeRunner{results: []NativeProbe{{Stdout: ""}, {Stdout: ""}}}
+	runner := &fakeNativeRunner{results: []NativeProbe{{Stdout: ""}, {Stdout: ""}, {Stdout: ""}}}
 	tasks := &fakeTaskManager{}
 	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
 	remover := &mapStateRemover{filesystem: &fs}

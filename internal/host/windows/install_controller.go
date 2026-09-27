@@ -54,6 +54,9 @@ func (controller InstallController) Run(
 	if controller.Port == nil || controller.Fresh == nil || controller.Filesystem == nil {
 		return InstallResult{}, errors.New("Windows installer adapters are incomplete")
 	}
+	if err := controller.Collector.WSL.RequireInstallCapabilities(ctx); err != nil {
+		return InstallResult{}, err
+	}
 	snapshot, err := controller.Collector.Collect(ctx, expected)
 	if err != nil {
 		return InstallResult{}, err
