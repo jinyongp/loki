@@ -481,6 +481,10 @@
       "to": "loki/internal/buildinfo"
     },
     {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/host/connect"
+    },
+    {
       "from": "loki/tools/toolchainfetch",
       "to": "loki/internal/work/toolchains"
     },
