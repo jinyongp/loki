@@ -52,6 +52,7 @@ type ManagedHelperEnsurer interface {
 
 type ConnectionStateStore interface {
 	ProviderRoot(string, string) (string, error)
+	EnsureProviderRoot(context.Context, string, string) error
 	Read(string, string) (ConnectionState, bool, error)
 	Write(context.Context, ConnectionState) error
 	List(string) ([]ConnectionState, error)
@@ -90,12 +91,13 @@ func (manager ConnectionManager) Providers() ([]string, error) {
 }
 
 func (manager ConnectionManager) Setup(ctx context.Context, distribution, provider string) error {
-	adapter, runtime, previous, hadPrevious, err := manager.prepare(ctx, distribution, provider)
+	adapter, runtime, previous, hadPrevious, err := manager.prepareSetup(ctx, distribution, provider)
 	if err != nil {
 		return err
 	}
 	if err = adapter.Setup(ctx, runtime); err != nil {
-		return fmt.Errorf("setup managed %s connection: %w", provider, err)
+		return manager.rollbackSetup(ctx, adapter, runtime, previous, hadPrevious,
+			fmt.Errorf("setup managed %s connection: %w", provider, err))
 	}
 	status, err := adapter.Status(ctx, runtime)
 	if err != nil {
@@ -296,23 +298,7 @@ func (manager ConnectionManager) prepare(
 	ctx context.Context,
 	distribution, provider string,
 ) (RemoteConnectionAdapter, ConnectionRuntimeContext, ConnectionState, bool, error) {
-	if manager.Helpers == nil || manager.Store == nil {
-		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false,
-			errors.New("managed connection core is incomplete")
-	}
-	if err := ValidateDistributionName(distribution); err != nil {
-		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
-	}
-	registry, err := manager.registry()
-	if err != nil {
-		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
-	}
-	adapter, ok := registry[provider]
-	if !ok {
-		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false,
-			fmt.Errorf("unsupported managed connection provider %q", provider)
-	}
-	runtime, err := manager.runtime(ctx, distribution, adapter)
+	adapter, err := manager.adapterFor(distribution, provider)
 	if err != nil {
 		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
 	}
@@ -320,7 +306,55 @@ func (manager ConnectionManager) prepare(
 	if err != nil {
 		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
 	}
-	return adapter, runtime, state, present, nil
+	if !present {
+		return adapter, ConnectionRuntimeContext{}, ConnectionState{}, false, nil
+	}
+	runtime, err := manager.runtime(ctx, distribution, adapter)
+	if err != nil {
+		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
+	}
+	return adapter, runtime, state, true, nil
+}
+
+func (manager ConnectionManager) prepareSetup(
+	ctx context.Context,
+	distribution, provider string,
+) (RemoteConnectionAdapter, ConnectionRuntimeContext, ConnectionState, bool, error) {
+	adapter, err := manager.adapterFor(distribution, provider)
+	if err != nil {
+		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
+	}
+	previous, present, err := manager.Store.Read(distribution, provider)
+	if err != nil {
+		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
+	}
+	if err = manager.Store.EnsureProviderRoot(ctx, distribution, provider); err != nil {
+		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, err
+	}
+	runtime, err := manager.runtime(ctx, distribution, adapter)
+	if err != nil {
+		cleanupErr := manager.Store.Remove(ctx, distribution, provider)
+		return nil, ConnectionRuntimeContext{}, ConnectionState{}, false, errors.Join(err, cleanupErr)
+	}
+	return adapter, runtime, previous, present, nil
+}
+
+func (manager ConnectionManager) adapterFor(distribution, provider string) (RemoteConnectionAdapter, error) {
+	if manager.Helpers == nil || manager.Store == nil {
+		return nil, errors.New("managed connection core is incomplete")
+	}
+	if err := ValidateDistributionName(distribution); err != nil {
+		return nil, err
+	}
+	registry, err := manager.registry()
+	if err != nil {
+		return nil, err
+	}
+	adapter, ok := registry[provider]
+	if !ok {
+		return nil, fmt.Errorf("unsupported managed connection provider %q", provider)
+	}
+	return adapter, nil
 }
 
 func (manager ConnectionManager) runtime(

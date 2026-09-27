@@ -48,6 +48,11 @@ func (store *fakeConnectionStore) ProviderRoot(distribution, provider string) (s
 	return root, nil
 }
 
+func (store *fakeConnectionStore) EnsureProviderRoot(_ context.Context, distribution, provider string) error {
+	_, err := store.ProviderRoot(distribution, provider)
+	return err
+}
+
 func (store *fakeConnectionStore) Read(distribution, provider string) (ConnectionState, bool, error) {
 	state, ok := store.states[connectionKey(distribution, provider)]
 	return state, ok, nil
@@ -272,6 +277,20 @@ func TestConnectionManagerRejectsStateBoundToDifferentHelper(t *testing.T) {
 	if err := manager.Start(t.Context(), "loki-mcp", "provider-one"); err == nil ||
 		!strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("mismatched helper state accepted: %v", err)
+	}
+}
+
+func TestConnectionManagerStatusUnconfiguredDoesNotInstallHelper(t *testing.T) {
+	manager, adapter, helpers, _, _ := connectionManagerFixture()
+	status, err := manager.Status(t.Context(), "loki-mcp", "provider-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Configured {
+		t.Fatalf("status=%+v", status)
+	}
+	if len(helpers.calls) != 0 || len(adapter.calls) != 0 {
+		t.Fatalf("unconfigured status had side effects: helpers=%v adapter=%v", helpers.calls, adapter.calls)
 	}
 }
 
