@@ -42,6 +42,10 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"windows-2025",
 		".\\scripts\\verify\\accept-wsl.ps1",
 		"wsl-accept:",
+		"windows-frontend-precutover:",
+		"Verify Windows frontend pre-cutover migration",
+		".\\scripts\\verify\\accept-windows-frontend-precutover.ps1",
+		"- windows-frontend-precutover",
 		"source-gates:",
 		"LOKI_TEST_RG:",
 		"CI-sensitive Go test detail",
@@ -137,6 +141,46 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	for _, match := range uses {
 		if !fullPin.MatchString(match[1]) {
 			t.Fatalf("release workflow action is not pinned to a full commit SHA: %s", match[1])
+		}
+	}
+}
+
+func TestWindowsFrontendPrecutoverAcceptanceCoversMigrationBoundaries(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "accept-windows-frontend-precutover.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"candidate evidence is not schema v5",
+		"downloaded candidate frontend did not execute directly",
+		"VAL-012 must run before the public PowerShell bootstrap cutover",
+		"release_tag = \"v0.1.19\"",
+		"bootstrap replaced an unverified canonical frontend",
+		"persistent user PATH does not contain exactly one canonical Loki bin entry",
+		"legacy keepalive task field $field changed during frontend adoption",
+		"frontend replacement unexpectedly succeeded while canonical executable was delete-locked",
+		"exact-byte interrupted frontend ownership recovery failed",
+		"Windows status JSON does not preserve the operator schema boundary",
+		"restore did not refresh the Windows token replica from the live appliance",
+		"non-interactive stale reinstall succeeded without explicit approval",
+		"verified legacy orphan recovery failed",
+		"verified Windows uninstall failed",
+		"fresh reinstall after uninstall failed",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("Windows frontend pre-cutover acceptance lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"Unblock-File",
+		"Set-ExecutionPolicy",
+		"--no-verify",
+		"LOKI_WINDOWS_FRONTEND_URL",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("Windows frontend pre-cutover acceptance contains forbidden trust bypass %q", forbidden)
 		}
 	}
 }
