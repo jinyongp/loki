@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -80,14 +79,7 @@ func (platform WindowsFrontendPlatform) EnsurePrivateDirectory(ctx context.Conte
 	if !info.Directory || info.Reparse {
 		return errors.New("Windows Loki program path is not a real directory")
 	}
-	current, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("resolve current Windows user: %w", err)
-	}
-	if platform.Runner == nil {
-		return errors.New("Windows native runner is unavailable")
-	}
-	return (WindowsFreshPlatform{Runner: platform.Runner}).protectDirectory(ctx, target, current.Username)
+	return applyPrivateACL(ctx, target, true)
 }
 
 func validateExistingDirectoryPrefixes(target string) error {
@@ -224,14 +216,7 @@ func (platform WindowsFrontendPlatform) Sleep(ctx context.Context, duration time
 }
 
 func (platform WindowsFrontendPlatform) protectFile(ctx context.Context, target string) error {
-	current, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("resolve current Windows user: %w", err)
-	}
-	if platform.Runner == nil {
-		return errors.New("Windows native runner is unavailable")
-	}
-	return (WindowsFreshPlatform{Runner: platform.Runner}).protectFile(ctx, target, current.Username)
+	return applyPrivateACL(ctx, target, false)
 }
 
 func copySyncedTemp(source, directory, pattern string) (string, error) {

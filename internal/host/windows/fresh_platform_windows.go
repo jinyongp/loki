@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/user"
 	"path/filepath"
 )
 
@@ -57,9 +56,6 @@ func (platform WindowsFreshPlatform) PublishWindowsState(
 	_ InstallOptions,
 	material ConnectionMaterial,
 ) (bool, error) {
-	if platform.Runner == nil {
-		return false, errors.New("Windows native runner is unavailable")
-	}
 	connectionRaw, err := BuildPublicConnection(expected, material)
 	if err != nil {
 		return false, err
@@ -93,18 +89,14 @@ func (platform WindowsFreshPlatform) PublishWindowsState(
 	if !stateInfo.Exists || !stateInfo.Directory || stateInfo.Reparse {
 		return created, errors.New("created Loki Windows state path is not a real directory")
 	}
-	current, err := user.Current()
-	if err != nil {
-		return created, fmt.Errorf("resolve current Windows user: %w", err)
-	}
-	if err = platform.protectDirectory(ctx, expected.StateDir, current.Username); err != nil {
+	if err = platform.protectDirectory(ctx, expected.StateDir); err != nil {
 		return created, err
 	}
 	tokenPath := joinWindowsPath(expected.StateDir, "mcp-token")
 	if err = writeExclusiveSynced(tokenPath, []byte(material.Token), 0o600); err != nil {
 		return created, fmt.Errorf("write Windows MCP token: %w", err)
 	}
-	if err = platform.protectFile(ctx, tokenPath, current.Username); err != nil {
+	if err = platform.protectFile(ctx, tokenPath); err != nil {
 		return created, err
 	}
 	connectionPath := joinWindowsPath(expected.StateDir, "connection.json")
@@ -123,9 +115,6 @@ func (platform WindowsFreshPlatform) PublishOwnership(
 	expected ExpectedInstallation,
 	options InstallOptions,
 ) error {
-	if platform.Runner == nil {
-		return errors.New("Windows native runner is unavailable")
-	}
 	raw, err := BuildOwnershipManifest(platform.Binding, expected, options)
 	if err != nil {
 		return err
@@ -134,11 +123,7 @@ func (platform WindowsFreshPlatform) PublishOwnership(
 	if err = writeExclusiveSynced(path, raw, 0o600); err != nil {
 		return fmt.Errorf("write Windows ownership manifest: %w", err)
 	}
-	current, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("resolve current Windows user: %w", err)
-	}
-	return platform.protectFile(ctx, path, current.Username)
+	return platform.protectFile(ctx, path)
 }
 
 func (platform WindowsFreshPlatform) RollbackFresh(
@@ -179,26 +164,12 @@ func (platform WindowsFreshPlatform) RollbackFresh(
 	return errors.Join(failures...)
 }
 
-func (platform WindowsFreshPlatform) protectDirectory(ctx context.Context, target, identity string) error {
-	return platform.runACL(ctx, target,
-		"/inheritance:r", "/grant:r", identity+":(OI)(CI)(F)", "SYSTEM:(OI)(CI)(F)")
+func (platform WindowsFreshPlatform) protectDirectory(ctx context.Context, target string) error {
+	return applyPrivateACL(ctx, target, true)
 }
 
-func (platform WindowsFreshPlatform) protectFile(ctx context.Context, target, identity string) error {
-	return platform.runACL(ctx, target,
-		"/inheritance:r", "/grant:r", identity+":(F)", "SYSTEM:(F)")
-}
-
-func (platform WindowsFreshPlatform) runACL(ctx context.Context, target string, arguments ...string) error {
-	all := append([]string{target}, arguments...)
-	result, err := platform.Runner.Run(ctx, "icacls.exe", all)
-	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return nativeFailure("protect Windows Loki state", result)
-	}
-	return nil
+func (platform WindowsFreshPlatform) protectFile(ctx context.Context, target string) error {
+	return applyPrivateACL(ctx, target, false)
 }
 
 func writeExclusiveSynced(path string, raw []byte, mode os.FileMode) error {
