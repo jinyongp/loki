@@ -386,41 +386,68 @@ function Get-LokiWindowsStateOwnership {
         $connectionFile = Join-Path $stateDir "connection.json"
         $tokenFile = Join-Path $stateDir "mcp-token"
         $connection = [IO.File]::ReadAllText($connectionFile) | ConvertFrom-Json
-        if ([int]$connection.schema_version -ne 1 -or
-            -not ([string]$connection.distribution).Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) -or
-            -not (Test-PathEqual ([string]$connection.local_origin.authentication.token_file) $tokenFile) -or
-            -not ([string]$connection.local_origin.authentication.type).Equals("bearer-token-file", [StringComparison]::Ordinal) -or
-            -not ([string]$connection.local_origin.transport).Equals("streamable-http", [StringComparison]::Ordinal) -or
-            -not ([string]$connection.local_origin.reachability).Equals("loopback", [StringComparison]::Ordinal)) {
-            throw "legacy connection state does not prove Loki ownership"
-        }
-        $origin = [Uri]([string]$connection.local_origin.url)
-        if ($origin.Scheme -ne "http" -or $origin.Host -ne "127.0.0.1" -or
-            $origin.AbsolutePath -ne "/mcp" -or $origin.Port -lt 1024 -or $origin.Port -gt 65535) {
-            throw "legacy connection state is not a loopback Loki origin"
+        $distributionProperty = $connection.PSObject.Properties["distribution"]
+        if (-not $distributionProperty -or
+            -not ([string]$distributionProperty.Value).Equals($distributionName, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "legacy connection state does not match the requested Loki distribution"
         }
 
-        # Earlier schema-v1 Windows state contained only schema_version,
-        # local_origin and distribution. Later installers added top-level
-        # compatibility aliases. Accept either published shape, but if an alias
-        # is present it must agree with the canonical local_origin proof above.
-        $compatAuthentication = $connection.PSObject.Properties["authentication"]
-        if ($compatAuthentication -and
-            -not ([string]$compatAuthentication.Value).Equals("bearer-token-file", [StringComparison]::Ordinal)) {
-            throw "legacy authentication alias does not match Loki connection state"
+        $localOriginProperty = $connection.PSObject.Properties["local_origin"]
+        if ($localOriginProperty) {
+            $schemaProperty = $connection.PSObject.Properties["schema_version"]
+            $localOrigin = $localOriginProperty.Value
+            if (-not $schemaProperty -or [int]$schemaProperty.Value -ne 1 -or
+                -not (Test-PathEqual ([string]$localOrigin.authentication.token_file) $tokenFile) -or
+                -not ([string]$localOrigin.authentication.type).Equals("bearer-token-file", [StringComparison]::Ordinal) -or
+                -not ([string]$localOrigin.transport).Equals("streamable-http", [StringComparison]::Ordinal) -or
+                -not ([string]$localOrigin.reachability).Equals("loopback", [StringComparison]::Ordinal)) {
+                throw "legacy local-origin connection state does not prove Loki ownership"
+            }
+            $origin = [Uri]([string]$localOrigin.url)
+            if ($origin.Scheme -ne "http" -or $origin.Host -ne "127.0.0.1" -or
+                $origin.AbsolutePath -ne "/mcp" -or $origin.Port -lt 1024 -or $origin.Port -gt 65535) {
+                throw "legacy local-origin connection state is not a valid Loki loopback origin"
+            }
+
+            # Later schema-v1 installers added top-level compatibility aliases.
+            # They are optional for older local-origin state, but if present
+            # must agree with the canonical local_origin proof above.
+            $compatAuthentication = $connection.PSObject.Properties["authentication"]
+            if ($compatAuthentication -and
+                -not ([string]$compatAuthentication.Value).Equals("bearer-token-file", [StringComparison]::Ordinal)) {
+                throw "legacy authentication alias does not match Loki connection state"
+            }
+            $compatTokenFile = $connection.PSObject.Properties["token_file"]
+            if ($compatTokenFile -and -not (Test-PathEqual ([string]$compatTokenFile.Value) $tokenFile)) {
+                throw "legacy token-file alias does not match Loki connection state"
+            }
+            $compatEndpoint = $connection.PSObject.Properties["endpoint"]
+            if ($compatEndpoint -and -not ([string]$compatEndpoint.Value).Equals($origin.AbsoluteUri, [StringComparison]::Ordinal)) {
+                throw "legacy endpoint alias does not match Loki connection state"
+            }
+            $compatTransport = $connection.PSObject.Properties["transport"]
+            if ($compatTransport -and
+                -not ([string]$compatTransport.Value).Equals("streamable-http", [StringComparison]::Ordinal)) {
+                throw "legacy transport alias does not match Loki connection state"
+            }
         }
-        $compatTokenFile = $connection.PSObject.Properties["token_file"]
-        if ($compatTokenFile -and -not (Test-PathEqual ([string]$compatTokenFile.Value) $tokenFile)) {
-            throw "legacy token-file alias does not match Loki connection state"
-        }
-        $compatEndpoint = $connection.PSObject.Properties["endpoint"]
-        if ($compatEndpoint -and -not ([string]$compatEndpoint.Value).Equals($origin.AbsoluteUri, [StringComparison]::Ordinal)) {
-            throw "legacy endpoint alias does not match Loki connection state"
-        }
-        $compatTransport = $connection.PSObject.Properties["transport"]
-        if ($compatTransport -and
-            -not ([string]$compatTransport.Value).Equals("streamable-http", [StringComparison]::Ordinal)) {
-            throw "legacy transport alias does not match Loki connection state"
+        else {
+            # The first published Windows connection state predates
+            # schema_version/local_origin and used an exact flat shape.
+            $flatAllowed = @("endpoint", "transport", "authentication", "token_file", "distribution")
+            $flatNames = @($connection.PSObject.Properties | ForEach-Object { $_.Name })
+            if ($flatNames.Count -ne $flatAllowed.Count -or
+                @($flatNames | Where-Object { $flatAllowed -notcontains $_ }).Count -ne 0 -or
+                -not ([string]$connection.transport).Equals("streamable-http", [StringComparison]::Ordinal) -or
+                -not ([string]$connection.authentication).Equals("bearer-token-file", [StringComparison]::Ordinal) -or
+                -not (Test-PathEqual ([string]$connection.token_file) $tokenFile)) {
+                throw "legacy flat connection state does not prove Loki ownership"
+            }
+            $origin = [Uri]([string]$connection.endpoint)
+            if ($origin.Scheme -ne "http" -or $origin.Host -ne "127.0.0.1" -or
+                $origin.AbsolutePath -ne "/mcp" -or $origin.Port -ne 18765) {
+                throw "legacy flat connection state is not the published Loki endpoint"
+            }
         }
         return [PSCustomObject]@{
             Present = $true
