@@ -76,13 +76,20 @@ Common choices are:
 
 - **client-specific tunnel or local agent** — usually the simplest option when
   the MCP client vendor provides one;
-- **private VPN** — useful when both sides can join the same private network;
+- **private VPN** — useful when both sides can join the same private network.
+  [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) is one
+  example;
 - **SSH or application tunnel** — useful for operator-controlled machines and
-  temporary access;
+  temporary access. See the
+  [OpenSSH port-forwarding options](https://man.openbsd.org/ssh);
 - **reverse proxy** — useful when you intentionally operate a stable remote MCP
-  endpoint;
+  endpoint. See the
+  [Caddy reverse-proxy quick start](https://caddyserver.com/docs/quick-starts/reverse-proxy)
+  for one implementation example;
 - **managed tunnel service** — useful when inbound networking cannot be opened
-  directly.
+  directly. Examples include
+  [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/)
+  and [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel).
 
 Whichever option you use, the ingress must forward Streamable HTTP requests to
 Loki and preserve or deliberately re-establish Loki's bearer authentication.
@@ -116,12 +123,22 @@ Loki
 
 Typical setup:
 
-1. Create the tunnel in the OpenAI product/platform flow.
-2. Run the current OpenAI `tunnel-client` on the Loki host.
-3. Point it at the Loki URL from `connection.json`.
+1. Create or inspect the tunnel in
+   [OpenAI Platform Tunnels](https://platform.openai.com/settings/organization/tunnels).
+2. Install the current OpenAI `tunnel-client` from the Platform tunnel page or
+   the [latest public release](https://github.com/openai/tunnel-client/releases/latest),
+   then run it on the Loki host.
+3. Create or select the runtime credential under
+   [OpenAI organization API keys](https://platform.openai.com/settings/organization/api-keys)
+   and point `tunnel-client` at the Loki URL from `connection.json`.
 4. Keep Loki bearer authentication enabled and configure the client connection
    to send the Loki bearer token.
-5. Verify the tunnel, then register or scan the MCP tools in the OpenAI client.
+5. Follow the
+   [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
+   to verify the tunnel.
+6. For ChatGPT, enable/configure the MCP app using the current
+   [developer mode and MCP apps guide](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt),
+   then scan the tools and test the connection.
 
 For PowerShell, load the Loki URL without copying it manually:
 
@@ -130,13 +147,9 @@ $connection = Get-Content "$env:LOCALAPPDATA\Loki\loki-mcp\connection.json" -Raw
 $env:MCP_SERVER_URL = $connection.local_origin.url
 ```
 
-OpenAI's UI, tunnel-client syntax, and plan permissions can change independently
-of Loki. Use the current OpenAI documentation for the provider-specific steps:
-
-- Secure MCP Tunnel:
-  https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
-- ChatGPT developer mode and custom MCP apps:
-  https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt
+OpenAI's UI, `tunnel-client` syntax, and plan permissions can change
+independently of Loki. Prefer the linked OpenAI settings pages and official
+guides above over copied UI instructions.
 
 Other MCP client vendors may provide their own tunnel, desktop bridge, gateway,
 or hosted connector. Prefer that vendor's supported mechanism when it preserves
