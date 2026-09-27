@@ -65,13 +65,19 @@ func (platform WindowsFreshPlatform) PublishWindowsState(
 		return false, err
 	}
 	stateRoot := filepath.Dir(expected.StateDir)
-	if err = os.MkdirAll(stateRoot, 0o700); err != nil {
-		return false, fmt.Errorf("create Loki Windows state root: %w", err)
-	}
 	filesystem := OSStateFilesystem{}
 	rootInfo, statErr := filesystem.Lstat(stateRoot)
 	if statErr != nil {
 		return false, fmt.Errorf("inspect Loki Windows state root: %w", statErr)
+	}
+	if !rootInfo.Exists {
+		if err = os.Mkdir(stateRoot, 0o700); err != nil {
+			return false, fmt.Errorf("create Loki Windows state root: %w", err)
+		}
+		rootInfo, statErr = filesystem.Lstat(stateRoot)
+		if statErr != nil {
+			return false, fmt.Errorf("inspect created Loki Windows state root: %w", statErr)
+		}
 	}
 	if !rootInfo.Exists || !rootInfo.Directory || rootInfo.Reparse {
 		return false, errors.New("Loki Windows state root is not a real directory")
@@ -239,15 +245,22 @@ func removeCreatedStateDirectory(target string) error {
 		if !allowed[entry.Name()] {
 			return fmt.Errorf("created Windows state contains unexpected entry %q", entry.Name())
 		}
-		entryInfo, statErr := filesystem.Lstat(joinWindowsPath(target, entry.Name()))
+		entryPath := joinWindowsPath(target, entry.Name())
+		entryInfo, statErr := filesystem.Lstat(entryPath)
 		if statErr != nil {
 			return statErr
 		}
 		if !entryInfo.Exists || !entryInfo.Regular || entryInfo.Reparse {
 			return fmt.Errorf("created Windows state entry %q changed type", entry.Name())
 		}
+		if err := os.Remove(entryPath); err != nil {
+			return fmt.Errorf("remove created Windows state entry %q: %w", entry.Name(), err)
+		}
 	}
-	return os.RemoveAll(target)
+	if err := os.Remove(target); err != nil {
+		return fmt.Errorf("remove created Windows state directory: %w", err)
+	}
+	return nil
 }
 
 func removeEmptyCreatedDirectory(target string) error {

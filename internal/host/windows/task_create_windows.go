@@ -45,5 +45,12 @@ func (source PowerShellStartupTaskSource) CreateOwned(ctx context.Context, expec
 		}
 		return false, fmt.Errorf("create Scheduled Task %q: %w: %s", expected.TaskName, err, detail)
 	}
+	probe, err := source.Probe(ctx, expected.TaskName)
+	if err != nil {
+		return true, fmt.Errorf("verify created Scheduled Task %q: %w", expected.TaskName, err)
+	}
+	if !ClassifyStartupTask(probe, expected).Owned {
+		return true, fmt.Errorf("created Scheduled Task %q does not match Loki's managed startup action", expected.TaskName)
+	}
 	return true, nil
 }

@@ -62,6 +62,13 @@ func copyVerifiedAppliance(source, target string, expected FileBinding) error {
 		return err
 	}
 	defer input.Close()
+	openedInfo, err := input.Stat()
+	if err != nil {
+		return err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) || openedInfo.Size() != expected.Length {
+		return errors.New("local WSL appliance changed while being opened")
+	}
 	return writeVerifiedAppliance(input, target, expected)
 }
 
