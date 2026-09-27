@@ -60,8 +60,8 @@ func TestRunHostStatusTextAndJSON(t *testing.T) {
 	if err := json.Unmarshal(jsonOut.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.State != "installed" || report.Release != candidate.Spec.Version || report.Workspace != workspace ||
-		report.DockerAccess != hostDockerAccessDirect {
+	if report.SchemaVersion != 1 || report.State != "installed" || report.Release != candidate.Spec.Version ||
+		report.Workspace != workspace || report.DockerAccess != hostDockerAccessDirect {
 		t.Fatalf("status report = %#v", report)
 	}
 }

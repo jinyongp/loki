@@ -51,12 +51,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: loki version [--json]")
 		return 2
 	default:
-		fmt.Fprintln(stderr, "Windows Loki frontend command is not available in this release candidate.")
-		printUsage(stderr)
-		return 2
+		return runWindowsCommand(args, stdout, stderr)
 	}
 }
 
 func printUsage(stderr io.Writer) {
-	fmt.Fprintln(stderr, "usage: loki version [--json]")
+	fmt.Fprintln(stderr, "usage: loki version [--json] | install [OPTIONS] | status [OPTIONS] | doctor [OPTIONS] | connection [OPTIONS] | update status|prepare|apply [OPTIONS] | backup [OPTIONS] | rollback [OPTIONS] | restore [OPTIONS] BACKUP_ID | uninstall [OPTIONS]")
 }

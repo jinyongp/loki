@@ -32,6 +32,7 @@ type hostInfoOptions struct {
 }
 
 type hostStatusReport struct {
+	SchemaVersion     int      `json:"schema_version"`
 	State             string   `json:"state"`
 	Scope             string   `json:"scope,omitempty"`
 	Workspace         string   `json:"workspace,omitempty"`
@@ -167,6 +168,7 @@ func runHostStatus(args []string, stdout, stderr io.Writer) int {
 
 func hostStatusFromSnapshot(snapshot lifecycle.Snapshot) (hostStatusReport, error) {
 	report := hostStatusReport{
+		SchemaVersion:     1,
 		State:             "not-installed",
 		EnabledComponents: append([]string(nil), snapshot.Host.EnabledComponents...),
 		UpdateAvailable:   snapshot.Available != nil && (snapshot.Installed == nil || snapshot.Available.ID != snapshot.Installed.ID),

@@ -24,6 +24,13 @@ type InstallOptions struct {
 
 var distributionNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
+func ValidateDistributionName(value string) error {
+	if value != strings.TrimSpace(value) || !distributionNamePattern.MatchString(value) {
+		return errors.New("Windows Loki distribution name must be 1-64 characters using letters, digits, dot, underscore, or hyphen")
+	}
+	return nil
+}
+
 func ResolveInstallOptions(lookup EnvironmentLookup) (InstallOptions, error) {
 	value := func(name string) (string, bool) {
 		raw, ok := lookup(name)
