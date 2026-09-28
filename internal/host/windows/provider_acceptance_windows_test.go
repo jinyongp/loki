@@ -195,15 +195,18 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 
 	distribution := providerAcceptanceDistribution()
 	connectionStore := NewWindowsConnectionStateStore(localRoot)
-	if err = connectionStore.EnsureProviderRoot(t.Context(), distribution, OpenAIProviderID); err != nil {
-		t.Fatal(err)
-	}
 	providerRoot, err := connectionStore.ProviderRoot(distribution, OpenAIProviderID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	openAIStore := NewWindowsOpenAIProviderStore()
-	providerPaths, err := openAIStore.Ensure(t.Context(), providerRoot)
+
+	// Native helper smoke needs isolated tunnel-client state, but it must not
+	// pre-create the canonical provider root. A pre-existing provider root
+	// without connection.json is intentionally rejected by ConnectionManager
+	// as unowned state.
+	smokeRoot := filepath.Join(t.TempDir(), "openai-smoke")
+	providerPaths, err := openAIStore.Ensure(t.Context(), smokeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
