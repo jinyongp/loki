@@ -25,82 +25,30 @@ type frontendVersionEnvelope struct {
 }
 
 func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
-	current, err := windowshost.CurrentReleaseBinding()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
 	client := windowshost.FrontendReleaseClient{}
-	pointer, err := client.Resolve(ctx)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	comparison, err := client.Compare(current.ReleaseTag, pointer)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if comparison > 0 {
-		fmt.Fprintf(stderr, "installed Windows frontend %s is newer than published release %s; refusing downgrade\n",
-			current.ReleaseTag, pointer.ReleaseTag)
-		return 1
-	}
-	if comparison == 0 {
-		fmt.Fprintf(stdout, "Windows Loki frontend is current at %s.\n", current.ReleaseTag)
-		return runInstall(ctx, nil, stdout, stderr)
-	}
+	return runProductUpdateWith(ctx, productUpdateDependencies{
+		CurrentBinding: windowshost.CurrentReleaseBinding,
+		Client:         client,
+		Stage:          stageFrontendUpdateCandidate,
+		Inspect:        inspectFrontendCandidate,
+		RunCandidate:   runFrontendCandidate,
+		CanonicalPath:  canonicalFrontendPath,
+		Converge: func(ctx context.Context, stdout, stderr io.Writer) int {
+			return runInstall(ctx, nil, stdout, stderr)
+		},
+	}, stdout, stderr)
+}
 
-	raw, err := client.Download(ctx, pointer)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	candidate, cleanup, err := stageFrontendUpdateCandidate(ctx, raw, pointer)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	defer cleanup()
-
-	candidateBinding, err := inspectFrontendCandidate(ctx, candidate)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if candidateBinding.ReleaseTag != pointer.ReleaseTag {
-		fmt.Fprintf(stderr, "downloaded Windows frontend binding %s does not match published release %s\n",
-			candidateBinding.ReleaseTag, pointer.ReleaseTag)
-		return 1
-	}
-
-	fmt.Fprintf(stdout, "Updating Windows Loki frontend %s -> %s...\n", current.ReleaseTag, pointer.ReleaseTag)
-	if code := runFrontendCandidate(ctx, candidate, []string{"bootstrap", "install"}, stdout, stderr); code != 0 {
-		return code
-	}
-
+func canonicalFrontendPath() (string, error) {
 	localAppData, _, err := windowsEnvironmentRoots()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return "", err
 	}
 	paths, err := windowshost.ResolveFrontendPaths(localAppData)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return "", err
 	}
-	installedBinding, err := inspectFrontendCandidate(ctx, paths.Binary)
-	if err != nil {
-		fmt.Fprintln(stderr, "verify updated Windows frontend:", err)
-		return 1
-	}
-	if installedBinding.ReleaseTag != pointer.ReleaseTag {
-		fmt.Fprintf(stderr, "updated Windows frontend is %s; expected %s\n",
-			installedBinding.ReleaseTag, pointer.ReleaseTag)
-		return 1
-	}
-	fmt.Fprintf(stdout, "Loki is updated to %s.\n", pointer.ReleaseTag)
-	return 0
+	return paths.Binary, nil
 }
 
 func stageFrontendUpdateCandidate(
