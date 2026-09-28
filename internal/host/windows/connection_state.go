@@ -3,6 +3,7 @@ package windows
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -10,6 +11,19 @@ const (
 	connectionStateFileName         = "connection.json"
 	connectionTaskOwnershipFileName = "startup-task.json"
 )
+
+func ConnectionProviderRoot(paths FrontendPaths, distribution, provider string) (string, error) {
+	if err := ValidateDistributionName(distribution); err != nil {
+		return "", err
+	}
+	if !connectionProviderPattern.MatchString(provider) {
+		return "", errors.New("managed connection provider name is invalid")
+	}
+	if paths.ConnectionsRoot == "" {
+		return "", errors.New("managed connection root is empty")
+	}
+	return joinWindowsPath(paths.ConnectionsRoot, distribution+"\\"+provider), nil
+}
 
 func encodeConnectionState(state ConnectionState) ([]byte, error) {
 	if err := validateConnectionState(state); err != nil {

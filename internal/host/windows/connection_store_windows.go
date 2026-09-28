@@ -33,17 +33,11 @@ func (store WindowsConnectionStateStore) frontendPaths() (FrontendPaths, error) 
 }
 
 func (store WindowsConnectionStateStore) ProviderRoot(distribution, provider string) (string, error) {
-	if err := ValidateDistributionName(distribution); err != nil {
-		return "", err
-	}
-	if !connectionProviderPattern.MatchString(provider) {
-		return "", errors.New("managed connection provider name is invalid")
-	}
 	paths, err := store.frontendPaths()
 	if err != nil {
 		return "", err
 	}
-	return joinWindowsPath(paths.ConnectionsRoot, distribution+"\\"+provider), nil
+	return ConnectionProviderRoot(paths, distribution, provider)
 }
 
 func (store WindowsConnectionStateStore) distributionRoot(distribution string) (string, error) {
