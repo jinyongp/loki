@@ -123,7 +123,7 @@ func (platform WindowsFrontendPlatform) PublishExecutable(ctx context.Context, s
 	if err = platform.protectFile(ctx, temp); err != nil {
 		return err
 	}
-	return replaceFile(temp, target)
+	return replaceExecutable(temp, target)
 }
 
 func (platform WindowsFrontendPlatform) WriteProtectedAtomic(ctx context.Context, target string, raw []byte) error {
@@ -252,6 +252,55 @@ func copySyncedTemp(source, directory, pattern string) (string, error) {
 }
 
 func replaceFile(source, target string) error {
+	return moveFile(source, target, true)
+}
+
+func replaceExecutable(source, target string) error {
+	if err := cleanupPreviousExecutable(target); err != nil {
+		return err
+	}
+	if err := replaceFile(source, target); err == nil {
+		return nil
+	} else if !errors.Is(err, windows.ERROR_ACCESS_DENIED) && !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		return err
+	}
+
+	previous := target + ".previous"
+	if err := moveFile(target, previous, true); err != nil {
+		return fmt.Errorf("move running Windows frontend aside: %w", err)
+	}
+	if err := moveFile(source, target, false); err != nil {
+		rollbackErr := moveFile(previous, target, true)
+		if rollbackErr != nil {
+			return errors.Join(
+				fmt.Errorf("publish replacement Windows frontend: %w", err),
+				fmt.Errorf("restore previous Windows frontend: %w", rollbackErr),
+			)
+		}
+		return fmt.Errorf("publish replacement Windows frontend: %w", err)
+	}
+	return nil
+}
+
+func cleanupPreviousExecutable(target string) error {
+	previous := target + ".previous"
+	info, err := OSStateFilesystem{}.Lstat(previous)
+	if err != nil {
+		return err
+	}
+	if !info.Exists {
+		return nil
+	}
+	if !info.Regular || info.Reparse {
+		return errors.New("previous Windows frontend is not a regular non-reparse file")
+	}
+	if err = os.Remove(previous); err != nil {
+		return fmt.Errorf("remove previous Windows frontend: %w", err)
+	}
+	return nil
+}
+
+func moveFile(source, target string, replace bool) error {
 	from, err := windows.UTF16PtrFromString(source)
 	if err != nil {
 		return err
@@ -260,7 +309,11 @@ func replaceFile(source, target string) error {
 	if err != nil {
 		return err
 	}
-	return windows.MoveFileEx(from, to, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
+	flags := uint32(windows.MOVEFILE_WRITE_THROUGH)
+	if replace {
+		flags |= windows.MOVEFILE_REPLACE_EXISTING
+	}
+	return windows.MoveFileEx(from, to, flags)
 }
 
 func broadcastEnvironmentChange() error {

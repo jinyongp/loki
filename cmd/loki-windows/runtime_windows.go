@@ -715,8 +715,7 @@ func newWindowsConnectionManagerWithAdapters(
 
 func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki update status|prepare|apply [--distribution NAME] [--json] [--approve] [--interrupt-active-jobs]")
-		return 2
+		return runProductUpdate(ctx, stdout, stderr)
 	}
 	action := args[0]
 	flags := flag.NewFlagSet("loki update "+action, flag.ContinueOnError)

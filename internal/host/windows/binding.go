@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"loki/internal/buildinfo"
 )
@@ -43,14 +44,7 @@ func CurrentReleaseBinding() (ReleaseBinding, error) {
 	if err != nil {
 		return ReleaseBinding{}, errors.New("Windows frontend helper catalog binding is invalid")
 	}
-	if !bindingDigestPattern.MatchString(WSLApplianceSHA256) ||
-		!bindingDigestPattern.MatchString(HelperCatalogSHA256) ||
-		strings.TrimSpace(buildinfo.Version) == "" ||
-		strings.TrimSpace(buildinfo.Commit) == "" ||
-		strings.TrimSpace(buildinfo.Date) == "" {
-		return ReleaseBinding{}, errors.New("Windows frontend release binding is incomplete")
-	}
-	return ReleaseBinding{
+	binding := ReleaseBinding{
 		SchemaVersion:  ReleaseBindingSchemaVersion,
 		ReleaseTag:     "v" + buildinfo.Version,
 		SourceRevision: buildinfo.Commit,
@@ -63,7 +57,25 @@ func CurrentReleaseBinding() (ReleaseBinding, error) {
 			SHA256: HelperCatalogSHA256,
 			Length: catalogLength,
 		},
-	}, nil
+	}
+	if err = ValidateReleaseBinding(binding); err != nil {
+		return ReleaseBinding{}, err
+	}
+	return binding, nil
+}
+
+func ValidateReleaseBinding(binding ReleaseBinding) error {
+	if binding.SchemaVersion != ReleaseBindingSchemaVersion ||
+		!validFrontendReleaseTag(binding.ReleaseTag) ||
+		!frontendRevisionPattern.MatchString(strings.TrimSpace(binding.SourceRevision)) ||
+		!bindingDigestPattern.MatchString(binding.WSLAppliance.SHA256) || binding.WSLAppliance.Length <= 0 ||
+		!bindingDigestPattern.MatchString(binding.HelperCatalog.SHA256) || binding.HelperCatalog.Length <= 0 {
+		return errors.New("Windows frontend release binding is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, strings.TrimSpace(binding.BuiltAt)); err != nil {
+		return errors.New("Windows frontend release timestamp is invalid")
+	}
+	return nil
 }
 
 func parseBoundLength(raw string) (int64, error) {

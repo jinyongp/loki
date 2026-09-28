@@ -167,19 +167,34 @@ loki connect
 identity separately. `loki connection` refreshes the protected Windows
 connection replica from the live appliance before reporting it.
 
-Appliance lifecycle operations are also explicit Windows commands:
+The installed frontend can update the whole Windows Loki product in place:
+
+```powershell
+loki update
+```
+
+This checks the published release pointer, downloads the exact Windows frontend
+asset, verifies its SHA-256 and length, validates the candidate's embedded
+release binding, replaces the canonical frontend, and then converges the WSL
+appliance to the same release. Rerunning the public PowerShell installer is not
+required for normal upgrades.
+
+Advanced appliance lifecycle operations remain available as explicit
+subcommands:
 
 ```powershell
 loki update status
+loki update prepare
+loki update apply
 loki backup
 loki rollback
 loki restore <backup-id>
 ```
 
 Mutating operations that can interrupt work or destroy state require their
-documented approval flags or an interactive confirmation. After update,
-rollback, or restore, Loki refreshes the Windows connection/token replica and
-reconciles enabled managed connections.
+documented approval flags or an interactive confirmation. After appliance
+update, rollback, or restore, Loki refreshes the Windows connection/token
+replica and reconciles enabled managed connections.
 
 ### Recovery behavior
 
