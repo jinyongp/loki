@@ -1058,3 +1058,156 @@ jobs:
             --json
           "$HOME/.local/bin/loki" host status
           "$HOME/.local/bin/loki" host doctor
+
+
+  verify-public-windows:
+    name: Verify public Windows install
+    needs:
+      - preflight
+      - pages
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    steps:
+      - name: Install current WSL package for public acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          wsl.exe --update --web-download
+          if ($LASTEXITCODE -ne 0) { throw "WSL package update failed" }
+
+      - name: Require current WSL2 for public acceptance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          wsl.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
+          $help = (wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
+          foreach ($option in @("--from-file", "--name", "--no-launch")) {
+            if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Verify published PowerShell installer bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseDir = Join-Path $env:RUNNER_TEMP "release"
+          $releaseInstaller = Join-Path $releaseDir "loki-install.ps1"
+          $publicInstaller = Join-Path $env:RUNNER_TEMP "install.ps1"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern loki-install.ps1 --dir $releaseDir
+          if ($LASTEXITCODE -ne 0) { throw "failed to download immutable release installer" }
+
+          $matched = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+              try {
+                  Invoke-WebRequest -UseBasicParsing -Uri https://jinyongp.dev/loki/install.ps1 -OutFile $publicInstaller -ErrorAction Stop
+                  $releaseInfo = Get-Item -LiteralPath $releaseInstaller -ErrorAction Stop
+                  $publicInfo = Get-Item -LiteralPath $publicInstaller -ErrorAction Stop
+                  $releaseHash = (Get-FileHash -LiteralPath $releaseInstaller -Algorithm SHA256).Hash
+                  $publicHash = (Get-FileHash -LiteralPath $publicInstaller -Algorithm SHA256).Hash
+                  if ($releaseInfo.Length -eq $publicInfo.Length -and $releaseHash -eq $publicHash) {
+                      $matched = $true
+                      break
+                  }
+              }
+              catch {
+                  if ($attempt -eq 20) { throw }
+              }
+              Start-Sleep -Seconds 15
+          }
+          if (-not $matched) { throw "public PowerShell installer does not match immutable release bytes" }
+          if ((Get-Content -LiteralPath $publicInstaller -Raw).Contains("@@LOKI_")) {
+              throw "public PowerShell installer contains unresolved release placeholders"
+          }
+
+      - name: Run public Windows source-free installation
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $suffix = "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $distribution = "loki-public-$suffix"
+          $installRoot = Join-Path $env:RUNNER_TEMP "loki-public-install"
+          $installLocation = Join-Path $installRoot $distribution
+          $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distribution)
+          $taskName = "Loki WSL ($distribution)"
+          $loki = Join-Path $env:LOCALAPPDATA "Programs\Loki\bin\loki.exe"
+
+          $portSelector = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $portSelector.Start()
+          $mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port
+          $portSelector.Stop()
+
+          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
+          $env:LOKI_WSL_NAME = $distribution
+          $env:LOKI_WSL_LOCATION = $installLocation
+          $env:LOKI_WSL_AUTOSTART = "1"
+          $env:LOKI_MCP_PORT = [string]$mcpPort
+
+          try {
+              $global:LASTEXITCODE = 0
+              irm https://jinyongp.dev/loki/install.ps1 | iex
+              if ($LASTEXITCODE -ne 0) { throw "public Windows installer failed with code $LASTEXITCODE" }
+              if (-not (Test-Path -LiteralPath $loki -PathType Leaf)) {
+                  throw "public Windows installer did not install the canonical frontend"
+              }
+
+              $versionRaw = (& $loki version --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "public Windows frontend version failed" }
+              $version = $versionRaw | ConvertFrom-Json
+              if ([string]$version.release_binding.release_tag -ne $env:TAG) {
+                  throw "public Windows frontend release binding does not match $env:TAG"
+              }
+
+              & $loki status --distribution $distribution --json
+              if ($LASTEXITCODE -ne 0) { throw "public Windows status failed" }
+              & $loki doctor --distribution $distribution
+              if ($LASTEXITCODE -ne 0) { throw "public Windows doctor failed" }
+              & $loki connection --distribution $distribution --json
+              if ($LASTEXITCODE -ne 0) { throw "public Windows connection refresh failed" }
+
+              & $loki uninstall --distribution $distribution --approve
+              if ($LASTEXITCODE -ne 0) { throw "public Windows uninstall failed" }
+              $registered = @(& wsl.exe --list --quiet 2>$null) |
+                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
+                  Where-Object { $_ }
+              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
+                  throw "public Windows uninstall left the distribution registered"
+              }
+              if (Test-Path -LiteralPath $stateDir) {
+                  throw "public Windows uninstall left per-distribution state"
+              }
+              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+                  throw "public Windows uninstall left the keepalive task"
+              }
+          }
+          finally {
+              Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
+
+              if (Test-Path -LiteralPath $loki -PathType Leaf) {
+                  & $loki uninstall --distribution $distribution --approve *> $null
+              }
+              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+                  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+              }
+              $registered = @(& wsl.exe --list --quiet 2>$null) |
+                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
+                  Where-Object { $_ }
+              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
+                  & wsl.exe --terminate $distribution 2>$null | Out-Null
+                  & wsl.exe --unregister $distribution 2>$null | Out-Null
+              }
+              Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
+          }

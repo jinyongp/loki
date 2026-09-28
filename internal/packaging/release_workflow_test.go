@@ -116,6 +116,12 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"loki-wsl-amd64.wsl",
 		"loki-install.ps1",
 		"Run public source-free installation",
+		"verify-public-windows:",
+		"Verify public Windows install",
+		"Verify published PowerShell installer bytes",
+		"Run public Windows source-free installation",
+		"irm https://jinyongp.dev/loki/install.ps1 | iex",
+		"public Windows frontend release binding does not match",
 		"--install-prerequisites",
 	} {
 		if !strings.Contains(text, required) {
@@ -143,6 +149,43 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		if !fullPin.MatchString(match[1]) {
 			t.Fatalf("release workflow action is not pinned to a full commit SHA: %s", match[1])
 		}
+	}
+}
+
+func TestPublicWindowsInstallIsSourceFree(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	start := strings.Index(text, "\n  verify-public-windows:\n")
+	if start < 0 {
+		t.Fatal("release workflow lacks public Windows install job")
+	}
+	job := text[start:]
+	for _, required := range []string{
+		"runs-on: windows-2025",
+		"needs:\n      - preflight\n      - pages",
+		"gh release download $env:TAG",
+		"https://jinyongp.dev/loki/install.ps1",
+		"irm https://jinyongp.dev/loki/install.ps1 | iex",
+		"loki.exe",
+		"version --json",
+		"status --distribution",
+		"doctor --distribution",
+		"connection --distribution",
+		"uninstall --distribution",
+	} {
+		if !strings.Contains(job, required) {
+			t.Errorf("public Windows install job lacks %q", required)
+		}
+	}
+	if strings.Contains(job, "actions/checkout@") {
+		t.Fatal("public Windows source-free install job checks out repository source")
 	}
 }
 
