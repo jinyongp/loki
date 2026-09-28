@@ -84,13 +84,13 @@ func TestWindowsInstallerVerifiesBeforeHandoffAndReflectsPathOnlyAfterSuccess(t 
 	cleanup := strings.Index(body, `Remove-Item -LiteralPath $tempRoot -Recurse -Force`)
 	propagate := strings.Index(body, `$global:LASTEXITCODE = $bootstrapExitCode`)
 	for name, position := range map[string]int{
-		"length check": lengthCheck,
-		"hash check": hashCheck,
-		"handoff": handoff,
-		"exit capture": exitCapture,
-		"success guard": successGuard,
-		"PATH reflection": pathReflect,
-		"cleanup": cleanup,
+		"length check":     lengthCheck,
+		"hash check":       hashCheck,
+		"handoff":          handoff,
+		"exit capture":     exitCapture,
+		"success guard":    successGuard,
+		"PATH reflection":  pathReflect,
+		"cleanup":          cleanup,
 		"exit propagation": propagate,
 	} {
 		if position < 0 {

@@ -15,8 +15,10 @@ Run in PowerShell:
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-Loki installs as a preconfigured WSL2 appliance. You do not need to install
-Ubuntu, Docker, Compose, or systemd manually.
+The PowerShell entry point verifies the release-bound Windows `loki.exe`
+frontend and hands installation to it. The installed frontend owns WSL2
+appliance lifecycle, recovery, Windows connection state and startup integration.
+You do not need to install Ubuntu, Docker, Compose, or systemd manually.
 
 ### Ubuntu
 
@@ -33,20 +35,27 @@ host prerequisites with explicit approval.
 
 Loki exposes a **local Streamable HTTP MCP origin** protected by a bearer token.
 
-On Windows, the installer writes connection information here:
-
-```text
-%LOCALAPPDATA%\Loki\<distribution-name>\
-├── connection.json
-├── mcp-token
-└── ownership.json
-```
-
-Inspect the non-secret connection metadata with:
+On Windows, inspect the refreshed non-secret connection metadata with:
 
 ```powershell
-Get-Content "$env:LOCALAPPDATA\Loki\loki-mcp\connection.json" -Raw
+loki connection
+loki connection --json
 ```
+
+Per-distribution connection state remains under
+`%LOCALAPPDATA%\Loki\<distribution-name>` for migration compatibility.
+Managed remote adapters and their isolated helper state live under
+`%LOCALAPPDATA%\Programs\Loki\connections`.
+
+For an OpenAI Secure MCP Tunnel connection to an existing tunnel:
+
+```powershell
+loki connect setup openai
+loki connect status openai
+```
+
+Loki installs only the reviewed same-release helper mirror and stores the
+runtime credential in Windows Credential Manager.
 
 On Linux:
 
@@ -71,8 +80,8 @@ connection model and provider-specific examples.
 Windows:
 
 ```powershell
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host status --system
-wsl -d loki-mcp --user root -- /usr/local/bin/loki host doctor --system
+loki status
+loki doctor
 ```
 
 Linux:

@@ -22,7 +22,15 @@ provider account.
 
 ### Windows
 
-The installer writes:
+Use the installed Windows frontend:
+
+```powershell
+loki connection
+loki connection --json
+```
+
+The command refreshes the protected Windows replica from the live appliance
+before reporting it. Per-distribution local-origin state remains at:
 
 ```text
 %LOCALAPPDATA%\Loki\<distribution-name>\
@@ -31,14 +39,12 @@ The installer writes:
 └── ownership.json
 ```
 
-Inspect only the non-secret connection metadata:
-
-```powershell
-Get-Content "$env:LOCALAPPDATA\Loki\loki-mcp\connection.json" -Raw
-```
-
-The MCP URL is in `local_origin.url`. The token itself is stored in
+The MCP URL is in `local_origin.url`. The token itself remains in
 `mcp-token`; do not commit it, paste it into issue reports, or put it in a URL.
+
+`loki connect` shows the direct/local connection plus any managed remote
+connection adapters without installing a helper merely to display the local
+origin.
 
 ### Linux
 
@@ -105,51 +111,83 @@ model, not as part of Loki's core connection contract.
 
 ### OpenAI products / ChatGPT
 
-For OpenAI products that support Secure MCP Tunnel, the tunnel is a
-client-specific ingress option. Loki remains on loopback and `tunnel-client`
-runs on the machine that can already reach Loki.
+For OpenAI products that support Secure MCP Tunnel, Loki can manage the reviewed
+Windows `tunnel-client` helper while keeping Loki itself on loopback:
 
 ```text
 OpenAI client
     |
     | OpenAI Secure MCP Tunnel
     v
-tunnel-client
+release-bound tunnel-client
     |
     | http://127.0.0.1:<port>/mcp
     v
 Loki
 ```
 
-Typical setup:
+The user still owns the OpenAI-side tunnel and runtime credential. Loki does not
+create or delete remote tunnels and does not store an OpenAI admin key.
 
 1. Create or inspect the tunnel in
    [OpenAI Platform Tunnels](https://platform.openai.com/settings/organization/tunnels).
-2. Install the current OpenAI `tunnel-client` from the Platform tunnel page or
-   the [latest public release](https://github.com/openai/tunnel-client/releases/latest),
-   then run it on the Loki host.
-3. Create or select the runtime credential under
-   [OpenAI organization API keys](https://platform.openai.com/settings/organization/api-keys)
-   and point `tunnel-client` at the Loki URL from `connection.json`.
-4. Keep Loki bearer authentication enabled and configure the client connection
-   to send the Loki bearer token.
-5. Follow the
-   [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
-   to verify the tunnel.
-6. For ChatGPT, enable/configure the MCP app using the current
+2. Create or select a runtime API key under
+   [OpenAI organization API keys](https://platform.openai.com/settings/organization/api-keys).
+3. Run:
+
+   ```powershell
+   loki connect setup openai
+   ```
+
+   The interactive setup prints the official OpenAI reference links, asks for
+   the existing tunnel ID, and reads the runtime key without echo. The key is
+   stored in Windows Credential Manager. Loki installs only the exact
+   same-release helper mirror from its reviewed helper catalog; it never resolves
+   an upstream `latest` helper at runtime.
+4. Inspect the managed connection:
+
+   ```powershell
+   loki connect status openai
+   ```
+
+5. For ChatGPT, configure/enable the MCP app using the current
    [developer mode and MCP apps guide](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt),
    then scan the tools and test the connection.
 
-For PowerShell, load the Loki URL without copying it manually:
+For non-interactive setup, provide the name of an environment variable rather
+than putting the runtime key in process arguments:
 
 ```powershell
-$connection = Get-Content "$env:LOCALAPPDATA\Loki\loki-mcp\connection.json" -Raw | ConvertFrom-Json
-$env:MCP_SERVER_URL = $connection.local_origin.url
+$env:OPENAI_TUNNEL_RUNTIME_KEY = "<runtime-key>"
+loki connect setup --tunnel-id "<existing-tunnel-id>" --runtime-key-env OPENAI_TUNNEL_RUNTIME_KEY openai
+Remove-Item Env:OPENAI_TUNNEL_RUNTIME_KEY
 ```
 
-OpenAI's UI, `tunnel-client` syntax, and plan permissions can change
-independently of Loki. Prefer the linked OpenAI settings pages and official
-guides above over copied UI instructions.
+Local lifecycle commands are:
+
+```powershell
+loki connect start openai
+loki connect status openai
+loki connect stop openai
+loki connect remove openai
+```
+
+`remove` deletes only Loki-owned local runtime metadata and the Loki-scoped
+runtime credential. It does not delete the remote OpenAI tunnel.
+
+Loki isolates native tunnel-client state and profiles under
+`%LOCALAPPDATA%\Programs\Loki\connections\<distribution>\openai` and
+injects both the runtime key and Loki bearer authorization only into the helper
+process environment. Neither secret is stored in adapter JSON, Scheduled Task
+arguments, helper ownership state, or process arguments.
+
+When a managed remote connection is enabled, Loki maintains one finite
+`Loki Connections (<distribution>)` logon task for the distribution. The task
+invokes the verified absolute `loki.exe`, waits boundedly for the appliance,
+and restores only enabled owned adapters.
+
+OpenAI's UI and permissions can change independently of Loki. Prefer the linked
+OpenAI settings pages and official guides for account-side steps.
 
 Other MCP client vendors may provide their own tunnel, desktop bridge, gateway,
 or hosted connector. Prefer that vendor's supported mechanism when it preserves

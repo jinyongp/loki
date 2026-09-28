@@ -27,9 +27,30 @@ Run this in PowerShell:
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The installer downloads one immutable `loki-wsl-amd64.wsl` artifact from the
-accepted Loki release, verifies its exact length and SHA-256, and registers it
-with WSL. The appliance is already configured with:
+The public PowerShell file is intentionally a thin release bootstrap. It is
+rendered for one immutable Loki release and contains only the accepted
+`loki-windows-amd64.exe` length and SHA-256. It downloads that frontend to a
+temporary file, verifies the bytes, and invokes the reserved
+`loki bootstrap install` handoff.
+
+The verified frontend then owns the Windows lifecycle:
+
+1. It reconciles the canonical frontend at
+   `%LOCALAPPDATA%\Programs\Loki\bin\loki.exe` and its ownership record.
+2. It adds that bin directory to the current user's persistent `PATH` without
+   rewriting unrelated entries. After the trusted handoff succeeds, the
+   PowerShell bootstrap also reflects the directory into the current
+   PowerShell process so `loki` is immediately available.
+3. The canonical frontend runs `loki install`, which classifies existing
+   Windows/WSL state, performs approved recovery when required, verifies the
+   release-bound WSL appliance, registers/provisions it, writes protected
+   Windows connection state, and owns the existing WSL keepalive task.
+
+The PowerShell bootstrap does not classify, register, unregister, or repair WSL
+distributions; it does not create Scheduled Tasks or write lifecycle ownership
+state. Those operations have one implementation in the Windows Go frontend.
+
+The WSL appliance contains:
 
 - Ubuntu 24.04 amd64 userspace;
 - systemd;
@@ -42,66 +63,44 @@ with WSL. The appliance is already configured with:
 
 There is no Ubuntu first-run account prompt. You do not choose a Linux username
 or password, install Docker, edit `/etc/wsl.conf`, or create a Windows startup
-task manually.
-
-Runtime secrets are not embedded in the appliance. The MCP token and Loki
-lifecycle state are generated on the installed machine during first boot.
+task manually. Runtime secrets are generated locally and are not embedded in
+the appliance or Windows frontend.
 
 ### Windows requirements
 
-The Windows installer requires WSL2 with custom `.wsl` distribution support.
-It checks for the WSL `--from-file`, `--name`, and `--no-launch` install
-options before making changes.
+Windows requires WSL2 with custom `.wsl` distribution support. The frontend
+checks for the WSL `--from-file`, `--name`, and `--no-launch` capabilities
+before registering a distribution.
 
-The installer does **not** run `wsl --update` automatically. If the installed
-WSL is too old, it stops with an error and asks you to update WSL manually:
+Loki does **not** run `wsl --update` automatically. If WSL is too old, update
+it explicitly and rerun the installer:
 
 ```powershell
 wsl --update
+irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-Rerun the Loki installer after the WSL update succeeds.
+### Installation options
 
-### Choose the WSL distribution name
+The default distribution is `loki-mcp`. Existing environment-variable
+compatibility is preserved and is consumed by `loki install` after the thin
+bootstrap handoff.
 
-The default local registration name is:
-
-```text
-loki-mcp
-```
-
-The name is local Windows configuration; Loki does not depend on it. To use a
-different name:
+Choose a different distribution name:
 
 ```powershell
 $env:LOKI_WSL_NAME = "my-loki"
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The installer fails before mutation if that distribution name already exists.
-
-### Choose the local MCP port
-
-The Windows local MCP origin uses port `18765` by default. The installer checks
-the selected loopback port before it downloads the appliance or registers a WSL
-distribution. It never stops an existing listener automatically.
-
-If the default port is already in use, choose another unused port:
+Choose another unused loopback MCP port instead of the default `18765`:
 
 ```powershell
 $env:LOKI_MCP_PORT = "19000"
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The selected port is passed into first-boot host provisioning, stored in Loki
-lifecycle state, and written to the Windows `connection.json` local-origin URL.
-The container-internal MCP service still uses its private fixed port; only the
-Windows/WSL host-side loopback publication changes.
-
-### Choose the WSL storage location
-
-By default WSL chooses the distribution storage location. To choose an explicit
-Windows path:
+Choose an explicit WSL storage location:
 
 ```powershell
 $env:LOKI_WSL_NAME = "my-loki"
@@ -109,43 +108,30 @@ $env:LOKI_WSL_LOCATION = "D:\WSL\my-loki"
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The requested location must be an absolute path and must not already exist.
-
-### Windows startup behavior
-
-The installer registers a per-user Scheduled Task by default. At Windows logon
-the task starts the installed Loki WSL distribution and keeps it alive with a
-benign `sleep infinity` process. The task uses an unlimited execution-time
-setting so Windows does not stop the keep-alive after the normal Task Scheduler
-limit.
-
-Set this before installation if you do not want the startup task:
+Disable the per-user WSL keepalive task:
 
 ```powershell
 $env:LOKI_WSL_AUTOSTART = "0"
 irm https://jinyongp.dev/loki/install.ps1 | iex
 ```
 
-The appliance itself enables systemd and Docker. Once WSL is running, systemd
-starts Docker and Docker restores Loki's managed containers.
+The selected port and location are validated before destructive mutation.
+Loki never stops an unrelated listener or deletes a path merely because a name
+matches.
 
-### Windows installation completion
+### Windows ownership and state
 
-The installer prints persistent `[Loki]` stage messages while it checks WSL,
-downloads and verifies the appliance, registers the distribution, waits for
-first-boot provisioning, verifies Loki health, writes connection files, and
-configures logon startup. Long first-boot provisioning also emits periodic
-elapsed-time messages instead of appearing idle.
-
-The installer waits for first-boot provisioning and does not report success
-until both of these checks pass inside the appliance:
+The shared Windows program root is:
 
 ```text
-loki host status --system
-loki host doctor --system
+%LOCALAPPDATA%\Programs\Loki\
+├── bin\loki.exe
+├── ownership.json
+├── helpers\...
+└── connections\<distribution>\<provider>\...
 ```
 
-On success it writes Windows-side connection material below:
+Per-distribution appliance state remains compatible with existing installations:
 
 ```text
 %LOCALAPPDATA%\Loki\<distribution-name>\
@@ -154,30 +140,78 @@ On success it writes Windows-side connection material below:
 └── ownership.json
 ```
 
-The token file ACL is restricted to the current Windows user and SYSTEM. Loki
-does not print the token value.
+The MCP token and provider credentials are not printed. The MCP token file is
+restricted to the current Windows user and SYSTEM. Provider runtime
+credentials, such as an OpenAI tunnel runtime key, are stored in Windows
+Credential Manager rather than JSON state.
 
-The generated connection data describes a **local MCP origin**. It is reachable
-only through the local loopback interface by default and is not a public MCP
-URL. `schema_version` and `local_origin` are the current contract. During the
-pre-1.0 migration from v0.1.14, the JSON also retains the legacy flat
-`endpoint`, `transport`, `authentication`, and `token_file` aliases so existing
-local clients do not break immediately; new consumers should use `local_origin`.
-Loki does not create or own DNS, TLS certificates, tunnels, reverse proxies, VPN
-routes, OAuth providers, or hosted MCP endpoints. If a remote MCP client must
-reach Loki, the operator chooses and manages that external ingress and forwards
-it to the local origin.
+The existing per-distribution `Loki WSL (<distribution>)` logon task retains
+its direct `wsl.exe ... /usr/bin/sleep infinity` ownership signature. When an
+owned remote connection is enabled, Loki may additionally create one finite
+`Loki Connections (<distribution>)` task that invokes the absolute verified
+frontend and restores only enabled managed connection runtimes.
 
-See [Connect an MCP client](connect-mcp-client.md) for client-specific setup.
+### Verify and operate the installation
 
-The default appliance workspace is:
+Normal Windows operations use the installed frontend:
 
-```text
-/home/ubuntu/workspace
+```powershell
+loki status
+loki doctor
+loki connection
+loki connection --json
+loki connect
 ```
 
-To inspect the installation directly from PowerShell, substitute your
-distribution name if you changed it:
+`loki status` reports the Windows frontend release and the installed appliance
+identity separately. `loki connection` refreshes the protected Windows
+connection replica from the live appliance before reporting it.
+
+Appliance lifecycle operations are also explicit Windows commands:
+
+```powershell
+loki update status
+loki backup
+loki rollback
+loki restore <backup-id>
+```
+
+Mutating operations that can interrupt work or destroy state require their
+documented approval flags or an interactive confirmation. After update,
+rollback, or restore, Loki refreshes the Windows connection/token replica and
+reconciles enabled managed connections.
+
+### Recovery behavior
+
+Rerunning the one-line installer is safe and idempotent. The temporary frontend
+first reconciles the canonical frontend, then the canonical `loki install`
+classifies the requested distribution and Windows state.
+
+- A verified healthy installation is adopted without reinstalling it.
+- A provisioning installation is left untouched until provisioning finishes.
+- Foreign or unverifiable WSL/Windows resources fail closed and are never
+  deleted merely because their names match Loki defaults.
+- Verified Windows-only orphans can be removed and recreated safely.
+- A verified stale appliance requires destructive approval before unregistering
+  its WSL distribution.
+
+For non-interactive stale recovery, opt in explicitly:
+
+```powershell
+$env:LOKI_WSL_REINSTALL = "1"
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+This is not a generic force switch. The frontend first proves Loki ownership
+again immediately before destructive WSL recovery.
+
+Existing v0.1.19-style ownership is migration input. Loki recognizes the
+manifest-owned state, the earlier schema-v1 connection shape, and the original
+strict flat connection shape. Unverified state is preserved for manual
+inspection rather than guessed or deleted.
+
+For low-level appliance diagnostics, the Windows frontend normally provides the
+safer operator surface. If direct inspection is necessary:
 
 ```powershell
 wsl -d loki-mcp --user root -- /usr/local/bin/loki host status --system
@@ -185,92 +219,21 @@ wsl -d loki-mcp --user root -- /usr/local/bin/loki host doctor --system
 ```
 
 The appliance does not grant the default `ubuntu` user passwordless sudo.
-Administrative maintenance uses the explicit WSL root boundary shown above.
+Administrative maintenance crosses the explicit WSL root boundary.
 
-### Windows troubleshooting
+### Uninstall
 
-If the installer says WSL is too old, run `wsl --update` manually. A WSL
-update failure is a Windows/WSL prerequisite problem; the Loki installer does
-not attempt to repair Windows Installer or Windows optional features.
-
-Rerunning the installer first reconciles the requested WSL distribution,
-protected Windows connection state, and the managed startup task. Ownership is
-not inferred from the distribution or task name alone.
-
-If the requested distribution is a verified healthy Loki appliance, the
-installer reports the existing installation and exits without reinstalling it.
-If Loki provisioning is still in progress, the installer leaves it untouched
-and asks you to wait. You can inspect that state directly:
+Uninstall one verified local appliance with:
 
 ```powershell
-wsl -d loki-mcp --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager
-wsl -d loki-mcp --user root -- /usr/bin/journalctl -u loki-appliance-provision.service --no-pager -n 80
+loki uninstall
 ```
 
-If the WSL distribution no longer exists but its verified Loki-owned
-`%LOCALAPPDATA%\Loki\<name>` connection state or exact Loki startup task
-remains, those orphaned Windows resources are removed automatically and the
-installer continues with a fresh install. This covers the common case where
-`wsl --unregister` was run manually but `connection.json`, `mcp-token`, or
-the startup task remained.
-
-A verified stale Loki appliance is destructive recovery because unregistering
-it deletes data inside that WSL distribution. From an interactive PowerShell
-console the installer lists the resources that will be removed and requires
-`[y/N]` confirmation. A genuinely non-interactive invocation fails closed
-unless you explicitly opt in:
-
-```powershell
-$env:LOKI_WSL_REINSTALL = "1"
-irm https://jinyongp.dev/loki/install.ps1 | iex
-```
-
-The opt-in is not a generic force switch: it applies only after the installer
-has verified Loki appliance identity. An unrelated or unverifiable
-distribution, Windows state directory, Scheduled Task, or custom install
-location is never deleted automatically.
-
-New installations write a protected non-secret `ownership.json` next to the
-Windows connection files so later recovery can bind the WSL distribution,
-state directory, startup task, release, port, and any custom WSL location.
-Older installations without that manifest use only the strict legacy
-`connection.json` and startup-task signatures; a legacy custom WSL location
-is not auto-deleted because its ownership was not recorded durably.
-
-The appliance binary is present at `/usr/lib/loki-appliance/loki` from the
-initial image. The normal `/usr/local/bin/loki` CLI is published by host
-provisioning and may not exist in an interrupted installation. If an existing
-distribution is unrelated, choose a different name with `LOKI_WSL_NAME`.
-
-If installation fails, the installer prints one `[Loki] ERROR:` line that
-includes the active installation stage instead of exposing a raw PowerShell
-native-command stack. During first boot it also reports the systemd unit state
-and restart count, so repeated provisioning failures are not presented as one
-long-running install. The provision service has a bounded restart rate; after
-repeated failures the installer stops early, prints recent service diagnostics,
-and rolls back the fresh install instead of waiting the full timeout.
-
-A bind failure on `127.0.0.1:18765` is reported explicitly as an MCP endpoint
-port conflict. The installer keeps the stage and cause concise, then puts
-follow-up guidance on separate lines instead of embedding commands in one long
-error sentence. For a recognized port conflict it suppresses the repetitive
-service journal and proceeds directly to fresh-install rollback; unknown
-provisioning failures still include a bounded recent journal for diagnosis. A
-genuinely long first boot with no repeated service failure may still wait up to
-the normal provisioning timeout.
-
-For a fresh install, resources created by the current installer invocation are
-transactional. If a later provisioning, health, connection-file, or startup-task
-step fails, the installer prints recent provisioning diagnostics, removes the
-Windows resources and WSL distribution created by that failed attempt, and
-reports that the same install command can be retried.
-
-Recovery of resources from an earlier invocation is narrower. Verified
-Windows-only orphans are disposable integration state and can be reconciled
-automatically. An existing WSL distribution is never removed merely because its
-name matches: it must first prove Loki appliance identity and be classified as
-stale, and destructive recovery then requires the approval described above.
-Unverified resources are left untouched.
+In non-interactive automation, pass `--approve` explicitly. The command removes
+only verified local connection runtimes/state, the owned connection-startup and
+WSL keepalive tasks, the verified WSL distribution, and its owned
+per-distribution Windows state. The shared Windows frontend and shared helper
+cache remain installed.
 
 Manual creation of a generic Ubuntu WSL distribution is not part of the normal
 Loki Windows installation path.

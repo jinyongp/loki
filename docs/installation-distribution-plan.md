@@ -70,10 +70,14 @@ bound to one exact release tag and the SHA-256 of
 
 The Windows first-install command is
 `irm https://jinyongp.dev/loki/install.ps1 | iex`. The PowerShell frontend is
-bound to the same exact release tag and to the accepted
-`loki-wsl-amd64.wsl` length and SHA-256. The appliance contains the supported
-Ubuntu userspace, systemd/Docker prerequisites and release-bound Loki bootstrap
-inputs, but no runtime secrets or installed lifecycle state.
+bound to one exact release tag and the accepted `loki-windows-amd64.exe`
+length and SHA-256. After verifying that temporary frontend, PowerShell invokes
+its reserved `bootstrap install` handoff. The trusted Windows frontend then
+owns canonical frontend installation, user PATH reconciliation, WSL
+classification/recovery, appliance acquisition, Scheduled Tasks and Windows
+connection state. The release-bound WSL appliance contains the supported Ubuntu
+userspace, systemd/Docker prerequisites and Loki host inputs, but no runtime
+secrets or installed lifecycle state.
 
 The publication pipeline consumes one accepted candidate bundle containing both
 bootstrap paths. `releaseway/actions` publishes the exact public asset set as
@@ -94,7 +98,19 @@ The source-free bootstrap is deliberately small. It:
 5. Stages the verified binary and manifest privately.
 6. Hands installation to `loki host install`.
 
-The reserved public shell frontend is a release-rendered thin downloader. It detects the supported host, downloads one exact `loki-bootstrap` artifact from one immutable GitHub Release tag, verifies the SHA-256 embedded into that rendered installer, and executes the bootstrap with the caller's arguments. It contains no lifecycle logic. Installation, update, rollback, diagnostics, and optional-component management belong in the Go host-management CLI so they share one implementation and one safety model.
+The reserved public Linux shell frontend is a release-rendered thin
+downloader. It downloads one exact `loki-bootstrap` artifact from one immutable
+GitHub Release tag, verifies the embedded SHA-256, and executes the bootstrap
+with the caller's arguments.
+
+The reserved public Windows PowerShell frontend follows the same trust shape but
+downloads the exact release-bound `loki-windows-amd64.exe`, verifies its
+embedded length/SHA-256 identity, and calls `bootstrap install`. It contains no
+WSL ownership, recovery, Scheduled Task or persistent-PATH implementation.
+Those operations belong to the Go Windows frontend, which self-installs under
+`%LOCALAPPDATA%\Programs\Loki` and then performs `loki install`. Both
+public frontends therefore remain download/verification handoffs rather than
+parallel lifecycle implementations.
 
 The canonical first-install procedure is [docs/first-install.md](first-install.md).
 The stable public entry points are
