@@ -75,8 +75,8 @@ func TestProductUpdateCurrentFrontendConvergesApplianceWithoutDownload(t *testin
 	if code != 0 || converged != 1 || client.downloadCalls != 0 || stderr.Len() != 0 {
 		t.Fatalf("code=%d converged=%d downloads=%d stderr=%q", code, converged, client.downloadCalls, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "frontend is current at v0.1.23") {
-		t.Fatalf("stdout=%q", stdout.String())
+	if got, want := stdout.String(), "Windows Loki frontend is current at v0.1.23.\n"; got != want {
+		t.Fatalf("stdout=%q want=%q", got, want)
 	}
 }
 
@@ -127,9 +127,8 @@ func TestProductUpdateOlderFrontendUsesVerifiedCandidateAndVerifiesCanonical(t *
 		t.Fatalf("code=%d downloads=%d cleanup=%d run=%d inspect=%d stderr=%q",
 			code, client.downloadCalls, cleanupCalls, runCalls, inspectCalls, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Updating Windows Loki frontend v0.1.23 -> v0.1.24") ||
-		!strings.Contains(stdout.String(), "Loki is updated to v0.1.24") {
-		t.Fatalf("stdout=%q", stdout.String())
+	if got, want := stdout.String(), "Updating Windows Loki frontend v0.1.23 -> v0.1.24...\nLoki is updated to v0.1.24.\n"; got != want {
+		t.Fatalf("stdout=%q want=%q", got, want)
 	}
 }
 
@@ -154,8 +153,11 @@ func TestProductUpdateRefusesPublishedDowngradeBeforeDownload(t *testing.T) {
 		CanonicalPath: func() (string, error) { return "", nil },
 		Converge:      func(context.Context, io.Writer, io.Writer) int { return 0 },
 	}, &stdout, &stderr)
-	if code != 1 || client.downloadCalls != 0 || !strings.Contains(stderr.String(), "refusing downgrade") {
+	if code != 1 || client.downloadCalls != 0 {
 		t.Fatalf("code=%d downloads=%d stderr=%q", code, client.downloadCalls, stderr.String())
+	}
+	if got, want := stderr.String(), "installed Windows frontend v0.1.24 is newer than published release v0.1.23; refusing downgrade\n"; got != want {
+		t.Fatalf("stderr=%q want=%q", got, want)
 	}
 }
 
@@ -185,7 +187,10 @@ func TestProductUpdateRejectsCandidateBindingMismatch(t *testing.T) {
 		CanonicalPath: func() (string, error) { return "canonical.exe", nil },
 		Converge:      func(context.Context, io.Writer, io.Writer) int { return 0 },
 	}, &stdout, &stderr)
-	if code != 1 || runCalls != 0 || !strings.Contains(stderr.String(), "does not match published release") {
+	if code != 1 || runCalls != 0 {
 		t.Fatalf("code=%d run=%d stderr=%q", code, runCalls, stderr.String())
+	}
+	if got, want := stderr.String(), "downloaded Windows frontend binding v0.1.25 does not match published release v0.1.24\n"; got != want {
+		t.Fatalf("stderr=%q want=%q", got, want)
 	}
 }
