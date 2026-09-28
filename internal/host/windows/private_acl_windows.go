@@ -104,8 +104,8 @@ func verifyPrivateACL(target string, directory bool) error {
 	if err != nil {
 		return err
 	}
-	if dacl == nil || dacl.AceCount != 2 {
-		return errors.New("Windows path DACL does not contain exactly two Loki principals")
+	if dacl == nil || dacl.AceCount == 0 {
+		return errors.New("Windows path DACL is empty")
 	}
 	userInfo, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
@@ -122,6 +122,8 @@ func verifyPrivateACL(target string, directory bool) error {
 	if directory {
 		expectedFlags = uint8(windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE)
 	}
+	const fileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1FF
+	const allowedAceFlags = windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE | windows.INHERITED_ACE
 	foundUser := false
 	foundSystem := false
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
@@ -129,22 +131,22 @@ func verifyPrivateACL(target string, directory bool) error {
 		if err = windows.GetAce(dacl, index, &ace); err != nil {
 			return err
 		}
-		if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE ||
-			ace.Mask != windows.GENERIC_ALL ||
-			ace.Header.AceFlags&uint8(windows.VALID_INHERIT_FLAGS) != expectedFlags {
-			return errors.New("Windows path DACL contains an unexpected access rule")
+		if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
+			return errors.New("Windows path DACL contains a non-allow access rule")
+		}
+		flags := ace.Header.AceFlags
+		if flags&^uint8(allowedAceFlags) != 0 ||
+			flags&uint8(windows.OBJECT_INHERIT_ACE|windows.CONTAINER_INHERIT_ACE) != expectedFlags {
+			return errors.New("Windows path DACL contains unexpected inheritance flags")
+		}
+		if ace.Mask&windows.GENERIC_ALL == 0 && ace.Mask&fileAllAccess != fileAllAccess {
+			return errors.New("Windows path DACL contains a rule without full control")
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
 		switch {
 		case sid.Equals(userInfo.User.Sid):
-			if foundUser {
-				return errors.New("Windows path DACL duplicates the current-user rule")
-			}
 			foundUser = true
 		case sid.Equals(systemSID):
-			if foundSystem {
-				return errors.New("Windows path DACL duplicates the LocalSystem rule")
-			}
 			foundSystem = true
 		default:
 			return errors.New("Windows path DACL grants access to an unexpected principal")
