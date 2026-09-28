@@ -705,11 +705,37 @@ jobs:
           TAG: ${{ needs.preflight.outputs.tag }}
         run: .\scripts\verify\accept-windows-frontend-precutover.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG"
 
+  windows-native:
+    name: Verify Windows native source
+    needs: preflight
+    runs-on: windows-2025
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run native Windows unit and ACL regression tests
+        shell: pwsh
+        run: go test ./internal/host/windows ./cmd/loki-windows -count=1 -timeout=5m
+
   windows-provider-acceptance:
     name: Verify Windows provider acceptance
     needs:
       - preflight
       - build
+      - windows-native
     runs-on: windows-2025
     permissions:
       contents: read

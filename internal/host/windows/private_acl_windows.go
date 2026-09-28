@@ -118,14 +118,7 @@ func verifyPrivateACL(target string, directory bool) error {
 	if err != nil {
 		return err
 	}
-	expectedFlags := uint8(windows.NO_INHERITANCE)
-	if directory {
-		expectedFlags = uint8(windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE)
-	}
-	const fileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1FF
-	const allowedAceFlags = windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE | windows.INHERITED_ACE
-	foundUser := false
-	foundSystem := false
+	rules := make([]privateACLRule, 0, dacl.AceCount)
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err = windows.GetAce(dacl, index, &ace); err != nil {
@@ -134,26 +127,22 @@ func verifyPrivateACL(target string, directory bool) error {
 		if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
 			return errors.New("Windows path DACL contains a non-allow access rule")
 		}
-		flags := ace.Header.AceFlags
-		if flags&^uint8(allowedAceFlags) != 0 ||
-			flags&uint8(windows.OBJECT_INHERIT_ACE|windows.CONTAINER_INHERIT_ACE) != expectedFlags {
-			return errors.New("Windows path DACL contains unexpected inheritance flags")
-		}
-		if ace.Mask&windows.GENERIC_ALL == 0 && ace.Mask&fileAllAccess != fileAllAccess {
-			return errors.New("Windows path DACL contains a rule without full control")
-		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		principal := privateACLForeign
 		switch {
 		case sid.Equals(userInfo.User.Sid):
-			foundUser = true
+			principal = privateACLCurrentUser
 		case sid.Equals(systemSID):
-			foundSystem = true
-		default:
-			return errors.New("Windows path DACL grants access to an unexpected principal")
+			principal = privateACLSystem
 		}
+		rules = append(rules, privateACLRule{
+			Principal: principal, Type: ace.Header.AceType,
+			Flags: ace.Header.AceFlags, Mask: uint32(ace.Mask),
+		})
 	}
-	if !foundUser || !foundSystem {
-		return errors.New("Windows path DACL is missing the current user or LocalSystem")
-	}
-	return nil
+	err = validatePrivateACLRules(rules, directory)
+	runtime.KeepAlive(sd)
+	runtime.KeepAlive(userInfo)
+	runtime.KeepAlive(systemSID)
+	return err
 }
