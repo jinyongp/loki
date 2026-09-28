@@ -1125,6 +1125,99 @@ jobs:
               throw "public PowerShell installer contains unresolved release placeholders"
           }
 
+
+      - name: Run public Windows self-update from previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          if (-not $env:PREVIOUS_TAG) { throw "previous release tag is required for self-update acceptance" }
+
+          $suffix = "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $distribution = "loki-self-update-$suffix"
+          $installRoot = Join-Path $env:RUNNER_TEMP "loki-self-update"
+          $installLocation = Join-Path $installRoot $distribution
+          $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distribution)
+          $taskName = "Loki WSL ($distribution)"
+          $loki = Join-Path $env:LOCALAPPDATA "Programs\Loki\bin\loki.exe"
+          $previousDir = Join-Path $env:RUNNER_TEMP "previous-release"
+          $previousInstaller = Join-Path $previousDir "loki-install.ps1"
+
+          $portSelector = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $portSelector.Start()
+          $mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port
+          $portSelector.Stop()
+
+          New-Item -ItemType Directory -Path $previousDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
+          gh release download $env:PREVIOUS_TAG --repo $env:GITHUB_REPOSITORY --pattern loki-install.ps1 --dir $previousDir
+          if ($LASTEXITCODE -ne 0) { throw "failed to download previous immutable Windows installer" }
+
+          $env:LOKI_WSL_NAME = $distribution
+          $env:LOKI_WSL_LOCATION = $installLocation
+          $env:LOKI_WSL_AUTOSTART = "1"
+          $env:LOKI_MCP_PORT = [string]$mcpPort
+
+          try {
+              $global:LASTEXITCODE = 0
+              & $previousInstaller
+              if ($LASTEXITCODE -ne 0) { throw "previous Windows installer failed with code $LASTEXITCODE" }
+
+              $beforeRaw = (& $loki version --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "previous Windows frontend version failed" }
+              $before = $beforeRaw | ConvertFrom-Json
+              if ([string]$before.release_binding.release_tag -ne $env:PREVIOUS_TAG) {
+                  throw "self-update fixture did not install previous frontend $env:PREVIOUS_TAG"
+              }
+
+              & $loki update
+              if ($LASTEXITCODE -ne 0) { throw "public Windows self-update failed with code $LASTEXITCODE" }
+
+              $afterRaw = (& $loki version --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "updated Windows frontend version failed" }
+              $after = $afterRaw | ConvertFrom-Json
+              if ([string]$after.release_binding.release_tag -ne $env:TAG) {
+                  throw "self-update frontend did not converge to $env:TAG"
+              }
+
+              & $loki status --distribution $distribution --json
+              if ($LASTEXITCODE -ne 0) { throw "self-update status failed" }
+              & $loki doctor --distribution $distribution
+              if ($LASTEXITCODE -ne 0) { throw "self-update doctor failed" }
+              & $loki connection --distribution $distribution --json
+              if ($LASTEXITCODE -ne 0) { throw "self-update connection refresh failed" }
+
+              & $loki uninstall --distribution $distribution --approve
+              if ($LASTEXITCODE -ne 0) { throw "self-update uninstall failed" }
+          }
+          finally {
+              Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
+              Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
+
+              if (Test-Path -LiteralPath $loki -PathType Leaf) {
+                  & $loki uninstall --distribution $distribution --approve *> $null
+              }
+              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+                  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+              }
+              $registered = @(& wsl.exe --list --quiet 2>$null) |
+                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
+                  Where-Object { $_ }
+              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
+                  & wsl.exe --terminate $distribution 2>$null | Out-Null
+                  & wsl.exe --unregister $distribution 2>$null | Out-Null
+              }
+              Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Run public Windows source-free installation
         env:
           TAG: ${{ needs.preflight.outputs.tag }}
