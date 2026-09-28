@@ -5,7 +5,6 @@ package windows
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -153,14 +152,8 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	catalogSum := sha256.Sum256(catalogRaw)
-	binding := ReleaseBinding{
-		ReleaseTag: tag,
-		HelperCatalog: FileBinding{
-			SHA256: hex.EncodeToString(catalogSum[:]),
-			Length: int64(len(catalogRaw)),
-		},
-	}
+	binding := verifyProviderCandidate(t, tag, catalogPath, archivePath, frontendPath)
+	t.Log("candidate source, executed frontend binding, helper archive and compliance sidecars verified")
 	catalogURL, err := helperMirrorURL(tag, helperCatalogAssetName)
 	if err != nil {
 		t.Fatal(err)
@@ -325,8 +318,18 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 		Root:         providerRoot,
 		Helper:       installed,
 	}
+	t.Cleanup(func() { _ = credentials.Delete(context.Background(), defaultOpenAICredentialTarget(distribution)) })
 	if err = adapter.Setup(t.Context(), runtime); err != nil {
 		t.Fatal(err)
+	}
+	// Inspect persisted bytes while they exist; checking only after Remove
+	// would silently skip the leak assertion on a successful cleanup.
+	metadataBeforeRemove, err := os.ReadFile(filepath.Join(providerRoot, openAIAdapterMetadataFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(metadataBeforeRemove), runtimeSecret) || strings.Contains(string(metadataBeforeRemove), lokiToken) {
+		t.Fatal("provider secret or Loki bearer material appeared in persisted provider metadata")
 	}
 	adapter.SetupConfig = OpenAISetupConfig{}
 	if err = adapter.Start(t.Context(), runtime); err != nil {
