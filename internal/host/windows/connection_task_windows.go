@@ -10,15 +10,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"strings"
+
+	"golang.org/x/sys/windows"
 )
 
 const connectionTaskProbeScript = `$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue;if(-not $t){[ordered]@{present=$false}|ConvertTo-Json -Compress;exit 0};$a=@($t.Actions|ForEach-Object{[ordered]@{executable=[string]$_.Execute;arguments=[string]$_.Arguments}});$tr=@($t.Triggers);$logon=$false;if($tr.Count -eq 1){$logon=([string]$tr[0].CimClass.CimClassName).Equals('MSFT_TaskLogonTrigger',[StringComparison]::Ordinal)};$ticks=[System.Xml.XmlConvert]::ToTimeSpan([string]$t.Settings.ExecutionTimeLimit).Ticks;[ordered]@{present=$true;description=[string]$t.Description;actions=$a;run_level=[string]$t.Principal.RunLevel;user_id=[string]$t.Principal.UserId;trigger_count=$tr.Count;logon_trigger=$logon;execution_time_ticks=[Int64]$ticks}|ConvertTo-Json -Depth 4 -Compress`
 
 const createConnectionTaskScript = `$ErrorActionPreference='Stop';if(Get-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue){throw 'Scheduled Task already exists'};$action=New-ScheduledTaskAction -Execute $env:LOKI_CONNECTION_TASK_EXE -Argument $env:LOKI_CONNECTION_TASK_ARGS;$trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:LOKI_CONNECTION_TASK_USER;$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;$principal=New-ScheduledTaskPrincipal -UserId $env:LOKI_CONNECTION_TASK_USER -LogonType Interactive -RunLevel Limited;Register-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description $env:LOKI_CONNECTION_TASK_DESCRIPTION -ErrorAction Stop|Out-Null`
 
-const removeConnectionTaskScript = `$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue;if(-not $t){exit 0};$a=@($t.Actions);$tr=@($t.Triggers);$ticks=[System.Xml.XmlConvert]::ToTimeSpan([string]$t.Settings.ExecutionTimeLimit).Ticks;if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_CONNECTION_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_CONNECTION_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals($env:LOKI_CONNECTION_TASK_DESCRIPTION,[StringComparison]::Ordinal) -or -not ([string]$t.Principal.RunLevel).Equals('Limited',[StringComparison]::OrdinalIgnoreCase) -or $tr.Count -ne 1 -or -not ([string]$tr[0].CimClass.CimClassName).Equals('MSFT_TaskLogonTrigger',[StringComparison]::Ordinal) -or $ticks -ne 6000000000){throw 'Scheduled Task no longer matches Loki connection ownership'};Stop-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -Confirm:$false -ErrorAction Stop`
+const removeConnectionTaskScript = `$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue;if(-not $t){exit 0};$a=@($t.Actions);$tr=@($t.Triggers);$ticks=[System.Xml.XmlConvert]::ToTimeSpan([string]$t.Settings.ExecutionTimeLimit).Ticks;$principal=[string]$t.Principal.UserId;try{$sid=([Security.Principal.SecurityIdentifier]::new($principal)).Value}catch{$sid=([Security.Principal.NTAccount]::new($principal)).Translate([Security.Principal.SecurityIdentifier]).Value};if($sid -ne $env:LOKI_CONNECTION_TASK_USER -or $a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_CONNECTION_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_CONNECTION_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals($env:LOKI_CONNECTION_TASK_DESCRIPTION,[StringComparison]::Ordinal) -or -not ([string]$t.Principal.RunLevel).Equals('Limited',[StringComparison]::OrdinalIgnoreCase) -or $tr.Count -ne 1 -or -not ([string]$tr[0].CimClass.CimClassName).Equals('MSFT_TaskLogonTrigger',[StringComparison]::Ordinal) -or $ticks -ne 6000000000){throw 'Scheduled Task no longer matches Loki connection ownership'};Stop-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -ErrorAction SilentlyContinue;Unregister-ScheduledTask -TaskName $env:LOKI_CONNECTION_TASK_NAME -Confirm:$false -ErrorAction Stop`
 
 type PowerShellConnectionTaskPlatform struct {
 	LocalAppData string
@@ -64,9 +65,17 @@ func (platform PowerShellConnectionTaskPlatform) Probe(ctx context.Context, task
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		return ConnectionTaskProbe{}, fmt.Errorf("decode connection Scheduled Task probe: %w", err)
 	}
+	principal := ""
+	if payload.Present {
+		var err error
+		principal, err = resolveConnectionTaskSID(payload.UserID)
+		if err != nil {
+			return ConnectionTaskProbe{}, fmt.Errorf("resolve connection Scheduled Task principal: %w", err)
+		}
+	}
 	probe := ConnectionTaskProbe{
 		Present: payload.Present, Description: payload.Description,
-		RunLevel: payload.RunLevel, UserID: payload.UserID,
+		RunLevel: payload.RunLevel, UserID: principal,
 		TriggerCount: payload.TriggerCount, LogonTrigger: payload.LogonTrigger,
 		ExecutionTimeTicks: payload.ExecutionTimeTicks,
 	}
@@ -107,14 +116,19 @@ func (platform PowerShellConnectionTaskPlatform) Create(ctx context.Context, own
 }
 
 func (platform PowerShellConnectionTaskPlatform) Remove(ctx context.Context, ownership ConnectionTaskOwnership) error {
+	current, err := platform.CurrentUser()
+	if err != nil {
+		return err
+	}
 	command := exec.CommandContext(ctx, platform.powershell(), "-NoProfile", "-NonInteractive", "-Command", removeConnectionTaskScript)
 	command.Env = append(withoutEnvironment(os.Environ(),
 		"LOKI_CONNECTION_TASK_NAME", "LOKI_CONNECTION_TASK_EXE", "LOKI_CONNECTION_TASK_ARGS",
-		"LOKI_CONNECTION_TASK_DESCRIPTION"),
+		"LOKI_CONNECTION_TASK_DESCRIPTION", "LOKI_CONNECTION_TASK_USER"),
 		"LOKI_CONNECTION_TASK_NAME="+ownership.TaskName,
 		"LOKI_CONNECTION_TASK_EXE="+ownership.Executable,
 		"LOKI_CONNECTION_TASK_ARGS="+ownership.Arguments,
 		"LOKI_CONNECTION_TASK_DESCRIPTION="+ownership.Description,
+		"LOKI_CONNECTION_TASK_USER="+current,
 	)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -276,14 +290,28 @@ func (platform PowerShellConnectionTaskPlatform) VerifyCanonicalFrontend(ctx con
 }
 
 func (platform PowerShellConnectionTaskPlatform) CurrentUser() (string, error) {
-	current, err := user.Current()
+	current, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
-		return "", fmt.Errorf("resolve current Windows user: %w", err)
+		return "", fmt.Errorf("resolve current Windows user SID: %w", err)
 	}
-	if strings.TrimSpace(current.Username) == "" {
-		return "", errors.New("current Windows user name is empty")
+	if current == nil || current.User.Sid == nil {
+		return "", errors.New("current Windows process has no user SID")
 	}
-	return current.Username, nil
+	return current.User.Sid.String(), nil
+}
+
+func resolveConnectionTaskSID(identity string) (string, error) {
+	if identity == "" || identity != strings.TrimSpace(identity) || strings.ContainsAny(identity, "\x00\r\n") {
+		return "", errors.New("connection Scheduled Task principal is empty or malformed")
+	}
+	if sid, err := windows.StringToSid(identity); err == nil {
+		return sid.String(), nil
+	}
+	sid, _, _, err := windows.LookupSID("", identity)
+	if err != nil {
+		return "", errors.New("connection Scheduled Task principal cannot be resolved to a SID")
+	}
+	return sid.String(), nil
 }
 
 func NewWindowsConnectionTaskManager(localAppData string) ConnectionTaskManager {

@@ -728,6 +728,8 @@ jobs:
 
       - name: Run native Windows unit and ACL regression tests
         shell: pwsh
+        env:
+          LOKI_WINDOWS_TASK_ACCEPTANCE: "1"
         run: go test ./internal/host/windows ./cmd/loki-windows -count=1 -timeout=5m
 
   windows-provider-acceptance:

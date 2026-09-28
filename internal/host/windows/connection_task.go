@@ -164,15 +164,41 @@ func validateConnectionTaskOwnership(actual, expected ConnectionTaskOwnership) e
 }
 
 func validateConnectionTaskProbe(probe ConnectionTaskProbe, expected ConnectionTaskOwnership, userID string) error {
-	if !probe.Present || len(probe.Actions) != 1 ||
-		!WindowsPathEqual(probe.Actions[0].Executable, expected.Executable) ||
-		probe.Actions[0].Arguments != expected.Arguments ||
-		probe.Description != expected.Description ||
-		!strings.EqualFold(probe.RunLevel, "Limited") ||
-		!strings.EqualFold(strings.TrimSpace(probe.UserID), strings.TrimSpace(userID)) ||
-		probe.TriggerCount != 1 || !probe.LogonTrigger ||
-		probe.ExecutionTimeTicks != connectionTaskExecutionTicks {
-		return errors.New("Loki connection startup task does not match exact managed ownership")
+	// Report field names, never task arguments or provider-controlled values.
+	var mismatches []string
+	if !probe.Present {
+		mismatches = append(mismatches, "presence")
+	}
+	if len(probe.Actions) != 1 {
+		mismatches = append(mismatches, "action_count")
+	} else {
+		if !WindowsPathEqual(probe.Actions[0].Executable, expected.Executable) {
+			mismatches = append(mismatches, "executable")
+		}
+		if probe.Actions[0].Arguments != expected.Arguments {
+			mismatches = append(mismatches, "arguments")
+		}
+	}
+	if probe.Description != expected.Description {
+		mismatches = append(mismatches, "description")
+	}
+	if !strings.EqualFold(probe.RunLevel, "Limited") {
+		mismatches = append(mismatches, "run_level")
+	}
+	if strings.TrimSpace(userID) == "" || !strings.EqualFold(strings.TrimSpace(probe.UserID), strings.TrimSpace(userID)) {
+		mismatches = append(mismatches, "principal")
+	}
+	if probe.TriggerCount != 1 {
+		mismatches = append(mismatches, "trigger_count")
+	}
+	if !probe.LogonTrigger {
+		mismatches = append(mismatches, "logon_trigger")
+	}
+	if probe.ExecutionTimeTicks != connectionTaskExecutionTicks {
+		mismatches = append(mismatches, "execution_limit")
+	}
+	if len(mismatches) != 0 {
+		return fmt.Errorf("Loki connection startup task does not match exact managed ownership: %s", strings.Join(mismatches, ", "))
 	}
 	return nil
 }
