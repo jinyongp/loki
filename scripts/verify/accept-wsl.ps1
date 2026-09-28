@@ -148,6 +148,9 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
 $taskName = "Loki WSL ($distributionName)"
+$programRoot = Join-Path $env:LOCALAPPDATA "Programs\Loki"
+$canonicalFrontend = Join-Path $programRoot "bin\loki.exe"
+$frontendOwnershipFile = Join-Path $programRoot "ownership.json"
 $env:LOKI_WSL_NAME = $distributionName
 $env:LOKI_WSL_LOCATION = $installLocation
 $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
@@ -262,6 +265,74 @@ try {
         Fail "Windows ownership manifest does not match the accepted installation"
     }
 
+    # Convert the accepted installation into the exact Windows ownership shape
+    # produced by the v0.1.19 baseline while keeping the current candidate
+    # appliance bytes. This isolates state/task migration compatibility from
+    # appliance-version compatibility.
+    $keepaliveBeforeMigration = [pscustomobject]@{
+        Execute = [string]$task.Actions[0].Execute
+        Arguments = [string]$task.Actions[0].Arguments
+        Description = [string]$task.Description
+        RunLevel = [string]$task.Principal.RunLevel
+        PrincipalSID = $principalSid
+        TriggerSID = $triggerSid
+        ExecutionTimeLimit = [string]$task.Settings.ExecutionTimeLimit
+    }
+    $ownership.release_tag = "v0.1.19"
+    [IO.File]::WriteAllText($ownershipFile, ($ownership | ConvertTo-Json -Depth 8), $utf8)
+    Remove-Item -LiteralPath $programRoot -Recurse -Force -ErrorAction Stop
+
+    $migrationCode = Invoke-InstallerNonInteractive $installer
+    if ($migrationCode -ne 0) { Fail "v0.1.19-style healthy adoption failed with code $migrationCode" }
+    if (-not (Test-Path -LiteralPath $canonicalFrontend -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $frontendOwnershipFile -PathType Leaf)) {
+        Fail "v0.1.19-style adoption did not restore the canonical Windows frontend"
+    }
+    if ((Get-FileHash -LiteralPath $canonicalFrontend -Algorithm SHA256).Hash.ToLowerInvariant() -ne $frontendSha) {
+        Fail "adopted canonical frontend does not match the exact candidate bytes"
+    }
+    $adoptedOwnership = Get-Content -LiteralPath $ownershipFile -Raw | ConvertFrom-Json
+    if ([string]$adoptedOwnership.release_tag -ne "v0.1.19") {
+        Fail "healthy v0.1.19-style adoption rewrote the appliance ownership proof"
+    }
+    $taskAfterMigration = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    $keepaliveAfterMigration = [pscustomobject]@{
+        Execute = [string]$taskAfterMigration.Actions[0].Execute
+        Arguments = [string]$taskAfterMigration.Actions[0].Arguments
+        Description = [string]$taskAfterMigration.Description
+        RunLevel = [string]$taskAfterMigration.Principal.RunLevel
+        PrincipalSID = Resolve-AccountSID ([string]$taskAfterMigration.Principal.UserId)
+        TriggerSID = Resolve-AccountSID ([string]$taskAfterMigration.Triggers[0].UserId)
+        ExecutionTimeLimit = [string]$taskAfterMigration.Settings.ExecutionTimeLimit
+    }
+    foreach ($field in @("Execute", "Arguments", "Description", "RunLevel", "PrincipalSID", "TriggerSID", "ExecutionTimeLimit")) {
+        if ([string]$keepaliveBeforeMigration.$field -cne [string]$keepaliveAfterMigration.$field) {
+            Fail "v0.1.19 keepalive task field $field changed during adoption"
+        }
+    }
+
+    # Force a canonical frontend replacement while holding the existing EXE
+    # delete-locked. The first attempt must fail closed; retry after releasing
+    # the lock must repair ownership and succeed without manual cleanup.
+    $frontendOwnership = Get-Content -LiteralPath $frontendOwnershipFile -Raw | ConvertFrom-Json
+    $frontendOwnership.release_tag = "v0.0.1"
+    $frontendOwnership.source_revision = "0000000000000000000000000000000000000001"
+    [IO.File]::WriteAllText($frontendOwnershipFile, ($frontendOwnership | ConvertTo-Json -Depth 8), $utf8)
+    $frontendLock = [IO.File]::Open($canonicalFrontend, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $lockedRetryCode = Invoke-InstallerNonInteractive $installer
+        if ($lockedRetryCode -eq 0) { Fail "frontend replacement unexpectedly succeeded while canonical EXE was locked" }
+        $stillOldFrontendOwnership = Get-Content -LiteralPath $frontendOwnershipFile -Raw | ConvertFrom-Json
+        if ([string]$stillOldFrontendOwnership.release_tag -ne "v0.0.1") {
+            Fail "failed locked frontend replacement published new ownership"
+        }
+    }
+    finally {
+        $frontendLock.Dispose()
+    }
+    $unlockedRetryCode = Invoke-InstallerNonInteractive $installer
+    if ($unlockedRetryCode -ne 0) { Fail "frontend replacement retry failed after releasing the injected lock" }
+
     Remove-Item Env:LOKI_WSL_REINSTALL -ErrorAction SilentlyContinue
     $healthyRerunCode = Invoke-InstallerNonInteractive $installer
     if ($healthyRerunCode -ne 0) { Fail "healthy non-interactive installer rerun failed with code $healthyRerunCode" }
@@ -337,17 +408,39 @@ try {
 
     Invoke-NativeCapture "wsl.exe" @("--terminate", $distributionName) | Out-Null
     Start-Sleep -Seconds 2
-    $restartProcess = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
+    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
     $recovered = $false
     for ($attempt = 0; $attempt -lt 90; $attempt++) {
         & wsl.exe -d $distributionName --user root --exec /usr/local/bin/loki host doctor --system *> $null
         if ($LASTEXITCODE -eq 0) { $recovered = $true; break }
         Start-Sleep -Seconds 2
     }
-    if (-not $recovered) { Fail "Loki did not recover after WSL termination and restart" }
+    if (-not $recovered) { Fail "Loki did not recover when the owned keepalive task was started as a logon/reboot simulation" }
     Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken
 
-    Write-Host "Loki WSL exact-candidate acceptance passed for $distributionName on MCP port $mcpPort"
+    $uninstallOutput = @(& $canonicalFrontend uninstall --distribution $distributionName --approve 2>&1)
+    $uninstallCode = $LASTEXITCODE
+    foreach ($line in $uninstallOutput) { Write-Host $line }
+    if ($uninstallCode -ne 0) { Fail "verified Windows uninstall failed with code $uninstallCode" }
+    if ((Get-RegisteredDistributions) | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
+        Fail "verified uninstall left the WSL distribution registered"
+    }
+    if (Test-Path -LiteralPath $stateDir) { Fail "verified uninstall left per-distribution Windows state" }
+    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Fail "verified uninstall left the WSL keepalive task" }
+    if (-not (Test-Path -LiteralPath $canonicalFrontend -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $frontendOwnershipFile -PathType Leaf)) {
+        Fail "verified uninstall removed the shared Windows frontend"
+    }
+
+    $freshReinstallCode = Invoke-InstallerNonInteractive $installer
+    if ($freshReinstallCode -ne 0) { Fail "fresh reinstall after verified uninstall failed with code $freshReinstallCode" }
+    Wait-LokiHealthy $distributionName
+    if (-not (Test-Path -LiteralPath $stateDir -PathType Container) -or
+        -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
+        Fail "fresh reinstall did not restore owned per-distribution state and keepalive task"
+    }
+
+    Write-Host "Loki WSL exact-candidate migration acceptance passed for $distributionName on MCP port $mcpPort"
 }
 finally {
     Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue

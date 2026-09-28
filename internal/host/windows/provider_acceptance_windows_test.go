@@ -268,28 +268,8 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 	t.Cleanup(func() {
 		_ = taskPlatform.delegate.Remove(context.Background(), expectedTask)
 	})
-	if err = taskManager.Reconcile(t.Context(), distribution, true); err != nil {
-		t.Fatal(err)
-	}
-	taskProbe, err := taskPlatform.Probe(t.Context(), expectedTask.TaskName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	userID, err := taskPlatform.CurrentUser()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = validateConnectionTaskProbe(taskProbe, expectedTask, userID); err != nil {
-		t.Fatal(err)
-	}
-	if taskProbe.ExecutionTimeTicks != connectionTaskExecutionTicks {
-		t.Fatal("connection startup task is not finite")
-	}
-	if err = taskManager.Reconcile(t.Context(), distribution, false); err != nil {
-		t.Fatal(err)
-	}
 	if probe, probeErr := taskPlatform.Probe(t.Context(), expectedTask.TaskName); probeErr != nil || probe.Present {
-		t.Fatal("connection startup task remained after disable")
+		t.Fatal("connection startup task existed before any managed adapter was enabled")
 	}
 
 	runtimeSecret := acceptanceSecret(t)
@@ -312,16 +292,33 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 			RuntimeKey: runtimeSecret,
 		},
 	}
-	runtime := ConnectionRuntimeContext{
-		Distribution: distribution,
-		Provider:     OpenAIProviderID,
-		Root:         providerRoot,
-		Helper:       installed,
+	manager := ConnectionManager{
+		Helpers:  helperManager,
+		Store:    connectionStore,
+		Tasks:    taskManager,
+		Adapters: []RemoteConnectionAdapter{adapter},
+		Platform: FrontendArchitecture,
 	}
 	t.Cleanup(func() { _ = credentials.Delete(context.Background(), defaultOpenAICredentialTarget(distribution)) })
-	if err = adapter.Setup(t.Context(), runtime); err != nil {
+
+	if err = manager.Setup(t.Context(), distribution, OpenAIProviderID); err != nil {
 		t.Fatal(err)
 	}
+	taskProbe, err := taskPlatform.Probe(t.Context(), expectedTask.TaskName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID, err := taskPlatform.CurrentUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = validateConnectionTaskProbe(taskProbe, expectedTask, userID); err != nil {
+		t.Fatal(err)
+	}
+	if taskProbe.ExecutionTimeTicks != connectionTaskExecutionTicks {
+		t.Fatal("connection startup task is not finite")
+	}
+
 	// Inspect persisted bytes while they exist; checking only after Remove
 	// would silently skip the leak assertion on a successful cleanup.
 	metadataBeforeRemove, err := os.ReadFile(filepath.Join(providerRoot, openAIAdapterMetadataFileName))
@@ -331,22 +328,38 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 	if strings.Contains(string(metadataBeforeRemove), runtimeSecret) || strings.Contains(string(metadataBeforeRemove), lokiToken) {
 		t.Fatal("provider secret or Loki bearer material appeared in persisted provider metadata")
 	}
+
 	adapter.SetupConfig = OpenAISetupConfig{}
-	if err = adapter.Start(t.Context(), runtime); err != nil {
+	if err = manager.Stop(t.Context(), distribution, OpenAIProviderID); err != nil {
 		t.Fatal(err)
 	}
-	status, err := adapter.Status(t.Context(), runtime)
+	if probe, probeErr := taskPlatform.Probe(t.Context(), expectedTask.TaskName); probeErr != nil || probe.Present {
+		t.Fatal("connection startup task remained after the last enabled adapter was stopped")
+	}
+
+	if err = manager.Start(t.Context(), distribution, OpenAIProviderID); err != nil {
+		t.Fatal(err)
+	}
+	taskProbe, err = taskPlatform.Probe(t.Context(), expectedTask.TaskName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !status.Healthy || !status.Ready {
-		t.Fatalf("fake-control-plane adapter status is not healthy/ready: %+v", status)
-	}
-	if err = adapter.Stop(t.Context(), runtime); err != nil {
+	if err = validateConnectionTaskProbe(taskProbe, expectedTask, userID); err != nil {
 		t.Fatal(err)
 	}
-	if err = adapter.Remove(t.Context(), runtime); err != nil {
+	status, err := manager.Status(t.Context(), distribution, OpenAIProviderID)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !status.Runtime.Healthy || !status.Runtime.Ready {
+		t.Fatalf("fake-control-plane adapter status is not healthy/ready: %+v", status.Runtime)
+	}
+
+	if err = manager.Remove(t.Context(), distribution, OpenAIProviderID); err != nil {
+		t.Fatal(err)
+	}
+	if probe, probeErr := taskPlatform.Probe(t.Context(), expectedTask.TaskName); probeErr != nil || probe.Present {
+		t.Fatal("connection startup task remained after the managed adapter was removed")
 	}
 	for _, call := range adapterRunner.calls {
 		for _, arg := range call.args {
