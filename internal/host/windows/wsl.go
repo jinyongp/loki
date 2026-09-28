@@ -3,6 +3,7 @@ package windows
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -142,6 +143,32 @@ func (client WSLClient) OwnedDistributionVersion(ctx context.Context, distributi
 		return "", fmt.Errorf("WSL distribution %q does not match Loki appliance identity", distribution)
 	}
 	return actualVersion, nil
+}
+
+func (client WSLClient) ManagedReleaseVersion(ctx context.Context, distribution string) (string, error) {
+	result, err := client.run(ctx, "-d", distribution, "--user", "root", "--exec",
+		"/usr/local/bin/loki", "host", "status", "--system", "--json")
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", nativeFailure("inspect managed Loki release", result)
+	}
+	var payload struct {
+		Release string `json:"release"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(result.Stdout))
+	if err = decoder.Decode(&payload); err != nil {
+		return "", fmt.Errorf("decode managed Loki release: %w", err)
+	}
+	if err = requireJSONEOF(decoder); err != nil {
+		return "", err
+	}
+	release := strings.TrimSpace(payload.Release)
+	if release == "" {
+		return "", errors.New("managed Loki release is missing from host status")
+	}
+	return strings.TrimPrefix(release, "v"), nil
 }
 
 func (client WSLClient) ProbeDistribution(ctx context.Context, distribution string, present bool) (DistributionProbe, error) {

@@ -87,6 +87,21 @@ func TestOperatorUpdateApplyRequiresExplicitApproval(t *testing.T) {
 	}
 }
 
+func TestManagedReleaseVersionReadsHostStatusRelease(t *testing.T) {
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{ExitCode: 0, Stdout: `{"release":"0.1.19"}`},
+	}}
+	version, err := (WSLClient{Runner: runner}).ManagedReleaseVersion(context.Background(), "loki-mcp")
+	if err != nil || version != "0.1.19" {
+		t.Fatalf("managed release version=%q err=%v", version, err)
+	}
+	want := []string{"-d", "loki-mcp", "--user", "root", "--exec",
+		"/usr/local/bin/loki", "host", "status", "--system", "--json"}
+	if len(runner.calls) != 1 || strings.Join(runner.calls[0].arguments, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("managed release argv=%#v", runner.calls)
+	}
+}
+
 func TestOwnedDistributionVersionRejectsForeignIdentity(t *testing.T) {
 	runner := &fakeNativeRunner{results: []NativeProbe{
 		{ExitCode: 0, Stdout: ownedManifest("1.2.3")},

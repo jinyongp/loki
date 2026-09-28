@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type WindowsFreshPlatform struct {
@@ -298,8 +299,9 @@ func NewWindowsInstallController(binding ReleaseBinding) InstallController {
 			Filesystem: filesystem,
 			Remover:    OSPathRemover{},
 		},
-		Port:       LoopbackPortProbe{},
-		Fresh:      TransactionalFreshInstaller{Platform: freshPlatform},
-		Filesystem: filesystem,
+		Port:           LoopbackPortProbe{},
+		Fresh:          TransactionalFreshInstaller{Platform: freshPlatform},
+		Filesystem:     filesystem,
+		DesiredVersion: strings.TrimPrefix(binding.ReleaseTag, "v"),
 	}
 }

@@ -164,6 +164,57 @@ func TestInstallControllerHealthyNoopAndInProgressProtection(t *testing.T) {
 	}
 }
 
+func TestInstallControllerHealthyOlderReleaseRequiresManagedUpgrade(t *testing.T) {
+	expected := fixtureExpected()
+	port := &fakePortProbe{available: true}
+	fresh := &fakeFreshInstaller{}
+	snapshot := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionHealthy},
+		Windows: WindowsState{
+			Present: true, Owned: true, Kind: WindowsStateManifest,
+			MCPPort: 18765, AutoStart: true, InstallLocation: `D:\Loki\loki-mcp`,
+		},
+		StartupTask: StartupTaskState{Present: true, Owned: true},
+	}
+	controller := controllerFixture(t, snapshot, port, fresh)
+	controller.DesiredVersion = "0.1.22"
+	runner := controller.Collector.WSL.Runner.(*fakeNativeRunner)
+	runner.results = append(runner.results, NativeProbe{Stdout: `{"release":"0.1.19"}`})
+	result, err := controller.Run(context.Background(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}, nil)
+	if err != nil || result.Disposition != InstallUpgradeRequired || fresh.calls != 0 {
+		t.Fatalf("upgrade result=%#v err=%v fresh=%d", result, err, fresh.calls)
+	}
+	if result.Snapshot.Distribution.Version != "0.1.19" || result.CurrentVersion != "0.1.19" {
+		t.Fatalf("upgrade versions base=%q managed=%q", result.Snapshot.Distribution.Version, result.CurrentVersion)
+	}
+}
+
+func TestInstallControllerHealthyCurrentManagedReleaseIsNoop(t *testing.T) {
+	expected := fixtureExpected()
+	port := &fakePortProbe{available: true}
+	fresh := &fakeFreshInstaller{}
+	snapshot := ExistingSnapshot{
+		Distribution: DistributionState{State: DistributionHealthy},
+		Windows: WindowsState{
+			Present: true, Owned: true, Kind: WindowsStateManifest,
+			MCPPort: 18765, AutoStart: true, InstallLocation: `D:\Loki\loki-mcp`,
+		},
+		StartupTask: StartupTaskState{Present: true, Owned: true},
+	}
+	controller := controllerFixture(t, snapshot, port, fresh)
+	controller.DesiredVersion = "0.1.22"
+	runner := controller.Collector.WSL.Runner.(*fakeNativeRunner)
+	runner.results = append(runner.results, NativeProbe{Stdout: `{"release":"0.1.22"}`})
+	result, err := controller.Run(context.Background(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}, nil)
+	if err != nil || result.Disposition != InstallNoop || result.CurrentVersion != "0.1.22" || fresh.calls != 0 {
+		t.Fatalf("current result=%#v err=%v fresh=%d", result, err, fresh.calls)
+	}
+}
+
 func TestInstallControllerRejectsPortBeforeStaleRecovery(t *testing.T) {
 	expected := fixtureExpected()
 	port := &fakePortProbe{available: false}
