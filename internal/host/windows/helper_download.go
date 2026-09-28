@@ -43,6 +43,9 @@ func (downloader HTTPHelperDownloader) Fetch(ctx context.Context, url string, ma
 	if err != nil {
 		return nil, err
 	}
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
 	if int64(len(raw)) > maxBytes {
 		return nil, errors.New("helper mirror response exceeds download bound")
 	}
