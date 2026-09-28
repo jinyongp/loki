@@ -159,13 +159,14 @@ Normal Windows operations use the installed frontend:
 loki status
 loki doctor
 loki connection
-loki connection --json
-loki connect
+loki connection list --json
+loki connection show local
 ```
 
 `loki status` reports the Windows frontend release and the installed appliance
-identity separately. `loki connection` refreshes the protected Windows
-connection replica from the live appliance before reporting it.
+identity separately. Bare `loki connection` is a passive overview of the local
+MCP endpoint and managed provider catalog. `loki connection show local` refreshes
+and verifies the protected Windows connection replica from the live appliance.
 
 The installed frontend can update the whole Windows Loki product in place:
 

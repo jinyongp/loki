@@ -29,7 +29,7 @@ func TestWindowsCLIFirstDocumentationContract(t *testing.T) {
 				"release-bound Windows",
 				"loki.exe",
 				"loki connection",
-				"loki connect setup openai",
+				"loki connection setup openai",
 				"Windows Credential Manager",
 				"loki status",
 				"loki doctor",
@@ -41,7 +41,7 @@ func TestWindowsCLIFirstDocumentationContract(t *testing.T) {
 				"loki bootstrap install",
 				"%LOCALAPPDATA%\\Programs\\Loki\\bin\\loki.exe",
 				"The PowerShell bootstrap does not classify, register, unregister, or repair WSL",
-				"loki connection --json",
+				"loki connection list --json",
 				"Loki Connections (<distribution>)",
 				"Credential Manager rather than JSON state",
 				"loki uninstall",
@@ -69,12 +69,12 @@ func TestWindowsCLIFirstDocumentationContract(t *testing.T) {
 		{
 			path: "docs/connect-mcp-client.md",
 			required: []string{
-				"loki connection --json",
-				"loki connect setup openai",
+				"loki connection list --json",
+				"loki connection setup openai",
 				"--runtime-key-env",
 				"same-release helper mirror",
 				"Windows Credential Manager",
-				"loki connect remove openai",
+				"loki connection remove openai",
 				"does not delete the remote OpenAI tunnel",
 			},
 			forbidden: []string{

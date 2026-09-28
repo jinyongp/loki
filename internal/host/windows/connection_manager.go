@@ -37,8 +37,48 @@ type ConnectionRuntimeStatus struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
+const (
+	LocalConnectionID     = "local"
+	LocalConnectionKind   = "local"
+	ManagedConnectionKind = "managed"
+)
+
+type ConnectionProviderDescriptor struct {
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"`
+	DisplayName string   `json:"display_name"`
+	Description string   `json:"description"`
+	Actions     []string `json:"actions"`
+}
+
+func (descriptor ConnectionProviderDescriptor) validate() error {
+	if !connectionProviderPattern.MatchString(strings.TrimSpace(descriptor.ID)) ||
+		descriptor.ID == LocalConnectionID ||
+		descriptor.Kind != ManagedConnectionKind ||
+		strings.TrimSpace(descriptor.DisplayName) == "" ||
+		strings.TrimSpace(descriptor.Description) == "" {
+		return errors.New("managed connection provider descriptor is invalid")
+	}
+	if len(descriptor.Actions) == 0 {
+		return errors.New("managed connection provider descriptor has no actions")
+	}
+	seen := map[string]bool{}
+	for _, action := range descriptor.Actions {
+		switch action {
+		case "setup", "start", "stop", "remove":
+		default:
+			return fmt.Errorf("managed connection provider descriptor has unsupported action %q", action)
+		}
+		if seen[action] {
+			return fmt.Errorf("managed connection provider descriptor repeats action %q", action)
+		}
+		seen[action] = true
+	}
+	return nil
+}
+
 type RemoteConnectionAdapter interface {
-	Provider() string
+	Descriptor() ConnectionProviderDescriptor
 	HelperID() string
 	Setup(context.Context, ConnectionRuntimeContext) error
 	Start(context.Context, ConnectionRuntimeContext) error
@@ -78,17 +118,59 @@ type ConnectionManager struct {
 	Platform string
 }
 
-func (manager ConnectionManager) Providers() ([]string, error) {
+func (manager ConnectionManager) ProviderDescriptors() ([]ConnectionProviderDescriptor, error) {
 	registry, err := manager.registry()
 	if err != nil {
 		return nil, err
 	}
-	providers := make([]string, 0, len(registry))
-	for provider := range registry {
-		providers = append(providers, provider)
+	descriptors := make([]ConnectionProviderDescriptor, 0, len(registry))
+	for _, adapter := range registry {
+		descriptor := adapter.Descriptor()
+		descriptor.Actions = append([]string(nil), descriptor.Actions...)
+		descriptors = append(descriptors, descriptor)
 	}
-	slices.Sort(providers)
+	slices.SortFunc(descriptors, func(left, right ConnectionProviderDescriptor) int {
+		return strings.Compare(left.ID, right.ID)
+	})
+	return descriptors, nil
+}
+
+func (manager ConnectionManager) Providers() ([]string, error) {
+	descriptors, err := manager.ProviderDescriptors()
+	if err != nil {
+		return nil, err
+	}
+	providers := make([]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		providers = append(providers, descriptor.ID)
+	}
 	return providers, nil
+}
+
+func (manager ConnectionManager) ConfiguredStates(distribution string) ([]ConnectionState, error) {
+	if manager.Store == nil {
+		return nil, errors.New("managed connection state store is unavailable")
+	}
+	if err := ValidateDistributionName(distribution); err != nil {
+		return nil, err
+	}
+	registry, err := manager.registry()
+	if err != nil {
+		return nil, err
+	}
+	states, err := manager.Store.List(distribution)
+	if err != nil {
+		return nil, err
+	}
+	for _, state := range states {
+		if _, ok := registry[state.Provider]; !ok {
+			return nil, fmt.Errorf("configured managed connection uses unsupported provider %q", state.Provider)
+		}
+	}
+	slices.SortFunc(states, func(left, right ConnectionState) int {
+		return strings.Compare(left.Provider, right.Provider)
+	})
+	return states, nil
 }
 
 func (manager ConnectionManager) Setup(ctx context.Context, distribution, provider string) error {
@@ -126,7 +208,7 @@ func (manager ConnectionManager) Start(ctx context.Context, distribution, provid
 		return err
 	}
 	if !hadPrevious {
-		return fmt.Errorf("managed %s connection is not configured; run connect setup first", provider)
+		return fmt.Errorf("managed %s connection is not configured; run 'loki connection setup %s' first", provider, provider)
 	}
 	if err = validateStateAgainstRuntime(previous, runtime); err != nil {
 		return err
@@ -396,7 +478,8 @@ func (manager ConnectionManager) runtime(
 	distribution string,
 	adapter RemoteConnectionAdapter,
 ) (ConnectionRuntimeContext, error) {
-	provider := adapter.Provider()
+	descriptor := adapter.Descriptor()
+	provider := descriptor.ID
 	root, err := manager.Store.ProviderRoot(distribution, provider)
 	if err != nil {
 		return ConnectionRuntimeContext{}, err
@@ -419,9 +502,10 @@ func (manager ConnectionManager) registry() (map[string]RemoteConnectionAdapter,
 		if adapter == nil {
 			return nil, errors.New("managed connection registry contains a nil adapter")
 		}
-		provider := strings.TrimSpace(adapter.Provider())
+		descriptor := adapter.Descriptor()
+		provider := strings.TrimSpace(descriptor.ID)
 		helperID := strings.TrimSpace(adapter.HelperID())
-		if !connectionProviderPattern.MatchString(provider) || helperID == "" {
+		if err := descriptor.validate(); err != nil || helperID == "" {
 			return nil, errors.New("managed connection adapter identity is invalid")
 		}
 		if _, duplicate := registry[provider]; duplicate {

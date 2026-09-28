@@ -26,11 +26,14 @@ Use the installed Windows frontend:
 
 ```powershell
 loki connection
-loki connection --json
+loki connection list --json
+loki connection show local
 ```
 
-The command refreshes the protected Windows replica from the live appliance
-before reporting it. Per-distribution local-origin state remains at:
+The bare command lists the supported local and managed connection types without
+starting or downloading a managed provider helper. `loki connection show local`
+refreshes the protected Windows replica from the live appliance before reporting
+its endpoint details. Per-distribution local-origin state remains at:
 
 ```text
 %LOCALAPPDATA%\Loki\<distribution-name>\
@@ -42,9 +45,9 @@ before reporting it. Per-distribution local-origin state remains at:
 The MCP URL is in `local_origin.url`. The token itself remains in
 `mcp-token`; do not commit it, paste it into issue reports, or put it in a URL.
 
-`loki connect` shows the direct/local connection plus any managed remote
-connection adapters without installing a helper merely to display the local
-origin.
+`loki connection list` is the provider catalog and persisted-state view. Use
+`loki connection show NAME` for details and `loki connection setup PROVIDER`
+for managed-provider configuration.
 
 ### Linux
 
@@ -136,7 +139,7 @@ create or delete remote tunnels and does not store an OpenAI admin key.
 3. Run:
 
    ```powershell
-   loki connect setup openai
+   loki connection setup openai
    ```
 
    The interactive setup prints the official OpenAI reference links, asks for
@@ -147,7 +150,7 @@ create or delete remote tunnels and does not store an OpenAI admin key.
 4. Inspect the managed connection:
 
    ```powershell
-   loki connect status openai
+   loki connection show openai
    ```
 
 5. For ChatGPT, configure/enable the MCP app using the current
@@ -159,17 +162,17 @@ than putting the runtime key in process arguments:
 
 ```powershell
 $env:OPENAI_TUNNEL_RUNTIME_KEY = "<runtime-key>"
-loki connect setup --tunnel-id "<existing-tunnel-id>" --runtime-key-env OPENAI_TUNNEL_RUNTIME_KEY openai
+loki connection setup --tunnel-id "<existing-tunnel-id>" --runtime-key-env OPENAI_TUNNEL_RUNTIME_KEY openai
 Remove-Item Env:OPENAI_TUNNEL_RUNTIME_KEY
 ```
 
 Local lifecycle commands are:
 
 ```powershell
-loki connect start openai
-loki connect status openai
-loki connect stop openai
-loki connect remove openai
+loki connection start openai
+loki connection show openai
+loki connection stop openai
+loki connection remove openai
 ```
 
 `remove` deletes only Loki-owned local runtime metadata and the Loki-scoped

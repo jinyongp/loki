@@ -10,29 +10,37 @@ import (
 	windowshost "loki/internal/host/windows"
 )
 
-func TestWindowsConnectOverviewDoesNotConstructManagedHelperState(t *testing.T) {
-	raw, err := os.ReadFile("runtime_windows.go")
+func TestWindowsConnectionListUsesPassiveProviderDiscovery(t *testing.T) {
+	raw, err := os.ReadFile("connection_command_windows.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	start := strings.Index(text, "func runConnectOverview(")
-	end := strings.Index(text, "func runConnectStatus(")
+	start := strings.Index(text, "func runConnectionList(")
+	end := strings.Index(text, "func runConnectionShow(")
 	if start < 0 || end <= start {
-		t.Fatal("Windows connect overview function not found")
+		t.Fatal("Windows connection list function not found")
 	}
 	body := text[start:end]
-	if !strings.Contains(body, "runConnection(") {
-		t.Fatal("direct/local connect overview no longer reports the local connection")
+	for _, required := range []string{
+		"passiveLocalConnectionPresent(",
+		"ProviderDescriptors()",
+		"ConfiguredStates(",
+		"buildConnectionList(",
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("connection list lacks %q", required)
+		}
 	}
 	for _, forbidden := range []string{
-		"newWindowsConnectionManager(",
-		"NewWindowsHelperManager(",
+		".Status(",
+		".Setup(",
+		".Start(",
 		".Ensure(",
-		"connect setup",
+		"NewWindowsHelperManager(",
 	} {
 		if strings.Contains(body, forbidden) {
-			t.Fatalf("direct/local connect overview unexpectedly contains managed-helper path %q", forbidden)
+			t.Fatalf("connection list unexpectedly performs active provider operation %q", forbidden)
 		}
 	}
 }
@@ -43,7 +51,7 @@ func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	start := strings.Index(text, "func runConnectSetup(")
+	start := strings.Index(text, "func runConnectionSetup(")
 	end := strings.Index(text, "func validEnvironmentVariableName(")
 	if start < 0 || end <= start {
 		t.Fatal("Windows OpenAI setup function not found")
@@ -88,6 +96,29 @@ func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
 		t.Fatal("OpenAI runtime credential is no longer behind Windows Credential Manager")
 	}
 }
+
+func TestTopLevelUsageExposesOnlyCanonicalConnectionSurface(t *testing.T) {
+	var stderr bytes.Buffer
+	printUsage(&stderr)
+	usage := stderr.String()
+	if !strings.Contains(usage, "connection [COMMAND]") {
+		t.Fatalf("usage lacks canonical connection surface: %s", usage)
+	}
+	if strings.Contains(usage, "| connect ") {
+		t.Fatalf("usage exposes legacy connect surface: %s", usage)
+	}
+}
+
+func TestCanonicalConnectionSurfaceExcludesInternalStartup(t *testing.T) {
+	raw, err := os.ReadFile("connection_command_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `case "startup":`) {
+		t.Fatal("canonical connection command exposes internal startup entrypoint")
+	}
+}
+
 func TestVersionJSONIncludesReleaseBinding(t *testing.T) {
 	oldVersion, oldCommit, oldDate := buildinfo.Version, buildinfo.Commit, buildinfo.Date
 	oldWSLSHA, oldWSLLen := windowshost.WSLApplianceSHA256, windowshost.WSLApplianceLength

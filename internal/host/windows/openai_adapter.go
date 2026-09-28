@@ -79,7 +79,16 @@ type OpenAIAdapter struct {
 	SetupConfig OpenAISetupConfig
 }
 
-func (adapter *OpenAIAdapter) Provider() string { return OpenAIProviderID }
+func (adapter *OpenAIAdapter) Descriptor() ConnectionProviderDescriptor {
+	return ConnectionProviderDescriptor{
+		ID:          OpenAIProviderID,
+		Kind:        ManagedConnectionKind,
+		DisplayName: "OpenAI Secure MCP Tunnel",
+		Description: "Expose this Loki MCP endpoint through an OpenAI Secure MCP Tunnel.",
+		Actions:     []string{"setup", "start", "stop", "remove"},
+	}
+}
+
 func (adapter *OpenAIAdapter) HelperID() string { return OpenAIHelperID }
 
 func (adapter *OpenAIAdapter) Setup(ctx context.Context, runtime ConnectionRuntimeContext) error {

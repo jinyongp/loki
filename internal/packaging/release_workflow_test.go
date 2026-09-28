@@ -177,7 +177,10 @@ func TestPublicWindowsInstallIsSourceFree(t *testing.T) {
 		"version --json",
 		"status --distribution",
 		"doctor --distribution",
-		"connection --distribution",
+		"connection show --distribution",
+		"connection list --distribution",
+		`id -eq "openai"`,
+		`state -ne "not-configured"`,
 		"uninstall --distribution",
 	} {
 		if !strings.Contains(job, required) {

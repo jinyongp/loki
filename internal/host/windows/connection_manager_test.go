@@ -107,7 +107,16 @@ type fakeConnectionAdapter struct {
 	last     ConnectionRuntimeContext
 }
 
-func (adapter *fakeConnectionAdapter) Provider() string { return adapter.provider }
+func (adapter *fakeConnectionAdapter) Descriptor() ConnectionProviderDescriptor {
+	return ConnectionProviderDescriptor{
+		ID:          adapter.provider,
+		Kind:        ManagedConnectionKind,
+		DisplayName: adapter.provider,
+		Description: "test managed connection provider",
+		Actions:     []string{"setup", "start", "stop", "remove"},
+	}
+}
+
 func (adapter *fakeConnectionAdapter) HelperID() string { return adapter.helperID }
 
 func (adapter *fakeConnectionAdapter) record(name string, runtime ConnectionRuntimeContext) error {
@@ -158,6 +167,50 @@ func connectionManagerFixture() (ConnectionManager, *fakeConnectionAdapter, *fak
 		Platform: "windows-amd64",
 	}
 	return manager, adapter, helpers, store, tasks
+}
+
+func TestConnectionManagerProviderDescriptors(t *testing.T) {
+	manager, _, _, _, _ := connectionManagerFixture()
+	descriptors, err := manager.ProviderDescriptors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(descriptors) != 1 {
+		t.Fatalf("descriptors=%#v", descriptors)
+	}
+	descriptor := descriptors[0]
+	if descriptor.ID != "provider-one" ||
+		descriptor.Kind != ManagedConnectionKind ||
+		descriptor.DisplayName == "" ||
+		len(descriptor.Actions) != 4 {
+		t.Fatalf("descriptor=%#v", descriptor)
+	}
+}
+
+func TestConnectionManagerConfiguredStatesIsPassive(t *testing.T) {
+	manager, adapter, helpers, store, _ := connectionManagerFixture()
+	state := ConnectionState{
+		SchemaVersion:  ConnectionStateSchemaVersion,
+		Distribution:   "loki-mcp",
+		Provider:       "provider-one",
+		Enabled:        true,
+		HelperID:       "helper-one",
+		HelperVersion:  "1.2.3",
+		HelperPlatform: "windows-amd64",
+	}
+	if err := store.Write(t.Context(), state); err != nil {
+		t.Fatal(err)
+	}
+	states, err := manager.ConfiguredStates("loki-mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || states[0].Provider != "provider-one" || !states[0].Enabled {
+		t.Fatalf("states=%#v", states)
+	}
+	if len(helpers.calls) != 0 || len(adapter.calls) != 0 {
+		t.Fatalf("passive state query invoked helper/runtime: helpers=%v adapter=%v", helpers.calls, adapter.calls)
+	}
 }
 
 func TestConnectionManagerSetupStopStartRemovePersistsEnablement(t *testing.T) {
@@ -350,6 +403,16 @@ func TestConnectionManagerListsOnlyCompiledAdapters(t *testing.T) {
 	}
 	if !reflect.DeepEqual(providers, []string{"provider-one", "provider-two"}) {
 		t.Fatalf("providers=%v", providers)
+	}
+}
+
+func TestConnectionManagerRejectsReservedLocalProviderID(t *testing.T) {
+	manager, _, _, _, _ := connectionManagerFixture()
+	manager.Adapters = []RemoteConnectionAdapter{
+		&fakeConnectionAdapter{provider: LocalConnectionID, helperID: "helper-local"},
+	}
+	if _, err := manager.ProviderDescriptors(); err == nil {
+		t.Fatal("reserved local connection id was accepted as a managed provider")
 	}
 }
 

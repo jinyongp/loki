@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
@@ -337,197 +336,49 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	return nativeProbeExitCode(result.Probe)
 }
 
-func runConnection(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	distribution, jsonOutput, err := parseInfoFlags("connection", args, true)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	delegated, err := windowshost.NewWindowsOperatorClient().Execute(
-		ctx, distribution, windowshost.OperatorRequest{Command: "connection"},
-	)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if delegated.Probe.ExitCode != 0 {
-		return writeNativeProbe(delegated.Probe, stdout, stderr)
-	}
-	expected, err := expectedInstallation(distribution, windowshost.InstallOptions{Distribution: distribution})
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	syncer := windowshost.NewWindowsReplicaSynchronizer(nil)
-	if _, err = syncer.Sync(ctx, expected); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if jsonOutput {
-		raw, readErr := os.ReadFile(filepath.Join(expected.StateDir, "connection.json"))
-		if readErr != nil {
-			fmt.Fprintln(stderr, "read refreshed Windows connection state:", readErr)
-			return 1
-		}
-		if _, err = stdout.Write(append(raw, '\n')); err != nil {
-			fmt.Fprintln(stderr, "write connection output:", err)
-			return 1
-		}
-		return 0
-	}
-	view, err := (windowshost.NewWindowsReplicaStore()).Read(expected)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	fmt.Fprintln(stdout, "Loki MCP connection")
-	fmt.Fprintf(stdout, "  Distribution: %s\n", distribution)
-	fmt.Fprintf(stdout, "  Local origin: %s\n", view.LocalOrigin)
-	fmt.Fprintln(stdout, "  Authentication: bearer token file")
-	fmt.Fprintf(stdout, "  Token file: %s\n", filepath.Join(expected.StateDir, "mcp-token"))
-	fmt.Fprintln(stdout, "  This is a loopback local origin, not a public MCP URL.")
-	return 0
-}
-
 func runConnect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return runConnectOverview(ctx, args, stdout, stderr)
+	if len(args) > 0 {
+		switch args[0] {
+		case "status":
+			return runLegacyConnectStatus(ctx, args[1:], stdout, stderr)
+		case "startup":
+			return runConnectionStartup(ctx, args[1:], stdout, stderr)
+		}
 	}
-	switch args[0] {
-	case "status":
-		return runConnectStatus(ctx, args[1:], stdout, stderr)
-	case "setup", "start", "stop", "remove":
-		return runConnectMutation(ctx, args[0], args[1:], stdout, stderr)
-	case "startup":
-		return runConnectStartup(ctx, args[1:], stdout, stderr)
-	default:
-		fmt.Fprintln(stderr, "usage: loki connect [--distribution NAME] | connect status [OPTIONS] [PROVIDER] | connect setup|start|stop|remove [--distribution NAME] PROVIDER")
-		return 2
-	}
+	return runConnection(ctx, args, stdout, stderr)
 }
 
-func runConnectOverview(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("loki connect", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return 2
-	}
-	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	if code := runConnection(ctx, []string{"--distribution", *distribution}, stdout, stderr); code != 0 {
-		return code
-	}
-	adapters := windowshost.WindowsConnectionAdapters()
-	if len(adapters) == 0 {
-		fmt.Fprintln(stdout, "Managed remote providers: none in this release.")
-		return 0
-	}
-	fmt.Fprintln(stdout, "Managed remote providers:")
-	for _, adapter := range adapters {
-		fmt.Fprintf(stdout, "  %s\n", adapter.Provider())
-	}
-	return 0
-}
-
-func runConnectStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runLegacyConnectStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect status", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	if err := flags.Parse(args); err != nil || flags.NArg() > 1 {
+		fmt.Fprintln(stderr, "usage: loki connection list [--distribution NAME] [--json] | loki connection show [--distribution NAME] [--json] PROVIDER")
 		return 2
 	}
-	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	manager, err := newWindowsConnectionManager()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
+	translated := []string{"list", "--distribution", *distribution}
 	if flags.NArg() == 1 {
-		provider := flags.Arg(0)
-		status, statusErr := manager.Status(ctx, *distribution, provider)
-		if statusErr != nil {
-			fmt.Fprintln(stderr, statusErr)
-			return 1
-		}
-		if *jsonOutput {
-			if err = json.NewEncoder(stdout).Encode(struct {
-				Provider string                              `json:"provider"`
-				Status   windowshost.ManagedConnectionStatus `json:"status"`
-			}{Provider: provider, Status: status}); err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			return 0
-		}
-		if !status.Configured {
-			fmt.Fprintf(stdout, "%s: not configured\n", provider)
-			return 0
-		}
-		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t ready=%t)\n",
-			provider, status.Runtime.State, status.State.Enabled, status.Runtime.Healthy, status.Runtime.Ready)
-		return 0
-	}
-
-	providers, err := manager.Providers()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	type providerStatus struct {
-		Provider string                              `json:"provider"`
-		Status   windowshost.ManagedConnectionStatus `json:"status"`
-	}
-	statuses := make([]providerStatus, 0, len(providers))
-	for _, provider := range providers {
-		status, statusErr := manager.Status(ctx, *distribution, provider)
-		if statusErr != nil {
-			fmt.Fprintln(stderr, statusErr)
-			return 1
-		}
-		statuses = append(statuses, providerStatus{Provider: provider, Status: status})
+		translated[0] = "show"
 	}
 	if *jsonOutput {
-		if err = json.NewEncoder(stdout).Encode(struct {
-			SchemaVersion int              `json:"schema_version"`
-			Distribution  string           `json:"distribution"`
-			Providers     []providerStatus `json:"providers"`
-		}{SchemaVersion: 1, Distribution: *distribution, Providers: statuses}); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		return 0
+		translated = append(translated, "--json")
 	}
-	if len(statuses) == 0 {
-		fmt.Fprintln(stdout, "No managed remote connection providers are compiled into this release.")
-		return 0
+	if flags.NArg() == 1 {
+		translated = append(translated, flags.Arg(0))
 	}
-	for _, item := range statuses {
-		if !item.Status.Configured {
-			fmt.Fprintf(stdout, "%s: not configured\n", item.Provider)
-			continue
-		}
-		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t ready=%t)\n",
-			item.Provider, item.Status.Runtime.State, item.Status.State.Enabled, item.Status.Runtime.Healthy, item.Status.Runtime.Ready)
-	}
-	return 0
+	return runConnection(ctx, translated, stdout, stderr)
 }
 
-func runConnectSetup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("loki connect setup", flag.ContinueOnError)
+func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connection setup", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	tunnelID := flags.String("tunnel-id", "", "existing OpenAI tunnel id")
 	runtimeKeyEnv := flags.String("runtime-key-env", "", "environment variable containing the OpenAI runtime API key")
 	credentialTarget := flags.String("runtime-key-credential", "", "existing Loki Windows Credential Manager target")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: loki connect setup [--distribution NAME] [--tunnel-id ID] [--runtime-key-env NAME | --runtime-key-credential TARGET] PROVIDER")
+		fmt.Fprintln(stderr, "usage: loki connection setup [--distribution NAME] [--tunnel-id ID] [--runtime-key-env NAME | --runtime-key-credential TARGET] PROVIDER")
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
@@ -619,15 +470,15 @@ func validEnvironmentVariableName(value string) bool {
 	return true
 }
 
-func runConnectMutation(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
+func runConnectionMutation(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	if action == "setup" {
-		return runConnectSetup(ctx, args, stdout, stderr)
+		return runConnectionSetup(ctx, args, stdout, stderr)
 	}
-	flags := flag.NewFlagSet("loki connect "+action, flag.ContinueOnError)
+	flags := flag.NewFlagSet("loki connection "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
-		fmt.Fprintf(stderr, "usage: loki connect %s [--distribution NAME] PROVIDER\n", action)
+		fmt.Fprintf(stderr, "usage: loki connection %s [--distribution NAME] PROVIDER\n", action)
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
@@ -658,7 +509,7 @@ func runConnectMutation(ctx context.Context, action string, args []string, stdou
 	return 0
 }
 
-func runConnectStartup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func runConnectionStartup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect startup", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")

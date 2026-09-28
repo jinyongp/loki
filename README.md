@@ -35,11 +35,12 @@ host prerequisites with explicit approval.
 
 Loki exposes a **local Streamable HTTP MCP origin** protected by a bearer token.
 
-On Windows, inspect the refreshed non-secret connection metadata with:
+On Windows, discover available connection types and inspect the live local endpoint with:
 
 ```powershell
 loki connection
-loki connection --json
+loki connection list --json
+loki connection show local
 ```
 
 Per-distribution connection state remains under
@@ -50,8 +51,8 @@ Managed remote adapters and their isolated helper state live under
 For an OpenAI Secure MCP Tunnel connection to an existing tunnel:
 
 ```powershell
-loki connect setup openai
-loki connect status openai
+loki connection setup openai
+loki connection show openai
 ```
 
 Loki installs only the reviewed same-release helper mirror and stores the

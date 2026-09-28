@@ -1188,8 +1188,21 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "self-update status failed" }
               & $loki doctor --distribution $distribution
               if ($LASTEXITCODE -ne 0) { throw "self-update doctor failed" }
-              & $loki connection --distribution $distribution --json
+              & $loki connection show --distribution $distribution --json local
               if ($LASTEXITCODE -ne 0) { throw "self-update connection refresh failed" }
+              $catalogRaw = (& $loki connection list --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "Windows connection catalog failed" }
+              $catalog = $catalogRaw | ConvertFrom-Json
+              $localConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "local" })
+              $openAIConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "openai" })
+              if ($localConnection.Count -ne 1 -or [string]$localConnection[0].kind -ne "local") {
+                  throw "Windows connection catalog is missing the local connection"
+              }
+              if ($openAIConnection.Count -ne 1 -or [string]$openAIConnection[0].kind -ne "managed" -or
+                  [string]$openAIConnection[0].state -ne "not-configured" -or
+                  @($openAIConnection[0].actions) -notcontains "setup") {
+                  throw "Windows connection catalog does not describe the OpenAI provider"
+              }
 
               & $loki uninstall --distribution $distribution --approve
               if ($LASTEXITCODE -ne 0) { throw "self-update uninstall failed" }
@@ -1263,8 +1276,21 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "public Windows status failed" }
               & $loki doctor --distribution $distribution
               if ($LASTEXITCODE -ne 0) { throw "public Windows doctor failed" }
-              & $loki connection --distribution $distribution --json
+              & $loki connection show --distribution $distribution --json local
               if ($LASTEXITCODE -ne 0) { throw "public Windows connection refresh failed" }
+              $catalogRaw = (& $loki connection list --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "Windows connection catalog failed" }
+              $catalog = $catalogRaw | ConvertFrom-Json
+              $localConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "local" })
+              $openAIConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "openai" })
+              if ($localConnection.Count -ne 1 -or [string]$localConnection[0].kind -ne "local") {
+                  throw "Windows connection catalog is missing the local connection"
+              }
+              if ($openAIConnection.Count -ne 1 -or [string]$openAIConnection[0].kind -ne "managed" -or
+                  [string]$openAIConnection[0].state -ne "not-configured" -or
+                  @($openAIConnection[0].actions) -notcontains "setup") {
+                  throw "Windows connection catalog does not describe the OpenAI provider"
+              }
 
               & $loki uninstall --distribution $distribution --approve
               if ($LASTEXITCODE -ne 0) { throw "public Windows uninstall failed" }
