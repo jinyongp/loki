@@ -659,52 +659,6 @@ jobs:
           TAG: ${{ needs.preflight.outputs.tag }}
         run: .\scripts\verify\accept-wsl.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG"
 
-  windows-frontend-precutover:
-    name: Verify Windows frontend pre-cutover migration
-    needs:
-      - preflight
-      - build
-    runs-on: windows-2025
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Download release candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}\candidate
-
-      - name: Install current WSL package for frontend acceptance
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          wsl.exe --update --web-download
-          if ($LASTEXITCODE -ne 0) { throw "WSL package update failed" }
-
-      - name: Require current WSL2 for frontend acceptance
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          wsl.exe --version
-          if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
-          $help = (wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
-          foreach ($option in @("--from-file", "--name", "--no-launch")) {
-            if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
-          }
-          $global:LASTEXITCODE = 0
-
-      - name: Run Windows frontend pre-cutover acceptance
-        shell: pwsh
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-        run: .\scripts\verify\accept-windows-frontend-precutover.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG"
-
   windows-native:
     name: Verify Windows native source
     needs: preflight
@@ -931,7 +885,6 @@ jobs:
       - build
       - accept
       - wsl-accept
-      - windows-frontend-precutover
       - windows-provider-acceptance
     runs-on: ubuntu-24.04
     permissions:

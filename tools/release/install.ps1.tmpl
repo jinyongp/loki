@@ -2,951 +2,105 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $releaseTag = "@@LOKI_RELEASE_TAG@@"
-$applianceSha256 = "@@LOKI_WSL_SHA256@@"
-$applianceLength = [Int64]"@@LOKI_WSL_LENGTH@@"
-$applianceAsset = "loki-wsl-amd64.wsl"
-$releaseUrl = "https://github.com/jinyongp/loki/releases/download/$releaseTag/$applianceAsset"
-$minimumWSL = "2.4.4"
-
-$distributionName = if ($env:LOKI_WSL_NAME) { $env:LOKI_WSL_NAME.Trim() } else { "loki-mcp" }
-$installLocationExplicit = [bool]$env:LOKI_WSL_LOCATION
-$installLocation = if ($installLocationExplicit) { $env:LOKI_WSL_LOCATION.Trim() } else { "" }
-$autoStartExplicit = $null -ne $env:LOKI_WSL_AUTOSTART
-$autoStart = $env:LOKI_WSL_AUTOSTART -ne "0"
-$localAppliance = if ($env:LOKI_WSL_APPLIANCE_FILE) { $env:LOKI_WSL_APPLIANCE_FILE.Trim() } else { "" }
-$mcpPortExplicit = [bool]$env:LOKI_MCP_PORT
-$mcpPortText = if ($mcpPortExplicit) { $env:LOKI_MCP_PORT.Trim() } else { "18765" }
-$mcpPort = 0
-$reinstallRequested = $env:LOKI_WSL_REINSTALL -eq "1"
-
-$currentStage = "initializing"
-$taskName = "Loki WSL ($distributionName)"
-$stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
-$ownershipFile = Join-Path $stateDir "ownership.json"
-$expectedTaskExecutable = Join-Path $env:SystemRoot "System32\wsl.exe"
-$expectedTaskArguments = "-d $distributionName --exec /usr/bin/sleep infinity"
-$createdDistribution = $false
-$createdStateDir = $false
-$createdTask = $false
-$installationComplete = $false
-$showRollbackDiagnostics = $true
-
-function Step([string]$Message) {
-    $script:currentStage = $Message
-    Write-Host "[Loki] $Message"
-}
+$frontendSha256 = "@@LOKI_WINDOWS_FRONTEND_SHA256@@"
+$frontendLength = [Int64]"@@LOKI_WINDOWS_FRONTEND_LENGTH@@"
+$frontendAsset = "loki-windows-amd64.exe"
+$releaseUrl = "https://github.com/jinyongp/loki/releases/download/$releaseTag/$frontendAsset"
+$canonicalBin = Join-Path $env:LOCALAPPDATA "Programs\Loki\bin"
 
 function Fail([string]$Message) {
     throw $Message
 }
 
-function Invoke-NativeResult([string]$Executable, [string[]]$Arguments) {
-    $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("loki-native-" + [Guid]::NewGuid().ToString("N") + ".stderr")
+function Add-CurrentProcessPath([string]$Directory) {
+    $parts = @($env:Path -split ';' | Where-Object { $_ })
+    foreach ($part in $parts) {
+        try {
+            $left = [IO.Path]::GetFullPath($part).TrimEnd('\')
+            $right = [IO.Path]::GetFullPath($Directory).TrimEnd('\')
+            if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase)) {
+                return
+            }
+        }
+        catch {
+            if ($part.Equals($Directory, [StringComparison]::OrdinalIgnoreCase)) {
+                return
+            }
+        }
+    }
+    if ($env:Path) {
+        $env:Path = "$Directory;$env:Path"
+    }
+    else {
+        $env:Path = $Directory
+    }
+}
+
+if (-not $env:LOCALAPPDATA) {
+    Fail "LOCALAPPDATA is required for the Windows Loki frontend."
+}
+if ($frontendSha256 -notmatch '^[0-9a-f]{64}$' -or $frontendLength -le 0) {
+    Fail "Windows Loki frontend release identity is invalid."
+}
+
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("loki-bootstrap-" + [Guid]::NewGuid().ToString("N"))
+$frontend = Join-Path $tempRoot $frontendAsset
+$bootstrapExitCode = 1
+
+try {
+    New-Item -ItemType Directory -Path $tempRoot -ErrorAction Stop | Out-Null
+
+    $localFrontend = if ($env:LOKI_WINDOWS_FRONTEND_FILE) { $env:LOKI_WINDOWS_FRONTEND_FILE.Trim() } else { "" }
+    if ($localFrontend) {
+        if (-not (Test-Path -LiteralPath $localFrontend -PathType Leaf)) {
+            Fail "LOKI_WINDOWS_FRONTEND_FILE does not exist: $localFrontend"
+        }
+        Write-Host "[Loki] Using local Windows frontend candidate."
+        Copy-Item -LiteralPath $localFrontend -Destination $frontend -ErrorAction Stop
+    }
+    else {
+        Write-Host "[Loki] Downloading Windows frontend $releaseTag..."
+        Invoke-WebRequest -UseBasicParsing -Uri $releaseUrl -OutFile $frontend -ErrorAction Stop
+    }
+
+    $item = Get-Item -LiteralPath $frontend -Force -ErrorAction Stop
+    if (-not $item -or $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        Fail "Downloaded Windows Loki frontend is not a regular file."
+    }
+    if ([Int64]$item.Length -ne $frontendLength) {
+        Fail "Downloaded Windows Loki frontend length does not match the accepted release."
+    }
+    $digest = (Get-FileHash -LiteralPath $frontend -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    if (-not $digest.Equals($frontendSha256, [StringComparison]::Ordinal)) {
+        Fail "Downloaded Windows Loki frontend SHA-256 does not match the accepted release."
+    }
+
+    Write-Host "[Loki] Installing verified Windows frontend and Loki appliance..."
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         # Windows PowerShell 5.1 can promote native stderr to NativeCommandError
-        # when ErrorActionPreference is Stop. Capture stderr separately and make
-        # the native process exit code authoritative instead.
+        # when ErrorActionPreference is Stop. The native exit code is authoritative.
         $ErrorActionPreference = "Continue"
-        $stdout = @(& $Executable @Arguments 2> $stderrPath)
-        $code = $LASTEXITCODE
-        $stderr = if (Test-Path -LiteralPath $stderrPath) { [IO.File]::ReadAllText($stderrPath) } else { "" }
+        & $frontend "bootstrap" "install"
+        $bootstrapExitCode = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
-        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
     }
-    [PSCustomObject]@{
-        ExitCode = $code
-        Stdout = ((($stdout -join [Environment]::NewLine) -replace "`0", "").Trim())
-        Stderr = (($stderr -replace "`0", "").Trim())
+
+    if ($bootstrapExitCode -eq 0) {
+        Add-CurrentProcessPath $canonicalBin
+        Write-Host "[Loki] Installation complete. 'loki' is available in this PowerShell session."
+    }
+    else {
+        Write-Host "[Loki] Verified Windows frontend exited with code $bootstrapExitCode." -ForegroundColor Red
     }
 }
-
-function Invoke-NativeCapture([string]$Executable, [string[]]$Arguments, [int[]]$AllowedExitCodes = @(0)) {
-    $result = Invoke-NativeResult $Executable $Arguments
-    if ($AllowedExitCodes -notcontains $result.ExitCode) {
-        $detail = if ($result.Stderr) { $result.Stderr } else { $result.Stdout }
-        Fail "$Executable exited with code $($result.ExitCode). $detail"
-    }
-    return $result.Stdout
-}
-
-function Get-ProvisionJournalText([int]$Tail = 80) {
-    $result = Invoke-NativeResult "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", [string]$Tail)
-    return ((@($result.Stdout, $result.Stderr) | Where-Object { $_ }) -join [Environment]::NewLine)
-}
-
-function Test-LoopbackPortAvailable([int]$Port) {
-    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
-    try {
-        $listener.Start()
-        return $true
-    }
-    catch [Net.Sockets.SocketException] {
-        if ($_.Exception.SocketErrorCode -eq [Net.Sockets.SocketError]::AddressAlreadyInUse) {
-            return $false
-        }
-        throw
-    }
-    finally {
-        $listener.Stop()
-    }
-}
-
-function Get-LoopbackPortOwner([int]$Port) {
-    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
-        return ""
-    }
-    $connection = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-        Where-Object { $_.LocalAddress -in @("127.0.0.1", "0.0.0.0", "::1", "::") } |
-        Select-Object -First 1)
-    if ($connection.Count -eq 0) {
-        return ""
-    }
-    $pidValue = [int]$connection[0].OwningProcess
-    $process = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
-    if ($process) {
-        return "$($process.ProcessName) (PID $pidValue)"
-    }
-    return "PID $pidValue"
-}
-
-function Get-PortConflictMessage([int]$Port) {
-    $owner = Get-LoopbackPortOwner $Port
-    $ownerLine = if ($owner) { "Current listener: $owner" } else { "Current listener: another local process or WSL relay" }
-    return (@(
-        "MCP local-origin port $Port is already in use."
-        $ownerLine
-        ""
-        "Choose another unused local port and rerun:"
-        '  $env:LOKI_MCP_PORT = "19000"'
-        "  irm https://jinyongp.dev/loki/install.ps1 | iex"
-        ""
-        "Loki will not stop or reconfigure the existing listener automatically."
-    ) -join [Environment]::NewLine)
-}
-
-function Get-ProvisionFailureMessage([string]$Fallback) {
-    $journal = Get-ProvisionJournalText 24
-    $needle = "failed to bind host port 127.0.0.1:$mcpPort/tcp: address already in use"
-    if ($journal.Contains($needle)) {
-        $script:showRollbackDiagnostics = $false
-        return Get-PortConflictMessage $mcpPort
-    }
-    return $Fallback
-}
-
-function Test-PathEqual([string]$Left, [string]$Right) {
-    try {
-        $leftFull = [IO.Path]::GetFullPath($Left).TrimEnd('\')
-        $rightFull = [IO.Path]::GetFullPath($Right).TrimEnd('\')
-        return $leftFull.Equals($rightFull, [StringComparison]::OrdinalIgnoreCase)
-    }
-    catch {
-        return $false
-    }
-}
-
-function Test-SafeOwnedInstallLocation([string]$Path) {
-    if (-not $Path -or -not [IO.Path]::IsPathRooted($Path)) {
-        return $false
-    }
-    try {
-        $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
-        $root = [IO.Path]::GetPathRoot($full).TrimEnd('\')
-        $stateFull = [IO.Path]::GetFullPath($stateDir).TrimEnd('\')
-        if ($full.Equals($root, [StringComparison]::OrdinalIgnoreCase) -or
-            $full.Equals($stateFull, [StringComparison]::OrdinalIgnoreCase) -or
-            $full.StartsWith($stateFull + "\", [StringComparison]::OrdinalIgnoreCase) -or
-            $stateFull.StartsWith($full + "\", [StringComparison]::OrdinalIgnoreCase)) {
-            return $false
-        }
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-function Test-InteractiveConsole {
-    if (-not [Environment]::UserInteractive) {
-        return $false
-    }
-    foreach ($arg in [Environment]::GetCommandLineArgs()) {
-        if ($arg.Equals("-NonInteractive", [StringComparison]::OrdinalIgnoreCase)) {
-            return $false
-        }
-    }
-    try {
-        if ([Console]::IsInputRedirected) {
-            return $false
-        }
-    }
-    catch {
-        return $false
-    }
-    return $true
-}
-
-function Confirm-LokiStaleReinstall($DistroState, $WindowsState, $StartupTask) {
-    Write-Host "[Loki] A verified stale Loki installation requires destructive recovery." -ForegroundColor Yellow
-    Write-Host "[Loki] Reinstalling will remove:"
-    Write-Host "  - WSL distribution '$distributionName' (including its internal data)"
-    if ($StartupTask.Present) {
-        Write-Host "  - Scheduled Task '$taskName'"
-    }
-    if ($WindowsState.Present) {
-        Write-Host "  - Windows state '$stateDir'"
-    }
-    if ($WindowsState.Kind -eq "manifest" -and $WindowsState.InstallLocation) {
-        Write-Host "  - Custom WSL location '$($WindowsState.InstallLocation)'"
-    }
-
-    if (Test-InteractiveConsole) {
-        try {
-            $answer = Read-Host "Reinstall Loki? [y/N]"
-        }
-        catch {
-            Fail "Interactive recovery approval is unavailable. No destructive recovery was performed."
-        }
-        return $answer.Trim().ToLowerInvariant() -in @("y", "yes")
-    }
-    if ($reinstallRequested) {
-        return $true
-    }
-    Fail (@(
-        "Existing Loki installation '$distributionName' requires destructive recovery."
-        "Non-interactive recovery will not unregister a WSL distribution without explicit approval."
-        'Set $env:LOKI_WSL_REINSTALL = "1" and rerun the installer.'
-    ) -join [Environment]::NewLine)
-}
-
-function Apply-LokiPreservedSettings($WindowsState) {
-    if (-not $WindowsState.Owned) {
-        return
-    }
-    if (-not $mcpPortExplicit -and $WindowsState.MCPPort -ge 1024 -and $WindowsState.MCPPort -le 65535) {
-        $script:mcpPort = [int]$WindowsState.MCPPort
-        $script:mcpPortText = [string]$WindowsState.MCPPort
-    }
-    if ($WindowsState.Kind -eq "manifest") {
-        if (-not $autoStartExplicit) {
-            $script:autoStart = [bool]$WindowsState.AutoStart
-        }
-        if (-not $installLocationExplicit -and $WindowsState.InstallLocation) {
-            $script:installLocation = [IO.Path]::GetFullPath([string]$WindowsState.InstallLocation)
-        }
-    }
-}
-
-function Remove-LokiOwnedStartupTask($StartupTask) {
-    if (-not $StartupTask.Present) {
-        return
-    }
-    if (-not $StartupTask.Owned) {
-        Fail "Refusing to remove unverified Scheduled Task '$taskName'."
-    }
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-}
-
-function Remove-LokiOwnedWindowsState($WindowsState) {
-    if (-not $WindowsState.Present) {
-        return
-    }
-    if (-not $WindowsState.Owned) {
-        Fail "Refusing to remove unverified Windows state '$stateDir'."
-    }
-    $ownedLocation = if ($WindowsState.Kind -eq "manifest") { [string]$WindowsState.InstallLocation } else { "" }
-    if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
-        if (-not (Test-SafeOwnedInstallLocation $ownedLocation)) {
-            Fail "Refusing to remove unsafe manifest-owned WSL location '$ownedLocation'."
-        }
-        $ownedLocationItem = Get-Item -LiteralPath $ownedLocation -Force
-        if (-not $ownedLocationItem.PSIsContainer -or ($ownedLocationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            Fail "Refusing to remove manifest-owned WSL location because it is not a real directory: $ownedLocation"
-        }
-    }
-    Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction Stop
-    if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
-        if (-not (Test-SafeOwnedInstallLocation $ownedLocation)) {
-            Fail "Refusing to remove unsafe manifest-owned WSL location '$ownedLocation'."
-        }
-        $locationItem = Get-Item -LiteralPath $ownedLocation -Force
-        if (-not $locationItem.PSIsContainer -or ($locationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            Fail "Refusing to remove manifest-owned WSL location because it is not a real directory: $ownedLocation"
-        }
-        Remove-Item -LiteralPath $ownedLocation -Recurse -Force -ErrorAction Stop
-    }
-}
-
-function Get-LokiPreflightSnapshot {
-    $existingRaw = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
-    $existing = @($existingRaw -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $present = @($existing | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
-    $windows = Get-LokiWindowsStateOwnership
-    $task = Get-LokiStartupTaskOwnership
-    $distro = Get-LokiDistributionState $present
-    return [PSCustomObject]@{
-        DistroPresent = $present
-        DistroState = $distro
-        WindowsState = $windows
-        StartupTask = $task
-    }
-}
-
-function Assert-LokiFreshPreflight($Snapshot) {
-    if ($Snapshot.DistroState.State -ne "absent" -or $Snapshot.WindowsState.Present -or $Snapshot.StartupTask.Present) {
-        Fail "Loki recovery did not converge to a clean fresh-install state."
-    }
-    if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
-        Fail "LOKI_WSL_LOCATION still exists after recovery: $installLocation"
-    }
-}
-
-function Get-LokiStartupTaskOwnership {
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if (-not $task) {
-        return [PSCustomObject]@{ Present = $false; Owned = $false }
-    }
-    $actions = @($task.Actions)
-    $owned = $actions.Count -eq 1 -and
-        ([string]$actions[0].Execute).Equals($expectedTaskExecutable, [StringComparison]::OrdinalIgnoreCase) -and
-        ([string]$actions[0].Arguments).Equals($expectedTaskArguments, [StringComparison]::Ordinal) -and
-        ([string]$task.Description).Equals("Keep the Loki WSL2 appliance running.", [StringComparison]::Ordinal)
-    return [PSCustomObject]@{ Present = $true; Owned = $owned }
-}
-
-function Get-LokiWindowsStateOwnership {
-    if (-not (Test-Path -LiteralPath $stateDir)) {
-        return [PSCustomObject]@{
-            Present = $false
-            Owned = $false
-            Kind = "absent"
-            InstallLocation = ""
-            AutoStart = $false
-            MCPPort = 0
-        }
-    }
-
-    try {
-        $stateItem = Get-Item -LiteralPath $stateDir -Force
-        if (-not $stateItem.PSIsContainer -or ($stateItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw "state path is not a real directory"
-        }
-        $entries = @(Get-ChildItem -LiteralPath $stateDir -Force)
-        $names = @($entries | ForEach-Object { $_.Name })
-
-        if (Test-Path -LiteralPath $ownershipFile -PathType Leaf) {
-            $allowed = @("connection.json", "mcp-token", "ownership.json")
-            if (@($names | Where-Object { $allowed -notcontains $_ }).Count -ne 0) {
-                throw "ownership state contains unexpected entries"
-            }
-            $ownership = [IO.File]::ReadAllText($ownershipFile) | ConvertFrom-Json
-            if ([int]$ownership.schema_version -ne 1 -or
-                -not ([string]$ownership.distribution).Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) -or
-                -not (Test-PathEqual ([string]$ownership.state_dir) $stateDir) -or
-                -not ([string]$ownership.task_name).Equals($taskName, [StringComparison]::Ordinal) -or
-                -not ([string]$ownership.task_executable).Equals($expectedTaskExecutable, [StringComparison]::OrdinalIgnoreCase) -or
-                -not ([string]$ownership.task_arguments).Equals($expectedTaskArguments, [StringComparison]::Ordinal) -or
-                ([string]$ownership.release_tag) -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-                throw "ownership manifest does not match the requested Loki installation"
-            }
-            $ownedLocation = [string]$ownership.install_location
-            $ownedPort = [int]$ownership.mcp_port
-            if ($ownedLocation -and -not (Test-SafeOwnedInstallLocation $ownedLocation)) {
-                throw "ownership manifest contains an unsafe install location"
-            }
-            if ($ownedLocation -and (Test-Path -LiteralPath $ownedLocation)) {
-                $ownedLocationItem = Get-Item -LiteralPath $ownedLocation -Force
-                if (-not $ownedLocationItem.PSIsContainer -or ($ownedLocationItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    throw "ownership manifest install location is not a real directory"
-                }
-            }
-            if ($ownedPort -lt 1024 -or $ownedPort -gt 65535) {
-                throw "ownership manifest contains an invalid MCP port"
-            }
-            return [PSCustomObject]@{
-                Present = $true
-                Owned = $true
-                Kind = "manifest"
-                InstallLocation = $ownedLocation
-                AutoStart = [bool]$ownership.autostart
-                MCPPort = $ownedPort
-            }
-        }
-
-        $legacyAllowed = @("connection.json", "mcp-token")
-        if (@($names | Where-Object { $legacyAllowed -notcontains $_ }).Count -ne 0 -or
-            -not (Test-Path -LiteralPath (Join-Path $stateDir "connection.json") -PathType Leaf) -or
-            -not (Test-Path -LiteralPath (Join-Path $stateDir "mcp-token") -PathType Leaf)) {
-            throw "legacy state does not match the Loki connection-state shape"
-        }
-        $connectionFile = Join-Path $stateDir "connection.json"
-        $tokenFile = Join-Path $stateDir "mcp-token"
-        $connection = [IO.File]::ReadAllText($connectionFile) | ConvertFrom-Json
-        $distributionProperty = $connection.PSObject.Properties["distribution"]
-        if (-not $distributionProperty -or
-            -not ([string]$distributionProperty.Value).Equals($distributionName, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "legacy connection state does not match the requested Loki distribution"
-        }
-
-        $localOriginProperty = $connection.PSObject.Properties["local_origin"]
-        if ($localOriginProperty) {
-            $schemaProperty = $connection.PSObject.Properties["schema_version"]
-            $localOrigin = $localOriginProperty.Value
-            if (-not $schemaProperty -or [int]$schemaProperty.Value -ne 1 -or
-                -not (Test-PathEqual ([string]$localOrigin.authentication.token_file) $tokenFile) -or
-                -not ([string]$localOrigin.authentication.type).Equals("bearer-token-file", [StringComparison]::Ordinal) -or
-                -not ([string]$localOrigin.transport).Equals("streamable-http", [StringComparison]::Ordinal) -or
-                -not ([string]$localOrigin.reachability).Equals("loopback", [StringComparison]::Ordinal)) {
-                throw "legacy local-origin connection state does not prove Loki ownership"
-            }
-            $origin = [Uri]([string]$localOrigin.url)
-            if ($origin.Scheme -ne "http" -or $origin.Host -ne "127.0.0.1" -or
-                $origin.AbsolutePath -ne "/mcp" -or $origin.Port -lt 1024 -or $origin.Port -gt 65535) {
-                throw "legacy local-origin connection state is not a valid Loki loopback origin"
-            }
-
-            # Later schema-v1 installers added top-level compatibility aliases.
-            # They are optional for older local-origin state, but if present
-            # must agree with the canonical local_origin proof above.
-            $compatAuthentication = $connection.PSObject.Properties["authentication"]
-            if ($compatAuthentication -and
-                -not ([string]$compatAuthentication.Value).Equals("bearer-token-file", [StringComparison]::Ordinal)) {
-                throw "legacy authentication alias does not match Loki connection state"
-            }
-            $compatTokenFile = $connection.PSObject.Properties["token_file"]
-            if ($compatTokenFile -and -not (Test-PathEqual ([string]$compatTokenFile.Value) $tokenFile)) {
-                throw "legacy token-file alias does not match Loki connection state"
-            }
-            $compatEndpoint = $connection.PSObject.Properties["endpoint"]
-            if ($compatEndpoint -and -not ([string]$compatEndpoint.Value).Equals($origin.AbsoluteUri, [StringComparison]::Ordinal)) {
-                throw "legacy endpoint alias does not match Loki connection state"
-            }
-            $compatTransport = $connection.PSObject.Properties["transport"]
-            if ($compatTransport -and
-                -not ([string]$compatTransport.Value).Equals("streamable-http", [StringComparison]::Ordinal)) {
-                throw "legacy transport alias does not match Loki connection state"
-            }
-        }
-        else {
-            # The first published Windows connection state predates
-            # schema_version/local_origin and used an exact flat shape.
-            $flatAllowed = @("endpoint", "transport", "authentication", "token_file", "distribution")
-            $flatNames = @($connection.PSObject.Properties | ForEach-Object { $_.Name })
-            if ($flatNames.Count -ne $flatAllowed.Count -or
-                @($flatNames | Where-Object { $flatAllowed -notcontains $_ }).Count -ne 0 -or
-                -not ([string]$connection.transport).Equals("streamable-http", [StringComparison]::Ordinal) -or
-                -not ([string]$connection.authentication).Equals("bearer-token-file", [StringComparison]::Ordinal) -or
-                -not (Test-PathEqual ([string]$connection.token_file) $tokenFile)) {
-                throw "legacy flat connection state does not prove Loki ownership"
-            }
-            $origin = [Uri]([string]$connection.endpoint)
-            if ($origin.Scheme -ne "http" -or $origin.Host -ne "127.0.0.1" -or
-                $origin.AbsolutePath -ne "/mcp" -or $origin.Port -ne 18765) {
-                throw "legacy flat connection state is not the published Loki endpoint"
-            }
-        }
-        return [PSCustomObject]@{
-            Present = $true
-            Owned = $true
-            Kind = "legacy"
-            InstallLocation = ""
-            AutoStart = $null
-            MCPPort = $origin.Port
-        }
-    }
-    catch {
-        return [PSCustomObject]@{
-            Present = $true
-            Owned = $false
-            Kind = "unverified"
-            InstallLocation = ""
-            AutoStart = $false
-            MCPPort = 0
-        }
-    }
-}
-
-function Get-LokiDistributionState([bool]$Present) {
-    if (-not $Present) {
-        return [PSCustomObject]@{ State = "absent"; Version = "" }
-    }
-
-    $manifestResult = Invoke-NativeResult "wsl.exe" @(
-        "-d", $distributionName, "--user", "root", "--exec",
-        "/bin/cat", "/usr/lib/loki-appliance/release-manifest.json"
-    )
-    $versionResult = Invoke-NativeResult "wsl.exe" @(
-        "-d", $distributionName, "--user", "root", "--exec",
-        "/usr/lib/loki-appliance/loki", "version"
-    )
-    if ($manifestResult.ExitCode -ne 0 -or $versionResult.ExitCode -ne 0) {
-        return [PSCustomObject]@{ State = "foreign"; Version = "" }
-    }
-
-    try {
-        $manifest = $manifestResult.Stdout | ConvertFrom-Json
-        $version = [string]$manifest.generation.spec.version
-        if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or
-            -not $versionResult.Stdout.StartsWith("loki $version", [StringComparison]::Ordinal)) {
-            return [PSCustomObject]@{ State = "foreign"; Version = "" }
-        }
-    }
-    catch {
-        return [PSCustomObject]@{ State = "foreign"; Version = "" }
-    }
-
-    $provisioned = Invoke-NativeResult "wsl.exe" @(
-        "-d", $distributionName, "--user", "root", "--exec",
-        "/usr/bin/test", "-f", "/var/lib/loki-appliance/provisioned"
-    )
-    if ($provisioned.ExitCode -eq 0) {
-        $doctor = Invoke-NativeResult "wsl.exe" @(
-            "-d", $distributionName, "--user", "root", "--exec",
-            "/usr/local/bin/loki", "host", "doctor", "--system"
-        )
-        $connection = Invoke-NativeResult "wsl.exe" @(
-            "-d", $distributionName, "--user", "root", "--exec",
-            "/usr/local/bin/loki", "host", "connection", "--system", "--json"
-        )
-        if ($doctor.ExitCode -eq 0 -and $connection.ExitCode -eq 0) {
-            return [PSCustomObject]@{ State = "healthy"; Version = $version }
-        }
-        return [PSCustomObject]@{ State = "stale"; Version = $version }
-    }
-    if ($provisioned.ExitCode -ne 1) {
-        return [PSCustomObject]@{ State = "indeterminate"; Version = $version }
-    }
-
-    $serviceResult = Invoke-NativeResult "wsl.exe" @(
-        "-d", $distributionName, "--user", "root", "--exec",
-        "/usr/bin/systemctl", "show", "loki-appliance-provision.service", "--no-pager",
-        "--property=ActiveState", "--property=SubState", "--property=Result",
-        "--property=NRestarts", "--property=ExecMainStatus"
-    )
-    if ($serviceResult.ExitCode -ne 0) {
-        return [PSCustomObject]@{ State = "indeterminate"; Version = $version }
-    }
-    $service = @{}
-    foreach ($line in ($serviceResult.Stdout -split '\r?\n')) {
-        $parts = $line -split "=", 2
-        if ($parts.Count -eq 2) {
-            $service[$parts[0]] = $parts[1]
-        }
-    }
-    $activeState = [string]$service["ActiveState"]
-    $subState = [string]$service["SubState"]
-    $restartCount = 0
-    if ([string]$service["NRestarts"] -match '^[0-9]+$') {
-        $restartCount = [int]$service["NRestarts"]
-    }
-    if ($activeState -in @("activating", "active") -or $subState -in @("start", "running", "auto-restart")) {
-        return [PSCustomObject]@{ State = "provisioning"; Version = $version }
-    }
-    if ($activeState -eq "failed" -or $restartCount -ge 3) {
-        return [PSCustomObject]@{ State = "stale"; Version = $version }
-    }
-    return [PSCustomObject]@{ State = "stale"; Version = $version }
-}
-
-function Write-LokiOwnershipManifest([string]$Identity) {
-    $ownership = [ordered]@{
-        schema_version = 1
-        distribution = $distributionName
-        release_tag = $releaseTag
-        state_dir = [IO.Path]::GetFullPath($stateDir)
-        install_location = if ($installLocation) { [IO.Path]::GetFullPath($installLocation) } else { "" }
-        autostart = [bool]$autoStart
-        mcp_port = [int]$mcpPort
-        task_name = $taskName
-        task_executable = $expectedTaskExecutable
-        task_arguments = $expectedTaskArguments
-    }
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($ownershipFile, ($ownership | ConvertTo-Json -Depth 4), $utf8)
-    Invoke-NativeCapture "icacls.exe" @(
-        $ownershipFile, "/inheritance:r", "/grant:r", "${Identity}:(F)", "SYSTEM:(F)"
-    ) | Out-Null
-}
-
-try {
-Step "Checking Windows and WSL prerequisites..."
-if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
-    Fail "WSL is required. Install WSL, then rerun this command."
-}
-if ($distributionName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
-    Fail "LOKI_WSL_NAME must be 1-64 characters using letters, digits, dot, underscore, or hyphen."
-}
-if (-not [int]::TryParse($mcpPortText, [ref]$mcpPort) -or $mcpPort -lt 1024 -or $mcpPort -gt 65535) {
-    Fail "LOKI_MCP_PORT must be an integer between 1024 and 65535."
-}
-if ($installLocation) {
-    if (-not [IO.Path]::IsPathRooted($installLocation)) {
-        Fail "LOKI_WSL_LOCATION must be an absolute Windows path."
-    }
-    $installLocation = [IO.Path]::GetFullPath($installLocation)
-}
-
-$help = Invoke-NativeCapture "wsl.exe" @("--help") @(-1, 0, 1)
-foreach ($requiredOption in @("--from-file", "--name", "--no-launch")) {
-    if (-not $help.Contains($requiredOption)) {
-        Fail "WSL $minimumWSL or newer is required for custom .wsl distributions. Run 'wsl --update' manually, then retry."
-    }
-}
-
-$preflight = Get-LokiPreflightSnapshot
-$windowsState = $preflight.WindowsState
-$startupTask = $preflight.StartupTask
-$distroState = $preflight.DistroState
-
-if ($windowsState.Present -and -not $windowsState.Owned) {
-    Fail "Windows state exists at '$stateDir' but does not prove Loki ownership. No changes were made."
-}
-if ($startupTask.Present -and -not $startupTask.Owned) {
-    Fail "Scheduled Task '$taskName' exists but does not match Loki's managed startup action. No changes were made."
-}
-
-Apply-LokiPreservedSettings $windowsState
-
-if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
-    $ownedRequestedLocation = $windowsState.Kind -eq "manifest" -and $windowsState.InstallLocation -and
-        (Test-PathEqual $installLocation ([string]$windowsState.InstallLocation))
-    if (-not $ownedRequestedLocation) {
-        Fail "LOKI_WSL_LOCATION already exists and is not proven as the current Loki installation location: $installLocation"
-    }
-}
-if ($distroState.State -eq "stale" -and $mcpPortExplicit -and $windowsState.MCPPort -gt 0 -and
-    $mcpPort -ne $windowsState.MCPPort -and -not (Test-LoopbackPortAvailable $mcpPort)) {
-    Fail (Get-PortConflictMessage $mcpPort)
-}
-
-switch ($distroState.State) {
-    "foreign" {
-        Fail (@(
-            "A WSL distribution named '$distributionName' exists but is not a verified Loki appliance."
-            "No changes were made."
-            "Choose another name with LOKI_WSL_NAME or inspect that distribution manually."
-        ) -join [Environment]::NewLine)
-    }
-    "indeterminate" {
-        Fail (@(
-            "The WSL distribution '$distributionName' contains Loki appliance identity, but its provisioning state could not be verified safely."
-            "No changes were made."
-            "Inspect the appliance before retrying:"
-            "  wsl -d $distributionName --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager"
-        ) -join [Environment]::NewLine)
-    }
-    "provisioning" {
-        Fail (@(
-            "Loki installation '$distributionName' is still provisioning."
-            "No changes were made."
-            "Wait for provisioning to finish, then rerun the installer."
-            "  wsl -d $distributionName --user root -- /usr/bin/systemctl status loki-appliance-provision.service --no-pager"
-        ) -join [Environment]::NewLine)
-    }
-    "healthy" {
-        if (-not $windowsState.Present) {
-            Fail (@(
-                "Loki '$distributionName' is healthy, but its protected Windows connection state is missing."
-                "No changes were made."
-                "Inspect the live installation with:"
-                "  wsl -d $distributionName --user root -- /usr/local/bin/loki host status --system"
-                "  wsl -d $distributionName --user root -- /usr/local/bin/loki host connection --system"
-            ) -join [Environment]::NewLine)
-        }
-        if ($windowsState.Kind -eq "manifest") {
-            if ($windowsState.AutoStart -and -not $startupTask.Present) {
-                Fail "Loki '$distributionName' is healthy, but its manifest-owned startup task is missing. No changes were made."
-            }
-            if (-not $windowsState.AutoStart -and $startupTask.Present) {
-                Fail "Loki '$distributionName' is healthy, but an unexpected Loki startup task is present. No changes were made."
-            }
-        }
-        Write-Host "[Loki] Loki is already installed and healthy."
-        Write-Host "  Release: v$($distroState.Version)"
-        Write-Host "  WSL distribution: $distributionName"
-        Write-Host "  Connection file: $(Join-Path $stateDir "connection.json")"
-        Write-Host "[Loki] No installation changes were made."
-        $global:LASTEXITCODE = 0
-        return
-    }
-    "stale" {
-        if (-not (Confirm-LokiStaleReinstall $distroState $windowsState $startupTask)) {
-            Fail "Loki reinstall cancelled. No changes were made."
-        }
-        Write-Host "[Loki] Removing verified stale Loki installation..."
-        Remove-LokiOwnedStartupTask $startupTask
-        $terminateResult = Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName)
-        if ($terminateResult.ExitCode -ne 0) {
-            $detail = if ($terminateResult.Stderr) { $terminateResult.Stderr } else { $terminateResult.Stdout }
-            Fail "Could not terminate stale Loki distribution '$distributionName'. $detail"
-        }
-        $unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)
-        if ($unregisterResult.ExitCode -ne 0) {
-            $detail = if ($unregisterResult.Stderr) { $unregisterResult.Stderr } else { $unregisterResult.Stdout }
-            Fail "Could not unregister stale Loki distribution '$distributionName'. $detail"
-        }
-        $afterUnregister = Invoke-NativeCapture "wsl.exe" @("--list", "--quiet")
-        $stillPresent = @($afterUnregister -split '\r?\n' | ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -and $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
-        if ($stillPresent) {
-            Fail "WSL still reports '$distributionName' after unregister; owned Windows state was not removed."
-        }
-        Remove-LokiOwnedWindowsState $windowsState
-        $preflight = Get-LokiPreflightSnapshot
-        Assert-LokiFreshPreflight $preflight
-        Write-Host "[Loki] Stale Loki installation removed; continuing with a fresh install."
-    }
-    "absent" {
-        if ($windowsState.Present -or $startupTask.Present) {
-            Write-Host "[Loki] Removing verified orphaned Loki Windows integration..."
-            Remove-LokiOwnedStartupTask $startupTask
-            Remove-LokiOwnedWindowsState $windowsState
-            $preflight = Get-LokiPreflightSnapshot
-            Assert-LokiFreshPreflight $preflight
-            Write-Host "[Loki] Orphaned Loki Windows integration removed."
-        }
-    }
-    default {
-        Fail "Unsupported Loki WSL preflight state '$($distroState.State)'."
-    }
-}
-
-if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
-    Fail "LOKI_WSL_LOCATION already exists and is not available for a fresh Loki install: $installLocation"
-}
-if (-not (Test-LoopbackPortAvailable $mcpPort)) {
-    Fail (Get-PortConflictMessage $mcpPort)
-}
-Write-Host "[Loki] Preflight complete. Target distribution: $distributionName"
-Write-Host "[Loki] MCP local-origin port: $mcpPort"
-
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("loki-wsl-" + [Guid]::NewGuid().ToString("N"))
-$appliance = Join-Path $tempRoot $applianceAsset
-New-Item -ItemType Directory -Path $tempRoot | Out-Null
-try {
-    Step "Preparing Loki $releaseTag WSL appliance..."
-    if ($localAppliance) {
-        if (-not (Test-Path -LiteralPath $localAppliance -PathType Leaf)) {
-            Fail "LOKI_WSL_APPLIANCE_FILE does not exist: $localAppliance"
-        }
-        Write-Host "[Loki] Using local appliance: $localAppliance"
-        Copy-Item -LiteralPath $localAppliance -Destination $appliance
-    } else {
-        $applianceMiB = [Math]::Ceiling($applianceLength / 1MB)
-        Write-Host "[Loki] Downloading $applianceAsset ($applianceMiB MiB)..."
-        Invoke-WebRequest -UseBasicParsing -Uri $releaseUrl -OutFile $appliance
-    }
-
-    Step "Verifying WSL appliance integrity..."
-    $file = Get-Item -LiteralPath $appliance
-    if ($file.Length -ne $applianceLength) {
-        Fail "Downloaded WSL appliance length does not match the accepted release."
-    }
-    $actualSha = (Get-FileHash -LiteralPath $appliance -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualSha -ne $applianceSha256) {
-        Fail "Downloaded WSL appliance SHA-256 does not match the accepted release."
-    }
-    Write-Host "[Loki] Appliance verification passed."
-
-    Step "Registering WSL distribution '$distributionName'..."
-    $installArgs = @("--install", "--from-file", $appliance, "--name", $distributionName, "--no-launch")
-    if ($installLocation) {
-        $installArgs += @("--location", $installLocation)
-    }
-    Invoke-NativeCapture "wsl.exe" $installArgs | Out-Null
-    $createdDistribution = $true
-    Write-Host "[Loki] WSL distribution registered."
-
-    Step "Starting WSL and provisioning Docker + Loki runtime..."
-    Write-Host "[Loki] This can take several minutes."
-    $keepAlive = Start-Process -FilePath "$env:SystemRoot\System32\wsl.exe" -ArgumentList @("-d", $distributionName, "--exec", "/usr/bin/sleep", "infinity") -WindowStyle Hidden -PassThru
-    Invoke-NativeCapture "wsl.exe" @(
-        "-d", $distributionName, "--user", "root", "--exec",
-        "/usr/lib/loki-appliance/configure-install", [string]$mcpPort
-    ) | Out-Null
-    Write-Host "[Loki] MCP local-origin port configured: $mcpPort"
-
-    $ready = $false
-    $lastRestartCount = 0
-    $maxProvisionRestarts = 3
-    for ($attempt = 0; $attempt -lt 300; $attempt++) {
-        # Query the system service as the normal appliance user. systemctl show
-        # remains read-only and lets us distinguish a long first boot from a
-        # service that is repeatedly failing and auto-restarting.
-        $probe = Invoke-NativeResult "wsl.exe" @(
-            "-d", $distributionName, "--exec", "/usr/bin/systemctl", "show",
-            "loki-appliance-provision.service", "--no-pager",
-            "--property=ActiveState", "--property=SubState", "--property=Result",
-            "--property=NRestarts", "--property=ExecMainStatus"
-        )
-        if ($probe.ExitCode -eq 0) {
-            $service = @{}
-            foreach ($line in ($probe.Stdout -split '\r?\n')) {
-                $parts = $line -split "=", 2
-                if ($parts.Count -eq 2) {
-                    $service[$parts[0]] = $parts[1]
-                }
-            }
-
-            $activeState = [string]$service["ActiveState"]
-            $subState = [string]$service["SubState"]
-            $serviceResult = [string]$service["Result"]
-            $execMainStatus = [string]$service["ExecMainStatus"]
-            $restartCount = 0
-            if ([string]$service["NRestarts"] -match '^[0-9]+$') {
-                $restartCount = [int]$service["NRestarts"]
-            }
-
-            if ($activeState -eq "active") {
-                $ready = $true
-                break
-            }
-
-            if ($restartCount -gt $lastRestartCount) {
-                Write-Host "[Loki]   Provisioning attempt failed; systemd restart $restartCount/$maxProvisionRestarts..."
-                $lastRestartCount = $restartCount
-            }
-
-            if ($activeState -eq "failed" -or $restartCount -ge $maxProvisionRestarts) {
-                $reason = "Loki appliance provisioning failed repeatedly (state=$activeState/$subState, result=$serviceResult, exit=$execMainStatus, restarts=$restartCount)."
-                Fail (Get-ProvisionFailureMessage $reason)
-            }
-
-            if ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
-                Write-Host "[Loki]   First-boot provisioning state: $activeState/$subState; restarts=$restartCount ($($attempt * 2)s elapsed)..."
-            }
-        } elseif ($attempt -gt 0 -and ($attempt % 15) -eq 0) {
-            Write-Host "[Loki]   Waiting for first-boot systemd state ($($attempt * 2)s elapsed)..."
-        }
-        Start-Sleep -Seconds 2
-    }
-    if (-not $ready) {
-        Fail (Get-ProvisionFailureMessage "Loki appliance provisioning did not complete within 10 minutes.")
-    }
-    Write-Host "[Loki] First-boot provisioning complete."
-
-    Step "Verifying Loki host health..."
-    Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "status", "--system", "--json") | Out-Null
-    Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "doctor", "--system") | Out-Null
-    Write-Host "[Loki] Loki host health checks passed."
-
-    Step "Reading MCP connection information..."
-    $connectionRaw = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "connection", "--system", "--json")
-    $connection = $connectionRaw | ConvertFrom-Json
-    $token = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/bin/cat", "/var/lib/loki/lifecycle/mcp-token")
-    if (-not $token -or $token.Contains([Environment]::NewLine)) {
-        Fail "Loki MCP token material is invalid."
-    }
-
-    Step "Writing protected Windows MCP connection files..."
-    New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
-    $createdStateDir = $true
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    Invoke-NativeCapture "icacls.exe" @($stateDir, "/inheritance:r", "/grant:r", "${identity}:(OI)(CI)(F)", "SYSTEM:(OI)(CI)(F)") | Out-Null
-
-    $tokenFile = Join-Path $stateDir "mcp-token"
-    $connectionFile = Join-Path $stateDir "connection.json"
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($tokenFile, $token, $utf8)
-    try {
-        Invoke-NativeCapture "icacls.exe" @($tokenFile, "/inheritance:r", "/grant:r", "${identity}:(F)", "SYSTEM:(F)") | Out-Null
-    }
-    catch {
-        Remove-Item -LiteralPath $tokenFile -Force -ErrorAction SilentlyContinue
-        throw
-    }
-
-    $publicConnection = [ordered]@{
-        schema_version = 1
-        local_origin = [ordered]@{
-            url = [string]$connection.local_origin.url
-            transport = [string]$connection.local_origin.transport
-            reachability = [string]$connection.local_origin.reachability
-            authentication = [ordered]@{
-                type = [string]$connection.local_origin.authentication.type
-                token_file = $tokenFile
-            }
-        }
-        # Compatibility aliases for v0.1.14-era local clients. New consumers
-        # should use local_origin.
-        endpoint = [string]$connection.local_origin.url
-        transport = [string]$connection.local_origin.transport
-        authentication = "bearer-token-file"
-        token_file = $tokenFile
-        distribution = $distributionName
-    }
-    [IO.File]::WriteAllText($connectionFile, ($publicConnection | ConvertTo-Json -Depth 4), $utf8)
-    Write-Host "[Loki] Windows MCP connection files are ready."
-
-    Step "Configuring Windows startup integration..."
-    if ($autoStart) {
-        $taskAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\wsl.exe" -Argument "-d $distributionName --exec /usr/bin/sleep infinity"
-        $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
-        $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-        Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Description "Keep the Loki WSL2 appliance running." -Force | Out-Null
-        $createdTask = $true
-        Write-Host "[Loki] Windows logon startup enabled."
-    } else {
-        Write-Host "[Loki] Windows logon startup disabled by LOKI_WSL_AUTOSTART=0."
-    }
-
-    Step "Recording Windows installation ownership..."
-    Write-LokiOwnershipManifest $identity
-    Write-Host "[Loki] Windows installation ownership recorded."
-
-    $installationComplete = $true
-    Write-Host "[Loki] Installation complete."
-    $global:LASTEXITCODE = 0
-    Write-Host "  Release: $releaseTag"
-    Write-Host "  WSL distribution: $distributionName"
-    Write-Host "  MCP local origin: $($publicConnection.local_origin.url)"
-    Write-Host "  Reachability: loopback only"
-    Write-Host "  External access: user-managed"
-    Write-Host "  Connection file: $connectionFile"
-    Write-Host "  Token file: $tokenFile"
-    Write-Host "[Loki] To use Loki from a remote MCP client, expose the local origin with a tunnel, reverse proxy, VPN, or gateway you manage."
-    Write-Host "[Loki] Loki does not create or manage a public MCP endpoint."
+catch {
+    Write-Host "[Loki] ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    $bootstrapExitCode = 1
 }
 finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-}
-}
-catch {
-    Write-Host "[Loki] ERROR [$script:currentStage]: $($_.Exception.Message)" -ForegroundColor Red
-    if ($createdDistribution -and -not $installationComplete) {
-        if ($showRollbackDiagnostics) {
-            Write-Host "[Loki] Collecting diagnostics before rollback..."
-            $diagnostics = Get-ProvisionJournalText 24
-            if ($diagnostics) {
-                Write-Host "[Loki] Recent provisioning diagnostics:"
-                Write-Host $diagnostics
-            }
-        }
-
-        Write-Host "[Loki] Rolling back incomplete installation..."
-        if ($createdTask) {
-            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-        }
-        if ($createdStateDir) {
-            Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Invoke-NativeResult "wsl.exe" @("--terminate", $distributionName) | Out-Null
-        $unregisterResult = Invoke-NativeResult "wsl.exe" @("--unregister", $distributionName)
-        if ($unregisterResult.ExitCode -eq 0) {
-            if ($installLocation -and (Test-Path -LiteralPath $installLocation)) {
-                Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            Write-Host "[Loki] Rollback complete. Removed incomplete WSL distribution '$distributionName'."
-            Write-Host "[Loki] You can rerun the installer with the same command."
-        } else {
-            $rollbackDetail = if ($unregisterResult.Stderr) { $unregisterResult.Stderr } else { $unregisterResult.Stdout }
-            Write-Host "[Loki] WARNING [rollback]: Could not remove incomplete WSL distribution '$distributionName'. $rollbackDetail" -ForegroundColor Yellow
-        }
-    }
-    $global:LASTEXITCODE = 1
+    $global:LASTEXITCODE = $bootstrapExitCode
 }

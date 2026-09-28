@@ -118,15 +118,23 @@ if ($wslInfo.Length -ne [Int64]$evidence.wsl_appliance.length) { Fail "candidate
 $actualSha = (Get-FileHash -LiteralPath $wslPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualSha -ne [string]$evidence.wsl_appliance.sha256) { Fail "candidate WSL SHA-256 changed" }
 
+$relativeFrontend = [string]$evidence.windows_frontend.path
+$frontendPath = Join-Path $candidateRoot ($relativeFrontend -replace "/", [IO.Path]::DirectorySeparatorChar)
+if (-not (Test-Path -LiteralPath $frontendPath -PathType Leaf)) { Fail "candidate Windows frontend is missing" }
+$frontendInfo = Get-Item -LiteralPath $frontendPath
+if ($frontendInfo.Length -ne [Int64]$evidence.windows_frontend.length) { Fail "candidate Windows frontend length changed" }
+$frontendSha = (Get-FileHash -LiteralPath $frontendPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($frontendSha -ne [string]$evidence.windows_frontend.sha256) { Fail "candidate Windows frontend SHA-256 changed" }
+
 $templatePath = Join-Path $repo "tools\release\install.ps1.tmpl"
 $template = Get-Content -LiteralPath $templatePath -Raw
-$placeholders = @("@@LOKI_RELEASE_TAG@@", "@@LOKI_WSL_SHA256@@", "@@LOKI_WSL_LENGTH@@")
+$placeholders = @("@@LOKI_RELEASE_TAG@@", "@@LOKI_WINDOWS_FRONTEND_SHA256@@", "@@LOKI_WINDOWS_FRONTEND_LENGTH@@")
 foreach ($placeholder in $placeholders) {
     if ($template.IndexOf($placeholder, [StringComparison]::Ordinal) -lt 0 -or $template.IndexOf($placeholder, [StringComparison]::Ordinal) -ne $template.LastIndexOf($placeholder, [StringComparison]::Ordinal)) {
         Fail "Windows installer template placeholder contract changed: $placeholder"
     }
 }
-$rendered = $template.Replace("@@LOKI_RELEASE_TAG@@", $Tag).Replace("@@LOKI_WSL_SHA256@@", [string]$evidence.wsl_appliance.sha256).Replace("@@LOKI_WSL_LENGTH@@", [string]$evidence.wsl_appliance.length)
+$rendered = $template.Replace("@@LOKI_RELEASE_TAG@@", $Tag).Replace("@@LOKI_WINDOWS_FRONTEND_SHA256@@", [string]$evidence.windows_frontend.sha256).Replace("@@LOKI_WINDOWS_FRONTEND_LENGTH@@", [string]$evidence.windows_frontend.length)
 if ($rendered.Contains("@@LOKI_")) { Fail "rendered Windows installer contains unresolved placeholders" }
 
 $suffix = if ($env:GITHUB_RUN_ID) { "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" } else { [Guid]::NewGuid().ToString("N").Substring(0, 12) }
@@ -135,26 +143,15 @@ $installParent = Join-Path $env:RUNNER_TEMP "loki-wsl-acceptance"
 $installLocation = Join-Path $installParent $distributionName
 New-Item -ItemType Directory -Path $installParent -Force | Out-Null
 $installer = Join-Path $env:RUNNER_TEMP "loki-install.ps1"
-$rollbackInstaller = Join-Path $env:RUNNER_TEMP "loki-install-rollback.ps1"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($installer, $rendered, $utf8)
-
-$rollbackMarker = '    $createdDistribution = $true'
-if ($rendered.IndexOf($rollbackMarker, [StringComparison]::Ordinal) -lt 0 -or
-    $rendered.IndexOf($rollbackMarker, [StringComparison]::Ordinal) -ne $rendered.LastIndexOf($rollbackMarker, [StringComparison]::Ordinal)) {
-    Fail "Windows installer rollback injection marker changed"
-}
-$rollbackRendered = $rendered.Replace(
-    $rollbackMarker,
-    $rollbackMarker + [Environment]::NewLine + '    Fail "synthetic acceptance failure after WSL registration"'
-)
-[IO.File]::WriteAllText($rollbackInstaller, $rollbackRendered, $utf8)
 
 $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distributionName)
 $taskName = "Loki WSL ($distributionName)"
 $env:LOKI_WSL_NAME = $distributionName
 $env:LOKI_WSL_LOCATION = $installLocation
 $env:LOKI_WSL_APPLIANCE_FILE = $wslPath
+$env:LOKI_WINDOWS_FRONTEND_FILE = $frontendPath
 $env:LOKI_WSL_AUTOSTART = "1"
 
 $defaultPortBlocker = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 18765)
@@ -194,21 +191,8 @@ $env:LOKI_MCP_PORT = [string]$mcpPort
 
 try {
     $global:LASTEXITCODE = 0
-    & $rollbackInstaller
-    $rollbackProbeCode = $LASTEXITCODE
-    if ($rollbackProbeCode -eq 0) { Fail "Windows installer rollback probe unexpectedly succeeded" }
-
-    $installedAfterRollback = @(& wsl.exe --list --quiet 2>$null) | ForEach-Object { (("$_" -replace "`0", "")).Trim() } | Where-Object { $_ }
-    if ($installedAfterRollback | Where-Object { $_.Equals($distributionName, [StringComparison]::OrdinalIgnoreCase) }) {
-        Fail "Windows installer rollback left the failed WSL distribution registered"
-    }
-    if (Test-Path -LiteralPath $installLocation) {
-        Fail "Windows installer rollback left the failed custom WSL location behind"
-    }
-
-    $global:LASTEXITCODE = 0
     & $installer
-    if ($LASTEXITCODE -ne 0) { Fail "Windows installer retry after rollback failed with code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) { Fail "Windows thin installer failed with code $LASTEXITCODE" }
 
     $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
     $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
@@ -369,6 +353,7 @@ finally {
     Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_APPLIANCE_FILE -ErrorAction SilentlyContinue
+    Remove-Item Env:LOKI_WINDOWS_FRONTEND_FILE -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
     Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
@@ -383,5 +368,4 @@ finally {
     Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $rollbackInstaller -Force -ErrorAction SilentlyContinue
 }

@@ -166,7 +166,12 @@ func preparePublication(cfg options) error {
 	if err != nil {
 		return fmt.Errorf("read Windows installer template: %w", err)
 	}
-	windowsInstaller, err := renderWindowsInstaller(windowsTemplate, expectedTag, evidence.WSLAppliance.SHA256, evidence.WSLAppliance.Length)
+	windowsInstaller, err := renderWindowsInstaller(
+		windowsTemplate,
+		expectedTag,
+		evidence.WindowsFrontend.SHA256,
+		evidence.WindowsFrontend.Length,
+	)
 	if err != nil {
 		return err
 	}
@@ -320,25 +325,25 @@ func renderInstaller(template []byte, tag, bootstrapSHA256 string) ([]byte, erro
 	return []byte(text), nil
 }
 
-func renderWindowsInstaller(template []byte, tag, applianceSHA256 string, applianceLength int64) ([]byte, error) {
+func renderWindowsInstaller(template []byte, tag, frontendSHA256 string, frontendLength int64) ([]byte, error) {
 	const tagPlaceholder = "@@LOKI_RELEASE_TAG@@"
-	const digestPlaceholder = "@@LOKI_WSL_SHA256@@"
-	const lengthPlaceholder = "@@LOKI_WSL_LENGTH@@"
+	const digestPlaceholder = "@@LOKI_WINDOWS_FRONTEND_SHA256@@"
+	const lengthPlaceholder = "@@LOKI_WINDOWS_FRONTEND_LENGTH@@"
 	text := string(template)
 	for _, placeholder := range []string{tagPlaceholder, digestPlaceholder, lengthPlaceholder} {
 		if strings.Count(text, placeholder) != 1 {
 			return nil, errors.New("Windows installer template must contain each release placeholder exactly once")
 		}
 	}
-	if !fullCommitSafeToken(tag) || len(applianceSHA256) != sha256.Size*2 || applianceLength <= 0 {
+	if !fullCommitSafeToken(tag) || len(frontendSHA256) != sha256.Size*2 || frontendLength <= 0 {
 		return nil, errors.New("Windows installer release identity is invalid")
 	}
-	if _, err := hex.DecodeString(applianceSHA256); err != nil {
-		return nil, errors.New("Windows installer appliance digest is invalid")
+	if _, err := hex.DecodeString(frontendSHA256); err != nil {
+		return nil, errors.New("Windows installer frontend digest is invalid")
 	}
 	text = strings.Replace(text, tagPlaceholder, tag, 1)
-	text = strings.Replace(text, digestPlaceholder, applianceSHA256, 1)
-	text = strings.Replace(text, lengthPlaceholder, fmt.Sprintf("%d", applianceLength), 1)
+	text = strings.Replace(text, digestPlaceholder, frontendSHA256, 1)
+	text = strings.Replace(text, lengthPlaceholder, fmt.Sprintf("%d", frontendLength), 1)
 	if strings.Contains(text, "@@LOKI_") {
 		return nil, errors.New("Windows installer template contains unresolved Loki placeholders")
 	}

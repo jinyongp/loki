@@ -329,17 +329,17 @@ func TestPreparePublicationProducesReleaseAndPagesInputs(t *testing.T) {
 		t.Fatalf("installer syntax: %v %s", err, outputRaw)
 	}
 
-	wslRaw, err := os.ReadFile(filepath.Join(candidate, "inputs", "loki-wsl-amd64.wsl"))
+	frontendRaw, err := os.ReadFile(filepath.Join(candidate, "inputs", "loki-windows-amd64.exe"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	wslSum := sha256.Sum256(wslRaw)
+	frontendSum := sha256.Sum256(frontendRaw)
 	windowsInstaller := string(windowsReleaseInstaller)
 	windowsRequired := []string{
 		"$releaseTag = \"v1.2.3\"",
-		"$applianceSha256 = \"" + hex.EncodeToString(wslSum[:]) + "\"",
-		fmt.Sprintf("$applianceLength = [Int64]\"%d\"", len(wslRaw)),
-		"$applianceAsset = \"loki-wsl-amd64.wsl\"",
+		"$frontendSha256 = \"" + hex.EncodeToString(frontendSum[:]) + "\"",
+		fmt.Sprintf("$frontendLength = [Int64]\"%d\"", len(frontendRaw)),
+		"$frontendAsset = \"loki-windows-amd64.exe\"",
 	}
 	for _, required := range windowsRequired {
 		if !strings.Contains(windowsInstaller, required) {
@@ -414,7 +414,7 @@ func TestRenderInstallerRequiresExactPlaceholders(t *testing.T) {
 
 func TestRenderWindowsInstallerRequiresExactPlaceholders(t *testing.T) {
 	digest := strings.Repeat("b", 64)
-	template := []byte("tag=@@LOKI_RELEASE_TAG@@\nsum=@@LOKI_WSL_SHA256@@\nlength=@@LOKI_WSL_LENGTH@@\n")
+	template := []byte("tag=@@LOKI_RELEASE_TAG@@\nsum=@@LOKI_WINDOWS_FRONTEND_SHA256@@\nlength=@@LOKI_WINDOWS_FRONTEND_LENGTH@@\n")
 	rendered, err := renderWindowsInstaller(template, "v1.2.3", digest, 1234)
 	if err != nil {
 		t.Fatal(err)
@@ -423,9 +423,9 @@ func TestRenderWindowsInstallerRequiresExactPlaceholders(t *testing.T) {
 		t.Fatalf("rendered Windows installer = %q", rendered)
 	}
 	if _, err = renderWindowsInstaller([]byte("@@LOKI_RELEASE_TAG@@"), "v1.2.3", digest, 1234); err == nil {
-		t.Fatal("Windows template missing WSL placeholders was accepted")
+		t.Fatal("Windows template missing frontend placeholders was accepted")
 	}
 	if _, err = renderWindowsInstaller(template, "v1.2.3", digest, 0); err == nil {
-		t.Fatal("Windows installer accepted an empty WSL artifact")
+		t.Fatal("Windows installer accepted an empty frontend artifact")
 	}
 }
