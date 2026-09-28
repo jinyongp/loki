@@ -114,6 +114,55 @@ func stalePreflightResults(distribution string) []NativeProbe {
 	}
 }
 
+func TestInstallMatrixOrphanPortConflictDoesNotMutate(t *testing.T) {
+	expected := fixtureExpected()
+	connection := joinWindowsPath(expected.StateDir, "connection.json")
+	token := joinWindowsPath(expected.StateDir, "mcp-token")
+	connectionRaw, _ := jsonMarshal(map[string]any{
+		"endpoint":       "http://127.0.0.1:18765/mcp",
+		"transport":      "streamable-http",
+		"authentication": "bearer-token-file",
+		"token_file":     token,
+		"distribution":   expected.Distribution,
+	})
+	fs := fakeStateFilesystem{
+		paths: map[string]StatePath{
+			expected.StateDir: {Exists: true, Directory: true},
+			connection:        {Exists: true, Regular: true},
+			token:             {Exists: true, Regular: true},
+		},
+		dirs:  map[string][]string{expected.StateDir: {"connection.json", "mcp-token"}},
+		files: map[string][]byte{connection: connectionRaw},
+		errs:  map[string]error{},
+	}
+	runner := &fakeNativeRunner{results: []NativeProbe{{Stdout: ""}}}
+	tasks := &fakeTaskManager{}
+	collector := PreflightCollector{Filesystem: fs, Tasks: tasks, WSL: WSLClient{Runner: runner}}
+	remover := &mapStateRemover{filesystem: &fs}
+	fresh := &fakeFreshInstaller{}
+	port := &fakePortProbe{available: false}
+	controller := InstallController{
+		Collector:  collector,
+		Recovery:   RecoveryExecutor{Collector: collector, Tasks: tasks, Filesystem: fs, Remover: remover},
+		Port:       port,
+		Fresh:      fresh,
+		Filesystem: fs,
+	}
+	_, err := controller.Run(context.Background(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}, nil)
+	var blocked InstallBlockedError
+	if !errors.As(err, &blocked) || blocked.Reason != "mcp-port-in-use" {
+		t.Fatalf("unexpected orphan port conflict: %v", err)
+	}
+	if len(remover.removed) != 0 || fresh.calls != 0 || tasks.removed != 0 {
+		t.Fatalf("orphan port conflict mutated state: removed=%#v fresh=%d tasks=%d", remover.removed, fresh.calls, tasks.removed)
+	}
+	if !reflect.DeepEqual(port.calls, []int{18765}) {
+		t.Fatalf("port preflight calls=%#v", port.calls)
+	}
+}
+
 func TestInstallMatrixOrphanCleanupAndFreshInstall(t *testing.T) {
 	expected := fixtureExpected()
 	connection := joinWindowsPath(expected.StateDir, "connection.json")

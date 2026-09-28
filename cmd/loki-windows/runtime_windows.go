@@ -139,7 +139,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		context.Background(), expected, options, approve,
 	)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, formatWindowsInstallError(err, options.Distribution, options.MCPPort))
 		return 1
 	}
 	switch result.Disposition {

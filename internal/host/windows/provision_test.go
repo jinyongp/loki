@@ -2,7 +2,9 @@ package windows
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,7 +85,59 @@ func TestWSLFreshProvisionerRejectsRepeatedProvisionFailure(t *testing.T) {
 	provisioner := WSLFreshProvisioner{
 		Client: WSLClient{Runner: runner}, Starter: &fakeProcessStarter{}, Sleep: noSleep, Attempts: 2,
 	}
-	if _, err := provisioner.Provision(t.Context(), fixtureExpected(), InstallOptions{MCPPort: 19000}); err == nil {
-		t.Fatal("repeated provisioning failure was accepted")
+	_, err := provisioner.Provision(t.Context(), fixtureExpected(), InstallOptions{MCPPort: 19000})
+	var failure *ProvisioningFailureError
+	if !errors.As(err, &failure) || failure.Kind != ProvisioningFailureUnknown {
+		t.Fatalf("unexpected repeated provisioning failure: %v", err)
+	}
+}
+
+func TestWSLFreshProvisionerClassifiesPortConflictWithoutJournalDump(t *testing.T) {
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{ExitCode: 0},
+		{ExitCode: 0, Stdout: "ActiveState=failed\nSubState=failed\nResult=exit-code\nNRestarts=3\nExecMainStatus=1\n"},
+		{ExitCode: 0, Stdout: "docker: failed to bind host port 127.0.0.1:19000/tcp: address already in use"},
+	}}
+	provisioner := WSLFreshProvisioner{
+		Client: WSLClient{Runner: runner}, Starter: &fakeProcessStarter{}, Sleep: noSleep, Attempts: 2,
+	}
+	_, err := provisioner.Provision(t.Context(), fixtureExpected(), InstallOptions{MCPPort: 19000})
+	var failure *ProvisioningFailureError
+	if !errors.As(err, &failure) || failure.Kind != ProvisioningFailurePortInUse || failure.Port != 19000 {
+		t.Fatalf("unexpected port conflict: %#v err=%v", failure, err)
+	}
+	if failure.Diagnostics != "" || strings.Contains(err.Error(), "docker:") {
+		t.Fatalf("recognized port conflict leaked journal diagnostics: %#v", failure)
+	}
+	wantJournal := []string{
+		"-d", "loki-mcp", "--user", "root", "--exec",
+		"/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager", "-n", "24",
+	}
+	if len(runner.calls) != 3 || !reflect.DeepEqual(runner.calls[2].arguments, wantJournal) {
+		t.Fatalf("journal argv=%#v", runner.calls)
+	}
+}
+
+func TestWSLFreshProvisionerRetainsBoundedUnknownDiagnostics(t *testing.T) {
+	diagnostics := "unknown failure: " + strings.Repeat("x", provisioningDiagnosticMaxBytes*2)
+	runner := &fakeNativeRunner{results: []NativeProbe{
+		{ExitCode: 0},
+		{ExitCode: 0, Stdout: "ActiveState=failed\nSubState=failed\nResult=exit-code\nNRestarts=3\nExecMainStatus=1\n"},
+		{ExitCode: 0, Stdout: diagnostics},
+	}}
+	provisioner := WSLFreshProvisioner{
+		Client: WSLClient{Runner: runner}, Starter: &fakeProcessStarter{}, Sleep: noSleep, Attempts: 2,
+	}
+	_, err := provisioner.Provision(t.Context(), fixtureExpected(), InstallOptions{MCPPort: 19000})
+	var failure *ProvisioningFailureError
+	if !errors.As(err, &failure) || failure.Kind != ProvisioningFailureUnknown {
+		t.Fatalf("unexpected unknown provisioning failure: %#v err=%v", failure, err)
+	}
+	if failure.Diagnostics == "" || len(failure.Diagnostics) > provisioningDiagnosticMaxBytes ||
+		!strings.Contains(failure.Diagnostics, "[diagnostics truncated]") {
+		t.Fatalf("diagnostics were not bounded: len=%d value=%q", len(failure.Diagnostics), failure.Diagnostics)
+	}
+	if !strings.Contains(err.Error(), "Recent provisioning diagnostics:") {
+		t.Fatalf("unknown failure omitted diagnostics: %v", err)
 	}
 }

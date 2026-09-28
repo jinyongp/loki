@@ -96,6 +96,15 @@ func (controller InstallController) Run(
 	}
 
 	assessment := AssessExistingInstallation(snapshot)
+	if assessment.Action == ExistingRemoveOrphan {
+		available, probeErr := controller.Port.Available(options.MCPPort)
+		if probeErr != nil {
+			return InstallResult{}, probeErr
+		}
+		if !available {
+			return InstallResult{}, InstallBlockedError{Reason: "mcp-port-in-use"}
+		}
+	}
 	switch assessment.Action {
 	case ExistingBlocked:
 		return InstallResult{}, InstallBlockedError{Reason: assessment.Reason}

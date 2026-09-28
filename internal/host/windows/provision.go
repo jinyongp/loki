@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type ProcessStarter interface {
@@ -32,6 +33,105 @@ type WSLFreshProvisioner struct {
 	Starter  ProcessStarter
 	Sleep    SleepFunc
 	Attempts int
+}
+
+const (
+	provisioningDiagnosticLines    = 24
+	provisioningDiagnosticMaxBytes = 8192
+)
+
+type ProvisioningFailureKind string
+
+const (
+	ProvisioningFailureUnknown   ProvisioningFailureKind = "unknown"
+	ProvisioningFailurePortInUse ProvisioningFailureKind = "mcp-port-in-use"
+)
+
+type ProvisioningFailureError struct {
+	Kind        ProvisioningFailureKind
+	Port        int
+	Summary     string
+	Diagnostics string
+}
+
+func (failure *ProvisioningFailureError) Error() string {
+	if failure == nil {
+		return ""
+	}
+	if failure.Diagnostics == "" {
+		return failure.Summary
+	}
+	return failure.Summary + "\nRecent provisioning diagnostics:\n" + failure.Diagnostics
+}
+
+func (provisioner WSLFreshProvisioner) provisioningFailure(
+	ctx context.Context,
+	expected ExpectedInstallation,
+	options InstallOptions,
+	summary string,
+) error {
+	diagnostics := provisioner.provisioningDiagnostics(ctx, expected.Distribution)
+	if provisioningDiagnosticsContainPortConflict(diagnostics, options.MCPPort) {
+		return &ProvisioningFailureError{
+			Kind:    ProvisioningFailurePortInUse,
+			Port:    options.MCPPort,
+			Summary: summary,
+		}
+	}
+	return &ProvisioningFailureError{
+		Kind:        ProvisioningFailureUnknown,
+		Port:        options.MCPPort,
+		Summary:     summary,
+		Diagnostics: boundProvisioningDiagnostics(diagnostics),
+	}
+}
+
+func (provisioner WSLFreshProvisioner) provisioningDiagnostics(ctx context.Context, distribution string) string {
+	result, err := provisioner.Client.run(ctx,
+		"-d", distribution, "--user", "root", "--exec",
+		"/usr/bin/journalctl", "-u", "loki-appliance-provision.service", "--no-pager",
+		"-n", strconv.Itoa(provisioningDiagnosticLines),
+	)
+	if err != nil {
+		return ""
+	}
+	detail := strings.TrimSpace(result.Stdout)
+	if stderr := strings.TrimSpace(result.Stderr); stderr != "" {
+		if detail != "" {
+			detail += "\n"
+		}
+		detail += stderr
+	}
+	return detail
+}
+
+func boundProvisioningDiagnostics(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if len(raw) <= provisioningDiagnosticMaxBytes {
+		return raw
+	}
+	const suffix = "\n[diagnostics truncated]"
+	limit := provisioningDiagnosticMaxBytes - len(suffix)
+	if limit < 0 {
+		return "[diagnostics truncated]"
+	}
+	raw = raw[:limit]
+	for len(raw) > 0 && !utf8.ValidString(raw) {
+		raw = raw[:len(raw)-1]
+	}
+	return strings.TrimSpace(raw) + suffix
+}
+
+func provisioningDiagnosticsContainPortConflict(diagnostics string, port int) bool {
+	if diagnostics == "" || port < 1 {
+		return false
+	}
+	lower := strings.ToLower(diagnostics)
+	if !strings.Contains(lower, fmt.Sprintf("127.0.0.1:%d", port)) {
+		return false
+	}
+	return strings.Contains(lower, "address already in use") ||
+		strings.Contains(lower, "port is already allocated")
 }
 
 func (provisioner WSLFreshProvisioner) RegisterDistribution(
@@ -115,10 +215,11 @@ func (provisioner WSLFreshProvisioner) Provision(
 				break
 			}
 			if active == "failed" || restarts >= 3 {
-				return ConnectionMaterial{}, fmt.Errorf(
+				summary := fmt.Sprintf(
 					"Loki appliance provisioning failed repeatedly (state=%s/%s, result=%s, exit=%s, restarts=%d)",
 					active, values["SubState"], values["Result"], values["ExecMainStatus"], restarts,
 				)
+				return ConnectionMaterial{}, provisioner.provisioningFailure(ctx, expected, options, summary)
 			}
 		}
 		if err := sleep(ctx, 2*time.Second); err != nil {
@@ -126,7 +227,9 @@ func (provisioner WSLFreshProvisioner) Provision(
 		}
 	}
 	if !ready {
-		return ConnectionMaterial{}, errors.New("Loki appliance provisioning did not complete within the allowed attempts")
+		return ConnectionMaterial{}, provisioner.provisioningFailure(
+			ctx, expected, options, "Loki appliance provisioning did not complete within the allowed attempts",
+		)
 	}
 
 	status, err := provisioner.Client.run(ctx, "-d", expected.Distribution, "--user", "root", "--exec",
