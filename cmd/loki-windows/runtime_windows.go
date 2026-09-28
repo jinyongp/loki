@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 
@@ -27,29 +28,32 @@ func runWindowsCommand(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
 	switch args[0] {
 	case "bootstrap":
-		return runBootstrap(args[1:], stdout, stderr)
+		return runBootstrap(ctx, args[1:], stdout, stderr)
 	case "install":
-		return runInstall(args[1:], stdout, stderr)
+		return runInstall(ctx, args[1:], stdout, stderr)
 	case "status":
-		return runStatus(args[1:], stdout, stderr)
+		return runStatus(ctx, args[1:], stdout, stderr)
 	case "doctor":
-		return runDoctor(args[1:], stdout, stderr)
+		return runDoctor(ctx, args[1:], stdout, stderr)
 	case "connection":
-		return runConnection(args[1:], stdout, stderr)
+		return runConnection(ctx, args[1:], stdout, stderr)
 	case "update":
-		return runUpdate(args[1:], stdout, stderr)
+		return runUpdate(ctx, args[1:], stdout, stderr)
 	case "backup":
-		return runMaintenance("backup", args[1:], stdout, stderr)
+		return runMaintenance(ctx, "backup", args[1:], stdout, stderr)
 	case "rollback":
-		return runMaintenance("rollback", args[1:], stdout, stderr)
+		return runMaintenance(ctx, "rollback", args[1:], stdout, stderr)
 	case "restore":
-		return runRestore(args[1:], stdout, stderr)
+		return runRestore(ctx, args[1:], stdout, stderr)
 	case "uninstall":
-		return runUninstall(args[1:], stdout, stderr)
+		return runUninstall(ctx, args[1:], stdout, stderr)
 	case "connect":
-		return runConnect(args[1:], stdout, stderr)
+		return runConnect(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown Windows Loki command %q\n", args[0])
 		printUsage(stderr)
@@ -57,7 +61,7 @@ func runWindowsCommand(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runBootstrap(args []string, stdout, stderr io.Writer) int {
+func runBootstrap(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "install" {
 		fmt.Fprintln(stderr, "usage: loki bootstrap install [INSTALL_OPTIONS]")
 		return 2
@@ -84,7 +88,7 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := (windowshost.FrontendInstaller{
 		Platform: windowshost.NewWindowsFrontendPlatform(),
-	}).Install(context.Background(), source, paths, binding)
+	}).Install(ctx, source, paths, binding)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -93,11 +97,11 @@ func runBootstrap(args []string, stdout, stderr io.Writer) int {
 	if result.PathChanged {
 		fmt.Fprintf(stdout, "Persistent user PATH now includes %s\n", paths.BinDir)
 	}
-	return runCanonicalInstall(paths.Binary, args[1:], stdout, stderr)
+	return runCanonicalInstall(ctx, paths.Binary, args[1:], stdout, stderr)
 }
 
-func runCanonicalInstall(binary string, args []string, stdout, stderr io.Writer) int {
-	command := exec.CommandContext(context.Background(), binary, append([]string{"install"}, args...)...)
+func runCanonicalInstall(ctx context.Context, binary string, args []string, stdout, stderr io.Writer) int {
+	command := exec.CommandContext(ctx, binary, append([]string{"install"}, args...)...)
 	command.Stdin = os.Stdin
 	command.Stdout = stdout
 	command.Stderr = stderr
@@ -113,7 +117,7 @@ func runCanonicalInstall(binary string, args []string, stdout, stderr io.Writer)
 	return 1
 }
 
-func runInstall(args []string, stdout, stderr io.Writer) int {
+func runInstall(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	binding, err := windowshost.CurrentReleaseBinding()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -136,7 +140,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		)
 	}
 	result, err := windowshost.NewWindowsInstallController(binding).Run(
-		context.Background(), expected, options, approve,
+		ctx, expected, options, approve,
 	)
 	if err != nil {
 		fmt.Fprintln(stderr, formatWindowsInstallError(err, options.Distribution, options.MCPPort))
@@ -144,7 +148,9 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	switch result.Disposition {
 	case windowshost.InstallNoop:
-		fmt.Fprintf(stdout, "Loki appliance %q is already healthy.\n", options.Distribution)
+		fmt.Fprintf(stdout, "Loki appliance %q is already healthy and current.\n", options.Distribution)
+	case windowshost.InstallUpgradeRequired:
+		return upgradeExistingAppliance(ctx, options.Distribution, result.CurrentVersion, binding.ReleaseTag, stdout, stderr)
 	case windowshost.InstallCompleted:
 		fmt.Fprintf(stdout, "Installed Loki appliance %q.\n", options.Distribution)
 	default:
@@ -154,14 +160,96 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runStatus(args []string, stdout, stderr io.Writer) int {
+func upgradeExistingAppliance(
+	ctx context.Context,
+	distribution, currentVersion, targetTag string,
+	stdout, stderr io.Writer,
+) int {
+	fmt.Fprintf(stdout, "Updating existing Loki appliance %q from v%s to %s...\n",
+		distribution, strings.TrimPrefix(currentVersion, "v"), targetTag)
+
+	client := windowshost.NewWindowsOperatorClient()
+	prepared, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "prepare"})
+	if err != nil {
+		fmt.Fprintln(stderr, "prepare managed appliance update:", err)
+		return 1
+	}
+	if prepared.Probe.ExitCode != 0 {
+		fmt.Fprintln(stderr, "The existing appliance is healthy but cannot be updated in place by this frontend.")
+		fmt.Fprintln(stderr, "No destructive reinstall was attempted.")
+		return writeNativeProbe(prepared.Probe, stdout, stderr)
+	}
+	updateStatus, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "status"})
+	if err != nil {
+		fmt.Fprintln(stderr, "verify prepared appliance update:", err)
+		return 1
+	}
+	if updateStatus.Probe.ExitCode != 0 {
+		return writeNativeProbe(updateStatus.Probe, stdout, stderr)
+	}
+	status, err := decodeMachineJSON[machineUpdateStatus](updateStatus.Probe.Stdout)
+	if err != nil || status.Available == nil || status.Prepared == nil {
+		fmt.Fprintln(stderr, "prepared appliance update could not be verified against the Windows frontend release")
+		return 1
+	}
+	preparedTag := "v" + strings.TrimPrefix(status.Available.Spec.Version, "v")
+	if preparedTag != targetTag {
+		fmt.Fprintf(stderr, "refusing appliance update to %s; Windows frontend is bound to %s\n", preparedTag, targetTag)
+		return 1
+	}
+	applied, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{
+		Command: "update", Action: "apply", Approve: true,
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, "apply managed appliance update:", err)
+		return 1
+	}
+	if applied.Probe.ExitCode != 0 {
+		return writeNativeProbe(applied.Probe, stdout, stderr)
+	}
+	postStatus, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "status"})
+	if err != nil {
+		fmt.Fprintln(stderr, "verify updated appliance release:", err)
+		return 1
+	}
+	if postStatus.Probe.ExitCode != 0 {
+		return writeNativeProbe(postStatus.Probe, stdout, stderr)
+	}
+	updated, err := decodeMachineJSON[machineUpdateStatus](postStatus.Probe.Stdout)
+	if err != nil || updated.Installed == nil {
+		fmt.Fprintln(stderr, "updated appliance release could not be verified")
+		return 1
+	}
+	actualTag := "v" + strings.TrimPrefix(updated.Installed.Spec.Version, "v")
+	if actualTag != targetTag {
+		fmt.Fprintf(stderr, "updated appliance release %s does not match Windows frontend release %s\n",
+			actualTag, targetTag)
+		return 1
+	}
+	syncResult, err := syncAfterLifecycleMutation(ctx, distribution)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err = renderAppliedUpdate(applied.Probe.Stdout, stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if syncResult.Changed {
+		fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
+	}
+	fmt.Fprintf(stdout, "Loki appliance %q is now updated to %s.\n", distribution, targetTag)
+	return 0
+}
+
+func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	distribution, jsonOutput, err := parseInfoFlags("status", args, true)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	result, err := windowshost.NewWindowsOperatorClient().Execute(
-		context.Background(), distribution, windowshost.OperatorRequest{Command: "status"},
+		ctx, distribution, windowshost.OperatorRequest{Command: "status"},
 	)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -219,30 +307,44 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runDoctor(args []string, stdout, stderr io.Writer) int {
-	distribution, _, err := parseInfoFlags("doctor", args, false)
+func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	distribution, jsonOutput, err := parseInfoFlags("doctor", args, true)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	result, err := windowshost.NewWindowsOperatorClient().Execute(
-		context.Background(), distribution, windowshost.OperatorRequest{Command: "doctor"},
+		ctx, distribution, windowshost.OperatorRequest{Command: "doctor"},
 	)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	return writeNativeProbe(result.Probe, stdout, stderr)
+	if result.Probe.Stderr != "" {
+		fmt.Fprintln(stderr, result.Probe.Stderr)
+	}
+	if result.Probe.Stdout != "" {
+		if jsonOutput {
+			if err = writeMachineJSON(stdout, result.Probe.Stdout); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		} else if err = renderDoctor(result.Probe.Stdout, stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	return nativeProbeExitCode(result.Probe)
 }
 
-func runConnection(args []string, stdout, stderr io.Writer) int {
+func runConnection(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	distribution, jsonOutput, err := parseInfoFlags("connection", args, true)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	delegated, err := windowshost.NewWindowsOperatorClient().Execute(
-		context.Background(), distribution, windowshost.OperatorRequest{Command: "connection"},
+		ctx, distribution, windowshost.OperatorRequest{Command: "connection"},
 	)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -257,7 +359,7 @@ func runConnection(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	syncer := windowshost.NewWindowsReplicaSynchronizer(nil)
-	if _, err = syncer.Sync(context.Background(), expected); err != nil {
+	if _, err = syncer.Sync(ctx, expected); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -287,24 +389,24 @@ func runConnection(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runConnect(args []string, stdout, stderr io.Writer) int {
+func runConnect(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return runConnectOverview(args, stdout, stderr)
+		return runConnectOverview(ctx, args, stdout, stderr)
 	}
 	switch args[0] {
 	case "status":
-		return runConnectStatus(args[1:], stdout, stderr)
+		return runConnectStatus(ctx, args[1:], stdout, stderr)
 	case "setup", "start", "stop", "remove":
-		return runConnectMutation(args[0], args[1:], stdout, stderr)
+		return runConnectMutation(ctx, args[0], args[1:], stdout, stderr)
 	case "startup":
-		return runConnectStartup(args[1:], stdout, stderr)
+		return runConnectStartup(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, "usage: loki connect [--distribution NAME] | connect status [OPTIONS] [PROVIDER] | connect setup|start|stop|remove [--distribution NAME] PROVIDER")
 		return 2
 	}
 }
 
-func runConnectOverview(args []string, stdout, stderr io.Writer) int {
+func runConnectOverview(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -315,7 +417,7 @@ func runConnectOverview(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if code := runConnection([]string{"--distribution", *distribution}, stdout, stderr); code != 0 {
+	if code := runConnection(ctx, []string{"--distribution", *distribution}, stdout, stderr); code != 0 {
 		return code
 	}
 	adapters := windowshost.WindowsConnectionAdapters()
@@ -330,7 +432,7 @@ func runConnectOverview(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runConnectStatus(args []string, stdout, stderr io.Writer) int {
+func runConnectStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect status", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -349,7 +451,7 @@ func runConnectStatus(args []string, stdout, stderr io.Writer) int {
 	}
 	if flags.NArg() == 1 {
 		provider := flags.Arg(0)
-		status, statusErr := manager.Status(context.Background(), *distribution, provider)
+		status, statusErr := manager.Status(ctx, *distribution, provider)
 		if statusErr != nil {
 			fmt.Fprintln(stderr, statusErr)
 			return 1
@@ -384,7 +486,7 @@ func runConnectStatus(args []string, stdout, stderr io.Writer) int {
 	}
 	statuses := make([]providerStatus, 0, len(providers))
 	for _, provider := range providers {
-		status, statusErr := manager.Status(context.Background(), *distribution, provider)
+		status, statusErr := manager.Status(ctx, *distribution, provider)
 		if statusErr != nil {
 			fmt.Fprintln(stderr, statusErr)
 			return 1
@@ -417,7 +519,7 @@ func runConnectStatus(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runConnectSetup(args []string, stdout, stderr io.Writer) int {
+func runConnectSetup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect setup", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -490,7 +592,7 @@ func runConnectSetup(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = manager.Setup(context.Background(), *distribution, provider); err != nil {
+	if err = manager.Setup(ctx, *distribution, provider); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -517,9 +619,9 @@ func validEnvironmentVariableName(value string) bool {
 	return true
 }
 
-func runConnectMutation(action string, args []string, stdout, stderr io.Writer) int {
+func runConnectMutation(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	if action == "setup" {
-		return runConnectSetup(args, stdout, stderr)
+		return runConnectSetup(ctx, args, stdout, stderr)
 	}
 	flags := flag.NewFlagSet("loki connect "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -538,7 +640,6 @@ func runConnectMutation(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	ctx := context.Background()
 	switch action {
 	case "setup":
 		err = manager.Setup(ctx, *distribution, provider)
@@ -557,7 +658,7 @@ func runConnectMutation(action string, args []string, stdout, stderr io.Writer) 
 	return 0
 }
 
-func runConnectStartup(args []string, stdout, stderr io.Writer) int {
+func runConnectStartup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connect startup", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -584,7 +685,7 @@ func runConnectStartup(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	controller := windowshost.NewWindowsConnectionStartupController(localAppData, &manager)
-	result, err := controller.Run(context.Background(), expected)
+	result, err := controller.Run(ctx, expected)
 	if err != nil {
 		fmt.Fprintf(stderr, "managed connection startup failed after %d health attempts: %v\n", result.HealthAttempts, err)
 		return 1
@@ -612,15 +713,16 @@ func newWindowsConnectionManagerWithAdapters(
 	return windowshost.NewWindowsConnectionManager(binding, localAppData, adapters)
 }
 
-func runUpdate(args []string, stdout, stderr io.Writer) int {
+func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki update status|prepare|apply [--distribution NAME] [--approve] [--interrupt-active-jobs]")
+		fmt.Fprintln(stderr, "usage: loki update status|prepare|apply [--distribution NAME] [--json] [--approve] [--interrupt-active-jobs]")
 		return 2
 	}
 	action := args[0]
 	flags := flag.NewFlagSet("loki update "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	approve := flags.Bool("approve", false, "approve update apply")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "approve interrupting active jobs")
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
@@ -630,8 +732,16 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if action != "status" && action != "prepare" && action != "apply" {
+		fmt.Fprintln(stderr, "update action must be status, prepare, or apply")
+		return 2
+	}
 	if action != "apply" && (*approve || *interrupt) {
 		fmt.Fprintln(stderr, "--approve and --interrupt-active-jobs are valid only for update apply")
+		return 2
+	}
+	if action == "apply" && *jsonOutput && !*approve {
+		fmt.Fprintln(stderr, "update apply --json requires --approve")
 		return 2
 	}
 	if action == "apply" && !*approve {
@@ -646,24 +756,57 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 		}
 		*approve = true
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(context.Background(), *distribution, windowshost.OperatorRequest{
+	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
 		Command: "update", Action: action, Approve: *approve, InterruptActiveJobs: *interrupt,
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	code := writeNativeProbe(result.Probe, stdout, stderr)
-	if code != 0 || action != "apply" {
-		return code
+	if result.Probe.ExitCode != 0 {
+		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	return refreshAfterLifecycleMutation(*distribution, stdout, stderr)
+	if result.Probe.Stderr != "" {
+		fmt.Fprintln(stderr, result.Probe.Stderr)
+	}
+	var syncResult windowshost.ReplicaSyncResult
+	if action == "apply" {
+		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	if *jsonOutput {
+		if err = writeMachineJSON(stdout, result.Probe.Stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	} else {
+		switch action {
+		case "status":
+			err = renderUpdateStatus(result.Probe.Stdout, stdout)
+		case "prepare":
+			err = renderPreparedUpdate(result.Probe.Stdout, stdout)
+		case "apply":
+			err = renderAppliedUpdate(result.Probe.Stdout, stdout)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if action == "apply" && syncResult.Changed {
+			fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
+		}
+	}
+	return 0
 }
 
-func runMaintenance(command string, args []string, stdout, stderr io.Writer) int {
+func runMaintenance(ctx context.Context, command string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki "+command, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "approve interrupting active jobs")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		return 2
@@ -672,48 +815,102 @@ func runMaintenance(command string, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(context.Background(), *distribution, windowshost.OperatorRequest{
+	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
 		Command: command, InterruptActiveJobs: *interrupt,
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	code := writeNativeProbe(result.Probe, stdout, stderr)
-	if code != 0 || command != "rollback" {
-		return code
+	if result.Probe.ExitCode != 0 {
+		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	return refreshAfterLifecycleMutation(*distribution, stdout, stderr)
+	if result.Probe.Stderr != "" {
+		fmt.Fprintln(stderr, result.Probe.Stderr)
+	}
+	var syncResult windowshost.ReplicaSyncResult
+	if command == "rollback" {
+		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	if *jsonOutput {
+		if err = writeMachineJSON(stdout, result.Probe.Stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+	switch command {
+	case "backup":
+		err = renderBackup(result.Probe.Stdout, stdout)
+	case "rollback":
+		err = renderBooleanMutation(result.Probe.Stdout, "rolled_back", "Rolled back Loki appliance.", stdout)
+	default:
+		err = fmt.Errorf("unsupported Windows maintenance command %q", command)
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if command == "rollback" && syncResult.Changed {
+		fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
+	}
+	return 0
 }
 
-func runRestore(args []string, stdout, stderr io.Writer) int {
+func runRestore(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki restore", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "approve interrupting active jobs")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: loki restore [--distribution NAME] [--interrupt-active-jobs] BACKUP_ID")
+		fmt.Fprintln(stderr, "usage: loki restore [--distribution NAME] [--json] [--interrupt-active-jobs] BACKUP_ID")
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(context.Background(), *distribution, windowshost.OperatorRequest{
+	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
 		Command: "restore", BackupID: flags.Arg(0), InterruptActiveJobs: *interrupt,
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	code := writeNativeProbe(result.Probe, stdout, stderr)
-	if code != 0 {
-		return code
+	if result.Probe.ExitCode != 0 {
+		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	return refreshAfterLifecycleMutation(*distribution, stdout, stderr)
+	if result.Probe.Stderr != "" {
+		fmt.Fprintln(stderr, result.Probe.Stderr)
+	}
+	syncResult, err := syncAfterLifecycleMutation(ctx, *distribution)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if *jsonOutput {
+		if err = writeMachineJSON(stdout, result.Probe.Stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+	if err = renderBooleanMutation(result.Probe.Stdout, "restored", "Restored Loki appliance backup.", stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if syncResult.Changed {
+		fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
+	}
+	return 0
 }
 
-func runUninstall(args []string, stdout, stderr io.Writer) int {
+func runUninstall(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki uninstall", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -750,7 +947,7 @@ func runUninstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = windowshost.NewWindowsUninstallController(&connections).Run(context.Background(), expected, *approve); err != nil {
+	if err = windowshost.NewWindowsUninstallController(&connections).Run(ctx, expected, *approve); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -759,26 +956,24 @@ func runUninstall(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func refreshAfterLifecycleMutation(distribution string, stdout, stderr io.Writer) int {
+func syncAfterLifecycleMutation(ctx context.Context, distribution string) (windowshost.ReplicaSyncResult, error) {
 	expected, err := expectedInstallation(distribution, windowshost.InstallOptions{Distribution: distribution})
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+		return windowshost.ReplicaSyncResult{}, err
 	}
 	connections, err := newWindowsConnectionManager()
 	if err != nil {
-		fmt.Fprintln(stderr, "appliance lifecycle mutation succeeded, but managed connection reconciliation is unavailable:", err)
-		return 1
+		return windowshost.ReplicaSyncResult{}, fmt.Errorf(
+			"appliance lifecycle mutation succeeded, but managed connection reconciliation is unavailable: %w", err,
+		)
 	}
-	result, err := windowshost.NewWindowsReplicaSynchronizer(&connections).Sync(context.Background(), expected)
+	result, err := windowshost.NewWindowsReplicaSynchronizer(&connections).Sync(ctx, expected)
 	if err != nil {
-		fmt.Fprintln(stderr, "appliance lifecycle mutation succeeded, but Windows connection resync failed:", err)
-		return 1
+		return windowshost.ReplicaSyncResult{}, fmt.Errorf(
+			"appliance lifecycle mutation succeeded, but Windows connection resync failed: %w", err,
+		)
 	}
-	if result.Changed {
-		fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
-	}
-	return 0
+	return result, nil
 }
 
 func parseInfoFlags(command string, args []string, allowJSON bool) (string, bool, error) {
