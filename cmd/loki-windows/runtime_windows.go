@@ -368,8 +368,8 @@ func runConnectStatus(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s: not configured\n", provider)
 			return 0
 		}
-		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t)\n",
-			provider, status.Runtime.State, status.State.Enabled, status.Runtime.Healthy)
+		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t ready=%t)\n",
+			provider, status.Runtime.State, status.State.Enabled, status.Runtime.Healthy, status.Runtime.Ready)
 		return 0
 	}
 
@@ -411,13 +411,116 @@ func runConnectStatus(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s: not configured\n", item.Provider)
 			continue
 		}
-		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t)\n",
-			item.Provider, item.Status.Runtime.State, item.Status.State.Enabled, item.Status.Runtime.Healthy)
+		fmt.Fprintf(stdout, "%s: %s (enabled=%t healthy=%t ready=%t)\n",
+			item.Provider, item.Status.Runtime.State, item.Status.State.Enabled, item.Status.Runtime.Healthy, item.Status.Runtime.Ready)
 	}
 	return 0
 }
 
+func runConnectSetup(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("loki connect setup", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
+	tunnelID := flags.String("tunnel-id", "", "existing OpenAI tunnel id")
+	runtimeKeyEnv := flags.String("runtime-key-env", "", "environment variable containing the OpenAI runtime API key")
+	credentialTarget := flags.String("runtime-key-credential", "", "existing Loki Windows Credential Manager target")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: loki connect setup [--distribution NAME] [--tunnel-id ID] [--runtime-key-env NAME | --runtime-key-credential TARGET] PROVIDER")
+		return 2
+	}
+	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	provider := flags.Arg(0)
+	if provider != windowshost.OpenAIProviderID {
+		fmt.Fprintf(stderr, "unsupported managed connection provider %q\n", provider)
+		return 2
+	}
+	if *runtimeKeyEnv != "" && *credentialTarget != "" {
+		fmt.Fprintln(stderr, "--runtime-key-env and --runtime-key-credential are mutually exclusive")
+		return 2
+	}
+
+	config := windowshost.OpenAISetupConfig{
+		TunnelID:         strings.TrimSpace(*tunnelID),
+		CredentialTarget: strings.TrimSpace(*credentialTarget),
+	}
+	fmt.Fprintln(stdout, "OpenAI Secure MCP Tunnel setup references:")
+	fmt.Fprintf(stdout, "  Tunnels: %s\n", windowshost.OpenAITunnelsURL)
+	fmt.Fprintf(stdout, "  Runtime API keys: %s\n", windowshost.OpenAIRuntimeKeysURL)
+	fmt.Fprintf(stdout, "  ChatGPT connectors: %s\n", windowshost.OpenAIConnectorsURL)
+
+	if config.TunnelID == "" && term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprint(stdout, "OpenAI tunnel ID: ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		config.TunnelID = strings.TrimSpace(line)
+	}
+	if name := strings.TrimSpace(*runtimeKeyEnv); name != "" {
+		if !validEnvironmentVariableName(name) {
+			fmt.Fprintln(stderr, "--runtime-key-env must name a valid environment variable")
+			return 2
+		}
+		value, ok := os.LookupEnv(name)
+		if !ok || value == "" {
+			fmt.Fprintf(stderr, "environment variable %s is not set\n", name)
+			return 1
+		}
+		config.RuntimeKey = value
+	} else if config.CredentialTarget == "" && term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprint(stdout, "OpenAI runtime API key: ")
+		raw, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(stdout)
+		if err != nil {
+			fmt.Fprintln(stderr, "read OpenAI runtime API key:", err)
+			return 1
+		}
+		defer clear(raw)
+		config.RuntimeKey = strings.TrimSpace(string(raw))
+	}
+
+	manager, err := newWindowsConnectionManagerWithAdapters(
+		windowshost.WindowsConnectionAdaptersWithOpenAISetup(config),
+	)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err = manager.Setup(context.Background(), *distribution, provider); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Managed %s connection setup completed.\n", provider)
+	return 0
+}
+
+func validEnvironmentVariableName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index, char := range value {
+		if index == 0 {
+			if char != '_' && (char < 'A' || char > 'Z') && (char < 'a' || char > 'z') {
+				return false
+			}
+			continue
+		}
+		if char != '_' && (char < 'A' || char > 'Z') && (char < 'a' || char > 'z') &&
+			(char < '0' || char > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 func runConnectMutation(action string, args []string, stdout, stderr io.Writer) int {
+	if action == "setup" {
+		return runConnectSetup(args, stdout, stderr)
+	}
 	flags := flag.NewFlagSet("loki connect "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
@@ -492,6 +595,12 @@ func runConnectStartup(args []string, stdout, stderr io.Writer) int {
 }
 
 func newWindowsConnectionManager() (windowshost.ConnectionManager, error) {
+	return newWindowsConnectionManagerWithAdapters(windowshost.WindowsConnectionAdapters())
+}
+
+func newWindowsConnectionManagerWithAdapters(
+	adapters []windowshost.RemoteConnectionAdapter,
+) (windowshost.ConnectionManager, error) {
 	binding, err := windowshost.CurrentReleaseBinding()
 	if err != nil {
 		return windowshost.ConnectionManager{}, err
@@ -500,11 +609,7 @@ func newWindowsConnectionManager() (windowshost.ConnectionManager, error) {
 	if err != nil {
 		return windowshost.ConnectionManager{}, err
 	}
-	return windowshost.NewWindowsConnectionManager(
-		binding,
-		localAppData,
-		windowshost.WindowsConnectionAdapters(),
-	)
+	return windowshost.NewWindowsConnectionManager(binding, localAppData, adapters)
 }
 
 func runUpdate(args []string, stdout, stderr io.Writer) int {

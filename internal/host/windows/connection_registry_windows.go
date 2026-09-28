@@ -3,5 +3,9 @@
 package windows
 
 func WindowsConnectionAdapters() []RemoteConnectionAdapter {
-	return nil
+	return WindowsConnectionAdaptersWithOpenAISetup(OpenAISetupConfig{})
+}
+
+func WindowsConnectionAdaptersWithOpenAISetup(setup OpenAISetupConfig) []RemoteConnectionAdapter {
+	return []RemoteConnectionAdapter{NewWindowsOpenAIAdapter(setup)}
 }

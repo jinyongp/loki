@@ -37,6 +37,57 @@ func TestWindowsConnectOverviewDoesNotConstructManagedHelperState(t *testing.T) 
 	}
 }
 
+func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
+	raw, err := os.ReadFile("runtime_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	start := strings.Index(text, "func runConnectSetup(")
+	end := strings.Index(text, "func validEnvironmentVariableName(")
+	if start < 0 || end <= start {
+		t.Fatal("Windows OpenAI setup function not found")
+	}
+	body := text[start:end]
+	for _, required := range []string{
+		`flags.String("runtime-key-env"`,
+		`flags.String("runtime-key-credential"`,
+		"term.ReadPassword",
+		"WindowsConnectionAdaptersWithOpenAISetup",
+		"OpenAITunnelsURL",
+		"OpenAIRuntimeKeysURL",
+		"OpenAIConnectorsURL",
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("OpenAI setup lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`flags.String("runtime-key"`,
+		"OPENAI_ADMIN_KEY",
+		"--admin-key",
+		"tunnels create",
+		"tunnels delete",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("OpenAI setup contains forbidden literal/admin surface %q", forbidden)
+		}
+	}
+
+	platformRaw, err := os.ReadFile("../../internal/host/windows/openai_platform_windows.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform := string(platformRaw)
+	if !strings.Contains(platform, "withoutEnvironment(os.Environ(), names...)") {
+		t.Fatal("OpenAI helper process no longer inherits the ambient provider environment")
+	}
+	if !strings.Contains(platform, "CredWriteW") ||
+		!strings.Contains(platform, "CredReadW") ||
+		!strings.Contains(platform, "CredDeleteW") {
+		t.Fatal("OpenAI runtime credential is no longer behind Windows Credential Manager")
+	}
+}
 func TestVersionJSONIncludesReleaseBinding(t *testing.T) {
 	oldVersion, oldCommit, oldDate := buildinfo.Version, buildinfo.Commit, buildinfo.Date
 	oldWSLSHA, oldWSLLen := windowshost.WSLApplianceSHA256, windowshost.WSLApplianceLength
