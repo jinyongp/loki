@@ -144,6 +144,11 @@ func (adapter *OpenAIAdapter) Setup(ctx context.Context, runtime ConnectionRunti
 		RuntimeAlias: openAIRuntimeAlias, ProfileName: openAIProfileName,
 		LocalOrigin: material.LocalOrigin,
 	}
+	if present {
+		if err = adapter.stopNative(ctx, runtime, paths); err != nil {
+			return fmt.Errorf("stop existing OpenAI tunnel runtime before setup reconciliation: %w", err)
+		}
+	}
 	if err = adapter.connect(ctx, runtime, paths, metadata, material, key); err != nil {
 		return err
 	}
@@ -171,6 +176,9 @@ func (adapter *OpenAIAdapter) Start(ctx context.Context, runtime ConnectionRunti
 	paths, metadata, material, key, err := adapter.runtimeInputs(ctx, runtime)
 	if err != nil {
 		return err
+	}
+	if err = adapter.stopNative(ctx, runtime, paths); err != nil {
+		return fmt.Errorf("stop OpenAI tunnel runtime before restart: %w", err)
 	}
 	if err = adapter.connect(ctx, runtime, paths, metadata, material, key); err != nil {
 		return err

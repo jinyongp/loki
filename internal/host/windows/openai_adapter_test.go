@@ -234,7 +234,50 @@ func TestOpenAISetupUsesSecretReferencesAndProcessScopedAuthorization(t *testing
 	}
 }
 
-func TestOpenAIStartReloadsCredentialAndCurrentLokiToken(t *testing.T) {
+func TestOpenAISetupExistingRecordRestartsBeforeApplyingRotatedRuntimeKey(t *testing.T) {
+	adapter, runtime, credentials, runner, _, store := openAIAdapterFixture()
+	target := defaultOpenAICredentialTarget("loki-mcp")
+	credentials.values[target] = "old-runtime-key"
+	store.present = true
+	store.metadata = OpenAIProviderMetadata{
+		SchemaVersion:    openAIAdapterSchemaVersion,
+		TunnelID:         adapter.SetupConfig.TunnelID,
+		CredentialTarget: target,
+		RuntimeAlias:     openAIRuntimeAlias, ProfileName: openAIProfileName,
+		LocalOrigin: "http://127.0.0.1:18765/mcp",
+	}
+
+	if err := adapter.Setup(t.Context(), runtime); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("calls=%+v", runner.calls)
+	}
+	if got := runner.calls[0].args; !reflect.DeepEqual(got, []string{"runtimes", "stop", "loki", "--json"}) {
+		t.Fatalf("setup reconciliation did not stop existing runtime first: %q", got)
+	}
+	if runner.calls[0].env[openAIRuntimeKeyEnv] != "" ||
+		runner.calls[0].env[openAIMCPAuthorizationEnv] != "" {
+		t.Fatalf("stop env unexpectedly contains secrets: %v", runner.calls[0].env)
+	}
+	connectCall := runner.calls[1]
+	if len(connectCall.args) < 2 || connectCall.args[0] != "runtimes" || connectCall.args[1] != "connect" {
+		t.Fatalf("setup reconciliation did not reconnect after stop: %+v", connectCall)
+	}
+	if connectCall.env[openAIRuntimeKeyEnv] != "runtime-key-secret" ||
+		connectCall.env[openAIMCPAuthorizationEnv] != "Bearer loki-token-secret" {
+		t.Fatalf("reconciled runtime env=%v", connectCall.env)
+	}
+	if got := runner.calls[2].args; !reflect.DeepEqual(got, []string{"doctor", "--profile", "loki", "--json"}) {
+		t.Fatalf("setup reconciliation doctor args=%q", got)
+	}
+	if credentials.values[target] != "runtime-key-secret" ||
+		!reflect.DeepEqual(credentials.puts, []string{target}) {
+		t.Fatalf("rotated credential was not committed after successful restart: %+v", credentials)
+	}
+}
+
+func TestOpenAIStartRestartsBeforeReloadingCredentialAndCurrentLokiToken(t *testing.T) {
 	adapter, runtime, credentials, runner, local, store := openAIAdapterFixture()
 	target := defaultOpenAICredentialTarget("loki-mcp")
 	credentials.values[target] = "stored-runtime-key"
@@ -255,12 +298,54 @@ func TestOpenAIStartReloadsCredentialAndCurrentLokiToken(t *testing.T) {
 	if !reflect.DeepEqual(credentials.gets, []string{target}) {
 		t.Fatalf("credential gets=%v", credentials.gets)
 	}
-	if runner.calls[0].env[openAIRuntimeKeyEnv] != "stored-runtime-key" ||
-		runner.calls[0].env[openAIMCPAuthorizationEnv] != "Bearer rotated-loki-token" {
-		t.Fatalf("runtime env=%v", runner.calls[0].env)
+	if len(runner.calls) != 3 {
+		t.Fatalf("calls=%+v", runner.calls)
+	}
+	if got := runner.calls[0].args; !reflect.DeepEqual(got, []string{"runtimes", "stop", "loki", "--json"}) {
+		t.Fatalf("restart did not stop existing runtime first: %q", got)
+	}
+	if runner.calls[0].env[openAIRuntimeKeyEnv] != "" ||
+		runner.calls[0].env[openAIMCPAuthorizationEnv] != "" {
+		t.Fatalf("stop env unexpectedly contains rotated secrets: %v", runner.calls[0].env)
+	}
+	connectCall := runner.calls[1]
+	if len(connectCall.args) < 2 || connectCall.args[0] != "runtimes" || connectCall.args[1] != "connect" {
+		t.Fatalf("restart did not reconnect after stop: %+v", connectCall)
+	}
+	if connectCall.env[openAIRuntimeKeyEnv] != "stored-runtime-key" ||
+		connectCall.env[openAIMCPAuthorizationEnv] != "Bearer rotated-loki-token" {
+		t.Fatalf("restarted runtime env=%v", connectCall.env)
+	}
+	if got := runner.calls[2].args; !reflect.DeepEqual(got, []string{"doctor", "--profile", "loki", "--json"}) {
+		t.Fatalf("restart doctor args=%q", got)
 	}
 	if store.metadata.LocalOrigin != "http://127.0.0.1:19000/mcp" {
 		t.Fatalf("metadata local origin=%q", store.metadata.LocalOrigin)
+	}
+}
+
+func TestOpenAIStartFailsClosedWhenOwnedRuntimeCannotStop(t *testing.T) {
+	adapter, runtime, credentials, runner, _, store := openAIAdapterFixture()
+	target := defaultOpenAICredentialTarget("loki-mcp")
+	credentials.values[target] = "stored-runtime-key"
+	store.present = true
+	store.metadata = OpenAIProviderMetadata{
+		SchemaVersion:    openAIAdapterSchemaVersion,
+		TunnelID:         adapter.SetupConfig.TunnelID,
+		CredentialTarget: target,
+		RuntimeAlias:     openAIRuntimeAlias, ProfileName: openAIProfileName,
+		LocalOrigin: "http://127.0.0.1:18765/mcp",
+	}
+	adapter.SetupConfig = OpenAISetupConfig{}
+	runner.results = []NativeProbe{{ExitCode: 2, Stderr: "owned runtime did not stop"}}
+
+	err := adapter.Start(t.Context(), runtime)
+	if err == nil || !strings.Contains(err.Error(), "before restart") {
+		t.Fatalf("err=%v", err)
+	}
+	if len(runner.calls) != 1 ||
+		!reflect.DeepEqual(runner.calls[0].args, []string{"runtimes", "stop", "loki", "--json"}) {
+		t.Fatalf("failed stop should prevent reconnect: %+v", runner.calls)
 	}
 }
 
