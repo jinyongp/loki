@@ -10,6 +10,7 @@ func TestLoopbackPortProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = listener.Close() })
 	port := listener.Addr().(*net.TCPAddr).Port
 	available, err := (LoopbackPortProbe{}).Available(port)
 	if err != nil {
