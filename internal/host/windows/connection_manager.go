@@ -33,6 +33,7 @@ type ConnectionRuntimeContext struct {
 type ConnectionRuntimeStatus struct {
 	State   string `json:"state"`
 	Healthy bool   `json:"healthy"`
+	Ready   bool   `json:"ready"`
 	Detail  string `json:"detail,omitempty"`
 }
 
@@ -465,11 +466,12 @@ func (manager ConnectionManager) rollbackSetup(
 	hadPrevious bool,
 	cause error,
 ) error {
-	removeErr := adapter.Remove(ctx, runtime)
 	if hadPrevious {
-		restoreErr := manager.Store.Write(ctx, previous)
-		return errors.Join(cause, removeErr, restoreErr)
+		restoreRuntimeErr := adapter.Start(ctx, runtime)
+		restoreStateErr := manager.Store.Write(ctx, previous)
+		return errors.Join(cause, restoreRuntimeErr, restoreStateErr)
 	}
+	removeErr := adapter.Remove(ctx, runtime)
 	stateErr := manager.Store.Remove(ctx, runtime.Distribution, runtime.Provider)
 	return errors.Join(cause, removeErr, stateErr)
 }
