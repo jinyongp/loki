@@ -13,8 +13,8 @@ import (
 const ProtocolVersion = 3
 
 const (
-	reviewedDevtoolsVersion = "0.19.9"
-	reviewedDevtoolsCommit  = "ce9e198872a2de7754efe3db1ead166653746402"
+	reviewedDevtoolsVersion = "0.19.10"
+	reviewedDevtoolsCommit  = "f1551152ced34de995856f95dddcd47a69596b0e"
 )
 
 // This reviewed consumer subset is not a captured full release catalog.

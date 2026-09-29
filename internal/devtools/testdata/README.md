@@ -9,11 +9,12 @@ Task definition edits, validation mutations, doctor execution, backup/cleanup,
 secret management, generic command execution, and runtime lifecycle mutations
 remain excluded.
 
-The reviewed release basis is devtools v0.19.9 at commit
-`ce9e198872a2de7754efe3db1ead166653746402` (reviewed 2026-09-28).
-The v0.19.9 task CLI retains the same Loki-approved protocol-3 executable
-contract fingerprint as the prior v0.18.0 baseline while upstream implementation
-and non-approved surfaces continue to evolve. Loki does not expose those forms: generic
+The reviewed release basis is devtools v0.19.10 at commit
+`f1551152ced34de995856f95dddcd47a69596b0e` (reviewed 2026-09-29).
+The v0.19.10 task CLI retains the same Loki-approved protocol-3 executable
+contract fingerprint as the v0.19.9 baseline. The reviewed upstream delta is
+confined to task JSON decode size handling and context response compaction,
+without CLI schema or command-surface drift. Loki does not expose those forms: generic
 `Client.Call` rejects coordination queries and mutations, while
 `QueryCoordination` and `MutateCoordination` construct their accepted inputs
 from typed Loki requests. The reviewed baseline nevertheless fingerprints the
@@ -27,7 +28,7 @@ protected session state. Runtime verification reads the selected binary's actual
 catalog before any call and requires the approved contract fingerprint to match
 this reviewed baseline.
 
-Reviewed v0.19.9 source includes `internal/cli/processes.go`,
+Reviewed v0.19.10 source includes `internal/cli/processes.go`,
 `internal/cli/schema.go`, `internal/cli/commands.go`,
 `internal/cli/cli.go`, `internal/cli/tasks.go`,
 `internal/cli/task_schema.go`, `internal/tasks/commands.go`,
@@ -40,12 +41,12 @@ Reviewed v0.19.9 source includes `internal/cli/processes.go`,
 - cli.go: `976cf6013b6fc8d8c3cfc73b282f1fbde3c57591e746432b1e6c9fc05e385e73`
 - tasks.go: `dbb1c20e9c44dc4b0669447ac479e717702679b8ed67bd0dbb12f69739cc4f68`
 - task_schema.go: `75580b45df9fbfe58e45f47020dbc4fc42f0dd8a39fa95379975522bb8bfdb1e`
-- tasks/commands.go: `aebc76e3b5b818e486cc210a173ab8592c6b0d9e8edb508d307ffefe8f4bb2df`
+- tasks/commands.go: `88228b881b1f27afb290672536e8b3ec442c5bb227251f7297d0a3b15b008aef`
 - tasks/model.go: `ed5f274930c8a3f4b0939f690d7b8b24e764ce64a7de604f0831cf7900cd1ae5`
-- tasks/query.go: `65f6445ab880b775f8f392d5d578c4fb671778ac9373fcc95eb9fb00bf7c6316`
+- tasks/query.go: `0712044be1561844ff4f9f482dbd9140ca45c85c5024464c735bcd3d330b8e8e`
 - project.go: `d1623d81ea4bbd39e67df71ea2e85beeba51cd3ed257c4dda58b91fe5cfe69ca`
 
-An exact v0.19.9 build verified through Loki's runtime `Client.Verify()` reports
+An exact v0.19.10 build verified through Loki's runtime `Client.Verify()` reports
 protocol 3, 21 approved commands, and catalog fingerprint
 `f9cd7292b95ea7538ec20004a2da4ac7a5d6886897a2d04cf464ef236cb8b708`,
 which matches the embedded reviewed subset.
