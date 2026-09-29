@@ -95,12 +95,16 @@ func (relay *nativeProgressRelay) Write(raw []byte) (int, error) {
 	}
 	relay.pending += strings.ReplaceAll(string(raw), "\x00", "")
 	for {
-		index := strings.IndexByte(relay.pending, '\n')
+		index := strings.IndexAny(relay.pending, "\r\n")
 		if index < 0 {
 			break
 		}
-		line := strings.TrimSuffix(relay.pending[:index], "\r")
-		relay.pending = relay.pending[index+1:]
+		line := relay.pending[:index]
+		next := index + 1
+		if relay.pending[index] == '\r' && next < len(relay.pending) && relay.pending[next] == '\n' {
+			next++
+		}
+		relay.pending = relay.pending[next:]
 		relay.writeLine(line)
 	}
 	return len(raw), nil

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"loki/internal/progress"
@@ -197,17 +198,23 @@ func TestVerifyDistributionIdentityRequiresApprovedVersion(t *testing.T) {
 	}
 }
 
-func TestNativeProgressRelayHandlesChunkedLines(t *testing.T) {
+func TestNativeProgressRelayHandlesChunkedRecordEndings(t *testing.T) {
 	var out bytes.Buffer
 	relay := newNativeProgressRelay(progress.NewLineReporter(&out))
 	if _, err := relay.Write([]byte("ordinary stderr\n[loki] Preparing")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := relay.Write([]byte(" update...\r\nwarning\n[loki] Applying update...")); err != nil {
+	if _, err := relay.Write([]byte(" update...\r[loki] Downloading...\r")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := relay.Write([]byte("\nwarning\r\n[loki] Applying update...")); err != nil {
 		t.Fatal(err)
 	}
 	relay.Flush()
-	if got, want := out.String(), "[loki] Preparing update...\n[loki] Applying update...\n"; got != want {
+	if got, want := out.String(), "[loki] Preparing update...\n[loki] Downloading...\n[loki] Applying update...\n"; got != want {
 		t.Fatalf("progress=%q want=%q", got, want)
+	}
+	if strings.ContainsRune(out.String(), '\r') {
+		t.Fatalf("progress retained carriage return: %q", out.String())
 	}
 }
