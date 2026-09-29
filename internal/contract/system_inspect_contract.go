@@ -27,6 +27,47 @@ func systemToolCatalogSchema() map[string]any {
 	}
 }
 
+func integrationStateSchema(extra map[string]any, extraRequired ...string) map[string]any {
+	properties := map[string]any{
+		"supported":  map[string]any{"type": "boolean"},
+		"configured": map[string]any{"type": "boolean"},
+		"enabled":    map[string]any{"type": "boolean"},
+		"ready":      map[string]any{"type": "boolean"},
+		"state":      map[string]any{"type": "string", "enum": []string{"unconfigured", "disabled", "ready", "degraded"}},
+		"authority":  map[string]any{"type": "string", "minLength": 1},
+	}
+	for name, schema := range extra {
+		properties[name] = schema
+	}
+	required := []string{"supported", "configured", "enabled", "ready", "state", "authority"}
+	required = append(required, extraRequired...)
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": properties, "required": required,
+	}
+}
+
+func systemIntegrationsSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{
+			"browser": integrationStateSchema(nil),
+			"github": integrationStateSchema(map[string]any{
+				"authentication": map[string]any{"const": "GitHub App installation tokens"},
+				"target_count":   map[string]any{"type": "integer", "minimum": 0},
+			}, "authentication", "target_count"),
+			"signing": integrationStateSchema(map[string]any{
+				"format":                  map[string]any{"anyOf": []any{map[string]any{"type": "string"}, map[string]any{"type": "null"}}},
+				"identity_configured":     map[string]any{"type": "boolean"},
+				"commit_signing_required": map[string]any{"type": "boolean"},
+				"public_key_available":    map[string]any{"type": "boolean"},
+				"agent_socket_available":  map[string]any{"type": "boolean"},
+			}, "format", "identity_configured", "commit_signing_required", "public_key_available", "agent_socket_available"),
+		},
+		"required": []string{"browser", "github", "signing"},
+	}
+}
+
 func systemServerOutputSchema() map[string]any {
 	capabilities := map[string]any{
 		"type": "object", "additionalProperties": false,
@@ -76,15 +117,10 @@ func systemServerOutputSchema() map[string]any {
 				},
 				"required": []string{"revision", "installed"},
 			},
-			"github": map[string]any{
-				"type": "object", "additionalProperties": false,
-				"properties": map[string]any{
-					"configured":     map[string]any{"type": "boolean"},
-					"target_count":   map[string]any{"type": "integer", "minimum": 0},
-					"authentication": map[string]any{"type": "string", "minLength": 1},
-				},
-				"required": []string{"configured", "target_count", "authentication"},
-			},
+			"github": integrationStateSchema(map[string]any{
+				"authentication": map[string]any{"const": "GitHub App installation tokens"},
+				"target_count":   map[string]any{"type": "integer", "minimum": 0},
+			}, "authentication", "target_count"),
 			"github_https":       map[string]any{"type": "boolean"},
 			"structured_browser": map[string]any{"type": "boolean"},
 			"browser_devtools":   map[string]any{"type": "boolean"},
@@ -130,12 +166,13 @@ func systemServerOutputSchema() map[string]any {
 			"workspace":         map[string]any{"const": "/workspace"},
 			"policy_generation": systemPolicyGenerationSchema(),
 			"tool_catalog":      systemToolCatalogSchema(),
+			"integrations":      systemIntegrationsSchema(),
 			"capabilities":      capabilities,
 			"limits":            limits,
 		},
 		"required": []string{
 			"name", "version", "schema_revision", "mcp_sdk_version", "python_version", "go_version",
-			"uptime_seconds", "server_time", "workspace", "policy_generation", "tool_catalog", "capabilities", "limits",
+			"uptime_seconds", "server_time", "workspace", "policy_generation", "tool_catalog", "integrations", "capabilities", "limits",
 		},
 	}
 }
@@ -166,7 +203,9 @@ func systemDiagnosticsOutputSchema() map[string]any {
 	return map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"healthy": map[string]any{"type": "boolean"},
+			"healthy":      map[string]any{"type": "boolean"},
+			"core_healthy": map[string]any{"type": "boolean"},
+			"integrations": systemIntegrationsSchema(),
 			"workspace": map[string]any{
 				"type": "object", "additionalProperties": false,
 				"properties": map[string]any{"readable": map[string]any{"type": "boolean"}, "writable": map[string]any{"type": "boolean"}},
@@ -182,9 +221,11 @@ func systemDiagnosticsOutputSchema() map[string]any {
 				"properties": map[string]any{
 					"configured":   map[string]any{"type": "boolean"},
 					"target_count": map[string]any{"type": "integer", "minimum": 0},
+					"ready":        map[string]any{"type": "boolean"},
+					"state":        map[string]any{"type": "string", "enum": []string{"unconfigured", "disabled", "ready", "degraded"}},
 					"protocol":     map[string]any{"const": "https"},
 				},
-				"required": []string{"configured", "target_count", "protocol"},
+				"required": []string{"configured", "target_count", "ready", "state", "protocol"},
 			},
 			"git_signing": map[string]any{
 				"type": "object", "additionalProperties": false,
@@ -194,8 +235,10 @@ func systemDiagnosticsOutputSchema() map[string]any {
 					"commit_signing_required": map[string]any{"type": "boolean"},
 					"public_key_available":    map[string]any{"type": "boolean"},
 					"agent_socket_available":  map[string]any{"type": "boolean"},
+					"ready":                   map[string]any{"type": "boolean"},
+					"state":                   map[string]any{"type": "string", "enum": []string{"unconfigured", "disabled", "ready", "degraded"}},
 				},
-				"required": []string{"identity_configured", "format", "commit_signing_required", "public_key_available", "agent_socket_available"},
+				"required": []string{"identity_configured", "format", "commit_signing_required", "public_key_available", "agent_socket_available", "ready", "state"},
 			},
 			"repositories": map[string]any{"type": "array", "items": map[string]any{"type": "string", "minLength": 1}},
 			"tool_catalog": systemToolCatalogSchema(),
@@ -203,14 +246,16 @@ func systemDiagnosticsOutputSchema() map[string]any {
 				"type": "object", "additionalProperties": false,
 				"properties": map[string]any{
 					"socket_available":    map[string]any{"type": "boolean"},
+					"ready":               map[string]any{"type": "boolean"},
+					"state":               map[string]any{"type": "string", "enum": []string{"unconfigured", "disabled", "ready", "degraded"}},
 					"catalog_revision":    map[string]any{"type": "string", "minLength": 1},
 					"expected_tool_count": map[string]any{"type": "integer", "minimum": 0},
 					"expected_tools":      map[string]any{"type": "array", "items": map[string]any{"type": "string", "minLength": 1}},
 				},
-				"required": []string{"socket_available", "catalog_revision", "expected_tool_count", "expected_tools"},
+				"required": []string{"socket_available", "ready", "state", "catalog_revision", "expected_tool_count", "expected_tools"},
 			},
 		},
-		"required": []string{"healthy", "workspace", "audit_log", "github", "git_signing", "repositories", "tool_catalog", "browser"},
+		"required": []string{"healthy", "core_healthy", "workspace", "audit_log", "integrations", "github", "git_signing", "repositories", "tool_catalog", "browser"},
 	}
 }
 

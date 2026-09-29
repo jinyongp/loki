@@ -177,11 +177,13 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	defer client.Close()
 	if instructions := client.InitializeResult().Instructions; !strings.Contains(instructions, "project_coordination") ||
 		!strings.Contains(instructions, "project_coordination_write") || !strings.Contains(instructions, "job action=start") ||
+		!strings.Contains(instructions, "this Loki server's authority boundary") ||
+		!strings.Contains(instructions, "never ambient gh auth credentials") ||
 		strings.Contains(instructions, "task queues") {
 		t.Fatal("stale MCP instructions", instructions)
 	}
 	tools, err := client.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 30 {
+	if err != nil || len(tools.Tools) != 35 {
 		t.Fatal(tools, err)
 	}
 	resources, err := client.ListResources(t.Context(), nil)
@@ -288,7 +290,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 }
 
-func TestNewMCPExcludesDisabledIntegrationTools(t *testing.T) {
+func TestNewMCPKeepsOptionalIntegrationToolSurfaceStableAndFailClosed(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -327,20 +329,55 @@ func TestNewMCPExcludesDisabledIntegrationTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Tools) != 19 {
-		t.Fatalf("disabled integration tool count = %d, want 19", len(listed.Tools))
+	if len(listed.Tools) != 30 {
+		t.Fatalf("disabled integration tool count = %d, want 30", len(listed.Tools))
 	}
-	forbidden := map[string]bool{
-		"browser_session": true, "browser_observe": true, "browser_interact": true,
-		"browser_screenshot": true, "browser_save_screenshot": true, "browser_share_screenshot": true,
-		"share_image": true, "artifact_publish": true,
-		"preview_publish": true, "shared_resources": true, "revoke_share": true,
-		"github": true, "github_issue_fields_read": true, "github_issue_fields_write": true,
-	}
+	seen := map[string]bool{}
 	for _, tool := range listed.Tools {
-		if forbidden[tool.Name] {
-			t.Fatalf("disabled integration tool was registered: %s", tool.Name)
+		seen[tool.Name] = true
+	}
+	for _, required := range []string{
+		"browser_session", "browser_observe", "browser_interact",
+		"browser_screenshot", "browser_save_screenshot", "browser_share_screenshot",
+		"github_read", "github_write", "github", "github_issue_fields_read", "github_issue_fields_write",
+	} {
+		if !seen[required] {
+			t.Fatalf("stable optional integration tool missing: %s", required)
 		}
+	}
+	for _, unavailable := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"browser_session", map[string]any{"action": "start"}},
+		{"github_read", map[string]any{"action": "repository", "target": "owner/repo"}},
+	} {
+		result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: unavailable.name, Arguments: unavailable.args})
+		if err != nil || !result.IsError {
+			t.Fatalf("%s did not fail closed: result=%#v err=%v", unavailable.name, result, err)
+		}
+		raw, _ := json.Marshal(result)
+		if !strings.Contains(string(raw), "integration") {
+			t.Fatalf("%s error does not identify unavailable integration: %s", unavailable.name, raw)
+		}
+	}
+	for _, absent := range []string{"share_image", "artifact_publish", "preview_publish", "shared_resources", "revoke_share"} {
+		if seen[absent] {
+			t.Fatalf("unconfigured non-stable surface was registered: %s", absent)
+		}
+	}
+	infoResult, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "system_inspect", Arguments: map[string]any{"action": "server"}})
+	if err != nil || infoResult.IsError {
+		t.Fatalf("system info: %#v %v", infoResult, err)
+	}
+	raw, _ := json.Marshal(infoResult.StructuredContent)
+	var info map[string]any
+	if json.Unmarshal(raw, &info) != nil {
+		t.Fatal(string(raw))
+	}
+	catalog := info["tool_catalog"].(map[string]any)
+	if int(catalog["count"].(float64)) != len(listed.Tools) {
+		t.Fatalf("effective tool catalog count=%v tools/list=%d", catalog["count"], len(listed.Tools))
 	}
 }
 

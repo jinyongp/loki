@@ -58,6 +58,13 @@ func NewConfiguredCurrent(handlers map[string]Handler, origins ResourceOrigins) 
 // active handlers. It rejects unknown handler names and preserves contract
 // ordering for the enabled subset.
 func NewConfiguredAvailable(handlers map[string]Handler, origins ResourceOrigins) (*mcp.Server, error) {
+	return NewConfiguredAvailableWithInstructions(handlers, origins, contract.CurrentInstructions)
+}
+
+// NewConfiguredAvailableWithInstructions preserves the available-handler
+// contract while allowing the product composition root to append bounded
+// instance-specific provenance and readiness guidance.
+func NewConfiguredAvailableWithInstructions(handlers map[string]Handler, origins ResourceOrigins, instructions string) (*mcp.Server, error) {
 	if err := origins.validate(); err != nil {
 		return nil, err
 	}
@@ -85,7 +92,7 @@ func NewConfiguredAvailable(handlers map[string]Handler, origins ResourceOrigins
 			return nil, fmt.Errorf("unknown tool implementation %s", name)
 		}
 	}
-	return newServer(current, handlers, selected, &origins, contract.CurrentInstructions)
+	return newServer(current, handlers, selected, &origins, instructions)
 }
 
 func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {

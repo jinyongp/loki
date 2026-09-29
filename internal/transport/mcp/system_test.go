@@ -33,7 +33,13 @@ func TestSystemInformation(t *testing.T) {
 		switch action {
 		case "server":
 			metadata := value["policy_generation"].(controlpolicy.GenerationMetadata)
-			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 35 || metadata.SHA256 != generation.Digest() {
+			capabilities := value["capabilities"].(map[string]any)
+			integrations := value["integrations"].(map[string]any)
+			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 35 || metadata.SHA256 != generation.Digest() ||
+				capabilities["signed_git_commits"] != false ||
+				integrations["browser"].(map[string]any)["state"] != integrationDisabled ||
+				integrations["github"].(map[string]any)["state"] != integrationUnconfigured ||
+				integrations["signing"].(map[string]any)["state"] != integrationUnconfigured {
 				t.Fatal(value)
 			}
 		case "workspace":
@@ -41,7 +47,13 @@ func TestSystemInformation(t *testing.T) {
 				t.Fatal(value)
 			}
 		case "diagnostics":
-			if value["healthy"] != false || len(value["repositories"].([]string)) != 2 {
+			if value["healthy"] != true || value["core_healthy"] != true || len(value["repositories"].([]string)) != 2 {
+				t.Fatal(value)
+			}
+			integrations := value["integrations"].(map[string]any)
+			if integrations["browser"].(map[string]any)["state"] != integrationDisabled ||
+				integrations["github"].(map[string]any)["state"] != integrationUnconfigured ||
+				integrations["signing"].(map[string]any)["state"] != integrationUnconfigured {
 				t.Fatal(value)
 			}
 		case "activity":

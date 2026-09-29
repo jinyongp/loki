@@ -12,7 +12,7 @@ import (
 var currentJSON []byte
 
 const (
-	CatalogRevision   = "2026-09-21.28"
+	CatalogRevision   = "2026-09-29.1"
 	snapshotToolCount = 31
 )
 
@@ -117,5 +117,6 @@ func CurrentDefinitions() ([]*mcp.Tool, error) {
 	if err := applyGeneratedToolOverrides(selected); err != nil {
 		return nil, err
 	}
+	applyIntegrationAuthorityMetadata(selected)
 	return selected, nil
 }

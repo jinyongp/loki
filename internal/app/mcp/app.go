@@ -147,9 +147,15 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.RouteAllowed)
 	}
-	system := &mcptransport.SystemController{Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(), RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment, InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
-		return mcptransport.InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
-	}}
+	system := &mcptransport.SystemController{
+		Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(),
+		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket,
+		BrowserEnabled: options.Browser != nil, BrowserReady: options.Browser != nil,
+		Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment,
+		InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
+			return mcptransport.InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
+		},
+	}
 	handlers := map[string]mcpserver.Handler{
 		"system_inspect": mcptransport.SystemHandler(system), "developer_view": mcptransport.DeveloperHandler(app.files),
 	}
@@ -167,13 +173,11 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if app.Artifacts != nil {
 		groups = append(groups, mcptransport.ArtifactHandlers(app.files, app.Artifacts))
 	}
-	if options.Browser != nil {
-		var uploads mcptransport.BrowserUploadStager
-		if options.BrowserSocket != "" {
-			uploads = mcptransport.SocketBrowserUploadStager{Socket: options.BrowserSocket}
-		}
-		groups = append(groups, mcptransport.BrowserHandlers(options.Browser, uploads, app.files, app.Artifacts))
+	var uploads mcptransport.BrowserUploadStager
+	if options.BrowserSocket != "" {
+		uploads = mcptransport.SocketBrowserUploadStager{Socket: options.BrowserSocket}
 	}
+	groups = append(groups, mcptransport.BrowserHandlers(options.Browser, uploads, app.files, app.Artifacts))
 	if app.Previews != nil || app.Artifacts != nil {
 		groups = append(groups, mcptransport.PreviewHandlers(preview, app.Artifacts))
 	}
@@ -183,6 +187,8 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 			mcptransport.GitHubIssueFieldsHandlers(options.Runtime),
 			mcptransport.GitHubCommandHandlers(options.Runtime),
 		)
+	} else {
+		groups = append(groups, mcptransport.GitHubUnavailableHandlers())
 	}
 	for _, group := range groups {
 		for name, handler := range group {
@@ -191,6 +197,10 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 			}
 			handlers[name] = handler
 		}
+	}
+	system.ToolNames = make([]string, 0, len(handlers))
+	for name := range handlers {
+		system.ToolNames = append(system.ToolNames, name)
 	}
 	if !filepath.IsAbs(c.AuditLog) {
 		return nil, errors.New("MCP audit path must be absolute")
@@ -206,7 +216,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	for name, handler := range handlers {
 		handlers[name] = mcptransport.AuditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfiguredAvailable(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain})
+	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, instanceInstructions(c, options.Browser != nil))
 	if err != nil {
 		return nil, err
 	}
