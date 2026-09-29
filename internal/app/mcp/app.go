@@ -223,7 +223,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	for name, handler := range handlers {
 		handlers[name] = mcptransport.AuditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, instanceInstructions(c, options.Browser != nil))
+	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, mcptransport.InstanceInstructions(c, options.Browser != nil))
 	if err != nil {
 		return nil, err
 	}
