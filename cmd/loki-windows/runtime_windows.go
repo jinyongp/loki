@@ -650,6 +650,28 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "update apply --json requires --approve")
 		return 2
 	}
+	client := windowshost.NewWindowsOperatorClient()
+	if action == "apply" {
+		preflight, preflightErr := client.Execute(ctx, *distribution, windowshost.OperatorRequest{
+			Command: "update", Action: "status",
+		})
+		if preflightErr != nil {
+			fmt.Fprintln(stderr, preflightErr)
+			return 1
+		}
+		if preflight.Probe.ExitCode != 0 {
+			return writeNativeProbe(preflight.Probe, stdout, stderr)
+		}
+		status, decodeErr := decodeMachineJSON[machineUpdateStatus](preflight.Probe.Stdout)
+		if decodeErr != nil {
+			fmt.Fprintln(stderr, decodeErr)
+			return 1
+		}
+		if readinessErr := updateApplyReadinessError(status); readinessErr != nil {
+			fmt.Fprintln(stderr, readinessErr)
+			return 1
+		}
+	}
 	if action == "apply" && !*approve {
 		confirmed, err := confirmWindows("Apply the prepared Loki appliance update?", stdout)
 		if err != nil {
@@ -668,7 +690,6 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	} else if action == "apply" {
 		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared appliance update..."})
 	}
-	client := windowshost.NewWindowsOperatorClient()
 	request := windowshost.OperatorRequest{
 		Command: "update", Action: action, Approve: *approve, InterruptActiveJobs: *interrupt,
 	}
