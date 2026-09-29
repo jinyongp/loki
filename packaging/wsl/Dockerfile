@@ -51,7 +51,9 @@ RUN dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /tmp/lok
       "docker-compose-plugin=$DOCKER_COMPOSE_VERSION" \
  && dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /tmp/loki-wsl-final-packages \
  && comm -13 /tmp/loki-wsl-base-packages /tmp/loki-wsl-final-packages > /tmp/loki-wsl-apt-delta.actual \
- && comm -23 /tmp/loki-wsl-base-packages /tmp/loki-wsl-final-packages > /tmp/loki-wsl-apt-removed.actual \
+ && cut -d= -f1 /tmp/loki-wsl-base-packages | LC_ALL=C sort -u > /tmp/loki-wsl-base-package-names \
+ && cut -d= -f1 /tmp/loki-wsl-final-packages | LC_ALL=C sort -u > /tmp/loki-wsl-final-package-names \
+ && comm -23 /tmp/loki-wsl-base-package-names /tmp/loki-wsl-final-package-names > /tmp/loki-wsl-apt-removed.actual \
  && if ! cmp -s /tmp/loki-wsl-apt-delta.lock /tmp/loki-wsl-apt-delta.actual; then \
       echo "WSL apt package delta changed" >&2; \
       cat /tmp/loki-wsl-apt-delta.actual >&2; \
@@ -62,7 +64,7 @@ RUN dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /tmp/lok
       cat /tmp/loki-wsl-apt-removed.actual >&2; \
       exit 1; \
     fi \
- && rm -f /tmp/loki-wsl-base-packages /tmp/loki-wsl-final-packages /tmp/loki-wsl-apt-delta.actual /tmp/loki-wsl-apt-removed.actual /tmp/loki-wsl-apt-delta.lock \
+ && rm -f /tmp/loki-wsl-base-packages /tmp/loki-wsl-final-packages /tmp/loki-wsl-base-package-names /tmp/loki-wsl-final-package-names /tmp/loki-wsl-apt-delta.actual /tmp/loki-wsl-apt-removed.actual /tmp/loki-wsl-apt-delta.lock \
  && rm -f /etc/apt/keyrings/docker.asc /etc/apt/sources.list.d/docker.sources \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /var/log/apt \
