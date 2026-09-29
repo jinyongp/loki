@@ -21,6 +21,23 @@ type mapHostUpdateFetcher struct {
 	assets map[string][]byte
 }
 
+type recordingHostUpdateFetcher struct {
+	assets map[string][]byte
+	calls  []string
+}
+
+func (f *recordingHostUpdateFetcher) Fetch(_ context.Context, assetURL string, maximum int64) ([]byte, error) {
+	f.calls = append(f.calls, assetURL)
+	raw, ok := f.assets[assetURL]
+	if !ok {
+		return nil, errors.New("unexpected asset URL: " + assetURL)
+	}
+	if int64(len(raw)) > maximum {
+		return nil, errors.New("fixture exceeds requested maximum")
+	}
+	return append([]byte(nil), raw...), nil
+}
+
 func (f mapHostUpdateFetcher) Fetch(_ context.Context, assetURL string, maximum int64) ([]byte, error) {
 	raw, ok := f.assets[assetURL]
 	if !ok {
@@ -313,23 +330,47 @@ func TestPrepareHostUpdateCandidateRejectsBootstrapManifestMismatch(t *testing.T
 	}
 }
 
+func TestPrepareHostUpdateCandidateCurrentReleaseStopsAfterInstaller(t *testing.T) {
+	releasedAt := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	installed := lifecycleUpdateGeneration(t, "1.3.0", releasedAt)
+	store, _ := installHostUpdateFixture(t, installed)
+	fixture := newHostUpdateFixture(t, "1.3.0", releasedAt)
+	fetcher := &recordingHostUpdateFetcher{assets: fixture.assets}
+	_, err := prepareHostUpdateCandidateWith(
+		t.Context(), store, fetcher,
+		func(context.Context, string) (hostUpdateReleaseBinding, error) {
+			t.Fatal("bootstrap inspected for current release")
+			return hostUpdateReleaseBinding{}, nil
+		},
+		fixture.host,
+	)
+	if err == nil || !strings.Contains(err.Error(), "no newer release") {
+		t.Fatalf("current release discovery error = %v", err)
+	}
+	if len(fetcher.calls) != 1 || fetcher.calls[0] != publicHostUpdateInstallerURL {
+		t.Fatalf("current release fetched large assets: %#v", fetcher.calls)
+	}
+}
+
 func TestPrepareHostUpdateCandidateRejectsReleaseRollback(t *testing.T) {
 	releasedAt := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 	installed := lifecycleUpdateGeneration(t, "1.3.0", releasedAt)
 	store, _ := installHostUpdateFixture(t, installed)
 	fixture := newHostUpdateFixture(t, "1.2.9", releasedAt.Add(-time.Hour))
+	fetcher := &recordingHostUpdateFetcher{assets: fixture.assets}
 	_, err := prepareHostUpdateCandidateWith(
-		t.Context(), store, mapHostUpdateFetcher{assets: fixture.assets},
+		t.Context(), store, fetcher,
 		func(context.Context, string) (hostUpdateReleaseBinding, error) {
-			return hostUpdateReleaseBinding{
-				ReleaseTag: fixture.tag, ReleaseManifestSHA256: digestBytes(fixture.manifestRaw),
-				HostBinarySHA256: strings.TrimPrefix(fixture.generation.Spec.HostBinaryDigest, "sha256:"),
-			}, nil
+			t.Fatal("bootstrap inspected for rollback release")
+			return hostUpdateReleaseBinding{}, nil
 		},
 		fixture.host,
 	)
 	if err == nil || !strings.Contains(err.Error(), "older than the installed") {
 		t.Fatalf("rollback discovery error = %v", err)
+	}
+	if len(fetcher.calls) != 1 || fetcher.calls[0] != publicHostUpdateInstallerURL {
+		t.Fatalf("rollback release fetched large assets: %#v", fetcher.calls)
 	}
 }
 

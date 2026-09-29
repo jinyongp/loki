@@ -157,6 +157,9 @@ func prepareHostUpdateCandidateWithPrefetch(
 	if err != nil {
 		return lifecycle.Generation{}, err
 	}
+	if err = validateHostUpdateTagAdvance(*snapshot.Installed, tag); err != nil {
+		return lifecycle.Generation{}, err
+	}
 
 	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "bootstrap", State: progress.StateStarted, Message: "Downloading and verifying the release bootstrap..."})
 	bootstrapURL, err := hostUpdateReleaseAssetURL(tag, "loki-bootstrap-linux-amd64")
@@ -415,6 +418,24 @@ func verifyHostUpdateIndex(index releases.ReleaseIndex, manifest releases.Releas
 		return nil
 	}
 	return errors.New("release index does not contain the verified release manifest")
+}
+
+func validateHostUpdateTagAdvance(installed lifecycle.Generation, tag string) error {
+	if !installed.Valid() || !strings.HasPrefix(tag, "v") {
+		return errors.New("host update release identity is invalid")
+	}
+	comparison, err := compareReleaseVersions(strings.TrimPrefix(tag, "v"), installed.Spec.Version)
+	if err != nil {
+		return err
+	}
+	switch {
+	case comparison < 0:
+		return errors.New("published release is older than the installed release")
+	case comparison == 0:
+		return errors.New("no newer release is available")
+	default:
+		return nil
+	}
 }
 
 func validateHostUpdateAdvance(installed, candidate lifecycle.Generation) error {
