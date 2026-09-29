@@ -56,6 +56,40 @@ func Load(path string) (Config, error) {
 	return Parse(data)
 }
 
+var githubFragmentKeys = map[string]bool{
+	"github_app_id": true, "github_installations": true, "github_api_version": true,
+	"github_max_response_bytes": true, "github_max_pages": true,
+	"github_command_timeout_seconds": true, "github_max_input_bytes": true,
+	"github_max_output_bytes": true,
+}
+
+func decodeGitHubFragment(data []byte) (map[string]any, error) {
+	var injected map[string]any
+	if toml.Unmarshal(data, &injected) != nil {
+		return nil, errors.New("invalid GitHub TOML configuration")
+	}
+	for key := range injected {
+		if !githubFragmentKeys[key] {
+			return nil, fmt.Errorf("GitHub configuration contains unsupported setting %q", key)
+		}
+	}
+	return injected, nil
+}
+
+// ParseGitHubFragment validates a deployment-provided public GitHub TOML
+// fragment without allowing it to alter non-GitHub runtime settings.
+func ParseGitHubFragment(data []byte) (Config, error) {
+	injected, err := decodeGitHubFragment(data)
+	if err != nil {
+		return Config{}, err
+	}
+	merged, err := toml.Marshal(injected)
+	if err != nil {
+		return Config{}, errors.New("invalid GitHub TOML configuration")
+	}
+	return Parse(merged)
+}
+
 // LoadWithGitHub merges a deployment-provided public GitHub TOML fragment
 // into the primary configuration. The fragment is limited to GitHub settings
 // so a mounted Compose config cannot alter runtime isolation.
@@ -71,20 +105,15 @@ func LoadWithGitHub(path, githubPath string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	var primary, injected map[string]any
-	if toml.Unmarshal(base, &primary) != nil || toml.Unmarshal(fragment, &injected) != nil {
+	var primary map[string]any
+	if toml.Unmarshal(base, &primary) != nil {
 		return Config{}, errors.New("invalid Loki TOML configuration")
 	}
-	allowed := map[string]bool{
-		"github_app_id": true, "github_installations": true, "github_api_version": true,
-		"github_max_response_bytes": true, "github_max_pages": true,
-		"github_command_timeout_seconds": true, "github_max_input_bytes": true,
-		"github_max_output_bytes": true,
+	injected, err := decodeGitHubFragment(fragment)
+	if err != nil {
+		return Config{}, err
 	}
 	for key, value := range injected {
-		if !allowed[key] {
-			return Config{}, fmt.Errorf("GitHub configuration contains unsupported setting %q", key)
-		}
 		if _, exists := primary[key]; exists {
 			return Config{}, fmt.Errorf("GitHub setting %q is configured more than once", key)
 		}

@@ -109,6 +109,27 @@ repositories=["Project"]
 	}
 }
 
+func TestParseGitHubFragmentAllowsOnlyGitHubSettings(t *testing.T) {
+	raw := []byte(`github_app_id=123
+[[github_installations]]
+account="owner"
+account_type="organization"
+installation_id=456
+repositories=["repo"]
+`)
+	c, err := ParseGitHubFragment(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.GitHubAppID != 123 || len(c.GitHubTargets) != 1 || c.GitHubTargets[0] != "owner/repo" {
+		t.Fatalf("GitHub fragment=%#v", c)
+	}
+	if _, err = ParseGitHubFragment(append([]byte("root=\"/tmp/escape\"\n"), raw...)); err == nil ||
+		!strings.Contains(err.Error(), "unsupported setting") {
+		t.Fatalf("non-GitHub fragment setting was accepted: %v", err)
+	}
+}
+
 func TestInvalidGitHubAppConfiguration(t *testing.T) {
 	for _, text := range []string{
 		`github_app_id=1`,

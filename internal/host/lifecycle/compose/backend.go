@@ -894,9 +894,6 @@ func (b *Backend) composeEnvironment(
 		"LOKI_SIGNING_ALLOWED_SIGNERS_FILE=/dev/null",
 		"LOKI_SIGNING_SOCKET_VOLUME=",
 	}
-	if !containsProfile(state.Profiles, "signing") {
-		return env, nil
-	}
 	store, err := lifecycle.OpenFileStore(b.root)
 	if err != nil {
 		return nil, err
@@ -905,26 +902,44 @@ func (b *Backend) composeEnvironment(
 	if err != nil {
 		return nil, err
 	}
-	if !integrations.Signing.Configured || !integrations.Signing.Enabled {
-		return nil, errors.New("signing profile requires a configured and enabled managed signing integration")
+	replacements := map[string]string{}
+	if integrations.GitHub.Configured && integrations.GitHub.Enabled {
+		for _, relative := range []string{lifecycle.ManagedGitHubConfigFile, lifecycle.ManagedGitHubCredentialFile} {
+			if _, err = store.ReadManagedIntegrationFile(ctx, relative, true); err != nil {
+				return nil, fmt.Errorf("managed GitHub integration file %s is unavailable: %w", relative, err)
+			}
+		}
+		managedConfig, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubConfigFile)
+		if pathErr != nil {
+			return nil, pathErr
+		}
+		managedKey, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubCredentialFile)
+		if pathErr != nil {
+			return nil, pathErr
+		}
+		replacements["LOKI_GITHUB_CONFIG_FILE"] = managedConfig
+		replacements["LOKI_GITHUB_PRIVATE_KEY_FILE"] = managedKey
 	}
-	if _, err = store.ReadManagedIntegrationFile(ctx, lifecycle.ManagedSigningCredentialFile, true); err != nil {
-		return nil, fmt.Errorf("managed signing private key is unavailable: %w", err)
-	}
-	privateKeyPath, err := store.ManagedIntegrationFilePath(lifecycle.ManagedSigningCredentialFile)
-	if err != nil {
-		return nil, err
-	}
-	public, err := b.materializeSigningPublicFiles(ctx, store)
-	if err != nil {
-		return nil, err
-	}
-	replacements := map[string]string{
-		"LOKI_SIGNING_KEY_FILE":             privateKeyPath,
-		"LOKI_SIGNING_PUBLIC_KEY_FILE":      public[lifecycle.ManagedSigningPublicKeyFile],
-		"LOKI_SIGNING_GIT_CONFIG_FILE":      public[lifecycle.ManagedSigningGitConfigFile],
-		"LOKI_SIGNING_ALLOWED_SIGNERS_FILE": public[lifecycle.ManagedSigningAllowedSignersFile],
-		"LOKI_SIGNING_SOCKET_VOLUME":        b.volumeName("signing-socket"),
+	if containsProfile(state.Profiles, "signing") {
+		if !integrations.Signing.Configured || !integrations.Signing.Enabled {
+			return nil, errors.New("signing profile requires a configured and enabled managed signing integration")
+		}
+		if _, err = store.ReadManagedIntegrationFile(ctx, lifecycle.ManagedSigningCredentialFile, true); err != nil {
+			return nil, fmt.Errorf("managed signing private key is unavailable: %w", err)
+		}
+		privateKeyPath, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedSigningCredentialFile)
+		if pathErr != nil {
+			return nil, pathErr
+		}
+		public, materializeErr := b.materializeSigningPublicFiles(ctx, store)
+		if materializeErr != nil {
+			return nil, materializeErr
+		}
+		replacements["LOKI_SIGNING_KEY_FILE"] = privateKeyPath
+		replacements["LOKI_SIGNING_PUBLIC_KEY_FILE"] = public[lifecycle.ManagedSigningPublicKeyFile]
+		replacements["LOKI_SIGNING_GIT_CONFIG_FILE"] = public[lifecycle.ManagedSigningGitConfigFile]
+		replacements["LOKI_SIGNING_ALLOWED_SIGNERS_FILE"] = public[lifecycle.ManagedSigningAllowedSignersFile]
+		replacements["LOKI_SIGNING_SOCKET_VOLUME"] = b.volumeName("signing-socket")
 	}
 	for index, value := range env {
 		name, _, found := strings.Cut(value, "=")

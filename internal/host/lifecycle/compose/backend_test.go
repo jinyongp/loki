@@ -411,6 +411,82 @@ func TestComposeEnvironmentUsesManagedSigningPathsWithoutCredentialBytes(t *test
 	}
 }
 
+func TestComposeEnvironmentUsesManagedGitHubPathsWithoutCredentialBytes(t *testing.T) {
+	backend, _, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := lifecycle.OpenFileStore(backend.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configRaw := []byte("github_app_id = 123\n[[github_installations]]\naccount = \"example-org\"\naccount_type = \"organization\"\ninstallation_id = 456\nrepositories = [\"repo\"]\n")
+	privateKey := []byte("managed-github-private-key")
+	configDigest, err := store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedGitHubConfigFile, configRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentialDigest, err := store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedGitHubCredentialFile, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed := lifecycle.DefaultManagedIntegrationState()
+	managed.GitHub = lifecycle.ManagedIntegrationToggle{
+		Configured: true, Enabled: true, ConfigSHA256: configDigest, CredentialSHA256: credentialDigest,
+	}
+	rawState, err := json.Marshal(managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedIntegrationStateFile, append(rawState, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	env, err := backend.composeEnvironment(t.Context(), state, "/tmp/release-github.toml", "/tmp/ingress.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{}
+	for _, value := range env {
+		key, val, found := strings.Cut(value, "=")
+		if found {
+			values[key] = val
+		}
+	}
+	configPath, err := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubConfigFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPath, err := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubCredentialFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["LOKI_GITHUB_CONFIG_FILE"] != configPath || values["LOKI_GITHUB_PRIVATE_KEY_FILE"] != keyPath {
+		t.Fatalf("managed GitHub environment=%#v", values)
+	}
+	if strings.Contains(strings.Join(env, "\n"), string(privateKey)) {
+		t.Fatal("compose environment leaked GitHub private key bytes")
+	}
+
+	managed.GitHub.Enabled = false
+	rawState, err = json.Marshal(managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedIntegrationStateFile, append(rawState, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	env, err = backend.composeEnvironment(t.Context(), state, "/tmp/release-github.toml", "/tmp/ingress.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(env, "LOKI_GITHUB_CONFIG_FILE=/tmp/release-github.toml") ||
+		!slices.Contains(env, "LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null") {
+		t.Fatalf("disabled GitHub environment=%#v", env)
+	}
+}
+
 func TestBackendSnapshotHelpersRunAsRootWithBoundedCapabilities(t *testing.T) {
 	backend, runner, workspace := composeBackendFixture(t)
 	generation := composeGeneration(t, "1.2.3", "b")

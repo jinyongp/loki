@@ -30,6 +30,10 @@ type hostIntegrationReport struct {
 	Fingerprint          string   `json:"fingerprint,omitempty"`
 	IdentityName         string   `json:"identity_name,omitempty"`
 	IdentityEmail        string   `json:"identity_email,omitempty"`
+	GitHubAppID          int64    `json:"github_app_id,omitempty"`
+	TargetCount          int      `json:"target_count,omitempty"`
+	Authentication       string   `json:"authentication,omitempty"`
+	Detail               string   `json:"detail,omitempty"`
 }
 
 type hostIntegrationOptions struct {
@@ -107,7 +111,19 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	}
 	action := args[0]
 	if action == "setup" || action == "rotate" {
-		return runHostSigningSetup(action, args[1:], stdout, stderr)
+		if len(args) < 2 {
+			fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] signing|github\n", action)
+			return 2
+		}
+		switch args[len(args)-1] {
+		case "signing":
+			return runHostSigningSetup(action, args[1:], stdout, stderr)
+		case "github":
+			return runHostGitHubSetup(action, args[1:], stdout, stderr)
+		default:
+			fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] signing|github\n", action)
+			return 2
+		}
 	}
 	switch action {
 	case "list", "status", "enable", "disable", "remove", "doctor":
@@ -143,21 +159,30 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if action == "enable" || action == "disable" {
-		if name != "browser" && name != "signing" {
-			fmt.Fprintf(stderr, "%s integration does not use a component enablement profile\n", name)
-			return 1
+		enabled := action == "enable"
+		switch name {
+		case "browser", "signing":
+			err = manager.SetComponent(ctx, name, enabled, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+		case "github":
+			err = toggleManagedGitHub(ctx, manager, store, enabled, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+		default:
+			err = errors.New("integration name is invalid")
 		}
-		if err = manager.SetComponent(ctx, name, action == "enable", lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}); err != nil {
+		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 	}
 	if action == "remove" {
-		if name != "signing" {
-			fmt.Fprintf(stderr, "%s integration removal is not available yet\n", name)
-			return 1
+		switch name {
+		case "signing":
+			err = removeManagedSigning(ctx, manager, store, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}, lifecycleTimeNow)
+		case "github":
+			err = removeManagedGitHub(ctx, manager, store, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+		default:
+			err = fmt.Errorf("%s integration removal is not available", name)
 		}
-		if err = removeManagedSigning(ctx, manager, store, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}, lifecycleTimeNow); err != nil {
+		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
@@ -192,6 +217,21 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if action == "doctor" && name == "github" && report.Configured && report.Enabled {
+		candidate, loadErr := loadManagedGitHubFromStore(ctx, store)
+		if loadErr != nil {
+			report.Ready = false
+			report.State = "degraded"
+			report.Detail = loadErr.Error()
+		} else {
+			defer clear(candidate.KeyRaw)
+			if validateErr := validateManagedGitHubCandidate(ctx, candidate, nil); validateErr != nil {
+				report.Ready = false
+				report.State = "degraded"
+				report.Detail = "GitHub App validation failed: " + validateErr.Error()
+			}
+		}
+	}
 	if options.JSON {
 		if err = json.NewEncoder(stdout).Encode(report); err != nil {
 			fmt.Fprintln(stderr, "cannot encode integration status")
@@ -203,6 +243,13 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  Configured: %t\n", report.Configured)
 		fmt.Fprintf(stdout, "  Enabled: %t\n", report.Enabled)
 		fmt.Fprintf(stdout, "  Ready: %t\n", report.Ready)
+		if report.GitHubAppID != 0 {
+			fmt.Fprintf(stdout, "  App ID: %d\n", report.GitHubAppID)
+			fmt.Fprintf(stdout, "  Repositories: %d\n", report.TargetCount)
+		}
+		if report.Detail != "" {
+			fmt.Fprintf(stdout, "  Detail: %s\n", report.Detail)
+		}
 	}
 	if action == "doctor" && report.Enabled && !report.Ready {
 		return 1
@@ -290,13 +337,36 @@ func inspectHostIntegration(
 	case "github":
 		report.Configured = managed.GitHub.Configured
 		report.Enabled = managed.GitHub.Enabled
-		report.Ready = false
+		report.Authentication = "GitHub App installation tokens"
 		if !report.Configured {
 			report.State = "unconfigured"
-		} else if !report.Enabled {
+			break
+		}
+		_, githubConfig, loadErr := loadManagedGitHubPublicConfig(ctx, store)
+		if loadErr != nil {
+			report.State = "degraded"
+			report.Detail = loadErr.Error()
+			break
+		}
+		report.GitHubAppID = githubConfig.GitHubAppID
+		report.TargetCount = len(githubConfig.GitHubTargets)
+		if !report.Enabled {
 			report.State = "disabled"
+			break
+		}
+		readiness, readyErr := backend.Readiness(ctx)
+		if readyErr != nil {
+			report.State = "degraded"
+			report.Detail = "runtime readiness is unavailable"
+			break
+		}
+		report.RunningServices = append([]string(nil), readiness.RunningServices...)
+		report.Ready = readiness.Ready()
+		if report.Ready {
+			report.State = "ready"
 		} else {
 			report.State = "degraded"
+			report.Detail = "core runtime services are not ready"
 		}
 	default:
 		return hostIntegrationReport{}, errors.New("integration name is invalid")
