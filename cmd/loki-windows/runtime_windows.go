@@ -154,112 +154,13 @@ func runInstall(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	}
 	switch result.Disposition {
 	case windowshost.InstallNoop:
-		fmt.Fprintf(stdout, "Loki appliance %q is already healthy and current.\n", options.Distribution)
-	case windowshost.InstallUpgradeRequired:
-		return upgradeExistingAppliance(ctx, options.Distribution, result.CurrentVersion, binding.ReleaseTag, stdout, stderr)
+		fmt.Fprintf(stdout, "Loki appliance %q is already healthy.\n", options.Distribution)
 	case windowshost.InstallCompleted:
 		fmt.Fprintf(stdout, "Installed Loki appliance %q.\n", options.Distribution)
 	default:
 		fmt.Fprintf(stdout, "Loki appliance %q: %s\n", options.Distribution, result.Disposition)
 	}
 	fmt.Fprintln(stdout, "Run 'loki status' or 'loki connection' for operator details.")
-	return 0
-}
-
-func upgradeExistingAppliance(
-	ctx context.Context,
-	distribution, currentVersion, targetTag string,
-	stdout, stderr io.Writer,
-) int {
-	reporter := progress.NewLineReporter(stderr)
-	progress.Emit(reporter, progress.Event{
-		Operation: "update", Phase: "appliance", State: progress.StateStarted,
-		Message: fmt.Sprintf("Updating Loki appliance %q from v%s to %s...", distribution, strings.TrimPrefix(currentVersion, "v"), targetTag),
-	})
-
-	client := windowshost.NewWindowsOperatorClient()
-	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
-		Operation: "update", Phase: "prepare", Message: "Still preparing the appliance update",
-	})
-	prepared, err := client.ExecuteStreaming(
-		ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "prepare"}, reporter,
-	)
-	stopHeartbeat()
-	if err != nil {
-		fmt.Fprintln(stderr, "prepare managed appliance update:", err)
-		return 1
-	}
-	if prepared.Probe.ExitCode != 0 {
-		fmt.Fprintln(stderr, "The existing appliance is healthy but cannot be updated in place by this frontend.")
-		fmt.Fprintln(stderr, "No destructive reinstall was attempted.")
-		return writeNativeProbe(prepared.Probe, stdout, stderr)
-	}
-	updateStatus, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "status"})
-	if err != nil {
-		fmt.Fprintln(stderr, "verify prepared appliance update:", err)
-		return 1
-	}
-	if updateStatus.Probe.ExitCode != 0 {
-		return writeNativeProbe(updateStatus.Probe, stdout, stderr)
-	}
-	status, err := decodeMachineJSON[machineUpdateStatus](updateStatus.Probe.Stdout)
-	if err != nil || status.Available == nil || status.Prepared == nil {
-		fmt.Fprintln(stderr, "prepared appliance update could not be verified against the Windows frontend release")
-		return 1
-	}
-	preparedTag := "v" + strings.TrimPrefix(status.Available.Spec.Version, "v")
-	if preparedTag != targetTag {
-		fmt.Fprintf(stderr, "refusing appliance update to %s; Windows frontend is bound to %s\n", preparedTag, targetTag)
-		return 1
-	}
-	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared appliance update..."})
-	stopHeartbeat = progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
-		Operation: "update", Phase: "apply", Message: "Still applying the appliance update",
-	})
-	applied, err := client.ExecuteStreaming(ctx, distribution, windowshost.OperatorRequest{
-		Command: "update", Action: "apply", Approve: true,
-	}, reporter)
-	stopHeartbeat()
-	if err != nil {
-		fmt.Fprintln(stderr, "apply managed appliance update:", err)
-		return 1
-	}
-	if applied.Probe.ExitCode != 0 {
-		return writeNativeProbe(applied.Probe, stdout, stderr)
-	}
-	postStatus, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "status"})
-	if err != nil {
-		fmt.Fprintln(stderr, "verify updated appliance release:", err)
-		return 1
-	}
-	if postStatus.Probe.ExitCode != 0 {
-		return writeNativeProbe(postStatus.Probe, stdout, stderr)
-	}
-	updated, err := decodeMachineJSON[machineUpdateStatus](postStatus.Probe.Stdout)
-	if err != nil || updated.Installed == nil {
-		fmt.Fprintln(stderr, "updated appliance release could not be verified")
-		return 1
-	}
-	actualTag := "v" + strings.TrimPrefix(updated.Installed.Spec.Version, "v")
-	if actualTag != targetTag {
-		fmt.Fprintf(stderr, "updated appliance release %s does not match Windows frontend release %s\n",
-			actualTag, targetTag)
-		return 1
-	}
-	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "resync", State: progress.StateStarted, Message: "Refreshing the Windows MCP connection state..."})
-	syncResult, err := syncAfterLifecycleMutation(ctx, distribution, reporter)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if err = renderAppliedUpdate(applied.Probe.Stdout, stdout); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if syncResult.Changed {
-		fmt.Fprintln(stdout, "Refreshed Windows MCP connection state from the live appliance.")
-	}
-	fmt.Fprintf(stdout, "Loki appliance %q is now updated to %s.\n", distribution, targetTag)
 	return 0
 }
 

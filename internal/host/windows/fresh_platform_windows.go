@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"loki/internal/progress"
 )
@@ -312,9 +311,8 @@ func NewWindowsInstallControllerWithProgress(
 			Filesystem: filesystem,
 			Remover:    OSPathRemover{},
 		},
-		Port:           LoopbackPortProbe{},
-		Fresh:          TransactionalFreshInstaller{Platform: freshPlatform, Progress: reporter},
-		Filesystem:     filesystem,
-		DesiredVersion: strings.TrimPrefix(binding.ReleaseTag, "v"),
+		Port:       LoopbackPortProbe{},
+		Fresh:      TransactionalFreshInstaller{Platform: freshPlatform, Progress: reporter},
+		Filesystem: filesystem,
 	}
 }

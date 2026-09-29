@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-
-	"golang.org/x/mod/semver"
 )
 
 type PortProbe interface {
@@ -20,27 +17,24 @@ type FreshInstaller interface {
 }
 
 type InstallController struct {
-	Collector      PreflightCollector
-	Recovery       RecoveryExecutor
-	Port           PortProbe
-	Fresh          FreshInstaller
-	Filesystem     StateFilesystem
-	DesiredVersion string
+	Collector  PreflightCollector
+	Recovery   RecoveryExecutor
+	Port       PortProbe
+	Fresh      FreshInstaller
+	Filesystem StateFilesystem
 }
 
 type InstallDisposition string
 
 const (
-	InstallNoop            InstallDisposition = "already-healthy"
-	InstallUpgradeRequired InstallDisposition = "upgrade-required"
-	InstallCompleted       InstallDisposition = "installed"
+	InstallNoop      InstallDisposition = "already-healthy"
+	InstallCompleted InstallDisposition = "installed"
 )
 
 type InstallResult struct {
-	Disposition    InstallDisposition
-	Options        InstallOptions
-	Snapshot       ExistingSnapshot
-	CurrentVersion string
+	Disposition InstallDisposition
+	Options     InstallOptions
+	Snapshot    ExistingSnapshot
 }
 
 type InstallBlockedError struct {
@@ -115,21 +109,8 @@ func (controller InstallController) Run(
 	case ExistingBlocked:
 		return InstallResult{}, InstallBlockedError{Reason: assessment.Reason}
 	case ExistingHealthyNoop:
-		currentVersion := snapshot.Distribution.Version
-		if strings.TrimSpace(controller.DesiredVersion) != "" {
-			managedVersion, managedErr := controller.Collector.WSL.ManagedReleaseVersion(ctx, expected.Distribution)
-			if managedErr == nil {
-				currentVersion = managedVersion
-			} else if strings.TrimSpace(currentVersion) == strings.TrimSpace(controller.DesiredVersion) {
-				return InstallResult{}, InstallBlockedError{Reason: "managed-release-unverifiable"}
-			}
-		}
-		disposition, versionErr := controller.healthyDisposition(currentVersion)
-		if versionErr != nil {
-			return InstallResult{}, versionErr
-		}
 		return InstallResult{
-			Disposition: disposition, Options: options, Snapshot: snapshot, CurrentVersion: currentVersion,
+			Disposition: InstallNoop, Options: options, Snapshot: snapshot,
 		}, nil
 	case ExistingStaleNeedsApproval:
 		approved := options.ReinstallRequested
@@ -177,25 +158,4 @@ func (controller InstallController) Run(
 		return InstallResult{}, err
 	}
 	return InstallResult{Disposition: InstallCompleted, Options: options}, nil
-}
-
-func (controller InstallController) healthyDisposition(currentVersion string) (InstallDisposition, error) {
-	desired := strings.TrimSpace(controller.DesiredVersion)
-	current := strings.TrimSpace(currentVersion)
-	if desired == "" || current == desired {
-		return InstallNoop, nil
-	}
-	currentSemver := "v" + strings.TrimPrefix(current, "v")
-	desiredSemver := "v" + strings.TrimPrefix(desired, "v")
-	if !semver.IsValid(currentSemver) || !semver.IsValid(desiredSemver) {
-		return "", errors.New("Windows Loki appliance release version is invalid")
-	}
-	switch semver.Compare(currentSemver, desiredSemver) {
-	case -1:
-		return InstallUpgradeRequired, nil
-	case 0:
-		return InstallNoop, nil
-	default:
-		return "", InstallBlockedError{Reason: "appliance-newer-than-frontend"}
-	}
 }
