@@ -217,11 +217,11 @@ On a lifecycle-managed Linux/WSL host they are managed through the integration s
 loki host integration enable browser
 loki host integration disable browser
 
-loki host integration setup signing --identity-name NAME --identity-email EMAIL signing
+loki host integration setup --identity-name NAME --identity-email EMAIL signing
 loki host integration disable signing
 loki host integration remove signing
 
-loki host integration setup github --config-file /secure/github.toml --private-key-file /secure/github-app.pem github
+loki host integration setup --config-file /secure/github.toml --private-key-file /secure/github-app.pem github
 loki host integration disable github
 ```
 

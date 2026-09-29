@@ -62,7 +62,7 @@ loki host rollback
 
 loki host integration list
 loki host integration enable browser
-loki host integration setup signing --identity-name NAME --identity-email EMAIL signing
+loki host integration setup --identity-name NAME --identity-email EMAIL signing
 loki host integration status signing
 loki host integration disable signing
 loki host integration remove signing
@@ -132,14 +132,14 @@ The validator compares OCI configuration and provenance labels, hashes Loki-mana
 
 ## Configure the optional GitHub App
 
-For a lifecycle-managed host, use `loki host integration setup github --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github`, then inspect it with `loki host integration status github`. The source files are import inputs; the managed host owns the resulting private credential after setup.
+For a lifecycle-managed host, use `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github`, then inspect it with `loki host integration status github`. The source files are import inputs; the managed host owns the resulting private credential after setup.
 
 For direct self-hosted Compose, GitHub integration continues to use repository-scoped GitHub App installation tokens with external files. Supply the public App and installation configuration plus the private-key host path to the core Compose services:
 
 ```sh
 export LOKI_GITHUB_CONFIG_FILE=/secure/loki/github.toml
 export LOKI_GITHUB_PRIVATE_KEY_FILE=/secure/loki/github-app.pem
-docker compose up -d --force-recreate runtime mcp
+docker compose up -d --force-recreate launcher executor runtime mcp
 ```
 
 The configuration supports installations on organization and personal accounts. Follow [GitHub App integration](github-app.md) for App registration, permissions, repository selection, configuration format, PEM handling, rotation, and the supported `gh` command contract.
@@ -147,15 +147,20 @@ The configuration supports installations on organization and personal accounts. 
 
 ## Enable optional Git signing
 
-For a lifecycle-managed host, run `loki host integration setup signing --identity-name NAME --identity-email EMAIL signing`. Loki generates an Ed25519 key inside managed state by default; `--key-file` imports an existing private key. Status exposes only the public key and fingerprint. Disable or remove it with `loki host integration disable signing` or `loki host integration remove signing`.
+For a lifecycle-managed host, run `loki host integration setup --identity-name NAME --identity-email EMAIL signing`. Loki generates an Ed25519 key inside managed state by default; `--key-file` imports an existing private key. Status exposes only the public key and fingerprint. Disable or remove it with `loki host integration disable signing` or `loki host integration remove signing`.
 
-For direct self-hosted Compose, the core stack starts without signing. Create an unencrypted SSH signing key owned by the host administrator with mode `0600`, then set its absolute path only for the Compose invocation:
+For direct self-hosted Compose, provide an administrator-owned private SSH key (`0600`) and separate public signing files. The public Git configuration must set `user.name`, `user.email`, `user.signingKey = /home/runner/.ssh/id_ed25519.pub`, `gpg.ssh.allowedSignersFile = /etc/loki-go/allowed_signers`, and commit/tag signing. The allowed-signers file contains the signing email followed by the SSH public key. Public files must be readable by the container runner; only the private key is secret.
 
 ```sh
-LOKI_SIGNING_KEY_FILE=/secure/loki-signing-key \
-  docker compose --profile signing up -d
+export COMPOSE_PROJECT_NAME=loki
+export LOKI_SIGNING_KEY_FILE=/secure/loki/signing/id_ed25519
+export LOKI_SIGNING_PUBLIC_KEY_FILE=/secure/loki/signing/id_ed25519.pub
+export LOKI_SIGNING_GIT_CONFIG_FILE=/secure/loki/signing/signing.gitconfig
+export LOKI_SIGNING_ALLOWED_SIGNERS_FILE=/secure/loki/signing/allowed_signers
+export LOKI_SIGNING_SOCKET_VOLUME=loki_signing-socket
+docker compose --profile signing up -d --force-recreate signing launcher mcp
 ```
 
-The signing container uses the same Loki image, has no network or workspace mount, and receives the key read-only. Its private agent socket and state remain in the private `signing-state` volume; runtime and MCP can reach only the restricted public socket in the shared socket volume. The proxy permits signing and public-key listing while rejecting agent mutation requests.
+The signing container has no network or workspace mount and receives the private key read-only. MCP and isolated Jobs receive public signing files and the restricted signing socket, never the key. The private agent socket remains root-only (`0600`); the proxy permits signing and public-key listing while rejecting agent mutation requests. The signing socket volume is separate from runtime-control and Docker sockets.
 
-Disable the option with `docker compose stop signing`. Core runtime and MCP do not depend on the signing service and continue without it.
+To disable signing, stop the signing service, clear the four public signing environment variables above, and recreate `launcher` and `mcp` without the signing profile. A lifecycle-managed installation performs this reconciliation automatically through `loki host integration disable signing`.

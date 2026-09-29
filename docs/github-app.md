@@ -61,7 +61,7 @@ loki integration setup github `
 loki integration doctor github
 ```
 
-On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup github ... github` command. The input PEM is imported into lifecycle-owned private credential state. Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository before setup succeeds. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
+On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository before setup succeeds. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
 
 ## Start with Compose
 
@@ -70,10 +70,10 @@ Direct self-hosted Compose continues to support external configuration and PEM f
 ```sh
 export LOKI_GITHUB_CONFIG_FILE=/secure/loki/github.toml
 export LOKI_GITHUB_PRIVATE_KEY_FILE=/secure/loki/github-app.pem
-docker compose up -d --force-recreate runtime mcp
+docker compose up -d --force-recreate launcher executor runtime mcp
 ```
 
-Compose mounts the public configuration into both services. It mounts the PEM only into `runtime` at `/run/loki-private/github-app-private-key`; a root-owned `0700` tmpfs protects its parent directory from the MCP and runner identities. The PEM is never copied into the image, named volumes, workspace, or backup state.
+Compose mounts the public configuration into `launcher`, `executor`, `runtime`, and `mcp` so their effective policy stays consistent. It mounts the PEM only into `runtime` at `/run/loki-private/github-app-private-key`; a root-owned `0700` tmpfs protects its parent directory from the MCP and runner identities. The PEM is never copied into the image, named volumes, workspace, or backup state.
 
 The core stack remains usable with the repository's empty GitHub configuration and no PEM. `loki status` reports whether GitHub is configured and whether its credential source is available without reading or returning the key.
 
@@ -82,7 +82,7 @@ To rotate a key, atomically replace the host PEM and recreate `runtime`. Recreat
 ```sh
 install -m 0600 /secure/loki/github-app.pem.new /secure/loki/github-app.pem.next
 mv /secure/loki/github-app.pem.next /secure/loki/github-app.pem
-docker compose up -d --force-recreate runtime mcp
+docker compose up -d --force-recreate launcher executor runtime mcp
 ```
 
 Recreating runtime clears cached installation tokens. GitHub installation tokens are minted for one configured repository and expire automatically.
