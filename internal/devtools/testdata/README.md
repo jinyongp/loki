@@ -9,12 +9,14 @@ Task definition edits, validation mutations, doctor execution, backup/cleanup,
 secret management, generic command execution, and runtime lifecycle mutations
 remain excluded.
 
-The reviewed release basis is devtools v0.19.10 at commit
-`f1551152ced34de995856f95dddcd47a69596b0e` (reviewed 2026-09-29).
-The v0.19.10 task CLI retains the same Loki-approved protocol-3 executable
-contract fingerprint as the v0.19.9 baseline. The reviewed upstream delta is
-confined to task JSON decode size handling and context response compaction,
-without CLI schema or command-surface drift. Loki does not expose those forms: generic
+The reviewed release basis is devtools v0.19.12 at commit
+`9ae37040517f1aa7b8b5efc8f5cf20af390b2827` (reviewed 2026-09-29).
+The embedded consumer subset was originally captured from v0.19.10. Review of
+the v0.19.10..v0.19.12 delta found no approved CLI schema or command-surface
+drift; the changes are confined to task input cancellation, Unicode validation,
+impact/context internals, proxy caching, and tests. The release gate still
+rebuilds the exact pinned binary and requires its protocol-3 contract fingerprint
+to match this embedded baseline before publication. Loki does not expose those forms: generic
 `Client.Call` rejects coordination queries and mutations, while
 `QueryCoordination` and `MutateCoordination` construct their accepted inputs
 from typed Loki requests. The reviewed baseline nevertheless fingerprints the
@@ -28,7 +30,7 @@ protected session state. Runtime verification reads the selected binary's actual
 catalog before any call and requires the approved contract fingerprint to match
 this reviewed baseline.
 
-Reviewed v0.19.10 source includes `internal/cli/processes.go`,
+The original v0.19.10 baseline review included `internal/cli/processes.go`,
 `internal/cli/schema.go`, `internal/cli/commands.go`,
 `internal/cli/cli.go`, `internal/cli/tasks.go`,
 `internal/cli/task_schema.go`, `internal/tasks/commands.go`,
