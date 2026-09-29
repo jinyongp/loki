@@ -966,11 +966,12 @@ jobs:
 
       - name: Publish immutable GitHub Release
         id: release
-        uses: releaseway/actions@49c543357d96884d0e5a683c45d45ebd50a8b612 # v0.1.4
+        uses: releaseway/actions@4fdc624aafb0c824fb81dd7aaf59031bb1f5aa0f # v0.2.0
         with:
           tag: ${{ needs.preflight.outputs.tag }}
           commit: ${{ github.sha }}
           assets: publication/assets/*
+          notes: file
           notes-file: publication/assets/loki-release-notes.md
           title: ${{ needs.preflight.outputs.tag }}
           latest: "true"
