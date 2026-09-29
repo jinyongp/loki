@@ -11,9 +11,10 @@ import (
 	"loki/internal/progress"
 )
 
-// v0.1.29 first exposes absent OAuth discovery outside the bearer gate.
+// v0.1.31 makes Loki's stateful MCP endpoint explicitly reject modern
+// server/discover so OpenAI clients fall back to the session-bound handshake.
 // Frontend-only releases do not change this server requirement.
-const openAIMinimumServerRelease = "v0.1.29"
+const openAIMinimumServerRelease = "v0.1.31"
 
 func connectionSetupCompatibilityError(frontendRelease, applianceVersion string, updatePrepared bool) error {
 	frontend := normalizedReleaseTag(frontendRelease)
