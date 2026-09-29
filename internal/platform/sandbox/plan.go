@@ -39,6 +39,7 @@ var (
 	envNamePattern       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	endpointNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	toolchainNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	volumeNamePattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 )
 
 type NetworkProfile string
@@ -79,10 +80,18 @@ type GatewayPolicy struct {
 	tmpfsBytes        int64
 }
 
+type SigningPolicyOptions struct {
+	SocketVolume   string
+	PublicKey      string
+	GitConfig      string
+	AllowedSigners string
+}
+
 type PolicyOptions struct {
 	GenerationSHA256   string
 	Image              string
 	Gateway            GatewayPolicyOptions
+	Signing            SigningPolicyOptions
 	Workspace          string
 	InputDirectory     string
 	ToolchainDirectory string
@@ -93,11 +102,33 @@ type PolicyOptions struct {
 	TmpfsBytes         int64
 }
 
+type signingPolicy struct {
+	socketVolume   string
+	publicKey      string
+	gitConfig      string
+	allowedSigners string
+}
+
+func (s signingPolicy) enabled() bool {
+	return s.socketVolume != ""
+}
+
+func (s signingPolicy) valid() bool {
+	if !s.enabled() {
+		return s.publicKey == "" && s.gitConfig == "" && s.allowedSigners == ""
+	}
+	return volumeNamePattern.MatchString(s.socketVolume) &&
+		cleanAbsoluteNonRoot(s.publicKey) &&
+		cleanAbsoluteNonRoot(s.gitConfig) &&
+		cleanAbsoluteNonRoot(s.allowedSigners)
+}
+
 type Policy struct {
 	generationSHA256   string
 	sandboxSHA256      string
 	image              string
 	gateway            GatewayPolicy
+	signing            signingPolicy
 	workspace          string
 	inputDirectory     string
 	toolchainDirectory string
@@ -135,6 +166,7 @@ type Plan struct {
 	endpoints          []EndpointSpec
 	toolchains         []ToolchainMount
 	gateway            GatewayPolicy
+	signing            signingPolicy
 	inputDirectory     string
 	toolchainDirectory string
 	inputPath          string
@@ -248,12 +280,36 @@ func (g GatewayPolicy) valid() bool {
 		g.tmpfsBytes <= g.memoryBytes
 }
 
+func normalizeSigningPolicy(options SigningPolicyOptions) (signingPolicy, error) {
+	values := []string{options.SocketVolume, options.PublicKey, options.GitConfig, options.AllowedSigners}
+	present := 0
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			present++
+		}
+	}
+	if present == 0 {
+		return signingPolicy{}, nil
+	}
+	if present != len(values) || !volumeNamePattern.MatchString(options.SocketVolume) ||
+		!cleanAbsoluteNonRoot(options.PublicKey) ||
+		!cleanAbsoluteNonRoot(options.GitConfig) ||
+		!cleanAbsoluteNonRoot(options.AllowedSigners) {
+		return signingPolicy{}, errors.New("sandbox signing authority is incomplete or invalid")
+	}
+	return signingPolicy{
+		socketVolume: options.SocketVolume, publicKey: options.PublicKey,
+		gitConfig: options.GitConfig, allowedSigners: options.AllowedSigners,
+	}, nil
+}
+
 func sandboxPolicyFingerprint(
 	generationSHA256, image, workspace, inputDirectory, toolchainDirectory string,
 	uid, gid uint32,
 	environment []string,
 	memoryBytes, pids, tmpfsBytes int64,
 	gateway GatewayPolicy,
+	signing signingPolicy,
 ) (string, error) {
 	payload := struct {
 		GenerationSHA256   string   `json:"generation_sha256"`
@@ -277,6 +333,12 @@ func sandboxPolicyFingerprint(
 			PIDs              int64  `json:"pids"`
 			TmpfsBytes        int64  `json:"tmpfs_bytes"`
 		} `json:"gateway"`
+		Signing struct {
+			SocketVolume   string `json:"socket_volume,omitempty"`
+			PublicKey      string `json:"public_key,omitempty"`
+			GitConfig      string `json:"git_config,omitempty"`
+			AllowedSigners string `json:"allowed_signers,omitempty"`
+		} `json:"signing,omitempty"`
 	}{
 		GenerationSHA256: generationSHA256, Image: image, Workspace: workspace, InputDirectory: inputDirectory,
 		ToolchainDirectory: toolchainDirectory, UID: uid, GID: gid, Environment: append([]string(nil), environment...),
@@ -290,6 +352,10 @@ func sandboxPolicyFingerprint(
 	payload.Gateway.MemoryBytes = gateway.memoryBytes
 	payload.Gateway.PIDs = gateway.pids
 	payload.Gateway.TmpfsBytes = gateway.tmpfsBytes
+	payload.Signing.SocketVolume = signing.socketVolume
+	payload.Signing.PublicKey = signing.publicKey
+	payload.Signing.GitConfig = signing.gitConfig
+	payload.Signing.AllowedSigners = signing.allowedSigners
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -334,16 +400,20 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if err != nil {
 		return Policy{}, err
 	}
+	signing, err := normalizeSigningPolicy(options.Signing)
+	if err != nil {
+		return Policy{}, err
+	}
 	sandboxSHA256, err := sandboxPolicyFingerprint(
 		options.GenerationSHA256, options.Image, options.Workspace, options.InputDirectory, options.ToolchainDirectory,
-		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway,
+		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway, signing,
 	)
 	if err != nil {
 		return Policy{}, err
 	}
 	return Policy{
 		generationSHA256: options.GenerationSHA256, sandboxSHA256: sandboxSHA256,
-		image: options.Image, gateway: gateway, workspace: options.Workspace, inputDirectory: options.InputDirectory,
+		image: options.Image, gateway: gateway, signing: signing, workspace: options.Workspace, inputDirectory: options.InputDirectory,
 		toolchainDirectory: options.ToolchainDirectory, uid: options.UID, gid: options.GID, environment: environment,
 		memoryBytes: options.MemoryBytes, pids: options.PIDs, tmpfsBytes: options.TmpfsBytes,
 	}, nil
@@ -351,7 +421,7 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 
 func (p Policy) Valid() bool {
 	if !digestPattern.MatchString(p.generationSHA256) || !digestPattern.MatchString(p.sandboxSHA256) ||
-		!imageDigestPattern.MatchString(p.image) || !p.gateway.valid() ||
+		!imageDigestPattern.MatchString(p.image) || !p.gateway.valid() || !p.signing.valid() ||
 		!cleanAbsoluteNonRoot(p.workspace) ||
 		p.inputDirectory != "" && !cleanAbsoluteNonRoot(p.inputDirectory) ||
 		p.toolchainDirectory != "" && !cleanAbsoluteNonRoot(p.toolchainDirectory) ||
@@ -371,7 +441,7 @@ func (p Policy) Valid() bool {
 	}
 	fingerprint, err := sandboxPolicyFingerprint(
 		p.generationSHA256, p.image, p.workspace, p.inputDirectory, p.toolchainDirectory, p.uid, p.gid, p.environment,
-		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway,
+		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway, p.signing,
 	)
 	return err == nil && fingerprint == p.sandboxSHA256
 }
@@ -525,6 +595,10 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		return Plan{}, err
 	}
 	environment := append([]string(nil), p.environment...)
+	if p.signing.enabled() {
+		environment = append(environment, "SSH_AUTH_SOCK=/run/loki/signing/agent.sock")
+		sort.Strings(environment)
+	}
 	tmpfs := fmt.Sprintf("rw,noexec,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", p.tmpfsBytes, p.uid, p.gid)
 	needsGateway := network == NetworkDependencyInstall || len(endpoints) > 0
 	create := dockerCreateRequest{
@@ -560,6 +634,14 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 			Init:         true,
 		},
 	}
+	if p.signing.enabled() {
+		create.HostConfig.Mounts = append(create.HostConfig.Mounts,
+			dockerMount{Type: "volume", Source: p.signing.socketVolume, Target: "/run/loki/signing", ReadOnly: true},
+			dockerMount{Type: "bind", Source: p.signing.publicKey, Target: "/home/runner/.ssh/id_ed25519.pub", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
+			dockerMount{Type: "bind", Source: p.signing.gitConfig, Target: "/etc/loki-go/signing.gitconfig", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
+			dockerMount{Type: "bind", Source: p.signing.allowedSigners, Target: "/etc/loki-go/allowed_signers", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
+		)
+	}
 	for _, toolchain := range toolchains {
 		create.HostConfig.Mounts = append(create.HostConfig.Mounts, dockerMount{
 			Type: "bind", Source: toolchain.Source, Target: path.Join("/opt/loki/managed", toolchain.Family), ReadOnly: true,
@@ -576,7 +658,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	return Plan{
 		valid: true, name: resource.Name(), policySHA256: p.generationSHA256,
 		sandboxSHA256: p.sandboxSHA256, resource: resource, network: network,
-		endpoints: endpoints, toolchains: toolchains, gateway: p.gateway,
+		endpoints: endpoints, toolchains: toolchains, gateway: p.gateway, signing: p.signing,
 		inputDirectory: p.inputDirectory, toolchainDirectory: p.toolchainDirectory, inputPath: spec.InputPath,
 		maxOutputBytes: spec.MaxOutputBytes, create: create,
 	}, nil
@@ -621,7 +703,7 @@ func (p Plan) Valid() bool {
 		p.sandboxSHA256 != p.resource.SandboxSHA256() ||
 		!digestPattern.MatchString(p.sandboxSHA256) || !p.network.Valid() ||
 		p.maxOutputBytes < 0 || p.maxOutputBytes > maxRunOutputBytes ||
-		!p.gateway.valid() || p.create.Image == "" || !p.resource.owns(p.create.Labels) {
+		!p.gateway.valid() || !p.signing.valid() || p.create.Image == "" || !p.resource.owns(p.create.Labels) {
 		return false
 	}
 	if p.inputPath != "" {

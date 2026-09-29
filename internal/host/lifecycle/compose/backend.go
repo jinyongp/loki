@@ -539,16 +539,9 @@ func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
 			return RuntimeReadiness{}, errors.New("compose lifecycle readiness input is not a regular file")
 		}
 	}
-	env := []string{
-		"LOKI_IMAGE=" + state.CoreImage,
-		"LOKI_JOB_IMAGE=" + state.CoreImage,
-		"LOKI_WORKSPACE=" + state.Workspace,
-		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
-		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
-		"LOKI_INGRESS_CONFIG_FILE=" + ingressPath,
-		"LOKI_GITHUB_CONFIG_FILE=" + githubPath,
-		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
-		"LOKI_SIGNING_KEY_FILE=/dev/null",
+	env, err := b.composeEnvironment(ctx, state, githubPath, ingressPath)
+	if err != nil {
+		return RuntimeReadiness{}, err
 	}
 	if state.BrowserImage != "" {
 		env = append(env, "LOKI_BROWSER_IMAGE="+state.BrowserImage)
@@ -833,6 +826,118 @@ func (b *Backend) materializeIngressConfig(hosts []string) (string, error) {
 	return path, nil
 }
 
+func containsProfile(profiles []string, name string) bool {
+	for _, profile := range profiles {
+		if profile == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *Backend) materializeSigningPublicFiles(ctx context.Context, store *lifecycle.FileStore) (map[string]string, error) {
+	if store == nil {
+		return nil, errors.New("managed signing store is not configured")
+	}
+	dir := filepath.Join(b.runtimeRoot, "signing-public")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("managed signing public projection directory is invalid")
+	}
+	items := []struct {
+		relative string
+		name     string
+	}{
+		{lifecycle.ManagedSigningPublicKeyFile, "id_ed25519.pub"},
+		{lifecycle.ManagedSigningGitConfigFile, "signing.gitconfig"},
+		{lifecycle.ManagedSigningAllowedSignersFile, "allowed_signers"},
+	}
+	result := make(map[string]string, len(items))
+	for _, item := range items {
+		raw, readErr := store.ReadManagedIntegrationFile(ctx, item.relative, true)
+		if readErr != nil {
+			return nil, fmt.Errorf("managed signing integration file %s is unavailable: %w", item.relative, readErr)
+		}
+		target := filepath.Join(dir, item.name)
+		if err = safeio.PublishPrivate(target, raw, true); err != nil {
+			return nil, err
+		}
+		if err = os.Chmod(target, 0644); err != nil {
+			return nil, err
+		}
+		result[item.relative] = target
+	}
+	return result, nil
+}
+
+func (b *Backend) composeEnvironment(
+	ctx context.Context,
+	state runtimeState,
+	githubConfigPath string,
+	ingressPath string,
+) ([]string, error) {
+	env := []string{
+		"LOKI_IMAGE=" + state.CoreImage,
+		"LOKI_JOB_IMAGE=" + state.CoreImage,
+		"LOKI_WORKSPACE=" + state.Workspace,
+		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
+		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
+		"LOKI_INGRESS_CONFIG_FILE=" + ingressPath,
+		"LOKI_GITHUB_CONFIG_FILE=" + githubConfigPath,
+		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
+		"LOKI_SIGNING_KEY_FILE=/dev/null",
+		"LOKI_SIGNING_PUBLIC_KEY_FILE=/dev/null",
+		"LOKI_SIGNING_GIT_CONFIG_FILE=/dev/null",
+		"LOKI_SIGNING_ALLOWED_SIGNERS_FILE=/dev/null",
+		"LOKI_SIGNING_SOCKET_VOLUME=",
+	}
+	if !containsProfile(state.Profiles, "signing") {
+		return env, nil
+	}
+	store, err := lifecycle.OpenFileStore(b.root)
+	if err != nil {
+		return nil, err
+	}
+	integrations, err := store.ReadManagedIntegrations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !integrations.Signing.Configured || !integrations.Signing.Enabled {
+		return nil, errors.New("signing profile requires a configured and enabled managed signing integration")
+	}
+	if _, err = store.ReadManagedIntegrationFile(ctx, lifecycle.ManagedSigningCredentialFile, true); err != nil {
+		return nil, fmt.Errorf("managed signing private key is unavailable: %w", err)
+	}
+	privateKeyPath, err := store.ManagedIntegrationFilePath(lifecycle.ManagedSigningCredentialFile)
+	if err != nil {
+		return nil, err
+	}
+	public, err := b.materializeSigningPublicFiles(ctx, store)
+	if err != nil {
+		return nil, err
+	}
+	replacements := map[string]string{
+		"LOKI_SIGNING_KEY_FILE":             privateKeyPath,
+		"LOKI_SIGNING_PUBLIC_KEY_FILE":      public[lifecycle.ManagedSigningPublicKeyFile],
+		"LOKI_SIGNING_GIT_CONFIG_FILE":      public[lifecycle.ManagedSigningGitConfigFile],
+		"LOKI_SIGNING_ALLOWED_SIGNERS_FILE": public[lifecycle.ManagedSigningAllowedSignersFile],
+		"LOKI_SIGNING_SOCKET_VOLUME":        b.volumeName("signing-socket"),
+	}
+	for index, value := range env {
+		name, _, found := strings.Cut(value, "=")
+		if !found {
+			continue
+		}
+		if replacement, ok := replacements[name]; ok {
+			env[index] = name + "=" + replacement
+		}
+	}
+	return env, nil
+}
+
 func (b *Backend) compose(ctx context.Context, state runtimeState, command ...string) ([]byte, error) {
 	if err := b.ensureAssetsAndToken(); err != nil {
 		return nil, err
@@ -845,16 +950,9 @@ func (b *Backend) compose(ctx context.Context, state runtimeState, command ...st
 	if err != nil {
 		return nil, err
 	}
-	env := []string{
-		"LOKI_IMAGE=" + state.CoreImage,
-		"LOKI_JOB_IMAGE=" + state.CoreImage,
-		"LOKI_WORKSPACE=" + state.Workspace,
-		"LOKI_MCP_HOST_PORT=" + strconv.Itoa(state.effectiveMCPPort()),
-		"LOKI_MCP_TOKEN_FILE=" + b.containerTokenPath(),
-		"LOKI_INGRESS_CONFIG_FILE=" + ingressPath,
-		"LOKI_GITHUB_CONFIG_FILE=" + materialized.GitHubConfig,
-		"LOKI_GITHUB_PRIVATE_KEY_FILE=/dev/null",
-		"LOKI_SIGNING_KEY_FILE=/dev/null",
+	env, err := b.composeEnvironment(ctx, state, materialized.GitHubConfig, ingressPath)
+	if err != nil {
+		return nil, err
 	}
 	if state.BrowserImage != "" {
 		env = append(env, "LOKI_BROWSER_IMAGE="+state.BrowserImage)

@@ -80,6 +80,25 @@ func TestBuildLauncherConstructsNarrowRoleInputs(t *testing.T) {
 	}
 }
 
+func TestBuildLauncherAcceptsTrustedSigningAuthority(t *testing.T) {
+	layout := validLauncherLayout(t)
+	layout.SigningSocketVolume = "loki_signing-socket"
+	layout.SigningPublicKey = "/var/lib/loki/signing-public/id_ed25519.pub"
+	layout.SigningGitConfig = "/var/lib/loki/signing-public/signing.gitconfig"
+	layout.SigningAllowedSigners = "/var/lib/loki/signing-public/allowed_signers"
+	options, err := buildLauncher(layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := options.Policy.Plan(sandbox.WorkloadSpec{
+		ID: strings.Repeat("d", 32), PolicySHA256: layout.PolicySHA256,
+		CWD: ".", Argv: []string{"/usr/bin/git", "status"},
+	})
+	if err != nil || !plan.Valid() {
+		t.Fatalf("trusted signing policy plan=%#v err=%v", plan, err)
+	}
+}
+
 func TestOpenLauncherJournalOwnsConfiguredPrivateState(t *testing.T) {
 	layout := validLauncherLayout(t)
 	journal, err := openLauncherJournal(layout)
@@ -136,6 +155,13 @@ func TestBuildLauncherRejectsUnsafeLayout(t *testing.T) {
 		{"gateway-pids", func(l *launcherLayout) { l.GatewayPIDs = 1 }},
 		{"gateway-tmpfs", func(l *launcherLayout) { l.GatewayTmpfsBytes = 1 }},
 		{"workspace-relative", func(l *launcherLayout) { l.Workspace = "workspace" }},
+		{"signing-partial", func(l *launcherLayout) { l.SigningSocketVolume = "loki_signing-socket" }},
+		{"signing-volume", func(l *launcherLayout) {
+			l.SigningSocketVolume = "../bad"
+			l.SigningPublicKey = "/var/lib/loki/signing-public/id_ed25519.pub"
+			l.SigningGitConfig = "/var/lib/loki/signing-public/signing.gitconfig"
+			l.SigningAllowedSigners = "/var/lib/loki/signing-public/allowed_signers"
+		}},
 		{"memory", func(l *launcherLayout) { l.MemoryBytes = 1 }},
 		{"pids", func(l *launcherLayout) { l.PIDs = 1 }},
 		{"tmpfs", func(l *launcherLayout) { l.TmpfsBytes = 1 }},

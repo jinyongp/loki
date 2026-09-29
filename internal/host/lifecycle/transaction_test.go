@@ -29,6 +29,7 @@ type fakeTransactionBackend struct {
 	healthCalls    int
 	healthErr      error
 	restoreErr     error
+	restoreHook    func() error
 	stopped        bool
 }
 
@@ -91,6 +92,11 @@ func (b *fakeTransactionBackend) Health(context.Context) error {
 func (b *fakeTransactionBackend) Restore(_ context.Context, ref string) error {
 	if b.restoreErr != nil {
 		return b.restoreErr
+	}
+	if b.restoreHook != nil {
+		if err := b.restoreHook(); err != nil {
+			return err
+		}
 	}
 	value, ok := b.snapshots[ref]
 	if !ok {
@@ -495,6 +501,94 @@ func TestTransactionComponentFailureRestoresPreviousState(t *testing.T) {
 	}
 	if !integrations.Browser.Enabled {
 		t.Fatalf("browser integration projection was not recovered: %#v", integrations.Browser)
+	}
+}
+
+func TestManagedSigningRemovalFailureRestoresCredentialBeforeRuntime(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	oldKey := []byte("old-managed-signing-key")
+	oldDigest, err := store.WriteManagedIntegrationFile(t.Context(), ManagedSigningCredentialFile, oldKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicInfo := []byte(`{"version":1,"public_key":"ssh-ed25519 AAAAfixture","fingerprint":"SHA256:fixture","identity_name":"Signing Test","identity_email":"signing@example.test"}` + "\n")
+	for _, item := range []struct {
+		path string
+		raw  []byte
+	}{
+		{ManagedSigningPublicInfoFile, publicInfo},
+		{ManagedSigningPublicKeyFile, []byte("ssh-ed25519 AAAAfixture\n")},
+		{ManagedSigningGitConfigFile, []byte("[commit]\n\tgpgSign = true\n")},
+		{ManagedSigningAllowedSignersFile, []byte("signing@example.test ssh-ed25519 AAAAfixture\n")},
+	} {
+		if _, err = store.WriteManagedIntegrationFile(t.Context(), item.path, item.raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	integrations := DefaultManagedIntegrationState()
+	integrations.Signing = ManagedIntegrationToggle{
+		Configured: true, Enabled: true, CredentialSHA256: oldDigest,
+		ConfigSHA256: ManagedIntegrationDigest(publicInfo),
+	}
+	if err = store.CommitManagedIntegrations(t.Context(), integrations, "fixture-signing", now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.CommitComponents(t.Context(), []string{"browser", "signing"}, now.Add(-30*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	backend.components["signing"] = true
+	backend.healthErr = errors.New("signing health failed")
+	backend.restoreHook = func() error {
+		raw, readErr := store.ReadManagedIntegrationFile(t.Context(), ManagedSigningCredentialFile, true)
+		if readErr != nil {
+			return readErr
+		}
+		if string(raw) != string(oldKey) {
+			return errors.New("managed signing credential was not restored before runtime recovery")
+		}
+		state, readErr := store.ReadManagedIntegrations(t.Context())
+		if readErr != nil {
+			return readErr
+		}
+		if !state.Signing.Configured || !state.Signing.Enabled {
+			return errors.New("managed signing state was not restored before runtime recovery")
+		}
+		return nil
+	}
+
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+	err = engine.UpdateManagedComponentIntegration(t.Context(), "signing", false, func(ctx context.Context, store *FileStore) error {
+		for _, path := range []string{
+			ManagedSigningCredentialFile,
+			ManagedSigningPublicInfoFile,
+			ManagedSigningPublicKeyFile,
+			ManagedSigningGitConfigFile,
+			ManagedSigningAllowedSignersFile,
+		} {
+			if removeErr := store.RemoveManagedIntegrationFile(ctx, path); removeErr != nil {
+				return removeErr
+			}
+		}
+		state, readErr := store.ReadManagedIntegrations(ctx)
+		if readErr != nil {
+			return readErr
+		}
+		state.Signing = ManagedIntegrationToggle{}
+		return store.CommitManagedIntegrations(ctx, state, "remove-signing", now)
+	})
+	if err == nil || !strings.Contains(err.Error(), "signing health failed") {
+		t.Fatalf("signing removal error=%v", err)
+	}
+	raw, err := store.ReadManagedIntegrationFile(t.Context(), ManagedSigningCredentialFile, true)
+	if err != nil || string(raw) != string(oldKey) {
+		t.Fatalf("signing credential after recovery=%q err=%v", raw, err)
+	}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(snapshot.Host.EnabledComponents, "signing") || !backend.components["signing"] {
+		t.Fatalf("signing component after recovery host=%#v backend=%#v", snapshot.Host.EnabledComponents, backend.components)
 	}
 }
 

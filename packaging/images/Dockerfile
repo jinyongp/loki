@@ -39,7 +39,8 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
       'workspace:x:10001:runner' \
       'egress:x:10002:' \
       > /rootfs/etc/group \
- && install -d -o 10000 -g 10000 -m 0700 /rootfs/home/runner \
+ && install -d -o 10000 -g 10000 -m 0700 /rootfs/home/runner /rootfs/home/runner/.ssh \
+ && install -d -o 0 -g 0 -m 0755 /rootfs/etc/loki-go \
  && ln -s /opt/loki/bin/loki /rootfs/usr/local/bin/loki \
  && ln -s /opt/loki/libexec/devtools /rootfs/usr/local/bin/devtools \
  && ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/node \

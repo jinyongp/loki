@@ -210,6 +210,14 @@ prepare_signing_identity() {
   printf '%s %s\n' "$identity_email" "$public_key" > "$config/allowed_signers"
   chown root:root "$config/allowed_signers"
   chmod 0644 "$config/allowed_signers"
+  : > "$config/signing.gitconfig"
+  git config --file "$config/signing.gitconfig" user.signingKey /home/runner/.ssh/id_ed25519.pub
+  git config --file "$config/signing.gitconfig" gpg.ssh.allowedSignersFile /etc/loki-go/allowed_signers
+  git config --file "$config/signing.gitconfig" commit.gpgSign true
+  git config --file "$config/signing.gitconfig" tag.gpgSign true
+  git config --file "$config/signing.gitconfig" tag.forceSignAnnotated true
+  chown root:root "$config/signing.gitconfig"
+  chmod 0644 "$config/signing.gitconfig"
 }
 
 health() {

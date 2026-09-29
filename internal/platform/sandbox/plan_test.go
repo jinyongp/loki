@@ -141,6 +141,107 @@ func TestWorkloadSpecValidation(t *testing.T) {
 	}
 }
 
+func TestPlanInjectsOnlyTrustedSigningAuthority(t *testing.T) {
+	options := validPolicyOptions()
+	options.Signing = SigningPolicyOptions{
+		SocketVolume:   "loki_signing-socket",
+		PublicKey:      "/var/lib/loki/signing-public/id_ed25519.pub",
+		GitConfig:      "/var/lib/loki/signing-public/signing.gitconfig",
+		AllowedSigners: "/var/lib/loki/signing-public/allowed_signers",
+	}
+	policy, err := NewPolicy(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := policy.Plan(validWorkloadSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Valid() {
+		t.Fatal("signing plan is invalid")
+	}
+	if len(plan.create.HostConfig.Mounts) != 5 {
+		t.Fatalf("signing mounts=%#v", plan.create.HostConfig.Mounts)
+	}
+	wantMounts := map[string]dockerMount{
+		"/run/loki/signing": {
+			Type: "volume", Source: options.Signing.SocketVolume,
+			Target: "/run/loki/signing", ReadOnly: true,
+		},
+		"/home/runner/.ssh/id_ed25519.pub": {
+			Type: "bind", Source: options.Signing.PublicKey,
+			Target: "/home/runner/.ssh/id_ed25519.pub", ReadOnly: true,
+			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
+		},
+		"/etc/loki-go/signing.gitconfig": {
+			Type: "bind", Source: options.Signing.GitConfig,
+			Target: "/etc/loki-go/signing.gitconfig", ReadOnly: true,
+			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
+		},
+		"/etc/loki-go/allowed_signers": {
+			Type: "bind", Source: options.Signing.AllowedSigners,
+			Target: "/etc/loki-go/allowed_signers", ReadOnly: true,
+			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
+		},
+	}
+	for _, mount := range plan.create.HostConfig.Mounts[1:] {
+		want, ok := wantMounts[mount.Target]
+		if !ok {
+			t.Fatalf("unexpected signing mount=%#v", mount)
+		}
+		if mount.Type != want.Type || mount.Source != want.Source || mount.Target != want.Target || mount.ReadOnly != want.ReadOnly {
+			t.Fatalf("signing mount=%#v want=%#v", mount, want)
+		}
+		delete(wantMounts, mount.Target)
+	}
+	if len(wantMounts) != 0 {
+		t.Fatalf("missing signing mounts=%#v", wantMounts)
+	}
+	foundAgent := false
+	for _, value := range plan.create.Env {
+		if value == "SSH_AUTH_SOCK=/run/loki/signing/agent.sock" {
+			foundAgent = true
+		}
+		if strings.Contains(value, "PRIVATE") {
+			t.Fatalf("signing environment leaked private material: %q", value)
+		}
+	}
+	if !foundAgent {
+		t.Fatalf("signing environment=%#v", plan.create.Env)
+	}
+
+	disabled, err := NewPolicy(validPolicyOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabledPlan, err := disabled.Plan(validWorkloadSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disabledPlan.create.HostConfig.Mounts) != 1 {
+		t.Fatalf("disabled signing mounts=%#v", disabledPlan.create.HostConfig.Mounts)
+	}
+	for _, value := range disabledPlan.create.Env {
+		if strings.HasPrefix(value, "SSH_AUTH_SOCK=") {
+			t.Fatalf("disabled signing environment=%#v", disabledPlan.create.Env)
+		}
+	}
+
+	for _, mutate := range []func(*PolicyOptions){
+		func(o *PolicyOptions) { o.Signing.SocketVolume = "" },
+		func(o *PolicyOptions) { o.Signing.SocketVolume = "../socket" },
+		func(o *PolicyOptions) { o.Signing.PublicKey = "relative.pub" },
+		func(o *PolicyOptions) { o.Signing.GitConfig = "/" },
+		func(o *PolicyOptions) { o.Signing.AllowedSigners = "" },
+	} {
+		invalid := options
+		mutate(&invalid)
+		if _, err = NewPolicy(invalid); err == nil {
+			t.Fatalf("invalid signing policy accepted: %#v", invalid.Signing)
+		}
+	}
+}
+
 func TestPlanMountsOnlyImmutableManagedToolchainGenerations(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "toolchains")
 	generations := filepath.Join(store, "generations")

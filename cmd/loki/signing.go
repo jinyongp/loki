@@ -73,7 +73,11 @@ func runSigningAgent(args []string, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	grant := signing.NewSSHSignatureGrant(uint32(*runner))
-	err := signing.RunAgent(ctx, signing.AgentOptions{PrivateSocket: *private, PublicSocket: *public, Key: *key, Grant: grant, SocketGID: *group, Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }})
+	err := signing.RunAgent(ctx, signing.AgentOptions{
+		PrivateSocket: *private, PublicSocket: *public, Key: *key, Grant: grant,
+		SocketUID: int(*runner), SocketGID: *group,
+		Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") },
+	})
 	if err != nil {
 		fmt.Fprintln(stderr, "signing agent failed:", err)
 		return 1

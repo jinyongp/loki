@@ -130,13 +130,18 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		!slices.Equal(secretNames(compose.Services["runtime"].Configs), []string{"github_config"}) ||
 		!slices.Equal(secretNames(compose.Services["launcher"].Configs), []string{"github_config"}) ||
 		!slices.Equal(secretNames(compose.Services["executor"].Configs), []string{"github_config"}) ||
-		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{"github_config", "ingress_config"}) {
-		t.Fatal("GitHub config and private key injection boundary is invalid")
+		!slices.Equal(secretNames(compose.Services["mcp"].Configs), []string{
+			"github_config", "ingress_config", "signing_public_key", "signing_git_config", "signing_allowed_signers",
+		}) {
+		t.Fatal("GitHub/signing config and private key injection boundary is invalid")
 	}
 	if compose.Configs["github_config"].File != "${LOKI_GITHUB_CONFIG_FILE:-./config/github.compose.toml}" ||
 		compose.Configs["ingress_config"].File != "${LOKI_INGRESS_CONFIG_FILE:-./config/ingress.compose.toml}" ||
+		compose.Configs["signing_public_key"].File != "${LOKI_SIGNING_PUBLIC_KEY_FILE:-/dev/null}" ||
+		compose.Configs["signing_git_config"].File != "${LOKI_SIGNING_GIT_CONFIG_FILE:-/dev/null}" ||
+		compose.Configs["signing_allowed_signers"].File != "${LOKI_SIGNING_ALLOWED_SIGNERS_FILE:-/dev/null}" ||
 		compose.Secrets["github_app_private_key"].File != "${LOKI_GITHUB_PRIVATE_KEY_FILE:-/dev/null}" {
-		t.Fatal("GitHub Compose sources are invalid")
+		t.Fatal("GitHub/signing Compose sources are invalid")
 	}
 	if !slices.Contains(compose.Services["runtime"].Tmpfs, "/run/loki-private:uid=0,gid=0,mode=0700") {
 		t.Fatal("GitHub private runtime tmpfs is missing")
@@ -150,6 +155,9 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 		secretTarget(compose.Services["runtime"].Configs, "github_config") != "/etc/loki/github.toml" ||
 		secretTarget(compose.Services["mcp"].Configs, "github_config") != "/etc/loki/github.toml" ||
 		secretTarget(compose.Services["mcp"].Configs, "ingress_config") != "/etc/loki/ingress.toml" ||
+		secretTarget(compose.Services["mcp"].Configs, "signing_public_key") != "/home/runner/.ssh/id_ed25519.pub" ||
+		secretTarget(compose.Services["mcp"].Configs, "signing_git_config") != "/etc/loki-go/signing.gitconfig" ||
+		secretTarget(compose.Services["mcp"].Configs, "signing_allowed_signers") != "/etc/loki-go/allowed_signers" ||
 		!slices.Contains(compose.Services["runtime"].Command, "--github-config") ||
 		!slices.Contains(compose.Services["mcp"].Command, "--github-config") {
 		t.Fatal("GitHub/ingress Compose configuration is incomplete")
@@ -222,7 +230,7 @@ func TestComposeSigningProfileIsPrivateAndOptional(t *testing.T) {
 		!signing.ReadOnly || !slices.Equal(signing.CapDrop, []string{"ALL"}) || !slices.Equal(signing.CapAdd, []string{"CHOWN"}) {
 		t.Fatalf("signing hardening: %#v", signing)
 	}
-	for _, destination := range []string{"/var/lib/loki/signing", "/run/loki"} {
+	for _, destination := range []string{"/var/lib/loki/signing", "/run/loki/signing"} {
 		if !hasMount(signing.Volumes, destination) {
 			t.Errorf("missing signing mount %s", destination)
 		}

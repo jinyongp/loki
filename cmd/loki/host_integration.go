@@ -26,6 +26,10 @@ type hostIntegrationReport struct {
 	ProjectionConsistent bool     `json:"projection_consistent"`
 	RequiredServices     []string `json:"required_services,omitempty"`
 	RunningServices      []string `json:"running_services,omitempty"`
+	PublicKey            string   `json:"public_key,omitempty"`
+	Fingerprint          string   `json:"fingerprint,omitempty"`
+	IdentityName         string   `json:"identity_name,omitempty"`
+	IdentityEmail        string   `json:"identity_email,omitempty"`
 }
 
 type hostIntegrationOptions struct {
@@ -47,8 +51,8 @@ func parseHostIntegrationOptions(action string, args []string, stderr io.Writer)
 	if err := flags.Parse(args); err != nil {
 		return hostIntegrationOptions{}, "", err
 	}
-	if action != "enable" && action != "disable" && *interrupt {
-		return hostIntegrationOptions{}, "", errors.New("--interrupt-active-jobs is valid only for enable or disable")
+	if action != "enable" && action != "disable" && action != "remove" && *interrupt {
+		return hostIntegrationOptions{}, "", errors.New("--interrupt-active-jobs is valid only for enable, disable, or remove")
 	}
 	result := hostIntegrationOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
@@ -98,14 +102,17 @@ func resolveHostIntegrationOptions(options hostIntegrationOptions) (hostIntegrat
 
 func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|enable|disable|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|rotate|enable|disable|remove|doctor ...")
 		return 2
 	}
 	action := args[0]
+	if action == "setup" || action == "rotate" {
+		return runHostSigningSetup(action, args[1:], stdout, stderr)
+	}
 	switch action {
-	case "list", "status", "enable", "disable", "doctor":
+	case "list", "status", "enable", "disable", "remove", "doctor":
 	default:
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|enable|disable|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|rotate|enable|disable|remove|doctor ...")
 		return 2
 	}
 	options, name, err := parseHostIntegrationOptions(action, args[1:], stderr)
@@ -129,18 +136,28 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	ctx := context.Background()
+	manager := lifecycle.Manager{
+		Store: store, Jobs: backend, Maintainer: &lifecycle.TransactionEngine{
+			Store: store, Backend: backend, Now: lifecycleTimeNow,
+		}, Now: lifecycleTimeNow,
+	}
 
 	if action == "enable" || action == "disable" {
-		if name != "browser" {
-			fmt.Fprintf(stderr, "%s integration setup is not available yet; configure it before changing enablement\n", name)
+		if name != "browser" && name != "signing" {
+			fmt.Fprintf(stderr, "%s integration does not use a component enablement profile\n", name)
 			return 1
 		}
-		manager := lifecycle.Manager{
-			Store: store, Jobs: backend, Maintainer: &lifecycle.TransactionEngine{
-				Store: store, Backend: backend, Now: lifecycleTimeNow,
-			}, Now: lifecycleTimeNow,
+		if err = manager.SetComponent(ctx, name, action == "enable", lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
-		if err = manager.SetComponent(ctx, "browser", action == "enable", lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}); err != nil {
+	}
+	if action == "remove" {
+		if name != "signing" {
+			fmt.Fprintf(stderr, "%s integration removal is not available yet\n", name)
+			return 1
+		}
+		if err = removeManagedSigning(ctx, manager, store, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}, lifecycleTimeNow); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
@@ -240,11 +257,33 @@ func inspectHostIntegration(
 		report.Configured = managed.Signing.Configured
 		report.Enabled = slices.Contains(snapshot.Host.EnabledComponents, "signing")
 		report.ProjectionConsistent = managed.Revision == "" || managed.Signing.Enabled == report.Enabled
-		report.Ready = false
 		if !report.Configured {
 			report.State = "unconfigured"
-		} else if !report.Enabled {
+			break
+		}
+		info, infoErr := store.ReadManagedSigningPublicInfo(ctx)
+		if infoErr != nil {
+			report.State = "degraded"
+			break
+		}
+		report.PublicKey = info.PublicKey
+		report.Fingerprint = info.Fingerprint
+		report.IdentityName = info.IdentityName
+		report.IdentityEmail = info.IdentityEmail
+		if !report.Enabled {
 			report.State = "disabled"
+			break
+		}
+		readiness, readyErr := backend.Readiness(ctx)
+		if readyErr != nil {
+			report.State = "degraded"
+			break
+		}
+		report.RequiredServices = []string{"signing"}
+		report.RunningServices = append([]string(nil), readiness.RunningServices...)
+		report.Ready = report.ProjectionConsistent && slices.Contains(readiness.RunningServices, "signing")
+		if report.Ready {
+			report.State = "ready"
 		} else {
 			report.State = "degraded"
 		}

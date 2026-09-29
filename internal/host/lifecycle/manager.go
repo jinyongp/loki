@@ -249,6 +249,44 @@ func (m Manager) SetComponent(ctx context.Context, name string, enabled bool, op
 	return m.Maintainer.SetComponent(ctx, name, enabled)
 }
 
+type ManagedIntegrationMaintainer interface {
+	UpdateManagedIntegration(context.Context, string, ManagedIntegrationMutation) error
+	UpdateManagedComponentIntegration(context.Context, string, bool, ManagedIntegrationMutation) error
+}
+
+func (m Manager) UpdateManagedIntegration(
+	ctx context.Context,
+	name string,
+	mutate ManagedIntegrationMutation,
+	options MutationOptions,
+) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	maintainer, ok := m.Maintainer.(ManagedIntegrationMaintainer)
+	if !ok {
+		return errors.New("host lifecycle managed integration engine is not configured")
+	}
+	return maintainer.UpdateManagedIntegration(ctx, name, mutate)
+}
+
+func (m Manager) UpdateManagedComponentIntegration(
+	ctx context.Context,
+	name string,
+	enabled bool,
+	mutate ManagedIntegrationMutation,
+	options MutationOptions,
+) error {
+	if _, err := m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	maintainer, ok := m.Maintainer.(ManagedIntegrationMaintainer)
+	if !ok {
+		return errors.New("host lifecycle managed integration engine is not configured")
+	}
+	return maintainer.UpdateManagedComponentIntegration(ctx, name, enabled, mutate)
+}
+
 func (m Manager) SetIngressHosts(ctx context.Context, hosts []string, options MutationOptions) error {
 	if _, err := m.mutationJobs(ctx, options); err != nil {
 		return err

@@ -15,7 +15,7 @@ import (
 type AgentOptions struct {
 	PrivateSocket, PublicSocket, Key string
 	Grant                            SSHSignatureGrant
-	SocketGID                        int
+	SocketUID, SocketGID             int
 	Ready                            func() error
 }
 
@@ -24,7 +24,7 @@ type AgentOptions struct {
 // directory cleanup before this role starts.
 func RunAgent(ctx context.Context, o AgentOptions) error {
 	if !filepath.IsAbs(o.Key) || !filepath.IsAbs(o.PrivateSocket) || !filepath.IsAbs(o.PublicSocket) ||
-		filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || !o.Grant.valid || o.SocketGID < 0 {
+		filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || !o.Grant.valid || o.SocketUID < 0 || o.SocketGID < 0 {
 		return errors.New("invalid signing agent layout or grant")
 	}
 	for _, socket := range []string{o.PrivateSocket, o.PublicSocket} {
@@ -94,7 +94,7 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 		return errors.New("cannot create public signing socket")
 	}
 	defer public.Close()
-	if err = os.Chown(o.PublicSocket, -1, o.SocketGID); err != nil {
+	if err = os.Chown(o.PublicSocket, o.SocketUID, o.SocketGID); err != nil {
 		return err
 	}
 	if err = os.Chmod(o.PublicSocket, 0660); err != nil {

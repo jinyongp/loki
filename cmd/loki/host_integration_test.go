@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -87,6 +88,78 @@ func TestInspectHostBrowserIntegrationDisabledReadyAndDegraded(t *testing.T) {
 	}
 	if report.Ready || report.State != "degraded" || report.ProjectionConsistent {
 		t.Fatalf("mismatched browser report=%#v", report)
+	}
+}
+
+func TestInspectHostSigningIntegrationReportsManagedAuthority(t *testing.T) {
+	store, now := hostIntegrationStoreFixture(t)
+	runtime := staticIntegrationRuntime{}
+
+	report, err := inspectHostIntegration(t.Context(), store, runtime, "signing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Configured || report.Enabled || report.Ready || report.State != "unconfigured" {
+		t.Fatalf("unconfigured signing report=%#v", report)
+	}
+
+	private := []byte("managed-signing-private-key")
+	credentialDigest, err := store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedSigningCredentialFile, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := lifecycle.ManagedSigningPublicInfo{
+		Version: 1, PublicKey: "ssh-ed25519 AAAAfixture", Fingerprint: "SHA256:fixture",
+		IdentityName: "Signing Test", IdentityEmail: "signing@example.test",
+	}
+	infoRaw, err := json.Marshal(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	infoRaw = append(infoRaw, '\n')
+	for _, item := range []struct {
+		path string
+		raw  []byte
+	}{
+		{lifecycle.ManagedSigningPublicInfoFile, infoRaw},
+		{lifecycle.ManagedSigningPublicKeyFile, []byte(info.PublicKey + "\n")},
+		{lifecycle.ManagedSigningGitConfigFile, []byte("[commit]\n\tgpgSign = true\n")},
+		{lifecycle.ManagedSigningAllowedSignersFile, []byte(info.IdentityEmail + " " + info.PublicKey + "\n")},
+	} {
+		if _, err = store.WriteManagedIntegrationFile(t.Context(), item.path, item.raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	managed := lifecycle.DefaultManagedIntegrationState()
+	managed.Signing = lifecycle.ManagedIntegrationToggle{
+		Configured: true, Enabled: true, CredentialSHA256: credentialDigest,
+		ConfigSHA256: lifecycle.ManagedIntegrationDigest(infoRaw),
+	}
+	if err = store.CommitManagedIntegrations(t.Context(), managed, "signing-ready", now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.CommitComponents(t.Context(), []string{"signing"}, now.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	runtime.readiness = lifecyclecompose.RuntimeReadiness{
+		Activated: true, GenerationID: "generation", RunningServices: []string{"signing"},
+	}
+	report, err = inspectHostIntegration(t.Context(), store, runtime, "signing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Configured || !report.Enabled || !report.Ready || report.State != "ready" ||
+		report.PublicKey != info.PublicKey || report.Fingerprint != info.Fingerprint {
+		t.Fatalf("ready signing report=%#v", report)
+	}
+
+	runtime.readiness.RunningServices = nil
+	report, err = inspectHostIntegration(t.Context(), store, runtime, "signing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Ready || report.State != "degraded" {
+		t.Fatalf("degraded signing report=%#v", report)
 	}
 }
 

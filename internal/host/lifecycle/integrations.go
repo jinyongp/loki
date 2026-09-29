@@ -24,17 +24,23 @@ const (
 	managedIntegrationStateVersion = 1
 	maxManagedIntegrationFileBytes = 1 << 20
 
-	ManagedIntegrationStateFile  = "integrations/state.json"
-	ManagedGitHubConfigFile      = "integrations/github.toml"
-	ManagedSigningPublicInfoFile = "integrations/signing.json"
-	ManagedGitHubCredentialFile  = "credentials/github-app.pem"
-	ManagedSigningCredentialFile = "credentials/signing-key"
+	ManagedIntegrationStateFile      = "integrations/state.json"
+	ManagedGitHubConfigFile          = "integrations/github.toml"
+	ManagedSigningPublicInfoFile     = "integrations/signing.json"
+	ManagedSigningPublicKeyFile      = "integrations/signing.pub"
+	ManagedSigningGitConfigFile      = "integrations/signing.gitconfig"
+	ManagedSigningAllowedSignersFile = "integrations/signing-allowed-signers"
+	ManagedGitHubCredentialFile      = "credentials/github-app.pem"
+	ManagedSigningCredentialFile     = "credentials/signing-key"
 )
 
 var managedIntegrationFiles = []string{
 	ManagedIntegrationStateFile,
 	ManagedGitHubConfigFile,
 	ManagedSigningPublicInfoFile,
+	ManagedSigningPublicKeyFile,
+	ManagedSigningGitConfigFile,
+	ManagedSigningAllowedSignersFile,
 	ManagedGitHubCredentialFile,
 	ManagedSigningCredentialFile,
 }
@@ -52,6 +58,26 @@ type ManagedIntegrationState struct {
 	Browser  ManagedIntegrationToggle `json:"browser"`
 	Signing  ManagedIntegrationToggle `json:"signing"`
 	GitHub   ManagedIntegrationToggle `json:"github"`
+}
+
+type ManagedSigningPublicInfo struct {
+	Version       int    `json:"version"`
+	PublicKey     string `json:"public_key"`
+	Fingerprint   string `json:"fingerprint"`
+	IdentityName  string `json:"identity_name"`
+	IdentityEmail string `json:"identity_email"`
+}
+
+func (i ManagedSigningPublicInfo) Valid() bool {
+	return i.Version == 1 &&
+		strings.HasPrefix(i.PublicKey, "ssh-ed25519 ") &&
+		len(i.PublicKey) <= 16384 && !strings.ContainsAny(i.PublicKey, "\r\n\x00") &&
+		strings.HasPrefix(i.Fingerprint, "SHA256:") &&
+		len(i.Fingerprint) <= 256 && !strings.ContainsAny(i.Fingerprint, "\r\n\x00") &&
+		strings.TrimSpace(i.IdentityName) == i.IdentityName && i.IdentityName != "" &&
+		len(i.IdentityName) <= 256 && !strings.ContainsAny(i.IdentityName, "\r\n\x00") &&
+		strings.TrimSpace(i.IdentityEmail) == i.IdentityEmail && i.IdentityEmail != "" &&
+		len(i.IdentityEmail) <= 320 && !strings.ContainsAny(i.IdentityEmail, " \t\r\n\x00")
 }
 
 func DefaultManagedIntegrationState() ManagedIntegrationState {
@@ -255,6 +281,21 @@ func (s *FileStore) ReadManagedIntegrationFile(ctx context.Context, relative str
 		return nil, err
 	}
 	return readManagedPrivateFile(path, required)
+}
+
+func (s *FileStore) ReadManagedSigningPublicInfo(ctx context.Context) (ManagedSigningPublicInfo, error) {
+	raw, err := s.ReadManagedIntegrationFile(ctx, ManagedSigningPublicInfoFile, false)
+	if err != nil {
+		return ManagedSigningPublicInfo{}, err
+	}
+	if len(raw) == 0 {
+		return ManagedSigningPublicInfo{}, nil
+	}
+	var info ManagedSigningPublicInfo
+	if err = decodeManagedJSON(raw, &info); err != nil || !info.Valid() {
+		return ManagedSigningPublicInfo{}, errors.New("managed signing public info is invalid")
+	}
+	return info, nil
 }
 
 func (s *FileStore) ManagedIntegrationFilePath(relative string) (string, error) {

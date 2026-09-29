@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -327,6 +328,86 @@ func TestBackendSnapshotRestoreWithoutVolumesPreservesRuntimeAndCoverage(t *test
 	if err != nil || !found || state.MCPPort != 19000 || !slices.Equal(state.Profiles, []string{"browser"}) ||
 		!slices.Equal(state.IngressHosts, []string{"mcp.example.com"}) {
 		t.Fatalf("restored runtime = %#v found=%v err=%v", state, found, err)
+	}
+}
+
+func TestComposeEnvironmentUsesManagedSigningPathsWithoutCredentialBytes(t *testing.T) {
+	backend, _, workspace := composeBackendFixture(t)
+	generation := composeGeneration(t, "1.2.3", "b")
+	state, err := backend.stateFor(generation, lifecycle.InstallationState{Scope: "user", Workspace: workspace}, []string{"signing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := lifecycle.OpenFileStore(backend.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey := []byte("managed-private-signing-key")
+	credentialDigest, err := store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedSigningCredentialFile, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct {
+		path string
+		raw  []byte
+	}{
+		{lifecycle.ManagedSigningPublicKeyFile, []byte("ssh-ed25519 AAAAfixture\n")},
+		{lifecycle.ManagedSigningGitConfigFile, []byte("[commit]\n\tgpgSign = true\n")},
+		{lifecycle.ManagedSigningAllowedSignersFile, []byte("signing@example.test ssh-ed25519 AAAAfixture\n")},
+	} {
+		if _, err = store.WriteManagedIntegrationFile(t.Context(), item.path, item.raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	managed := lifecycle.DefaultManagedIntegrationState()
+	managed.Signing = lifecycle.ManagedIntegrationToggle{
+		Configured: true, Enabled: true, CredentialSHA256: credentialDigest,
+	}
+	rawState, err := json.Marshal(managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedIntegrationStateFile, append(rawState, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	env, err := backend.composeEnvironment(t.Context(), state, "/tmp/github.toml", "/tmp/ingress.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]string{}
+	for _, value := range env {
+		key, val, found := strings.Cut(value, "=")
+		if found {
+			values[key] = val
+		}
+	}
+	privatePath, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedSigningCredentialFile)
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	want := map[string]string{
+		"LOKI_SIGNING_KEY_FILE":             privatePath,
+		"LOKI_SIGNING_PUBLIC_KEY_FILE":      filepath.Join(backend.runtimeRoot, "signing-public", "id_ed25519.pub"),
+		"LOKI_SIGNING_GIT_CONFIG_FILE":      filepath.Join(backend.runtimeRoot, "signing-public", "signing.gitconfig"),
+		"LOKI_SIGNING_ALLOWED_SIGNERS_FILE": filepath.Join(backend.runtimeRoot, "signing-public", "allowed_signers"),
+		"LOKI_SIGNING_SOCKET_VOLUME":        backend.volumeName("signing-socket"),
+	}
+	for envName, expected := range want {
+		if values[envName] != expected {
+			t.Fatalf("%s=%q want=%q", envName, values[envName], expected)
+		}
+	}
+	if strings.Contains(strings.Join(env, "\n"), string(privateKey)) {
+		t.Fatal("compose environment leaked private signing key bytes")
+	}
+
+	state.Profiles = nil
+	env, err = backend.composeEnvironment(t.Context(), state, "/tmp/github.toml", "/tmp/ingress.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(env, "LOKI_SIGNING_KEY_FILE=/dev/null") {
+		t.Fatalf("disabled signing environment=%#v", env)
 	}
 }
 

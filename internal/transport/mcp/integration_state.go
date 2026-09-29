@@ -39,7 +39,7 @@ func (c *SystemController) integrationStatus(ctx context.Context) map[string]any
 	githubReady := githubConfigured && len(c.Config.GitHubTargets) > 0
 
 	signingPublicKey := exists("/home/runner/.ssh/id_ed25519.pub")
-	signingAgent := socketExists("/run/loki-go/signing/agent.sock")
+	signingAgent := c.SigningSocket != "" && socketExists(c.SigningSocket)
 	signingFormat := c.git(ctx, "config", "--global", "--includes", "--get", "gpg.format")
 	signingRequired := strings.EqualFold(c.git(ctx, "config", "--global", "--includes", "--get", "commit.gpgsign"), "true")
 	signingIdentity := c.git(ctx, "config", "--global", "--includes", "--get", "user.name") != "" &&

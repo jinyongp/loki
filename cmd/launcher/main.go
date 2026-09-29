@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -46,6 +47,10 @@ type launcherLayout struct {
 	GatewayTmpfsBytes        int64
 	Workspace                string
 	ToolchainStore           string
+	SigningSocketVolume      string
+	SigningPublicKey         string
+	SigningGitConfig         string
+	SigningAllowedSigners    string
 	Environment              []string
 	WorkloadUID              uint32
 	WorkloadGID              uint32
@@ -106,12 +111,16 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		},
 		Workspace:          layout.Workspace,
 		ToolchainDirectory: layout.ToolchainStore,
-		UID:                layout.WorkloadUID,
-		GID:                layout.WorkloadGID,
-		Environment:        layout.Environment,
-		MemoryBytes:        layout.MemoryBytes,
-		PIDs:               layout.PIDs,
-		TmpfsBytes:         layout.TmpfsBytes,
+		Signing: sandbox.SigningPolicyOptions{
+			SocketVolume: layout.SigningSocketVolume, PublicKey: layout.SigningPublicKey,
+			GitConfig: layout.SigningGitConfig, AllowedSigners: layout.SigningAllowedSigners,
+		},
+		UID:         layout.WorkloadUID,
+		GID:         layout.WorkloadGID,
+		Environment: layout.Environment,
+		MemoryBytes: layout.MemoryBytes,
+		PIDs:        layout.PIDs,
+		TmpfsBytes:  layout.TmpfsBytes,
 	})
 	if err != nil {
 		return applauncher.Options{}, err
@@ -182,6 +191,10 @@ func run(args []string, stderr io.Writer) int {
 	imageOverride := flags.String("image", "", "immutable workload OCI image override")
 	gatewayImageOverride := flags.String("gateway-image", "", "immutable gateway OCI image override")
 	workspaceOverride := flags.String("workspace-source", "", "host-visible workspace source override")
+	signingSocketVolume := flags.String("signing-socket-volume", "", "trusted Docker volume containing the restricted signing-agent socket")
+	signingPublicKey := flags.String("signing-public-key-source", "", "host-visible managed signing public key")
+	signingGitConfig := flags.String("signing-git-config-source", "", "host-visible managed signing Git config")
+	signingAllowedSigners := flags.String("signing-allowed-signers-source", "", "host-visible managed SSH allowed-signers file")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -210,6 +223,10 @@ func run(args []string, stderr io.Writer) int {
 	if *workspaceOverride != "" {
 		layout.Workspace = *workspaceOverride
 	}
+	layout.SigningSocketVolume = strings.TrimSpace(*signingSocketVolume)
+	layout.SigningPublicKey = strings.TrimSpace(*signingPublicKey)
+	layout.SigningGitConfig = strings.TrimSpace(*signingGitConfig)
+	layout.SigningAllowedSigners = strings.TrimSpace(*signingAllowedSigners)
 	if err := resolveLauncherPolicy(&layout, *configPath, *githubConfigPath, *executionContractPath); err != nil {
 		fmt.Fprintln(stderr, "invalid launcher effective policy:", err)
 		return 2

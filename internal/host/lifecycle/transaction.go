@@ -352,6 +352,19 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 	if err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, nil, err)
 	}
+	if name == "signing" {
+		integrations, readErr := e.Store.ReadManagedIntegrations(ctx)
+		if readErr != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, readErr)
+		}
+		if enabled && !integrations.Signing.Configured {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, errors.New("signing integration must be configured before enablement"))
+		}
+		integrations.Signing.Enabled = enabled
+		if err = e.Store.CommitManagedIntegrations(ctx, integrations, "signing-component", e.now()); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
+	}
 	if err = e.Backend.SetComponent(ctx, *snapshot.Installed, name, enabled); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
@@ -376,18 +389,13 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	if name == "browser" || name == "signing" {
+	if name == "browser" {
 		integrations, readErr := e.Store.ReadManagedIntegrations(ctx)
 		if readErr != nil {
 			return e.recoverFailure(ctx, journal, record.ID, &backup, readErr)
 		}
-		switch name {
-		case "browser":
-			integrations.Browser.Enabled = enabled
-		case "signing":
-			integrations.Signing.Enabled = enabled
-		}
-		if err = e.Store.CommitManagedIntegrations(ctx, integrations, name+"-component", e.now()); err != nil {
+		integrations.Browser.Enabled = enabled
+		if err = e.Store.CommitManagedIntegrations(ctx, integrations, "browser-component", e.now()); err != nil {
 			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 		}
 	}
@@ -396,6 +404,88 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 }
 
 type ManagedIntegrationMutation func(context.Context, *FileStore) error
+
+func (e *TransactionEngine) UpdateManagedComponentIntegration(
+	ctx context.Context,
+	name string,
+	enabled bool,
+	mutate ManagedIntegrationMutation,
+) error {
+	if e == nil || e.Store == nil || e.Backend == nil || mutate == nil {
+		return errors.New("host lifecycle managed component integration transaction is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if name != "browser" && name != "signing" {
+		return errors.New("managed component integration name is invalid")
+	}
+	lock, journal, err := e.openJournal(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err = e.recoverInterrupted(ctx, journal); err != nil {
+		return err
+	}
+	snapshot, err := e.Store.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("managed integration change requires an installed release")
+	}
+	target, componentChanged, err := optionalComponentTarget(*snapshot.Installed, snapshot.Host.EnabledComponents, name, enabled)
+	if err != nil {
+		return err
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, e.now())
+	if err != nil {
+		return err
+	}
+	record, err := journal.Begin(OperationUpdateIntegration, plan, e.now())
+	if err != nil {
+		return err
+	}
+	backup, err := e.captureBackup(ctx, journal, record, snapshot)
+	if err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, nil, err)
+	}
+	if err = mutate(ctx, e.Store); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if componentChanged {
+		if err = e.Backend.SetComponent(ctx, *snapshot.Installed, name, enabled); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
+	}
+	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseMigrate, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Restart(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseRestart, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Health(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if componentChanged {
+		if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
+	}
+	_, err = journal.MarkSucceeded(record.ID, e.now())
+	return err
+}
 
 func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name string, mutate ManagedIntegrationMutation) error {
 	if e == nil || e.Store == nil || e.Backend == nil || mutate == nil {
@@ -790,6 +880,16 @@ func (e *TransactionEngine) openJournal(ctx context.Context) (*OperationLock, *O
 }
 
 func (e *TransactionEngine) restoreRecoveryBackup(ctx context.Context, backup BackupRecord) error {
+	// Managed integration credentials may be required just to parse or stop
+	// the currently active Compose profile. Restore them before the runtime
+	// whenever this backup owns a managed snapshot. Legacy backups without a
+	// managed snapshot keep the old ordering so an active managed profile can
+	// still be stopped before those credentials are removed.
+	if backup.ManagedIntegrationRef != "" {
+		if err := e.Store.RestoreManagedIntegrationSnapshot(ctx, backup.ManagedIntegrationRef); err != nil {
+			return err
+		}
+	}
 	if err := e.Backend.Restore(ctx, backup.RuntimeRef); err != nil {
 		return err
 	}

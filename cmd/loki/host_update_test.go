@@ -71,16 +71,17 @@ func newHostUpdateFixture(t *testing.T, version string, releasedAt time.Time) ho
 		Version: version, ReleasedAt: releasedAt.UTC().Truncate(time.Second),
 		HostBinaryDigest: "sha256:" + hex.EncodeToString(binarySum[:]),
 		CoreImageDigest:  "sha256:" + strings.Repeat("b", 64),
-		Components: []releases.Component{{
-			Name: "browser", Digest: "sha256:" + strings.Repeat("c", 64), Optional: true,
-		}},
+		Components: []releases.Component{
+			{Name: "browser", Digest: "sha256:" + strings.Repeat("c", 64), Optional: true},
+			{Name: "signing", Digest: "sha256:" + strings.Repeat("d", 64), Optional: true},
+		},
 		ConfigSchema: 1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
 		Reads: releases.Compatibility{
 			Config: releases.SchemaRange{Min: 1, Max: 1}, Policy: releases.SchemaRange{Min: 1, Max: 1},
 			Toolchain: releases.SchemaRange{Min: 1, Max: 1}, State: releases.SchemaRange{Min: 1, Max: 1},
 		},
 		Rollback: releases.RollbackCoverage{
-			StateSnapshot: true, ConfigSnapshot: true, OptionalComponentState: []string{"browser"},
+			StateSnapshot: true, ConfigSnapshot: true, OptionalComponentState: []string{"browser", "signing"},
 		},
 	})
 	if err != nil {

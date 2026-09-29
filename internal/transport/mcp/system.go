@@ -28,17 +28,17 @@ import (
 var browserTools = []string{"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot"}
 
 type SystemController struct {
-	Config                       config.Config
-	Policy                       controlpolicy.Generation
-	Paths                        *policy.Workspace
-	Started                      time.Time
-	RuntimeSocket, BrowserSocket string
-	BrowserEnabled, BrowserReady bool
-	Artifacts, Previews          bool
-	InspectPort                  func(context.Context, int) (map[string]any, error)
-	GitEnvironment               []string
-	ToolNames                    []string
-	Audit                        *audit.Log
+	Config                                      config.Config
+	Policy                                      controlpolicy.Generation
+	Paths                                       *policy.Workspace
+	Started                                     time.Time
+	RuntimeSocket, BrowserSocket, SigningSocket string
+	BrowserEnabled, BrowserReady                bool
+	Artifacts, Previews                         bool
+	InspectPort                                 func(context.Context, int) (map[string]any, error)
+	GitEnvironment                              []string
+	ToolNames                                   []string
+	Audit                                       *audit.Log
 }
 
 func catalogInfo(effective []string) map[string]any {

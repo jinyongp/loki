@@ -112,6 +112,13 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		app.roots = append(app.roots, root)
 	}
 	gitEnvironment := toolEnvironment(options.Environment)
+	signingSocket := "/run/loki/signing/agent.sock"
+	if value := strings.TrimSpace(options.Environment["SSH_AUTH_SOCK"]); value != "" {
+		if !filepath.IsAbs(value) {
+			return nil, errors.New("MCP SSH_AUTH_SOCK must be absolute")
+		}
+		signingSocket = filepath.Clean(value)
+	}
 	repository, err := workspace.NewRepository(app.files.Policy, c, options.GitJobs, gitEnvironment, app.roots)
 	if err != nil {
 		return nil, err
@@ -149,7 +156,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	system := &mcptransport.SystemController{
 		Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(),
-		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket,
+		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, SigningSocket: signingSocket,
 		BrowserEnabled: options.Browser != nil, BrowserReady: options.Browser != nil,
 		Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment,
 		InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
