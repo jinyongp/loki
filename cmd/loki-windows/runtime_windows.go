@@ -624,6 +624,10 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if len(args) == 0 {
 		return runProductUpdate(ctx, stdout, stderr)
 	}
+	if updateHelpRequested(args) {
+		printUpdateHelp(stdout)
+		return 0
+	}
 	action := args[0]
 	flags := flag.NewFlagSet("loki update "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
