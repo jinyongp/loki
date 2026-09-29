@@ -191,10 +191,11 @@ func run(args []string, stderr io.Writer) int {
 	imageOverride := flags.String("image", "", "immutable workload OCI image override")
 	gatewayImageOverride := flags.String("gateway-image", "", "immutable gateway OCI image override")
 	workspaceOverride := flags.String("workspace-source", "", "host-visible workspace source override")
-	signingSocketVolume := flags.String("signing-socket-volume", "", "trusted Docker volume containing the restricted signing-agent socket")
-	signingPublicKey := flags.String("signing-public-key-source", "", "host-visible managed signing public key")
-	signingGitConfig := flags.String("signing-git-config-source", "", "host-visible managed signing Git config")
-	signingAllowedSigners := flags.String("signing-allowed-signers-source", "", "host-visible managed SSH allowed-signers file")
+	signingDefaults := launcherSigningDefaults(os.Getenv)
+	signingSocketVolume := flags.String("signing-socket-volume", signingDefaults.SocketVolume, "trusted Docker volume containing the restricted signing-agent socket")
+	signingPublicKey := flags.String("signing-public-key-source", signingDefaults.PublicKey, "host-visible managed signing public key")
+	signingGitConfig := flags.String("signing-git-config-source", signingDefaults.GitConfig, "host-visible managed signing Git config")
+	signingAllowedSigners := flags.String("signing-allowed-signers-source", signingDefaults.AllowedSigners, "host-visible managed SSH allowed-signers file")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

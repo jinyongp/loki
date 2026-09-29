@@ -498,10 +498,7 @@ func (j *OperationJournal) BeginRecovery(id string, original error, now time.Tim
 	if record.State != OperationApplying || original == nil {
 		return OperationRecord{}, errors.New("host lifecycle recovery requires an applying operation and original error")
 	}
-	message := strings.TrimSpace(original.Error())
-	if message == "" || !validOperationError(message) {
-		return OperationRecord{}, errors.New("host lifecycle original error is invalid")
-	}
+	message := operationErrorMessage(original.Error())
 	updatedAt, err := nextOperationTime(record, now)
 	if err != nil {
 		return OperationRecord{}, err
@@ -548,10 +545,7 @@ func (j *OperationJournal) MarkRecoveryFailed(id string, recovery error, now tim
 	if record.State != OperationRecovering || record.OriginalError == "" || recovery == nil {
 		return OperationRecord{}, errors.New("host lifecycle recovery failure requires a recovering operation and recovery error")
 	}
-	message := strings.TrimSpace(recovery.Error())
-	if message == "" || !validOperationError(message) {
-		return OperationRecord{}, errors.New("host lifecycle recovery error is invalid")
-	}
+	message := operationErrorMessage(recovery.Error())
 	updatedAt, err := nextOperationTime(record, now)
 	if err != nil {
 		return OperationRecord{}, err

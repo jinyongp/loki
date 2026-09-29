@@ -61,18 +61,14 @@ func (r ExecRunner) Run(ctx context.Context, env []string, args ...string) ([]by
 	commandArgs := append(append([]string(nil), r.Prefix...), args...)
 	cmd := exec.CommandContext(ctx, executable, commandArgs...)
 	cmd.Env = append(os.Environ(), env...)
-	var output bytes.Buffer
+	var output commandOutput
 	cmd.Stdout = &output
 	cmd.Stderr = &output
-	err := cmd.Run()
-	raw := output.Bytes()
-	if len(raw) > maxCommandOutput {
-		raw = raw[:maxCommandOutput]
+	if err := cmd.Run(); err != nil {
+		detail := strings.ToValidUTF8(string(output.tail), "�")
+		return append([]byte(nil), output.tail...), fmt.Errorf("docker host operation failed: %w: %s", err, strings.TrimSpace(detail))
 	}
-	if err != nil {
-		return append([]byte(nil), raw...), fmt.Errorf("docker host operation failed: %w: %s", err, strings.TrimSpace(string(raw)))
-	}
-	return append([]byte(nil), raw...), nil
+	return append([]byte(nil), output.head...), nil
 }
 
 type Config struct {
