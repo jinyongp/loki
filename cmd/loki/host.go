@@ -130,7 +130,7 @@ func runHostRuntimeActiveJobs(args []string, stdout, stderr io.Writer) int {
 
 func runHost(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|integration|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	switch args[0] {
@@ -144,6 +144,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostDoctor(args[1:], stdout, stderr)
 	case "ingress":
 		return runHostIngress(args[1:], stdout, stderr)
+	case "integration":
+		return runHostIntegration(args[1:], stdout, stderr)
 	case "runtime-probe":
 		return runHostRuntimeProbe(args[1:], stdout, stderr)
 	case "runtime-active-jobs":
@@ -154,7 +156,7 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostMaintenance(args[0], args[1:], stdout, stderr)
 	}
 	if args[0] != "update" || len(args) < 2 {
-		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | update status|prepare|apply [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host install|status|connection|doctor|ingress|integration|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | update status|prepare|apply [OPTIONS]")
 		return 2
 	}
 	action := args[1]

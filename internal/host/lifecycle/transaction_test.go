@@ -406,6 +406,13 @@ func TestTransactionComponentChangeUsesGenericTransaction(t *testing.T) {
 	if len(snapshot.Host.EnabledComponents) != 0 || backend.components["browser"] || backend.componentCalls != 1 {
 		t.Fatalf("disabled component state host=%#v backend=%#v calls=%d", snapshot.Host.EnabledComponents, backend.components, backend.componentCalls)
 	}
+	integrations, err := store.ReadManagedIntegrations(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if integrations.Browser.Enabled || integrations.Revision == "" {
+		t.Fatalf("disabled browser integration projection = %#v", integrations.Browser)
+	}
 	snapshotCount := backend.nextSnapshot
 	if err = engine.SetComponent(t.Context(), "browser", false); err != nil {
 		t.Fatal(err)
@@ -424,6 +431,13 @@ func TestTransactionComponentChangeUsesGenericTransaction(t *testing.T) {
 	if len(snapshot.Host.EnabledComponents) != 1 || snapshot.Host.EnabledComponents[0] != "browser" ||
 		!backend.components["browser"] || backend.componentCalls != 2 {
 		t.Fatalf("enabled component state host=%#v backend=%#v calls=%d", snapshot.Host.EnabledComponents, backend.components, backend.componentCalls)
+	}
+	integrations, err = store.ReadManagedIntegrations(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !integrations.Browser.Enabled {
+		t.Fatalf("enabled browser integration projection = %#v", integrations.Browser)
 	}
 
 	lock, err := AcquireOperationLock(store.Root)
@@ -456,6 +470,11 @@ func TestTransactionComponentChangeUsesGenericTransaction(t *testing.T) {
 
 func TestTransactionComponentFailureRestoresPreviousState(t *testing.T) {
 	store, backend, _, _, now, _ := transactionFixture(t)
+	integrations := DefaultManagedIntegrationState()
+	integrations.Browser.Enabled = true
+	if err := store.CommitManagedIntegrations(t.Context(), integrations, "fixture-browser-enabled", now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
 	backend.healthErr = errors.New("component unhealthy")
 
@@ -469,6 +488,13 @@ func TestTransactionComponentFailureRestoresPreviousState(t *testing.T) {
 	if len(snapshot.Host.EnabledComponents) != 1 || snapshot.Host.EnabledComponents[0] != "browser" ||
 		!backend.components["browser"] {
 		t.Fatalf("recovered component state host=%#v backend=%#v", snapshot.Host.EnabledComponents, backend.components)
+	}
+	integrations, err = store.ReadManagedIntegrations(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !integrations.Browser.Enabled {
+		t.Fatalf("browser integration projection was not recovered: %#v", integrations.Browser)
 	}
 }
 

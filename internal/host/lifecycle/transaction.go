@@ -376,6 +376,21 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
+	if name == "browser" || name == "signing" {
+		integrations, readErr := e.Store.ReadManagedIntegrations(ctx)
+		if readErr != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, readErr)
+		}
+		switch name {
+		case "browser":
+			integrations.Browser.Enabled = enabled
+		case "signing":
+			integrations.Signing.Enabled = enabled
+		}
+		if err = e.Store.CommitManagedIntegrations(ctx, integrations, name+"-component", e.now()); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
+	}
 	_, err = journal.MarkSucceeded(record.ID, e.now())
 	return err
 }
