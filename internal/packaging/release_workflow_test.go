@@ -263,8 +263,8 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		}
 	}
 	for _, required := range []string{
-		"DEVTOOLS_VERSION=0.19.12",
-		"DEVTOOLS_COMMIT=9ae37040517f1aa7b8b5efc8f5cf20af390b2827",
+		"DEVTOOLS_VERSION=0.20.1",
+		"DEVTOOLS_COMMIT=d23d5bf1e0ad2b39a06782bcbe361dbf0f0c8d67",
 		"GH_VERSION=2.101.0",
 		"GH_COMMIT=0cf1092493af067646fc5f3db9421c6a6ec9c938",
 		"RIPGREP_VERSION=15.2.0",
@@ -274,7 +274,7 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"apk add --no-cache git build-base pcre2-dev perl",
 		"PCRE2_SYS_STATIC=1",
 		"cargo build --locked --profile release-lto --features pcre2",
-		`/out/devtools version | grep -q '"version":"0.19.12"'`,
+		`/out/devtools version | grep -q '"version":"0.20.1"'`,
 		`/out/gh version | grep -q '^gh version 2\.101\.0 '`,
 		`/src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0 '`,
 		"/src/ripgrep/target/release-lto/rg",

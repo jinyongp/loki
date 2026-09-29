@@ -21,7 +21,7 @@ func setMutationResponse(t *testing.T, client *Client, files map[string]string, 
 		t.Fatal(err)
 	}
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":3}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":4}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + files["catalog"] + "\"; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"project inspect\" ]; then cat \"" + files["project"] + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + files["log"] + "\"\n" +

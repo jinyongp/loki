@@ -1,6 +1,6 @@
 # Devtools protocol fixtures
 
-`catalog-protocol-v3.json` is the source-reviewed Loki consumer subset, not a
+`catalog-protocol-v4.json` is the source-reviewed Loki consumer subset, not a
 captured full release catalog. It contains the 21 commands admitted by Loki:
 `process start` / `process restart`, typed project metadata
 (`project inspect`, `command list`, `command inspect`), and the
@@ -9,14 +9,18 @@ Task definition edits, validation mutations, doctor execution, backup/cleanup,
 secret management, generic command execution, and runtime lifecycle mutations
 remain excluded.
 
-The reviewed release basis is devtools v0.19.12 at commit
-`9ae37040517f1aa7b8b5efc8f5cf20af390b2827` (reviewed 2026-09-29).
+The reviewed release basis is devtools v0.20.1 at commit
+`d23d5bf1e0ad2b39a06782bcbe361dbf0f0c8d67` (reviewed 2026-09-30).
 The embedded consumer subset was originally captured from v0.19.10. Review of
-the v0.19.10..v0.19.12 delta found no approved CLI schema or command-surface
-drift; the changes are confined to task input cancellation, Unicode validation,
-impact/context internals, proxy caching, and tests. The release gate still
-rebuilds the exact pinned binary and requires its protocol-3 contract fingerprint
-to match this embedded baseline before publication. Loki does not expose those forms: generic
+the v0.19.12..v0.20.1 delta found a CLI protocol bump from 3 to 4 for managed
+cross-device profile transfer plus task replay/storage optimizations. The new
+profile-transfer commands are outside Loki's approved command set. An exact
+v0.20.1 catalog comparison confirmed that all 21 approved command
+options/input/output contracts retain fingerprint
+`f9cd7292b95ea7538ec20004a2da4ac7a5d6886897a2d04cf464ef236cb8b708`.
+The release gate rebuilds the exact pinned binary and requires its protocol-4
+approved-contract fingerprint to match this embedded baseline before
+publication. Loki does not expose those forms: generic
 `Client.Call` rejects coordination queries and mutations, while
 `QueryCoordination` and `MutateCoordination` construct their accepted inputs
 from typed Loki requests. The reviewed baseline nevertheless fingerprints the
@@ -53,7 +57,7 @@ protocol 3, 21 approved commands, and catalog fingerprint
 `f9cd7292b95ea7538ec20004a2da4ac7a5d6886897a2d04cf464ef236cb8b708`,
 which matches the embedded reviewed subset.
 
-CLI protocol 3, response envelope 1, and the devtools task journal are separate
+CLI protocol 4, response envelope 1, and the devtools task journal are separate
 contracts. This adapter checks the CLI/transport contract and does not read or
 write the devtools task journal directly.
 
