@@ -308,7 +308,7 @@ func runStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	fmt.Fprintln(stdout, "Loki Windows")
 	fmt.Fprintf(stdout, "  Distribution: %s\n", distribution)
 	fmt.Fprintf(stdout, "  Frontend: %s\n", binding.ReleaseTag)
-	fmt.Fprintf(stdout, "  Appliance image: v%s\n", result.DistributionVersion)
+	fmt.Fprintf(stdout, "  Appliance base image: v%s\n", result.DistributionVersion)
 	if status.Release != "" {
 		fmt.Fprintf(stdout, "  Appliance release: v%s\n", strings.TrimPrefix(status.Release, "v"))
 	}

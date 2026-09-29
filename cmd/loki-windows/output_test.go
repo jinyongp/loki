@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	windowshost "loki/internal/host/windows"
 )
 
 func TestRenderDoctorHuman(t *testing.T) {
@@ -58,6 +60,23 @@ func TestRenderBackupHuman(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("backup output missing %q: %s", want, got)
 		}
+	}
+}
+
+func TestRenderOperatorStatusLabelsDistributionVersionAsBaseImage(t *testing.T) {
+	var out bytes.Buffer
+	renderOperatorStatus(
+		windowshost.OperatorStatus{State: "installed", Release: "v0.1.27"},
+		windowshost.ReleaseBinding{ReleaseTag: "v0.1.27"},
+		"loki-mcp",
+		"0.1.19",
+		&out,
+	)
+	got := out.String()
+	if !strings.Contains(got, "Appliance base image: v0.1.19") ||
+		!strings.Contains(got, "Appliance release: v0.1.27") ||
+		strings.Contains(got, "  Appliance image:") {
+		t.Fatalf("operator status did not distinguish base image from managed release: %s", got)
 	}
 }
 

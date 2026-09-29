@@ -243,7 +243,7 @@ func renderOperatorStatus(
 	fmt.Fprintln(stdout, "Loki Windows")
 	fmt.Fprintf(stdout, "  Distribution: %s\n", distribution)
 	fmt.Fprintf(stdout, "  Frontend: %s\n", binding.ReleaseTag)
-	fmt.Fprintf(stdout, "  Appliance image: v%s\n", strings.TrimPrefix(applianceBase, "v"))
+	fmt.Fprintf(stdout, "  Appliance base image: v%s\n", strings.TrimPrefix(applianceBase, "v"))
 	if status.Release != "" {
 		fmt.Fprintf(stdout, "  Appliance release: v%s\n", strings.TrimPrefix(status.Release, "v"))
 	}
