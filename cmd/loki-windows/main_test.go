@@ -61,6 +61,7 @@ func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
 		`flags.String("runtime-key-env"`,
 		`flags.String("runtime-key-credential"`,
 		"term.ReadPassword",
+		"preflightOpenAIConnectionSetup",
 		"WindowsConnectionAdaptersWithOpenAISetup",
 		"OpenAITunnelsURL",
 		"OpenAIRuntimeKeysURL",
@@ -69,6 +70,12 @@ func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
 		if !strings.Contains(body, required) {
 			t.Fatalf("OpenAI setup lacks %q", required)
 		}
+	}
+	preflight := strings.Index(body, "preflightOpenAIConnectionSetup")
+	references := strings.Index(body, "OpenAI Secure MCP Tunnel setup references:")
+	secretPrompt := strings.Index(body, "OpenAI runtime API key:")
+	if preflight < 0 || references < 0 || secretPrompt < 0 || preflight > references || preflight > secretPrompt {
+		t.Fatal("OpenAI setup compatibility preflight must run before references or secret prompts")
 	}
 	for _, forbidden := range []string{
 		`flags.String("runtime-key"`,

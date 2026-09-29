@@ -317,6 +317,10 @@ func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Wr
 		fmt.Fprintln(stderr, "--runtime-key-env and --runtime-key-credential are mutually exclusive")
 		return 2
 	}
+	if err := preflightOpenAIConnectionSetup(ctx, *distribution); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
 	config := windowshost.OpenAISetupConfig{
 		TunnelID:         strings.TrimSpace(*tunnelID),
@@ -382,6 +386,41 @@ func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Wr
 	}
 	fmt.Fprintf(stdout, "Managed %s connection setup completed.\n", provider)
 	return 0
+}
+
+func preflightOpenAIConnectionSetup(ctx context.Context, distribution string) error {
+	binding, err := windowshost.CurrentReleaseBinding()
+	if err != nil {
+		return fmt.Errorf("verify Windows frontend release before OpenAI setup: %w", err)
+	}
+	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, distribution, windowshost.OperatorRequest{Command: "status"})
+	if err != nil {
+		return fmt.Errorf(
+			"cannot verify the Loki appliance before OpenAI setup: %w\nRun 'loki update status' to inspect the appliance, then retry",
+			err,
+		)
+	}
+	if result.Probe.ExitCode != 0 {
+		detail := progress.NonProgressText(result.Probe.Stderr)
+		if detail == "" {
+			detail = strings.TrimSpace(result.Probe.Stdout)
+		}
+		if detail == "" {
+			detail = fmt.Sprintf("status command exited with code %d", result.Probe.ExitCode)
+		}
+		return fmt.Errorf(
+			"cannot verify the Loki appliance before OpenAI setup: %s\nRun 'loki update status' to inspect the appliance, then retry",
+			detail,
+		)
+	}
+	status, err := windowshost.ParseOperatorStatus([]byte(result.Probe.Stdout))
+	if err != nil {
+		return fmt.Errorf(
+			"cannot verify the Loki appliance before OpenAI setup: %w\nRun 'loki update status' to inspect the appliance, then retry",
+			err,
+		)
+	}
+	return connectionSetupCompatibilityError(binding.ReleaseTag, result.DistributionVersion, status.UpdatePrepared)
 }
 
 func validEnvironmentVariableName(value string) bool {
