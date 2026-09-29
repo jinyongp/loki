@@ -66,24 +66,28 @@ type BackupCoverage struct {
 }
 
 type RuntimeSnapshot struct {
-	Ref      string         `json:"ref"`
-	Coverage BackupCoverage `json:"coverage"`
+	Ref                   string         `json:"ref"`
+	ManagedIntegrationRef string         `json:"managed_integration_ref,omitempty"`
+	Coverage              BackupCoverage `json:"coverage"`
 }
 
 type BackupRecord struct {
-	ID           string             `json:"id"`
-	Reason       OperationKind      `json:"reason"`
-	CreatedAt    time.Time          `json:"created_at"`
-	Installed    *Generation        `json:"installed,omitempty"`
-	Host         HostState          `json:"host"`
-	Installation *InstallationState `json:"installation,omitempty"`
-	RuntimeRef   string             `json:"runtime_ref"`
-	Coverage     BackupCoverage     `json:"coverage"`
+	ID                    string             `json:"id"`
+	Reason                OperationKind      `json:"reason"`
+	CreatedAt             time.Time          `json:"created_at"`
+	Installed             *Generation        `json:"installed,omitempty"`
+	Host                  HostState          `json:"host"`
+	Installation          *InstallationState `json:"installation,omitempty"`
+	RuntimeRef            string             `json:"runtime_ref"`
+	ManagedIntegrationRef string             `json:"managed_integration_ref,omitempty"`
+	Coverage              BackupCoverage     `json:"coverage"`
 }
 
 func NewBackupRecord(reason OperationKind, snapshot Snapshot, runtime RuntimeSnapshot, now time.Time) (BackupRecord, error) {
 	runtime.Ref = strings.TrimSpace(runtime.Ref)
-	if !reason.Valid() || runtime.Ref == "" || len(runtime.Ref) > 4096 || strings.ContainsAny(runtime.Ref, "\r\n\x00") {
+	runtime.ManagedIntegrationRef = strings.TrimSpace(runtime.ManagedIntegrationRef)
+	if !reason.Valid() || runtime.Ref == "" || len(runtime.Ref) > 4096 || strings.ContainsAny(runtime.Ref, "\r\n\x00") ||
+		(runtime.ManagedIntegrationRef != "" && !validManagedIntegrationSnapshotRef(runtime.ManagedIntegrationRef)) {
 		return BackupRecord{}, errors.New("host lifecycle backup identity is invalid")
 	}
 	host, err := snapshot.Host.normalized()
@@ -106,20 +110,23 @@ func NewBackupRecord(reason OperationKind, snapshot Snapshot, runtime RuntimeSna
 	}
 	record := BackupRecord{
 		Reason: reason, CreatedAt: now, Installed: snapshot.Installed,
-		Host: host, Installation: snapshot.Installation, RuntimeRef: runtime.Ref, Coverage: coverage,
+		Host: host, Installation: snapshot.Installation, RuntimeRef: runtime.Ref,
+		ManagedIntegrationRef: runtime.ManagedIntegrationRef, Coverage: coverage,
 	}
 	raw, err := json.Marshal(struct {
-		Version      int                `json:"version"`
-		Reason       OperationKind      `json:"reason"`
-		CreatedAt    time.Time          `json:"created_at"`
-		Installed    *Generation        `json:"installed,omitempty"`
-		Host         HostState          `json:"host"`
-		Installation *InstallationState `json:"installation,omitempty"`
-		RuntimeRef   string             `json:"runtime_ref"`
-		Coverage     BackupCoverage     `json:"coverage"`
+		Version               int                `json:"version"`
+		Reason                OperationKind      `json:"reason"`
+		CreatedAt             time.Time          `json:"created_at"`
+		Installed             *Generation        `json:"installed,omitempty"`
+		Host                  HostState          `json:"host"`
+		Installation          *InstallationState `json:"installation,omitempty"`
+		RuntimeRef            string             `json:"runtime_ref"`
+		ManagedIntegrationRef string             `json:"managed_integration_ref,omitempty"`
+		Coverage              BackupCoverage     `json:"coverage"`
 	}{
 		Version: 1, Reason: record.Reason, CreatedAt: record.CreatedAt, Installed: record.Installed,
-		Host: record.Host, Installation: record.Installation, RuntimeRef: record.RuntimeRef, Coverage: record.Coverage,
+		Host: record.Host, Installation: record.Installation, RuntimeRef: record.RuntimeRef,
+		ManagedIntegrationRef: record.ManagedIntegrationRef, Coverage: record.Coverage,
 	})
 	if err != nil {
 		return BackupRecord{}, err
@@ -137,7 +144,7 @@ func (b BackupRecord) Valid() bool {
 	copy.ID = ""
 	expected, err := NewBackupRecord(copy.Reason, Snapshot{
 		Installed: copy.Installed, Host: copy.Host, Installation: copy.Installation,
-	}, RuntimeSnapshot{Ref: copy.RuntimeRef, Coverage: copy.Coverage}, copy.CreatedAt)
+	}, RuntimeSnapshot{Ref: copy.RuntimeRef, ManagedIntegrationRef: copy.ManagedIntegrationRef, Coverage: copy.Coverage}, copy.CreatedAt)
 	return err == nil && expected.ID == b.ID
 }
 
@@ -367,6 +374,73 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
 	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	_, err = journal.MarkSucceeded(record.ID, e.now())
+	return err
+}
+
+type ManagedIntegrationMutation func(context.Context, *FileStore) error
+
+func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name string, mutate ManagedIntegrationMutation) error {
+	if e == nil || e.Store == nil || e.Backend == nil || mutate == nil {
+		return errors.New("host lifecycle managed integration transaction is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	switch name {
+	case "browser", "signing", "github":
+	default:
+		return errors.New("managed integration name is invalid")
+	}
+	lock, journal, err := e.openJournal(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err = e.recoverInterrupted(ctx, journal); err != nil {
+		return err
+	}
+	snapshot, err := e.Store.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if snapshot.Installed == nil || snapshot.Installation == nil {
+		return errors.New("managed integration change requires an installed release")
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, e.now())
+	if err != nil {
+		return err
+	}
+	record, err := journal.Begin(OperationUpdateIntegration, plan, e.now())
+	if err != nil {
+		return err
+	}
+	backup, err := e.captureBackup(ctx, journal, record, snapshot)
+	if err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, nil, err)
+	}
+	if err = mutate(ctx, e.Store); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseSwitch, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseMigrate, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Restart(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseRestart, e.now()); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if err = e.Backend.Health(ctx); err != nil {
+		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
 	_, err = journal.MarkSucceeded(record.ID, e.now())
@@ -651,18 +725,27 @@ func (e *TransactionEngine) captureBackup(ctx context.Context, journal *Operatio
 	if err != nil {
 		return BackupRecord{}, err
 	}
+	managedRef, managedErr := e.Store.CaptureManagedIntegrationSnapshot(ctx)
+	if managedErr != nil {
+		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+			managedErr = errors.Join(managedErr, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
+		}
+		return BackupRecord{}, managedErr
+	}
+	runtimeSnapshot.ManagedIntegrationRef = managedRef
+	cleanupSnapshots := func(cause error) error {
+		cause = errors.Join(cause, e.Store.DeleteManagedIntegrationSnapshot(ctx, managedRef))
+		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+			cause = errors.Join(cause, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
+		}
+		return cause
+	}
 	backup, err := NewBackupRecord(record.Kind, snapshot, runtimeSnapshot, e.now())
 	if err != nil {
-		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
-			err = errors.Join(err, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
-		}
-		return BackupRecord{}, err
+		return BackupRecord{}, cleanupSnapshots(err)
 	}
 	if err = e.Store.SaveBackup(ctx, backup); err != nil {
-		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
-			err = errors.Join(err, storage.DeleteRuntimeSnapshot(ctx, runtimeSnapshot.Ref))
-		}
-		return BackupRecord{}, err
+		return BackupRecord{}, cleanupSnapshots(err)
 	}
 	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
 		if _, err = e.collectStorageLocked(ctx, journal, map[string]bool{backup.ID: true}); err != nil {
@@ -1057,6 +1140,9 @@ func (s *FileStore) RestoreBackup(ctx context.Context, backup BackupRecord) erro
 		return errors.New("host lifecycle backup record is invalid")
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.RestoreManagedIntegrationSnapshot(ctx, backup.ManagedIntegrationRef); err != nil {
 		return err
 	}
 	if backup.Installation != nil {

@@ -59,13 +59,16 @@ type RuntimeSnapshotStorage interface {
 }
 
 type LifecycleStorageUsage struct {
-	Bytes            int64
-	BackupBytes      int64
-	RuntimeBytes     int64
-	Backups          int
-	RuntimeSnapshots int
-	ProtectedBackups int
-	OrphanSnapshots  int
+	Bytes                             int64
+	BackupBytes                       int64
+	RuntimeBytes                      int64
+	ManagedIntegrationBytes           int64
+	Backups                           int
+	RuntimeSnapshots                  int
+	ManagedIntegrationSnapshots       int
+	ProtectedBackups                  int
+	OrphanSnapshots                   int
+	OrphanManagedIntegrationSnapshots int
 }
 
 type LifecycleStorageGCResult struct {
@@ -78,10 +81,11 @@ type LifecycleStorageGCResult struct {
 }
 
 type lifecycleBackupStorageEntry struct {
-	Backup    BackupRecord
-	MetaBytes int64
-	RunBytes  int64
-	Protected bool
+	Backup       BackupRecord
+	MetaBytes    int64
+	RunBytes     int64
+	ManagedBytes int64
+	Protected    bool
 }
 
 func (s *FileStore) normalizedStorageLimits() (LifecycleStorageLimits, error) {
@@ -110,6 +114,10 @@ func (s *FileStore) StorageUsage(ctx context.Context, storage RuntimeSnapshotSto
 	if err != nil {
 		return LifecycleStorageUsage{}, err
 	}
+	managedSnapshots, err := s.ListManagedIntegrationSnapshots(ctx)
+	if err != nil {
+		return LifecycleStorageUsage{}, err
+	}
 	snapshotByRef := make(map[string]RuntimeSnapshotInfo, len(snapshots))
 	for _, snapshot := range snapshots {
 		if snapshot.Ref == "" || snapshot.Bytes < 0 || snapshot.CreatedAt.IsZero() {
@@ -120,21 +128,43 @@ func (s *FileStore) StorageUsage(ctx context.Context, storage RuntimeSnapshotSto
 		}
 		snapshotByRef[snapshot.Ref] = snapshot
 	}
+	managedByRef := make(map[string]RuntimeSnapshotInfo, len(managedSnapshots))
+	for _, snapshot := range managedSnapshots {
+		if !validManagedIntegrationSnapshotRef(snapshot.Ref) || snapshot.Bytes < 0 || snapshot.CreatedAt.IsZero() {
+			return LifecycleStorageUsage{}, errors.New("managed integration snapshot storage returned invalid accounting")
+		}
+		if _, exists := managedByRef[snapshot.Ref]; exists {
+			return LifecycleStorageUsage{}, errors.New("managed integration snapshot storage returned duplicate references")
+		}
+		managedByRef[snapshot.Ref] = snapshot
+	}
 	referenced := make(map[string]bool, len(backups))
+	referencedManaged := make(map[string]bool, len(backups))
 	var usage LifecycleStorageUsage
 	for _, backup := range backups {
 		metaBytes, metaErr := s.backupMetadataBytes(backup.ID)
 		if metaErr != nil {
 			return LifecycleStorageUsage{}, metaErr
 		}
-		_, exists := snapshotByRef[backup.RuntimeRef]
-		if !exists {
+		if _, exists := snapshotByRef[backup.RuntimeRef]; !exists {
 			return LifecycleStorageUsage{}, fmt.Errorf("host lifecycle backup %s references missing runtime snapshot", backup.ID)
 		}
 		if referenced[backup.RuntimeRef] {
 			return LifecycleStorageUsage{}, errors.New("host lifecycle backups share a runtime snapshot reference")
 		}
 		referenced[backup.RuntimeRef] = true
+		if backup.ManagedIntegrationRef != "" {
+			if _, exists := managedByRef[backup.ManagedIntegrationRef]; !exists {
+				return LifecycleStorageUsage{}, fmt.Errorf("host lifecycle backup %s references missing managed integration snapshot", backup.ID)
+			}
+			if _, _, validateErr := s.loadManagedIntegrationSnapshot(backup.ManagedIntegrationRef); validateErr != nil {
+				return LifecycleStorageUsage{}, fmt.Errorf("host lifecycle backup %s references invalid managed integration snapshot: %w", backup.ID, validateErr)
+			}
+			if referencedManaged[backup.ManagedIntegrationRef] {
+				return LifecycleStorageUsage{}, errors.New("host lifecycle backups share a managed integration snapshot reference")
+			}
+			referencedManaged[backup.ManagedIntegrationRef] = true
+		}
 		usage.BackupBytes += metaBytes
 		usage.Backups++
 	}
@@ -145,7 +175,14 @@ func (s *FileStore) StorageUsage(ctx context.Context, storage RuntimeSnapshotSto
 			usage.OrphanSnapshots++
 		}
 	}
-	usage.Bytes = usage.BackupBytes + usage.RuntimeBytes
+	for _, snapshot := range managedSnapshots {
+		usage.ManagedIntegrationBytes += snapshot.Bytes
+		usage.ManagedIntegrationSnapshots++
+		if !referencedManaged[snapshot.Ref] {
+			usage.OrphanManagedIntegrationSnapshots++
+		}
+	}
+	usage.Bytes = usage.BackupBytes + usage.RuntimeBytes + usage.ManagedIntegrationBytes
 	return usage, nil
 }
 
@@ -229,6 +266,10 @@ func (e *TransactionEngine) collectStorageLocked(
 	if err != nil {
 		return LifecycleStorageGCResult{}, err
 	}
+	managedSnapshots, err := e.Store.ListManagedIntegrationSnapshots(ctx)
+	if err != nil {
+		return LifecycleStorageGCResult{}, err
+	}
 	snapshotByRef := make(map[string]RuntimeSnapshotInfo, len(snapshots))
 	for _, snapshot := range snapshots {
 		if snapshot.Ref == "" || snapshot.Bytes < 0 || snapshot.CreatedAt.IsZero() {
@@ -238,6 +279,16 @@ func (e *TransactionEngine) collectStorageLocked(
 			return LifecycleStorageGCResult{}, errors.New("runtime snapshot storage returned duplicate references")
 		}
 		snapshotByRef[snapshot.Ref] = snapshot
+	}
+	managedByRef := make(map[string]RuntimeSnapshotInfo, len(managedSnapshots))
+	for _, snapshot := range managedSnapshots {
+		if !validManagedIntegrationSnapshotRef(snapshot.Ref) || snapshot.Bytes < 0 || snapshot.CreatedAt.IsZero() {
+			return LifecycleStorageGCResult{}, errors.New("managed integration snapshot storage returned invalid accounting")
+		}
+		if _, exists := managedByRef[snapshot.Ref]; exists {
+			return LifecycleStorageGCResult{}, errors.New("managed integration snapshot storage returned duplicate references")
+		}
+		managedByRef[snapshot.Ref] = snapshot
 	}
 
 	protected := map[string]bool{}
@@ -264,6 +315,7 @@ func (e *TransactionEngine) collectStorageLocked(
 	}
 
 	referencedSnapshots := make(map[string]bool, len(backups))
+	referencedManaged := make(map[string]bool, len(backups))
 	entries := make([]lifecycleBackupStorageEntry, 0, len(backups))
 	var before LifecycleStorageUsage
 	for _, backup := range backups {
@@ -279,8 +331,24 @@ func (e *TransactionEngine) collectStorageLocked(
 			return LifecycleStorageGCResult{}, errors.New("host lifecycle backups share a runtime snapshot reference")
 		}
 		referencedSnapshots[backup.RuntimeRef] = true
+		var managedBytes int64
+		if backup.ManagedIntegrationRef != "" {
+			managed, exists := managedByRef[backup.ManagedIntegrationRef]
+			if !exists {
+				return LifecycleStorageGCResult{}, fmt.Errorf("host lifecycle backup %s references missing managed integration snapshot", backup.ID)
+			}
+			if _, _, validateErr := e.Store.loadManagedIntegrationSnapshot(backup.ManagedIntegrationRef); validateErr != nil {
+				return LifecycleStorageGCResult{}, fmt.Errorf("host lifecycle backup %s references invalid managed integration snapshot: %w", backup.ID, validateErr)
+			}
+			if referencedManaged[backup.ManagedIntegrationRef] {
+				return LifecycleStorageGCResult{}, errors.New("host lifecycle backups share a managed integration snapshot reference")
+			}
+			referencedManaged[backup.ManagedIntegrationRef] = true
+			managedBytes = managed.Bytes
+		}
 		entry := lifecycleBackupStorageEntry{
-			Backup: backup, MetaBytes: metaBytes, RunBytes: info.Bytes, Protected: protected[backup.ID],
+			Backup: backup, MetaBytes: metaBytes, RunBytes: info.Bytes,
+			ManagedBytes: managedBytes, Protected: protected[backup.ID],
 		}
 		entries = append(entries, entry)
 		before.BackupBytes += metaBytes
@@ -296,7 +364,14 @@ func (e *TransactionEngine) collectStorageLocked(
 			before.OrphanSnapshots++
 		}
 	}
-	before.Bytes = before.BackupBytes + before.RuntimeBytes
+	for _, snapshot := range managedSnapshots {
+		before.ManagedIntegrationBytes += snapshot.Bytes
+		before.ManagedIntegrationSnapshots++
+		if !referencedManaged[snapshot.Ref] {
+			before.OrphanManagedIntegrationSnapshots++
+		}
+	}
+	before.Bytes = before.BackupBytes + before.RuntimeBytes + before.ManagedIntegrationBytes
 	result := LifecycleStorageGCResult{Before: before, Supported: true}
 
 	// Orphans cannot be valid rollback or recovery roots because no durable
@@ -313,6 +388,20 @@ func (e *TransactionEngine) collectStorageLocked(
 		before.RuntimeBytes -= snapshot.Bytes
 		before.RuntimeSnapshots--
 		before.OrphanSnapshots--
+		before.Bytes -= snapshot.Bytes
+	}
+	for _, snapshot := range managedSnapshots {
+		if referencedManaged[snapshot.Ref] {
+			continue
+		}
+		if err = e.Store.DeleteManagedIntegrationSnapshot(ctx, snapshot.Ref); err != nil {
+			return result, err
+		}
+		result.RemovedOrphans = append(result.RemovedOrphans, snapshot.Ref)
+		result.ReclaimedBytes += snapshot.Bytes
+		before.ManagedIntegrationBytes -= snapshot.Bytes
+		before.ManagedIntegrationSnapshots--
+		before.OrphanManagedIntegrationSnapshots--
 		before.Bytes -= snapshot.Bytes
 	}
 
@@ -334,8 +423,8 @@ func (e *TransactionEngine) collectStorageLocked(
 		if !expired && !overQuota {
 			continue
 		}
-		// Remove the durable metadata first. A crash after this point leaves an
-		// orphan snapshot, which the next collection can safely reclaim.
+		// Remove durable metadata first. Any crash after this point leaves only
+		// private orphan snapshots, which the next collection reclaims.
 		if err = e.Store.DeleteBackup(ctx, entry.Backup.ID); err != nil {
 			return result, err
 		}
@@ -348,6 +437,13 @@ func (e *TransactionEngine) collectStorageLocked(
 		}
 		currentBytes -= entry.RunBytes
 		result.ReclaimedBytes += entry.RunBytes
+		if entry.Backup.ManagedIntegrationRef != "" {
+			if err = e.Store.DeleteManagedIntegrationSnapshot(ctx, entry.Backup.ManagedIntegrationRef); err != nil {
+				return result, err
+			}
+			currentBytes -= entry.ManagedBytes
+			result.ReclaimedBytes += entry.ManagedBytes
+		}
 	}
 
 	if currentBytes > limits.MaxBytes || currentBackups > limits.MaxBackups {
@@ -361,28 +457,43 @@ func (e *TransactionEngine) collectStorageLocked(
 	if err != nil {
 		return result, err
 	}
+	afterManaged, err := e.Store.ListManagedIntegrationSnapshots(ctx)
+	if err != nil {
+		return result, err
+	}
 	var after LifecycleStorageUsage
 	after.Backups = len(afterBackups)
 	after.RuntimeSnapshots = len(afterSnapshots)
-	afterProtected := map[string]bool{}
+	after.ManagedIntegrationSnapshots = len(afterManaged)
+	afterRuntimeRefs := map[string]bool{}
+	afterManagedRefs := map[string]bool{}
 	for _, backup := range afterBackups {
 		metaBytes, metaErr := e.Store.backupMetadataBytes(backup.ID)
 		if metaErr != nil {
 			return result, metaErr
 		}
 		after.BackupBytes += metaBytes
-		afterProtected[backup.RuntimeRef] = true
+		afterRuntimeRefs[backup.RuntimeRef] = true
+		if backup.ManagedIntegrationRef != "" {
+			afterManagedRefs[backup.ManagedIntegrationRef] = true
+		}
 		if protected[backup.ID] {
 			after.ProtectedBackups++
 		}
 	}
 	for _, snapshot := range afterSnapshots {
 		after.RuntimeBytes += snapshot.Bytes
-		if !afterProtected[snapshot.Ref] {
+		if !afterRuntimeRefs[snapshot.Ref] {
 			after.OrphanSnapshots++
 		}
 	}
-	after.Bytes = after.BackupBytes + after.RuntimeBytes
+	for _, snapshot := range afterManaged {
+		after.ManagedIntegrationBytes += snapshot.Bytes
+		if !afterManagedRefs[snapshot.Ref] {
+			after.OrphanManagedIntegrationSnapshots++
+		}
+	}
+	after.Bytes = after.BackupBytes + after.RuntimeBytes + after.ManagedIntegrationBytes
 	result.After = after
 	return result, nil
 }
@@ -407,11 +518,12 @@ func newestRollbackBackup(backups []BackupRecord) string {
 }
 
 func (e *TransactionEngine) discardBackup(ctx context.Context, backup BackupRecord) error {
+	metaErr := e.Store.DeleteBackup(ctx, backup.ID)
+	managedErr := e.Store.DeleteManagedIntegrationSnapshot(ctx, backup.ManagedIntegrationRef)
 	storage, ok := e.Backend.(RuntimeSnapshotStorage)
 	if !ok {
-		return e.Store.DeleteBackup(ctx, backup.ID)
+		return errors.Join(metaErr, managedErr)
 	}
-	metaErr := e.Store.DeleteBackup(ctx, backup.ID)
 	snapshotErr := storage.DeleteRuntimeSnapshot(ctx, backup.RuntimeRef)
-	return errors.Join(metaErr, snapshotErr)
+	return errors.Join(metaErr, managedErr, snapshotErr)
 }

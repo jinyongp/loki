@@ -32,21 +32,22 @@ const (
 type OperationKind string
 
 const (
-	OperationApply            OperationKind = "apply"
-	OperationBackup           OperationKind = "backup"
-	OperationInstall          OperationKind = "install"
-	OperationRollback         OperationKind = "rollback"
-	OperationRestore          OperationKind = "restore"
-	OperationUninstall        OperationKind = "uninstall"
-	OperationEnableComponent  OperationKind = "enable_component"
-	OperationDisableComponent OperationKind = "disable_component"
-	OperationSetIngressHosts  OperationKind = "set_ingress_hosts"
+	OperationApply             OperationKind = "apply"
+	OperationBackup            OperationKind = "backup"
+	OperationInstall           OperationKind = "install"
+	OperationRollback          OperationKind = "rollback"
+	OperationRestore           OperationKind = "restore"
+	OperationUninstall         OperationKind = "uninstall"
+	OperationEnableComponent   OperationKind = "enable_component"
+	OperationDisableComponent  OperationKind = "disable_component"
+	OperationSetIngressHosts   OperationKind = "set_ingress_hosts"
+	OperationUpdateIntegration OperationKind = "update_integration"
 )
 
 func (k OperationKind) Valid() bool {
 	switch k {
 	case OperationApply, OperationBackup, OperationInstall, OperationRollback, OperationRestore, OperationUninstall,
-		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts:
+		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration:
 		return true
 	default:
 		return false
