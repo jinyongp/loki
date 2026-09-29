@@ -265,6 +265,8 @@ try {
         Fail "Windows ownership manifest does not match the accepted installation"
     }
 
+    & (Join-Path $PSScriptRoot "accept-managed-integrations.ps1") -Frontend $canonicalFrontend -Distribution $distributionName -ConnectionFile $connectionFile
+
     # Convert the accepted installation into the exact Windows ownership shape
     # produced by the v0.1.19 baseline while keeping the current candidate
     # appliance bytes. This isolates state/task migration compatibility from
