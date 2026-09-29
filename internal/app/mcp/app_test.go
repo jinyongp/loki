@@ -147,6 +147,29 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatalf("operator ingress host was rejected: %d %s", operatorRecorder.Code, operatorRecorder.Body.String())
 	}
 
+	discoverRequest := httptest.NewRequest(http.MethodPost, server.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"discover","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"chatgpt","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}`))
+	discoverRequest.Header.Set("Authorization", "Bearer "+token)
+	discoverRequest.Header.Set("Content-Type", "application/json")
+	discoverRequest.Header.Set("Accept", "application/json, text/event-stream")
+	discoverRequest.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	discoverRequest.Header.Set("Mcp-Method", "server/discover")
+	discoverRecorder := httptest.NewRecorder()
+	app.ServeHTTP(discoverRecorder, discoverRequest)
+	if discoverRecorder.Code != http.StatusNotFound {
+		t.Fatalf("modern discovery status=%d body=%q", discoverRecorder.Code, discoverRecorder.Body.String())
+	}
+	var discoverResponse struct {
+		Error struct {
+			Code int `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(discoverRecorder.Body.Bytes(), &discoverResponse); err != nil {
+		t.Fatal(err)
+	}
+	if discoverResponse.Error.Code != -32601 {
+		t.Fatalf("modern discovery error=%d body=%q", discoverResponse.Error.Code, discoverRecorder.Body.String())
+	}
+
 	client, err := mcp.NewClient(&mcp.Implementation{Name: "assembled-test", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport{token}}}, nil)
 	if err != nil {
 		t.Fatal(err)

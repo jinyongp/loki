@@ -210,6 +210,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if err != nil {
 		return nil, err
 	}
+	app.Server.AddReceivingMiddleware(rejectModernDiscovery)
 	listenerHosts, err := config.NormalizePublicHosts(append(append([]string(nil), c.PublicHosts...), options.IngressHosts...))
 	if err != nil {
 		return nil, errors.New("MCP ingress Host allowlist is invalid")
