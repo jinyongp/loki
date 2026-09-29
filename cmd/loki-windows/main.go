@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], consoleOutputWriter(os.Stdout), consoleOutputWriter(os.Stderr)))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
