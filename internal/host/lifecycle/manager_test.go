@@ -143,6 +143,33 @@ func TestManagerPreparePublishesInspectablePlanOnly(t *testing.T) {
 	}
 }
 
+func TestManagerApplyReportsNoNewerUpdateWhenInstalledMatchesAvailable(t *testing.T) {
+	manager, store, jobs, applier, _ := managerFixture(t)
+	store.snapshot.Available = store.snapshot.Installed
+
+	_, err := manager.Apply(t.Context(), ApplyOptions{})
+	if err == nil || !strings.Contains(err.Error(), "no newer host update is available") ||
+		strings.Contains(err.Error(), "run prepare") {
+		t.Fatalf("current-release apply error = %v", err)
+	}
+	if jobs.calls != 0 || len(applier.requests) != 0 {
+		t.Fatalf("current-release apply reached jobs/applier: jobs=%d apply=%d", jobs.calls, len(applier.requests))
+	}
+}
+
+func TestManagerApplyRequiresPrepareOnlyWhenUpdateIsAvailable(t *testing.T) {
+	manager, _, jobs, applier, _ := managerFixture(t)
+
+	_, err := manager.Apply(t.Context(), ApplyOptions{})
+	if err == nil || !strings.Contains(err.Error(), "available but not prepared") ||
+		!strings.Contains(err.Error(), "run prepare") {
+		t.Fatalf("unprepared available update error = %v", err)
+	}
+	if jobs.calls != 0 || len(applier.requests) != 0 {
+		t.Fatalf("unprepared update reached jobs/applier: jobs=%d apply=%d", jobs.calls, len(applier.requests))
+	}
+}
+
 func TestManagerApplyRejectsStalePreparedPlanBeforeJobInspection(t *testing.T) {
 	manager, store, jobs, applier, _ := managerFixture(t)
 	if _, err := manager.Prepare(t.Context()); err != nil {

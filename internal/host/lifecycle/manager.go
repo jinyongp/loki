@@ -153,8 +153,15 @@ func (m Manager) Apply(ctx context.Context, options ApplyOptions) (ApplyResult, 
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	if snapshot.Available == nil || snapshot.Prepared == nil {
-		return ApplyResult{}, errors.New("host update must be prepared before apply")
+	if snapshot.Prepared == nil {
+		if snapshot.Available == nil ||
+			(snapshot.Installed != nil && snapshot.Available.ID == snapshot.Installed.ID) {
+			return ApplyResult{}, errors.New("no newer host update is available to apply")
+		}
+		return ApplyResult{}, errors.New("host update is available but not prepared; run prepare before apply")
+	}
+	if snapshot.Available == nil {
+		return ApplyResult{}, errors.New("prepared host update is missing its candidate release")
 	}
 	if !snapshot.Prepared.Valid() {
 		return ApplyResult{}, errors.New("prepared host update plan is invalid")
