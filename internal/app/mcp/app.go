@@ -224,8 +224,17 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		}
 		transport.ServeHTTP(w, r)
 	})
-	protected := auth.Gate{Token: options.Token, External: options.ExternalAuth}.Handler(auth.HostPolicy(c.Port, listenerHosts, mcpRoute))
+	ingress := auth.HostPolicy(c.Port, listenerHosts, mcpRoute)
+	protected := auth.Gate{Token: options.Token, External: options.ExternalAuth}.Handler(ingress)
 	app.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tunnel-client treats 404 from both PRMD candidates as the supported
+		// signal that this bearer-token MCP does not expose OAuth discovery.
+		// Keep these probes outside the bearer gate so absence stays a 404.
+		if r.URL.Path == "/.well-known/oauth-protected-resource/mcp" ||
+			r.URL.Path == "/.well-known/oauth-protected-resource" {
+			ingress.ServeHTTP(w, r)
+			return
+		}
 		if app.Previews != nil {
 			if _, ok := app.Previews.ResolveHost(r.Host); ok {
 				if options.PreviewExternalAuth != nil && !options.PreviewExternalAuth.VerifyRequest(r) {

@@ -99,6 +99,20 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 			t.Fatal("MCP credential bypassed preview Access", w.Code)
 		}
 	}
+	for _, path := range []string{
+		"/.well-known/oauth-protected-resource/mcp",
+		"/.well-known/oauth-protected-resource",
+	} {
+		r := httptest.NewRequest(http.MethodGet, server.URL+path, nil)
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, r)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("OAuth discovery path %s status=%d body=%q", path, w.Code, w.Body.String())
+		}
+		if w.Header().Get("WWW-Authenticate") != "" {
+			t.Fatalf("OAuth discovery path %s unexpectedly emitted an auth challenge", path)
+		}
+	}
 	for _, test := range []struct {
 		auth, host, origin, access string
 		want                       int
