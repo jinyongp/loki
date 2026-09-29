@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"loki/internal/progress"
 )
 
 type UninstallPlatform interface {
@@ -19,6 +21,7 @@ type UninstallPlatform interface {
 
 type UninstallController struct {
 	Platform UninstallPlatform
+	Progress progress.Reporter
 }
 
 func (controller UninstallController) Run(
@@ -32,6 +35,7 @@ func (controller UninstallController) Run(
 	if controller.Platform == nil {
 		return errors.New("Windows uninstall platform is unavailable")
 	}
+	progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "inspect", State: progress.StateStarted, Message: "Inspecting verified Windows Loki ownership..."})
 	snapshot, err := controller.Platform.Collect(ctx, expected)
 	if err != nil {
 		return err
@@ -43,6 +47,7 @@ func (controller UninstallController) Run(
 		return nil
 	}
 
+	progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "revalidate", State: progress.StateStarted, Message: "Revalidating installation ownership before destructive changes..."})
 	live, err := controller.Platform.Collect(ctx, expected)
 	if err != nil {
 		return err
@@ -54,10 +59,12 @@ func (controller UninstallController) Run(
 		return err
 	}
 
+	progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "connections", State: progress.StateStarted, Message: "Removing managed connection runtimes..."})
 	if err = controller.Platform.RemoveConnections(ctx, expected.Distribution); err != nil {
 		return fmt.Errorf("remove Loki local connections: %w", err)
 	}
 	if live.StartupTask.Present {
+		progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "startup-task", State: progress.StateStarted, Message: "Removing the Windows startup task..."})
 		if err = controller.Platform.RemoveStartupTask(ctx, expected); err != nil {
 			return err
 		}
@@ -68,6 +75,7 @@ func (controller UninstallController) Run(
 		); err != nil {
 			return err
 		}
+		progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "terminate", State: progress.StateStarted, Message: "Stopping the Loki WSL distribution..."})
 		if err = controller.Platform.TerminateDistribution(ctx, expected.Distribution); err != nil {
 			return err
 		}
@@ -76,6 +84,7 @@ func (controller UninstallController) Run(
 		); err != nil {
 			return err
 		}
+		progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "unregister", State: progress.StateStarted, Message: "Unregistering the Loki WSL distribution..."})
 		if err = controller.Platform.UnregisterDistribution(ctx, expected.Distribution); err != nil {
 			return err
 		}
@@ -88,10 +97,12 @@ func (controller UninstallController) Run(
 		}
 	}
 	if live.Windows.Present {
+		progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "windows-state", State: progress.StateStarted, Message: "Removing owned per-distribution Windows state..."})
 		if err = controller.Platform.RemoveWindowsState(expected, live.Windows); err != nil {
 			return err
 		}
 	}
+	progress.Emit(controller.Progress, progress.Event{Operation: "uninstall", Phase: "verify", State: progress.StateStarted, Message: "Verifying that the local installation is absent..."})
 	final, err := controller.Platform.Collect(ctx, expected)
 	if err != nil {
 		return err

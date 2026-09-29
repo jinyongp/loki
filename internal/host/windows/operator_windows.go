@@ -2,6 +2,8 @@
 
 package windows
 
+import "loki/internal/progress"
+
 func NewWindowsOperatorClient() OperatorClient {
 	runner := ExecNativeRunner{}
 	return OperatorClient{WSL: WSLClient{Runner: runner}}
@@ -26,6 +28,13 @@ func NewWindowsReplicaSynchronizer(reconciler ConnectionRuntimeReconciler) Repli
 }
 
 func NewWindowsUninstallController(connections LocalConnectionRemover) UninstallController {
+	return NewWindowsUninstallControllerWithProgress(connections, nil)
+}
+
+func NewWindowsUninstallControllerWithProgress(
+	connections LocalConnectionRemover,
+	reporter progress.Reporter,
+) UninstallController {
 	if connections == nil {
 		connections = WindowsConnectionRemovalGuard{}
 	}
@@ -34,11 +43,14 @@ func NewWindowsUninstallController(connections LocalConnectionRemover) Uninstall
 	tasks := PowerShellStartupTaskSource{}
 	filesystem := OSStateFilesystem{}
 	collector := PreflightCollector{Filesystem: filesystem, Tasks: tasks, WSL: wsl}
-	return UninstallController{Platform: UninstallAdapter{
-		Collector:   collector,
-		Tasks:       tasks,
-		Filesystem:  filesystem,
-		Remover:     OSPathRemover{},
-		Connections: connections,
-	}}
+	return UninstallController{
+		Platform: UninstallAdapter{
+			Collector:   collector,
+			Tasks:       tasks,
+			Filesystem:  filesystem,
+			Remover:     OSPathRemover{},
+			Connections: connections,
+		},
+		Progress: reporter,
+	}
 }

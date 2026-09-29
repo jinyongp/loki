@@ -19,6 +19,7 @@ import (
 
 	"loki/internal/host/lifecycle"
 	"loki/internal/host/releases"
+	"loki/internal/progress"
 )
 
 const (
@@ -42,7 +43,8 @@ type hostUpdateReleaseBinding struct {
 type hostUpdateBootstrapInspector func(context.Context, string) (hostUpdateReleaseBinding, error)
 
 type hostUpdateHTTPFetcher struct {
-	Client *http.Client
+	Client   *http.Client
+	Progress progress.Reporter
 }
 
 func (f hostUpdateHTTPFetcher) Fetch(ctx context.Context, assetURL string, maximum int64) ([]byte, error) {
@@ -68,7 +70,23 @@ func (f hostUpdateHTTPFetcher) Fetch(ctx context.Context, assetURL string, maxim
 	if response.ContentLength > maximum {
 		return nil, errors.New("release asset exceeds size policy")
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maximum+1))
+	reader := io.Reader(io.LimitReader(response.Body, maximum+1))
+	stopHeartbeat := func() {}
+	if maximum >= 1<<20 {
+		total := response.ContentLength
+		if total < 0 {
+			total = 0
+		}
+		label := filepath.Base(request.URL.Path)
+		reader = progress.NewReader(reader, f.Progress, progress.ReaderOptions{
+			Operation: "update", Phase: "download-asset", Label: label, TotalBytes: total,
+		})
+		stopHeartbeat = progress.StartHeartbeat(ctx, f.Progress, progress.HeartbeatOptions{
+			Operation: "update", Phase: "download-asset", Message: "Still downloading " + label,
+		})
+	}
+	raw, err := io.ReadAll(reader)
+	stopHeartbeat()
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +97,14 @@ func (f hostUpdateHTTPFetcher) Fetch(ctx context.Context, assetURL string, maxim
 }
 
 func prepareHostUpdateCandidate(ctx context.Context, store *lifecycle.FileStore) (lifecycle.Generation, error) {
+	return prepareHostUpdateCandidateProgress(ctx, store, nil)
+}
+
+func prepareHostUpdateCandidateProgress(
+	ctx context.Context,
+	store *lifecycle.FileStore,
+	reporter progress.Reporter,
+) (lifecycle.Generation, error) {
 	host, err := releases.DetectHost()
 	if err != nil {
 		return lifecycle.Generation{}, err
@@ -88,7 +114,7 @@ func prepareHostUpdateCandidate(ctx context.Context, store *lifecycle.FileStore)
 		return lifecycle.Generation{}, err
 	}
 	return prepareHostUpdateCandidateWithPrefetch(
-		ctx, store, hostUpdateHTTPFetcher{}, inspectHostUpdateBootstrap, host, backend.Prefetch,
+		ctx, store, hostUpdateHTTPFetcher{Progress: reporter}, inspectHostUpdateBootstrap, host, backend.Prefetch, reporter,
 	)
 }
 
@@ -99,7 +125,7 @@ func prepareHostUpdateCandidateWith(
 	inspect hostUpdateBootstrapInspector,
 	host releases.SupportedHost,
 ) (lifecycle.Generation, error) {
-	return prepareHostUpdateCandidateWithPrefetch(ctx, store, fetcher, inspect, host, nil)
+	return prepareHostUpdateCandidateWithPrefetch(ctx, store, fetcher, inspect, host, nil, nil)
 }
 
 func prepareHostUpdateCandidateWithPrefetch(
@@ -109,10 +135,12 @@ func prepareHostUpdateCandidateWithPrefetch(
 	inspect hostUpdateBootstrapInspector,
 	host releases.SupportedHost,
 	prefetch func(context.Context, lifecycle.Generation, lifecycle.InstallationState, []string) error,
+	reporter progress.Reporter,
 ) (lifecycle.Generation, error) {
 	if store == nil || fetcher == nil || inspect == nil {
 		return lifecycle.Generation{}, errors.New("host update discovery is not configured")
 	}
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "inspect", State: progress.StateStarted, Message: "Inspecting installed release and host state..."})
 	snapshot, err := store.Snapshot(ctx)
 	if err != nil {
 		return lifecycle.Generation{}, err
@@ -120,6 +148,7 @@ func prepareHostUpdateCandidateWithPrefetch(
 	if snapshot.Installed == nil || snapshot.Installation == nil {
 		return lifecycle.Generation{}, errors.New("host update discovery requires an installed release")
 	}
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "discover", State: progress.StateStarted, Message: "Checking the published Loki release..."})
 	installerRaw, err := fetcher.Fetch(ctx, publicHostUpdateInstallerURL, maxHostUpdateInstallerBytes)
 	if err != nil {
 		return lifecycle.Generation{}, fmt.Errorf("fetch public Loki installer: %w", err)
@@ -129,6 +158,7 @@ func prepareHostUpdateCandidateWithPrefetch(
 		return lifecycle.Generation{}, err
 	}
 
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "bootstrap", State: progress.StateStarted, Message: "Downloading and verifying the release bootstrap..."})
 	bootstrapURL, err := hostUpdateReleaseAssetURL(tag, "loki-bootstrap-linux-amd64")
 	if err != nil {
 		return lifecycle.Generation{}, err
@@ -160,6 +190,7 @@ func prepareHostUpdateCandidateWithPrefetch(
 		return lifecycle.Generation{}, errors.New("release bootstrap tag does not match the public installer")
 	}
 
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "metadata", State: progress.StateStarted, Message: "Verifying release metadata and host compatibility..."})
 	manifestURL, err := hostUpdateReleaseAssetURL(tag, "loki-release-manifest.json")
 	if err != nil {
 		return lifecycle.Generation{}, err
@@ -216,6 +247,7 @@ func prepareHostUpdateCandidateWithPrefetch(
 		return lifecycle.Generation{}, errors.New("verified release notes are empty or invalid")
 	}
 
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "binary", State: progress.StateStarted, Message: "Downloading and verifying the host binary..."})
 	binaryURL, err := hostUpdateReleaseAssetURL(tag, "loki-linux-amd64")
 	if err != nil {
 		return lifecycle.Generation{}, err
@@ -246,7 +278,13 @@ func prepareHostUpdateCandidateWithPrefetch(
 		return lifecycle.Generation{}, fmt.Errorf("stage verified host CLI: %w", err)
 	}
 	if prefetch != nil {
-		if err = prefetch(ctx, candidate, *snapshot.Installation, snapshot.Host.EnabledComponents); err != nil {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "prefetch", State: progress.StateStarted, Message: "Prefetching runtime artifacts for the new release..."})
+		stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+			Operation: "update", Phase: "prefetch", Message: "Still prefetching runtime artifacts",
+		})
+		err = prefetch(ctx, candidate, *snapshot.Installation, snapshot.Host.EnabledComponents)
+		stopHeartbeat()
+		if err != nil {
 			return lifecycle.Generation{}, err
 		}
 	}
@@ -256,6 +294,7 @@ func prepareHostUpdateCandidateWithPrefetch(
 		ReleaseNotesPath: manifest.ReleaseNotes.Path, ReleaseNotesLength: manifest.ReleaseNotes.Length,
 		ReleaseNotesSHA256: manifest.ReleaseNotes.SHA256, ReleaseNotes: string(releaseNotesRaw),
 	}
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "publish", State: progress.StateStarted, Message: "Recording the prepared update candidate..."})
 	if err = publishHostUpdateCandidate(ctx, store, snapshot, candidate, metadata); err != nil {
 		return lifecycle.Generation{}, err
 	}

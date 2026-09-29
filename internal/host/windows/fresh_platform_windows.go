@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"loki/internal/progress"
 )
 
 type WindowsFreshPlatform struct {
@@ -21,10 +23,13 @@ type WindowsFreshPlatform struct {
 	Sleep    SleepFunc
 	Attempts int
 	Runner   NativeRunner
+	Progress progress.Reporter
 }
 
 func (platform WindowsFreshPlatform) PrepareAppliance(ctx context.Context, options InstallOptions) (PreparedAppliance, func(), error) {
-	return ReleaseAppliancePreparer{Binding: platform.Binding, Client: platform.Client}.PrepareAppliance(ctx, options)
+	return ReleaseAppliancePreparer{
+		Binding: platform.Binding, Client: platform.Client, Progress: platform.Progress,
+	}.PrepareAppliance(ctx, options)
 }
 
 func (platform WindowsFreshPlatform) RegisterDistribution(
@@ -47,7 +52,7 @@ func (platform WindowsFreshPlatform) Provision(
 func (platform WindowsFreshPlatform) provisioner() WSLFreshProvisioner {
 	return WSLFreshProvisioner{
 		Client: platform.WSL, Starter: platform.Starter,
-		Sleep: platform.Sleep, Attempts: platform.Attempts,
+		Sleep: platform.Sleep, Attempts: platform.Attempts, Progress: platform.Progress,
 	}
 }
 
@@ -280,15 +285,23 @@ func removeCreatedDirectoryTree(target string) error {
 }
 
 func NewWindowsInstallController(binding ReleaseBinding) InstallController {
+	return NewWindowsInstallControllerWithProgress(binding, nil)
+}
+
+func NewWindowsInstallControllerWithProgress(
+	binding ReleaseBinding,
+	reporter progress.Reporter,
+) InstallController {
 	runner := ExecNativeRunner{}
 	wsl := WSLClient{Runner: runner}
 	tasks := PowerShellStartupTaskSource{}
 	filesystem := OSStateFilesystem{}
 	freshPlatform := WindowsFreshPlatform{
-		Binding: binding,
-		WSL:     wsl,
-		Tasks:   tasks,
-		Runner:  runner,
+		Binding:  binding,
+		WSL:      wsl,
+		Tasks:    tasks,
+		Runner:   runner,
+		Progress: reporter,
 	}
 	collector := PreflightCollector{Filesystem: filesystem, Tasks: tasks, WSL: wsl}
 	return InstallController{
@@ -300,7 +313,7 @@ func NewWindowsInstallController(binding ReleaseBinding) InstallController {
 			Remover:    OSPathRemover{},
 		},
 		Port:           LoopbackPortProbe{},
-		Fresh:          TransactionalFreshInstaller{Platform: freshPlatform},
+		Fresh:          TransactionalFreshInstaller{Platform: freshPlatform, Progress: reporter},
 		Filesystem:     filesystem,
 		DesiredVersion: strings.TrimPrefix(binding.ReleaseTag, "v"),
 	}

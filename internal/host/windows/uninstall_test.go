@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"loki/internal/progress"
 )
 
 type fakeUninstallPlatform struct {
@@ -147,5 +149,26 @@ func TestUninstallRefusesProvisioningAndForeignDistribution(t *testing.T) {
 				t.Fatalf("state %s accepted", state)
 			}
 		})
+	}
+}
+
+func TestUninstallReportsDestructivePhases(t *testing.T) {
+	expected := ExpectedInstallation{Distribution: "loki-mcp"}
+	owned := ownedUninstallSnapshot()
+	absent := ExistingSnapshot{Distribution: DistributionState{State: DistributionAbsent}}
+	platform := &fakeUninstallPlatform{snapshots: []ExistingSnapshot{owned, owned, absent}}
+	var phases []string
+	controller := UninstallController{
+		Platform: platform,
+		Progress: progress.ReporterFunc(func(event progress.Event) {
+			phases = append(phases, event.Phase)
+		}),
+	}
+	if err := controller.Run(t.Context(), expected, true); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"inspect", "revalidate", "connections", "startup-task", "terminate", "unregister", "windows-state", "verify"}
+	if !reflect.DeepEqual(phases, want) {
+		t.Fatalf("phases=%#v want=%#v", phases, want)
 	}
 }

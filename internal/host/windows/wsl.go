@@ -6,12 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+
+	"loki/internal/progress"
 )
 
 type NativeRunner interface {
 	Run(context.Context, string, []string) (NativeProbe, error)
+}
+
+type NativeStreamingRunner interface {
+	RunStreaming(context.Context, string, []string, progress.Reporter) (NativeProbe, error)
 }
 
 type ExecNativeRunner struct{}
@@ -23,12 +30,38 @@ func normalizeNativeExitCode(code int) int {
 	return code
 }
 
-func (ExecNativeRunner) Run(ctx context.Context, executable string, arguments []string) (NativeProbe, error) {
+func (runner ExecNativeRunner) Run(ctx context.Context, executable string, arguments []string) (NativeProbe, error) {
+	return runner.run(ctx, executable, arguments, nil)
+}
+
+func (runner ExecNativeRunner) RunStreaming(
+	ctx context.Context,
+	executable string,
+	arguments []string,
+	reporter progress.Reporter,
+) (NativeProbe, error) {
+	return runner.run(ctx, executable, arguments, reporter)
+}
+
+func (ExecNativeRunner) run(
+	ctx context.Context,
+	executable string,
+	arguments []string,
+	reporter progress.Reporter,
+) (NativeProbe, error) {
 	command := exec.CommandContext(ctx, executable, arguments...)
 	var stdout, stderr bytes.Buffer
+	relay := newNativeProgressRelay(reporter)
 	command.Stdout = &stdout
-	command.Stderr = &stderr
+	if relay == nil {
+		command.Stderr = &stderr
+	} else {
+		command.Stderr = io.MultiWriter(&stderr, relay)
+	}
 	err := command.Run()
+	if relay != nil {
+		relay.Flush()
+	}
 	probe := NativeProbe{
 		ExitCode: 0,
 		Stdout:   strings.TrimSpace(strings.ReplaceAll(stdout.String(), "\x00", "")),
@@ -43,6 +76,55 @@ func (ExecNativeRunner) Run(ctx context.Context, executable string, arguments []
 		return probe, nil
 	}
 	return NativeProbe{}, fmt.Errorf("start %s: %w", executable, err)
+}
+
+type nativeProgressRelay struct {
+	reporter progress.Reporter
+	pending  string
+}
+
+func newNativeProgressRelay(reporter progress.Reporter) *nativeProgressRelay {
+	if reporter == nil {
+		return nil
+	}
+	return &nativeProgressRelay{reporter: reporter}
+}
+
+func (relay *nativeProgressRelay) Write(raw []byte) (int, error) {
+	if relay == nil {
+		return len(raw), nil
+	}
+	relay.pending += strings.ReplaceAll(string(raw), "\x00", "")
+	for {
+		index := strings.IndexByte(relay.pending, '\n')
+		if index < 0 {
+			break
+		}
+		line := strings.TrimSuffix(relay.pending[:index], "\r")
+		relay.pending = relay.pending[index+1:]
+		relay.writeLine(line)
+	}
+	return len(raw), nil
+}
+
+func (relay *nativeProgressRelay) Flush() {
+	if relay == nil || relay.pending == "" {
+		return
+	}
+	line := strings.TrimSuffix(relay.pending, "\r")
+	relay.pending = ""
+	relay.writeLine(line)
+}
+
+func (relay *nativeProgressRelay) writeLine(line string) {
+	line = strings.TrimSpace(line)
+	if !progress.IsProgressLine(line) {
+		return
+	}
+	progress.Emit(relay.reporter, progress.Event{
+		State:   progress.StateInfo,
+		Message: strings.TrimPrefix(line, progress.LinePrefix),
+	})
 }
 
 type WSLClient struct {
@@ -246,6 +328,33 @@ func (client WSLClient) run(ctx context.Context, arguments ...string) (NativePro
 		return NativeProbe{}, errors.New("WSL native runner is unavailable")
 	}
 	return client.Runner.Run(ctx, client.executable(), arguments)
+}
+
+func (client WSLClient) runStreaming(
+	ctx context.Context,
+	reporter progress.Reporter,
+	arguments ...string,
+) (NativeProbe, error) {
+	if client.Runner == nil {
+		return NativeProbe{}, errors.New("WSL native runner is unavailable")
+	}
+	if streaming, ok := client.Runner.(NativeStreamingRunner); ok {
+		return streaming.RunStreaming(ctx, client.executable(), arguments, reporter)
+	}
+	result, err := client.Runner.Run(ctx, client.executable(), arguments)
+	if err != nil || reporter == nil {
+		return result, err
+	}
+	for _, line := range strings.Split(strings.ReplaceAll(result.Stderr, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if progress.IsProgressLine(line) {
+			progress.Emit(reporter, progress.Event{
+				State:   progress.StateInfo,
+				Message: strings.TrimPrefix(line, progress.LinePrefix),
+			})
+		}
+	}
+	return result, nil
 }
 
 func nativeFailure(operation string, result NativeProbe) error {

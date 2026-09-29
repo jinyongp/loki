@@ -1,10 +1,13 @@
 package windows
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"reflect"
 	"testing"
+
+	"loki/internal/progress"
 )
 
 type runnerCall struct {
@@ -191,5 +194,20 @@ func TestVerifyDistributionIdentityRequiresApprovedVersion(t *testing.T) {
 	client.Runner = runner
 	if err := client.VerifyDistributionIdentity(context.Background(), "loki-mcp", "0.1.19"); err == nil {
 		t.Fatal("changed Loki distribution identity was accepted")
+	}
+}
+
+func TestNativeProgressRelayHandlesChunkedLines(t *testing.T) {
+	var out bytes.Buffer
+	relay := newNativeProgressRelay(progress.NewLineReporter(&out))
+	if _, err := relay.Write([]byte("ordinary stderr\n[loki] Preparing")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := relay.Write([]byte(" update...\r\nwarning\n[loki] Applying update...")); err != nil {
+		t.Fatal(err)
+	}
+	relay.Flush()
+	if got, want := out.String(), "[loki] Preparing update...\n[loki] Applying update...\n"; got != want {
+		t.Fatalf("progress=%q want=%q", got, want)
 	}
 }

@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 type fakeProductUpdateClient struct {
@@ -89,6 +91,7 @@ func TestProductUpdateOlderFrontendUsesVerifiedCandidateAndVerifiesCanonical(t *
 	cleanupCalls := 0
 	runCalls := 0
 	inspectCalls := 0
+	var phases []string
 	var stdout, stderr bytes.Buffer
 	code := runProductUpdateWith(t.Context(), productUpdateDependencies{
 		CurrentBinding: func() (windowshost.ReleaseBinding, error) {
@@ -122,13 +125,20 @@ func TestProductUpdateOlderFrontendUsesVerifiedCandidateAndVerifiesCanonical(t *
 			t.Fatal("current-version converge called during frontend update")
 			return 1
 		},
+		Progress: progress.ReporterFunc(func(event progress.Event) {
+			phases = append(phases, event.Phase)
+		}),
 	}, &stdout, &stderr)
 	if code != 0 || client.downloadCalls != 1 || cleanupCalls != 1 || runCalls != 1 || inspectCalls != 2 || stderr.Len() != 0 {
 		t.Fatalf("code=%d downloads=%d cleanup=%d run=%d inspect=%d stderr=%q",
 			code, client.downloadCalls, cleanupCalls, runCalls, inspectCalls, stderr.String())
 	}
-	if got, want := stdout.String(), "Updating Windows Loki frontend v0.1.23 -> v0.1.24...\nLoki is updated to v0.1.24.\n"; got != want {
+	if got, want := stdout.String(), "Loki is updated to v0.1.24.\n"; got != want {
 		t.Fatalf("stdout=%q want=%q", got, want)
+	}
+	wantPhases := []string{"resolve", "download-frontend", "verify-frontend", "install-frontend", "verify-installed-frontend"}
+	if !slices.Equal(phases, wantPhases) {
+		t.Fatalf("phases=%#v want=%#v", phases, wantPhases)
 	}
 }
 

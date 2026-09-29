@@ -7,13 +7,16 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"loki/internal/progress"
 )
 
 // HTTPHelperDownloader is platform-independent so the real HTTP size and
 // cancellation boundaries are exercised without requiring a Windows runner.
 // HelperManager supplies the immutable same-release URL and checks its bytes.
 type HTTPHelperDownloader struct {
-	Client *http.Client
+	Client   *http.Client
+	Progress progress.Reporter
 }
 
 func (downloader HTTPHelperDownloader) Fetch(ctx context.Context, url string, maxBytes int64) ([]byte, error) {
@@ -39,7 +42,24 @@ func (downloader HTTPHelperDownloader) Fetch(ctx context.Context, url string, ma
 	if response.ContentLength > maxBytes {
 		return nil, errors.New("helper mirror response exceeds download bound")
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
+	reader := io.Reader(io.LimitReader(response.Body, maxBytes+1))
+	if maxBytes >= 1<<20 {
+		total := response.ContentLength
+		if total < 0 {
+			total = 0
+		}
+		reader = progress.NewReader(reader, downloader.Progress, progress.ReaderOptions{
+			Operation: "connection", Phase: "download-helper", Label: "Connection helper", TotalBytes: total,
+		})
+	}
+	stopHeartbeat := func() {}
+	if maxBytes >= 1<<20 {
+		stopHeartbeat = progress.StartHeartbeat(ctx, downloader.Progress, progress.HeartbeatOptions{
+			Operation: "connection", Phase: "download-helper", Message: "Still downloading the connection helper",
+		})
+	}
+	raw, err := io.ReadAll(reader)
+	stopHeartbeat()
 	if err != nil {
 		return nil, err
 	}

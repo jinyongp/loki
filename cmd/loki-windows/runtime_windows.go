@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 const defaultWindowsDistribution = "loki-mcp"
@@ -138,7 +139,9 @@ func runInstall(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			stdout,
 		)
 	}
-	result, err := windowshost.NewWindowsInstallController(binding).Run(
+	reporter := progress.NewLineReporter(stderr)
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "inspect", State: progress.StateStarted, Message: "Inspecting the existing Windows Loki installation..."})
+	result, err := windowshost.NewWindowsInstallControllerWithProgress(binding, reporter).Run(
 		ctx, expected, options, approve,
 	)
 	if err != nil {
@@ -164,11 +167,20 @@ func upgradeExistingAppliance(
 	distribution, currentVersion, targetTag string,
 	stdout, stderr io.Writer,
 ) int {
-	fmt.Fprintf(stdout, "Updating existing Loki appliance %q from v%s to %s...\n",
-		distribution, strings.TrimPrefix(currentVersion, "v"), targetTag)
+	reporter := progress.NewLineReporter(stderr)
+	progress.Emit(reporter, progress.Event{
+		Operation: "update", Phase: "appliance", State: progress.StateStarted,
+		Message: fmt.Sprintf("Updating Loki appliance %q from v%s to %s...", distribution, strings.TrimPrefix(currentVersion, "v"), targetTag),
+	})
 
 	client := windowshost.NewWindowsOperatorClient()
-	prepared, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "prepare"})
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "update", Phase: "prepare", Message: "Still preparing the appliance update",
+	})
+	prepared, err := client.ExecuteStreaming(
+		ctx, distribution, windowshost.OperatorRequest{Command: "update", Action: "prepare"}, reporter,
+	)
+	stopHeartbeat()
 	if err != nil {
 		fmt.Fprintln(stderr, "prepare managed appliance update:", err)
 		return 1
@@ -196,9 +208,14 @@ func upgradeExistingAppliance(
 		fmt.Fprintf(stderr, "refusing appliance update to %s; Windows frontend is bound to %s\n", preparedTag, targetTag)
 		return 1
 	}
-	applied, err := client.Execute(ctx, distribution, windowshost.OperatorRequest{
-		Command: "update", Action: "apply", Approve: true,
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared appliance update..."})
+	stopHeartbeat = progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "update", Phase: "apply", Message: "Still applying the appliance update",
 	})
+	applied, err := client.ExecuteStreaming(ctx, distribution, windowshost.OperatorRequest{
+		Command: "update", Action: "apply", Approve: true,
+	}, reporter)
+	stopHeartbeat()
 	if err != nil {
 		fmt.Fprintln(stderr, "apply managed appliance update:", err)
 		return 1
@@ -225,7 +242,8 @@ func upgradeExistingAppliance(
 			actualTag, targetTag)
 		return 1
 	}
-	syncResult, err := syncAfterLifecycleMutation(ctx, distribution)
+	progress.Emit(reporter, progress.Event{Operation: "update", Phase: "resync", State: progress.StateStarted, Message: "Refreshing the Windows MCP connection state..."})
+	syncResult, err := syncAfterLifecycleMutation(ctx, distribution, reporter)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -436,14 +454,24 @@ func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Wr
 		config.RuntimeKey = strings.TrimSpace(string(raw))
 	}
 
-	manager, err := newWindowsConnectionManagerWithAdapters(
-		windowshost.WindowsConnectionAdaptersWithOpenAISetup(config),
+	reporter := progress.NewLineReporter(stderr)
+	manager, err := newWindowsConnectionManagerWithAdaptersAndProgress(
+		windowshost.WindowsConnectionAdaptersWithOpenAISetup(config), reporter,
 	)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = manager.Setup(ctx, *distribution, provider); err != nil {
+	progress.Emit(reporter, progress.Event{
+		Operation: "connection", Phase: "setup", State: progress.StateStarted,
+		Message: fmt.Sprintf("Configuring managed %s connection and verifying its helper runtime...", provider),
+	})
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "connection", Phase: "setup", Message: "Still configuring the managed connection",
+	})
+	err = manager.Setup(ctx, *distribution, provider)
+	stopHeartbeat()
+	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -486,11 +514,23 @@ func runConnectionMutation(ctx context.Context, action string, args []string, st
 		return 2
 	}
 	provider := flags.Arg(0)
-	manager, err := newWindowsConnectionManager()
+	reporter := progress.NewLineReporter(stderr)
+	manager, err := newWindowsConnectionManagerWithProgress(reporter)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	message := map[string]string{
+		"start":  fmt.Sprintf("Starting managed %s connection...", provider),
+		"stop":   fmt.Sprintf("Stopping managed %s connection...", provider),
+		"remove": fmt.Sprintf("Removing managed %s connection...", provider),
+	}[action]
+	progress.Emit(reporter, progress.Event{
+		Operation: "connection", Phase: action, State: progress.StateStarted, Message: message,
+	})
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "connection", Phase: action, Message: "Still waiting for the managed connection operation",
+	})
 	switch action {
 	case "setup":
 		err = manager.Setup(ctx, *distribution, provider)
@@ -501,6 +541,7 @@ func runConnectionMutation(ctx context.Context, action string, args []string, st
 	case "remove":
 		err = manager.Remove(ctx, *distribution, provider)
 	}
+	stopHeartbeat()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -547,11 +588,26 @@ func runConnectionStartup(ctx context.Context, args []string, stdout, stderr io.
 }
 
 func newWindowsConnectionManager() (windowshost.ConnectionManager, error) {
-	return newWindowsConnectionManagerWithAdapters(windowshost.WindowsConnectionAdapters())
+	return newWindowsConnectionManagerWithProgress(nil)
+}
+
+func newWindowsConnectionManagerWithProgress(
+	reporter progress.Reporter,
+) (windowshost.ConnectionManager, error) {
+	return newWindowsConnectionManagerWithAdaptersAndProgress(
+		windowshost.WindowsConnectionAdapters(), reporter,
+	)
 }
 
 func newWindowsConnectionManagerWithAdapters(
 	adapters []windowshost.RemoteConnectionAdapter,
+) (windowshost.ConnectionManager, error) {
+	return newWindowsConnectionManagerWithAdaptersAndProgress(adapters, nil)
+}
+
+func newWindowsConnectionManagerWithAdaptersAndProgress(
+	adapters []windowshost.RemoteConnectionAdapter,
+	reporter progress.Reporter,
 ) (windowshost.ConnectionManager, error) {
 	binding, err := windowshost.CurrentReleaseBinding()
 	if err != nil {
@@ -561,7 +617,7 @@ func newWindowsConnectionManagerWithAdapters(
 	if err != nil {
 		return windowshost.ConnectionManager{}, err
 	}
-	return windowshost.NewWindowsConnectionManager(binding, localAppData, adapters)
+	return windowshost.NewWindowsConnectionManagerWithProgress(binding, localAppData, adapters, reporter)
 }
 
 func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -606,9 +662,33 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		}
 		*approve = true
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
+	reporter := progress.NewLineReporter(stderr)
+	if action == "prepare" {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "prepare", State: progress.StateStarted, Message: "Preparing the appliance update..."})
+	} else if action == "apply" {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared appliance update..."})
+	}
+	client := windowshost.NewWindowsOperatorClient()
+	request := windowshost.OperatorRequest{
 		Command: "update", Action: action, Approve: *approve, InterruptActiveJobs: *interrupt,
-	})
+	}
+	var (
+		result windowshost.OperatorResult
+		err    error
+	)
+	if action == "status" {
+		result, err = client.Execute(ctx, *distribution, request)
+	} else {
+		message := "Still preparing the appliance update"
+		if action == "apply" {
+			message = "Still applying the appliance update"
+		}
+		stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+			Operation: "update", Phase: action, Message: message,
+		})
+		result, err = client.ExecuteStreaming(ctx, *distribution, request, reporter)
+		stopHeartbeat()
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -616,12 +696,13 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if result.Probe.ExitCode != 0 {
 		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	if result.Probe.Stderr != "" {
-		fmt.Fprintln(stderr, result.Probe.Stderr)
+	if detail := progress.NonProgressText(result.Probe.Stderr); detail != "" {
+		fmt.Fprintln(stderr, detail)
 	}
 	var syncResult windowshost.ReplicaSyncResult
 	if action == "apply" {
-		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution)
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "resync", State: progress.StateStarted, Message: "Refreshing the Windows MCP connection state..."})
+		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution, reporter)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -665,9 +746,19 @@ func runMaintenance(ctx context.Context, command string, args []string, stdout, 
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
-		Command: command, InterruptActiveJobs: *interrupt,
+	reporter := progress.NewLineReporter(stderr)
+	message := map[string]string{
+		"backup":   "Creating an appliance lifecycle backup...",
+		"rollback": "Rolling back the appliance lifecycle state...",
+	}[command]
+	progress.Emit(reporter, progress.Event{Operation: command, Phase: "execute", State: progress.StateStarted, Message: message})
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: command, Phase: "execute", Message: "Still waiting for the appliance lifecycle operation",
 	})
+	result, err := windowshost.NewWindowsOperatorClient().ExecuteStreaming(ctx, *distribution, windowshost.OperatorRequest{
+		Command: command, InterruptActiveJobs: *interrupt,
+	}, reporter)
+	stopHeartbeat()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -675,12 +766,13 @@ func runMaintenance(ctx context.Context, command string, args []string, stdout, 
 	if result.Probe.ExitCode != 0 {
 		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	if result.Probe.Stderr != "" {
-		fmt.Fprintln(stderr, result.Probe.Stderr)
+	if detail := progress.NonProgressText(result.Probe.Stderr); detail != "" {
+		fmt.Fprintln(stderr, detail)
 	}
 	var syncResult windowshost.ReplicaSyncResult
 	if command == "rollback" {
-		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution)
+		progress.Emit(reporter, progress.Event{Operation: command, Phase: "resync", State: progress.StateStarted, Message: "Refreshing the Windows MCP connection state..."})
+		syncResult, err = syncAfterLifecycleMutation(ctx, *distribution, reporter)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -725,9 +817,15 @@ func runRestore(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, windowshost.OperatorRequest{
-		Command: "restore", BackupID: flags.Arg(0), InterruptActiveJobs: *interrupt,
+	reporter := progress.NewLineReporter(stderr)
+	progress.Emit(reporter, progress.Event{Operation: "restore", Phase: "execute", State: progress.StateStarted, Message: "Restoring the selected appliance lifecycle backup..."})
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "restore", Phase: "execute", Message: "Still restoring the appliance lifecycle backup",
 	})
+	result, err := windowshost.NewWindowsOperatorClient().ExecuteStreaming(ctx, *distribution, windowshost.OperatorRequest{
+		Command: "restore", BackupID: flags.Arg(0), InterruptActiveJobs: *interrupt,
+	}, reporter)
+	stopHeartbeat()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -735,10 +833,11 @@ func runRestore(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if result.Probe.ExitCode != 0 {
 		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	if result.Probe.Stderr != "" {
-		fmt.Fprintln(stderr, result.Probe.Stderr)
+	if detail := progress.NonProgressText(result.Probe.Stderr); detail != "" {
+		fmt.Fprintln(stderr, detail)
 	}
-	syncResult, err := syncAfterLifecycleMutation(ctx, *distribution)
+	progress.Emit(reporter, progress.Event{Operation: "restore", Phase: "resync", State: progress.StateStarted, Message: "Refreshing the Windows MCP connection state..."})
+	syncResult, err := syncAfterLifecycleMutation(ctx, *distribution, reporter)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -792,12 +891,20 @@ func runUninstall(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	connections, err := newWindowsConnectionManager()
+	reporter := progress.NewLineReporter(stderr)
+	connections, err := newWindowsConnectionManagerWithProgress(reporter)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err = windowshost.NewWindowsUninstallController(&connections).Run(ctx, expected, *approve); err != nil {
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "uninstall", Phase: "remove", Message: "Still removing the local Loki installation",
+	})
+	err = windowshost.NewWindowsUninstallControllerWithProgress(
+		&connections, reporter,
+	).Run(ctx, expected, *approve)
+	stopHeartbeat()
+	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -806,12 +913,16 @@ func runUninstall(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	return 0
 }
 
-func syncAfterLifecycleMutation(ctx context.Context, distribution string) (windowshost.ReplicaSyncResult, error) {
+func syncAfterLifecycleMutation(
+	ctx context.Context,
+	distribution string,
+	reporter progress.Reporter,
+) (windowshost.ReplicaSyncResult, error) {
 	expected, err := expectedInstallation(distribution, windowshost.InstallOptions{Distribution: distribution})
 	if err != nil {
 		return windowshost.ReplicaSyncResult{}, err
 	}
-	connections, err := newWindowsConnectionManager()
+	connections, err := newWindowsConnectionManagerWithProgress(reporter)
 	if err != nil {
 		return windowshost.ReplicaSyncResult{}, fmt.Errorf(
 			"appliance lifecycle mutation succeeded, but managed connection reconciliation is unavailable: %w", err,
@@ -899,8 +1010,8 @@ func writeNativeProbe(probe windowshost.NativeProbe, stdout, stderr io.Writer) i
 	if probe.Stdout != "" {
 		fmt.Fprintln(stdout, probe.Stdout)
 	}
-	if probe.Stderr != "" {
-		fmt.Fprintln(stderr, probe.Stderr)
+	if detail := progress.NonProgressText(probe.Stderr); detail != "" {
+		fmt.Fprintln(stderr, detail)
 	}
 	if probe.ExitCode == 0 {
 		return 0

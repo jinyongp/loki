@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"loki/internal/progress"
 )
 
 type PreparedAppliance struct {
@@ -30,6 +32,7 @@ type FreshInstallPlatform interface {
 
 type TransactionalFreshInstaller struct {
 	Platform FreshInstallPlatform
+	Progress progress.Reporter
 }
 
 func (installer TransactionalFreshInstaller) Install(
@@ -40,6 +43,7 @@ func (installer TransactionalFreshInstaller) Install(
 	if installer.Platform == nil {
 		return errors.New("fresh-install platform is unavailable")
 	}
+	progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "prepare-appliance", State: progress.StateStarted, Message: "Preparing the verified WSL appliance image..."})
 	appliance, cleanup, err := installer.Platform.PrepareAppliance(ctx, options)
 	if err != nil {
 		return err
@@ -53,6 +57,7 @@ func (installer TransactionalFreshInstaller) Install(
 		if installationComplete || !transaction.CreatedDistribution {
 			return
 		}
+		progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "rollback", State: progress.StateStarted, Message: "Rolling back the incomplete Windows installation..."})
 		if rollbackErr := installer.Platform.RollbackFresh(ctx, expected, options, transaction); rollbackErr != nil {
 			if resultErr == nil {
 				resultErr = fmt.Errorf("rollback incomplete installation: %w", rollbackErr)
@@ -62,6 +67,7 @@ func (installer TransactionalFreshInstaller) Install(
 		}
 	}()
 
+	progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "register", State: progress.StateStarted, Message: "Registering the Loki WSL distribution..."})
 	createdDistribution, registerErr := installer.Platform.RegisterDistribution(ctx, expected, options, appliance)
 	transaction.CreatedDistribution = createdDistribution
 	if registerErr != nil {
@@ -71,10 +77,12 @@ func (installer TransactionalFreshInstaller) Install(
 		return errors.New("fresh-install platform registered no owned distribution")
 	}
 
+	progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "provision", State: progress.StateStarted, Message: "Provisioning Loki services inside WSL..."})
 	connection, err := installer.Platform.Provision(ctx, expected, options)
 	if err != nil {
 		return err
 	}
+	progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "publish-state", State: progress.StateStarted, Message: "Publishing the local MCP connection state..."})
 	createdStateDir, stateErr := installer.Platform.PublishWindowsState(ctx, expected, options, connection)
 	transaction.CreatedStateDir = createdStateDir
 	if stateErr != nil {
@@ -85,6 +93,7 @@ func (installer TransactionalFreshInstaller) Install(
 	}
 
 	if options.AutoStart {
+		progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "startup", State: progress.StateStarted, Message: "Configuring Windows logon startup..."})
 		createdTask, taskErr := installer.Platform.CreateStartupTask(ctx, expected)
 		transaction.CreatedStartupTask = createdTask
 		if taskErr != nil {
@@ -94,6 +103,7 @@ func (installer TransactionalFreshInstaller) Install(
 			return errors.New("fresh-install platform created no owned startup task")
 		}
 	}
+	progress.Emit(installer.Progress, progress.Event{Operation: "install", Phase: "ownership", State: progress.StateStarted, Message: "Recording Windows installation ownership..."})
 	if err = installer.Platform.PublishOwnership(ctx, expected, options); err != nil {
 		return err
 	}

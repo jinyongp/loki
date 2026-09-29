@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/mod/semver"
+	"loki/internal/progress"
 )
 
 const (
@@ -40,7 +41,8 @@ type FrontendUpdateFetcher interface {
 }
 
 type HTTPFrontendUpdateFetcher struct {
-	Client *http.Client
+	Client   *http.Client
+	Progress progress.Reporter
 }
 
 func (fetcher HTTPFrontendUpdateFetcher) Fetch(ctx context.Context, assetURL string, maximum int64) ([]byte, error) {
@@ -66,7 +68,24 @@ func (fetcher HTTPFrontendUpdateFetcher) Fetch(ctx context.Context, assetURL str
 	if response.ContentLength > maximum {
 		return nil, errors.New("Windows frontend update response exceeds download bound")
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maximum+1))
+	reader := io.Reader(io.LimitReader(response.Body, maximum+1))
+	if maximum >= 1<<20 {
+		total := response.ContentLength
+		if total < 0 {
+			total = 0
+		}
+		reader = progress.NewReader(reader, fetcher.Progress, progress.ReaderOptions{
+			Operation: "update", Phase: "download-frontend", Label: "Windows frontend", TotalBytes: total,
+		})
+	}
+	stopHeartbeat := func() {}
+	if maximum >= 1<<20 {
+		stopHeartbeat = progress.StartHeartbeat(ctx, fetcher.Progress, progress.HeartbeatOptions{
+			Operation: "update", Phase: "download-frontend", Message: "Still downloading the Windows frontend",
+		})
+	}
+	raw, err := io.ReadAll(reader)
+	stopHeartbeat()
 	if err != nil {
 		return nil, err
 	}
@@ -82,13 +101,14 @@ func (fetcher HTTPFrontendUpdateFetcher) Fetch(ctx context.Context, assetURL str
 type FrontendReleaseClient struct {
 	Fetcher      FrontendUpdateFetcher
 	InstallerURL string
+	Progress     progress.Reporter
 }
 
 func (client FrontendReleaseClient) fetcher() FrontendUpdateFetcher {
 	if client.Fetcher != nil {
 		return client.Fetcher
 	}
-	return HTTPFrontendUpdateFetcher{}
+	return HTTPFrontendUpdateFetcher{Progress: client.Progress}
 }
 
 func (client FrontendReleaseClient) installerURL() string {

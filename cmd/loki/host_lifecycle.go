@@ -19,6 +19,7 @@ import (
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
 	"loki/internal/host/releases"
+	"loki/internal/progress"
 )
 
 func newHostRuntimeBackend(store *lifecycle.FileStore) (lifecycle.TransactionBackend, error) {
@@ -131,6 +132,8 @@ func defaultHostStateRoot(system bool) (string, error) {
 }
 
 func runHostInstall(args []string, stdout, stderr io.Writer) int {
+	reporter := progress.NewLineReporter(stderr)
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "preflight", State: progress.StateStarted, Message: "Inspecting host installation options..."})
 	options, err := parseHostInstallOptions(args, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -147,6 +150,7 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "verify-release", State: progress.StateStarted, Message: "Verifying the release manifest and host binary..."})
 	release, err := loadBootstrapHostRelease(options.ReleaseManifest)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -167,6 +171,7 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	options.PersistCLI = true
 
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "runtime", State: progress.StateStarted, Message: "Checking the container runtime and workspace..."})
 	ctx := context.Background()
 	executor := execHostCommandExecutor{}
 	prompter := defaultHostInstallPrompter(stdout)
@@ -201,7 +206,14 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	return runHostInstallWith(context.Background(), options, release.Generation, backend, stdout, stderr)
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "apply", State: progress.StateStarted, Message: "Applying the Loki host installation..."})
+	installCtx := context.Background()
+	stopHeartbeat := progress.StartHeartbeat(installCtx, reporter, progress.HeartbeatOptions{
+		Operation: "install", Phase: "apply", Message: "Still applying the Loki host installation",
+	})
+	code := runHostInstallWith(installCtx, options, release.Generation, backend, stdout, stderr)
+	stopHeartbeat()
+	return code
 }
 
 func runHostInstallWith(
@@ -401,6 +413,17 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 		Maintainer: engine,
 		Now:        lifecycleTimeNow,
 	}
+	message := map[string]string{
+		"backup":    "Creating a lifecycle backup...",
+		"restore":   "Restoring the selected lifecycle backup...",
+		"rollback":  "Rolling back to the previous compatible release...",
+		"enable":    "Applying component enablement...",
+		"disable":   "Applying component disablement...",
+		"uninstall": "Removing managed Loki host state...",
+	}[action]
+	progress.Emit(progress.NewLineReporter(stderr), progress.Event{
+		Operation: action, Phase: "execute", State: progress.StateStarted, Message: message,
+	})
 	return runHostMaintenanceWith(context.Background(), manager, action, options, stdout, stderr)
 }
 

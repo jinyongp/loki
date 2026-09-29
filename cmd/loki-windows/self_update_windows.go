@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 type frontendVersionEnvelope struct {
@@ -25,7 +26,8 @@ type frontendVersionEnvelope struct {
 }
 
 func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
-	client := windowshost.FrontendReleaseClient{}
+	reporter := progress.NewLineReporter(stderr)
+	client := windowshost.FrontendReleaseClient{Progress: reporter}
 	return runProductUpdateWith(ctx, productUpdateDependencies{
 		CurrentBinding: windowshost.CurrentReleaseBinding,
 		Client:         client,
@@ -36,6 +38,7 @@ func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
 		Converge: func(ctx context.Context, stdout, stderr io.Writer) int {
 			return runInstall(ctx, nil, stdout, stderr)
 		},
+		Progress: reporter,
 	}, stdout, stderr)
 }
 

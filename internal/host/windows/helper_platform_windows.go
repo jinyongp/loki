@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"loki/internal/progress"
 )
 
 type WindowsHelperInstallPlatform struct{}
@@ -197,9 +199,17 @@ func (WindowsHelperInstallPlatform) RemoveTree(target string) error {
 }
 
 func NewWindowsHelperManager(binding ReleaseBinding, paths FrontendPaths) HelperManager {
+	return NewWindowsHelperManagerWithProgress(binding, paths, nil)
+}
+
+func NewWindowsHelperManagerWithProgress(
+	binding ReleaseBinding,
+	paths FrontendPaths,
+	reporter progress.Reporter,
+) HelperManager {
 	return HelperManager{
 		Platform:    WindowsHelperInstallPlatform{},
-		Downloader:  HTTPHelperDownloader{},
+		Downloader:  HTTPHelperDownloader{Progress: reporter},
 		Binding:     binding,
 		HelpersRoot: paths.HelpersRoot,
 	}

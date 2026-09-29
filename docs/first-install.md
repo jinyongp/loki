@@ -197,6 +197,29 @@ documented approval flags or an interactive confirmation. After appliance
 update, rollback, or restore, Loki refreshes the Windows connection/token
 replica and reconciles enabled managed connections.
 
+### Progress output
+
+Long-running install, update, backup, restore, rollback, uninstall, and managed
+connection mutations emit stable line-oriented progress on **stderr**. Final
+human output and machine-readable `--json` results remain on **stdout**, so
+redirecting or parsing stdout does not mix progress events into the result.
+
+The same progress contract is used in interactive terminals and non-interactive
+PowerShell/CI runs. Loki does not invent percentages or ETAs. It reports
+observable phases, measured byte counts for large downloads, WSL provisioning
+state transitions, and a bounded provisioning heartbeat while a state remains
+unchanged. Nested WSL lifecycle commands relay only Loki progress lines in real
+time; ordinary child stderr remains buffered for normal error reporting.
+
+Progress lines use the stable prefix:
+
+```text
+[loki] Preparing the verified WSL appliance image...
+[loki] WSL appliance: 64.0 MiB / 160.9 MiB
+[loki] Provisioning service state: activating/start.
+[loki] Still waiting for provisioning (30s elapsed)...
+```
+
 ### Recovery behavior
 
 Rerunning the one-line installer is safe and idempotent. The temporary frontend

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"loki/internal/progress"
 )
 
 const OperatorInfoSchemaVersion = 1
@@ -32,6 +34,24 @@ func (client OperatorClient) Execute(
 	distribution string,
 	request OperatorRequest,
 ) (OperatorResult, error) {
+	return client.execute(ctx, distribution, request, nil)
+}
+
+func (client OperatorClient) ExecuteStreaming(
+	ctx context.Context,
+	distribution string,
+	request OperatorRequest,
+	reporter progress.Reporter,
+) (OperatorResult, error) {
+	return client.execute(ctx, distribution, request, reporter)
+}
+
+func (client OperatorClient) execute(
+	ctx context.Context,
+	distribution string,
+	request OperatorRequest,
+	reporter progress.Reporter,
+) (OperatorResult, error) {
 	if !distributionNamePattern.MatchString(distribution) {
 		return OperatorResult{}, errors.New("Windows Loki distribution name is invalid")
 	}
@@ -45,7 +65,12 @@ func (client OperatorClient) Execute(
 	}
 	arguments := []string{"-d", distribution, "--user", "root", "--exec", "/usr/local/bin/loki"}
 	arguments = append(arguments, command...)
-	result, err := client.WSL.run(ctx, arguments...)
+	var result NativeProbe
+	if reporter == nil {
+		result, err = client.WSL.run(ctx, arguments...)
+	} else {
+		result, err = client.WSL.runStreaming(ctx, reporter, arguments...)
+	}
 	if err != nil {
 		return OperatorResult{}, err
 	}

@@ -85,6 +85,14 @@
       "to": "loki/internal/host/windows"
     },
     {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/progress"
+    },
+    {
       "from": "loki/cmd/loki",
       "to": "loki/internal/config"
     },
@@ -483,6 +491,10 @@
     {
       "from": "loki/internal/host/windows",
       "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/progress"
     },
     {
       "from": "loki/tools/toolchainfetch",
@@ -1168,6 +1180,12 @@
       "owner": "safeio",
       "tags": [],
       "target": "platform/safeio"
+    },
+    "loki/internal/progress": {
+      "kind": "platform",
+      "owner": "cli-progress",
+      "tags": [],
+      "target": "platform/progress"
     },
     "loki/internal/platform/sandbox": {
       "kind": "platform",

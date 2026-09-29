@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"loki/internal/progress"
 )
 
 type ProcessStarter interface {
@@ -33,6 +35,7 @@ type WSLFreshProvisioner struct {
 	Starter  ProcessStarter
 	Sleep    SleepFunc
 	Attempts int
+	Progress progress.Reporter
 }
 
 const (
@@ -144,7 +147,11 @@ func (provisioner WSLFreshProvisioner) RegisterDistribution(
 	if options.InstallLocation != "" {
 		arguments = append(arguments, "--location", options.InstallLocation)
 	}
+	stopHeartbeat := progress.StartHeartbeat(ctx, provisioner.Progress, progress.HeartbeatOptions{
+		Operation: "install", Phase: "register", Message: "Still registering the Loki WSL distribution",
+	})
 	result, err := provisioner.Client.run(ctx, arguments...)
+	stopHeartbeat()
 	if err != nil {
 		return false, err
 	}
@@ -161,6 +168,7 @@ func (provisioner WSLFreshProvisioner) Provision(
 	expected ExpectedInstallation,
 	options InstallOptions,
 ) (ConnectionMaterial, error) {
+	progress.Emit(provisioner.Progress, progress.Event{Operation: "install", Phase: "start-wsl", State: progress.StateStarted, Message: "Starting the Loki WSL appliance..."})
 	starter := provisioner.Starter
 	if starter == nil {
 		starter = ExecProcessStarter{}
@@ -169,6 +177,7 @@ func (provisioner WSLFreshProvisioner) Provision(
 		[]string{"-d", expected.Distribution, "--exec", "/usr/bin/sleep", "infinity"}); err != nil {
 		return ConnectionMaterial{}, fmt.Errorf("start WSL keepalive: %w", err)
 	}
+	progress.Emit(provisioner.Progress, progress.Event{Operation: "install", Phase: "configure", State: progress.StateStarted, Message: "Configuring the appliance installation..."})
 	configure, err := provisioner.Client.run(ctx,
 		"-d", expected.Distribution, "--user", "root", "--exec",
 		"/usr/lib/loki-appliance/configure-install", strconv.Itoa(options.MCPPort))
@@ -196,7 +205,9 @@ func (provisioner WSLFreshProvisioner) Provision(
 			}
 		}
 	}
+	progress.Emit(provisioner.Progress, progress.Event{Operation: "install", Phase: "wait-provision", State: progress.StateStarted, Message: "Waiting for the appliance provisioning service..."})
 	ready := false
+	lastServiceState := ""
 	for attempt := 0; attempt < attempts; attempt++ {
 		service, runErr := provisioner.Client.run(ctx,
 			"-d", expected.Distribution, "--exec", "/usr/bin/systemctl", "show",
@@ -210,6 +221,19 @@ func (provisioner WSLFreshProvisioner) Provision(
 			values := parseSystemdProperties(service.Stdout)
 			active := values["ActiveState"]
 			restarts, _ := strconv.Atoi(values["NRestarts"])
+			serviceState := fmt.Sprintf("%s/%s", active, values["SubState"])
+			if serviceState != lastServiceState {
+				progress.Emit(provisioner.Progress, progress.Event{
+					Operation: "install", Phase: "wait-provision", State: progress.StateInfo,
+					Message: fmt.Sprintf("Provisioning service state: %s.", serviceState),
+				})
+				lastServiceState = serviceState
+			} else if attempt > 0 && attempt%15 == 0 {
+				progress.Emit(provisioner.Progress, progress.Event{
+					Operation: "install", Phase: "wait-provision", State: progress.StateInfo,
+					Message: fmt.Sprintf("Still waiting for provisioning (%s elapsed)...", time.Duration(attempt*2)*time.Second),
+				})
+			}
 			if active == "active" {
 				ready = true
 				break
@@ -232,6 +256,7 @@ func (provisioner WSLFreshProvisioner) Provision(
 		)
 	}
 
+	progress.Emit(provisioner.Progress, progress.Event{Operation: "install", Phase: "verify", State: progress.StateStarted, Message: "Verifying Loki host health and MCP connection..."})
 	status, err := provisioner.Client.run(ctx, "-d", expected.Distribution, "--user", "root", "--exec",
 		"/usr/local/bin/loki", "host", "status", "--system", "--json")
 	if err != nil {

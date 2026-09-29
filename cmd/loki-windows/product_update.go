@@ -6,6 +6,7 @@ import (
 	"io"
 
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 type productUpdateClient interface {
@@ -22,6 +23,7 @@ type productUpdateDependencies struct {
 	RunCandidate   func(context.Context, string, []string, io.Writer, io.Writer) int
 	CanonicalPath  func() (string, error)
 	Converge       func(context.Context, io.Writer, io.Writer) int
+	Progress       progress.Reporter
 }
 
 func runProductUpdateWith(
@@ -39,6 +41,7 @@ func runProductUpdateWith(
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "resolve", State: progress.StateStarted, Message: "Checking the latest published Loki release..."})
 	pointer, err := deps.Client.Resolve(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -59,11 +62,13 @@ func runProductUpdateWith(
 		return deps.Converge(ctx, stdout, stderr)
 	}
 
+	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "download-frontend", State: progress.StateStarted, Message: fmt.Sprintf("Downloading Windows frontend %s...", pointer.ReleaseTag)})
 	raw, err := deps.Client.Download(ctx, pointer)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "verify-frontend", State: progress.StateStarted, Message: "Verifying the downloaded Windows frontend..."})
 	candidate, cleanup, err := deps.Stage(ctx, raw, pointer)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -82,7 +87,10 @@ func runProductUpdateWith(
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "Updating Windows Loki frontend %s -> %s...\n", current.ReleaseTag, pointer.ReleaseTag)
+	progress.Emit(deps.Progress, progress.Event{
+		Operation: "update", Phase: "install-frontend", State: progress.StateStarted,
+		Message: fmt.Sprintf("Installing Windows frontend %s -> %s...", current.ReleaseTag, pointer.ReleaseTag),
+	})
 	if code := deps.RunCandidate(ctx, candidate, []string{"bootstrap", "install"}, stdout, stderr); code != 0 {
 		return code
 	}
@@ -92,6 +100,7 @@ func runProductUpdateWith(
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "verify-installed-frontend", State: progress.StateStarted, Message: "Verifying the installed Windows frontend..."})
 	installedBinding, err := deps.Inspect(ctx, canonical)
 	if err != nil {
 		fmt.Fprintln(stderr, "verify updated Windows frontend:", err)

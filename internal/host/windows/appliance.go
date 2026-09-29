@@ -12,11 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"loki/internal/progress"
 )
 
 type ReleaseAppliancePreparer struct {
-	Binding ReleaseBinding
-	Client  *http.Client
+	Binding  ReleaseBinding
+	Client   *http.Client
+	Progress progress.Reporter
 }
 
 func (preparer ReleaseAppliancePreparer) PrepareAppliance(ctx context.Context, options InstallOptions) (PreparedAppliance, func(), error) {
@@ -31,7 +34,7 @@ func (preparer ReleaseAppliancePreparer) PrepareAppliance(ctx context.Context, o
 	cleanup := func() { _ = os.RemoveAll(root) }
 	target := filepath.Join(root, "loki-wsl-amd64.wsl")
 	if options.LocalAppliance != "" {
-		if err = copyVerifiedAppliance(options.LocalAppliance, target, preparer.Binding.WSLAppliance); err != nil {
+		if err = copyVerifiedApplianceProgress(options.LocalAppliance, target, preparer.Binding.WSLAppliance, preparer.Progress); err != nil {
 			cleanup()
 			return PreparedAppliance{}, nil, err
 		}
@@ -41,7 +44,7 @@ func (preparer ReleaseAppliancePreparer) PrepareAppliance(ctx context.Context, o
 			client = &http.Client{Timeout: 30 * time.Minute}
 		}
 		url := "https://github.com/jinyongp/loki/releases/download/" + preparer.Binding.ReleaseTag + "/loki-wsl-amd64.wsl"
-		if err = downloadVerifiedAppliance(ctx, client, url, target, preparer.Binding.WSLAppliance); err != nil {
+		if err = downloadVerifiedApplianceProgress(ctx, client, url, target, preparer.Binding.WSLAppliance, preparer.Progress); err != nil {
 			cleanup()
 			return PreparedAppliance{}, nil, err
 		}
@@ -50,6 +53,10 @@ func (preparer ReleaseAppliancePreparer) PrepareAppliance(ctx context.Context, o
 }
 
 func copyVerifiedAppliance(source, target string, expected FileBinding) error {
+	return copyVerifiedApplianceProgress(source, target, expected, nil)
+}
+
+func copyVerifiedApplianceProgress(source, target string, expected FileBinding, reporter progress.Reporter) error {
 	info, err := os.Lstat(source)
 	if err != nil {
 		return fmt.Errorf("inspect local WSL appliance: %w", err)
@@ -69,10 +76,28 @@ func copyVerifiedAppliance(source, target string, expected FileBinding) error {
 	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) || openedInfo.Size() != expected.Length {
 		return errors.New("local WSL appliance changed while being opened")
 	}
-	return writeVerifiedAppliance(input, target, expected)
+	reader := progress.NewReader(input, reporter, progress.ReaderOptions{
+		Operation: "install", Phase: "copy-appliance", Label: "WSL appliance", TotalBytes: expected.Length,
+	})
+	stopHeartbeat := progress.StartHeartbeat(context.Background(), reporter, progress.HeartbeatOptions{
+		Operation: "install", Phase: "copy-appliance", Message: "Still copying the WSL appliance",
+	})
+	err = writeVerifiedAppliance(reader, target, expected)
+	stopHeartbeat()
+	return err
 }
 
 func downloadVerifiedAppliance(ctx context.Context, client *http.Client, sourceURL, target string, expected FileBinding) error {
+	return downloadVerifiedApplianceProgress(ctx, client, sourceURL, target, expected, nil)
+}
+
+func downloadVerifiedApplianceProgress(
+	ctx context.Context,
+	client *http.Client,
+	sourceURL, target string,
+	expected FileBinding,
+	reporter progress.Reporter,
+) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return err
@@ -88,7 +113,19 @@ func downloadVerifiedAppliance(ctx context.Context, client *http.Client, sourceU
 	if response.ContentLength >= 0 && response.ContentLength != expected.Length {
 		return errors.New("downloaded WSL appliance length does not match accepted release")
 	}
-	return writeVerifiedAppliance(io.LimitReader(response.Body, expected.Length+1), target, expected)
+	reader := progress.NewReader(
+		io.LimitReader(response.Body, expected.Length+1),
+		reporter,
+		progress.ReaderOptions{
+			Operation: "install", Phase: "download-appliance", Label: "WSL appliance", TotalBytes: expected.Length,
+		},
+	)
+	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+		Operation: "install", Phase: "download-appliance", Message: "Still downloading the WSL appliance",
+	})
+	err = writeVerifiedAppliance(reader, target, expected)
+	stopHeartbeat()
+	return err
 }
 
 func writeVerifiedAppliance(reader io.Reader, target string, expected FileBinding) error {

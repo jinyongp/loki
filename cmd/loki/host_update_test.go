@@ -14,6 +14,7 @@ import (
 
 	"loki/internal/host/lifecycle"
 	"loki/internal/host/releases"
+	"loki/internal/progress"
 )
 
 type mapHostUpdateFetcher struct {
@@ -244,6 +245,44 @@ func TestPrepareHostUpdateCandidateVerifiesStagesAndPublishesAvailable(t *testin
 	}
 	if _, err = os.Lstat(paths.Link); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("prepare switched managed CLI link: %v", err)
+	}
+}
+
+func TestPrepareHostUpdateCandidateReportsProgressPhases(t *testing.T) {
+	releasedAt := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	installed := lifecycleUpdateGeneration(t, "1.2.3", releasedAt.Add(-24*time.Hour))
+	store, _ := installHostUpdateFixture(t, installed)
+	fixture := newHostUpdateFixture(t, "1.3.0", releasedAt)
+	inspector := func(_ context.Context, path string) (hostUpdateReleaseBinding, error) {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return hostUpdateReleaseBinding{}, err
+		}
+		if string(raw) != string(fixture.bootstrap) {
+			return hostUpdateReleaseBinding{}, errors.New("unexpected staged bootstrap")
+		}
+		return hostUpdateReleaseBinding{
+			ReleaseTag: fixture.tag, ReleaseManifestSHA256: digestBytes(fixture.manifestRaw),
+			HostBinarySHA256: strings.TrimPrefix(fixture.generation.Spec.HostBinaryDigest, "sha256:"),
+		}, nil
+	}
+	var phases []string
+	reporter := progress.ReporterFunc(func(event progress.Event) {
+		phases = append(phases, event.Phase)
+	})
+	if _, err := prepareHostUpdateCandidateWithPrefetch(
+		t.Context(), store, mapHostUpdateFetcher{assets: fixture.assets}, inspector, fixture.host, nil, reporter,
+	); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"inspect", "discover", "bootstrap", "metadata", "binary", "publish"}
+	if len(phases) != len(want) {
+		t.Fatalf("phases=%#v want=%#v", phases, want)
+	}
+	for index := range want {
+		if phases[index] != want[index] {
+			t.Fatalf("phases=%#v want=%#v", phases, want)
+		}
 	}
 }
 

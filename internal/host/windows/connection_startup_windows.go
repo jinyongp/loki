@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"loki/internal/progress"
 )
 
 const startVerifiedKeepaliveTaskScript = `$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop;$a=@($t.Actions);if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'};Start-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop`
@@ -120,6 +122,15 @@ func NewWindowsConnectionManager(
 	localAppData string,
 	adapters []RemoteConnectionAdapter,
 ) (ConnectionManager, error) {
+	return NewWindowsConnectionManagerWithProgress(binding, localAppData, adapters, nil)
+}
+
+func NewWindowsConnectionManagerWithProgress(
+	binding ReleaseBinding,
+	localAppData string,
+	adapters []RemoteConnectionAdapter,
+	reporter progress.Reporter,
+) (ConnectionManager, error) {
 	paths, err := ResolveFrontendPaths(localAppData)
 	if err != nil {
 		return ConnectionManager{}, err
@@ -129,7 +140,7 @@ func NewWindowsConnectionManager(
 	}
 	store := NewWindowsConnectionStateStore(localAppData)
 	return ConnectionManager{
-		Helpers:  NewWindowsHelperManager(binding, paths),
+		Helpers:  NewWindowsHelperManagerWithProgress(binding, paths, reporter),
 		Store:    store,
 		Tasks:    NewWindowsConnectionTaskManager(localAppData),
 		Adapters: append([]RemoteConnectionAdapter(nil), adapters...),

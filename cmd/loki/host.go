@@ -14,6 +14,7 @@ import (
 
 	"loki/internal/daemon"
 	"loki/internal/host/lifecycle"
+	"loki/internal/progress"
 	"loki/internal/work/jobs"
 )
 
@@ -200,13 +201,15 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	manager := lifecycle.Manager{Store: store}
+	reporter := progress.NewLineReporter(stderr)
 	if action == "prepare" {
-		if _, err = prepareHostUpdateCandidate(context.Background(), store); err != nil {
+		if _, err = prepareHostUpdateCandidateProgress(context.Background(), store, reporter); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 	}
 	if action == "apply" {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "preflight-apply", State: progress.StateStarted, Message: "Preparing the update transaction..."})
 		if !*approve {
 			prompter := defaultHostInstallPrompter(stdout)
 			if !prompter.interactive {
@@ -250,6 +253,18 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		manager.Applier = &lifecycle.TransactionEngine{
 			Store: store, Backend: backend, ReleaseAssets: releaseAssets, Now: lifecycleTimeNow,
 		}
+	}
+	if action == "apply" {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared update and restarting required services..."})
+		ctx := context.Background()
+		stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
+			Operation: "update", Phase: "apply", Message: "Still applying the prepared update",
+		})
+		code := runHostUpdateWith(ctx, manager, action, lifecycle.ApplyOptions{
+			InterruptActiveJobs: *interrupt,
+		}, stdout, stderr)
+		stopHeartbeat()
+		return code
 	}
 	return runHostUpdateWith(context.Background(), manager, action, lifecycle.ApplyOptions{
 		InterruptActiveJobs: *interrupt,

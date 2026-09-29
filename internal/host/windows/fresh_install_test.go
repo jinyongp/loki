@@ -5,6 +5,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"loki/internal/progress"
 )
 
 type fakeFreshPlatform struct {
@@ -122,5 +124,24 @@ func TestTransactionalFreshInstallerSuccessAndAutoStartDisabled(t *testing.T) {
 	want := []string{"prepare", "register", "provision", "state", "ownership", "cleanup"}
 	if !reflect.DeepEqual(platform.calls, want) {
 		t.Fatalf("calls=%#v want=%#v", platform.calls, want)
+	}
+}
+
+func TestTransactionalFreshInstallerReportsPhases(t *testing.T) {
+	expected := fixtureExpected()
+	platform := &fakeFreshPlatform{}
+	var phases []string
+	reporter := progress.ReporterFunc(func(event progress.Event) {
+		phases = append(phases, event.Phase)
+	})
+	installer := TransactionalFreshInstaller{Platform: platform, Progress: reporter}
+	if err := installer.Install(t.Context(), expected, InstallOptions{
+		Distribution: expected.Distribution, MCPPort: 18765, AutoStart: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"prepare-appliance", "register", "provision", "publish-state", "startup", "ownership"}
+	if !reflect.DeepEqual(phases, want) {
+		t.Fatalf("phases=%#v want=%#v", phases, want)
 	}
 }

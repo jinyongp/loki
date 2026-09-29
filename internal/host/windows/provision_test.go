@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"loki/internal/progress"
 )
 
 type fakeProcessStarter struct {
@@ -139,5 +141,47 @@ func TestWSLFreshProvisionerRetainsBoundedUnknownDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Recent provisioning diagnostics:") {
 		t.Fatalf("unknown failure omitted diagnostics: %v", err)
+	}
+}
+
+func TestWSLFreshProvisionerReportsStateAndHeartbeat(t *testing.T) {
+	results := []NativeProbe{{ExitCode: 0}}
+	for attempt := 0; attempt < 16; attempt++ {
+		results = append(results, NativeProbe{
+			ExitCode: 0,
+			Stdout:   "ActiveState=activating\nSubState=start\nNRestarts=0\n",
+		})
+	}
+	results = append(results,
+		NativeProbe{ExitCode: 0, Stdout: "ActiveState=active\nSubState=exited\nNRestarts=0\n"},
+		NativeProbe{ExitCode: 0, Stdout: "{\"schema_version\":1}"},
+		NativeProbe{ExitCode: 0},
+		NativeProbe{ExitCode: 0, Stdout: "{\"schema_version\":1,\"local_origin\":{\"url\":\"http://127.0.0.1:19000/mcp\",\"transport\":\"streamable-http\",\"reachability\":\"loopback\",\"authentication\":{\"type\":\"bearer-token-file\"}}}"},
+		NativeProbe{ExitCode: 0, Stdout: "secret-token"},
+	)
+	runner := &fakeNativeRunner{results: results}
+	var messages []string
+	reporter := progress.ReporterFunc(func(event progress.Event) {
+		messages = append(messages, event.Message)
+	})
+	provisioner := WSLFreshProvisioner{
+		Client: WSLClient{Runner: runner}, Starter: &fakeProcessStarter{}, Sleep: noSleep, Attempts: 20, Progress: reporter,
+	}
+	if _, err := provisioner.Provision(t.Context(), fixtureExpected(), InstallOptions{MCPPort: 19000}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(messages, "\n")
+	for _, want := range []string{
+		"Starting the Loki WSL appliance...",
+		"Configuring the appliance installation...",
+		"Waiting for the appliance provisioning service...",
+		"Provisioning service state: activating/start.",
+		"Still waiting for provisioning (30s elapsed)...",
+		"Provisioning service state: active/exited.",
+		"Verifying Loki host health and MCP connection...",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("progress missing %q: %s", want, joined)
+		}
 	}
 }
