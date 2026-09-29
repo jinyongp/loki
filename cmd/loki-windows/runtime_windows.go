@@ -400,27 +400,7 @@ func preflightOpenAIConnectionSetup(ctx context.Context, distribution string) er
 			err,
 		)
 	}
-	if result.Probe.ExitCode != 0 {
-		detail := progress.NonProgressText(result.Probe.Stderr)
-		if detail == "" {
-			detail = strings.TrimSpace(result.Probe.Stdout)
-		}
-		if detail == "" {
-			detail = fmt.Sprintf("status command exited with code %d", result.Probe.ExitCode)
-		}
-		return fmt.Errorf(
-			"cannot verify the Loki appliance before OpenAI setup: %s\nRun 'loki update status' to inspect the appliance, then retry",
-			detail,
-		)
-	}
-	status, err := windowshost.ParseOperatorStatus([]byte(result.Probe.Stdout))
-	if err != nil {
-		return fmt.Errorf(
-			"cannot verify the Loki appliance before OpenAI setup: %w\nRun 'loki update status' to inspect the appliance, then retry",
-			err,
-		)
-	}
-	return connectionSetupCompatibilityError(binding.ReleaseTag, result.DistributionVersion, status.UpdatePrepared)
+	return connectionSetupCompatibilityFromStatus(binding.ReleaseTag, result)
 }
 
 func validEnvironmentVariableName(value string) bool {
