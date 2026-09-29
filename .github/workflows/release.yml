@@ -1175,6 +1175,14 @@ jobs:
                   throw "self-update fixture did not install previous frontend $env:PREVIOUS_TAG"
               }
 
+              $beforeStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "previous appliance status failed" }
+              $beforeStatus = $beforeStatusRaw | ConvertFrom-Json
+              $beforeApplianceRelease = [string]$beforeStatus.status.release
+              if (-not $beforeApplianceRelease) {
+                  throw "self-update fixture did not report an installed appliance release"
+              }
+
               & $loki update
               if ($LASTEXITCODE -ne 0) { throw "public Windows self-update failed with code $LASTEXITCODE" }
 
@@ -1182,11 +1190,39 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "updated Windows frontend version failed" }
               $after = $afterRaw | ConvertFrom-Json
               if ([string]$after.release_binding.release_tag -ne $env:TAG) {
-                  throw "self-update frontend did not converge to $env:TAG"
+                  throw "self-update frontend did not update to $env:TAG"
               }
 
-              & $loki status --distribution $distribution --json
-              if ($LASTEXITCODE -ne 0) { throw "self-update status failed" }
+              $afterBareStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "post-frontend appliance status failed" }
+              $afterBareStatus = $afterBareStatusRaw | ConvertFrom-Json
+              $afterBareApplianceRelease = [string]$afterBareStatus.status.release
+              if ($afterBareApplianceRelease -ne $beforeApplianceRelease) {
+                  throw "bare self-update mutated appliance release $beforeApplianceRelease -> $afterBareApplianceRelease"
+              }
+
+              & $loki update prepare --distribution $distribution
+              if ($LASTEXITCODE -ne 0) { throw "explicit appliance prepare failed with code $LASTEXITCODE" }
+
+              $preparedRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "prepared appliance status failed" }
+              $prepared = $preparedRaw | ConvertFrom-Json
+              if ($null -eq $prepared.prepared) {
+                  throw "explicit appliance prepare did not publish a prepared plan"
+              }
+
+              & $loki update apply --distribution $distribution --approve
+              if ($LASTEXITCODE -ne 0) { throw "explicit appliance apply failed with code $LASTEXITCODE" }
+
+              $afterApplyStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "post-apply appliance status failed" }
+              $afterApplyStatus = $afterApplyStatusRaw | ConvertFrom-Json
+              $afterApplyRelease = [string]$afterApplyStatus.status.release
+              $expectedApplianceRelease = $env:TAG -replace '^v', ''
+              if ($afterApplyRelease -ne $expectedApplianceRelease) {
+                  throw "explicit appliance apply produced $afterApplyRelease; expected $expectedApplianceRelease"
+              }
+
               & $loki doctor --distribution $distribution
               if ($LASTEXITCODE -ne 0) { throw "self-update doctor failed" }
               & $loki connection show --distribution $distribution --json local

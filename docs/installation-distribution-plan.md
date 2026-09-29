@@ -255,7 +255,7 @@ A successfully prepared update can therefore be inspected before the operator ac
 
 Application creates the required recovery snapshot, switches the pinned release assets, performs any declared state migration, recreates the affected Compose services, and runs health and MCP smoke checks. If validation fails, Loki automatically attempts to restore the prior known-good release and matching state.
 
-Automatic background updates, automatic update application, and silent self-update are out of scope. Explicit operator-invoked Windows self-update through `loki update` is supported and must verify the published frontend release pointer and exact immutable asset before replacing the canonical frontend.
+Automatic background updates, automatic appliance update application, and silent self-update are out of scope. Explicit operator-invoked Windows frontend self-update through `loki update` is supported and must verify the published frontend release pointer and exact immutable asset before replacing the canonical frontend. Bare `loki update` does not prepare or apply an appliance update; it performs only a read-only appliance readiness check after the frontend operation. Appliance preparation and application remain explicit `loki update prepare` and `loki update apply` actions, with apply as the sole appliance update mutation boundary.
 
 ## Release metadata
 

@@ -168,20 +168,24 @@ identity separately. Bare `loki connection` is a passive overview of the local
 MCP endpoint and managed provider catalog. `loki connection show local` refreshes
 and verifies the protected Windows connection replica from the live appliance.
 
-The installed frontend can update the whole Windows Loki product in place:
+The installed Windows frontend can update itself in place:
 
 ```powershell
 loki update
 ```
 
-This checks the published release pointer, downloads the exact Windows frontend
-asset, verifies its SHA-256 and length, validates the candidate's embedded
-release binding, replaces the canonical frontend, and then converges the WSL
-appliance to the same release. Rerunning the public PowerShell installer is not
-required for normal upgrades.
+This checks the published frontend release pointer, downloads the exact Windows
+frontend asset, verifies its SHA-256 and length, validates the candidate's
+embedded release binding, and replaces the canonical frontend. It does not
+prepare or apply an appliance update. After the frontend check/update, Loki
+performs a read-only appliance readiness check and tells the operator whether
+the appliance is current, has an update that can be prepared, or already has a
+prepared update. If readiness cannot be determined, the successful frontend
+update is retained and Loki directs the operator to inspect appliance status
+explicitly. Rerunning the public PowerShell installer is not required for normal
+frontend upgrades.
 
-Advanced appliance lifecycle operations remain available as explicit
-subcommands:
+Appliance lifecycle operations are separate explicit subcommands:
 
 ```powershell
 loki update status
