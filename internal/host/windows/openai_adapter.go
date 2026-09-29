@@ -382,7 +382,7 @@ func (adapter *OpenAIAdapter) doctor(
 		return err
 	}
 	if probe.ExitCode != 0 {
-		return openAIProcessFailure("run OpenAI tunnel doctor", redactOpenAIProbe(probe, runtimeKey, material.Token))
+		return openAIDoctorFailure(redactOpenAIProbe(probe, runtimeKey, material.Token))
 	}
 	return nil
 }
@@ -541,6 +541,48 @@ func redactOpenAIProbe(probe NativeProbe, secrets ...string) NativeProbe {
 		probe.Stderr = strings.ReplaceAll(probe.Stderr, "Bearer "+secret, "Bearer [REDACTED]")
 	}
 	return probe
+}
+
+type openAIDoctorReport struct {
+	FailedChecks []string            `json:"failed_checks"`
+	Checks       []openAIDoctorCheck `json:"checks"`
+}
+
+type openAIDoctorCheck struct {
+	ID      string `json:"id"`
+	Summary string `json:"summary"`
+}
+
+func openAIDoctorFailure(probe NativeProbe) error {
+	for _, raw := range []string{probe.Stdout, probe.Stderr} {
+		var report openAIDoctorReport
+		if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &report); err != nil ||
+			len(report.FailedChecks) == 0 {
+			continue
+		}
+		checks := make(map[string]string, len(report.Checks))
+		for _, check := range report.Checks {
+			if summary := strings.Join(strings.Fields(check.Summary), " "); summary != "" {
+				checks[check.ID] = summary
+			}
+		}
+		details := make([]string, 0, len(report.FailedChecks))
+		for _, id := range report.FailedChecks {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if summary := checks[id]; summary != "" {
+				details = append(details, id+": "+summary)
+			} else {
+				details = append(details, id)
+			}
+		}
+		if len(details) != 0 {
+			return fmt.Errorf("OpenAI tunnel doctor failed: %s", strings.Join(details, "; "))
+		}
+	}
+	return openAIProcessFailure("run OpenAI tunnel doctor", probe)
 }
 
 func openAIProcessFailure(operation string, probe NativeProbe) error {

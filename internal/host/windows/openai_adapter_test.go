@@ -450,6 +450,38 @@ func TestOpenAIStartFailsClosedWhenCredentialMissing(t *testing.T) {
 	}
 }
 
+func TestOpenAIDoctorFailureSummarizesFailedChecks(t *testing.T) {
+	err := openAIDoctorFailure(NativeProbe{
+		ExitCode: 2,
+		Stdout: `{
+			"result":"fail",
+			"failed_checks":["oauth_metadata"],
+			"checks":[
+				{"id":"config_source","status":"PASS","summary":"profile: loki"},
+				{"id":"oauth_metadata","status":"FAIL","summary":"oauth discovery invalid metadata from http://127.0.0.1:13357: protected resource metadata missing resource"}
+			]
+		}`,
+	})
+	if err == nil {
+		t.Fatal("expected doctor failure")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "OpenAI tunnel doctor failed: oauth_metadata: oauth discovery invalid metadata") ||
+		!strings.Contains(message, "protected resource metadata missing resource") {
+		t.Fatalf("doctor failure did not explain the failing check: %v", err)
+	}
+	if strings.Contains(message, "config_source") || strings.Contains(message, `"checks"`) {
+		t.Fatalf("doctor failure leaked the raw report instead of summarizing it: %v", err)
+	}
+}
+
+func TestOpenAIDoctorFailureFallsBackForUnstructuredOutput(t *testing.T) {
+	err := openAIDoctorFailure(NativeProbe{ExitCode: 2, Stderr: "helper failed before producing JSON"})
+	if err == nil || !strings.Contains(err.Error(), "run OpenAI tunnel doctor failed with exit code 2: helper failed before producing JSON") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestOpenAIProcessFailureRedactsRuntimeAndLokiSecrets(t *testing.T) {
 	probe := redactOpenAIProbe(NativeProbe{
 		ExitCode: 1,
