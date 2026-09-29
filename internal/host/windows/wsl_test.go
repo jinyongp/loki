@@ -14,6 +14,7 @@ import (
 type runnerCall struct {
 	executable string
 	arguments  []string
+	input      []byte
 }
 
 type fakeNativeRunner struct {
@@ -26,7 +27,17 @@ type fakeNativeRunner struct {
 }
 
 func (runner *fakeNativeRunner) Run(_ context.Context, executable string, arguments []string) (NativeProbe, error) {
-	runner.calls = append(runner.calls, runnerCall{executable: executable, arguments: append([]string(nil), arguments...)})
+	return runner.run(executable, arguments, nil)
+}
+
+func (runner *fakeNativeRunner) RunInput(_ context.Context, executable string, arguments []string, input []byte) (NativeProbe, error) {
+	return runner.run(executable, arguments, input)
+}
+
+func (runner *fakeNativeRunner) run(executable string, arguments []string, input []byte) (NativeProbe, error) {
+	runner.calls = append(runner.calls, runnerCall{
+		executable: executable, arguments: append([]string(nil), arguments...), input: append([]byte(nil), input...),
+	})
 	if reflect.DeepEqual(arguments, []string{"--help"}) {
 		if runner.helpErr != nil {
 			return NativeProbe{}, runner.helpErr

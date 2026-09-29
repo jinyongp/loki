@@ -129,6 +129,26 @@ func TestManagedSigningMaterialGeneratesAndSignsGitCommit(t *testing.T) {
 	}
 }
 
+func TestManagedSigningMaterialFromStdinBytesMatchesImportedKey(t *testing.T) {
+	generated, err := prepareManagedSigningMaterial(t.Context(), "", "Signing Test", "signing@example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(generated.PrivateKey)
+	imported, err := prepareManagedSigningMaterialBytes(
+		t.Context(), generated.PrivateKey, "Signing Test", "signing@example.test",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(imported.PrivateKey)
+	if imported.Info.PublicKey != generated.Info.PublicKey ||
+		imported.Info.Fingerprint != generated.Info.Fingerprint ||
+		!bytes.Equal(imported.PublicKey, generated.PublicKey) {
+		t.Fatalf("stdin signing material=%#v generated=%#v", imported.Info, generated.Info)
+	}
+}
+
 func TestSigningKeyImportRejectsPublicAndSymlinkFiles(t *testing.T) {
 	root := t.TempDir()
 	key := filepath.Join(root, "key")

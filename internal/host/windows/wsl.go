@@ -20,6 +20,10 @@ type NativeStreamingRunner interface {
 	RunStreaming(context.Context, string, []string, progress.Reporter) (NativeProbe, error)
 }
 
+type NativeInputRunner interface {
+	RunInput(context.Context, string, []string, []byte) (NativeProbe, error)
+}
+
 type ExecNativeRunner struct{}
 
 func normalizeNativeExitCode(code int) int {
@@ -30,7 +34,11 @@ func normalizeNativeExitCode(code int) int {
 }
 
 func (runner ExecNativeRunner) Run(ctx context.Context, executable string, arguments []string) (NativeProbe, error) {
-	return runner.run(ctx, executable, arguments, nil)
+	return runner.run(ctx, executable, arguments, nil, nil)
+}
+
+func (runner ExecNativeRunner) RunInput(ctx context.Context, executable string, arguments []string, input []byte) (NativeProbe, error) {
+	return runner.run(ctx, executable, arguments, nil, input)
 }
 
 func (runner ExecNativeRunner) RunStreaming(
@@ -39,7 +47,7 @@ func (runner ExecNativeRunner) RunStreaming(
 	arguments []string,
 	reporter progress.Reporter,
 ) (NativeProbe, error) {
-	return runner.run(ctx, executable, arguments, reporter)
+	return runner.run(ctx, executable, arguments, reporter, nil)
 }
 
 func (ExecNativeRunner) run(
@@ -47,8 +55,12 @@ func (ExecNativeRunner) run(
 	executable string,
 	arguments []string,
 	reporter progress.Reporter,
+	input []byte,
 ) (NativeProbe, error) {
 	command := exec.CommandContext(ctx, executable, arguments...)
+	if input != nil {
+		command.Stdin = bytes.NewReader(input)
+	}
 	var stdout, stderr bytes.Buffer
 	relay := newNativeProgressRelay(reporter)
 	command.Stdout = &stdout
@@ -305,6 +317,17 @@ func (client WSLClient) run(ctx context.Context, arguments ...string) (NativePro
 		return NativeProbe{}, errors.New("WSL native runner is unavailable")
 	}
 	return client.Runner.Run(ctx, client.executable(), arguments)
+}
+
+func (client WSLClient) runInput(ctx context.Context, input []byte, arguments ...string) (NativeProbe, error) {
+	if client.Runner == nil {
+		return NativeProbe{}, errors.New("WSL native runner is unavailable")
+	}
+	inputRunner, ok := client.Runner.(NativeInputRunner)
+	if !ok {
+		return NativeProbe{}, errors.New("WSL native runner does not support stdin")
+	}
+	return inputRunner.RunInput(ctx, client.executable(), arguments, input)
 }
 
 func (client WSLClient) runStreaming(

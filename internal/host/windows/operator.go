@@ -16,6 +16,10 @@ type OperatorRequest struct {
 	Command             string
 	Action              string
 	BackupID            string
+	Integration         string
+	IdentityName        string
+	IdentityEmail       string
+	UseStdin            bool
 	Approve             bool
 	InterruptActiveJobs bool
 }
@@ -34,7 +38,19 @@ func (client OperatorClient) Execute(
 	distribution string,
 	request OperatorRequest,
 ) (OperatorResult, error) {
-	return client.execute(ctx, distribution, request, nil)
+	return client.execute(ctx, distribution, request, nil, nil)
+}
+
+func (client OperatorClient) ExecuteInput(
+	ctx context.Context,
+	distribution string,
+	request OperatorRequest,
+	input []byte,
+) (OperatorResult, error) {
+	if len(input) == 0 || len(input) > 4<<20 {
+		return OperatorResult{}, errors.New("Windows operator stdin is empty or exceeds 4 MiB")
+	}
+	return client.execute(ctx, distribution, request, nil, input)
 }
 
 func (client OperatorClient) ExecuteStreaming(
@@ -43,7 +59,7 @@ func (client OperatorClient) ExecuteStreaming(
 	request OperatorRequest,
 	reporter progress.Reporter,
 ) (OperatorResult, error) {
-	return client.execute(ctx, distribution, request, reporter)
+	return client.execute(ctx, distribution, request, reporter, nil)
 }
 
 func (client OperatorClient) execute(
@@ -51,6 +67,7 @@ func (client OperatorClient) execute(
 	distribution string,
 	request OperatorRequest,
 	reporter progress.Reporter,
+	input []byte,
 ) (OperatorResult, error) {
 	if !distributionNamePattern.MatchString(distribution) {
 		return OperatorResult{}, errors.New("Windows Loki distribution name is invalid")
@@ -59,6 +76,9 @@ func (client OperatorClient) execute(
 	if err != nil {
 		return OperatorResult{}, err
 	}
+	if (input != nil) != request.UseStdin {
+		return OperatorResult{}, errors.New("Windows operator stdin contract does not match request")
+	}
 	command, machine, err := operatorCommandArguments(request)
 	if err != nil {
 		return OperatorResult{}, err
@@ -66,9 +86,15 @@ func (client OperatorClient) execute(
 	arguments := []string{"-d", distribution, "--user", "root", "--exec", "/usr/local/bin/loki"}
 	arguments = append(arguments, command...)
 	var result NativeProbe
-	if reporter == nil {
+	switch {
+	case input != nil:
+		if reporter != nil {
+			return OperatorResult{}, errors.New("Windows operator does not stream commands with stdin")
+		}
+		result, err = client.WSL.runInput(ctx, input, arguments...)
+	case reporter == nil:
 		result, err = client.WSL.run(ctx, arguments...)
-	} else {
+	default:
 		result, err = client.WSL.runStreaming(ctx, reporter, arguments...)
 	}
 	if err != nil {
@@ -83,6 +109,10 @@ func (client OperatorClient) execute(
 }
 
 func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
+	if request.Command != "integration" &&
+		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin) {
+		return nil, false, fmt.Errorf("%s does not accept integration options", request.Command)
+	}
 	switch request.Command {
 	case "status":
 		if request.Action != "" || request.BackupID != "" || request.Approve || request.InterruptActiveJobs {
@@ -142,6 +172,72 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		}
 		args = append(args, backupID)
 		return args, false, nil
+	case "integration":
+		if request.BackupID != "" || request.Approve {
+			return nil, false, errors.New("integration does not accept backup or approval options")
+		}
+		action := strings.TrimSpace(request.Action)
+		if action != "list" && action != "status" && action != "doctor" &&
+			action != "setup" && action != "rotate" && action != "enable" &&
+			action != "disable" && action != "remove" {
+			return nil, false, errors.New("integration action is invalid")
+		}
+		integration := strings.TrimSpace(request.Integration)
+		if action == "list" {
+			if integration != "" || request.IdentityName != "" || request.IdentityEmail != "" ||
+				request.UseStdin || request.InterruptActiveJobs {
+				return nil, false, errors.New("integration list does not accept integration mutation options")
+			}
+			return []string{"host", "integration", "list", "--system", "--json"}, true, nil
+		}
+		if integration != "browser" && integration != "signing" && integration != "github" {
+			return nil, false, errors.New("integration name must be browser, signing, or github")
+		}
+		args := []string{"host", "integration", action, "--system"}
+		switch action {
+		case "status", "doctor":
+			if request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.InterruptActiveJobs {
+				return nil, false, errors.New("integration inspection does not accept mutation options")
+			}
+			args = append(args, "--json", integration)
+			return args, true, nil
+		case "enable", "disable", "remove":
+			if request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin {
+				return nil, false, errors.New("integration mutation options are invalid")
+			}
+			if request.InterruptActiveJobs {
+				args = append(args, "--interrupt-active-jobs")
+			}
+			args = append(args, integration)
+			return args, false, nil
+		case "setup", "rotate":
+			if request.InterruptActiveJobs {
+				args = append(args, "--interrupt-active-jobs")
+			}
+			switch integration {
+			case "browser":
+				return nil, false, errors.New("browser does not require setup or rotation")
+			case "signing":
+				name := strings.TrimSpace(request.IdentityName)
+				email := strings.TrimSpace(request.IdentityEmail)
+				if name == "" || len(name) > 256 || strings.ContainsAny(name, "\r\n\x00") ||
+					email == "" || len(email) > 320 || strings.ContainsAny(email, " \t\r\n\x00") {
+					return nil, false, errors.New("signing identity is invalid")
+				}
+				args = append(args, "--identity-name", name, "--identity-email", email)
+				if request.UseStdin {
+					args = append(args, "--key-stdin")
+				}
+			case "github":
+				if request.IdentityName != "" || request.IdentityEmail != "" || !request.UseStdin {
+					return nil, false, errors.New("GitHub setup requires stdin and does not accept signing identity")
+				}
+				args = append(args, "--stdin")
+			}
+			args = append(args, integration)
+			return args, false, nil
+		}
+		return nil, false, errors.New("integration action is invalid")
 	default:
 		return nil, false, fmt.Errorf("unsupported Windows operator command %q", request.Command)
 	}

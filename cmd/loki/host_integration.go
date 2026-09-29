@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
 )
+
+var hostIntegrationStdin io.Reader = os.Stdin
 
 type hostIntegrationReport struct {
 	SchemaVersion        int      `json:"schema_version"`

@@ -42,6 +42,8 @@ func runWindowsCommand(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(ctx, args[1:], stdout, stderr)
 	case "connection":
 		return runConnection(ctx, args[1:], stdout, stderr)
+	case "integration":
+		return runIntegration(ctx, args[1:], stdout, stderr)
 	case "update":
 		return runUpdate(ctx, args[1:], stdout, stderr)
 	case "backup":

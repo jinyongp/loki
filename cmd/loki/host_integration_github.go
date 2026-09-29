@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +22,12 @@ import (
 )
 
 const maxGitHubConfigImportBytes = 1 << 20
+const maxGitHubSetupEnvelopeBytes = 4 << 20
+
+type managedGitHubSetupEnvelope struct {
+	Config     []byte `json:"config"`
+	PrivateKey []byte `json:"private_key"`
+}
 
 type managedGitHubCandidate struct {
 	ConfigRaw []byte
@@ -37,12 +45,18 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
 	privateKeyFile := flags.String("private-key-file", "", "GitHub App RSA private key PEM")
+	stdin := flags.Bool("stdin", false, "read GitHub App config and private key from stdin envelope")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" {
 		fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] github\n", action)
 		return 2
 	}
-	if strings.TrimSpace(*configFile) == "" || strings.TrimSpace(*privateKeyFile) == "" {
-		fmt.Fprintln(stderr, "--config-file and --private-key-file are required")
+	if *stdin {
+		if strings.TrimSpace(*configFile) != "" || strings.TrimSpace(*privateKeyFile) != "" {
+			fmt.Fprintln(stderr, "--stdin is mutually exclusive with --config-file and --private-key-file")
+			return 2
+		}
+	} else if strings.TrimSpace(*configFile) == "" || strings.TrimSpace(*privateKeyFile) == "" {
+		fmt.Fprintln(stderr, "--config-file and --private-key-file are required unless --stdin is used")
 		return 2
 	}
 	options, err := resolveHostIntegrationOptions(hostIntegrationOptions{
@@ -83,7 +97,12 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 
-	candidate, err := loadManagedGitHubCandidate(context.Background(), strings.TrimSpace(*configFile), strings.TrimSpace(*privateKeyFile))
+	var candidate managedGitHubCandidate
+	if *stdin {
+		candidate, err = readManagedGitHubCandidateEnvelope(context.Background(), hostIntegrationStdin)
+	} else {
+		candidate, err = loadManagedGitHubCandidate(context.Background(), strings.TrimSpace(*configFile), strings.TrimSpace(*privateKeyFile))
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -138,6 +157,52 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stdout, "  Enabled: %t\n", enabled)
 	}
 	return 0
+}
+
+func readManagedGitHubCandidateEnvelope(ctx context.Context, reader io.Reader) (managedGitHubCandidate, error) {
+	if reader == nil {
+		return managedGitHubCandidate{}, errors.New("GitHub setup stdin is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return managedGitHubCandidate{}, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, maxGitHubSetupEnvelopeBytes+1))
+	if err != nil || len(raw) == 0 || len(raw) > maxGitHubSetupEnvelopeBytes {
+		clear(raw)
+		return managedGitHubCandidate{}, errors.New("GitHub setup stdin is empty or exceeds the supported size")
+	}
+	defer clear(raw)
+	var envelope managedGitHubSetupEnvelope
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&envelope); err != nil {
+		clear(envelope.PrivateKey)
+		return managedGitHubCandidate{}, errors.New("GitHub setup stdin is invalid")
+	}
+	var trailing any
+	if err = decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		clear(envelope.PrivateKey)
+		return managedGitHubCandidate{}, errors.New("GitHub setup stdin contains trailing data")
+	}
+	if len(envelope.Config) == 0 || len(envelope.Config) > maxGitHubConfigImportBytes ||
+		len(envelope.PrivateKey) == 0 || len(envelope.PrivateKey) > githubapp.MaxPrivateKeyBytes {
+		clear(envelope.PrivateKey)
+		return managedGitHubCandidate{}, errors.New("GitHub setup stdin fields are empty or exceed supported sizes")
+	}
+	parsed, err := config.ParseGitHubFragment(envelope.Config)
+	if err != nil || parsed.GitHubAppID <= 0 || len(parsed.GitHubTargets) == 0 {
+		clear(envelope.PrivateKey)
+		return managedGitHubCandidate{}, errors.New("GitHub App configuration is invalid")
+	}
+	if err = githubapp.ValidatePrivateKey(string(envelope.PrivateKey)); err != nil {
+		clear(envelope.PrivateKey)
+		return managedGitHubCandidate{}, errors.New("GitHub App private key is invalid")
+	}
+	return managedGitHubCandidate{
+		ConfigRaw: append([]byte(nil), envelope.Config...),
+		KeyRaw:    envelope.PrivateKey,
+		Config:    parsed,
+	}, nil
 }
 
 func loadManagedGitHubCandidate(ctx context.Context, configPath, keyPath string) (managedGitHubCandidate, error) {

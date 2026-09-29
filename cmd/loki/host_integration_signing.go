@@ -45,6 +45,7 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	keyFile := flags.String("key-file", "", "private Ed25519 SSH signing key to import; omit to generate")
+	keyStdin := flags.Bool("key-stdin", false, "read the private Ed25519 SSH signing key from stdin")
 	identityName := flags.String("identity-name", "", "Git user.name for managed signing")
 	identityEmail := flags.String("identity-email", "", "Git user.email for managed signing")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 || flags.Arg(0) != "signing" {
@@ -62,6 +63,10 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 	if options.System && os.Geteuid() != 0 {
 		fmt.Fprintln(stderr, "system integration setup requires root")
 		return 1
+	}
+	if *keyStdin && strings.TrimSpace(*keyFile) != "" {
+		fmt.Fprintln(stderr, "--key-file and --key-stdin are mutually exclusive")
+		return 2
 	}
 	if err = validateManagedSigningIdentity(*identityName, *identityEmail); err != nil {
 		fmt.Fprintln(stderr, err)
@@ -83,11 +88,24 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 			return 1
 		}
 	}
-	material, err := prepareManagedSigningMaterial(context.Background(), strings.TrimSpace(*keyFile), *identityName, *identityEmail)
+	var material managedSigningMaterial
+	if *keyStdin {
+		privateKey, readErr := io.ReadAll(io.LimitReader(hostIntegrationStdin, maxSigningKeyImportBytes+1))
+		if readErr != nil || len(privateKey) == 0 || len(privateKey) > maxSigningKeyImportBytes {
+			clear(privateKey)
+			fmt.Fprintln(stderr, "signing key stdin is empty or exceeds the supported size")
+			return 1
+		}
+		material, err = prepareManagedSigningMaterialBytes(context.Background(), privateKey, *identityName, *identityEmail)
+		clear(privateKey)
+	} else {
+		material, err = prepareManagedSigningMaterial(context.Background(), strings.TrimSpace(*keyFile), *identityName, *identityEmail)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	defer clear(material.PrivateKey)
 
 	backend, err := newHostComposeBackend(store)
 	if err != nil {
@@ -188,6 +206,21 @@ func prepareManagedSigningMaterial(
 	ctx context.Context,
 	sourceKey, identityName, identityEmail string,
 ) (managedSigningMaterial, error) {
+	if sourceKey == "" {
+		return prepareManagedSigningMaterialBytes(ctx, nil, identityName, identityEmail)
+	}
+	privateKey, err := readSigningImportFile(sourceKey)
+	if err != nil {
+		return managedSigningMaterial{}, err
+	}
+	return prepareManagedSigningMaterialBytes(ctx, privateKey, identityName, identityEmail)
+}
+
+func prepareManagedSigningMaterialBytes(
+	ctx context.Context,
+	imported []byte,
+	identityName, identityEmail string,
+) (managedSigningMaterial, error) {
 	var zero managedSigningMaterial
 	if err := validateManagedSigningIdentity(identityName, identityEmail); err != nil {
 		return zero, err
@@ -198,18 +231,16 @@ func prepareManagedSigningMaterial(
 		fingerprint string
 		err         error
 	)
-	if sourceKey == "" {
+	if len(imported) == 0 {
 		privateKey, public, fingerprint, err = generateManagedEd25519Key()
 		if err != nil {
 			return zero, fmt.Errorf("generate managed signing key: %w", err)
 		}
 	} else {
-		privateKey, err = readSigningImportFile(sourceKey)
-		if err != nil {
-			return zero, err
-		}
+		privateKey = append([]byte(nil), imported...)
 		public, fingerprint, err = publicKeyFromPrivateBytes(ctx, privateKey)
 		if err != nil {
+			clear(privateKey)
 			return zero, fmt.Errorf("validate managed signing key: %w", err)
 		}
 	}

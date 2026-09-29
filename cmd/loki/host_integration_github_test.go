@@ -58,6 +58,31 @@ func managedGitHubCandidateFixture(t *testing.T) managedGitHubCandidate {
 	return managedGitHubCandidate{ConfigRaw: raw, KeyRaw: githubPrivateKeyFixture(t), Config: parsed}
 }
 
+func TestManagedGitHubStdinEnvelopeDecodesWithoutFilePaths(t *testing.T) {
+	candidate := managedGitHubCandidateFixture(t)
+	defer clear(candidate.KeyRaw)
+	envelope, err := json.Marshal(managedGitHubSetupEnvelope{
+		Config: candidate.ConfigRaw, PrivateKey: candidate.KeyRaw,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := readManagedGitHubCandidateEnvelope(t.Context(), bytes.NewReader(envelope))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(decoded.KeyRaw)
+	if decoded.Config.GitHubAppID != candidate.Config.GitHubAppID ||
+		!bytes.Equal(decoded.ConfigRaw, candidate.ConfigRaw) ||
+		!bytes.Equal(decoded.KeyRaw, candidate.KeyRaw) {
+		t.Fatalf("decoded candidate=%#v", decoded.Config)
+	}
+	bad := append(append([]byte(nil), envelope...), []byte("\n{}")...)
+	if _, err = readManagedGitHubCandidateEnvelope(t.Context(), bytes.NewReader(bad)); err == nil {
+		t.Fatal("GitHub stdin envelope accepted trailing data")
+	}
+}
+
 func TestValidateManagedGitHubCandidateUsesInstallationTokenAndRepositoryRead(t *testing.T) {
 	candidate := managedGitHubCandidateFixture(t)
 	defer clear(candidate.KeyRaw)
