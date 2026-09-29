@@ -16,14 +16,14 @@ type productUpdateClient interface {
 }
 
 type productUpdateDependencies struct {
-	CurrentBinding func() (windowshost.ReleaseBinding, error)
-	Client         productUpdateClient
-	Stage          func(context.Context, []byte, windowshost.FrontendReleasePointer) (string, func(), error)
-	Inspect        func(context.Context, string) (windowshost.ReleaseBinding, error)
-	RunCandidate   func(context.Context, string, []string, io.Writer, io.Writer) int
-	CanonicalPath  func() (string, error)
-	Converge       func(context.Context, io.Writer, io.Writer) int
-	Progress       progress.Reporter
+	CurrentBinding    func() (windowshost.ReleaseBinding, error)
+	Client            productUpdateClient
+	Stage             func(context.Context, []byte, windowshost.FrontendReleasePointer) (string, func(), error)
+	Inspect           func(context.Context, string) (windowshost.ReleaseBinding, error)
+	RunCandidate      func(context.Context, string, []string, io.Writer, io.Writer) int
+	CanonicalPath     func() (string, error)
+	ApplianceAdvisory func(context.Context, io.Writer) error
+	Progress          progress.Reporter
 }
 
 func runProductUpdateWith(
@@ -32,7 +32,7 @@ func runProductUpdateWith(
 	stdout, stderr io.Writer,
 ) int {
 	if deps.CurrentBinding == nil || deps.Client == nil || deps.Stage == nil || deps.Inspect == nil ||
-		deps.RunCandidate == nil || deps.CanonicalPath == nil || deps.Converge == nil {
+		deps.RunCandidate == nil || deps.CanonicalPath == nil || deps.ApplianceAdvisory == nil {
 		fmt.Fprintln(stderr, "Windows Loki product update is not configured")
 		return 1
 	}
@@ -59,7 +59,7 @@ func runProductUpdateWith(
 	}
 	if comparison == 0 {
 		fmt.Fprintf(stdout, "Windows Loki frontend is current at %s.\n", current.ReleaseTag)
-		return deps.Converge(ctx, stdout, stderr)
+		return finishProductUpdateAdvisory(ctx, deps, stdout, stderr)
 	}
 
 	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "download-frontend", State: progress.StateStarted, Message: fmt.Sprintf("Downloading Windows frontend %s...", pointer.ReleaseTag)})
@@ -91,7 +91,7 @@ func runProductUpdateWith(
 		Operation: "update", Phase: "install-frontend", State: progress.StateStarted,
 		Message: fmt.Sprintf("Installing Windows frontend %s -> %s...", current.ReleaseTag, pointer.ReleaseTag),
 	})
-	if code := deps.RunCandidate(ctx, candidate, []string{"bootstrap", "install"}, stdout, stderr); code != 0 {
+	if code := deps.RunCandidate(ctx, candidate, []string{"bootstrap", "update"}, stdout, stderr); code != 0 {
 		return code
 	}
 
@@ -111,6 +111,18 @@ func runProductUpdateWith(
 			installedBinding.ReleaseTag, pointer.ReleaseTag)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Loki is updated to %s.\n", pointer.ReleaseTag)
+	fmt.Fprintf(stdout, "Windows Loki frontend is updated to %s.\n", pointer.ReleaseTag)
+	return finishProductUpdateAdvisory(ctx, deps, stdout, stderr)
+}
+
+func finishProductUpdateAdvisory(
+	ctx context.Context,
+	deps productUpdateDependencies,
+	stdout, stderr io.Writer,
+) int {
+	if err := deps.ApplianceAdvisory(ctx, stdout); err != nil {
+		fmt.Fprintln(stderr, "Could not determine Loki appliance update readiness:", err)
+		fmt.Fprintln(stderr, "Run 'loki update status' to inspect the appliance lifecycle.")
+	}
 	return 0
 }

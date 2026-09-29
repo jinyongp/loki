@@ -29,17 +29,43 @@ func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
 	reporter := progress.NewLineReporter(stderr)
 	client := windowshost.FrontendReleaseClient{Progress: reporter}
 	return runProductUpdateWith(ctx, productUpdateDependencies{
-		CurrentBinding: windowshost.CurrentReleaseBinding,
-		Client:         client,
-		Stage:          stageFrontendUpdateCandidate,
-		Inspect:        inspectFrontendCandidate,
-		RunCandidate:   runFrontendCandidate,
-		CanonicalPath:  canonicalFrontendPath,
-		Converge: func(ctx context.Context, stdout, stderr io.Writer) int {
-			return runInstall(ctx, nil, stdout, stderr)
-		},
-		Progress: reporter,
+		CurrentBinding:    windowshost.CurrentReleaseBinding,
+		Client:            client,
+		Stage:             stageFrontendUpdateCandidate,
+		Inspect:           inspectFrontendCandidate,
+		RunCandidate:      runFrontendCandidate,
+		CanonicalPath:     canonicalFrontendPath,
+		ApplianceAdvisory: reportWindowsApplianceUpdateAdvisory,
+		Progress:          reporter,
 	}, stdout, stderr)
+}
+
+func reportWindowsApplianceUpdateAdvisory(ctx context.Context, stdout io.Writer) error {
+	distribution := defaultDistribution()
+	operator := windowshost.NewWindowsOperatorClient()
+	releases := windowshost.ApplianceReleaseClient{}
+	advisory, err := resolveApplianceUpdateAdvisory(ctx, applianceAdvisoryDependencies{
+		Status: func(ctx context.Context) (windowshost.OperatorStatus, error) {
+			result, err := operator.Execute(ctx, distribution, windowshost.OperatorRequest{Command: "status"})
+			if err != nil {
+				return windowshost.OperatorStatus{}, err
+			}
+			if result.Probe.ExitCode != 0 {
+				detail := strings.TrimSpace(result.Probe.Stderr)
+				if detail == "" {
+					detail = strings.TrimSpace(result.Probe.Stdout)
+				}
+				return windowshost.OperatorStatus{}, fmt.Errorf("inspect Loki appliance status: exit %d: %s", result.Probe.ExitCode, detail)
+			}
+			return windowshost.ParseOperatorStatus([]byte(result.Probe.Stdout))
+		},
+		Resolve: releases.Resolve,
+		Compare: releases.Compare,
+	})
+	if err != nil {
+		return err
+	}
+	return renderApplianceUpdateAdvisory(advisory, stdout)
 }
 
 func canonicalFrontendPath() (string, error) {

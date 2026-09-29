@@ -31,7 +31,7 @@ func TestUpdateHelpRequested(t *testing.T) {
 	}
 }
 
-func TestPrintUpdateHelpExplainsWholeProductAndTwoPhaseLifecycle(t *testing.T) {
+func TestPrintUpdateHelpSeparatesFrontendAndApplianceLifecycle(t *testing.T) {
 	var out bytes.Buffer
 	printUpdateHelp(&out)
 	got := out.String()
@@ -39,8 +39,8 @@ func TestPrintUpdateHelpExplainsWholeProductAndTwoPhaseLifecycle(t *testing.T) {
 		"loki update",
 		"loki update prepare",
 		"loki update apply",
-		"updates the Windows frontend and converges the appliance release",
-		"advanced two-phase appliance lifecycle",
+		"updates only the Windows frontend and reports appliance update readiness",
+		"never prepares or applies an appliance update",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("update help missing %q: %s", want, got)

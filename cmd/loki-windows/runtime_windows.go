@@ -62,8 +62,9 @@ func runWindowsCommand(args []string, stdout, stderr io.Writer) int {
 }
 
 func runBootstrap(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "install" {
-		fmt.Fprintln(stderr, "usage: loki bootstrap install [INSTALL_OPTIONS]")
+	mode, installArgs, err := parseBootstrapMode(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "usage: loki bootstrap install [INSTALL_OPTIONS] | update")
 		return 2
 	}
 	binding, err := windowshost.CurrentReleaseBinding()
@@ -97,7 +98,10 @@ func runBootstrap(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if result.PathChanged {
 		fmt.Fprintf(stdout, "Persistent user PATH now includes %s\n", paths.BinDir)
 	}
-	return runCanonicalInstall(ctx, paths.Binary, args[1:], stdout, stderr)
+	if mode == bootstrapModeUpdate {
+		return 0
+	}
+	return runCanonicalInstall(ctx, paths.Binary, installArgs, stdout, stderr)
 }
 
 func runCanonicalInstall(ctx context.Context, binary string, args []string, stdout, stderr io.Writer) int {

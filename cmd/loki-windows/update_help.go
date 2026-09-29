@@ -25,6 +25,6 @@ func printUpdateHelp(output io.Writer) {
 	fmt.Fprintln(output, "  loki update prepare [--distribution NAME] [--json]")
 	fmt.Fprintln(output, "  loki update apply [--distribution NAME] [--json] [--approve] [--interrupt-active-jobs]")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Bare 'loki update' updates the Windows frontend and converges the appliance release.")
-	fmt.Fprintln(output, "The status, prepare, and apply subcommands expose the advanced two-phase appliance lifecycle.")
+	fmt.Fprintln(output, "Bare 'loki update' updates only the Windows frontend and reports appliance update readiness.")
+	fmt.Fprintln(output, "It never prepares or applies an appliance update; use status, prepare, and apply explicitly for the appliance lifecycle.")
 }
