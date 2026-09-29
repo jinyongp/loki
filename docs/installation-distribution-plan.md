@@ -209,21 +209,25 @@ Derived OCI images remain available for comparatively static native or operating
 
 ## Optional components
 
-Browser control and isolated Git signing are disabled by default.
+Browser control, isolated Git signing, and GitHub App authority are disabled or unconfigured by default.
 
-They must be independently enableable and disableable after installation, for example:
+On a lifecycle-managed Linux/WSL host they are managed through the integration surface:
 
 ```sh
-loki host enable browser
-loki host disable browser
+loki host integration enable browser
+loki host integration disable browser
 
-loki host enable signing
-loki host disable signing
+loki host integration setup signing --identity-name NAME --identity-email EMAIL signing
+loki host integration disable signing
+loki host integration remove signing
+
+loki host integration setup github --config-file /secure/github.toml --private-key-file /secure/github-app.pem github
+loki host integration disable github
 ```
 
-Enabling an optional component performs only the additional image, state, configuration, and health work required by that component. It does not reinstall or broaden the base runtime.
+The Windows frontend exposes the same model without the internal `host` prefix as `loki integration ...`. Enabling an optional integration performs only the additional image, state, configuration, credential, and health work required by that integration. It does not reinstall or broaden the base runtime.
 
-The signing capability remains provider-neutral. Loki may expose the generated public signing key, but registering that key with a particular Git provider is a separate integration concern.
+The signing capability remains provider-neutral. Loki exposes only the generated public signing key and fingerprint; registering that key with a particular Git provider is a separate integration concern. GitHub authority comes only from configured GitHub App installation tokens and never from ambient `gh auth` state.
 
 ## Update model
 

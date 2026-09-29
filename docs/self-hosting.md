@@ -59,12 +59,18 @@ loki host update apply
 loki host backup
 loki host restore BACKUP_ID
 loki host rollback
-loki host enable browser
-loki host disable browser
+
+loki host integration list
+loki host integration enable browser
+loki host integration setup signing --identity-name NAME --identity-email EMAIL signing
+loki host integration status signing
+loki host integration disable signing
+loki host integration remove signing
+
 loki host uninstall
 ```
 
-For unsafe mutations, active or cleanup-pending Jobs block the operation by default. An operator may explicitly pass `--interrupt-active-jobs` only when interruption is intended. Backup, restore, rollback, update and optional-component operations share the same durable journal, recoverable lock, recovery snapshot and truthful `recovery_failed` outcome model.
+For unsafe mutations, active or cleanup-pending Jobs block the operation by default. An operator may explicitly pass `--interrupt-active-jobs` only when interruption is intended. Backup, restore, rollback, update and integration mutations share the same durable journal, recoverable lock, recovery snapshot and truthful `recovery_failed` outcome model. Managed GitHub/signing credentials are copied into lifecycle-owned private state and are not stored in the workspace or application-secret vault.
 
 The selected workspace is preserved by install, update, restore, rollback and uninstall. Deleting workspace data is not part of the lifecycle contract.
 
@@ -126,7 +132,9 @@ The validator compares OCI configuration and provenance labels, hashes Loki-mana
 
 ## Configure the optional GitHub App
 
-GitHub integration uses a repository-scoped GitHub App installation token. Supply the public App and installation configuration plus the private-key host path to the core Compose services:
+For a lifecycle-managed host, use `loki host integration setup github --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github`, then inspect it with `loki host integration status github`. The source files are import inputs; the managed host owns the resulting private credential after setup.
+
+For direct self-hosted Compose, GitHub integration continues to use repository-scoped GitHub App installation tokens with external files. Supply the public App and installation configuration plus the private-key host path to the core Compose services:
 
 ```sh
 export LOKI_GITHUB_CONFIG_FILE=/secure/loki/github.toml
@@ -139,7 +147,9 @@ The configuration supports installations on organization and personal accounts. 
 
 ## Enable optional Git signing
 
-The core stack starts without signing. To enable the isolated signing profile, create an unencrypted SSH signing key owned by the host administrator with mode `0600`, then set its absolute path only for the Compose invocation:
+For a lifecycle-managed host, run `loki host integration setup signing --identity-name NAME --identity-email EMAIL signing`. Loki generates an Ed25519 key inside managed state by default; `--key-file` imports an existing private key. Status exposes only the public key and fingerprint. Disable or remove it with `loki host integration disable signing` or `loki host integration remove signing`.
+
+For direct self-hosted Compose, the core stack starts without signing. Create an unencrypted SSH signing key owned by the host administrator with mode `0600`, then set its absolute path only for the Compose invocation:
 
 ```sh
 LOKI_SIGNING_KEY_FILE=/secure/loki-signing-key \

@@ -50,9 +50,22 @@ install -d -m 0700 /secure/loki
 install -m 0600 /path/from/github.private-key.pem /secure/loki/github-app.pem
 ```
 
+## Managed installation
+
+On a managed Windows installation, configure the App through the frontend:
+
+```powershell
+loki integration setup github `
+  --config-file C:\secure\loki\github.toml `
+  --private-key-file C:\secure\loki\github-app.pem
+loki integration doctor github
+```
+
+On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup github ... github` command. The input PEM is imported into lifecycle-owned private credential state. Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository before setup succeeds. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
+
 ## Start with Compose
 
-Pass absolute host paths when creating or recreating the core services:
+Direct self-hosted Compose continues to support external configuration and PEM files. Pass absolute host paths when creating or recreating the core services:
 
 ```sh
 export LOKI_GITHUB_CONFIG_FILE=/secure/loki/github.toml

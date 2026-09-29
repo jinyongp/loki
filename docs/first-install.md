@@ -196,6 +196,44 @@ loki rollback
 loki restore <backup-id>
 ```
 
+Optional integrations are managed through the Windows frontend; normal users
+do not enter WSL or edit Compose directly:
+
+```powershell
+loki integration list
+
+loki integration enable browser
+loki integration status browser
+loki integration disable browser
+
+loki integration setup signing
+loki integration status signing
+loki integration rotate signing --key-file C:\secure\signing-key
+loki integration disable signing
+loki integration remove signing
+
+loki integration setup github `
+  --config-file C:\secure\github.toml `
+  --private-key-file C:\secure\github-app.pem
+loki integration doctor github
+loki integration disable github
+loki integration enable github
+loki integration remove github
+```
+
+Signing setup prompts for the Git identity when it is not supplied and generates
+a managed Ed25519 key by default. It prints only the public signing key and
+fingerprint; register that public key with the Git provider when verified
+signatures are desired. An explicit signing key file is an import source, not
+the durable credential location.
+
+GitHub setup validates the App configuration, exchanges the App credential for
+a repository-scoped installation token, and reads an allowlisted repository
+before accepting the configuration. GitHub and signing private-key bytes cross
+the Windows-to-WSL boundary only through stdin and are stored in lifecycle-owned
+private appliance state. They are not placed in command-line arguments,
+workspace files, connection JSON, or Loki's application-secret vault.
+
 Mutating operations that can interrupt work or destroy state require their
 documented approval flags or an interactive confirmation. After appliance
 update, rollback, or restore, Loki refreshes the Windows connection/token
