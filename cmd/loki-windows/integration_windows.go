@@ -17,23 +17,6 @@ import (
 
 const maxWindowsIntegrationFileBytes = 1 << 20
 
-type windowsIntegrationReport struct {
-	SchemaVersion  int    `json:"schema_version"`
-	Name           string `json:"name"`
-	Configured     bool   `json:"configured"`
-	Enabled        bool   `json:"enabled"`
-	Ready          bool   `json:"ready"`
-	State          string `json:"state"`
-	PublicKey      string `json:"public_key,omitempty"`
-	Fingerprint    string `json:"fingerprint,omitempty"`
-	IdentityName   string `json:"identity_name,omitempty"`
-	IdentityEmail  string `json:"identity_email,omitempty"`
-	GitHubAppID    int64  `json:"github_app_id,omitempty"`
-	TargetCount    int    `json:"target_count,omitempty"`
-	Authentication string `json:"authentication,omitempty"`
-	Detail         string `json:"detail,omitempty"`
-}
-
 type windowsGitHubEnvelope struct {
 	Config     []byte `json:"config"`
 	PrivateKey []byte `json:"private_key"`
@@ -107,65 +90,14 @@ func runIntegrationAction(ctx context.Context, action string, args []string, std
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if action == "list" || action == "status" || action == "doctor" {
+		return writeWindowsIntegrationInspection(action, result.Probe, *jsonOutput, stdout, stderr)
+	}
 	if result.Probe.ExitCode != 0 {
 		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	if action == "list" {
-		if *jsonOutput {
-			fmt.Fprintln(stdout, result.Probe.Stdout)
-			return 0
-		}
-		var envelope struct {
-			Integrations []windowsIntegrationReport `json:"integrations"`
-		}
-		if err = json.Unmarshal([]byte(result.Probe.Stdout), &envelope); err != nil {
-			fmt.Fprintln(stderr, "cannot decode Loki integration list")
-			return 1
-		}
-		fmt.Fprintln(stdout, "Loki integrations")
-		for _, item := range envelope.Integrations {
-			fmt.Fprintf(stdout, "  %s: %s\n", item.Name, item.State)
-		}
-		return 0
-	}
-	if action == "status" || action == "doctor" {
-		if *jsonOutput {
-			fmt.Fprintln(stdout, result.Probe.Stdout)
-			return 0
-		}
-		var report windowsIntegrationReport
-		if err = json.Unmarshal([]byte(result.Probe.Stdout), &report); err != nil {
-			fmt.Fprintln(stderr, "cannot decode Loki integration status")
-			return 1
-		}
-		renderWindowsIntegration(report, stdout)
-		return 0
-	}
 	fmt.Fprintf(stdout, "Loki %s integration %s completed.\n", name, action)
 	return 0
-}
-
-func renderWindowsIntegration(report windowsIntegrationReport, stdout io.Writer) {
-	fmt.Fprintf(stdout, "Loki integration: %s\n", report.Name)
-	fmt.Fprintf(stdout, "  State: %s\n", report.State)
-	fmt.Fprintf(stdout, "  Configured: %t\n", report.Configured)
-	fmt.Fprintf(stdout, "  Enabled: %t\n", report.Enabled)
-	fmt.Fprintf(stdout, "  Ready: %t\n", report.Ready)
-	if report.PublicKey != "" {
-		fmt.Fprintf(stdout, "  Public key: %s\n", report.PublicKey)
-		fmt.Fprintf(stdout, "  Fingerprint: %s\n", report.Fingerprint)
-		fmt.Fprintf(stdout, "  Identity: %s <%s>\n", report.IdentityName, report.IdentityEmail)
-	}
-	if report.GitHubAppID != 0 {
-		fmt.Fprintf(stdout, "  App ID: %d\n", report.GitHubAppID)
-		fmt.Fprintf(stdout, "  Repositories: %d\n", report.TargetCount)
-	}
-	if report.Authentication != "" {
-		fmt.Fprintf(stdout, "  Authentication: %s\n", report.Authentication)
-	}
-	if report.Detail != "" {
-		fmt.Fprintf(stdout, "  Detail: %s\n", report.Detail)
-	}
 }
 
 func runIntegrationSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {

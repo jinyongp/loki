@@ -900,18 +900,9 @@ func (b *Backend) composeEnvironment(
 	}
 	replacements := map[string]string{}
 	if integrations.GitHub.Configured && integrations.GitHub.Enabled {
-		for _, relative := range []string{lifecycle.ManagedGitHubConfigFile, lifecycle.ManagedGitHubCredentialFile} {
-			if _, err = store.ReadManagedIntegrationFile(ctx, relative, true); err != nil {
-				return nil, fmt.Errorf("managed GitHub integration file %s is unavailable: %w", relative, err)
-			}
-		}
-		managedConfig, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubConfigFile)
-		if pathErr != nil {
-			return nil, pathErr
-		}
-		managedKey, pathErr := store.ManagedIntegrationFilePath(lifecycle.ManagedGitHubCredentialFile)
-		if pathErr != nil {
-			return nil, pathErr
+		managedConfig, managedKey, projectionErr := b.materializeGitHubConfiguration(ctx, store, integrations.GitHub)
+		if projectionErr != nil {
+			return nil, projectionErr
 		}
 		replacements["LOKI_GITHUB_CONFIG_FILE"] = managedConfig
 		replacements["LOKI_GITHUB_PRIVATE_KEY_FILE"] = managedKey

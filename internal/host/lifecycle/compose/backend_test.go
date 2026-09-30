@@ -462,8 +462,28 @@ func TestComposeEnvironmentUsesManagedGitHubPathsWithoutCredentialBytes(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if values["LOKI_GITHUB_CONFIG_FILE"] != configPath || values["LOKI_GITHUB_PRIVATE_KEY_FILE"] != keyPath {
+	projection := filepath.Join(backend.runtimeRoot, "github-public", "github.toml")
+	if values["LOKI_GITHUB_CONFIG_FILE"] != projection || values["LOKI_GITHUB_PRIVATE_KEY_FILE"] != keyPath {
 		t.Fatalf("managed GitHub environment=%#v", values)
+	}
+	projected, err := os.ReadFile(projection)
+	if err != nil || string(projected) != string(configRaw) || strings.Contains(string(projected), string(privateKey)) {
+		t.Fatalf("public projection differs from validated config or leaks credentials: %v", err)
+	}
+	for path, mode := range map[string]os.FileMode{projection: 0444, configPath: 0600, keyPath: 0600} {
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.Mode().Perm() != mode {
+			t.Fatalf("incorrect public/private permission boundary for %s: %v", path, statErr)
+		}
+	}
+	if _, err = store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedGitHubCredentialFile, []byte("changed credential")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = backend.composeEnvironment(t.Context(), state, "/tmp/release-github.toml", "/tmp/ingress.toml"); err == nil {
+		t.Fatal("credential digest mismatch was accepted")
+	}
+	if _, err = store.WriteManagedIntegrationFile(t.Context(), lifecycle.ManagedGitHubCredentialFile, privateKey); err != nil {
+		t.Fatal(err)
 	}
 	if strings.Contains(strings.Join(env, "\n"), string(privateKey)) {
 		t.Fatal("compose environment leaked GitHub private key bytes")
