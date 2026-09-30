@@ -20,6 +20,8 @@ func TestComposeAcceptanceIsDisposableTopologySmoke(t *testing.T) {
 		"verify-derived-image.sh", "--profile browser", "--profile signing",
 		"LOKI_ACCEPTANCE_INVARIANT_PATHS", "cmp \"$before\" \"$after\"",
 		"assert_networks", "assert_no_mount", "assert_not_inspectable",
+		"--user 10000:10000", "SSH_AUTH_SOCK=/run/loki/signing/agent.sock",
+		"isolated workload identity cannot access the configured signing agent identity",
 		"buildx version", "buildx build --quiet --load",
 	} {
 		if !strings.Contains(script, required) {

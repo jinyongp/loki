@@ -27,6 +27,7 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 		filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || !o.Grant.valid || o.SocketUID < 0 || o.SocketGID < 0 {
 		return errors.New("invalid signing agent layout or grant")
 	}
+	parents := map[string]struct{}{}
 	for _, socket := range []string{o.PrivateSocket, o.PublicSocket} {
 		parent := filepath.Dir(socket)
 		resolved, err := filepath.EvalSymlinks(parent)
@@ -36,6 +37,16 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 		var stat unix.Stat_t
 		if err = unix.Stat(parent, &stat); err != nil || stat.Uid != uint32(os.Getuid()) || stat.Mode&0022 != 0 {
 			return errors.New("signing socket directory must be service-owned and not writable by other users")
+		}
+		if _, ok := parents[parent]; !ok {
+			// Job containers intentionally do not receive the workspace
+			// supplementary group. Keep the directory non-listable/non-writable
+			// while allowing traversal to the public socket; the socket inode
+			// remains the actual delegated-authority boundary.
+			if err = os.Chmod(parent, 0711); err != nil {
+				return errors.New("cannot prepare signing socket directory traversal")
+			}
+			parents[parent] = struct{}{}
 		}
 		if _, err = os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
 			return errors.New("signing socket already exists or cannot be inspected")

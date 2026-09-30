@@ -213,6 +213,19 @@ if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
   assert_no_mount signing /workspace
   assert_no_mount signing /var/lib/loki/runtime
   assert_not_inspectable signing "$token"
+
+  signing_volume=${LOKI_SIGNING_SOCKET_VOLUME:-loki-signing-socket}
+  expected_signer=$(awk 'NR == 1 { print $1 " " $2 }' "$LOKI_SIGNING_KEY_FILE.pub")
+  actual_signer=$("$docker" run --rm \
+    --read-only \
+    --network none \
+    --user 10000:10000 \
+    --volume "$signing_volume:/run/loki/signing:ro" \
+    --env SSH_AUTH_SOCK=/run/loki/signing/agent.sock \
+    --entrypoint /usr/bin/ssh-add \
+    "$image" -L | awk 'NR == 1 { print $1 " " $2 }')
+  test -n "$expected_signer" && test "$actual_signer" = "$expected_signer" ||
+    die "isolated workload identity cannot access the configured signing agent identity"
 fi
 
 stage=final-invariants

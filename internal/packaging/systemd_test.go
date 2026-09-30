@@ -447,6 +447,27 @@ func TestServiceSuiteHasSingleBootTarget(t *testing.T) {
 	}
 }
 
+func TestSigningUnitAllowsSocketTraversalWithoutDirectoryListing(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(root, "packaging", "native", "systemd", "signing-agent.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(unit)
+	for _, want := range []string{
+		"RuntimeDirectoryMode=0711",
+		"--runner-uid $RUNNER_UID",
+		"--socket-gid $WORKSPACE_GID",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("signing unit does not contain %q", want)
+		}
+	}
+}
+
 func TestBrowserUnitUsesCandidateChromium(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

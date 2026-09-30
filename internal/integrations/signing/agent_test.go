@@ -45,6 +45,13 @@ func TestAgentLifecycle(t *testing.T) {
 	if stat.Mode&0777 != 0660 {
 		t.Fatalf("public signing socket mode=%#o", stat.Mode&0777)
 	}
+	var parent unix.Stat_t
+	if err := unix.Stat(root, &parent); err != nil {
+		t.Fatal(err)
+	}
+	if parent.Mode&0777 != 0711 {
+		t.Fatalf("signing socket directory mode=%#o", parent.Mode&0777)
+	}
 	list := exec.Command("/usr/bin/ssh-add", "-L")
 	list.Env = []string{"SSH_AUTH_SOCK=" + public}
 	out, err := list.CombinedOutput()
