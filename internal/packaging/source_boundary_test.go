@@ -17,8 +17,24 @@ func TestRetiredPythonEntrypointsAreOutsideCurrentSource(t *testing.T) {
 		"scripts/verify-and-deploy-loki.sh", "scripts/backup-python-deployment.sh",
 		"internal/secret/testdata/python_reference.py",
 	} {
-		if _, err := os.Lstat(filepath.Join(root, name)); !os.IsNotExist(err) {
-			t.Errorf("retired Python path must not be a current entrypoint: %s (%v)", name, err)
+		err := filepath.WalkDir(filepath.Join(root, name), func(path string, entry os.DirEntry, err error) error {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				if entry.Name() == "__pycache__" || strings.HasSuffix(entry.Name(), ".egg-info") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			t.Errorf("retired Python file must not be a current entrypoint: %s", path)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }

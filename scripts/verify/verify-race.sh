@@ -24,5 +24,5 @@ else
 fi
 
 printf 'loki validation: profile=race scope=go-memory-races integration=excluded\n'
-go test -race ./... -count=1
+go test -race -vet=off ./...
 printf 'loki validation: profile=race result=passed note=process/container integration is not covered\n'

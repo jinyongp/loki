@@ -5,12 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-func TestValidationProfilesKeepRequiredBoundaries(t *testing.T) {
+func TestExactCandidateProfileKeepsRequiredBoundaries(t *testing.T) {
 	root := filepath.Join("..", "..")
 	read := func(name string) string {
 		t.Helper()
@@ -19,49 +20,6 @@ func TestValidationProfilesKeepRequiredBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		return string(raw)
-	}
-
-	source := read("verify-source.sh")
-	for _, required := range []string{
-		"profile=source",
-		"go test ./... -count=1",
-		"go vet ./...",
-		"go build ./...",
-		"go run ./tools/archcheck",
-		"go mod tidy -diff",
-		"git diff --check",
-		"integration=excluded",
-		"all independent source checks were attempted",
-		"ripgrep is required; set LOKI_TEST_RG to a pinned executable",
-	} {
-		if !strings.Contains(source, required) {
-			t.Errorf("source profile lacks %q", required)
-		}
-	}
-	if strings.Contains(source, "accept-oci-jobs.sh") {
-		t.Fatal("source profile must not silently include fixture-gated integration")
-	}
-
-	race := read("verify-race.sh")
-	for _, required := range []string{"profile=race", "go test -race ./... -count=1", "integration=excluded", "ripgrep is required; set LOKI_TEST_RG to a pinned executable"} {
-		if !strings.Contains(race, required) {
-			t.Errorf("race profile lacks %q", required)
-		}
-	}
-
-	preflight := read("verify-preflight.sh")
-	for _, required := range []string{
-		"profile=preflight",
-		"requires Linux because real OCI integration is mandatory",
-		"verify-source.sh",
-		"verify-race.sh",
-		"accept-oci-jobs.sh",
-		"all independent preflight profiles were attempted",
-		"remaining=exact-candidate,windows-wsl,publication",
-	} {
-		if !strings.Contains(preflight, required) {
-			t.Errorf("preflight profile lacks %q", required)
-		}
 	}
 
 	candidate := read("verify-release.sh")
@@ -81,6 +39,79 @@ func TestValidationProfilesKeepRequiredBoundaries(t *testing.T) {
 		if !strings.Contains(candidate, required) {
 			t.Errorf("exact-candidate profile lacks %q", required)
 		}
+	}
+}
+
+func TestValidationProfilesExecuteEachCheckAndReportFailures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX validation scripts")
+	}
+	for _, test := range []struct {
+		name, script, failure string
+		args                  []string
+		want                  []string
+	}{
+		{name: "source", script: "verify-source.sh", want: []string{
+			"go test -vet=off ./...", "go vet ./...", "go build ./cmd/...",
+			"go run ./tools/archcheck", "go mod tidy -diff", "git diff --check",
+		}},
+		{name: "source-failure", script: "verify-source.sh", failure: "test", want: []string{
+			"go test -vet=off ./...", "go vet ./...", "go build ./cmd/...",
+			"go run ./tools/archcheck", "go mod tidy -diff", "git diff --check",
+		}},
+		{name: "race", script: "verify-race.sh", want: []string{"go test -race -vet=off ./..."}},
+		{name: "preflight", script: "verify-preflight.sh", want: []string{"source", "race"}},
+		{name: "preflight-oci", script: "verify-preflight.sh", args: []string{"--oci"}, want: []string{"source", "race", "oci"}},
+		{name: "preflight-oci-failure", script: "verify-preflight.sh", args: []string{"--oci"}, failure: "oci", want: []string{"source", "race", "oci"}},
+		{name: "preflight-source-failure", script: "verify-preflight.sh", args: []string{"--oci"}, failure: "source", want: []string{"source", "race", "oci"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			bin := filepath.Join(root, "bin")
+			verify := filepath.Join(root, "scripts", "verify")
+			for _, dir := range []string{bin, verify} {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write := func(path, body string) {
+				t.Helper()
+				if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "verify", test.script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			write(filepath.Join(verify, test.script), string(script))
+			for _, tool := range []string{"go", "git"} {
+				write(filepath.Join(bin, tool), "#!/bin/sh\nprintf '%s\\n' '"+tool+" '"+`"$*" >> "$LOKI_VERIFY_LOG"`+"\n"+`test "$1" != "$LOKI_VERIFY_FAIL"`+"\n")
+			}
+			write(filepath.Join(bin, "rg"), "#!/bin/sh\nexit 0\n")
+			if test.script == "verify-preflight.sh" {
+				for name, label := range map[string]string{"verify-source.sh": "source", "verify-race.sh": "race", "accept-oci-jobs.sh": "oci"} {
+					write(filepath.Join(verify, name), "#!/bin/sh\nprintf '%s\\n' '"+label+"' >> \"$LOKI_VERIFY_LOG\"\ntest '"+label+"' != \"$LOKI_VERIFY_FAIL\"\n")
+				}
+			}
+			log := filepath.Join(root, "commands")
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("LOKI_TEST_RG", filepath.Join(bin, "rg"))
+			t.Setenv("LOKI_VERIFY_LOG", log)
+			t.Setenv("LOKI_VERIFY_FAIL", test.failure)
+			args := append([]string{filepath.Join(verify, test.script)}, test.args...)
+			output, err := exec.Command("sh", args...).CombinedOutput()
+			if (err != nil) != (test.failure != "") {
+				t.Fatalf("failure=%q err=%v\n%s", test.failure, err, output)
+			}
+			commands, err := os.ReadFile(log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Split(strings.TrimSpace(string(commands)), "\n"); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("commands = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 
