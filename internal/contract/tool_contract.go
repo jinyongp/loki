@@ -477,15 +477,15 @@ func overrideWorkspaceRead(tool *mcp.Tool) error {
 				"description": "Workspace-relative path. list/search default to the workspace root; file/history actions require an explicit target path.",
 			}},
 			{Name: "max_depth", Schema: map[string]any{
-				"type": "integer", "minimum": 1, "maximum": 10, "default": 3,
-				"description": "Maximum recursive directory depth for action=list.",
+				"type": "integer", "minimum": 1, "default": 3,
+				"description": "Requested recursive directory depth for action=list; Loki clamps it to 10.",
 			}},
 			{Name: "offset", Schema: map[string]any{
 				"type": "integer", "minimum": 0, "default": 0,
 				"description": "Zero-based entry or line offset for action=list or action=file.",
 			}},
 			{Name: "limit", Schema: map[string]any{
-				"type": "integer", "minimum": 1, "maximum": 100000, "default": 200,
+				"type": "integer", "minimum": 1, "default": 200,
 				"description": "Requested entry, line, or revision count. Loki clamps it to the action-specific configured bound.",
 			}},
 			{Name: "query", Schema: map[string]any{
@@ -493,8 +493,8 @@ func overrideWorkspaceRead(tool *mcp.Tool) error {
 				"description": "Literal or regular-expression search text for action=search.",
 			}},
 			{Name: "max_results", Schema: map[string]any{
-				"type": "integer", "minimum": 1, "maximum": 10000, "default": 100,
-				"description": "Maximum search matches requested for action=search; the configured server bound may be lower.",
+				"type": "integer", "minimum": 1, "default": 100,
+				"description": "Requested search matches for action=search; Loki clamps it to the configured server bound.",
 			}},
 			{Name: "regex", Schema: map[string]any{
 				"type": "boolean", "default": false,

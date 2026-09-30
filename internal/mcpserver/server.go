@@ -179,21 +179,10 @@ func wrap(tool *mcp.Tool, handler Handler) (mcp.ToolHandler, error) {
 		if json.Unmarshal(args, &input) != nil || input == nil {
 			return errorResult(fault.Describe(fault.New(fault.CodeInvalidInput, "invalid arguments: request; inspect the tool schema and retry", false, "inspect the tool schema and correct the request"))), nil
 		}
-		for key := range input {
-			if _, known := schema.Properties[key]; !known {
-				return errorResult(fault.Describe(fault.New(fault.CodeInvalidInput, "invalid arguments: unknown field; inspect the tool schema and retry", false, "remove unknown fields and retry"))), nil
-			}
-		}
 		if err := resolved.Validate(input); err != nil {
 			fields := []string{}
 			for _, key := range schema.Required {
 				if _, ok := input[key]; !ok {
-					fields = append(fields, key)
-				}
-			}
-			for key, value := range input {
-				property, err := schema.Properties[key].Resolve(nil)
-				if err != nil || property.Validate(value) != nil {
 					fields = append(fields, key)
 				}
 			}
