@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -85,8 +86,23 @@ func TestSecretTerminalEchoAndCancellation(t *testing.T) {
 				t.Fatal("terminal settings not restored")
 			}
 			poll := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
-			if n, err := unix.Poll(poll, 20); err != nil || n != 0 {
-				t.Fatal("secret bytes echoed to terminal")
+			for {
+				_, pollErr := unix.Poll(poll, 20)
+				if errors.Is(pollErr, unix.EINTR) {
+					continue
+				}
+				if pollErr != nil {
+					t.Fatal(pollErr)
+				}
+				break
+			}
+			if poll[0].Revents&unix.POLLIN != 0 {
+				var echoed [256]byte
+				n, readErr := unix.Read(fd, echoed[:])
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				t.Fatalf("secret bytes echoed to terminal: %q", echoed[:n])
 			}
 		})
 	}
