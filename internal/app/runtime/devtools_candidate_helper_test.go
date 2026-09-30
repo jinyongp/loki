@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version":
-			fmt.Fprintln(os.Stdout, `{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"runtime-test","protocol_version":4}}`)
+			fmt.Fprintln(os.Stdout, `{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"runtime-test","protocol_version":5}}`)
 			os.Exit(0)
 		case "schema":
 			if len(os.Args) > 2 && os.Args[2] == "--all" {

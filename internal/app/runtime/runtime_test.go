@@ -67,7 +67,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "devtools", "testdata", "catalog-protocol-v4.json"))
+	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "devtools", "testdata", "catalog-protocol-v5.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||
 		githubStatus["credential_available"] != true ||
 		devtoolsStatus["version"] != "0.17.0" || devtoolsStatus["commit"] != "runtime-test" ||
-		devtoolsStatus["protocol_version"] != float64(4) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||
+		devtoolsStatus["protocol_version"] != float64(devtools.ProtocolVersion) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||
 		len(devtoolsStatus["catalog_sha256"].(string)) != 64 {
 		t.Fatal(status)
 	}

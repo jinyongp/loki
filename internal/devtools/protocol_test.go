@@ -57,7 +57,7 @@ func TestEnvelopeContract(t *testing.T) {
 }
 
 func TestVersionRequiresIndependentProtocol(t *testing.T) {
-	for _, protocol := range []string{"0", "1", "2", "3", "5", "null", `"4"`} {
+	for _, protocol := range []string{"0", "1", "2", "3", "4", "null", `"5"`} {
 		t.Run(protocol, func(t *testing.T) {
 			raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":` + protocol + `}}`)
 			if _, err := ParseVersion(raw); err == nil {
@@ -67,15 +67,15 @@ func TestVersionRequiresIndependentProtocol(t *testing.T) {
 	}
 	for _, raw := range []string{
 		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test"}}`,
-		`{"schema_version":3,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":4}}`,
-		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":1,"protocol_version":4}}`,
+		`{"schema_version":3,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":5}}`,
+		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":1,"protocol_version":5}}`,
 	} {
 		if _, err := ParseVersion([]byte(raw)); err == nil {
 			t.Fatal("invalid version contract accepted")
 		}
 	}
-	got, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":4}}`))
-	if err != nil || got.ProtocolVersion != 4 || got.Version != "0.17.0" {
+	got, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":5}}`))
+	if err != nil || got.ProtocolVersion != 5 || got.Version != "0.17.0" {
 		t.Fatalf("version = %+v, error = %v", got, err)
 	}
 }
@@ -176,7 +176,7 @@ func TestClientChecksFailureEnvelopeBeforeCLIError(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := "#!/bin/sh\n" +
-				"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":4}}'; exit 0; fi\n" +
+				"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":5}}'; exit 0; fi\n" +
 				"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + filepath.Join(client.CWD, "catalog.json") + "\"; exit 0; fi\n"
 			redirect := ""
 			if test.exit != 0 {
