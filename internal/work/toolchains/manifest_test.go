@@ -23,7 +23,7 @@ func TestRepositoryManifest(t *testing.T) {
 		artifacts[artifact.Name] = artifact
 	}
 	for name, version := range map[string]string{
-		"gh":   "2.101.0",
+		"gh":   "2.102.0",
 		"go":   "1.27.1",
 		"node": "26.9.0",
 		"pnpm": "12.5.1",

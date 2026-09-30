@@ -265,8 +265,8 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	for _, required := range []string{
 		"DEVTOOLS_VERSION=0.21.0",
 		"DEVTOOLS_COMMIT=dec585b4a537f79a656b69261d208073682e1006",
-		"GH_VERSION=2.101.0",
-		"GH_COMMIT=0cf1092493af067646fc5f3db9421c6a6ec9c938",
+		"GH_VERSION=2.102.0",
+		"GH_COMMIT=fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd",
 		"RIPGREP_VERSION=15.2.0",
 		"RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
 		"golang:1.27.1-bookworm@sha256:",
