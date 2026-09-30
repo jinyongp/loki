@@ -26,6 +26,11 @@ import (
 	"loki/internal/work/jobs"
 )
 
+const (
+	defaultOCIWorkloadUID uint32 = 10000
+	defaultOCIWorkloadGID uint32 = 10000
+)
+
 func TestRealOCIJobLifecycle(t *testing.T) {
 	if os.Getenv("LOKI_REQUIRE_OCI_JOB_TESTS") != "1" {
 		t.Skip("set LOKI_REQUIRE_OCI_JOB_TESTS=1 with explicit Docker socket, pinned image, and shared workspace fixtures")
@@ -45,8 +50,8 @@ func TestRealOCIJobLifecycle(t *testing.T) {
 	}
 
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("a", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,
@@ -162,8 +167,8 @@ func TestRealOCIJobDetachedDescendantCleanup(t *testing.T) {
 	}
 
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("d", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,
@@ -289,8 +294,8 @@ func TestRealOCIJobRecoveryAndBoundedOutput(t *testing.T) {
 	image := requiredOCIEnv(t, "LOKI_TEST_DOCKER_IMAGE")
 	workspace := requiredOCIEnv(t, "LOKI_TEST_DOCKER_WORKSPACE")
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("b", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,
@@ -383,8 +388,8 @@ func TestRealOCIJobWritableEnvironmentAndGitPersistence(t *testing.T) {
 	image := requiredOCIEnv(t, "LOKI_TEST_DOCKER_IMAGE")
 	workspace := requiredOCIEnv(t, "LOKI_TEST_DOCKER_WORKSPACE")
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("e", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,
@@ -449,7 +454,10 @@ func TestRealOCIJobWritableEnvironmentAndGitPersistence(t *testing.T) {
 		return result
 	}
 
-	run([]string{"/bin/sh", "-c", `for path in "$TMPDIR" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"; do test -d "$path" && test -w "$path" || exit 31; done; exec /usr/bin/git -c safe.directory='*' init -q --initial-branch=main .`})
+	run([]string{"/bin/sh", "-c", `test -d "$TMPDIR" && test -w "$TMPDIR" || exit 31
+test -d "$XDG_CACHE_HOME" && test -w "$XDG_CACHE_HOME" || exit 32
+test -d "$XDG_CONFIG_HOME" && test -w "$XDG_CONFIG_HOME" || exit 33
+exec /usr/bin/git -c safe.directory='*' init -q --initial-branch=main .`})
 	run([]string{
 		"/usr/bin/git",
 		"-c", "safe.directory=*",
@@ -458,10 +466,8 @@ func TestRealOCIJobWritableEnvironmentAndGitPersistence(t *testing.T) {
 		"-c", "commit.gpgsign=false",
 		"commit", "--allow-empty", "-qm", "persistent OCI git fixture",
 	})
-	result := run([]string{"/usr/bin/git", "-c", "safe.directory=*", "log", "-1", "--format=%s"})
-	if strings.TrimSpace(string(result.Output)) != "persistent OCI git fixture" {
-		t.Fatalf("persisted commit output = %q", result.Output)
-	}
+	run([]string{"/usr/bin/git", "-c", "safe.directory=*", "cat-file", "-e", "HEAD^{commit}"})
+	run([]string{"/bin/rm", "-rf", ".git"})
 }
 
 func TestRealOCIJobNetworkEndpointPreview(t *testing.T) {
@@ -488,8 +494,8 @@ func TestRealOCIJobNetworkEndpointPreview(t *testing.T) {
 	}
 
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("c", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,

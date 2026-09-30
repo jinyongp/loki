@@ -1,6 +1,7 @@
 package packaging
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -78,6 +79,7 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	}
 
 	goCall := mustRead(t, goLog)
+	workloadUID, workloadGID := shippingOCIWorkloadIdentity(t, root)
 	for _, required := range []string{
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobWritableEnvironmentAndGitPersistence$ -v -count=1",
@@ -89,6 +91,8 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 		"LOKI_TEST_DOCKER_SOCKET=" + socket,
 		"LOKI_TEST_DOCKER_PEER_UID=" + strconv.Itoa(os.Getuid()),
 		"LOKI_TEST_DOCKER_IMAGE=127.0.0.1:49153/loki-oci-job-fixture@sha256:" + strings.Repeat("a", 64),
+		"LOKI_TEST_WORKLOAD_UID=" + workloadUID,
+		"LOKI_TEST_WORKLOAD_GID=" + workloadGID,
 		"LOKI_TEST_EGRESS_ALLOWED_AUTHORITY=registry.npmjs.org:443",
 	} {
 		if !strings.Contains(goCall, required) {
@@ -165,6 +169,7 @@ func TestOCIJobAcceptanceRunnerUsesImmutableReleaseImage(t *testing.T) {
 	}
 
 	goCalls := mustRead(t, goLog)
+	workloadUID, workloadGID := shippingOCIWorkloadIdentity(t, root)
 	for _, required := range []string{
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobNetworkEndpointPreview$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
@@ -173,6 +178,8 @@ func TestOCIJobAcceptanceRunnerUsesImmutableReleaseImage(t *testing.T) {
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobDetachedDescendantCleanup$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
 		"LOKI_TEST_DOCKER_IMAGE=" + image,
+		"LOKI_TEST_WORKLOAD_UID=" + workloadUID,
+		"LOKI_TEST_WORKLOAD_GID=" + workloadGID,
 	} {
 		if !strings.Contains(goCalls, required) {
 			t.Errorf("release-image invocation missing %q:\n%s", required, goCalls)
@@ -264,6 +271,25 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 	}
 }
 
+func shippingOCIWorkloadIdentity(t *testing.T, root string) (string, string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, "packaging", "images", "config", "launcher.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launcher struct {
+		WorkloadUID uint32
+		WorkloadGID uint32
+	}
+	if err = json.Unmarshal(raw, &launcher); err != nil {
+		t.Fatal(err)
+	}
+	if launcher.WorkloadUID == 0 || launcher.WorkloadGID == 0 {
+		t.Fatalf("shipping workload identity must be unprivileged: %#v", launcher)
+	}
+	return strconv.FormatUint(uint64(launcher.WorkloadUID), 10), strconv.FormatUint(uint64(launcher.WorkloadGID), 10)
+}
+
 func mustRead(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -343,6 +369,8 @@ set -eu
   printf 'LOKI_TEST_DOCKER_PEER_UID=%s\n' "$LOKI_TEST_DOCKER_PEER_UID"
   printf 'LOKI_TEST_DOCKER_IMAGE=%s\n' "$LOKI_TEST_DOCKER_IMAGE"
   printf 'LOKI_TEST_DOCKER_WORKSPACE=%s\n' "$LOKI_TEST_DOCKER_WORKSPACE"
+  printf 'LOKI_TEST_WORKLOAD_UID=%s\n' "$LOKI_TEST_WORKLOAD_UID"
+  printf 'LOKI_TEST_WORKLOAD_GID=%s\n' "$LOKI_TEST_WORKLOAD_GID"
   printf 'LOKI_TEST_EGRESS_ALLOWED_AUTHORITY=%s\n' "$LOKI_TEST_EGRESS_ALLOWED_AUTHORITY"
 } >>"$LOKI_FAKE_GO_LOG"
 case " $* " in

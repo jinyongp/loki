@@ -37,6 +37,18 @@ case "$peer_uid" in
   ''|*[!0-9]*) fail "Docker peer UID must be an unsigned integer" ;;
 esac
 
+launcher_config="$SOURCE_DIR/packaging/images/config/launcher.json"
+shipping_workload_uid=$(sed -n 's/^[[:space:]]*"WorkloadUID":[[:space:]]*\([0-9][0-9]*\),\{0,1\}[[:space:]]*$/\1/p' "$launcher_config")
+shipping_workload_gid=$(sed -n 's/^[[:space:]]*"WorkloadGID":[[:space:]]*\([0-9][0-9]*\),\{0,1\}[[:space:]]*$/\1/p' "$launcher_config")
+workload_uid=${LOKI_TEST_WORKLOAD_UID:-$shipping_workload_uid}
+workload_gid=${LOKI_TEST_WORKLOAD_GID:-$shipping_workload_gid}
+case "$workload_uid" in
+  ''|0|*[!0-9]*) fail "workload UID must be the shipping unprivileged identity or an explicit unsigned override" ;;
+esac
+case "$workload_gid" in
+  ''|0|*[!0-9]*) fail "workload GID must be the shipping unprivileged identity or an explicit unsigned override" ;;
+esac
+
 allowed_authority=${LOKI_TEST_EGRESS_ALLOWED_AUTHORITY:-registry.npmjs.org:443}
 case "$allowed_authority" in
   *:443) allowed_host=${allowed_authority%:443} ;;
@@ -136,8 +148,8 @@ else
   fixture_image_owned=1
 fi
 
-printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s\n' \
-  "$socket" "$image_digest" "$allowed_authority"
+printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s workload=%s:%s\n' \
+  "$socket" "$image_digest" "$allowed_authority" "$workload_uid" "$workload_gid"
 
 run_oci_test() {
   test_name=$1
@@ -148,6 +160,8 @@ run_oci_test() {
     LOKI_TEST_DOCKER_PEER_UID="$peer_uid" \
     LOKI_TEST_DOCKER_IMAGE="$image_digest" \
     LOKI_TEST_DOCKER_WORKSPACE="$workspace" \
+    LOKI_TEST_WORKLOAD_UID="$workload_uid" \
+    LOKI_TEST_WORKLOAD_GID="$workload_gid" \
     LOKI_TEST_EGRESS_ALLOWED_AUTHORITY="$allowed_authority" \
       go test ./internal/platform/sandbox -run "^$test_name$" -v -count=1 >"$log" 2>&1; then
     cat "$log"

@@ -29,8 +29,8 @@ func TestRealOCIJobScriptAuthorityBoundary(t *testing.T) {
 	}
 
 	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
-	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
-	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", defaultOCIWorkloadUID)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", defaultOCIWorkloadGID)
 	policyDigest := strings.Repeat("e", 64)
 	policy, err := NewPolicy(PolicyOptions{
 		GenerationSHA256: policyDigest,
