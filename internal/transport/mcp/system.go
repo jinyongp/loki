@@ -33,7 +33,6 @@ type SystemController struct {
 	Paths                                       *policy.Workspace
 	Started                                     time.Time
 	RuntimeSocket, BrowserSocket, SigningSocket string
-	BrowserEnabled, BrowserReady                bool
 	Artifacts, Previews                         bool
 	InspectPort                                 func(context.Context, int) (map[string]any, error)
 	GitEnvironment                              []string

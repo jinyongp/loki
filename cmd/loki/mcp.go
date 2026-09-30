@@ -71,18 +71,11 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 		GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token,
 	}
 	if hasBrowserSocket {
-		info, statErr := os.Stat(l.BrowserSocket)
-		switch {
-		case statErr == nil && info.Mode()&os.ModeSocket != 0:
-			options.Browser = appbrowser.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
-			options.BrowserSocket = l.BrowserSocket
-		case errors.Is(statErr, os.ErrNotExist):
-			// Optional browser integration is absent from construction.
-		case statErr != nil:
-			return mcpapp.MCPOptions{}, fmt.Errorf("inspect MCP browser socket: %w", statErr)
-		default:
-			return mcpapp.MCPOptions{}, errors.New("MCP browser socket path is not a socket")
-		}
+		// Optional browser authority is dynamic. Construct the RPC client even
+		// when the socket is absent so a later lifecycle enable becomes usable
+		// without restarting the MCP process.
+		options.Browser = appbrowser.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
+		options.BrowserSocket = l.BrowserSocket
 	}
 	hasExecutorSocket := l.ExecutorSocket != ""
 	hasExecutorUID := l.ExecutorUID != nil

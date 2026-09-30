@@ -34,7 +34,12 @@ func NewBrowserRPC(socket string, uid uint32) BrowserRPC {
 func (c BrowserRPC) Call(ctx context.Context, operation string, args map[string]any) (map[string]any, error) {
 	if _, err := os.Stat(c.Client.Socket); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fault.Error("browser is not configured")
+			return nil, fault.New(
+				fault.CodeUnavailable,
+				"browser integration is not ready for this Loki server",
+				false,
+				"enable it with `loki integration enable browser` and retry",
+			)
 		}
 		return nil, err
 	}

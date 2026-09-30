@@ -49,6 +49,9 @@ func TestMCPLayoutRequiresExplicitPeers(t *testing.T) {
 	if _, ok := options.GitJobs.(*jobsremote.Executor); !ok {
 		t.Fatalf("Git Job client type = %T", options.GitJobs)
 	}
+	if options.Browser == nil || options.BrowserSocket != valid.BrowserSocket {
+		t.Fatalf("browser client was not constructed lazily: %#v", options)
+	}
 
 	for _, mutate := range []func(*mcpLayout){
 		func(l *mcpLayout) { l.RuntimeUID = nil },

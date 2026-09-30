@@ -31,8 +31,8 @@ func effectiveIntegrationState(configured, enabled, ready bool) string {
 
 func (c *SystemController) integrationStatus(ctx context.Context) map[string]any {
 	browserConfigured := true
-	browserEnabled := c.BrowserEnabled
-	browserReady := c.BrowserReady
+	browserEnabled := c.BrowserSocket != "" && socketExists(c.BrowserSocket)
+	browserReady := browserEnabled
 
 	githubConfigured := c.Config.GitHubAppID != 0
 	githubEnabled := githubConfigured

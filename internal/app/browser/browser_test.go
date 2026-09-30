@@ -54,8 +54,56 @@ func TestBrowserOperationEnvelope(t *testing.T) {
 }
 func TestBrowserRPCReportsMissingOptionalSocket(t *testing.T) {
 	client := NewBrowserRPC(filepath.Join(t.TempDir(), "browser.sock"), uint32(os.Getuid()))
-	if _, err := client.Call(t.Context(), "state", nil); err == nil || err.Error() != "browser is not configured" {
+	if _, err := client.Call(t.Context(), "state", nil); err == nil || err.Error() != "browser integration is not ready for this Loki server" {
 		t.Fatalf("missing browser error = %v", err)
+	}
+}
+
+func TestBrowserRPCBecomesAvailableWhenSocketAppears(t *testing.T) {
+	root := t.TempDir()
+	socket := filepath.Join(root, "socket", "browser.sock")
+	uid := uint32(os.Getuid())
+	client := NewBrowserRPC(socket, uid)
+
+	if _, err := client.Call(t.Context(), "state", nil); err == nil {
+		t.Fatal("browser client unexpectedly succeeded before socket creation")
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ready := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- RunBrowser(ctx, BrowserOptions{
+			Socket: socket, AgentUID: uid, SocketGID: os.Getgid(),
+			Browser: browser.Options{
+				Binary:    "/unneeded-until-start",
+				Profile:   filepath.Join(root, "profile"),
+				Downloads: filepath.Join(root, "downloads"),
+				Proxy:     "http://127.0.0.1:1",
+			},
+		}, func() error { close(ready); return nil })
+	}()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("browser readiness timeout")
+	}
+
+	result, err := client.Call(t.Context(), "stop", nil)
+	if err != nil || result["status"] != "stopped" {
+		t.Fatalf("lazy browser client result=%#v err=%v", result, err)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("browser shutdown timeout")
 	}
 }
 

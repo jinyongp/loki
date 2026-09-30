@@ -2,6 +2,7 @@ package mcptransport
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -65,5 +66,37 @@ func TestSystemInformation(t *testing.T) {
 				t.Fatal(value)
 			}
 		}
+	}
+}
+
+func TestBrowserIntegrationStatusTracksSocketDynamically(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "browser.sock")
+	paths := serviceFixture(t)
+	cfg, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Root = paths.Root()
+	controller := &SystemController{
+		Config: cfg, Paths: paths, BrowserSocket: socket,
+		GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"},
+	}
+
+	status := controller.integrationStatus(t.Context())
+	browser := status["browser"].(map[string]any)
+	if browser["state"] != integrationDisabled || browser["ready"] != false {
+		t.Fatalf("browser status before enable=%#v", browser)
+	}
+
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	status = controller.integrationStatus(t.Context())
+	browser = status["browser"].(map[string]any)
+	if browser["state"] != integrationReady || browser["enabled"] != true || browser["ready"] != true {
+		t.Fatalf("browser status after enable=%#v", browser)
 	}
 }
