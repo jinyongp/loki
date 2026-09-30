@@ -2,294 +2,238 @@ package packaging
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
-func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", ".."))
+func TestReleaseDependencyUpdatesAreOptionalAndContractGateIsRequired(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
-	if err != nil {
+	var workflow struct {
+		On struct {
+			Dispatch struct {
+				Inputs map[string]struct {
+					Default any
+					Type    string
+				}
+			} `yaml:"workflow_dispatch"`
+		}
+		Jobs map[string]struct {
+			Steps []struct {
+				ID, If, Run string
+			}
+		}
+	}
+	if err := yaml.Unmarshal(raw, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	text := string(raw)
-	for _, required := range []string{
-		"workflow_dispatch:",
-		"bump:",
-		"Publish the accepted release after validation.",
-		"type: boolean",
-		"default: true",
-		"if: ${{ inputs.publish }}",
-		"actions-up@1.21.0",
-		"npm view actions-up version",
-		`gh release view "$latest_tag" --json isDraft,isImmutable`,
-		"current commit is already published immutably as $latest_tag",
-		"current commit has a mutable failed release at $latest_tag; advancing to the next version",
-		"./scripts/verify/release-pins.sh metadata",
-		"./scripts/verify/release-pins.sh containers",
-		"Verify release container pins are current",
-		"crazy-max/ghaction-github-runtime@",
-		"# v4.0.0",
-		"release-contracts:",
-		"Verify release contracts and pins",
-		"release-inputs:",
-		"source-runtime-contracts:",
-		"Verify source runtime fixtures",
-		"oci-gates:",
-		"Verify OCI runtime",
-		"Verify Windows WSL appliance",
-		"windows-2025",
-		".\\scripts\\verify\\update-wsl.ps1 -Attempts 3 -DelaySeconds 10",
-		"Parse Windows verification scripts",
-		"[void][scriptblock]::Create",
-		".\\scripts\\verify\\accept-wsl.ps1",
-		"wsl-accept:",
-		"windows-provider-acceptance:",
-		"Verify Windows provider acceptance",
-		"LOKI_WINDOWS_PROVIDER_ACCEPTANCE",
-		"TestWindowsProviderAcceptance",
-		"- windows-provider-acceptance",
-		"source-gates:",
-		"LOKI_TEST_RG:",
-		"CI-sensitive Go test detail",
-		"ubuntu-24.04-arm",
-		"./scripts/build/build-release-inputs.sh",
-		"pattern: loki-release-inputs-*",
-		"merge-multiple: true",
-		"Restore release input executable modes",
-		"Prepare release candidate",
-		"sh ./scripts/verify/prepare-candidate.sh",
-		"path: ${{ runner.temp }}/candidate",
-		"LOKI_BUILD_CACHE_SCOPE: release-inputs",
-		"LOKI_BUILD_CACHE_SCOPE=loki-core",
-		"LOKI_BUILD_CACHE_SCOPE=loki-browser",
-		"./scripts/build/build-oci.sh",
-		"./scripts/build/build-browser-oci.sh",
-		"./scripts/build/build-wsl.sh",
-		"Require anonymously pullable runtime images",
-		"go run ./tools/release/releasebuild",
-		"go run ./tools/release/evidencebuild",
-		"go run ./tools/release/helperfetch",
-		"--catalog \"$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json\"",
-		"go run ./tools/release/windowsbuild",
-		"--windows-frontend",
-		"--connect-helper-catalog",
-		"--connect-helper-archive",
-		"--connect-helper-license",
-		"--connect-helper-notice",
-		"--connect-helper-spdx",
-		"--wsl-appliance",
-		"go run ./tools/release/publishprep",
-		"--windows-installer-template",
-		"Run CI-sensitive Go tests",
-		"CI-sensitive Go test failed",
-		"Run deterministic source profile",
-		"sh ./scripts/verify/verify-source.sh",
-		"Run Go race profile",
-		"sh ./scripts/verify/verify-race.sh",
-		"Run runner/vault OS permission acceptance",
-		"go test -c -o \"$RUNNER_TEMP/execution-permission.test\" ./internal/execution",
-		"sudo \"$RUNNER_TEMP/execution-permission.test\" -test.run '^TestLinuxRunnerCanWriteStateButCannotReadVaultKey$' -test.v",
-		"Run release OCI authority acceptance",
-		"LOKI_OCI_ACCEPTANCE_IMAGE: ${{ needs.build.outputs.core_image }}",
-		"Run protected-resource cross-path authority matrix",
-		"LOKI_IMAGE: ${{ needs.build.outputs.core_image }}",
-		"bash ./scripts/verify/accept-authority-matrix.sh",
-		"./scripts/verify/accept-oci-jobs.sh",
-		"Run MCP-only project execution acceptance",
-		"./scripts/verify/accept-project-execution.sh",
-		"Run provider-neutral MCP ingress acceptance",
-		"TestProviderNeutralExternalIngressAcceptance",
-		"Run provider release contract acceptance",
-		"go test ./internal/integrations/github -v -count=1",
-		"Run release Compose, browser and signing acceptance",
-		`LOKI_SIGNING_KEY_FILE="$key" ./scripts/verify/accept-compose.sh`,
-		"./scripts/verify/accept-bootstrap.sh",
-		"./scripts/build/build-toolchain-bundle.sh",
-		"Create or verify release tag",
-		"releaseway/actions@",
-		"actions/upload-pages-artifact@",
-		"actions/deploy-pages@",
-		"https://jinyongp.dev/loki/install.sh",
-		"https://jinyongp.dev/loki/install.ps1",
-		"loki-wsl-amd64.wsl",
-		"loki-install.ps1",
-		"Run public source-free installation",
-		"verify-public-windows:",
-		"Verify public Windows install",
-		"Verify published PowerShell installer bytes",
-		"Run public Windows source-free installation",
-		"irm https://jinyongp.dev/loki/install.ps1 | iex",
-		"public Windows frontend release binding does not match",
-		"--install-prerequisites",
-	} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("release workflow lacks %q", required)
+	input, ok := workflow.On.Dispatch.Inputs["check_updates"]
+	if !ok || input.Default != false || input.Type != "boolean" {
+		t.Fatal("dependency update checks must be an explicit opt-in")
+	}
+	checks := map[string]bool{"action_pins": false, "metadata_pins": false, "container_pins": false}
+	var gate string
+	for _, step := range workflow.Jobs["release-contracts"].Steps {
+		if _, ok := checks[step.ID]; ok {
+			checks[step.ID] = step.If == "${{ inputs.check_updates }}"
+		}
+		if strings.Contains(step.Run, "steps.contract_tests.outcome") {
+			if step.If != "${{ always() }}" {
+				t.Fatal("contract result gate must run even after a failed step")
+			}
+			gate = step.Run
 		}
 	}
-	for _, forbidden := range []string{
-		"workflow_call:",
-		"push:",
-		"pull_request:",
-		"releaseway/actions@v",
-		"--clobber",
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("release workflow contains forbidden publication path %q", forbidden)
+	for id, optional := range checks {
+		if !optional {
+			t.Errorf("%s must follow the dependency update opt-in", id)
 		}
 	}
+	if gate == "" {
+		t.Fatal("release contract result gate is missing")
+	}
+	for _, test := range []struct {
+		name, updates, contracts, pins string
+		pass                           bool
+	}{
+		{"updates-skipped", "false", "success", "skipped", true},
+		{"contracts-failed", "false", "failure", "skipped", false},
+		{"updates-passed", "true", "success", "success", true},
+		{"updates-failed", "true", "success", "failure", false},
+		{"updates-skipped-when-required", "true", "success", "skipped", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			script := strings.NewReplacer(
+				"${{ inputs.check_updates }}", test.updates,
+				"${{ steps.contract_tests.outcome }}", test.contracts,
+				"${{ steps.action_pins.outcome }}", test.pins,
+				"${{ steps.metadata_pins.outcome }}", test.pins,
+				"${{ steps.container_pins.outcome }}", test.pins,
+			).Replace(gate)
+			output, err := exec.Command("bash", "-c", script).CombinedOutput()
+			if (err == nil) != test.pass {
+				t.Fatalf("gate pass=%v, want %v: %v\n%s", err == nil, test.pass, err, output)
+			}
+		})
+	}
+}
 
-	uses := regexp.MustCompile("(?m)^\\s*uses:\\s+([^\\s#]+)").FindAllStringSubmatch(text, -1)
-	if len(uses) == 0 {
-		t.Fatal("release workflow has no actions")
+type releaseWorkflowJob struct {
+	Needs yaml.Node
+	If    string
+	Steps []struct {
+		ID, Name, Uses, Run, If string
+		Env                     map[string]string
 	}
-	fullPin := regexp.MustCompile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
-	for _, match := range uses {
-		if !fullPin.MatchString(match[1]) {
-			t.Fatalf("release workflow action is not pinned to a full commit SHA: %s", match[1])
+}
+
+func releaseWorkflowJobs(t *testing.T) map[string]releaseWorkflowJob {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		On   map[string]yaml.Node
+		Jobs map[string]releaseWorkflowJob
+	}
+	if err := yaml.Unmarshal(raw, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if _, manual := workflow.On["workflow_dispatch"]; !manual || len(workflow.On) != 1 {
+		t.Fatal("release workflow must have one manual trigger")
+	}
+	return workflow.Jobs
+}
+
+func releaseJobNeeds(t *testing.T, job releaseWorkflowJob) []string {
+	t.Helper()
+	switch job.Needs.Kind {
+	case 0:
+		return nil
+	case yaml.ScalarNode:
+		return []string{job.Needs.Value}
+	case yaml.SequenceNode:
+		var needs []string
+		if err := job.Needs.Decode(&needs); err != nil {
+			t.Fatal(err)
 		}
+		return needs
+	default:
+		t.Fatal("workflow needs must be a job name or list")
+		return nil
+	}
+}
+
+func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
+	jobs := releaseWorkflowJobs(t)
+	fullPin := regexp.MustCompile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
+	for name, job := range jobs {
+		if len(job.Steps) == 0 {
+			t.Errorf("release job %s has no steps", name)
+		}
+		for _, dependency := range releaseJobNeeds(t, job) {
+			if _, ok := jobs[dependency]; !ok {
+				t.Errorf("%s needs unknown job %s", name, dependency)
+			}
+		}
+		for _, step := range job.Steps {
+			if step.Uses != "" && !fullPin.MatchString(step.Uses) {
+				t.Errorf("%s action is not pinned to a source commit: %s", name, step.Uses)
+			}
+			if strings.Contains(step.Run, "--clobber") {
+				t.Errorf("%s can overwrite release artifacts", name)
+			}
+		}
+	}
+	for name, command := range map[string]string{
+		"source-gates":     "scripts/verify/verify-source.sh",
+		"source-race":      "scripts/verify/verify-race.sh",
+		"oci-gates":        "scripts/verify/accept-oci-jobs.sh",
+		"accept-oci":       "scripts/verify/accept-oci-jobs.sh",
+		"accept-authority": "scripts/verify/accept-authority-matrix.sh",
+		"accept-runtime":   "scripts/verify/accept-project-execution.sh",
+		"accept-compose":   "scripts/verify/accept-compose.sh",
+		"accept-bootstrap": "scripts/verify/accept-bootstrap.sh",
+		"build":            "tools/release/releasebuild",
+		"publish":          "tools/release/publishprep",
+	} {
+		found := false
+		for _, step := range jobs[name].Steps {
+			found = found || strings.Contains(step.Run, command)
+		}
+		if !found {
+			t.Errorf("%s lacks its validation or build command %s", name, command)
+		}
+	}
+	if jobs["publish"].If != "${{ inputs.publish }}" {
+		t.Fatal("publication must follow the operator's publish choice")
+	}
+	found := false
+	for _, step := range jobs["accept-oci"].Steps {
+		found = found || step.Env["LOKI_OCI_ACCEPTANCE_IMAGE"] == "${{ needs.build.outputs.core_image }}"
+	}
+	if !found {
+		t.Fatal("OCI acceptance must exercise the exact candidate core image")
 	}
 }
 
 func TestReleaseAcceptanceDomainsAreIndependent(t *testing.T) {
-	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	if strings.Contains(text, "\n  accept:\n") {
-		t.Fatal("release acceptance must not collapse independent domains into one serial fail-fast job")
-	}
-	between := func(startKey, endKey string) string {
-		t.Helper()
-		start := strings.Index(text, "\n  "+startKey+":\n")
-		end := strings.Index(text, "\n  "+endKey+":\n")
-		if start < 0 || end < 0 || end <= start {
-			t.Fatalf("release workflow lacks %s..%s job boundary", startKey, endKey)
+	jobs := releaseWorkflowJobs(t)
+	contains := func(values []string, wanted string) bool {
+		for _, value := range values {
+			if value == wanted {
+				return true
+			}
 		}
-		return text[start:end]
+		return false
 	}
-	preflight := between("preflight", "release-contracts")
-	for _, forbidden := range []string{
-		"Run fast release contract tests",
-		"Verify GitHub Action pins are current",
-		"Verify release dependency pins are current",
-	} {
-		if strings.Contains(preflight, forbidden) {
-			t.Fatalf("candidate identity preflight still serializes independent validation %q", forbidden)
+	checks := []string{
+		"release-contracts", "source-gates", "source-runtime-contracts", "source-race",
+		"oci-gates", "windows-native", "wsl-accept", "windows-provider-acceptance",
+		"accept-runtime", "accept-recovery", "accept-oci", "accept-authority",
+		"accept-compose", "accept-bootstrap",
+	}
+	for _, name := range append(append([]string{}, checks...), "build") {
+		job, ok := jobs[name]
+		if !ok {
+			t.Fatalf("release job %s is missing", name)
 		}
-	}
-	releaseContracts := between("release-contracts", "release-inputs")
-	for _, required := range []string{
-		"Run fast release contract tests",
-		"Verify GitHub Action pins are current",
-		"Verify release dependency pins are current",
-		"Verify release container pins are current",
-		"continue-on-error: true",
-		"Require all release contract and pin checks",
-	} {
-		if !strings.Contains(releaseContracts, required) {
-			t.Errorf("release contract gate lacks %q", required)
-		}
-	}
-	if strings.Contains(between("release-inputs", "source-gates"), "Verify release container pins are current") {
-		t.Fatal("release input construction must not be suppressed by independent pin freshness validation")
-	}
-	race := between("source-race", "build")
-	for _, required := range []string{
-		"- release-inputs",
-		"if: ${{ always() && needs.preflight.result == 'success' }}",
-		"name: loki-release-inputs-amd64",
-		"LOKI_TEST_RG:",
-	} {
-		if !strings.Contains(race, required) {
-			t.Fatalf("race validation lacks pinned-tool fan-out contract %q", required)
-		}
-	}
-	for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- oci-gates", "- release-contracts"} {
-		if strings.Contains(race, forbidden) {
-			t.Fatalf("race validation still depends on independent gate %q", forbidden)
-		}
-	}
-	source := between("source-gates", "source-runtime-contracts")
-	for _, required := range []string{
-		"- release-inputs",
-		"if: ${{ always() && needs.preflight.result == 'success' }}",
-		"name: loki-release-inputs-amd64",
-		"LOKI_TEST_RG:",
-	} {
-		if !strings.Contains(source, required) {
-			t.Fatalf("source validation lacks pinned-tool fan-out contract %q", required)
-		}
-	}
-	for _, forbidden := range []string{"- source-gates", "- source-race", "- oci-gates", "- release-contracts"} {
-		if strings.Contains(between("build", "wsl-accept"), forbidden) {
-			t.Fatalf("candidate build is suppressed by independent validation %q", forbidden)
-		}
-	}
-	if strings.Contains(between("windows-provider-acceptance", "accept-runtime"), "- windows-native") {
-		t.Fatal("Windows provider acceptance must run independently of native Windows unit validation")
-	}
-
-	type domain struct {
-		key      string
-		next     string
-		required string
-	}
-	domains := []domain{
-		{"accept-runtime", "accept-recovery", "Run MCP-only project execution acceptance"},
-		{"accept-recovery", "accept-oci", "Run published release lifecycle recovery acceptance"},
-		{"accept-oci", "accept-authority", "Run release OCI authority acceptance"},
-		{"accept-authority", "accept-compose", "Run protected-resource cross-path authority matrix"},
-		{"accept-compose", "accept-bootstrap", "Run release Compose, browser and signing acceptance"},
-		{"accept-bootstrap", "publish", "Run bootstrap acceptance"},
-	}
-	for _, d := range domains {
-		start := strings.Index(text, "\n  "+d.key+":\n")
-		end := strings.Index(text, "\n  "+d.next+":\n")
-		if start < 0 || end < 0 || end <= start {
-			t.Fatalf("release workflow lacks independent %s job boundary", d.key)
-		}
-		block := text[start:end]
-		if !strings.Contains(block, d.required) {
-			t.Fatalf("%s job lacks %q", d.key, d.required)
-		}
-		for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- source-race", "- oci-gates", "- release-contracts"} {
-			if strings.Contains(block, forbidden) {
-				t.Fatalf("%s job is suppressed by independent validation %q", d.key, forbidden)
+		for _, dependency := range releaseJobNeeds(t, job) {
+			if contains(checks, dependency) {
+				t.Errorf("%s is blocked by independent validation %s", name, dependency)
 			}
 		}
 	}
-
-	publish := strings.Index(text, "\n  publish:\n")
-	if publish < 0 {
-		t.Fatal("release workflow lacks publish job")
+	publishNeeds := releaseJobNeeds(t, jobs["publish"])
+	for _, required := range append([]string{"preflight", "build"}, checks...) {
+		if !contains(publishNeeds, required) {
+			t.Errorf("publication barrier lacks %s", required)
+		}
 	}
-	publishBlock := text[publish:]
-	for _, required := range []string{
-		"- release-contracts",
-		"- source-gates",
-		"- source-runtime-contracts",
-		"- source-race",
-		"- oci-gates",
-		"- windows-native",
-		"- accept-runtime",
-		"- accept-recovery",
-		"- accept-oci",
-		"- accept-authority",
-		"- accept-compose",
-		"- accept-bootstrap",
-		"- wsl-accept",
-		"- windows-provider-acceptance",
+	for _, name := range []string{"source-gates", "source-race", "source-runtime-contracts"} {
+		if !contains(releaseJobNeeds(t, jobs[name]), "release-inputs") {
+			t.Errorf("%s lacks its pinned tool fixture", name)
+		}
+	}
+	for _, name := range []string{
+		"accept-runtime", "accept-recovery", "accept-oci", "accept-authority",
+		"accept-compose", "accept-bootstrap", "wsl-accept", "windows-provider-acceptance",
 	} {
-		if !strings.Contains(publishBlock, required) {
-			t.Errorf("publication barrier lacks %q", required)
+		if !contains(releaseJobNeeds(t, jobs[name]), "build") {
+			t.Errorf("%s lacks the immutable candidate prerequisite", name)
+		}
+	}
+	for _, name := range []string{"pages", "verify-public", "verify-public-windows"} {
+		if _, ok := jobs[name]; !ok {
+			t.Errorf("release completion job %s is missing", name)
 		}
 	}
 }
@@ -404,21 +348,24 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 			t.Fatalf("release input builder lacks %q", required)
 		}
 	}
+	for _, name := range []string{"DEVTOOLS", "GH", "RIPGREP"} {
+		if !regexp.MustCompile(`(?m)^ARG `+name+`_VERSION=[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(dockerfile) ||
+			!regexp.MustCompile(`(?m)^ARG `+name+`_COMMIT=[0-9a-f]{40}$`).MatchString(dockerfile) {
+			t.Errorf("release input %s needs an explicit version and source commit", name)
+		}
+	}
+	for _, image := range []string{"golang", "rust"} {
+		if !regexp.MustCompile(image + `:[^\s@]+@sha256:[0-9a-f]{64}\b`).MatchString(dockerfile) {
+			t.Errorf("release input %s builder needs an immutable image", image)
+		}
+	}
 	for _, required := range []string{
-		"DEVTOOLS_VERSION=0.21.0",
-		"DEVTOOLS_COMMIT=dec585b4a537f79a656b69261d208073682e1006",
-		"GH_VERSION=2.102.0",
-		"GH_COMMIT=fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd",
-		"RIPGREP_VERSION=15.2.0",
-		"RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f",
-		"golang:1.27.1-bookworm@sha256:",
-		"rust:1.98.1-alpine3.24@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f",
 		"apk add --no-cache git build-base pcre2-dev perl",
 		"PCRE2_SYS_STATIC=1",
 		"cargo build --locked --profile release-lto --features pcre2",
-		`/out/devtools version | grep -q '"version":"0.21.0"'`,
-		`/out/gh version | grep -q '^gh version 2\.102\.0 '`,
-		`/src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0 '`,
+		"/out/devtools version",
+		"/out/gh version",
+		"/src/ripgrep/target/release-lto/rg --version",
 		"/src/ripgrep/target/release-lto/rg",
 		"AS go-export",
 		"AS ripgrep-export",

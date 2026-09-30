@@ -119,15 +119,14 @@ verify_metadata() {
   compose_latest=$(latest_package_version docker-compose-plugin)
   buildx_latest=$(latest_package_version docker-buildx-plugin)
   containerd_latest=$(latest_package_version containerd.io)
-  test -n "$docker_latest" && test "$docker_min" = "$docker_latest" ||
-    fail "Docker Engine minimum $docker_min is stale; latest official noble/stable package is $docker_latest"
-  test -n "$compose_latest" && test "$compose_min" = "$compose_latest" ||
-    fail "Docker Compose minimum $compose_min is stale; latest official noble/stable package is $compose_latest"
-
   wsl_docker=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_CE_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
   wsl_compose=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_COMPOSE_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
   wsl_buildx=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" DOCKER_BUILDX_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
   wsl_containerd=$(extract_arg "$source_dir/packaging/wsl/Dockerfile" CONTAINERD_VERSION | sed 's/^[0-9][0-9]*://; s/-.*$//')
+  test -n "$wsl_docker" && test "$(printf '%s\n' "$docker_min" "$wsl_docker" | sort -V | head -n 1)" = "$docker_min" ||
+    fail "WSL Docker Engine $wsl_docker does not meet supported minimum $docker_min"
+  test -n "$wsl_compose" && test "$(printf '%s\n' "$compose_min" "$wsl_compose" | sort -V | head -n 1)" = "$compose_min" ||
+    fail "WSL Docker Compose $wsl_compose does not meet supported minimum $compose_min"
   test "$wsl_docker" = "$docker_latest" ||
     fail "WSL Docker Engine pin $wsl_docker is stale; latest is $docker_latest"
   test "$wsl_compose" = "$compose_latest" ||

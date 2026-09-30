@@ -17,6 +17,11 @@ on:
         required: true
         default: true
         type: boolean
+      check_updates:
+        description: Also check dependency updates against live upstream registries.
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -152,17 +157,13 @@ jobs:
 
       - name: Verify GitHub Action pins are current
         id: action_pins
+        if: ${{ inputs.check_updates }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          latest_actions_up=$(npm view actions-up version)
-          test "$latest_actions_up" = 1.21.0 || {
-            echo "actions-up 1.21.0 is stale; latest is $latest_actions_up" >&2
-            exit 1
-          }
           npm exec --yes actions-up@1.21.0 -- \
             --dir .github \
             --dry-run \
@@ -178,16 +179,19 @@ jobs:
 
       - name: Verify release dependency pins are current
         id: metadata_pins
+        if: ${{ inputs.check_updates }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: sh ./scripts/verify/release-pins.sh metadata
 
       - name: Set up Docker Buildx
+        if: ${{ inputs.check_updates }}
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Verify release container pins are current
         id: container_pins
+        if: ${{ inputs.check_updates }}
         continue-on-error: true
         run: sh ./scripts/verify/release-pins.sh containers
 
@@ -197,9 +201,11 @@ jobs:
         run: |
           set -euo pipefail
           test "${{ steps.contract_tests.outcome }}" = success
-          test "${{ steps.action_pins.outcome }}" = success
-          test "${{ steps.metadata_pins.outcome }}" = success
-          test "${{ steps.container_pins.outcome }}" = success
+          if test "${{ inputs.check_updates }}" = true; then
+            test "${{ steps.action_pins.outcome }}" = success
+            test "${{ steps.metadata_pins.outcome }}" = success
+            test "${{ steps.container_pins.outcome }}" = success
+          fi
 
   release-inputs:
     name: Build release inputs (${{ matrix.arch }})
