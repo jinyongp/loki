@@ -44,6 +44,7 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"Verify OCI runtime",
 		"Verify Windows WSL appliance",
 		"windows-2025",
+		".\\scripts\\verify\\update-wsl.ps1 -Attempts 3 -DelaySeconds 10",
 		"Parse Windows verification scripts",
 		"[void][scriptblock]::Create",
 		".\\scripts\\verify\\accept-wsl.ps1",
@@ -467,6 +468,26 @@ func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("release pin verifier lacks %q", required)
+		}
+	}
+}
+
+func TestWSLUpdateUsesBoundedRetry(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "update-wsl.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"& wsl.exe --update --web-download",
+		"for ($attempt = 1; $attempt -le $Attempts; $attempt++)",
+		"Start-Sleep -Seconds $DelaySeconds",
+		"WSL package update attempt $attempt failed",
+		"WSL package update unavailable after $Attempts attempts",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("WSL update helper lacks %q", required)
 		}
 	}
 }
