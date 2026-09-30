@@ -220,8 +220,8 @@ if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
     --read-only \
     --network none \
     --user 10000:10000 \
-    --volume "$signing_volume:/run/loki/signing:ro" \
-    --env SSH_AUTH_SOCK=/run/loki/signing/agent.sock \
+    --volume "$signing_volume:/run/loki-signing:ro" \
+    --env SSH_AUTH_SOCK=/run/loki-signing/agent.sock \
     --entrypoint /usr/bin/ssh-add \
     "$image" -L | awk 'NR == 1 { print $1 " " $2 }')
   test -n "$expected_signer" && test "$actual_signer" = "$expected_signer" ||

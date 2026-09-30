@@ -167,9 +167,9 @@ func TestPlanInjectsOnlyTrustedSigningAuthority(t *testing.T) {
 		t.Fatalf("signing mounts=%#v", plan.create.HostConfig.Mounts)
 	}
 	wantMounts := map[string]dockerMount{
-		"/run/loki/signing": {
+		"/run/loki-signing": {
 			Type: "volume", Source: options.Signing.SocketVolume,
-			Target: "/run/loki/signing", ReadOnly: true,
+			Target: "/run/loki-signing", ReadOnly: true,
 		},
 		"/home/runner/.ssh/id_ed25519.pub": {
 			Type: "bind", Source: options.Signing.PublicKey,
@@ -202,7 +202,7 @@ func TestPlanInjectsOnlyTrustedSigningAuthority(t *testing.T) {
 	}
 	foundAgent := false
 	for _, value := range plan.create.Env {
-		if value == "SSH_AUTH_SOCK=/run/loki/signing/agent.sock" {
+		if value == "SSH_AUTH_SOCK=/run/loki-signing/agent.sock" {
 			foundAgent = true
 		}
 		if strings.Contains(value, "PRIVATE") {

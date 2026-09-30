@@ -56,6 +56,7 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"runner:x:10000:10000",
 		"egress:x:10002:10002",
 		"executor:x:10004:10001",
+		"install -d -o 0 -g 10001 -m 0750 /rootfs/run/loki",
 		"/rootfs/opt/loki/toolchain/bin",
 		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/node",
 		"ln -s /opt/loki/bin/loki /rootfs/opt/loki/toolchain/bin/npm",

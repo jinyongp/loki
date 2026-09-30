@@ -28,8 +28,10 @@ const (
 	maxEnv            = 256
 	maxEnvBytes       = 64 << 10
 	maxEndpoints      = 8
-	maxToolchains     = 8
-	maxRunOutputBytes = 64 << 20
+	maxToolchains             = 8
+	maxRunOutputBytes         = 64 << 20
+	jobSigningSocketDirectory = "/run/loki-signing"
+	jobSigningSocket          = jobSigningSocketDirectory + "/agent.sock"
 )
 
 var (
@@ -630,7 +632,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	}
 	environment := append([]string(nil), p.environment...)
 	if p.signing.enabled() {
-		environment = append(environment, "SSH_AUTH_SOCK=/run/loki/signing/agent.sock")
+		environment = append(environment, "SSH_AUTH_SOCK="+jobSigningSocket)
 		sort.Strings(environment)
 	}
 	scratchTmpfs, err := workloadScratchTmpfs(environment, p.uid, p.gid, p.tmpfsBytes)
@@ -673,7 +675,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	}
 	if p.signing.enabled() {
 		create.HostConfig.Mounts = append(create.HostConfig.Mounts,
-			dockerMount{Type: "volume", Source: p.signing.socketVolume, Target: "/run/loki/signing", ReadOnly: true},
+			dockerMount{Type: "volume", Source: p.signing.socketVolume, Target: jobSigningSocketDirectory, ReadOnly: true},
 			dockerMount{Type: "bind", Source: p.signing.publicKey, Target: "/home/runner/.ssh/id_ed25519.pub", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
 			dockerMount{Type: "bind", Source: p.signing.gitConfig, Target: "/etc/loki-go/signing.gitconfig", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
 			dockerMount{Type: "bind", Source: p.signing.allowedSigners, Target: "/etc/loki-go/allowed_signers", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
