@@ -1,6 +1,7 @@
 package packaging_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,37 +130,41 @@ func TestCandidatePreparationRestoresExecutableModes(t *testing.T) {
 		t.Skip("candidate preparation is a POSIX release-engineering helper")
 	}
 	root := filepath.Join("..", "..")
-	candidate := t.TempDir()
-	for _, relative := range []string{
-		"install.sh",
-		filepath.Join("inputs", "loki"),
-		filepath.Join("inputs", "loki-bootstrap"),
-		filepath.Join("inputs", "loki-windows-amd64.exe"),
-	} {
-		path := filepath.Join(candidate, relative)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte("fixture"), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
 	script := filepath.Join(root, "scripts", "verify", "prepare-candidate.sh")
-	if output, err := exec.Command("sh", script, candidate).CombinedOutput(); err != nil {
-		t.Fatalf("prepare candidate: %v\n%s", err, output)
-	}
-	for _, relative := range []string{
-		"install.sh",
-		filepath.Join("inputs", "loki"),
-		filepath.Join("inputs", "loki-bootstrap"),
-		filepath.Join("inputs", "loki-windows-amd64.exe"),
-	} {
-		info, err := os.Stat(filepath.Join(candidate, relative))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Mode().Perm() != 0755 {
-			t.Errorf("%s mode = %o, want 0755", relative, info.Mode().Perm())
-		}
+
+	for _, withInstaller := range []bool{false, true} {
+		t.Run(fmt.Sprintf("installer-%v", withInstaller), func(t *testing.T) {
+			candidate := t.TempDir()
+			required := []string{
+				filepath.Join("inputs", "loki"),
+				filepath.Join("inputs", "loki-bootstrap"),
+				filepath.Join("inputs", "loki-windows-amd64.exe"),
+			}
+			files := append([]string(nil), required...)
+			if withInstaller {
+				files = append(files, "install.sh")
+			}
+			for _, relative := range files {
+				path := filepath.Join(candidate, relative)
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("fixture"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if output, err := exec.Command("sh", script, candidate).CombinedOutput(); err != nil {
+				t.Fatalf("prepare candidate: %v\n%s", err, output)
+			}
+			for _, relative := range files {
+				info, err := os.Stat(filepath.Join(candidate, relative))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm() != 0755 {
+					t.Errorf("%s mode = %o, want 0755", relative, info.Mode().Perm())
+				}
+			}
+		})
 	}
 }

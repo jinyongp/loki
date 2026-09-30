@@ -12,8 +12,11 @@ test -d "$candidate" || {
   exit 1
 }
 
+if test -f "$candidate/install.sh"; then
+  chmod 0755 "$candidate/install.sh"
+fi
+
 for relative in \
-  install.sh \
   inputs/loki \
   inputs/loki-bootstrap \
   inputs/loki-windows-amd64.exe
