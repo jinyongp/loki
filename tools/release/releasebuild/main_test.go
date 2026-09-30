@@ -93,9 +93,16 @@ func TestAssembleBuildsReleaseBoundArtifactSet(t *testing.T) {
 	}
 	if manifest.Generation.Spec.Version != "0.1.0" ||
 		manifest.Generation.Spec.CoreImageDigest != "sha256:"+coreDigest ||
-		len(manifest.Generation.Spec.Components) != 1 ||
+		len(manifest.Generation.Spec.Components) != 2 ||
 		manifest.Generation.Spec.Components[0].Name != "browser" ||
-		manifest.Generation.Spec.Components[0].Digest != "sha256:"+browserDigest {
+		manifest.Generation.Spec.Components[0].Digest != "sha256:"+browserDigest ||
+		manifest.Generation.Spec.Components[1].Name != "signing" ||
+		manifest.Generation.Spec.Components[1].Digest != "sha256:"+coreDigest ||
+		!manifest.Generation.Spec.Components[0].Optional ||
+		!manifest.Generation.Spec.Components[1].Optional ||
+		len(manifest.Generation.Spec.Rollback.OptionalComponentState) != 2 ||
+		manifest.Generation.Spec.Rollback.OptionalComponentState[0] != "browser" ||
+		manifest.Generation.Spec.Rollback.OptionalComponentState[1] != "signing" {
 		t.Fatalf("release manifest generation = %#v", manifest.Generation.Spec)
 	}
 	if manifest.Runtime.DockerMin != "29.8.1" || manifest.Runtime.ComposeMin != "5.5.1" {

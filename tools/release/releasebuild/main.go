@@ -253,9 +253,10 @@ func assemble(ctx context.Context, cfg options, runner buildRunner) error {
 		ReleasedAt:       releasedAt,
 		HostBinaryDigest: "sha256:" + digest(hostRaw),
 		CoreImageDigest:  coreDigest,
-		Components: []releases.Component{{
-			Name: "browser", Digest: browserDigest, Optional: true,
-		}},
+		Components: []releases.Component{
+			{Name: "browser", Digest: browserDigest, Optional: true},
+			{Name: "signing", Digest: coreDigest, Optional: true},
+		},
 		ConfigSchema: 1, PolicySchema: 1, ToolchainSchema: 1, StateSchema: 1,
 		Reads: releases.Compatibility{
 			Config:    releases.SchemaRange{Min: 1, Max: 1},
@@ -265,7 +266,7 @@ func assemble(ctx context.Context, cfg options, runner buildRunner) error {
 		},
 		Rollback: releases.RollbackCoverage{
 			StateSnapshot: true, ConfigSnapshot: true,
-			OptionalComponentState: []string{"browser"},
+			OptionalComponentState: []string{"browser", "signing"},
 		},
 	})
 	if err != nil {

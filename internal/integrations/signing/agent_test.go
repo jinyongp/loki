@@ -42,6 +42,9 @@ func TestAgentLifecycle(t *testing.T) {
 	if int(stat.Uid) != os.Getuid() || int(stat.Gid) != os.Getgid() {
 		t.Fatalf("public signing socket owner=%d:%d", stat.Uid, stat.Gid)
 	}
+	if stat.Mode&0777 != 0660 {
+		t.Fatalf("public signing socket mode=%#o", stat.Mode&0777)
+	}
 	list := exec.Command("/usr/bin/ssh-add", "-L")
 	list.Env = []string{"SSH_AUTH_SOCK=" + public}
 	out, err := list.CombinedOutput()

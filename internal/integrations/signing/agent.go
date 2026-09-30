@@ -94,10 +94,13 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 		return errors.New("cannot create public signing socket")
 	}
 	defer public.Close()
-	if err = os.Chown(o.PublicSocket, o.SocketUID, o.SocketGID); err != nil {
+	// Apply the public mode while the service still owns the socket. The
+	// container deliberately has CAP_CHOWN but not CAP_FOWNER; chmod after
+	// transferring ownership to the runner would therefore fail closed.
+	if err = os.Chmod(o.PublicSocket, 0660); err != nil {
 		return err
 	}
-	if err = os.Chmod(o.PublicSocket, 0660); err != nil {
+	if err = os.Chown(o.PublicSocket, o.SocketUID, o.SocketGID); err != nil {
 		return err
 	}
 	proxy := Proxy{PrivateSocket: o.PrivateSocket, Grant: o.Grant, AgentUID: uint32(os.Getuid())}
