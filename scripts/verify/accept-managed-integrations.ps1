@@ -90,6 +90,24 @@ function Invoke-GitJob([hashtable]$Session, [string]$Cwd, [string[]]$Argv, [swit
     throw "Git Job did not finish and clean up: $($job.job_id)"
 }
 
+function Assert-SigningAgentIdentity([hashtable]$Session, [string]$ExpectedPublicKey) {
+    $parts = @($ExpectedPublicKey.Trim() -split "\s+")
+    if ($parts.Count -lt 2) { throw "Managed signing public key is malformed" }
+    $expected = "$($parts[0]) $($parts[1])"
+    $agentKeys = Invoke-GitJob $Session "." @("/usr/bin/ssh-add", "-L")
+    $matched = $false
+    foreach ($line in @($agentKeys -split "\r?\n")) {
+        $candidate = @($line.Trim() -split "\s+")
+        if ($candidate.Count -ge 2 -and "$($candidate[0]) $($candidate[1])" -ceq $expected) {
+            $matched = $true
+            break
+        }
+    }
+    if (-not $matched) {
+        throw "Managed signing agent does not expose the configured public key"
+    }
+}
+
 $failures = [System.Collections.Generic.List[string]]::new()
 
 function Invoke-AcceptanceSection([string]$Name, [scriptblock]$Body, [scriptblock]$Cleanup) {
@@ -149,6 +167,7 @@ Invoke-AcceptanceSection "managed signing through isolated MCP Jobs" {
     if (-not $signing.ready -or -not $signing.fingerprint) { throw "Signing setup did not expose a ready public identity" }
     $originalFingerprint = $signing.fingerprint
     $session = Connect-MCP
+    Assert-SigningAgentIdentity $session $signing.public_key
     Invoke-GitJob $session "." @("/usr/bin/git", "init", "-q", "--initial-branch=main", $fixture) | Out-Null
     Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "managed signing fixture") | Out-Null
     Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
@@ -156,12 +175,16 @@ Invoke-AcceptanceSection "managed signing through isolated MCP Jobs" {
     $session = Connect-MCP
     Invoke-GitJob $session $fixture @("/usr/bin/ssh-add", "-l") -ExpectFailure | Out-Null
     Invoke-IntegrationCLI @("integration", "enable", "--distribution", $Distribution, "signing") | Out-Null
-    if ((Get-IntegrationStatus "signing").fingerprint -cne $originalFingerprint) { throw "Signing enable replaced the persisted key" }
+    $reenabled = Get-IntegrationStatus "signing"
+    if ($reenabled.fingerprint -cne $originalFingerprint) { throw "Signing enable replaced the persisted key" }
     $session = Connect-MCP
+    Assert-SigningAgentIdentity $session $reenabled.public_key
     Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
     Invoke-IntegrationCLI @("integration", "rotate", "signing", "--distribution", $Distribution, "--identity-name", "Loki Acceptance", "--identity-email", "signing@example.test") | Out-Null
-    if ((Get-IntegrationStatus "signing").fingerprint -ceq $originalFingerprint) { throw "Signing rotation kept the old key" }
+    $rotated = Get-IntegrationStatus "signing"
+    if ($rotated.fingerprint -ceq $originalFingerprint) { throw "Signing rotation kept the old key" }
     $session = Connect-MCP
+    Assert-SigningAgentIdentity $session $rotated.public_key
     Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "rotated signing fixture") | Out-Null
     Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
     Invoke-IntegrationCLI @("integration", "remove", "--distribution", $Distribution, "signing") | Out-Null
