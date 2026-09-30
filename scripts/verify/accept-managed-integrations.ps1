@@ -90,6 +90,29 @@ function Invoke-GitJob([hashtable]$Session, [string]$Cwd, [string[]]$Argv, [swit
     throw "Git Job did not finish and clean up: $($job.job_id)"
 }
 
+$failures = [System.Collections.Generic.List[string]]::new()
+
+function Invoke-AcceptanceSection([string]$Name, [scriptblock]$Body, [scriptblock]$Cleanup) {
+    Write-Host "Verifying $Name"
+    try {
+        & $Body
+    } catch {
+        $message = "$Name: $($_.Exception.Message)"
+        $failures.Add($message)
+        Write-Warning $message
+    } finally {
+        if ($null -ne $Cleanup) {
+            try {
+                & $Cleanup
+            } catch {
+                $message = "$Name cleanup: $($_.Exception.Message)"
+                $failures.Add($message)
+                Write-Warning $message
+            }
+        }
+    }
+}
+
 $list = Invoke-IntegrationCLI @("integration", "list", "--distribution", $Distribution, "--json") | ConvertFrom-Json
 if (@($list.integrations).Count -ne 3) { throw "Fresh integration list is incomplete" }
 foreach ($item in $list.integrations) {
@@ -100,48 +123,69 @@ $catalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.
 Invoke-LokiTool $session "browser_session" @{ action = "start" } -ExpectError
 Invoke-LokiTool $session "github_read" @{ action = "repository"; target = "example-org/integration-fixture" } -ExpectError
 
-Write-Host "Verifying managed browser enable, MCP use, and disable"
-Invoke-IntegrationCLI @("integration", "enable", "--distribution", $Distribution, "browser") | Out-Null
-if (-not (Get-IntegrationStatus "browser").ready) { throw "Enabled browser is not ready" }
-$session = Connect-MCP
-$enabledCatalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
-if ($catalog -cne $enabledCatalog) { throw "Enabling browser changed the MCP tool catalog" }
-$browser = Invoke-LokiTool $session "browser_session" @{ action = "start" }
-if ($browser.status -ne "running") { throw "Browser did not start Chromium" }
-Invoke-LokiTool $session "browser_session" @{ action = "stop" } | Out-Null
-Invoke-IntegrationCLI @("integration", "disable", "--distribution", $Distribution, "browser") | Out-Null
-$session = Connect-MCP
-Invoke-LokiTool $session "browser_session" @{ action = "start" } -ExpectError
+Invoke-AcceptanceSection "managed browser enable, MCP use, and disable" {
+    Invoke-IntegrationCLI @("integration", "enable", "--distribution", $Distribution, "browser") | Out-Null
+    if (-not (Get-IntegrationStatus "browser").ready) { throw "Enabled browser is not ready" }
+    $session = Connect-MCP
+    $enabledCatalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
+    if ($catalog -cne $enabledCatalog) { throw "Enabling browser changed the MCP tool catalog" }
+    $browser = Invoke-LokiTool $session "browser_session" @{ action = "start" }
+    if ($browser.status -ne "running") { throw "Browser did not start Chromium" }
+    Invoke-LokiTool $session "browser_session" @{ action = "stop" } | Out-Null
+    Invoke-IntegrationCLI @("integration", "disable", "--distribution", $Distribution, "browser") | Out-Null
+    $session = Connect-MCP
+    Invoke-LokiTool $session "browser_session" @{ action = "start" } -ExpectError
+} {
+    $browserStatus = Get-IntegrationStatus "browser"
+    if ($browserStatus.enabled -or $browserStatus.ready) {
+        Invoke-IntegrationCLI @("integration", "disable", "--distribution", $Distribution, "browser") | Out-Null
+    }
+}
 
-Write-Host "Verifying managed signing through isolated MCP Jobs"
-Invoke-IntegrationCLI @("integration", "setup", "signing", "--distribution", $Distribution, "--identity-name", "Loki Acceptance", "--identity-email", "signing@example.test") | Out-Null
-$signing = Get-IntegrationStatus "signing"
-if (-not $signing.ready -or -not $signing.fingerprint) { throw "Signing setup did not expose a ready public identity" }
-$originalFingerprint = $signing.fingerprint
 $fixture = ".loki-integration-acceptance-" + [Guid]::NewGuid().ToString("N")
-$session = Connect-MCP
-Invoke-GitJob $session "." @("/usr/bin/git", "init", "-q", "--initial-branch=main", $fixture) | Out-Null
-Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "managed signing fixture") | Out-Null
-Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
-Invoke-IntegrationCLI @("integration", "disable", "--distribution", $Distribution, "signing") | Out-Null
-$session = Connect-MCP
-Invoke-GitJob $session $fixture @("/usr/bin/ssh-add", "-l") -ExpectFailure | Out-Null
-Invoke-IntegrationCLI @("integration", "enable", "--distribution", $Distribution, "signing") | Out-Null
-if ((Get-IntegrationStatus "signing").fingerprint -cne $originalFingerprint) { throw "Signing enable replaced the persisted key" }
-$session = Connect-MCP
-Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
-Invoke-IntegrationCLI @("integration", "rotate", "signing", "--distribution", $Distribution, "--identity-name", "Loki Acceptance", "--identity-email", "signing@example.test") | Out-Null
-if ((Get-IntegrationStatus "signing").fingerprint -ceq $originalFingerprint) { throw "Signing rotation kept the old key" }
-$session = Connect-MCP
-Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "rotated signing fixture") | Out-Null
-Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
-Invoke-IntegrationCLI @("integration", "remove", "--distribution", $Distribution, "signing") | Out-Null
-$removed = Get-IntegrationStatus "signing"
-if ($removed.configured -or $removed.enabled -or $removed.ready) { throw "Signing removal retained authority" }
-$session = Connect-MCP
-Invoke-GitJob $session $fixture @("/usr/bin/ssh-add", "-l") -ExpectFailure | Out-Null
-Invoke-GitJob $session "." @("/bin/rm", "-rf", $fixture) | Out-Null
-Invoke-LokiTool $session "github_read" @{ action = "repository"; target = "example-org/integration-fixture" } -ExpectError
-$finalCatalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
-if ($catalog -cne $finalCatalog) { throw "Integration lifecycle changed the MCP tool catalog" }
+Invoke-AcceptanceSection "managed signing through isolated MCP Jobs" {
+    Invoke-IntegrationCLI @("integration", "setup", "signing", "--distribution", $Distribution, "--identity-name", "Loki Acceptance", "--identity-email", "signing@example.test") | Out-Null
+    $signing = Get-IntegrationStatus "signing"
+    if (-not $signing.ready -or -not $signing.fingerprint) { throw "Signing setup did not expose a ready public identity" }
+    $originalFingerprint = $signing.fingerprint
+    $session = Connect-MCP
+    Invoke-GitJob $session "." @("/usr/bin/git", "init", "-q", "--initial-branch=main", $fixture) | Out-Null
+    Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "managed signing fixture") | Out-Null
+    Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
+    Invoke-IntegrationCLI @("integration", "disable", "--distribution", $Distribution, "signing") | Out-Null
+    $session = Connect-MCP
+    Invoke-GitJob $session $fixture @("/usr/bin/ssh-add", "-l") -ExpectFailure | Out-Null
+    Invoke-IntegrationCLI @("integration", "enable", "--distribution", $Distribution, "signing") | Out-Null
+    if ((Get-IntegrationStatus "signing").fingerprint -cne $originalFingerprint) { throw "Signing enable replaced the persisted key" }
+    $session = Connect-MCP
+    Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
+    Invoke-IntegrationCLI @("integration", "rotate", "signing", "--distribution", $Distribution, "--identity-name", "Loki Acceptance", "--identity-email", "signing@example.test") | Out-Null
+    if ((Get-IntegrationStatus "signing").fingerprint -ceq $originalFingerprint) { throw "Signing rotation kept the old key" }
+    $session = Connect-MCP
+    Invoke-GitJob $session $fixture @("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "rotated signing fixture") | Out-Null
+    Invoke-GitJob $session $fixture @("/usr/bin/git", "verify-commit", "HEAD") | Out-Null
+    Invoke-IntegrationCLI @("integration", "remove", "--distribution", $Distribution, "signing") | Out-Null
+    $removed = Get-IntegrationStatus "signing"
+    if ($removed.configured -or $removed.enabled -or $removed.ready) { throw "Signing removal retained authority" }
+    $session = Connect-MCP
+    Invoke-GitJob $session $fixture @("/usr/bin/ssh-add", "-l") -ExpectFailure | Out-Null
+} {
+    $signingStatus = Get-IntegrationStatus "signing"
+    if ($signingStatus.configured -or $signingStatus.enabled -or $signingStatus.ready) {
+        Invoke-IntegrationCLI @("integration", "remove", "--distribution", $Distribution, "signing") | Out-Null
+    }
+    $session = Connect-MCP
+    Invoke-GitJob $session "." @("/bin/rm", "-rf", $fixture) | Out-Null
+}
+
+Invoke-AcceptanceSection "final optional authority and catalog invariants" {
+    $session = Connect-MCP
+    Invoke-LokiTool $session "github_read" @{ action = "repository"; target = "example-org/integration-fixture" } -ExpectError
+    $finalCatalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
+    if ($catalog -cne $finalCatalog) { throw "Integration lifecycle changed the MCP tool catalog" }
+} $null
+
+if ($failures.Count -gt 0) {
+    throw ("Managed integration exact-candidate acceptance failed:`n - " + ($failures -join "`n - "))
+}
 Write-Host "Managed integration exact-candidate acceptance passed"

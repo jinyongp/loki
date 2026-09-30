@@ -11,12 +11,15 @@ import (
 func TestReleaseGateIncludesEveryRequiredLayer(t *testing.T) {
 	gate := readPortabilityFile(t, filepath.Join("..", "..", "scripts", "verify", "verify-release.sh"))
 	for _, required := range []string{
-		"go test ./...",
-		"go test -race ./...",
-		"go vet ./...",
+		"verify-source.sh",
+		"verify-race.sh",
+		"LOKI_OCI_ACCEPTANCE_IMAGE=\"$core_image\"",
+		"accept-oci-jobs.sh",
+		"accept-authority-matrix.sh",
 		"accept-bootstrap.sh",
 		"accept-candidate.sh",
 		"accept-compose.sh",
+		"LOKI_SIGNING_KEY_FILE is required for signing acceptance",
 		"inspect_image \"$core_image\" Loki",
 		"inspect_image \"$browser_image\" 'Loki Browser'",
 	} {

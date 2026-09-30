@@ -21,6 +21,11 @@ func TestWSLGatesManagedIntegrationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
+		`function Invoke-AcceptanceSection`,
+		`Invoke-AcceptanceSection "managed browser enable, MCP use, and disable"`,
+		`Invoke-AcceptanceSection "managed signing through isolated MCP Jobs"`,
+		`Invoke-AcceptanceSection "final optional authority and catalog invariants"`,
+		`$failures.Count -gt 0`,
 		`"integration", "enable", "--distribution", $Distribution, "browser"`,
 		`"browser_session" @{ action = "start" }`,
 		`"integration", "setup", "signing"`,

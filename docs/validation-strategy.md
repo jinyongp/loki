@@ -2,6 +2,37 @@
 
 This document defines which Loki checks must be deterministic on an ordinary developer checkout and which checks require an explicit disposable host/runtime fixture. A missing prerequisite is not allowed to turn a product regression into an environment-only skip.
 
+## Validation profiles
+
+Validation status is always reported as one of the following profiles. Passing a lower profile must never be described as passing a higher one.
+
+| Profile | Canonical command or gate | Required environment | What a pass means |
+| --- | --- | --- | --- |
+| source | `sh ./scripts/verify/verify-source.sh` | Ordinary checkout with Go | Deterministic tests, vet, build, architecture, module tidiness and diff hygiene passed. Fixture-gated integration is explicitly excluded. |
+| race | `sh ./scripts/verify/verify-race.sh` | Ordinary checkout with Go race support | The source suite's exercised Go paths are race-clean. Process, container and OS integration is explicitly excluded. |
+| preflight | `sh ./scripts/verify/verify-preflight.sh` | Linux, Docker Unix socket, Buildx/BuildKit and the OCI acceptance network fixture | source + race + real self-contained OCI Job acceptance passed. Missing Docker or another required fixture is a failure, not a skip. This is the minimum local gate before dispatching a release candidate. |
+| exact-candidate | `LOKI_SIGNING_KEY_FILE=/path/to/synthetic-key sh ./scripts/verify/verify-release.sh CANDIDATE CORE@sha256:... BROWSER@sha256:...` | Linux release-engineering host plus immutable candidate artifacts and a synthetic signing key | The exact candidate passed source/race, exact-image OCI authority, cross-path authority, bootstrap, candidate lifecycle and Compose browser/signing acceptance. Native Windows/WSL and publication are still outstanding. |
+| publication | GitHub release workflow acceptance, publication and public-install jobs | GitHub-hosted Linux and Windows/WSL clean hosts, immutable candidate and previous immutable release | All independent exact-candidate domains, native Windows/provider/WSL gates, immutable publication, installer deployment and public Linux/Windows installation passed. Only this profile establishes release completion. |
+
+Two rules apply across profiles:
+
+- An integration test may skip only outside a profile that requires it. Required profiles must provision the fixture or fail before claiming a pass.
+- A defect first discovered in exact-candidate or publication validation must gain deterministic or lower-tier integration regression coverage where technically possible before the release is retried. Release-only discovery is evidence of a missing lower-tier test, not a reason to leave the defect release-only.
+
+Independent acceptance domains must execute independently. Browser, signing, OCI, authority, recovery and bootstrap failures should be reported in the same release run whenever their fixtures do not depend on one another; a serial fail-fast script must not hide unrelated defects.
+
+### Release fan-out and publication barrier
+
+The release workflow deliberately separates candidate identity from validation. `preflight` only establishes that the workflow is operating on the intended main-branch commit and resolves the candidate version/tag. After that point, independent evidence fans out:
+
+- `release-contracts` runs release contract tests plus action, metadata and container pin freshness checks, attempting every independent check before failing the job;
+- deterministic `source-gates`, `source-race`, self-contained `oci-gates`, and native Windows validation do not depend on release-input construction or on each other;
+- `release-inputs` and the immutable candidate build do not depend on independent validation results, so a pin, source, race or OCI defect does not hide build/acceptance evidence;
+- candidate-dependent Linux acceptance, WSL acceptance, and Windows provider acceptance depend only on the resolved candidate and the artifact they actually require, not on unrelated validation jobs;
+- `publish` is the fan-in barrier. It requires release contracts/pins, source, fixture-backed source runtime checks, race, source OCI, native Windows, every exact-candidate Linux domain, WSL and Windows provider acceptance. Any failed or skipped required gate blocks publication.
+
+This structure intentionally spends more CI after a failure in exchange for a complete defect set from one release attempt. A fixture or artifact construction failure may still make dependent checks impossible; such checks are reported as blocked by that concrete prerequisite rather than being treated as successful or silently omitted.
+
 ## 1. Validation execution cadence
 
 Validation requirements and validation execution cadence are separate concerns. Every material behavior change still owns appropriate regression or acceptance coverage, but broad checks are not rerun mechanically after each implementation unit.

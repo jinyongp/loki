@@ -59,50 +59,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - name: Run fast release contract tests
-        run: >-
-          go test
-          ./internal/app/launcher
-          ./internal/devtools
-          ./internal/platform/sandbox
-          ./internal/packaging
-          ./internal/host/policy
-          ./internal/host/releases
-          ./tools/release/bootstrapbuild
-          ./tools/release/evidencebuild
-          ./tools/release/publishprep
-          ./tools/release/releasebuild
-          -count=1
-
-      - name: Verify GitHub Action pins are current
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          latest_actions_up=$(npm view actions-up version)
-          test "$latest_actions_up" = 1.21.0 || {
-            echo "actions-up 1.21.0 is stale; latest is $latest_actions_up" >&2
-            exit 1
-          }
-          npm exec --yes actions-up@1.21.0 -- \
-            --dir .github \
-            --dry-run \
-            --json \
-            --mode major \
-            --style sha \
-            --prefer-tags \
-            --min-age 0 \
-            >"$RUNNER_TEMP/actions-up.raw"
-          sed -n '/^{/,$p' "$RUNNER_TEMP/actions-up.raw" >"$RUNNER_TEMP/actions-up.json"
-          jq -e '.summary.totalUpdates == 0 and .summary.totalBlockedByMode == 0 and .summary.totalBlockedByAge == 0' \
-            "$RUNNER_TEMP/actions-up.json" >/dev/null
-
-      - name: Verify release dependency pins are current
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: sh ./scripts/verify/release-pins.sh metadata
-
       - name: Resolve version
         id: version
         env:
@@ -158,6 +114,94 @@ jobs:
             echo "released_at=$released_at"
           } >>"$GITHUB_OUTPUT"
 
+  release-contracts:
+    name: Verify release contracts and pins
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run fast release contract tests
+        id: contract_tests
+        continue-on-error: true
+        run: >-
+          go test
+          ./internal/app/launcher
+          ./internal/devtools
+          ./internal/platform/sandbox
+          ./internal/packaging
+          ./internal/host/policy
+          ./internal/host/releases
+          ./tools/release/bootstrapbuild
+          ./tools/release/evidencebuild
+          ./tools/release/publishprep
+          ./tools/release/releasebuild
+          -count=1
+
+      - name: Verify GitHub Action pins are current
+        id: action_pins
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_actions_up=$(npm view actions-up version)
+          test "$latest_actions_up" = 1.21.0 || {
+            echo "actions-up 1.21.0 is stale; latest is $latest_actions_up" >&2
+            exit 1
+          }
+          npm exec --yes actions-up@1.21.0 -- \
+            --dir .github \
+            --dry-run \
+            --json \
+            --mode major \
+            --style sha \
+            --prefer-tags \
+            --min-age 0 \
+            >"$RUNNER_TEMP/actions-up.raw"
+          sed -n '/^{/,$p' "$RUNNER_TEMP/actions-up.raw" >"$RUNNER_TEMP/actions-up.json"
+          jq -e '.summary.totalUpdates == 0 and .summary.totalBlockedByMode == 0 and .summary.totalBlockedByAge == 0' \
+            "$RUNNER_TEMP/actions-up.json" >/dev/null
+
+      - name: Verify release dependency pins are current
+        id: metadata_pins
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh ./scripts/verify/release-pins.sh metadata
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Verify release container pins are current
+        id: container_pins
+        continue-on-error: true
+        run: sh ./scripts/verify/release-pins.sh containers
+
+      - name: Require all release contract and pin checks
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.contract_tests.outcome }}" = success
+          test "${{ steps.action_pins.outcome }}" = success
+          test "${{ steps.metadata_pins.outcome }}" = success
+          test "${{ steps.container_pins.outcome }}" = success
+
   release-inputs:
     name: Build release inputs (${{ matrix.arch }})
     needs: preflight
@@ -182,10 +226,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Verify release container pins are current
-        if: matrix.arch == 'amd64'
-        run: sh ./scripts/verify/release-pins.sh containers
-
       - name: Expose GitHub cache runtime
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
 
@@ -204,7 +244,30 @@ jobs:
 
 
   source-gates:
-    name: Verify source
+    name: Verify deterministic source
+    needs: preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run deterministic source profile
+        run: sh ./scripts/verify/verify-source.sh
+
+  source-runtime-contracts:
+    name: Verify source runtime fixtures
     needs:
       - preflight
       - release-inputs
@@ -216,8 +279,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
-          fetch-tags: true
+          fetch-depth: 1
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -237,11 +299,15 @@ jobs:
         run: chmod 0755 "$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg"
 
       - name: Verify pinned devtools runtime contract
+        id: devtools_contract
+        continue-on-error: true
         env:
           LOKI_DEVTOOLS_BINARY: ${{ runner.temp }}/release-inputs/devtools/amd64/devtools
         run: go test ./internal/devtools -run '^TestRealProcessInheritsBrokerSecrets$' -v -count=1
 
       - name: Run CI-sensitive Go tests
+        id: sensitive_tests
+        continue-on-error: true
         env:
           LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
         shell: bash
@@ -265,47 +331,13 @@ jobs:
             exit "$status"
           fi
 
-      - name: Run Go tests
-        env:
-          LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
+      - name: Require all source runtime fixture checks
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          go test -json ./... -count=1 | tee "$RUNNER_TEMP/go-test.json"
-          status=${PIPESTATUS[0]}
-          set -e
-          if test "$status" -ne 0; then
-            jq -r 'select(.Action == "fail" and .Test != null) | (.Package + "::" + .Test)' "$RUNNER_TEMP/go-test.json" |
-              sort -u |
-              while IFS= read -r failure; do
-                test -n "$failure" && printf '::error title=Go test failed::%s\n' "$failure"
-              done
-            jq -r 'select(.Action == "output" and .Test != null and (.Output | contains("_test.go:"))) | (.Package + "::" + .Test + "::" + (.Output | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")))' "$RUNNER_TEMP/go-test.json" |
-              tail -n 40 |
-              while IFS= read -r detail; do
-                test -n "$detail" && printf '::error title=Go test detail::%s\n' "$detail"
-              done
-            exit "$status"
-          fi
-
-      - name: Run Go vet
-        run: go vet ./...
-
-      - name: Build all Go packages
-        run: go build ./...
-
-      - name: Verify architecture policy
-        run: go run ./tools/archcheck
-
-      - name: Verify Go module tidiness
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -z "$(go mod tidy -diff)"
-
-      - name: Verify Git diff hygiene
-        run: git diff --check
+          test "${{ steps.devtools_contract.outcome }}" = success
+          test "${{ steps.sensitive_tests.outcome }}" = success
 
   oci-gates:
     name: Verify OCI runtime
@@ -331,13 +363,11 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Run real OCI job acceptance
-        run: ./scripts/verify/accept-oci-jobs.sh
+        run: sh ./scripts/verify/accept-oci-jobs.sh
 
   source-race:
     name: Verify race safety
-    needs:
-      - source-gates
-      - oci-gates
+    needs: preflight
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -355,42 +385,14 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Download release inputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: loki-release-inputs-*
-          path: ${{ runner.temp }}/release-inputs
-          merge-multiple: true
-
-      - name: Restore test tool executable mode
-        run: chmod 0755 "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg"
-
-      - name: Run Go race tests
-        env:
-          LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +e
-          go test -json -race ./... -count=1 | tee "$RUNNER_TEMP/go-race-test.json"
-          status=${PIPESTATUS[0]}
-          set -e
-          if test "$status" -ne 0; then
-            jq -r 'select(.Action == "fail" and .Package != null) | .Package' "$RUNNER_TEMP/go-race-test.json" |
-              sort -u |
-              while IFS= read -r package; do
-                test -n "$package" && printf '::error title=Go race package failed::%s\n' "$package"
-              done
-            exit "$status"
-          fi
+      - name: Run Go race profile
+        run: sh ./scripts/verify/verify-race.sh
 
   build:
     name: Build immutable release
     needs:
       - preflight
       - release-inputs
-      - source-gates
-      - oci-gates
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -691,7 +693,6 @@ jobs:
     needs:
       - preflight
       - build
-      - windows-native
     runs-on: windows-2025
     permissions:
       contents: read
@@ -725,12 +726,11 @@ jobs:
           LOKI_ACCEPTANCE_FRONTEND: ${{ runner.temp }}\candidate\inputs\loki-windows-amd64.exe
         run: go test ./internal/host/windows -run '^TestWindowsProviderAcceptance$' -v -count=1
 
-  accept:
-    name: Release acceptance
+  accept-runtime:
+    name: Verify release runtime contracts
     needs:
       - preflight
       - build
-      - source-race
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -740,8 +740,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
-          fetch-tags: true
+          fetch-depth: 1
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -760,10 +759,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Install acceptance prerequisites
+      - name: Install runtime acceptance prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install --yes acl libarchive-tools openssh-client
+          sudo apt-get install --yes libarchive-tools
 
       - name: Run runner/vault OS permission acceptance
         run: |
@@ -811,6 +810,35 @@ jobs:
       - name: Run provider release contract acceptance
         run: go test ./internal/integrations/github -v -count=1
 
+  accept-recovery:
+    name: Verify release recovery and projection
+    needs:
+      - preflight
+      - build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Download release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build.outputs.candidate_artifact }}
+          path: ${{ runner.temp }}/candidate
+
       - name: Run published release lifecycle recovery acceptance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -846,15 +874,121 @@ jobs:
             --windows-installer-template "$GITHUB_WORKSPACE/tools/release/install.ps1.tmpl"
           sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
 
+  accept-oci:
+    name: Verify exact-candidate OCI lifecycle
+    needs:
+      - preflight
+      - build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Run release OCI authority acceptance
         env:
           LOKI_OCI_ACCEPTANCE_IMAGE: ${{ needs.build.outputs.core_image }}
-        run: ./scripts/verify/accept-oci-jobs.sh
+        run: sh ./scripts/verify/accept-oci-jobs.sh
+
+  accept-authority:
+    name: Verify exact-candidate authority matrix
+    needs:
+      - preflight
+      - build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Install authority runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          mapfile -t packages < <(jq -r '.apt_packages[].name' packaging/native/toolchain-manifest.json)
+          test "${#packages[@]}" -gt 0
+          sudo apt-get install --yes "${packages[@]}"
 
       - name: Run protected-resource cross-path authority matrix
         env:
           LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
         run: bash ./scripts/verify/accept-authority-matrix.sh
+
+  accept-compose:
+    name: Verify exact-candidate Compose integrations
+    needs:
+      - preflight
+      - build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Install Compose acceptance prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes acl openssh-client
 
       - name: Run release Compose, browser and signing acceptance
         env:
@@ -874,16 +1008,49 @@ jobs:
           trap cleanup EXIT
           LOKI_SIGNING_KEY_FILE="$key" ./scripts/verify/accept-compose.sh
 
+  accept-bootstrap:
+    name: Verify release bootstrap
+    needs:
+      - preflight
+      - build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
       - name: Run bootstrap acceptance
-        run: ./scripts/verify/accept-bootstrap.sh
+        run: sh ./scripts/verify/accept-bootstrap.sh
 
   publish:
     name: Publish immutable release
     if: ${{ inputs.publish }}
     needs:
       - preflight
+      - release-contracts
       - build
-      - accept
+      - source-gates
+      - source-runtime-contracts
+      - source-race
+      - oci-gates
+      - windows-native
+      - accept-runtime
+      - accept-recovery
+      - accept-oci
+      - accept-authority
+      - accept-compose
+      - accept-bootstrap
       - wsl-accept
       - windows-provider-acceptance
     runs-on: ubuntu-24.04

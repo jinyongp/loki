@@ -35,7 +35,11 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"Verify release container pins are current",
 		"crazy-max/ghaction-github-runtime@",
 		"# v4.0.0",
+		"release-contracts:",
+		"Verify release contracts and pins",
 		"release-inputs:",
+		"source-runtime-contracts:",
+		"Verify source runtime fixtures",
 		"oci-gates:",
 		"Verify OCI runtime",
 		"Verify Windows WSL appliance",
@@ -81,13 +85,10 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"--windows-installer-template",
 		"Run CI-sensitive Go tests",
 		"CI-sensitive Go test failed",
-		"Run Go tests",
-		"Run Go race tests",
-		"Run Go vet",
-		"Build all Go packages",
-		"Verify architecture policy",
-		"Verify Go module tidiness",
-		"Verify Git diff hygiene",
+		"Run deterministic source profile",
+		"sh ./scripts/verify/verify-source.sh",
+		"Run Go race profile",
+		"sh ./scripts/verify/verify-race.sh",
 		"Run runner/vault OS permission acceptance",
 		"go test -c -o \"$RUNNER_TEMP/execution-permission.test\" ./internal/execution",
 		"sudo \"$RUNNER_TEMP/execution-permission.test\" -test.run '^TestLinuxRunnerCanWriteStateButCannotReadVaultKey$' -test.v",
@@ -148,6 +149,122 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 	for _, match := range uses {
 		if !fullPin.MatchString(match[1]) {
 			t.Fatalf("release workflow action is not pinned to a full commit SHA: %s", match[1])
+		}
+	}
+}
+
+func TestReleaseAcceptanceDomainsAreIndependent(t *testing.T) {
+	root := filepath.Join("..", "..")
+	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if strings.Contains(text, "\n  accept:\n") {
+		t.Fatal("release acceptance must not collapse independent domains into one serial fail-fast job")
+	}
+	between := func(startKey, endKey string) string {
+		t.Helper()
+		start := strings.Index(text, "\n  "+startKey+":\n")
+		end := strings.Index(text, "\n  "+endKey+":\n")
+		if start < 0 || end < 0 || end <= start {
+			t.Fatalf("release workflow lacks %s..%s job boundary", startKey, endKey)
+		}
+		return text[start:end]
+	}
+	preflight := between("preflight", "release-contracts")
+	for _, forbidden := range []string{
+		"Run fast release contract tests",
+		"Verify GitHub Action pins are current",
+		"Verify release dependency pins are current",
+	} {
+		if strings.Contains(preflight, forbidden) {
+			t.Fatalf("candidate identity preflight still serializes independent validation %q", forbidden)
+		}
+	}
+	releaseContracts := between("release-contracts", "release-inputs")
+	for _, required := range []string{
+		"Run fast release contract tests",
+		"Verify GitHub Action pins are current",
+		"Verify release dependency pins are current",
+		"Verify release container pins are current",
+		"continue-on-error: true",
+		"Require all release contract and pin checks",
+	} {
+		if !strings.Contains(releaseContracts, required) {
+			t.Errorf("release contract gate lacks %q", required)
+		}
+	}
+	if strings.Contains(between("release-inputs", "source-gates"), "Verify release container pins are current") {
+		t.Fatal("release input construction must not be suppressed by independent pin freshness validation")
+	}
+	for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- oci-gates", "- release-inputs"} {
+		if strings.Contains(between("source-race", "build"), forbidden) {
+			t.Fatalf("race validation still depends on independent gate %q", forbidden)
+		}
+	}
+	for _, forbidden := range []string{"- source-gates", "- source-race", "- oci-gates", "- release-contracts"} {
+		if strings.Contains(between("build", "wsl-accept"), forbidden) {
+			t.Fatalf("candidate build is suppressed by independent validation %q", forbidden)
+		}
+	}
+	if strings.Contains(between("windows-provider-acceptance", "accept-runtime"), "- windows-native") {
+		t.Fatal("Windows provider acceptance must run independently of native Windows unit validation")
+	}
+
+	type domain struct {
+		key      string
+		next     string
+		required string
+	}
+	domains := []domain{
+		{"accept-runtime", "accept-recovery", "Run MCP-only project execution acceptance"},
+		{"accept-recovery", "accept-oci", "Run published release lifecycle recovery acceptance"},
+		{"accept-oci", "accept-authority", "Run release OCI authority acceptance"},
+		{"accept-authority", "accept-compose", "Run protected-resource cross-path authority matrix"},
+		{"accept-compose", "accept-bootstrap", "Run release Compose, browser and signing acceptance"},
+		{"accept-bootstrap", "publish", "Run bootstrap acceptance"},
+	}
+	for _, d := range domains {
+		start := strings.Index(text, "\n  "+d.key+":\n")
+		end := strings.Index(text, "\n  "+d.next+":\n")
+		if start < 0 || end < 0 || end <= start {
+			t.Fatalf("release workflow lacks independent %s job boundary", d.key)
+		}
+		block := text[start:end]
+		if !strings.Contains(block, d.required) {
+			t.Fatalf("%s job lacks %q", d.key, d.required)
+		}
+		for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- source-race", "- oci-gates", "- release-contracts"} {
+			if strings.Contains(block, forbidden) {
+				t.Fatalf("%s job is suppressed by independent validation %q", d.key, forbidden)
+			}
+		}
+	}
+
+	publish := strings.Index(text, "\n  publish:\n")
+	if publish < 0 {
+		t.Fatal("release workflow lacks publish job")
+	}
+	publishBlock := text[publish:]
+	for _, required := range []string{
+		"- release-contracts",
+		"- source-gates",
+		"- source-runtime-contracts",
+		"- source-race",
+		"- oci-gates",
+		"- windows-native",
+		"- accept-runtime",
+		"- accept-recovery",
+		"- accept-oci",
+		"- accept-authority",
+		"- accept-compose",
+		"- accept-bootstrap",
+		"- wsl-accept",
+		"- windows-provider-acceptance",
+	} {
+		if !strings.Contains(publishBlock, required) {
+			t.Errorf("publication barrier lacks %q", required)
 		}
 	}
 }
