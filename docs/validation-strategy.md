@@ -10,7 +10,7 @@ Validation status is always reported as one of the following profiles. Passing a
 | --- | --- | --- | --- |
 | source | `sh ./scripts/verify/verify-source.sh` | Ordinary checkout with Go | Deterministic tests, vet, build, architecture, module tidiness and diff hygiene passed. Fixture-gated integration is explicitly excluded. |
 | race | `sh ./scripts/verify/verify-race.sh` | Ordinary checkout with Go race support | The source suite's exercised Go paths are race-clean. Process, container and OS integration is explicitly excluded. |
-| preflight | `sh ./scripts/verify/verify-preflight.sh` | Linux, Docker Unix socket, Buildx/BuildKit and the OCI acceptance network fixture | source + race + real self-contained OCI Job acceptance passed. Missing Docker or another required fixture is a failure, not a skip. This is the minimum local gate before dispatching a release candidate. |
+| preflight | `sh ./scripts/verify/verify-preflight.sh [--oci]` | Go and race support; `--oci` additionally requires Linux, Docker, Buildx/BuildKit and the OCI network fixture | source + race passed. With `--oci`, real self-contained OCI Job acceptance also passed and missing OCI prerequisites fail. OCI coverage is reported explicitly. |
 | exact-candidate | `LOKI_SIGNING_KEY_FILE=/path/to/synthetic-key sh ./scripts/verify/verify-release.sh CANDIDATE CORE@sha256:... BROWSER@sha256:...` | Linux release-engineering host plus immutable candidate artifacts and a synthetic signing key | The exact candidate passed source/race, exact-image OCI authority, cross-path authority, bootstrap, candidate lifecycle and Compose browser/signing acceptance. Native Windows/WSL and publication are still outstanding. |
 | publication | GitHub release workflow acceptance, publication and public-install jobs | GitHub-hosted Linux and Windows/WSL clean hosts, immutable candidate and previous immutable release | All independent exact-candidate domains, native Windows/provider/WSL gates, immutable publication, installer deployment and public Linux/Windows installation passed. Only this profile establishes release completion. |
 
@@ -25,11 +25,11 @@ Independent acceptance domains must execute independently. Browser, signing, OCI
 
 The release workflow deliberately separates candidate identity from validation. `preflight` only establishes that the workflow is operating on the intended main-branch commit and resolves the candidate version/tag. After that point, independent evidence fans out:
 
-- `release-contracts` runs release contract tests plus action, metadata and container pin freshness checks, attempting every independent check before failing the job;
-- deterministic `source-gates`, `source-race`, self-contained `oci-gates`, and native Windows validation do not depend on release-input construction or on each other;
+- `release-contracts` runs the early release contract subset. `check_updates=true` additionally requires live action, metadata and container freshness checks; the default validates the selected pinned candidate without requiring upstream latest versions;
+- deterministic `source-gates` and `source-race` use the pinned ripgrep artifact from `release-inputs`. They run independently of one another. Self-contained `oci-gates` and native Windows validation have their own fixtures;
 - `release-inputs` and the immutable candidate build do not depend on independent validation results, so a pin, source, race or OCI defect does not hide build/acceptance evidence;
 - candidate-dependent Linux acceptance, WSL acceptance, and Windows provider acceptance depend only on the resolved candidate and the artifact they actually require, not on unrelated validation jobs;
-- `publish` is the fan-in barrier. It requires release contracts/pins, source, fixture-backed source runtime checks, race, source OCI, native Windows, every exact-candidate Linux domain, WSL and Windows provider acceptance. Any failed or skipped required gate blocks publication.
+- `publish` is the fan-in barrier. It requires release contracts, source, fixture-backed source runtime checks, race, source OCI, native Windows, every exact-candidate Linux domain, WSL and Windows provider acceptance. Any failed or skipped required gate blocks publication. Live dependency freshness is required when the operator selects `check_updates`;
 
 This structure intentionally spends more CI after a failure in exchange for a complete defect set from one release attempt. A fixture or artifact construction failure may still make dependent checks impossible; such checks are reported as blocked by that concrete prerequisite rather than being treated as successful or silently omitted.
 
@@ -55,17 +55,46 @@ These checks must not require Docker, Chromium, root, systemd, POSIX ACL utiliti
 
 ```sh
 go run ./tools/archcheck
-go test ./...
-go test -race ./...
+go test -vet=off ./...
+go test -race -vet=off ./...
 go vet ./...
-go build ./...
+go build ./cmd/...
 ```
+
+The source profile owns the full `go vet` pass. Tests and race checks disable
+their implicit vet pass, and the explicit build links command binaries while
+tests compile the remaining packages. Ordinary source, race and repeated CI
+subsets use Go's cache; changed code, tests and observed inputs invalidate it.
+External-fixture and exact-candidate acceptance retain `-count=1` so retained
+cache results cannot stand in for the current candidate or host fixture.
+
+Validation checks behavior and stable contracts. Source/build pins must remain
+explicit and immutable; tests accept valid pin updates without copying each
+version and digest into a second hardcoded inventory. Docker and Compose
+support minimums describe compatibility floors, while appliance pins identify
+selected versions. Minimums must fit the selected appliance rather than track
+each upstream release. Generated Python caches and package metadata in a
+developer checkout are outside current source-entrypoint checks.
 
 Tests that are explicitly classified as integration checks may report a clear skip when their prerequisite is absent during ordinary development. Everything else in the default suite must be independent of ambient host state such as umask, user home contents, network access, or a previously installed Loki instance.
 
-A default-suite failure caused by product behavior remains a failure. `internal/toolchain.TestInstallZipArtifactPreservesExecutables` now verifies the R9 correction under both umask `0022` and `0077`; the tar.gz case checks the same final mode policy. R8 containment regressions reject chained and late symlink parents, unsafe resolved links, duplicate paths, reserved metadata, and unsupported object types, while preserving safe in-root link chains. These are product tests, not optional integration prerequisites. The ZIP extractor uses root-bound writes; the retained external GNU tar extractor receives final tree validation and mode normalization, not a new extraction sandbox. A09 still owns that broader isolation work.
+File permissions, archive containment, auth and daemon behavior are deterministic
+product checks. Their fixtures apply explicit modes and cover safe and unsafe
+paths without relying on the developer's umask. These checks stay in the default
+suite; integration prerequisites apply only to tests that use external fixtures.
 
-The auth and daemon fixtures that previously depended on ambient umask are ordinary unit tests. Their fixture modes are now applied explicitly; they are not moved to the integration tier.
+## Validation ownership
+
+| Boundary | Check owner | Purpose |
+| --- | --- | --- |
+| MCP request shape | The resolved tool input schema | Validate types, required fields, actions and unknown fields once before the handler. Missing required-field diagnostics use the decoded input; errors never expose submitted values. |
+| Workspace read size | The workspace service | Clamp positive requested counts and depth to configured bounds; report pagination and truncation so a bounded result is explicit. |
+| Mutations and protected resources | The owning service and each authority boundary | Preserve file/index preconditions, replay identity, confinement, credential separation, persisted-state integrity and resource ownership. Public schema validation cannot establish these stateful facts. |
+| Go source | The source profile | Run tests, full vet, command linking, architecture, module tidiness and diff hygiene once per coherent batch. Reuse valid Go cache results. |
+| Concurrent Go behavior | The race profile | Exercise Go memory race checks separately from container and process lifecycle checks. |
+| CI workflow | Parsed jobs, prerequisites, pinned actions and gate execution tests | Preserve required acceptance domains and publication prerequisites while allowing job order, step labels and valid dependency pins to change. |
+| Candidate/host integration | Explicit integration and release acceptance | Exercise actual pinned binaries, images, host permissions and recovery fixtures with fresh test execution. |
+| Dependency freshness | The optional `check_updates` release input | Query live upstream metadata when requested; immutable pinning and candidate integrity remain part of ordinary validation. |
 
 ## 3. Explicit integration checks
 
@@ -95,7 +124,7 @@ An integration test may skip only when run outside a gate that declares it requi
 
 ## 4. Static/race checks
 
-`go vet ./...`, `go build ./...`, and the architecture checker are always deterministic checks. `go test -race ./...` follows the same prerequisite classification as the default test suite: explicitly classified integration cases may skip, but ordinary unit/product regressions still fail.
+`go vet ./...`, `go build ./cmd/...`, and the architecture checker are deterministic checks. `go test -race -vet=off ./...` follows the same prerequisite classification as the default test suite: explicitly classified integration cases may skip, but ordinary unit/product regressions still fail.
 
 The race detector proves only races observable in the exercised Go memory model. It does not establish cgroup cleanup, cross-process filesystem CAS, network isolation, credential separation, or container namespace safety; those remain integration/acceptance properties.
 
@@ -111,13 +140,10 @@ The current release verifier still does not make every optional development inte
 
 Release evidence records at least the source commit, core/browser image digests, effective policy/config generation, candidate binary identity, exact commands, pass/fail/skip counts, and recovery result. A skip is acceptable only for a capability explicitly outside the released milestone; otherwise it is a failed gate.
 
-## 6. Current baseline interpretation
+## 6. Reporting results
 
-At the reviewed baseline, full normal and race runs failed in `internal/auth`, `internal/daemon`, `internal/toolchain`, and `internal/packaging`, and nine integration tests were skipped. The classification is:
-
-- `internal/auth` and `internal/daemon`: deterministic test-fixture defects caused by ambient umask assumptions; keep in the default tier and fix the fixtures.
-- `internal/toolchain`: R9 product defect; keep in the default tier and do not skip or relax the expected executable mode.
-- Compose topology acceptance: explicit Docker + POSIX ACL integration prerequisite. The disposable script requires `setfacl` and fails when it is absent; lifecycle transaction coverage belongs to the Go host-manager acceptance rather than `internal/packaging` shell tests.
-- Chromium/CDP, real devtools, project execution, root permission, OCI archive, and real OCI Job tests: explicit integration prerequisites listed above. The real OCI fixture now covers A05 plus A06/A07 network/endpoint/preview behavior, and the self-contained runner supplies its normal local-Docker inputs. Required release/acceptance coverage closes only when that runner actually records a pass on a supported host.
-
-This classification does not claim that the current Go candidate is release-ready. It prevents environment prerequisites from obscuring product regressions while the architecture remediation proceeds.
+Report the executed profile and its result, along with any required check that
+failed or lacked a fixture. A passing source or race profile establishes its
+own coverage. Exact-candidate and publication results require their pinned
+artifacts and supported host fixtures. Local preflight includes OCI coverage
+only when `--oci` was requested and passed.
