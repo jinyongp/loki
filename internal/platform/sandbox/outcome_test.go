@@ -127,6 +127,98 @@ func TestEngineClassifiesDeadlineAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestEngineClassifiesCancellationDuringStartAndCleansUp(t *testing.T) {
+	const version = "1.44"
+	plan := validPlan(t)
+	resource := plan.Resource()
+	containerID := strings.Repeat("d", 64)
+	startEntered := make(chan struct{})
+	var startOnce sync.Once
+	var mu sync.Mutex
+	running := false
+	removed := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/version":
+			_ = json.NewEncoder(w).Encode(map[string]any{"ApiVersion": version})
+		case r.URL.Path == "/v"+version+"/containers/create":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"Id": containerID})
+		case strings.HasSuffix(r.URL.Path, "/start"):
+			mu.Lock()
+			running = true
+			mu.Unlock()
+			startOnce.Do(func() { close(startEntered) })
+			<-r.Context().Done()
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json"):
+			mu.Lock()
+			isRunning, isRemoved := running, removed
+			mu.Unlock()
+			if isRemoved {
+				http.NotFound(w, r)
+				return
+			}
+			status := "created"
+			if isRunning {
+				status = "running"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"Id":     containerID,
+				"Config": map[string]any{"Labels": resource.labels()},
+				"State":  map[string]any{"Status": status, "Running": isRunning, "OOMKilled": false, "ExitCode": 0},
+			})
+		case strings.HasSuffix(r.URL.Path, "/stop"):
+			mu.Lock()
+			running = false
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodDelete:
+			mu.Lock()
+			removed = true
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	engine := engineForSocket(t, fakeDockerSocket(t, handler), func(options *EngineOptions) {
+		options.GracefulStopTimeout = time.Second
+		options.CleanupTimeout = time.Second
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	type runResult struct {
+		result Result
+		err    error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, err := engine.Run(ctx, plan)
+		done <- runResult{result: result, err: err}
+	}()
+	select {
+	case <-startEntered:
+	case <-time.After(time.Second):
+		t.Fatal("start request was not reached")
+	}
+	cancel()
+	select {
+	case got := <-done:
+		if !errors.Is(got.err, context.Canceled) {
+			t.Fatalf("cancellation error = %v", got.err)
+		}
+		if got.result.Outcome != OutcomeCanceled || got.result.Cleanup != CleanupComplete {
+			t.Fatalf("result = %#v", got.result)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("run did not return after cancellation")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !removed {
+		t.Fatal("canceled launch resource was not removed")
+	}
+}
+
 func TestEngineCleanupRejectsForeignSameNameResource(t *testing.T) {
 	const version = "1.44"
 	plan := validPlan(t)

@@ -372,6 +372,98 @@ func TestRealOCIJobRecoveryAndBoundedOutput(t *testing.T) {
 	}
 }
 
+func TestRealOCIJobWritableEnvironmentAndGitPersistence(t *testing.T) {
+	if os.Getenv("LOKI_REQUIRE_OCI_JOB_TESTS") != "1" {
+		t.Skip("set LOKI_REQUIRE_OCI_JOB_TESTS=1 with explicit Docker socket, pinned image, and shared workspace fixtures")
+	}
+	if runtime.GOOS != "linux" {
+		t.Fatal("real OCI writable-environment acceptance requires Linux")
+	}
+	socket := requiredOCIEnv(t, "LOKI_TEST_DOCKER_SOCKET")
+	image := requiredOCIEnv(t, "LOKI_TEST_DOCKER_IMAGE")
+	workspace := requiredOCIEnv(t, "LOKI_TEST_DOCKER_WORKSPACE")
+	peerUID := optionalOCIUint32(t, "LOKI_TEST_DOCKER_PEER_UID", 0)
+	workloadUID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_UID", 65534)
+	workloadGID := optionalOCIUint32(t, "LOKI_TEST_WORKLOAD_GID", 65534)
+	policyDigest := strings.Repeat("e", 64)
+	policy, err := NewPolicy(PolicyOptions{
+		GenerationSHA256: policyDigest,
+		Image:            image,
+		Gateway: GatewayPolicyOptions{
+			Image: image, Binary: "/opt/loki/bin/loki",
+			ExecutionContract: "/usr/share/doc/loki/execution-contract.json",
+			EgressPolicy:      "/usr/share/doc/loki/egress-policy.json", ProxyPort: 18766,
+			MemoryBytes: 64 << 20, PIDs: 16, TmpfsBytes: 16 << 20,
+		},
+		Workspace: workspace,
+		UID:       workloadUID,
+		GID:       workloadGID,
+		Environment: []string{
+			"GIT_CONFIG_GLOBAL=/usr/share/doc/loki/gitconfig",
+			"GIT_CONFIG_NOSYSTEM=1",
+			"GIT_OPTIONAL_LOCKS=0",
+			"HOME=/home/runner",
+			"LANG=C.UTF-8",
+			"LC_ALL=C.UTF-8",
+			"PATH=/usr/bin:/bin",
+			"TMPDIR=/var/tmp/loki/runner",
+			"XDG_CACHE_HOME=/var/cache/loki/runner",
+			"XDG_CONFIG_HOME=/var/lib/loki/runner/config",
+		},
+		MemoryBytes: 128 << 20,
+		PIDs:        32,
+		TmpfsBytes:  16 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := ".loki-oci-git-" + randomOCIJobID(t)
+	hostFixture := filepath.Join(workspace, fixture)
+	if err = os.Mkdir(hostFixture, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(hostFixture, 0777); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(hostFixture) })
+
+	engine := realOCIEngine(t, socket, peerUID)
+	run := func(argv []string) Result {
+		t.Helper()
+		plan, planErr := policy.Plan(WorkloadSpec{
+			ID:           randomOCIJobID(t),
+			PolicySHA256: policyDigest,
+			CWD:          fixture,
+			Argv:         argv,
+		})
+		if planErr != nil {
+			t.Fatal(planErr)
+		}
+		result, runErr := engine.Run(t.Context(), plan)
+		if runErr != nil {
+			t.Fatalf("OCI Git job failed: argv=%q result=%#v err=%v output=%q", argv, result, runErr, result.Output)
+		}
+		if !result.ExitCodeKnown || result.ExitCode != 0 || result.Outcome != OutcomeExited || result.Cleanup != CleanupComplete {
+			t.Fatalf("OCI Git job result: argv=%q result=%#v output=%q", argv, result, result.Output)
+		}
+		return result
+	}
+
+	run([]string{"/bin/sh", "-c", `for path in "$TMPDIR" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"; do test -d "$path" && test -w "$path" || exit 31; done; exec /usr/bin/git -c safe.directory='*' init -q --initial-branch=main .`})
+	run([]string{
+		"/usr/bin/git",
+		"-c", "safe.directory=*",
+		"-c", "user.name=Loki OCI Acceptance",
+		"-c", "user.email=loki-oci@example.test",
+		"-c", "commit.gpgsign=false",
+		"commit", "--allow-empty", "-qm", "persistent OCI git fixture",
+	})
+	result := run([]string{"/usr/bin/git", "-c", "safe.directory=*", "log", "-1", "--format=%s"})
+	if strings.TrimSpace(string(result.Output)) != "persistent OCI git fixture" {
+		t.Fatalf("persisted commit output = %q", result.Output)
+	}
+}
+
 func TestRealOCIJobNetworkEndpointPreview(t *testing.T) {
 	if os.Getenv("LOKI_REQUIRE_OCI_JOB_TESTS") != "1" {
 		t.Skip("set LOKI_REQUIRE_OCI_JOB_TESTS=1 with explicit Docker socket, pinned Loki image, shared workspace, and allowlisted HTTPS authority fixtures")

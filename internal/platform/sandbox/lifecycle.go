@@ -19,6 +19,13 @@ func outcomeForError(err error) Outcome {
 	}
 }
 
+func launchOutcomeForError(err error) Outcome {
+	if outcome := outcomeForError(err); outcome != OutcomeUnknown {
+		return outcome
+	}
+	return OutcomeLaunchFailed
+}
+
 func (e *Engine) joinCleanup(version string, resource Resource, containerID string, primary error) (CleanupStatus, error) {
 	status, cleanupErr := e.cleanupResource(version, resource, containerID)
 	return status, errors.Join(primary, cleanupErr)

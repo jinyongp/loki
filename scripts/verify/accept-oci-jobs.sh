@@ -161,10 +161,22 @@ run_oci_test() {
   return 1
 }
 
-run_oci_test TestRealOCIJobNetworkEndpointPreview
-run_oci_test TestRealOCIJobLifecycle
-run_oci_test TestRealOCIJobScriptAuthorityBoundary
-run_oci_test TestRealOCIJobDetachedDescendantCleanup
-run_oci_test TestRealOCIJobRecoveryAndBoundedOutput
+failures=0
+for test_name in \
+  TestRealOCIJobNetworkEndpointPreview \
+  TestRealOCIJobLifecycle \
+  TestRealOCIJobWritableEnvironmentAndGitPersistence \
+  TestRealOCIJobScriptAuthorityBoundary \
+  TestRealOCIJobDetachedDescendantCleanup \
+  TestRealOCIJobRecoveryAndBoundedOutput
+do
+  if ! run_oci_test "$test_name"; then
+    failures=$((failures + 1))
+  fi
+done
 
+if test "$failures" -ne 0; then
+  printf 'loki OCI Job acceptance: failed %s test(s); all independent OCI cases were attempted\n' "$failures" >&2
+  exit 1
+fi
 printf 'loki OCI Job acceptance: passed\n'

@@ -13,8 +13,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
     go build -trimpath -ldflags="-s -w" -o /out/loki ./cmd/loki
 
+FROM alpine/git:2.54.0@sha256:832b1cd1a271509f3d5272a1a62d4cb2ab1a53426ebde1f6c2cb7349f907dc6f AS git-root
+
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+COPY --from=git-root / /
 COPY --from=build /out/loki /opt/loki/bin/loki
+COPY config/gitconfig /usr/share/doc/loki/gitconfig
 COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/
 ENV PATH=/opt/loki/bin:/usr/local/bin:/usr/bin:/bin
 WORKDIR /workspace

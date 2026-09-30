@@ -72,6 +72,9 @@ func TestPolicyValidation(t *testing.T) {
 		{"env-name", func(o *PolicyOptions) { o.Environment = []string{"1BAD=value"} }},
 		{"env-duplicate", func(o *PolicyOptions) { o.Environment = []string{"A=1", "A=2"} }},
 		{"env-nul", func(o *PolicyOptions) { o.Environment = []string{"A=x\x00y"} }},
+		{"scratch-relative", func(o *PolicyOptions) { o.Environment = []string{"TMPDIR=tmp"} }},
+		{"scratch-workspace", func(o *PolicyOptions) { o.Environment = []string{"TMPDIR=/workspace/tmp"} }},
+		{"scratch-control", func(o *PolicyOptions) { o.Environment = []string{"XDG_CACHE_HOME=/run/loki/cache"} }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -410,6 +413,61 @@ func TestPlanUsesOnlyFixedSecurityEnvelope(t *testing.T) {
 	for _, forbidden := range []string{"Privileged", "CapAdd", "Devices", "Binds", "VolumesFrom", "PidMode", "IpcMode", "UTSMode", "CgroupnsMode"} {
 		if _, ok := hostDocument[forbidden]; ok {
 			t.Fatalf("forbidden Docker field %q present in %s", forbidden, raw)
+		}
+	}
+}
+
+func TestPlanProjectsWritableExecutionPathsIntoPrivateTmpfs(t *testing.T) {
+	options := validPolicyOptions()
+	options.Environment = []string{
+		"GOCACHE=/var/cache/loki/go-build",
+		"GOMODCACHE=/var/cache/loki/go-mod",
+		"GH_CONFIG_DIR=/var/lib/loki/runner/gh-config",
+		"NPM_CONFIG_CACHE=/var/cache/loki/npm",
+		"PIP_CACHE_DIR=/var/cache/loki/pip",
+		"TMPDIR=/var/tmp/loki/runner",
+		"XDG_CACHE_HOME=/var/cache/loki/runner",
+		"XDG_CONFIG_HOME=/var/lib/loki/runner/config",
+		"XDG_DATA_HOME=/var/lib/loki/runner/data",
+		"XDG_STATE_HOME=/var/lib/loki/runner/xdg-state",
+		"npm_config_store_dir=/var/cache/loki/pnpm",
+		"PATH=/usr/bin:/bin",
+	}
+	policy, err := NewPolicy(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := policy.Plan(validWorkloadSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"/tmp",
+		"/var/cache/loki/go-build",
+		"/var/cache/loki/go-mod",
+		"/var/cache/loki/npm",
+		"/var/cache/loki/pip",
+		"/var/cache/loki/pnpm",
+		"/var/cache/loki/runner",
+		"/var/lib/loki/runner/config",
+		"/var/lib/loki/runner/data",
+		"/var/lib/loki/runner/gh-config",
+		"/var/lib/loki/runner/xdg-state",
+		"/var/tmp/loki/runner",
+	}
+	if len(plan.create.HostConfig.Tmpfs) != len(want) {
+		t.Fatalf("tmpfs = %#v", plan.create.HostConfig.Tmpfs)
+	}
+	for _, path := range want {
+		options, ok := plan.create.HostConfig.Tmpfs[path]
+		if !ok {
+			t.Errorf("writable execution path %q is not projected", path)
+			continue
+		}
+		for _, required := range []string{"rw", "noexec", "nosuid", "nodev", "uid=10000", "gid=10000", "mode=0700"} {
+			if !strings.Contains(options, required) {
+				t.Errorf("tmpfs %q for %s lacks %q", options, path, required)
+			}
 		}
 	}
 }

@@ -161,18 +161,18 @@ func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
 	resource := plan.Resource()
 	version, err := e.apiVersion(ctx)
 	if err != nil {
-		return Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}, err
+		return Result{Outcome: launchOutcomeForError(err), Cleanup: CleanupNotRequired}, err
 	}
 	containerID, created, err := e.create(ctx, version, plan)
 	if err != nil {
-		result := Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}
+		result := Result{Outcome: launchOutcomeForError(err), Cleanup: CleanupNotRequired}
 		if created {
 			result.Cleanup, err = e.joinCleanup(version, resource, containerID, err)
 		}
 		return result, err
 	}
 	if err = e.start(ctx, version, resource); err != nil {
-		result := Result{Outcome: OutcomeLaunchFailed}
+		result := Result{Outcome: launchOutcomeForError(err)}
 		result.Cleanup, err = e.joinCleanup(version, resource, containerID, err)
 		return result, err
 	}

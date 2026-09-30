@@ -33,13 +33,18 @@ const (
 )
 
 var (
-	digestPattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	imageDigestPattern   = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
-	jobIDPattern         = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	envNamePattern       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	endpointNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	toolchainNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	volumeNamePattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	digestPattern              = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	imageDigestPattern         = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
+	jobIDPattern               = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	envNamePattern             = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	endpointNamePattern        = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	toolchainNamePattern       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	volumeNamePattern          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	workloadScratchEnvironment = map[string]struct{}{
+		"GH_CONFIG_DIR": {}, "XDG_CONFIG_HOME": {}, "XDG_DATA_HOME": {}, "XDG_STATE_HOME": {},
+		"XDG_CACHE_HOME": {}, "NPM_CONFIG_CACHE": {}, "npm_config_store_dir": {},
+		"PLAYWRIGHT_BROWSERS_PATH": {}, "GOCACHE": {}, "GOMODCACHE": {}, "PIP_CACHE_DIR": {}, "TMPDIR": {},
+	}
 )
 
 type NetworkProfile string
@@ -396,6 +401,9 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if err != nil {
 		return Policy{}, err
 	}
+	if _, err = workloadScratchTmpfs(environment, options.UID, options.GID, options.TmpfsBytes); err != nil {
+		return Policy{}, err
+	}
 	gateway, err := normalizeGateway(options.Gateway)
 	if err != nil {
 		return Policy{}, err
@@ -432,6 +440,9 @@ func (p Policy) Valid() bool {
 	}
 	normalized, err := normalizeEnvironment(p.environment)
 	if err != nil || len(normalized) != len(p.environment) {
+		return false
+	}
+	if _, err = workloadScratchTmpfs(normalized, p.uid, p.gid, p.tmpfsBytes); err != nil {
 		return false
 	}
 	for index := range normalized {
@@ -479,6 +490,29 @@ func normalizeEnvironment(values []string) ([]string, error) {
 		result = append(result, value)
 	}
 	sort.Strings(result)
+	return result, nil
+}
+
+func workloadScratchTmpfs(environment []string, uid, gid uint32, tmpfsBytes int64) (map[string]string, error) {
+	options := fmt.Sprintf("rw,noexec,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", tmpfsBytes, uid, gid)
+	result := map[string]string{"/tmp": options}
+	for _, entry := range environment {
+		name, value, _ := strings.Cut(entry, "=")
+		if _, ok := workloadScratchEnvironment[name]; !ok {
+			continue
+		}
+		if !cleanAbsoluteNonRoot(value) {
+			return nil, fmt.Errorf("sandbox writable environment path %s is invalid", name)
+		}
+		if value == "/tmp" {
+			continue
+		}
+		if value == "/workspace" || strings.HasPrefix(value, "/workspace/") ||
+			value == "/run/loki" || strings.HasPrefix(value, "/run/loki/") {
+			return nil, fmt.Errorf("sandbox writable environment path %s overlaps protected workload mounts", name)
+		}
+		result[value] = options
+	}
 	return result, nil
 }
 
@@ -599,7 +633,10 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		environment = append(environment, "SSH_AUTH_SOCK=/run/loki/signing/agent.sock")
 		sort.Strings(environment)
 	}
-	tmpfs := fmt.Sprintf("rw,noexec,nosuid,nodev,size=%d,uid=%d,gid=%d,mode=0700", p.tmpfsBytes, p.uid, p.gid)
+	scratchTmpfs, err := workloadScratchTmpfs(environment, p.uid, p.gid, p.tmpfsBytes)
+	if err != nil {
+		return Plan{}, err
+	}
 	needsGateway := network == NetworkDependencyInstall || len(endpoints) > 0
 	create := dockerCreateRequest{
 		Image:           p.image,
@@ -629,7 +666,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 					Propagation: "rprivate",
 				},
 			}},
-			Tmpfs:        map[string]string{"/tmp": tmpfs},
+			Tmpfs:        scratchTmpfs,
 			PortBindings: map[string][]dockerPortBinding{},
 			Init:         true,
 		},

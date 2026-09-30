@@ -80,6 +80,7 @@ func TestOCIJobAcceptanceRunnerBootstrapsFixtures(t *testing.T) {
 	goCall := mustRead(t, goLog)
 	for _, required := range []string{
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobWritableEnvironmentAndGitPersistence$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobScriptAuthorityBoundary$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobDetachedDescendantCleanup$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
@@ -167,6 +168,7 @@ func TestOCIJobAcceptanceRunnerUsesImmutableReleaseImage(t *testing.T) {
 	for _, required := range []string{
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobNetworkEndpointPreview$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobLifecycle$ -v -count=1",
+		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobWritableEnvironmentAndGitPersistence$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobScriptAuthorityBoundary$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobDetachedDescendantCleanup$ -v -count=1",
 		"args=test ./internal/platform/sandbox -run ^TestRealOCIJobRecoveryAndBoundedOutput$ -v -count=1",
@@ -174,6 +176,64 @@ func TestOCIJobAcceptanceRunnerUsesImmutableReleaseImage(t *testing.T) {
 	} {
 		if !strings.Contains(goCalls, required) {
 			t.Errorf("release-image invocation missing %q:\n%s", required, goCalls)
+		}
+	}
+}
+
+func TestOCIJobAcceptanceRunnerAggregatesIndependentFailures(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("runner is Linux-only")
+	}
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(root, "scripts", "verify", "accept-oci-jobs.sh")
+	bin := t.TempDir()
+	dockerLog := filepath.Join(t.TempDir(), "docker.log")
+	goLog := filepath.Join(t.TempDir(), "go.log")
+	writeExecutable(t, filepath.Join(bin, "docker"), fakeOCIJobDocker)
+	writeExecutable(t, filepath.Join(bin, "go"), fakeOCIJobGo)
+
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	image := "ghcr.io/jinyongp/loki@sha256:" + strings.Repeat("c", 64)
+	command := exec.Command("sh", script)
+	command.Dir = root
+	command.Env = append(os.Environ(),
+		"PATH="+bin+":"+os.Getenv("PATH"),
+		"TMPDIR="+t.TempDir(),
+		"LOKI_TEST_DOCKER_SOCKET="+socket,
+		"LOKI_OCI_ACCEPTANCE_IMAGE="+image,
+		"LOKI_FAKE_DOCKER_LOG="+dockerLog,
+		"LOKI_FAKE_GO_LOG="+goLog,
+		"LOKI_FAKE_GO_FAIL_PATTERN=TestRealOCIJobLifecycle",
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("runner unexpectedly passed:\n%s", output)
+	}
+	if !strings.Contains(string(output), "failed 1 test(s); all independent OCI cases were attempted") {
+		t.Fatalf("runner did not aggregate the failure:\n%s", output)
+	}
+
+	goCalls := mustRead(t, goLog)
+	for _, required := range []string{
+		"^TestRealOCIJobNetworkEndpointPreview$",
+		"^TestRealOCIJobLifecycle$",
+		"^TestRealOCIJobWritableEnvironmentAndGitPersistence$",
+		"^TestRealOCIJobScriptAuthorityBoundary$",
+		"^TestRealOCIJobDetachedDescendantCleanup$",
+		"^TestRealOCIJobRecoveryAndBoundedOutput$",
+	} {
+		if !strings.Contains(goCalls, required) {
+			t.Errorf("OCI runner stopped before %s after an independent failure:\n%s", required, goCalls)
 		}
 	}
 }
@@ -190,8 +250,11 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
 		"go build -trimpath",
 		"-o /out/loki ./cmd/loki",
+		"FROM alpine/git:2.54.0@sha256:",
+		"COPY --from=git-root / /",
 		"FROM alpine:3.24.2@sha256:",
 		"COPY --from=build /out/loki /opt/loki/bin/loki",
+		"COPY config/gitconfig /usr/share/doc/loki/gitconfig",
 		"COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/",
 		"CMD [\"/bin/sh\"]",
 	} {
@@ -282,4 +345,7 @@ set -eu
   printf 'LOKI_TEST_DOCKER_WORKSPACE=%s\n' "$LOKI_TEST_DOCKER_WORKSPACE"
   printf 'LOKI_TEST_EGRESS_ALLOWED_AUTHORITY=%s\n' "$LOKI_TEST_EGRESS_ALLOWED_AUTHORITY"
 } >>"$LOKI_FAKE_GO_LOG"
+case " $* " in
+  *"${LOKI_FAKE_GO_FAIL_PATTERN:-__never_match__}"*) exit 1 ;;
+esac
 `
