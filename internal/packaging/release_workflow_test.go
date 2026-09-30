@@ -44,6 +44,8 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"Verify OCI runtime",
 		"Verify Windows WSL appliance",
 		"windows-2025",
+		"Parse Windows verification scripts",
+		"[void][scriptblock]::Create",
 		".\\scripts\\verify\\accept-wsl.ps1",
 		"wsl-accept:",
 		"windows-provider-acceptance:",
@@ -59,9 +61,9 @@ func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
 		"pattern: loki-release-inputs-*",
 		"merge-multiple: true",
 		"Restore release input executable modes",
-		"Restore candidate executable modes",
+		"Prepare release candidate",
+		"sh ./scripts/verify/prepare-candidate.sh",
 		"path: ${{ runner.temp }}/candidate",
-		`chmod 0755 "$RUNNER_TEMP/candidate/inputs/loki" "$RUNNER_TEMP/candidate/inputs/loki-bootstrap" "$RUNNER_TEMP/candidate/inputs/loki-windows-amd64.exe"`,
 		"LOKI_BUILD_CACHE_SCOPE: release-inputs",
 		"LOKI_BUILD_CACHE_SCOPE=loki-core",
 		"LOKI_BUILD_CACHE_SCOPE=loki-browser",
@@ -198,9 +200,31 @@ func TestReleaseAcceptanceDomainsAreIndependent(t *testing.T) {
 	if strings.Contains(between("release-inputs", "source-gates"), "Verify release container pins are current") {
 		t.Fatal("release input construction must not be suppressed by independent pin freshness validation")
 	}
-	for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- oci-gates", "- release-inputs"} {
-		if strings.Contains(between("source-race", "build"), forbidden) {
+	race := between("source-race", "build")
+	for _, required := range []string{
+		"- release-inputs",
+		"if: ${{ always() && needs.preflight.result == 'success' }}",
+		"name: loki-release-inputs-amd64",
+		"LOKI_TEST_RG:",
+	} {
+		if !strings.Contains(race, required) {
+			t.Fatalf("race validation lacks pinned-tool fan-out contract %q", required)
+		}
+	}
+	for _, forbidden := range []string{"- source-gates", "- source-runtime-contracts", "- oci-gates", "- release-contracts"} {
+		if strings.Contains(race, forbidden) {
 			t.Fatalf("race validation still depends on independent gate %q", forbidden)
+		}
+	}
+	source := between("source-gates", "source-runtime-contracts")
+	for _, required := range []string{
+		"- release-inputs",
+		"if: ${{ always() && needs.preflight.result == 'success' }}",
+		"name: loki-release-inputs-amd64",
+		"LOKI_TEST_RG:",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("source validation lacks pinned-tool fan-out contract %q", required)
 		}
 	}
 	for _, forbidden := range []string{"- source-gates", "- source-race", "- oci-gates", "- release-contracts"} {
@@ -437,6 +461,9 @@ func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
 		"verify_frontend",
 		"verify_go_builder",
 		"verify_alpine_runtime",
+		"release dependency check unavailable",
+		"current digest could not be resolved after 3 attempts",
+		"while test \"$attempt\" -le 3",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("release pin verifier lacks %q", required)

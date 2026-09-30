@@ -9,6 +9,11 @@ fail() {
   exit 1
 }
 
+unavailable() {
+  printf '::error title=release dependency check unavailable::%s\n' "$*" >&2
+  exit 1
+}
+
 require() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 is required for release pin verification"
 }
@@ -134,8 +139,23 @@ verify_metadata() {
 }
 
 inspect_digest() {
-  docker buildx imagetools inspect "$1" |
-    awk '$1 == "Digest:" { print $2; exit }'
+  image=$1
+  attempt=1
+  while test "$attempt" -le 3; do
+    output=$(docker buildx imagetools inspect "$image" 2>&1) && {
+      digest=$(printf '%s\n' "$output" | awk '$1 == "Digest:" { print $2; exit }')
+      test -n "$digest" && {
+        printf '%s\n' "$digest"
+        return 0
+      }
+    }
+    if test "$attempt" -lt 3; then
+      sleep 2
+    fi
+    attempt=$((attempt + 1))
+  done
+  printf '%s\n' "$output" >&2
+  return 1
 }
 
 verify_ref() {
@@ -143,8 +163,9 @@ verify_ref() {
   floating=$2
   label=$3
   pinned_digest=${pinned##*@}
-  current_digest=$(inspect_digest "$floating")
-  test -n "$current_digest" && test "$pinned_digest" = "$current_digest" ||
+  current_digest=$(inspect_digest "$floating") ||
+    unavailable "$label current digest could not be resolved after 3 attempts ($floating)"
+  test "$pinned_digest" = "$current_digest" ||
     fail "$label digest is stale: pinned $pinned_digest, current $current_digest ($floating)"
 }
 

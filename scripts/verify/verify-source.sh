@@ -9,6 +9,20 @@ fi
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo"
 
+if test -n "${LOKI_TEST_RG:-}"; then
+  test -x "$LOKI_TEST_RG" || {
+    echo "loki validation: profile=source prerequisite=LOKI_TEST_RG is not executable: $LOKI_TEST_RG" >&2
+    exit 1
+  }
+else
+  LOKI_TEST_RG=$(command -v rg || true)
+  test -n "$LOKI_TEST_RG" || {
+    echo "loki validation: profile=source prerequisite=ripgrep is required; set LOKI_TEST_RG to a pinned executable" >&2
+    exit 1
+  }
+  export LOKI_TEST_RG
+fi
+
 printf 'loki validation: profile=source scope=deterministic-source integration=excluded\n'
 
 failures=0

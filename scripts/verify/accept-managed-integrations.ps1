@@ -97,7 +97,7 @@ function Invoke-AcceptanceSection([string]$Name, [scriptblock]$Body, [scriptbloc
     try {
         & $Body
     } catch {
-        $message = "$Name: $($_.Exception.Message)"
+        $message = "${Name}: $($_.Exception.Message)"
         $failures.Add($message)
         Write-Warning $message
     } finally {
@@ -105,7 +105,7 @@ function Invoke-AcceptanceSection([string]$Name, [scriptblock]$Body, [scriptbloc
             try {
                 & $Cleanup
             } catch {
-                $message = "$Name cleanup: $($_.Exception.Message)"
+                $message = "${Name} cleanup: $($_.Exception.Message)"
                 $failures.Add($message)
                 Write-Warning $message
             }

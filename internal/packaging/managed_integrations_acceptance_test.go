@@ -26,6 +26,8 @@ func TestWSLGatesManagedIntegrationLifecycle(t *testing.T) {
 		`Invoke-AcceptanceSection "managed signing through isolated MCP Jobs"`,
 		`Invoke-AcceptanceSection "final optional authority and catalog invariants"`,
 		`$failures.Count -gt 0`,
+		`$message = "${Name}: $($_.Exception.Message)"`,
+		`$message = "${Name} cleanup: $($_.Exception.Message)"`,
 		`"integration", "enable", "--distribution", $Distribution, "browser"`,
 		`"browser_session" @{ action = "start" }`,
 		`"integration", "setup", "signing"`,

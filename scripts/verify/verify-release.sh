@@ -25,6 +25,7 @@ require_digest() {
   esac
 }
 
+sh "$repo/scripts/verify/prepare-candidate.sh" "$candidate" || fail "candidate executable preparation failed"
 test -x "$candidate/install.sh" || fail "candidate install script is missing"
 test -n "$signing_key" || fail "LOKI_SIGNING_KEY_FILE is required for signing acceptance"
 test -f "$signing_key" || fail "signing fixture does not exist: $signing_key"

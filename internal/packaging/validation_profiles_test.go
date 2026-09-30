@@ -31,6 +31,7 @@ func TestValidationProfilesKeepRequiredBoundaries(t *testing.T) {
 		"git diff --check",
 		"integration=excluded",
 		"all independent source checks were attempted",
+		"ripgrep is required; set LOKI_TEST_RG to a pinned executable",
 	} {
 		if !strings.Contains(source, required) {
 			t.Errorf("source profile lacks %q", required)
@@ -41,7 +42,7 @@ func TestValidationProfilesKeepRequiredBoundaries(t *testing.T) {
 	}
 
 	race := read("verify-race.sh")
-	for _, required := range []string{"profile=race", "go test -race ./... -count=1", "integration=excluded"} {
+	for _, required := range []string{"profile=race", "go test -race ./... -count=1", "integration=excluded", "ripgrep is required; set LOKI_TEST_RG to a pinned executable"} {
 		if !strings.Contains(race, required) {
 			t.Errorf("race profile lacks %q", required)
 		}
@@ -113,11 +114,52 @@ func TestValidationProfileShellSyntax(t *testing.T) {
 		"verify-race.sh",
 		"verify-preflight.sh",
 		"verify-release.sh",
+		"prepare-candidate.sh",
 		"accept-oci-jobs.sh",
 	} {
 		path := filepath.Join(root, "scripts", "verify", name)
 		if output, err := exec.Command("sh", "-n", path).CombinedOutput(); err != nil {
 			t.Errorf("%s shell syntax: %v\n%s", name, err, output)
+		}
+	}
+}
+
+func TestCandidatePreparationRestoresExecutableModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("candidate preparation is a POSIX release-engineering helper")
+	}
+	root := filepath.Join("..", "..")
+	candidate := t.TempDir()
+	for _, relative := range []string{
+		"install.sh",
+		filepath.Join("inputs", "loki"),
+		filepath.Join("inputs", "loki-bootstrap"),
+		filepath.Join("inputs", "loki-windows-amd64.exe"),
+	} {
+		path := filepath.Join(candidate, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := filepath.Join(root, "scripts", "verify", "prepare-candidate.sh")
+	if output, err := exec.Command("sh", script, candidate).CombinedOutput(); err != nil {
+		t.Fatalf("prepare candidate: %v\n%s", err, output)
+	}
+	for _, relative := range []string{
+		"install.sh",
+		filepath.Join("inputs", "loki"),
+		filepath.Join("inputs", "loki-bootstrap"),
+		filepath.Join("inputs", "loki-windows-amd64.exe"),
+	} {
+		info, err := os.Stat(filepath.Join(candidate, relative))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0755 {
+			t.Errorf("%s mode = %o, want 0755", relative, info.Mode().Perm())
 		}
 	}
 }
