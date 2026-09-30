@@ -275,7 +275,7 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"PCRE2_SYS_STATIC=1",
 		"cargo build --locked --profile release-lto --features pcre2",
 		`/out/devtools version | grep -q '"version":"0.21.0"'`,
-		`/out/gh version | grep -q '^gh version 2\.101\.0 '`,
+		`/out/gh version | grep -q '^gh version 2\.102\.0 '`,
 		`/src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0 '`,
 		"/src/ripgrep/target/release-lto/rg",
 		"AS go-export",
