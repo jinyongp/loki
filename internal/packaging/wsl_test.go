@@ -28,6 +28,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"UBUNTU_CURL_VERSION=8.5.0-2ubuntu10.15",
 		"UBUNTU_DBUS_VERSION=1.14.10-4ubuntu4.1",
 		"UBUNTU_IPTABLES_VERSION=1.8.10-3ubuntu2",
+		"UBUNTU_KMOD_VERSION=31+20240202-2ubuntu7.2",
+		"UBUNTU_LIBPAM_SYSTEMD_VERSION=255.4-1ubuntu8.17",
 		"UBUNTU_PASSWD_VERSION=1:4.13+dfsg1-4ubuntu3.2",
 		"UBUNTU_SYSTEMD_VERSION=255.4-1ubuntu8.17",
 		"UBUNTU_SYSTEMD_SYSV_VERSION=255.4-1ubuntu8.17",
@@ -36,6 +38,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		`"curl=$UBUNTU_CURL_VERSION"`,
 		`"dbus=$UBUNTU_DBUS_VERSION"`,
 		`"iptables=$UBUNTU_IPTABLES_VERSION"`,
+		`"kmod=$UBUNTU_KMOD_VERSION"`,
+		`"libpam-systemd=$UBUNTU_LIBPAM_SYSTEMD_VERSION"`,
 		`"passwd=$UBUNTU_PASSWD_VERSION"`,
 		`"systemd=$UBUNTU_SYSTEMD_VERSION"`,
 		`"systemd-sysv=$UBUNTU_SYSTEMD_SYSV_VERSION"`,
@@ -103,6 +107,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"containerd.io=2.3.6-1~ubuntu.24.04~noble",
 		"docker-ce=5:29.8.1-1~ubuntu.24.04~noble",
 		"systemd=255.4-1ubuntu8.17",
+		"kmod=31+20240202-2ubuntu7.2",
+		"libpam-systemd:amd64=255.4-1ubuntu8.17",
 	} {
 		if !strings.Contains("\n"+aptLock+"\n", "\n"+required+"\n") {
 			t.Errorf("WSL apt transaction lock lacks %q", required)

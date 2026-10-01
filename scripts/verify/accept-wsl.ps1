@@ -86,10 +86,19 @@ function Get-RegisteredDistributions {
         Where-Object { $_ }
 }
 
+function Assert-WSLBootHealthy([string]$Distribution) {
+    $userTarget = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--exec", "/usr/bin/systemctl", "--user", "is-active", "default.target")
+    if ($userTarget -ne "active") { Fail "default WSL user systemd session is not active: $userTarget" }
+
+    $failedUnits = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/bin/systemctl", "--failed", "--no-legend", "--plain")
+    if ($failedUnits) { Fail "WSL boot left failed systemd units: $failedUnits" }
+}
+
 function Wait-LokiHealthy([string]$Distribution, [int]$Attempts = 90) {
     for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
         & wsl.exe -d $Distribution --user root --exec /usr/local/bin/loki host doctor --system *> $null
         if ($LASTEXITCODE -eq 0) {
+            Assert-WSLBootHealthy $Distribution
             return
         }
         Start-Sleep -Seconds 2
@@ -201,6 +210,7 @@ try {
     $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
     $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
     if ($whoami -ne "ubuntu" -or $uid -ne "1000") { Fail "default WSL user is $whoami/$uid, expected ubuntu/1000" }
+    Assert-WSLBootHealthy $distributionName
 
     $groups = Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/id", "-nG", "ubuntu")
     if (($groups -split "\s+") -contains "docker") { Fail "default WSL user received Docker group authority" }
@@ -424,6 +434,7 @@ try {
             Start-Sleep -Seconds 2
         }
         if (-not $recovered) { Fail "Loki did not recover when the owned keepalive task was started as a logon/reboot simulation" }
+        Assert-WSLBootHealthy $distributionName
         Assert-WindowsMCPReachability ([string]$windowsConnection.local_origin.url) $windowsToken
 
         $uninstallOutput = @(& $canonicalFrontend uninstall --distribution $distributionName --approve 2>&1)

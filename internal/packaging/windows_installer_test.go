@@ -137,6 +137,9 @@ func TestWindowsWSLAcceptanceUsesVerifiedCandidateFrontend(t *testing.T) {
 		"Windows MCP token copy does not match",
 		"Windows ownership manifest is missing",
 		"Windows cannot reach the WSL MCP endpoint through localhost forwarding",
+		"Assert-WSLBootHealthy $distributionName",
+		"default WSL user systemd session is not active",
+		"WSL boot left failed systemd units",
 	} {
 		if !strings.Contains(body, required) {
 			t.Errorf("Windows WSL acceptance lacks %q", required)

@@ -58,6 +58,9 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("etc/passwd", 0644, "root:x:0:0:root:/root:/bin/bash\nubuntu:x:1000:1000:ubuntu:/home/ubuntu:/bin/bash\n")
 	write("etc/group", 0644, "root:x:0:\nubuntu:x:1000:\ndocker:x:999:\n")
 	write("etc/shadow", 0600, "root:*:20000:0:99999:7:::\nubuntu:!::0:99999:7:::\n")
+	write("usr/lib/pam.d/systemd-user", 0644, "session optional pam_systemd.so\n")
+	write("usr/lib/x86_64-linux-gnu/security/pam_systemd.so", 0644, "fixture-pam-module\n")
+	write("usr/bin/kmod", 0755, "fixture-kmod\n")
 	write("usr/lib/loki-appliance/loki", 0755, "fixture-host-binary\n")
 	write("usr/lib/loki-appliance/release-manifest.json", 0600, "{\"fixture\":true}\n")
 	write("usr/lib/loki-appliance/configure-install", 0755, "#!/bin/sh\nsystemctl start --no-block loki-appliance-provision.service\n")
@@ -107,6 +110,36 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	command := exec.Command("/bin/sh", filepath.Join(repo, "scripts", "verify", "verify-wsl.sh"), archive, host, manifest)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("verify synthetic WSL archive: %v\n%s", err, output)
+	}
+
+	for _, missing := range []string{
+		"usr/lib/pam.d/systemd-user",
+		"usr/lib/x86_64-linux-gnu/security/pam_systemd.so",
+		"usr/bin/kmod",
+	} {
+		t.Run("missing/"+missing, func(t *testing.T) {
+			path := filepath.Join(root, filepath.FromSlash(missing))
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { write(missing, info.Mode(), string(content)) })
+			broken := filepath.Join(t.TempDir(), "missing.wsl")
+			if err := writeWSLTestArchive(root, broken); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command("/bin/sh", filepath.Join(repo, "scripts", "verify", "verify-wsl.sh"), broken, host, manifest)
+			if output, err := command.CombinedOutput(); err == nil {
+				t.Fatalf("WSL verifier accepted missing boot dependency %s: %s", missing, output)
+			}
+		})
 	}
 }
 

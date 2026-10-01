@@ -42,6 +42,9 @@ for required in \
   etc/passwd \
   etc/group \
   etc/shadow \
+  usr/lib/pam.d/systemd-user \
+  usr/bin/kmod \
+  usr/lib/x86_64-linux-gnu/security/pam_systemd.so \
   usr/lib/loki-appliance/loki \
   usr/lib/loki-appliance/release-manifest.json \
   usr/lib/loki-appliance/configure-install \
@@ -105,6 +108,7 @@ test "$(stat -c '%a' "$root/etc/wsl-distribution.conf")" = 644
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/release-manifest.json")" = 600
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/loki")" = 755
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/configure-install")" = 755
+test -x "$root/usr/bin/kmod"
 test "$(stat -c '%a' "$root/home/ubuntu/workspace")" = 750
 
 grep -Fxq 'systemd=true' "$root/etc/wsl.conf"
