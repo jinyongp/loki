@@ -20,6 +20,19 @@ func runHostGitHubBrowserSetup(options hostIntegrationOptions, store *lifecycle.
 		return 1
 	}
 	handler := &hostGitHubSetup{Store: store}
+	handler.Reconcile = func(ctx context.Context) error {
+		backend, err := newHostComposeBackend(store)
+		if err != nil {
+			return err
+		}
+		reporter, stop := startHostIntegrationProgress(ctx, stderr, "setup", "github")
+		defer stop()
+		backend.Progress = reporter
+		manager := lifecycle.Manager{Store: store, Jobs: backend, Maintainer: &lifecycle.TransactionEngine{
+			Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter,
+		}}
+		return manager.RecoverManagedIntegration(ctx, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+	}
 	handler.Ready = func(ctx context.Context) (bool, error) {
 		backend, err := newHostComposeBackend(store)
 		if err != nil {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"loki/internal/host/githubsetup"
 	"loki/internal/host/lifecycle"
@@ -393,5 +394,170 @@ func TestGitHubDiscoveryAcceptsExistingRepositoryNameContract(t *testing.T) {
 	configured, err := h.Handle(t.Context(), githubsetup.Request{Action: "poll"})
 	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/-repo,example/repo-" {
 		t.Fatalf("existing repository names rejected: view=%+v err=%v", configured, err)
+	}
+}
+
+func TestGitHubSetupResumesInterruptedLifecycleApply(t *testing.T) {
+	for _, phase := range []lifecycle.OperationPhase{lifecycle.PhaseMigrate, lifecycle.PhaseHealth} {
+		t.Run(string(phase), func(t *testing.T) {
+			h, _ := browserSetupFixture(t)
+			now := time.Now().UTC()
+			generation := hostGenerationFixture(t, now)
+			if err := h.Store.InitializeInstall(t.Context(), generation, lifecycle.InstallationState{Scope: "user", Workspace: t.TempDir()}, now); err != nil {
+				t.Fatal(err)
+			}
+			if err := h.Store.CommitGeneration(t.Context(), generation, now); err != nil {
+				t.Fatal(err)
+			}
+			begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "poll"}); err != nil {
+				t.Fatal(err)
+			}
+			backend := &fakeHostRuntimeBackend{active: generation.ID}
+			snapshot, err := h.Store.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			runtime, err := backend.Snapshot(t.Context(), lifecycle.OperationUpdateIntegration, snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runtime.ManagedIntegrationRef, err = h.Store.CaptureManagedIntegrationSnapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			backup, err := lifecycle.NewBackupRecord(lifecycle.OperationUpdateIntegration, snapshot, runtime, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = h.Store.SaveBackup(t.Context(), backup); err != nil {
+				t.Fatal(err)
+			}
+			plan, err := lifecycle.Prepare(snapshot.Installed, *snapshot.Installed, snapshot.Host, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lock, err := lifecycle.AcquireOperationLock(h.Store.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = lock.Close() })
+			journal, err := lifecycle.OpenOperationJournal(h.Store.Root, lock, lifecycle.OperationJournalOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			record, err := journal.Begin(lifecycle.OperationUpdateIntegration, plan, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = journal.RecordSnapshot(record.ID, backup.ID, now); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := h.Store.ReadGitHubSetup(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved githubSetupSession
+			if err = json.Unmarshal(raw, &saved); err != nil {
+				t.Fatal(err)
+			}
+			clear(raw)
+			defer clear(saved.PrivateKey)
+			commit := func(ctx context.Context, store *lifecycle.FileStore, configRaw, keyRaw []byte) error {
+				configDigest, err := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubConfigFile, configRaw)
+				if err != nil {
+					return err
+				}
+				keyDigest, err := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubCredentialFile, keyRaw)
+				if err != nil {
+					return err
+				}
+				state, err := store.ReadManagedIntegrations(ctx)
+				if err != nil {
+					return err
+				}
+				state.GitHub = lifecycle.ManagedIntegrationToggle{Configured: true, Enabled: true, ConfigSHA256: configDigest, CredentialSHA256: keyDigest}
+				return store.CommitManagedIntegrations(ctx, state, "setup-github", time.Now().UTC())
+			}
+			if err = commit(t.Context(), h.Store, saved.ConfigRaw, saved.PrivateKey); err != nil {
+				t.Fatal(err)
+			}
+			for _, next := range []lifecycle.OperationPhase{lifecycle.PhaseSwitch, lifecycle.PhaseMigrate, lifecycle.PhaseRestart, lifecycle.PhaseHealth} {
+				if _, err = journal.Advance(record.ID, next, now); err != nil {
+					t.Fatal(err)
+				}
+				if next == phase {
+					break
+				}
+			}
+			if phase == lifecycle.PhaseMigrate {
+				if err = backend.Stop(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err = lock.Close(); err != nil {
+				t.Fatal(err)
+			}
+			// Atomic journal publication can leave a safe temporary file after a kill.
+			if err = os.WriteFile(filepath.Join(h.Store.Root, "operations", ".loki-private-interrupted"), []byte("partial operation record"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			engine := &lifecycle.TransactionEngine{Store: h.Store, Backend: backend}
+			manager := lifecycle.Manager{Store: h.Store, Jobs: staticHostJobs{jobs: []string{"job-active"}}, Maintainer: engine}
+			h.Reconcile = func(ctx context.Context) error {
+				return manager.RecoverManagedIntegration(ctx, lifecycle.MutationOptions{})
+			}
+			var blocked *lifecycle.BlockedJobsError
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:43/callback"}); !errors.As(err, &blocked) {
+				t.Fatalf("recovery bypassed active-job policy: %v", err)
+			}
+			h.Reconcile = func(ctx context.Context) error {
+				return manager.RecoverManagedIntegration(ctx, lifecycle.MutationOptions{InterruptActiveJobs: true})
+			}
+			h.Ready = func(ctx context.Context) (bool, error) {
+				state, err := h.Store.ReadManagedIntegrations(ctx)
+				return state.GitHub.Configured && backend.active != "", err
+			}
+			h.Apply = func(ctx context.Context, candidate managedGitHubCandidate) error {
+				return engine.UpdateManagedIntegration(ctx, "github", func(ctx context.Context, store *lifecycle.FileStore) error {
+					return commit(ctx, store, candidate.ConfigRaw, candidate.KeyRaw)
+				})
+			}
+			resumed, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:43/callback"})
+			if err != nil || resumed.Phase != "configured" {
+				t.Fatalf("interrupted apply did not resume its saved App: phase=%s err=%v", resumed.Phase, err)
+			}
+			state, err := h.Store.ReadManagedIntegrations(t.Context())
+			if err != nil || state.GitHub.Configured {
+				t.Fatal("interrupted transaction was not recovered before readiness")
+			}
+			operations, err := lifecycle.ReadOperationSnapshot(h.Store.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, operation := range operations {
+				if operation.ID == record.ID && operation.State != lifecycle.OperationRolledBack {
+					t.Fatal("unfinished apply was not rolled back")
+				}
+			}
+			ready, err := h.Handle(t.Context(), githubsetup.Request{Action: "apply"})
+			if err != nil || ready.Phase != "ready" {
+				t.Fatalf("saved App could not be reapplied: phase=%s err=%v", ready.Phase, err)
+			}
+			raw, err = h.Store.ReadGitHubSetup(t.Context())
+			if err != nil || len(raw) != 0 {
+				t.Fatal("successful reapply retained pending key")
+			}
+			manager.Jobs = staticHostJobs{err: errors.New("a committed integration must not query jobs for recovery")}
+			if err = manager.RecoverManagedIntegration(t.Context(), lifecycle.MutationOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

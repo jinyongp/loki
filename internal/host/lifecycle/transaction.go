@@ -500,6 +500,27 @@ func (e *TransactionEngine) UpdateManagedComponentIntegration(
 	return err
 }
 
+// RecoverManagedIntegration reconciles an interrupted integration update before
+// its published configuration can be treated as committed.
+func (e *TransactionEngine) RecoverManagedIntegration(ctx context.Context) error {
+	if e == nil || e.Store == nil || e.Backend == nil {
+		return errors.New("host lifecycle managed integration transaction is not configured")
+	}
+	lock, journal, err := e.openJournal(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	active, found, err := journal.Active()
+	if err != nil {
+		return err
+	}
+	if found && active.Kind != OperationUpdateIntegration {
+		return errors.New("an interrupted host lifecycle operation requires recovery before integration setup")
+	}
+	return e.recoverInterrupted(ctx, journal)
+}
+
 func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name string, mutate ManagedIntegrationMutation) error {
 	if e == nil || e.Store == nil || e.Backend == nil || mutate == nil {
 		return errors.New("host lifecycle managed integration transaction is not configured")

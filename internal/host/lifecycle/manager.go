@@ -254,6 +254,46 @@ type ManagedIntegrationMaintainer interface {
 	UpdateManagedComponentIntegration(context.Context, string, bool, ManagedIntegrationMutation) error
 }
 
+// RecoverManagedIntegration preserves the existing job interruption policy for
+// recovery, while leaving an already committed installation untouched.
+func (m Manager) RecoverManagedIntegration(ctx context.Context, options MutationOptions) error {
+	store, ok := m.Store.(*FileStore)
+	if !ok || store == nil {
+		return errors.New("host lifecycle file store is not configured")
+	}
+	lock, err := AcquireOperationLock(store.Root)
+	if err != nil {
+		return err
+	}
+	journal, err := OpenOperationJournal(store.Root, lock, OperationJournalOptions{})
+	if err != nil {
+		_ = lock.Close()
+		return err
+	}
+	active, found, err := journal.Active()
+	closeErr := lock.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if !found {
+		return ctx.Err()
+	}
+	if active.Kind != OperationUpdateIntegration {
+		return errors.New("an interrupted host lifecycle operation requires recovery before integration setup")
+	}
+	if _, err = m.mutationJobs(ctx, options); err != nil {
+		return err
+	}
+	maintainer, ok := m.Maintainer.(interface{ RecoverManagedIntegration(context.Context) error })
+	if !ok {
+		return errors.New("host lifecycle managed integration recovery is not configured")
+	}
+	return maintainer.RecoverManagedIntegration(ctx)
+}
+
 func (m Manager) UpdateManagedIntegration(
 	ctx context.Context,
 	name string,

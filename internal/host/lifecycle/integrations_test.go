@@ -115,6 +115,47 @@ func TestManagedIntegrationSnapshotRoundTripAndLegacyRestore(t *testing.T) {
 	}
 }
 
+func TestManagedIntegrationRecoveryPreservesOtherInterruptedOperations(t *testing.T) {
+	store, backend, _, _, now, _ := transactionFixture(t)
+	engine := &TransactionEngine{Store: store, Backend: backend, Now: func() time.Time { return now }}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, journal, err := engine.openJournal(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lock.Close() })
+	record, err := journal.Begin(OperationApply, plan, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	manager := Manager{Store: store, Maintainer: engine}
+	for _, recover := range []func(context.Context) error{
+		engine.RecoverManagedIntegration,
+		func(ctx context.Context) error { return manager.RecoverManagedIntegration(ctx, MutationOptions{}) },
+	} {
+		if err = recover(t.Context()); err == nil || !strings.Contains(err.Error(), "requires recovery") {
+			t.Fatalf("integration setup tried to recover a release operation: %v", err)
+		}
+	}
+	records, err := ReadOperationSnapshot(store.Root)
+	if err != nil || len(records) != 1 || records[0].ID != record.ID || records[0].State != OperationApplying {
+		t.Fatal("integration recovery changed the release journal")
+	}
+	if backend.restartCalls != 0 || backend.healthCalls != 0 {
+		t.Fatal("integration recovery changed the release runtime")
+	}
+}
+
 func TestManagedIntegrationTransactionRestoresCredentialAndStateOnHealthFailure(t *testing.T) {
 	store, backend, _, _, now, _ := transactionFixture(t)
 	oldCredential := []byte("old-platform-private-key")

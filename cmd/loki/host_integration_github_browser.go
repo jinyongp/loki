@@ -39,12 +39,13 @@ type githubSetupSession struct {
 	Repositories []string  `json:"repositories,omitempty"`
 }
 type hostGitHubSetup struct {
-	Store  *lifecycle.FileStore
-	Client *http.Client
-	APIURL string
-	Now    func() time.Time
-	Apply  func(context.Context, managedGitHubCandidate) error
-	Ready  func(context.Context) (bool, error)
+	Store     *lifecycle.FileStore
+	Client    *http.Client
+	APIURL    string
+	Now       func() time.Time
+	Reconcile func(context.Context) error
+	Apply     func(context.Context, managedGitHubCandidate) error
+	Ready     func(context.Context) (bool, error)
 }
 
 func (h *hostGitHubSetup) now() time.Time {
@@ -64,6 +65,11 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		return githubsetup.View{}, err
 	}
 	defer lock.Close()
+	if h.Reconcile != nil {
+		if err = h.Reconcile(ctx); err != nil {
+			return githubsetup.View{}, err
+		}
+	}
 	current, err := h.Store.ReadManagedIntegrations(ctx)
 	if err != nil {
 		return githubsetup.View{}, err
