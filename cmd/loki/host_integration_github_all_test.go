@@ -53,7 +53,7 @@ func TestGitHubBrowserFollowsInstallationSelectionWithoutRepositorySnapshot(t *t
 }
 
 func TestManagedGitHubAllRepositoriesValidatesInstallationAndRevokesProbeToken(t *testing.T) {
-	for _, scenario := range []string{"repository", "empty", "other-owner"} {
+	for _, scenario := range []string{"repository", "mixed-case", "empty", "other-owner"} {
 		t.Run(scenario, func(t *testing.T) {
 			candidate := managedGitHubCandidateFixture(t)
 			defer clear(candidate.KeyRaw)
@@ -93,6 +93,9 @@ func TestManagedGitHubAllRepositoriesValidatesInstallationAndRevokesProbeToken(t
 						t.Fatal("invalid probe credential")
 					}
 					body = `{"total_count":1,"repositories":[{"name":"repo","owner":{"login":"example-org"}}]}`
+					if scenario == "mixed-case" {
+						body = `{"total_count":1,"repositories":[{"name":"RePo","owner":{"login":"Example-ORG"}}]}`
+					}
 					if scenario == "empty" {
 						body = `{"total_count":0,"repositories":[]}`
 					}
@@ -101,6 +104,9 @@ func TestManagedGitHubAllRepositoriesValidatesInstallationAndRevokesProbeToken(t
 					status = 204
 				case "/repos/example-org/repo":
 					body = `{"full_name":"example-org/repo","default_branch":"main","html_url":"https://github.com/example-org/repo"}`
+					if scenario == "mixed-case" {
+						body = `{"full_name":"Example-ORG/RePo","default_branch":"main","html_url":"https://github.com/Example-ORG/RePo"}`
+					}
 				default:
 					t.Fatalf("unexpected request %s", r.URL.Path)
 				}

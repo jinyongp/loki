@@ -79,6 +79,35 @@ func TestProviderTypedReadsUseRepositoryScopedAPI(t *testing.T) {
 	}
 }
 
+func TestProviderRepositoryIdentityIgnoresCaseAndRejectsOtherTargets(t *testing.T) {
+	for _, test := range []struct {
+		fullName string
+		allowed  bool
+	}{
+		{"owner/repo", true}, {"Owner/RePo", true}, {"OWNER/REPO", true},
+		{"other/repo", false}, {"owner/other", false}, {"", false}, {"owner/repo/extra", false},
+	} {
+		t.Run(test.fullName, func(t *testing.T) {
+			provider := providerFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/repos/owner/repo" {
+					t.Errorf("unexpected repository request: %s", r.URL.Path)
+				}
+				json.NewEncoder(w).Encode(map[string]any{
+					"full_name": test.fullName, "default_branch": "main",
+					"html_url": "https://github.com/" + test.fullName,
+				})
+			})
+			result, err := provider.Read(t.Context(), ProviderReadRequest{Target: "Owner/Repo", Action: ProviderReadRepository})
+			if (err == nil) != test.allowed {
+				t.Fatalf("full_name=%q err=%v", test.fullName, err)
+			}
+			if test.allowed && (result.Target != "owner/repo" || result.Repository["full_name"] != test.fullName) {
+				t.Fatalf("canonical target or GitHub display name changed: %+v", result)
+			}
+		})
+	}
+}
+
 func TestProviderCommentReplaysByOperationIdentity(t *testing.T) {
 	var mu sync.Mutex
 	var created map[string]any

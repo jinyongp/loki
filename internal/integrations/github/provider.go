@@ -90,7 +90,7 @@ func (p *Provider) Read(ctx context.Context, request ProviderReadRequest) (Provi
 		fullName, _ := raw["full_name"].(string)
 		defaultBranch, _ := raw["default_branch"].(string)
 		htmlURL, _ := raw["html_url"].(string)
-		if fullName != target || defaultBranch == "" || htmlURL == "" {
+		if !strings.EqualFold(fullName, target) || defaultBranch == "" || htmlURL == "" {
 			return ProviderReadResult{}, errors.New("GitHub repository response is invalid")
 		}
 		result.Repository = map[string]any{
