@@ -23,6 +23,10 @@ type windowsGitHubEnvelope struct {
 }
 
 func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if integrationHelpRequested(args) {
+		printIntegrationUsage(stdout, args[:len(args)-1]...)
+		return 0
+	}
 	if len(args) == 0 {
 		printIntegrationUsage(stderr)
 		return 2
@@ -39,70 +43,40 @@ func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 }
 
-func printIntegrationUsage(output io.Writer) {
-	fmt.Fprintln(output, "usage:")
-	fmt.Fprintln(output, "  loki integration list [--distribution NAME] [--json]")
-	fmt.Fprintln(output, "  loki integration status|doctor [--distribution NAME] [--json] NAME")
-	fmt.Fprintln(output, "  loki integration enable|disable|remove [--distribution NAME] [--interrupt-active-jobs] NAME")
-	fmt.Fprintln(output, "  loki integration setup|rotate signing [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]")
-	fmt.Fprintln(output, "  loki integration setup|rotate github [--config-file PATH | --app-id ID --account OWNER --account-type TYPE --installation-id ID --repositories LIST] --private-key-file PATH")
-}
-
 func runIntegrationAction(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("integration "+action, flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
-	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
-	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
-	if err := flags.Parse(args); err != nil {
-		return 2
+	options, err := parseIntegrationAction(action, args, defaultDistribution())
+	if errors.Is(err, flag.ErrHelp) {
+		printIntegrationUsage(stdout, action)
+		return 0
 	}
-	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
+	if err != nil {
 		fmt.Fprintln(stderr, err)
+		printIntegrationUsage(stderr, action)
 		return 2
-	}
-	if (action == "list" && flags.NArg() != 0) || (action != "list" && flags.NArg() != 1) {
-		printIntegrationUsage(stderr)
-		return 2
-	}
-	if (action == "list" || action == "status" || action == "doctor") && *interrupt {
-		fmt.Fprintln(stderr, "--interrupt-active-jobs is valid only for integration mutations")
-		return 2
-	}
-	if action != "list" && action != "status" && action != "doctor" && *jsonOutput {
-		fmt.Fprintln(stderr, "--json is valid only for list, status, or doctor")
-		return 2
-	}
-	name := ""
-	if action != "list" {
-		name = strings.ToLower(strings.TrimSpace(flags.Arg(0)))
-		if name != "browser" && name != "signing" && name != "github" {
-			fmt.Fprintln(stderr, "integration name must be browser, signing, or github")
-			return 2
-		}
 	}
 	request := windowshost.OperatorRequest{
-		Command: "integration", Action: action, Integration: name,
-		InterruptActiveJobs: *interrupt,
+		Command: "integration", Action: action, Integration: options.Name,
+		InterruptActiveJobs: options.InterruptJobs,
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, *distribution, request)
+	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, options.Distribution, request)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if action == "list" || action == "status" || action == "doctor" {
-		return writeWindowsIntegrationInspection(action, result.Probe, *jsonOutput, stdout, stderr)
+		return writeWindowsIntegrationInspection(action, result.Probe, options.JSON, stdout, stderr)
 	}
 	if result.Probe.ExitCode != 0 {
 		return writeNativeProbe(result.Probe, stdout, stderr)
 	}
-	fmt.Fprintf(stdout, "Loki %s integration %s completed.\n", name, action)
+	fmt.Fprintf(stdout, "Loki %s integration %s completed.\n", options.Name, action)
 	return 0
 }
 
 func runIntegrationSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		printIntegrationUsage(stderr)
+		fmt.Fprintf(stderr, "integration %s requires a NAME: signing or github\n", action)
+		printIntegrationUsage(stderr, action)
 		return 2
 	}
 	// Accept the integration name either first or last. This keeps the public
@@ -119,20 +93,28 @@ func runIntegrationSetup(ctx context.Context, action string, args []string, stdo
 	case "github":
 		return runWindowsGitHubSetup(ctx, action, rest, stdout, stderr)
 	default:
-		printIntegrationUsage(stderr)
+		fmt.Fprintln(stderr, "integration name must be signing or github")
+		printIntegrationUsage(stderr, action)
 		return 2
 	}
 }
 
 func runWindowsSigningSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("integration "+action+" signing", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	identityName := flags.String("identity-name", "", "Git user.name")
 	identityEmail := flags.String("identity-email", "", "Git user.email")
 	keyFile := flags.String("key-file", "", "existing private Ed25519 OpenSSH key; omit to generate in appliance")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		printIntegrationUsage(stdout, action, "signing")
+		return 0
+	} else if err != nil || flags.NArg() != 0 {
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		}
+		printIntegrationUsage(stderr, action, "signing")
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
@@ -189,7 +171,7 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 
 func runWindowsGitHubSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("integration "+action+" github", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
@@ -199,7 +181,14 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 	accountType := flags.String("account-type", "organization", "organization or user")
 	installationID := flags.Int64("installation-id", 0, "GitHub App installation ID")
 	repositories := flags.String("repositories", "", "comma-separated repository allowlist")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		printIntegrationUsage(stdout, action, "github")
+		return 0
+	} else if err != nil || flags.NArg() != 0 {
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		}
+		printIntegrationUsage(stderr, action, "github")
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {

@@ -297,13 +297,21 @@ func runLegacyConnectStatus(ctx context.Context, args []string, stdout, stderr i
 
 func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("loki connection setup", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	tunnelID := flags.String("tunnel-id", "", "existing OpenAI tunnel id")
 	runtimeKeyEnv := flags.String("runtime-key-env", "", "environment variable containing the OpenAI runtime API key")
 	credentialTarget := flags.String("runtime-key-credential", "", "existing Loki Windows Credential Manager target")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: loki connection setup [--distribution NAME] [--tunnel-id ID] [--runtime-key-env NAME | --runtime-key-credential TARGET] PROVIDER")
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		printConnectionHelp(stdout, "setup")
+		return 0
+	} else if err != nil || flags.NArg() != 1 {
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		} else {
+			fmt.Fprintln(stderr, "connection setup requires one PROVIDER")
+		}
+		printConnectionHelp(stderr, "setup")
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
@@ -429,10 +437,18 @@ func runConnectionMutation(ctx context.Context, action string, args []string, st
 		return runConnectionSetup(ctx, args, stdout, stderr)
 	}
 	flags := flag.NewFlagSet("loki connection "+action, flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 1 {
-		fmt.Fprintf(stderr, "usage: loki connection %s [--distribution NAME] PROVIDER\n", action)
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		printConnectionHelp(stdout, action)
+		return 0
+	} else if err != nil || flags.NArg() != 1 {
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		} else {
+			fmt.Fprintf(stderr, "connection %s requires one PROVIDER\n", action)
+		}
+		printConnectionHelp(stderr, action)
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
@@ -551,25 +567,33 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return runProductUpdate(ctx, stdout, stderr)
 	}
 	if updateHelpRequested(args) {
-		printUpdateHelp(stdout)
+		printUpdateHelp(stdout, args[:len(args)-1]...)
 		return 0
 	}
 	action := args[0]
+	if action != "status" && action != "prepare" && action != "apply" {
+		fmt.Fprintln(stderr, "update action must be status, prepare, or apply")
+		printUpdateHelp(stderr)
+		return 2
+	}
 	flags := flag.NewFlagSet("loki update "+action, flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	approve := flags.Bool("approve", false, "approve update apply")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "approve interrupting active jobs")
-	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
+	if err := flags.Parse(args[1:]); errors.Is(err, flag.ErrHelp) {
+		printUpdateHelp(stdout, action)
+		return 0
+	} else if err != nil || flags.NArg() != 0 {
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		}
+		printUpdateHelp(stderr, action)
 		return 2
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
 		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	if action != "status" && action != "prepare" && action != "apply" {
-		fmt.Fprintln(stderr, "update action must be status, prepare, or apply")
 		return 2
 	}
 	if action != "apply" && (*approve || *interrupt) {

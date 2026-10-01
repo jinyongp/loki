@@ -18,7 +18,16 @@ func updateHelpRequested(args []string) bool {
 	return false
 }
 
-func printUpdateHelp(output io.Writer) {
+func printUpdateHelp(output io.Writer, path ...string) {
+	if len(path) != 0 {
+		switch path[0] {
+		case "status", "prepare":
+			fmt.Fprintf(output, "usage: loki update %s [--distribution NAME] [--json]\n", path[0])
+		case "apply":
+			fmt.Fprintln(output, "usage: loki update apply [--distribution NAME] [--json] [--approve] [--interrupt-active-jobs]")
+		}
+		return
+	}
 	fmt.Fprintln(output, "usage:")
 	fmt.Fprintln(output, "  loki update")
 	fmt.Fprintln(output, "  loki update status [--distribution NAME] [--json]")
