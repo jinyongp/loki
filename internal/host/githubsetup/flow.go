@@ -177,6 +177,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	if view.Phase == "installation" {
 		fmt.Fprintln(output, "Opening repository selection...")
+		fmt.Fprintln(output, "Choose Only select repositories, select your repositories, then click Install. Waiting for GitHub installation...")
 		show(view.InstallationURL)
 	}
 	interval := options.PollInterval

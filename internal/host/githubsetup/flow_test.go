@@ -17,6 +17,7 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	var redirect string
 	var exchanges atomic.Int32
 	var opened int
+	var polls int
 	transport := func(ctx context.Context, req Request) (View, error) {
 		switch req.Action {
 		case "begin":
@@ -29,6 +30,10 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 			}
 			return View{Phase: "installation", InstallationURL: "https://github.com/apps/loki-test/installations/new"}, nil
 		case "poll":
+			polls++
+			if polls < 4 {
+				return View{Phase: "installation"}, nil
+			}
 			return View{Phase: "configured"}, nil
 		case "apply":
 			return View{Phase: "ready", Account: "example", Repositories: []string{"example/repo"}}, nil
@@ -98,6 +103,9 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	}
 	if exchanges.Load() != 1 || opened != 2 || !strings.Contains(output.String(), "GitHub integration ready.") || !strings.Contains(output.String(), "example/repo") {
 		t.Fatalf("exchanges=%d opened=%d output=%s", exchanges.Load(), opened, output.String())
+	}
+	if polls != 4 || strings.Count(output.String(), "Only select repositories") != 1 || strings.Count(output.String(), "Opening repository selection") != 1 {
+		t.Fatalf("polls=%d output=%s", polls, output.String())
 	}
 }
 
