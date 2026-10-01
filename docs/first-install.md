@@ -240,7 +240,8 @@ fingerprint; register that public key with the Git provider when verified
 signatures are desired. An explicit signing key file is an import source, not
 the durable credential location.
 
-GitHub setup opens the browser to create a private App, then continues in the
+GitHub setup opens the browser to create an App with **Any account** installation
+enabled for personal and organization accounts, then continues in the
 same tab to select all or individual repositories and discovers its identifiers
 automatically. Rerun the same
 command after an installation wait or apply failure to continue with the saved

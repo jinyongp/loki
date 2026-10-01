@@ -74,7 +74,7 @@ func TestHostGitHubBrowserFlowResumesWithoutExposingPrivateKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if begin.Phase != "registration" || begin.Manifest.Public || begin.Manifest.DefaultPermissions["issues"] != "write" {
+	if begin.Phase != "registration" || begin.Manifest == nil || !begin.Manifest.Public || begin.Manifest.DefaultPermissions["issues"] != "write" {
 		t.Fatalf("begin=%#v", begin)
 	}
 	if _, err = h.Handle(ctx, githubsetup.Request{Action: "exchange", State: "wrong", Code: "validcode"}); err == nil || conversions.Load() != 0 {

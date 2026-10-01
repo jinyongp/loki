@@ -308,7 +308,7 @@ func (s githubSetupSession) view() githubsetup.View {
 		view.State = s.State
 		view.RegistrationURL = target + "?state=" + url.QueryEscape(s.State)
 		view.Manifest = &githubsetup.Manifest{
-			Name: "Loki-" + s.State[:12], URL: "https://github.com/jinyongp/loki", Public: false,
+			Name: "Loki-" + s.State[:12], URL: "https://github.com/jinyongp/loki", Public: true,
 			RedirectURL: s.RedirectURL, HookAttributes: map[string]any{"url": "https://github.com/jinyongp/loki", "active": false},
 			DefaultPermissions: map[string]string{"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write"},
 			DefaultEvents:      []string{}, RequestOAuthOnInstall: false,

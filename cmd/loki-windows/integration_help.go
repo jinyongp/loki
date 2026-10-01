@@ -54,7 +54,7 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		case "github":
 			if action == "setup" {
 				fmt.Fprintln(output, "usage: loki integration setup github [--account OWNER] [--account-type user|organization] [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
-				fmt.Fprintln(output, "Creates a private App and continues repository selection in the same browser tab.")
+				fmt.Fprintln(output, "Creates an App installable on personal and organization accounts and continues repository selection in the same browser tab.")
 				fmt.Fprintln(output, "Detects the account type from --account unless --account-type is supplied.")
 				fmt.Fprintln(output, "Use --manual to enter existing App credentials, or supply import files:")
 			}

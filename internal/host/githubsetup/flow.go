@@ -185,7 +185,8 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	if view.Phase == "installation" {
 		if view.AppSettingsURL != "" {
 			fmt.Fprintln(output, "Adding an account installation to the existing GitHub App. Existing accounts remain configured.")
-			fmt.Fprintln(output, "If GitHub does not offer the requested account, check the App's installation visibility and the organization's App policy:", view.AppSettingsURL)
+			fmt.Fprintln(output, "If the requested account is missing and the App is private, open Advanced settings and choose Make public, then return to the installation page or rerun the same setup command:", view.AppSettingsURL)
+			fmt.Fprintln(output, "The requested account must approve installation; organization App policies still apply.")
 		}
 		fmt.Fprintln(output, "Choose All repositories or Only select repositories, then click Install. Waiting for GitHub installation...")
 		if !installationRedirected {

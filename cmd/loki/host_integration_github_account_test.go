@@ -26,6 +26,9 @@ func TestGitHubBrowserDetectsAccountTypeAndResumesWithoutLookup(t *testing.T) {
 			if !strings.HasPrefix(view.RegistrationURL, want) {
 				t.Fatalf("registration=%s", view.RegistrationURL)
 			}
+			if view.Manifest == nil || !view.Manifest.Public {
+				t.Fatal("new App must allow installations on additional personal and organization accounts")
+			}
 			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: view.State, Code: "code"}); err != nil {
 				t.Fatal(err)
 			}

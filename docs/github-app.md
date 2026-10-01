@@ -1,6 +1,6 @@
 # GitHub App integration
 
-Loki uses a private GitHub App to run repository-scoped `gh` commands without a user OAuth token. GitHub App installation permissions and the selected repositories form the external authorization boundary. Loki adds its configured target allowlist and command constraints.
+Loki uses a GitHub App to run repository-scoped `gh` commands without a user OAuth token. GitHub App installation permissions and the selected repositories form the external authorization boundary. Loki adds its configured target allowlist and command constraints.
 
 ## Browser setup on a managed host
 
@@ -23,7 +23,9 @@ Windows and user-scoped Linux. It prints a URL; registration still requires a
 browser on the same machine.
 
 The browser page submits a [GitHub App manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest).
-Approve creation of the private App. The same browser tab continues to its
+Approve creation of the App. Registration enables **Any account** installation
+so the same App can be installed on personal and organization accounts. The
+same browser tab continues to its
 installation page, where you choose **All repositories** or **Only select
 repositories**. Loki discovers the App ID, installation ID, account,
 and repository access, validates the installation, applies the integration,
@@ -58,13 +60,18 @@ then verifies and applies the combined configuration through the managed backup
 and recovery transaction. An organization approval request can remain pending;
 rerun the same command to resume.
 
-Browser registration creates a private App. GitHub permits private Apps to be
-installed only on their owning account. Installing an App on another account
-requires an App whose installation visibility allows that account; organization
-App policies also apply. Setup prints the App's settings link when adding an
-account. App visibility remains under the owner's control and is not changed by
-Loki. Membership in an organization alone does not grant the App access to its
-repositories.
+Browser registration creates a public App (`public = true` in the manifest),
+which permits installations on multiple accounts. Each account must approve
+installation and select repository access; organization App policies also apply.
+The App's installation visibility does not publish repository contents or its
+private key. See [GitHub App visibility](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private).
+
+Apps created by earlier Loki versions may still be private and can be installed
+only on their owning account. When adding an account, setup prints the existing
+App's Advanced settings link. Open it and choose **Make public**, then return to
+the installation page or rerun the same setup command. Existing installations
+and credentials remain available; recreating the App is unnecessary. Membership
+in an organization alone does not grant the App access to its repositories.
 
 Choose the repository access you want in GitHub. Browser setup stores
 `repositories = ["*"]` for that account with its installation ID. GitHub checks
@@ -122,7 +129,7 @@ Configure the registration as follows:
 
 - Leave user authorization, OAuth redirect URIs, and Device Flow disabled.
 - Disable the webhook unless another service in the deployment consumes GitHub events.
-- Select **Only on this account** for a private App.
+- Select **Any account** to use the same App on multiple personal or organization accounts.
 - Grant **Metadata: Read-only**.
 - Grant **Contents**, **Issues**, and **Pull requests: Read and write** for normal repository work.
 - Add **Actions: Read**, **Workflows: Read and write**, **Checks: Read and write**, **Commit statuses: Read and write**, **Deployments: Read and write**, **Variables: Read and write**, or **Secrets: Read and write** only for commands the deployment must run.

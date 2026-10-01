@@ -35,7 +35,7 @@ func TestRunAddsExistingAppInstallationWithoutRegistration(t *testing.T) {
 	if err := Run(t.Context(), transport, Options{Account: "example-org", PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
 		t.Fatal(err)
 	}
-	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts remain configured") || !strings.Contains(output.String(), "GitHub integration ready") {
+	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts remain configured") || !strings.Contains(output.String(), "Make public") || !strings.Contains(output.String(), "https://github.com/settings/apps/existing-app/advanced") || !strings.Contains(output.String(), "GitHub integration ready") {
 		t.Fatalf("opened=%v output=%s", opened, output.String())
 	}
 }
