@@ -51,13 +51,13 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	browserRequest := flags.Bool("browser-request", false, "read a browser setup relay request from stdin")
 	noBrowser := flags.Bool("no-browser", false, "print the local registration URL")
 	account := flags.String("account", "", "GitHub App owner")
-	accountType := flags.String("account-type", "user", "user or organization")
+	accountType := flags.String("account-type", "", "user or organization; omit to detect from --account")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" {
 		fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] github\n", action)
 		return 2
 	}
 	automatic := action == "setup" && !*stdin && strings.TrimSpace(*configFile) == "" && strings.TrimSpace(*privateKeyFile) == ""
-	if *browserRequest && (!automatic || *noBrowser || *account != "" || *accountType != "user") {
+	if *browserRequest && (!automatic || *noBrowser || *account != "" || *accountType != "") {
 		fmt.Fprintln(stderr, "browser relay requests cannot be combined with import or browser options")
 		return 2
 	}

@@ -38,6 +38,11 @@ func browserSetupFixture(t *testing.T, ownerTypes ...string) (*hostGitHubSetup, 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.URL.Path == "/users/example":
+			if r.Header.Get("Authorization") != "" {
+				t.Error("account detection must not borrow ambient authentication")
+			}
+			fmt.Fprintf(w, `{"id":42,"login":"example","type":%q}`, ownerType)
 		case strings.HasPrefix(r.URL.Path, "/app-manifests/"):
 			conversions.Add(1)
 			if r.Header.Get("Authorization") != "" {

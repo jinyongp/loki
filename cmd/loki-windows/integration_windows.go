@@ -213,7 +213,7 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 			}
 		})
 		if !typeProvided {
-			*accountType = "user"
+			*accountType = ""
 		}
 		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{Account: *account, AccountType: *accountType, NoBrowser: *noBrowser}, stdout, stderr)
 	}

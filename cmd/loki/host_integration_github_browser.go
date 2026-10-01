@@ -115,6 +115,18 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if err = validateGitHubSetupBegin(request); err != nil {
 			return githubsetup.View{}, err
 		}
+		if request.AccountType == "" {
+			if session.Phase != "" && (request.Account == "" || strings.EqualFold(request.Account, session.Account)) {
+				request.AccountType = session.AccountType
+			} else if request.Account != "" {
+				request.AccountType, err = h.accountType(ctx, request.Account)
+				if err != nil {
+					return githubsetup.View{}, err
+				}
+			} else {
+				request.AccountType = "user"
+			}
+		}
 		if session.Phase == "exchange_pending" {
 			return githubsetup.View{}, errors.New("GitHub App creation result is uncertain. Check your GitHub App settings, generate a private key, and use file-based setup to recover")
 		}
@@ -327,6 +339,28 @@ func validateGitHubSetupBegin(request githubsetup.Request) error {
 		return errors.New("organization setup requires --account")
 	}
 	return nil
+}
+
+func (h *hostGitHubSetup) accountType(ctx context.Context, account string) (string, error) {
+	var result struct {
+		ID    int64  `json:"id"`
+		Login string `json:"login"`
+		Type  string `json:"type"`
+	}
+	if err := h.api(ctx, http.MethodGet, "/users/"+url.PathEscape(account), "", nil, &result); err != nil {
+		return "", fmt.Errorf("cannot detect GitHub account type; verify --account or provide --account-type: %w", err)
+	}
+	if result.ID <= 0 || !strings.EqualFold(result.Login, account) {
+		return "", errors.New("GitHub account lookup returned invalid metadata")
+	}
+	switch result.Type {
+	case "Organization":
+		return "organization", nil
+	case "User":
+		return "user", nil
+	default:
+		return "", errors.New("GitHub account is not a user or organization")
+	}
 }
 func setupName(value string, max int) bool {
 	if value == "" || len(value) > max || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") || strings.Contains(value, "..") {
