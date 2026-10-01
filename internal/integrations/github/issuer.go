@@ -209,3 +209,16 @@ func signJWT(key *rsa.PrivateKey, appID int64, now time.Time) (string, error) {
 	}
 	return encoded + "." + base64.RawURLEncoding.EncodeToString(signature), nil
 }
+
+// AppJWT authenticates host-owned App setup and installation discovery.
+// Runtime repository access continues to use Broker's repository-scoped tokens.
+func AppJWT(privateKey []byte, appID int64, now time.Time) (string, error) {
+	if appID <= 0 {
+		return "", errors.New("GitHub App ID is invalid")
+	}
+	key, err := parsePrivateKey(string(privateKey))
+	if err != nil {
+		return "", err
+	}
+	return signJWT(key, appID, now)
+}

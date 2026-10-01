@@ -170,3 +170,35 @@ func TestOwnedDistributionVersionRejectsForeignIdentity(t *testing.T) {
 		t.Fatal("foreign identity accepted")
 	}
 }
+
+func TestOperatorGitHubBrowserRelayKeepsOneTimeCodeOnStdin(t *testing.T) {
+	args, machine, err := operatorCommandArguments(OperatorRequest{Command: "integration", Action: "setup", Integration: "github", UseStdin: true, GitHubBrowser: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"host", "integration", "setup", "--system", "--browser-request", "github"}
+	if !machine || !slices.Equal(args, want) {
+		t.Fatalf("args=%q machine=%t", args, machine)
+	}
+	for _, bad := range []OperatorRequest{
+		{Command: "status", GitHubBrowser: true},
+		{Command: "integration", Action: "rotate", Integration: "github", UseStdin: true, GitHubBrowser: true},
+		{Command: "integration", Action: "setup", Integration: "signing", UseStdin: true, GitHubBrowser: true},
+		{Command: "integration", Action: "setup", Integration: "github", GitHubBrowser: true},
+		{Command: "integration", Action: "setup", Integration: "github", UseStdin: true, GitHubBrowser: true, IdentityName: "user"},
+	} {
+		if _, _, err := operatorCommandArguments(bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+	code := []byte("{\"action\":\"exchange\",\"state\":\"state\",\"code\":\"one-time-secret\"}")
+	runner := &fakeNativeRunner{results: []NativeProbe{{ExitCode: 0, Stdout: ownedManifest("1.2.3")}, {ExitCode: 0, Stdout: "loki 1.2.3"}, {ExitCode: 0, Stdout: `{"schema_version":1,"phase":"installation"}`}}}
+	_, err = (OperatorClient{WSL: WSLClient{Runner: runner}}).ExecuteInput(t.Context(), "loki-mcp", OperatorRequest{Command: "integration", Action: "setup", Integration: "github", UseStdin: true, GitHubBrowser: true}, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[2]
+	if !bytes.Equal(call.input, code) || strings.Contains(strings.Join(call.arguments, " "), "one-time-secret") {
+		t.Fatal("one-time code was not isolated to stdin")
+	}
+}

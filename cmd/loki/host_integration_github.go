@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/config"
+	"loki/internal/host/githubsetup"
 	"loki/internal/host/lifecycle"
 	githubapp "loki/internal/integrations/github"
 	"loki/internal/progress"
@@ -47,8 +48,25 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
 	privateKeyFile := flags.String("private-key-file", "", "GitHub App RSA private key PEM")
 	stdin := flags.Bool("stdin", false, "read GitHub App config and private key from stdin envelope")
+	browserRequest := flags.Bool("browser-request", false, "read a browser setup relay request from stdin")
+	noBrowser := flags.Bool("no-browser", false, "print the local registration URL")
+	account := flags.String("account", "", "GitHub App owner")
+	accountType := flags.String("account-type", "user", "user or organization")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" {
 		fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] github\n", action)
+		return 2
+	}
+	automatic := action == "setup" && !*stdin && strings.TrimSpace(*configFile) == "" && strings.TrimSpace(*privateKeyFile) == ""
+	if *browserRequest && (!automatic || *noBrowser || *account != "" || *accountType != "user") {
+		fmt.Fprintln(stderr, "browser relay requests cannot be combined with import or browser options")
+		return 2
+	}
+	if automatic && *jsonOutput && !*browserRequest {
+		fmt.Fprintln(stderr, "automatic setup is interactive; use integration status --json github for machine-readable status")
+		return 2
+	}
+	if !automatic && *noBrowser {
+		fmt.Fprintln(stderr, "--no-browser applies to automatic setup only")
 		return 2
 	}
 	if *stdin {
@@ -56,7 +74,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 			fmt.Fprintln(stderr, "--stdin is mutually exclusive with --config-file and --private-key-file")
 			return 2
 		}
-	} else if strings.TrimSpace(*configFile) == "" || strings.TrimSpace(*privateKeyFile) == "" {
+	} else if !automatic && (strings.TrimSpace(*configFile) == "" || strings.TrimSpace(*privateKeyFile) == "") {
 		fmt.Fprintln(stderr, "--config-file and --private-key-file are required unless --stdin is used")
 		return 2
 	}
@@ -77,6 +95,15 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "Loki is not installed for this scope.")
 		return 1
 	}
+	if automatic {
+		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{Account: *account, AccountType: *accountType, NoBrowser: *noBrowser}, stdout, stderr)
+	}
+	setupLock, err := store.GitHubSetupLock(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	defer setupLock.Close()
 	current, err := store.ReadManagedIntegrations(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -124,41 +151,15 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	backend, err := newHostComposeBackend(store)
-	if err != nil {
+	if err = applyManagedGitHubCandidate(context.Background(), action, options, store, current, candidate, reporter); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	backend.Progress = reporter
-	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter}
-	manager := lifecycle.Manager{Store: store, Jobs: backend, Maintainer: engine, Now: lifecycleTimeNow}
-	enabled := true
-	if action == "rotate" {
-		enabled = current.GitHub.Enabled
-	}
-	err = manager.UpdateManagedIntegration(context.Background(), "github", func(ctx context.Context, store *lifecycle.FileStore) error {
-		configDigest, writeErr := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubConfigFile, candidate.ConfigRaw)
-		if writeErr != nil {
-			return writeErr
-		}
-		credentialDigest, writeErr := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubCredentialFile, candidate.KeyRaw)
-		if writeErr != nil {
-			return writeErr
-		}
-		state, readErr := store.ReadManagedIntegrations(ctx)
-		if readErr != nil {
-			return readErr
-		}
-		state.GitHub = lifecycle.ManagedIntegrationToggle{
-			Configured: true, Enabled: enabled,
-			CredentialSHA256: credentialDigest, ConfigSHA256: configDigest,
-		}
-		return store.CommitManagedIntegrations(ctx, state, action+"-github", lifecycleTimeNow())
-	}, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
-	if err != nil {
-		fmt.Fprintln(stderr, err)
+	if err = store.ClearGitHubSetup(context.Background()); err != nil {
+		fmt.Fprintln(stderr, "GitHub configuration was applied but pending setup cleanup failed:", err)
 		return 1
 	}
+	enabled := action != "rotate" || current.GitHub.Enabled
 	if *jsonOutput {
 		fmt.Fprintf(stdout, "{\"configured\":true,\"enabled\":%t,\"app_id\":%d,\"target_count\":%d}\n",
 			enabled, candidate.Config.GitHubAppID, len(candidate.Config.GitHubTargets))
@@ -377,14 +378,19 @@ func removeManagedGitHub(
 	store *lifecycle.FileStore,
 	options lifecycle.MutationOptions,
 ) error {
+	setupLock, err := store.GitHubSetupLock(ctx)
+	if err != nil {
+		return err
+	}
+	defer setupLock.Close()
 	state, err := store.ReadManagedIntegrations(ctx)
 	if err != nil {
 		return err
 	}
 	if !state.GitHub.Configured {
-		return nil
+		return store.ClearGitHubSetup(ctx)
 	}
-	return manager.UpdateManagedIntegration(ctx, "github", func(ctx context.Context, store *lifecycle.FileStore) error {
+	err = manager.UpdateManagedIntegration(ctx, "github", func(ctx context.Context, store *lifecycle.FileStore) error {
 		for _, path := range []string{lifecycle.ManagedGitHubConfigFile, lifecycle.ManagedGitHubCredentialFile} {
 			if removeErr := store.RemoveManagedIntegrationFile(ctx, path); removeErr != nil {
 				return removeErr
@@ -397,6 +403,10 @@ func removeManagedGitHub(
 		current.GitHub = lifecycle.ManagedIntegrationToggle{}
 		return store.CommitManagedIntegrations(ctx, current, "remove-github", lifecycleTimeNow())
 	}, options)
+	if err != nil {
+		return err
+	}
+	return store.ClearGitHubSetup(ctx)
 }
 
 func loadManagedGitHubPublicConfig(ctx context.Context, store *lifecycle.FileStore) ([]byte, config.Config, error) {
@@ -421,4 +431,41 @@ func loadManagedGitHubFromStore(ctx context.Context, store *lifecycle.FileStore)
 		return managedGitHubCandidate{}, err
 	}
 	return managedGitHubCandidate{ConfigRaw: configRaw, KeyRaw: keyRaw, Config: parsed}, nil
+}
+
+func applyManagedGitHubCandidate(ctx context.Context, action string, options hostIntegrationOptions, store *lifecycle.FileStore, current lifecycle.ManagedIntegrationState, candidate managedGitHubCandidate, reporter progress.Reporter) error {
+	backend, err := newHostComposeBackend(store)
+	if err != nil {
+		return err
+	}
+	backend.Progress = reporter
+	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter}
+	manager := lifecycle.Manager{Store: store, Jobs: backend, Maintainer: engine, Now: lifecycleTimeNow}
+	enabled := true
+	if action == "rotate" {
+		enabled = current.GitHub.Enabled
+	}
+	err = manager.UpdateManagedIntegration(ctx, "github", func(ctx context.Context, store *lifecycle.FileStore) error {
+		configDigest, writeErr := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubConfigFile, candidate.ConfigRaw)
+		if writeErr != nil {
+			return writeErr
+		}
+		credentialDigest, writeErr := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedGitHubCredentialFile, candidate.KeyRaw)
+		if writeErr != nil {
+			return writeErr
+		}
+		state, readErr := store.ReadManagedIntegrations(ctx)
+		if readErr != nil {
+			return readErr
+		}
+		state.GitHub = lifecycle.ManagedIntegrationToggle{
+			Configured: true, Enabled: enabled,
+			CredentialSHA256: credentialDigest, ConfigSHA256: configDigest,
+		}
+		return store.CommitManagedIntegrations(ctx, state, action+"-github", lifecycleTimeNow())
+	}, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+	if err != nil {
+		return err
+	}
+	return nil
 }

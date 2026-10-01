@@ -82,6 +82,10 @@
     },
     {
       "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/host/githubsetup"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
       "to": "loki/internal/host/windows"
     },
     {
@@ -119,6 +123,10 @@
     {
       "from": "loki/cmd/loki",
       "to": "loki/internal/host/diagnostics"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/host/githubsetup"
     },
     {
       "from": "loki/cmd/loki",
@@ -1078,6 +1086,12 @@
         "diagnostic"
       ],
       "target": "host/diagnostics"
+    },
+    "loki/internal/host/githubsetup": {
+      "kind": "host-adapter",
+      "owner": "github-browser-relay",
+      "tags": [],
+      "target": "host/githubsetup"
     },
     "loki/internal/host/ingress": {
       "kind": "host",

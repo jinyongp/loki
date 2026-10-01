@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"loki/internal/host/githubsetup"
 	windowshost "loki/internal/host/windows"
 )
 
@@ -178,6 +179,8 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 func runWindowsGitHubSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("integration "+action+" github", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	manual := flags.Bool("manual", false, "enter existing App credentials")
+	noBrowser := flags.Bool("no-browser", false, "print the local registration URL")
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
 	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
@@ -199,6 +202,23 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 	}
 	if err := windowshost.ValidateDistributionName(*distribution); err != nil {
 		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	automatic := action == "setup" && !*manual && *configFile == "" && *privateKeyFile == "" && *appID == 0 && *installationID == 0 && *repositories == ""
+	if automatic {
+		typeProvided := false
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name == "account-type" {
+				typeProvided = true
+			}
+		})
+		if !typeProvided {
+			*accountType = "user"
+		}
+		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{Account: *account, AccountType: *accountType, NoBrowser: *noBrowser}, stdout, stderr)
+	}
+	if *noBrowser {
+		fmt.Fprintln(stderr, "--no-browser applies to automatic setup only")
 		return 2
 	}
 	reader := bufio.NewReader(os.Stdin)

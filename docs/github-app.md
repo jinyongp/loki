@@ -2,7 +2,63 @@
 
 Loki uses a private GitHub App to run repository-scoped `gh` commands without a user OAuth token. GitHub App installation permissions and the selected repositories form the external authorization boundary. Loki adds its configured target allowlist and command constraints.
 
-## Create and install the App
+## Browser setup on a managed host
+
+On Windows, run:
+
+```powershell
+loki integration setup github
+```
+
+On native Linux, run:
+
+```sh
+loki host integration setup github
+```
+
+For a system-scoped Linux installation, use
+`sudo loki host integration setup --system --no-browser github` and open the
+printed loopback URL in a browser on that machine. `--no-browser` also works on
+Windows and user-scoped Linux. It prints a URL; registration still requires a
+browser on the same machine.
+
+The browser page submits a [GitHub App manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest).
+Approve creation of the private App, then choose **Only select repositories**
+on its installation page. Loki discovers the App ID, installation ID, account,
+and selected repositories, validates repository access, applies the integration,
+and checks readiness before reporting success. The default App grants Metadata
+read access and Contents, Issues, and Pull requests read/write access, with
+webhooks and user OAuth authorization disabled. Installation selection is
+limited to 64 repositories on one account.
+
+Personal-account ownership is the default. To create an organization-owned App:
+
+```powershell
+loki integration setup github --account example-org --account-type organization
+```
+
+The Linux equivalent is
+`loki host integration setup --account example-org --account-type organization github`.
+You need permission to create and install Apps for the chosen owner. Organization
+approval can leave installation pending.
+
+The Linux host owns GitHub API calls, the App private key, private resumable
+setup state, and the managed integration transaction. Windows opens the browser
+and relays the callback code through stdin to that same host implementation.
+Neither platform reads `gh auth` credentials for this flow.
+
+If installation is pending or configuration application fails, rerun the same
+setup command to continue with the saved App. Pending private state is stored in
+a host-owned `0700` directory with a `0600` session file and is removed after
+successful setup. Registration and installation waits stop after ten minutes;
+an installation wait does not discard the App key.
+
+The manifest conversion code is single-use. If a connection failure makes its
+conversion result uncertain, Loki preserves that condition and reports recovery
+instructions. Open the existing App's GitHub settings, generate a new private
+key, and import that App using the file-based setup below.
+
+## Create and install an existing App manually
 
 Create a GitHub App under the account that will own it. Use a unique name and a homepage URL that identifies this Loki deployment or its source repository.
 
@@ -52,7 +108,7 @@ install -m 0600 /path/from/github.private-key.pem /secure/loki/github-app.pem
 
 ## Managed installation
 
-On a managed Windows installation, configure the App through the frontend:
+To import an existing App on a managed Windows installation, configure it through the frontend:
 
 ```powershell
 loki integration setup github `
@@ -60,6 +116,10 @@ loki integration setup github `
   --private-key-file C:\secure\loki\github-app.pem
 loki integration doctor github
 ```
+
+For prompted entry of an existing App's identifiers on Windows, use
+`loki integration setup github --manual`. The file-based path also supports
+multiple installations and additional App permissions.
 
 On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository before setup succeeds. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
 

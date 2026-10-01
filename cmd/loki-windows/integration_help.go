@@ -28,6 +28,7 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		fmt.Fprintln(output, "  loki integration status|doctor [--distribution NAME] [--json] NAME")
 		fmt.Fprintln(output, "  loki integration enable|disable|remove [--distribution NAME] [--interrupt-active-jobs] NAME")
 		fmt.Fprintln(output, "  loki integration setup|rotate signing [--distribution NAME] [--interrupt-active-jobs] [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]")
+		fmt.Fprintln(output, "  loki integration setup github [--account OWNER --account-type user|organization] [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
 		fmt.Fprintln(output, "  loki integration setup|rotate github [--distribution NAME] [--interrupt-active-jobs] [--config-file PATH | --app-id ID --account OWNER --account-type TYPE --installation-id ID --repositories LIST] --private-key-file PATH")
 		return
 	}
@@ -51,6 +52,11 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		case "signing":
 			fmt.Fprintf(output, "usage: loki integration %s signing [--distribution NAME] [--interrupt-active-jobs] [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]\n", action)
 		case "github":
+			if action == "setup" {
+				fmt.Fprintln(output, "usage: loki integration setup github [--account OWNER --account-type user|organization] [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
+				fmt.Fprintln(output, "Creates a private App in your browser, then discovers the selected repositories.")
+				fmt.Fprintln(output, "Use --manual to enter existing App credentials, or supply import files:")
+			}
 			fmt.Fprintf(output, "usage: loki integration %s github [--distribution NAME] [--interrupt-active-jobs] [--config-file PATH | --app-id ID --account OWNER --account-type TYPE --installation-id ID --repositories LIST] --private-key-file PATH\n", action)
 		}
 	}

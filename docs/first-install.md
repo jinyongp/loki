@@ -212,9 +212,7 @@ loki integration rotate signing --key-file C:\secure\signing-key
 loki integration disable signing
 loki integration remove signing
 
-loki integration setup github `
-  --config-file C:\secure\github.toml `
-  --private-key-file C:\secure\github-app.pem
+loki integration setup github
 loki integration doctor github
 loki integration disable github
 loki integration enable github
@@ -227,9 +225,18 @@ fingerprint; register that public key with the Git provider when verified
 signatures are desired. An explicit signing key file is an import source, not
 the durable credential location.
 
+GitHub setup opens the browser to create a private App and select individual
+repositories, then discovers its identifiers automatically. Rerun the same
+command after an installation wait or apply failure to continue with the saved
+App. Use `--account OWNER --account-type organization` for organization ownership,
+`--no-browser` to print the local registration URL, or import an existing App
+with `--config-file PATH --private-key-file PATH`. See [GitHub App setup](github-app.md).
+
+The Linux host owns App creation, private-key storage, and configuration
+application. Windows relays the one-time registration code through stdin.
 GitHub setup validates the App configuration, exchanges the App credential for
 a repository-scoped installation token, and reads an allowlisted repository
-before accepting the configuration. GitHub and signing private-key bytes cross
+before accepting the configuration. Imported GitHub and signing private-key bytes cross
 the Windows-to-WSL boundary only through stdin and are stored in lifecycle-owned
 private appliance state. They are not placed in command-line arguments,
 workspace files, connection JSON, or Loki's application-secret vault.
@@ -380,6 +387,13 @@ loki --version
 loki host status
 loki host doctor
 loki host connection
+```
+
+To connect GitHub after installation:
+
+```sh
+loki host integration setup github
+loki host integration doctor github
 ```
 
 `loki host connection` reports the loopback-only MCP local origin, transport,

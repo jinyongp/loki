@@ -19,6 +19,7 @@ type OperatorRequest struct {
 	Integration         string
 	IdentityName        string
 	IdentityEmail       string
+	GitHubBrowser       bool
 	UseStdin            bool
 	Approve             bool
 	InterruptActiveJobs bool
@@ -121,7 +122,7 @@ func (client OperatorClient) execute(
 
 func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 	if request.Command != "integration" &&
-		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin) {
+		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.GitHubBrowser) {
 		return nil, false, fmt.Errorf("%s does not accept integration options", request.Command)
 	}
 	switch request.Command {
@@ -184,6 +185,9 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		args = append(args, backupID)
 		return args, false, nil
 	case "integration":
+		if request.GitHubBrowser && (request.Action != "setup" || request.Integration != "github" || !request.UseStdin || request.IdentityName != "" || request.IdentityEmail != "") {
+			return nil, false, errors.New("GitHub browser relay requires setup github with stdin")
+		}
 		if request.BackupID != "" || request.Approve {
 			return nil, false, errors.New("integration does not accept backup or approval options")
 		}
@@ -243,10 +247,14 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 				if request.IdentityName != "" || request.IdentityEmail != "" || !request.UseStdin {
 					return nil, false, errors.New("GitHub setup requires stdin and does not accept signing identity")
 				}
-				args = append(args, "--stdin")
+				if request.GitHubBrowser {
+					args = append(args, "--browser-request")
+				} else {
+					args = append(args, "--stdin")
+				}
 			}
 			args = append(args, integration)
-			return args, false, nil
+			return args, request.GitHubBrowser, nil
 		}
 		return nil, false, errors.New("integration action is invalid")
 	default:
