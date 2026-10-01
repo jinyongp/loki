@@ -659,11 +659,15 @@ jobs:
           retention-days: 7
 
   wsl-accept:
-    name: Verify Windows WSL appliance
+    name: Verify Windows WSL appliance (${{ matrix.scenario }})
     needs:
       - preflight
       - build
     runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [integrations, migration, recovery]
     permissions:
       contents: read
     steps:
@@ -699,7 +703,7 @@ jobs:
         shell: pwsh
         env:
           TAG: ${{ needs.preflight.outputs.tag }}
-        run: .\scripts\verify\accept-wsl.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG"
+        run: .\scripts\verify\accept-wsl.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG" -Scenario "${{ matrix.scenario }}"
 
   windows-native:
     name: Verify Windows native source
@@ -729,6 +733,7 @@ jobs:
           Get-ChildItem -LiteralPath .\scripts\verify -Filter *.ps1 | ForEach-Object {
             [void][scriptblock]::Create([IO.File]::ReadAllText($_.FullName))
           }
+          .\scripts\verify\test-wsl-scenarios.ps1
 
       - name: Run native Windows unit and ACL regression tests
         shell: pwsh

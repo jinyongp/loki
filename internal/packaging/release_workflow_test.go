@@ -86,12 +86,47 @@ func TestReleaseDependencyUpdatesAreOptionalAndContractGateIsRequired(t *testing
 }
 
 type releaseWorkflowJob struct {
-	Needs yaml.Node
+	Needs    yaml.Node
+	Strategy struct {
+		FailFast *bool `yaml:"fail-fast"`
+		Matrix   struct {
+			Scenario []string
+		}
+	}
 	If    string
 	Steps []struct {
 		ID, Name, Uses, Run, If string
 		Env                     map[string]string
 	}
+}
+
+func TestReleaseWSLScenariosRemainRequiredForPublication(t *testing.T) {
+	jobs := releaseWorkflowJobs(t)
+	job := jobs["wsl-accept"]
+	if job.Strategy.FailFast == nil || *job.Strategy.FailFast {
+		t.Fatal("WSL failures must not cancel independent scenario results")
+	}
+	if strings.Join(job.Strategy.Matrix.Scenario, ",") != "integrations,migration,recovery" {
+		t.Fatal("WSL release acceptance must exercise all three scenario chains")
+	}
+	var invocation, routingCheck bool
+	for _, step := range job.Steps {
+		if strings.Contains(step.Run, "accept-wsl.ps1") {
+			invocation = strings.Contains(step.Run, `-Scenario "${{ matrix.scenario }}"`) && step.If == ""
+		}
+	}
+	for _, step := range jobs["windows-native"].Steps {
+		routingCheck = routingCheck || strings.Contains(step.Run, "test-wsl-scenarios.ps1")
+	}
+	if !invocation || !routingCheck {
+		t.Fatal("WSL matrix must pass its selected scenario and validate check routing")
+	}
+	for _, dependency := range releaseJobNeeds(t, jobs["publish"]) {
+		if dependency == "wsl-accept" {
+			return
+		}
+	}
+	t.Fatal("publication must wait for every WSL scenario")
 }
 
 func releaseWorkflowJobs(t *testing.T) map[string]releaseWorkflowJob {
