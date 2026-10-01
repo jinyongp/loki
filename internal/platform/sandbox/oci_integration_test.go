@@ -233,7 +233,8 @@ func TestRealOCIJobDetachedDescendantCleanup(t *testing.T) {
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		raw, readErr := os.ReadFile(hostHeartbeat)
-		if readErr == nil && string(raw) != initialHeartbeat {
+		// WriteFile truncates before writing; wait for a complete heartbeat.
+		if readErr == nil && strings.HasSuffix(string(raw), "\n") && string(raw) != initialHeartbeat {
 			first = string(raw)
 			break
 		}
@@ -247,7 +248,7 @@ func TestRealOCIJobDetachedDescendantCleanup(t *testing.T) {
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		raw, readErr := os.ReadFile(hostHeartbeat)
-		if readErr == nil && string(raw) != first {
+		if readErr == nil && strings.HasSuffix(string(raw), "\n") && string(raw) != first {
 			advanced = true
 			break
 		}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -48,7 +49,7 @@ func main() {
 	ready := false
 	for time.Now().Before(deadline) {
 		raw, readErr := os.ReadFile(path)
-		if readErr == nil && string(raw) != string(initial) {
+		if readErr == nil && strings.HasSuffix(string(raw), "\n") && string(raw) != string(initial) {
 			ready = true
 			break
 		}
