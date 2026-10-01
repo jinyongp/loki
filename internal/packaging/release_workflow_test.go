@@ -362,6 +362,8 @@ func TestPublicWindowsInstallIsSourceFree(t *testing.T) {
 		"update --all --distribution $distribution",
 		"combined frontend and appliance update failed",
 		"combined update produced",
+		"$afterRepeat = $afterRepeatRaw | ConvertFrom-Json -AsHashtable",
+		"$null -ne $afterRepeat['prepared']",
 		"repeated combined update changed the current appliance generation or prepared another update",
 		`id -eq "openai"`,
 		`state -ne "not-configured"`,

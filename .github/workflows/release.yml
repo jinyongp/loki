@@ -1480,8 +1480,8 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "repeated combined update failed with code $LASTEXITCODE" }
               $afterRepeatRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
               if ($LASTEXITCODE -ne 0) { throw "repeated combined update status failed" }
-              $afterRepeat = $afterRepeatRaw | ConvertFrom-Json
-              if ([string]$afterRepeat.installed.id -ne [string]$beforeRepeat.installed.id -or $null -ne $afterRepeat.prepared) {
+              $afterRepeat = $afterRepeatRaw | ConvertFrom-Json -AsHashtable
+              if ([string]$afterRepeat.installed.id -ne [string]$beforeRepeat.installed.id -or $null -ne $afterRepeat['prepared']) {
                   throw "repeated combined update changed the current appliance generation or prepared another update"
               }
 
