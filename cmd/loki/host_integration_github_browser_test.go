@@ -344,3 +344,32 @@ func TestGitHubConversionPersistsKnownAppAfterRequestCancellation(t *testing.T) 
 		t.Fatalf("known App was lost on cancellation: phase=%s conversions=%d err=%v", resumed.Phase, count.Load(), err)
 	}
 }
+
+func TestGitHubSetupResumePreservesExplicitOwnerType(t *testing.T) {
+	for _, phase := range []string{"installation", "configured"} {
+		t.Run(phase, func(t *testing.T) {
+			h, _ := browserSetupFixture(t, "Organization")
+			begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback", Account: "example", AccountType: "organization"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"}); err != nil {
+				t.Fatal(err)
+			}
+			if phase == "configured" {
+				if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "poll"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			request := githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:43/callback", Account: "example", AccountType: "user"}
+			if _, err = h.Handle(t.Context(), request); err == nil {
+				t.Fatal("resume ignored conflicting explicit account type")
+			}
+			request.Account = ""
+			resumed, err := h.Handle(t.Context(), request)
+			if err != nil || resumed.Phase != phase || resumed.Account != "example" {
+				t.Fatalf("bare resume lost organization App: view=%+v err=%v", resumed, err)
+			}
+		})
+	}
+}

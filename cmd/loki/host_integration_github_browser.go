@@ -113,7 +113,11 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 			return githubsetup.View{}, errors.New("GitHub App creation result is uncertain. Check your GitHub App settings, generate a private key, and use file-based setup to recover")
 		}
 		if session.Phase != "" && session.Phase != "registration" {
-			if request.Account != "" && !strings.EqualFold(request.Account, session.Account) {
+			accountType := request.AccountType
+			if accountType == "" {
+				accountType = "user"
+			}
+			if request.Account != "" && (!strings.EqualFold(request.Account, session.Account) || accountType != session.AccountType) {
 				return githubsetup.View{}, errors.New("a GitHub setup for another account is pending; finish that setup first")
 			}
 			return session.view(), nil
