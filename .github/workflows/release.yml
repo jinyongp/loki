@@ -1187,6 +1187,25 @@ jobs:
           git tag "$TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
 
+      - name: Prepare release draft from verified tag
+        id: release_draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            exit 0
+          fi
+          # The existing tag selects the accepted commit. A branch reference
+          # avoids requesting workflow-write scope for a historical commit SHA.
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag --target "$GITHUB_REF_NAME" \
+            --title "$TAG" \
+            --notes-file publication/assets/loki-release-notes.md
+
       - name: Publish immutable GitHub Release
         id: release
         uses: releaseway/actions@4fdc624aafb0c824fb81dd7aaf59031bb1f5aa0f # v0.2.0

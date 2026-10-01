@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -127,6 +128,61 @@ func TestReleaseWSLScenariosRemainRequiredForPublication(t *testing.T) {
 		}
 	}
 	t.Fatal("publication must wait for every WSL scenario")
+}
+
+func TestReleaseDraftUsesVerifiedTagAndPreservesPublisherChecks(t *testing.T) {
+	var script string
+	var tagVerified bool
+	for _, step := range releaseWorkflowJobs(t)["publish"].Steps {
+		if strings.Contains(step.Run, `git push origin "refs/tags/$TAG"`) {
+			tagVerified = true
+		}
+		if step.ID == "release_draft" {
+			if !tagVerified {
+				t.Fatal("draft creation must follow accepted-commit tag verification")
+			}
+			script = step.Run
+		}
+		if step.ID == "release" && (script == "" || !strings.HasPrefix(step.Uses, "releaseway/actions@")) {
+			t.Fatal("verified draft must still pass immutable publisher checks")
+		}
+	}
+	if script == "" || !strings.Contains(script, `--draft --verify-tag --target "$GITHUB_REF_NAME"`) {
+		t.Fatal("draft creation must use the verified tag and source branch reference")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("release draft creation executes on the Linux publication runner")
+	}
+	for _, state := range []string{"existing", "missing", "denied"} {
+		t.Run(state, func(t *testing.T) {
+			root := t.TempDir()
+			fake := `#!/usr/bin/env bash
+set -eu
+if test "$2" = view; then test "$DRAFT_STATE" = existing; exit; fi
+printf '%s\n' "$@" > "$DRAFT_CALL"
+test "$DRAFT_STATE" != denied
+`
+			if err := os.WriteFile(filepath.Join(root, "gh"), []byte(fake), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			call := filepath.Join(root, "call")
+			cmd := exec.Command("bash", "-c", script)
+			cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"DRAFT_STATE="+state, "DRAFT_CALL="+call, "TAG=v0.0.1", "GITHUB_REF_NAME=main", "GITHUB_REPOSITORY=fixture/repo")
+			output, err := cmd.CombinedOutput()
+			if (err == nil) != (state != "denied") {
+				t.Fatalf("state=%s: %v\n%s", state, err, output)
+			}
+			args, readErr := os.ReadFile(call)
+			if state == "existing" {
+				if !os.IsNotExist(readErr) {
+					t.Fatalf("existing release was changed: %q, error=%v", args, readErr)
+				}
+			} else if readErr != nil || string(args) != "release\ncreate\nv0.0.1\n--repo\nfixture/repo\n--draft\n--verify-tag\n--target\nmain\n--title\nv0.0.1\n--notes-file\npublication/assets/loki-release-notes.md\n" {
+				t.Fatalf("draft creation arguments=%q, error=%v", args, readErr)
+			}
+		})
+	}
 }
 
 func releaseWorkflowJobs(t *testing.T) map[string]releaseWorkflowJob {
