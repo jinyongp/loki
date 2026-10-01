@@ -24,6 +24,10 @@ type NativeInputRunner interface {
 	RunInput(context.Context, string, []string, []byte) (NativeProbe, error)
 }
 
+type NativeInputStreamingRunner interface {
+	RunInputStreaming(context.Context, string, []string, []byte, progress.Reporter) (NativeProbe, error)
+}
+
 type ExecNativeRunner struct{}
 
 func normalizeNativeExitCode(code int) int {
@@ -39,6 +43,10 @@ func (runner ExecNativeRunner) Run(ctx context.Context, executable string, argum
 
 func (runner ExecNativeRunner) RunInput(ctx context.Context, executable string, arguments []string, input []byte) (NativeProbe, error) {
 	return runner.run(ctx, executable, arguments, nil, input)
+}
+
+func (runner ExecNativeRunner) RunInputStreaming(ctx context.Context, executable string, arguments []string, input []byte, reporter progress.Reporter) (NativeProbe, error) {
+	return runner.run(ctx, executable, arguments, reporter, input)
 }
 
 func (runner ExecNativeRunner) RunStreaming(
@@ -328,6 +336,21 @@ func (client WSLClient) runInput(ctx context.Context, input []byte, arguments ..
 		return NativeProbe{}, errors.New("WSL native runner does not support stdin")
 	}
 	return inputRunner.RunInput(ctx, client.executable(), arguments, input)
+}
+
+func (client WSLClient) runInputStreaming(ctx context.Context, input []byte, reporter progress.Reporter, arguments ...string) (NativeProbe, error) {
+	if streaming, ok := client.Runner.(NativeInputStreamingRunner); ok {
+		return streaming.RunInputStreaming(ctx, client.executable(), arguments, input, reporter)
+	}
+	result, err := client.runInput(ctx, input, arguments...)
+	if err == nil {
+		relay := newNativeProgressRelay(reporter)
+		if relay != nil {
+			_, _ = relay.Write([]byte(result.Stderr))
+			relay.Flush()
+		}
+	}
+	return result, err
 }
 
 func (client WSLClient) runStreaming(

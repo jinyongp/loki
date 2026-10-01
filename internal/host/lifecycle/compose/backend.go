@@ -24,6 +24,7 @@ import (
 	hostingress "loki/internal/host/ingress"
 	"loki/internal/host/lifecycle"
 	"loki/internal/platform/safeio"
+	"loki/internal/progress"
 )
 
 const (
@@ -80,6 +81,7 @@ type Config struct {
 }
 
 type Backend struct {
+	Progress          progress.Reporter
 	root              string
 	runtimeRoot       string
 	snapshotRoot      string
@@ -202,6 +204,7 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 	}
 	stopped := false
 	if found {
+		b.report("snapshot-stop", "Stopping services to create a consistent recovery backup (shutdown grace: 30s)...")
 		if _, err = b.compose(ctx, current, "stop", "--timeout", "30"); err != nil {
 			return lifecycle.RuntimeSnapshot{}, err
 		}
@@ -235,6 +238,7 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 		copy.Profiles = append([]string(nil), current.Profiles...)
 		copy.IngressHosts = append([]string(nil), current.IngressHosts...)
 		manifest.Runtime = &copy
+		b.report("snapshot-volumes", "Inspecting persistent volumes for the recovery backup...")
 		for _, name := range persistentVolumes {
 			volume := b.volumeName(name)
 			present, existsErr := b.volumeExists(ctx, volume)
@@ -247,10 +251,12 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 				continue
 			}
 			archive := name + ".tar"
+			b.report("snapshot-volume", "Backing up "+name+"...")
 			if err = b.archiveVolume(ctx, current, volume, dir, archive); err != nil {
 				_ = os.RemoveAll(dir)
 				return lifecycle.RuntimeSnapshot{}, err
 			}
+			b.report("snapshot-hash", "Calculating the backup checksum for "+name+"...")
 			sum, hashErr := fileSHA256(filepath.Join(dir, archive))
 			if hashErr != nil {
 				_ = os.RemoveAll(dir)
@@ -470,6 +476,7 @@ func (b *Backend) Restart(ctx context.Context) error {
 	if !found {
 		return errors.New("compose lifecycle runtime is not activated")
 	}
+	b.report("restart", "Starting required services; missing container images will be downloaded if needed...")
 	_, err = b.compose(ctx, state, "up", "-d", "--remove-orphans")
 	return err
 }
@@ -482,8 +489,15 @@ func (b *Backend) Health(ctx context.Context) error {
 	if !found {
 		return errors.New("compose lifecycle runtime is not activated")
 	}
+	b.report("health", "Waiting for required services to become ready (service readiness limit: 60s)...")
 	_, err = b.compose(ctx, state, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", "60")
 	return err
+}
+
+func (b *Backend) report(phase, message string) {
+	progress.Emit(b.Progress, progress.Event{
+		Operation: "integration", Phase: phase, State: progress.StateStarted, Message: message,
+	})
 }
 
 type RuntimeReadiness struct {
@@ -510,6 +524,7 @@ func (r RuntimeReadiness) Ready() bool {
 }
 
 func (b *Backend) Readiness(ctx context.Context) (RuntimeReadiness, error) {
+	b.report("inspect-services", "Inspecting the integration's required services...")
 	if err := ctx.Err(); err != nil {
 		return RuntimeReadiness{}, err
 	}
@@ -605,6 +620,7 @@ func (b *Backend) DoctorProbe(ctx context.Context) ([]byte, error) {
 }
 
 func (b *Backend) ActiveJobs(ctx context.Context) ([]string, error) {
+	b.report("inspect-jobs", "Checking for active jobs before changing integration state...")
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

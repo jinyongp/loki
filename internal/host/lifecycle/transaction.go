@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"loki/internal/platform/safeio"
+	"loki/internal/progress"
 )
 
 const DefaultMCPPort = 18765
@@ -219,6 +220,13 @@ type TransactionEngine struct {
 	Backend       TransactionBackend
 	ReleaseAssets ManagedReleaseAssets
 	Now           func() time.Time
+	Progress      progress.Reporter
+}
+
+func (e *TransactionEngine) report(phase, message string) {
+	progress.Emit(e.Progress, progress.Event{
+		Operation: "integration", Phase: phase, State: progress.StateStarted, Message: message,
+	})
 }
 
 func (e *TransactionEngine) now() time.Time {
@@ -334,6 +342,7 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 		return err
 	}
 	if !changed {
+		e.report("unchanged", "The requested integration state is already active.")
 		return nil
 	}
 	plan, err := maintenancePlan(snapshot, snapshot.Installed.ID, e.now())
@@ -365,6 +374,7 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 		}
 	}
+	e.report("configure", "Updating the "+name+" integration configuration...")
 	if err = e.Backend.SetComponent(ctx, *snapshot.Installed, name, enabled); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
@@ -386,6 +396,7 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
+	e.report("commit", "Saving the verified integration state...")
 	if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
@@ -452,6 +463,7 @@ func (e *TransactionEngine) UpdateManagedComponentIntegration(
 	if err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, nil, err)
 	}
+	e.report("configure", "Updating the "+name+" integration configuration and credentials...")
 	if err = mutate(ctx, e.Store); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
@@ -478,6 +490,7 @@ func (e *TransactionEngine) UpdateManagedComponentIntegration(
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
+	e.report("commit", "Saving the verified integration state...")
 	if componentChanged {
 		if err = e.Store.CommitComponents(ctx, target, e.now()); err != nil {
 			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
@@ -527,6 +540,7 @@ func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name s
 	if err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, nil, err)
 	}
+	e.report("configure", "Updating the "+name+" integration configuration and credentials...")
 	if err = mutate(ctx, e.Store); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
@@ -816,12 +830,14 @@ func (e *TransactionEngine) restoreTo(ctx context.Context, kind OperationKind, t
 }
 
 func (e *TransactionEngine) captureBackup(ctx context.Context, journal *OperationJournal, record OperationRecord, snapshot Snapshot) (BackupRecord, error) {
+	e.report("backup", "Preparing a recovery backup before changing integration state...")
 	if e.ReleaseAssets != nil && snapshot.Installed != nil && releaseAssetsMutate(record.Kind) {
 		if err := e.ReleaseAssets.ValidateCurrent(ctx, *snapshot.Installed); err != nil {
 			return BackupRecord{}, err
 		}
 	}
 	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+		e.report("backup-retention", "Checking retained backups and reclaiming eligible backup storage...")
 		if _, err := e.collectStorageLocked(ctx, journal, nil); err != nil {
 			return BackupRecord{}, err
 		}
@@ -830,6 +846,7 @@ func (e *TransactionEngine) captureBackup(ctx context.Context, journal *Operatio
 	if err != nil {
 		return BackupRecord{}, err
 	}
+	e.report("backup-integrations", "Backing up managed integration configuration and credentials...")
 	managedRef, managedErr := e.Store.CaptureManagedIntegrationSnapshot(ctx)
 	if managedErr != nil {
 		if storage, ok := e.Backend.(RuntimeSnapshotStorage); ok {
@@ -853,6 +870,7 @@ func (e *TransactionEngine) captureBackup(ctx context.Context, journal *Operatio
 		return BackupRecord{}, cleanupSnapshots(err)
 	}
 	if _, ok := e.Backend.(RuntimeSnapshotStorage); ok {
+		e.report("backup-retention", "Recording the recovery backup and applying backup retention...")
 		if _, err = e.collectStorageLocked(ctx, journal, map[string]bool{backup.ID: true}); err != nil {
 			return BackupRecord{}, errors.Join(err, e.discardBackup(ctx, backup))
 		}
@@ -880,6 +898,7 @@ func (e *TransactionEngine) openJournal(ctx context.Context) (*OperationLock, *O
 }
 
 func (e *TransactionEngine) restoreRecoveryBackup(ctx context.Context, backup BackupRecord) error {
+	e.report("recovery", "Restoring the previous configuration and runtime from the recovery backup...")
 	// Managed integration credentials may be required just to parse or stop
 	// the currently active Compose profile. Restore them before the runtime
 	// whenever this backup owns a managed snapshot. Legacy backups without a
@@ -949,6 +968,7 @@ func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *Operati
 		}
 		return original
 	}
+	e.report("recovery", "Integration change failed; restoring the previous working state...")
 	recoveryErr := e.restoreRecoveryBackup(ctx, *backup)
 	if recoveryErr != nil {
 		_, persistErr := journal.MarkRecoveryFailed(operationID, recoveryErr, e.now())

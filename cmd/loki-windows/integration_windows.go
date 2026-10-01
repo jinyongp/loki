@@ -58,7 +58,13 @@ func runIntegrationAction(ctx context.Context, action string, args []string, std
 		Command: "integration", Action: action, Integration: options.Name,
 		InterruptActiveJobs: options.InterruptJobs,
 	}
-	result, err := windowshost.NewWindowsOperatorClient().Execute(ctx, options.Distribution, request)
+	client := windowshost.NewWindowsOperatorClient()
+	var result windowshost.OperatorResult
+	if action == "list" || action == "status" {
+		result, err = client.Execute(ctx, options.Distribution, request)
+	} else {
+		result, err = executeWindowsIntegrationWithProgress(ctx, client, options.Distribution, request, nil, stderr)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -154,9 +160,9 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 		}
 		defer clear(raw)
 		request.UseStdin = true
-		result, err = client.ExecuteInput(ctx, *distribution, request, raw)
+		result, err = executeWindowsIntegrationWithProgress(ctx, client, *distribution, request, raw, stderr)
 	} else {
-		result, err = client.Execute(ctx, *distribution, request)
+		result, err = executeWindowsIntegrationWithProgress(ctx, client, *distribution, request, nil, stderr)
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -278,7 +284,7 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 		Command: "integration", Action: action, Integration: "github",
 		UseStdin: true, InterruptActiveJobs: *interrupt,
 	}
-	result, err := windowshost.NewWindowsOperatorClient().ExecuteInput(ctx, *distribution, request, envelope)
+	result, err := executeWindowsIntegrationWithProgress(ctx, windowshost.NewWindowsOperatorClient(), *distribution, request, envelope, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

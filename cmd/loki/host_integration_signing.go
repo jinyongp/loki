@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/host/lifecycle"
+	"loki/internal/progress"
 )
 
 const maxSigningKeyImportBytes = 64 << 10
@@ -88,6 +89,12 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 			return 1
 		}
 	}
+	reporter, stopHeartbeat := startHostIntegrationProgress(context.Background(), stderr, action, "signing")
+	defer stopHeartbeat()
+	progress.Emit(reporter, progress.Event{
+		Operation: "integration", Phase: "prepare-signing", State: progress.StateStarted,
+		Message: "Preparing and validating the SSH signing key and Git identity...",
+	})
 	var material managedSigningMaterial
 	if *keyStdin {
 		privateKey, readErr := io.ReadAll(io.LimitReader(hostIntegrationStdin, maxSigningKeyImportBytes+1))
@@ -112,7 +119,8 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
+	backend.Progress = reporter
+	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter}
 	manager := lifecycle.Manager{Store: store, Jobs: backend, Maintainer: engine, Now: lifecycleTimeNow}
 	err = manager.UpdateManagedComponentIntegration(context.Background(), "signing", true, func(ctx context.Context, store *lifecycle.FileStore) error {
 		credentialDigest, writeErr := store.WriteManagedIntegrationFile(ctx, lifecycle.ManagedSigningCredentialFile, material.PrivateKey)

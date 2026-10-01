@@ -47,10 +47,20 @@ func (client OperatorClient) ExecuteInput(
 	request OperatorRequest,
 	input []byte,
 ) (OperatorResult, error) {
+	return client.ExecuteInputStreaming(ctx, distribution, request, input, nil)
+}
+
+func (client OperatorClient) ExecuteInputStreaming(
+	ctx context.Context,
+	distribution string,
+	request OperatorRequest,
+	input []byte,
+	reporter progress.Reporter,
+) (OperatorResult, error) {
 	if len(input) == 0 || len(input) > 4<<20 {
 		return OperatorResult{}, errors.New("Windows operator stdin is empty or exceeds 4 MiB")
 	}
-	return client.execute(ctx, distribution, request, nil, input)
+	return client.execute(ctx, distribution, request, reporter, input)
 }
 
 func (client OperatorClient) ExecuteStreaming(
@@ -88,10 +98,11 @@ func (client OperatorClient) execute(
 	var result NativeProbe
 	switch {
 	case input != nil:
-		if reporter != nil {
-			return OperatorResult{}, errors.New("Windows operator does not stream commands with stdin")
+		if reporter == nil {
+			result, err = client.WSL.runInput(ctx, input, arguments...)
+		} else {
+			result, err = client.WSL.runInputStreaming(ctx, input, reporter, arguments...)
 		}
-		result, err = client.WSL.runInput(ctx, input, arguments...)
 	case reporter == nil:
 		result, err = client.WSL.run(ctx, arguments...)
 	default:

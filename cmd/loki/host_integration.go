@@ -14,6 +14,7 @@ import (
 
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
+	"loki/internal/progress"
 )
 
 var hostIntegrationStdin io.Reader = os.Stdin
@@ -149,15 +150,22 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Loki is not installed for this scope.")
 		return 1
 	}
+	ctx := context.Background()
+	var reporter progress.Reporter
+	if action != "list" && action != "status" {
+		var stopHeartbeat func()
+		reporter, stopHeartbeat = startHostIntegrationProgress(ctx, stderr, action, name)
+		defer stopHeartbeat()
+	}
 	backend, err := newHostComposeBackend(store)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	ctx := context.Background()
+	backend.Progress = reporter
 	manager := lifecycle.Manager{
 		Store: store, Jobs: backend, Maintainer: &lifecycle.TransactionEngine{
-			Store: store, Backend: backend, Now: lifecycleTimeNow,
+			Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter,
 		}, Now: lifecycleTimeNow,
 	}
 
@@ -167,7 +175,7 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		case "browser", "signing":
 			err = manager.SetComponent(ctx, name, enabled, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
 		case "github":
-			err = toggleManagedGitHub(ctx, manager, store, enabled, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs})
+			err = toggleManagedGitHub(ctx, manager, store, enabled, lifecycle.MutationOptions{InterruptActiveJobs: options.InterruptJobs}, reporter)
 		default:
 			err = errors.New("integration name is invalid")
 		}
@@ -221,6 +229,10 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if action == "doctor" && name == "github" && report.Configured && report.Enabled {
+		progress.Emit(reporter, progress.Event{
+			Operation: "integration", Phase: "validate-github", State: progress.StateStarted,
+			Message: "Checking GitHub App authentication and repository access...",
+		})
 		candidate, loadErr := loadManagedGitHubFromStore(ctx, store)
 		if loadErr != nil {
 			report.Ready = false

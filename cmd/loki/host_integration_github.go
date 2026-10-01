@@ -19,6 +19,7 @@ import (
 	"loki/internal/config"
 	"loki/internal/host/lifecycle"
 	githubapp "loki/internal/integrations/github"
+	"loki/internal/progress"
 )
 
 const maxGitHubConfigImportBytes = 1 << 20
@@ -97,6 +98,12 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 
+	reporter, stopHeartbeat := startHostIntegrationProgress(context.Background(), stderr, action, "github")
+	defer stopHeartbeat()
+	progress.Emit(reporter, progress.Event{
+		Operation: "integration", Phase: "prepare-github", State: progress.StateStarted,
+		Message: "Reading and validating the GitHub App configuration and private key...",
+	})
 	var candidate managedGitHubCandidate
 	if *stdin {
 		candidate, err = readManagedGitHubCandidateEnvelope(context.Background(), hostIntegrationStdin)
@@ -108,6 +115,10 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	defer clear(candidate.KeyRaw)
+	progress.Emit(reporter, progress.Event{
+		Operation: "integration", Phase: "validate-github", State: progress.StateStarted,
+		Message: "Checking GitHub App authentication and repository access...",
+	})
 	if err = validateManagedGitHubCandidate(context.Background(), candidate, nil); err != nil {
 		fmt.Fprintln(stderr, "GitHub App validation failed:", err)
 		return 1
@@ -118,7 +129,8 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
+	backend.Progress = reporter
+	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow, Progress: reporter}
 	manager := lifecycle.Manager{Store: store, Jobs: backend, Maintainer: engine, Now: lifecycleTimeNow}
 	enabled := true
 	if action == "rotate" {
@@ -323,6 +335,7 @@ func toggleManagedGitHub(
 	store *lifecycle.FileStore,
 	enabled bool,
 	options lifecycle.MutationOptions,
+	reporter progress.Reporter,
 ) error {
 	state, err := store.ReadManagedIntegrations(ctx)
 	if err != nil {
@@ -335,6 +348,10 @@ func toggleManagedGitHub(
 		return nil
 	}
 	if enabled {
+		progress.Emit(reporter, progress.Event{
+			Operation: "integration", Phase: "validate-github", State: progress.StateStarted,
+			Message: "Checking GitHub App authentication and repository access before enablement...",
+		})
 		candidate, loadErr := loadManagedGitHubFromStore(ctx, store)
 		if loadErr != nil {
 			return loadErr
