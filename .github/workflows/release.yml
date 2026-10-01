@@ -1461,18 +1461,8 @@ jobs:
                   throw "bare self-update mutated appliance release $beforeApplianceRelease -> $afterBareApplianceRelease"
               }
 
-              & $loki update prepare --distribution $distribution
-              if ($LASTEXITCODE -ne 0) { throw "explicit appliance prepare failed with code $LASTEXITCODE" }
-
-              $preparedRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "prepared appliance status failed" }
-              $prepared = $preparedRaw | ConvertFrom-Json
-              if ($null -eq $prepared.prepared) {
-                  throw "explicit appliance prepare did not publish a prepared plan"
-              }
-
-              & $loki update apply --distribution $distribution --approve
-              if ($LASTEXITCODE -ne 0) { throw "explicit appliance apply failed with code $LASTEXITCODE" }
+              & $loki update --all --distribution $distribution
+              if ($LASTEXITCODE -ne 0) { throw "combined frontend and appliance update failed with code $LASTEXITCODE" }
 
               $afterApplyStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
               if ($LASTEXITCODE -ne 0) { throw "post-apply appliance status failed" }
@@ -1480,7 +1470,19 @@ jobs:
               $afterApplyRelease = [string]$afterApplyStatus.status.release
               $expectedApplianceRelease = $env:TAG -replace '^v', ''
               if ($afterApplyRelease -ne $expectedApplianceRelease) {
-                  throw "explicit appliance apply produced $afterApplyRelease; expected $expectedApplianceRelease"
+                  throw "combined update produced $afterApplyRelease; expected $expectedApplianceRelease"
+              }
+
+              $beforeRepeatRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "combined update status failed" }
+              $beforeRepeat = $beforeRepeatRaw | ConvertFrom-Json
+              & $loki update --all --distribution $distribution
+              if ($LASTEXITCODE -ne 0) { throw "repeated combined update failed with code $LASTEXITCODE" }
+              $afterRepeatRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "repeated combined update status failed" }
+              $afterRepeat = $afterRepeatRaw | ConvertFrom-Json
+              if ([string]$afterRepeat.installed.id -ne [string]$beforeRepeat.installed.id -or $null -ne $afterRepeat.prepared) {
+                  throw "repeated combined update changed the current appliance generation or prepared another update"
               }
 
               # Check the upgraded OS prerequisites after a real cold start.
