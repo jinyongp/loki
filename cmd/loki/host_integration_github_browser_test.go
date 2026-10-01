@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -304,5 +305,42 @@ func TestGitHubBrowserCLIRejectsUnavailableHostBeforeRegistration(t *testing.T) 
 	}
 	if out.Len() != 0 || count.Load() != 0 || !strings.Contains(stderr.String(), "installation is unavailable") {
 		t.Fatal("uninstalled host created an App")
+	}
+}
+
+type cancelConversionBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (body cancelConversionBody) Close() error {
+	err := body.ReadCloser.Close()
+	body.cancel()
+	return err
+}
+
+func TestGitHubConversionPersistsKnownAppAfterRequestCancellation(t *testing.T) {
+	h, count := browserSetupFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	begin, err := h.Handle(ctx, githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := h.Client.Transport
+	h.Client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		response, err := transport.RoundTrip(request)
+		if err == nil && strings.HasPrefix(request.URL.Path, "/app-manifests/") {
+			response.Body = cancelConversionBody{ReadCloser: response.Body, cancel: cancel}
+		}
+		return response, err
+	})
+	_, _ = h.Handle(ctx, githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"})
+	if ctx.Err() == nil {
+		t.Fatal("fixture did not cancel after the conversion response")
+	}
+	resumed, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:43/callback"})
+	if err != nil || resumed.Phase != "installation" || count.Load() != 1 {
+		t.Fatalf("known App was lost on cancellation: phase=%s conversions=%d err=%v", resumed.Phase, count.Load(), err)
 	}
 }

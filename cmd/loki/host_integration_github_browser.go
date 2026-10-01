@@ -203,7 +203,9 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		session.PrivateKey = []byte(result.PEM)
 		result.PEM = ""
 		session.Phase = "installation"
-		if err = h.save(ctx, session); err != nil {
+		// A successful conversion cannot be replayed. Publish its known key even
+		// if the caller stopped while receiving the response.
+		if err = h.save(context.WithoutCancel(ctx), session); err != nil {
 			return githubsetup.View{}, err
 		}
 	case "poll":
