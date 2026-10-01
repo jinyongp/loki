@@ -13,6 +13,33 @@ import (
 	"time"
 )
 
+func TestRunAddsExistingAppInstallationWithoutRegistration(t *testing.T) {
+	var opened []string
+	var output bytes.Buffer
+	transport := func(ctx context.Context, request Request) (View, error) {
+		switch request.Action {
+		case "begin":
+			if request.Account != "example-org" {
+				t.Fatal("requested additional account was lost")
+			}
+			return View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", AppSettingsURL: "https://github.com/settings/apps/existing-app/advanced"}, nil
+		case "poll":
+			return View{Phase: "configured"}, nil
+		case "apply":
+			return View{Phase: "ready", Account: "example-org", Repositories: []string{"example-org/*"}}, nil
+		default:
+			t.Fatalf("additional installation invoked registration: %s", request.Action)
+			return View{}, errors.New("unexpected registration")
+		}
+	}
+	if err := Run(t.Context(), transport, Options{Account: "example-org", PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts remain configured") || !strings.Contains(output.String(), "GitHub integration ready") {
+		t.Fatalf("opened=%v output=%s", opened, output.String())
+	}
+}
+
 func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	var redirect string
 	var exchanges atomic.Int32

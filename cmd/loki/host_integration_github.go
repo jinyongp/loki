@@ -286,7 +286,7 @@ func managedGitHubTargets(c config.Config) map[string]githubapp.Target {
 }
 
 func validateManagedGitHubCandidate(ctx context.Context, candidate managedGitHubCandidate, client *http.Client) error {
-	if candidate.Config.GitHubAppID <= 0 || len(candidate.Config.GitHubTargets) == 0 {
+	if candidate.Config.GitHubAppID <= 0 || len(candidate.Config.GitHubTargets) == 0 || len(candidate.Config.GitHubInstallations) == 0 {
 		return errors.New("GitHub App configuration has no repository targets")
 	}
 	if err := githubapp.ValidatePrivateKey(string(candidate.KeyRaw)); err != nil {
@@ -317,31 +317,35 @@ func validateManagedGitHubCandidate(ctx context.Context, candidate managedGitHub
 		},
 		HTTP: client, Tokens: broker,
 	}
-	target := candidate.Config.GitHubTargets[0]
-	if strings.HasSuffix(target, "/*") {
-		var err error
-		target, err = validateManagedGitHubInstallation(validationCtx, candidate, client)
+	for _, installation := range candidate.Config.GitHubInstallations {
+		if len(installation.Repositories) == 0 {
+			return errors.New("GitHub installation has no repository targets")
+		}
+		target := installation.Account + "/" + installation.Repositories[0]
+		if strings.HasSuffix(target, "/*") {
+			var err error
+			target, err = validateManagedGitHubInstallation(validationCtx, candidate, client, installation)
+			if err != nil {
+				return err
+			}
+			if target == "" {
+				continue // An authorized installation may not have repositories yet.
+			}
+		}
+		result, err := provider.Read(validationCtx, githubapp.ProviderReadRequest{
+			Target: target, Action: githubapp.ProviderReadRepository,
+		})
 		if err != nil {
 			return err
 		}
-		if target == "" {
-			return nil // An authorized installation may not have repositories yet.
+		if result.Target != target || result.Repository == nil {
+			return errors.New("GitHub repository validation returned an invalid result")
 		}
-	}
-	result, err := provider.Read(validationCtx, githubapp.ProviderReadRequest{
-		Target: target, Action: githubapp.ProviderReadRepository,
-	})
-	if err != nil {
-		return err
-	}
-	if result.Target != target || result.Repository == nil {
-		return errors.New("GitHub repository validation returned an invalid result")
 	}
 	return nil
 }
 
-func validateManagedGitHubInstallation(ctx context.Context, candidate managedGitHubCandidate, client *http.Client) (string, error) {
-	installation := candidate.Config.GitHubInstallations[0]
+func validateManagedGitHubInstallation(ctx context.Context, candidate managedGitHubCandidate, client *http.Client, installation config.GitHubInstallation) (string, error) {
 	api := &hostGitHubSetup{Client: client}
 	jwt, err := githubapp.AppJWT(candidate.KeyRaw, candidate.Config.GitHubAppID, time.Now())
 	if err != nil {

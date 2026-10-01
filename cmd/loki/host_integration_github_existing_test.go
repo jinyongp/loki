@@ -18,8 +18,8 @@ func TestGitHubConfiguredSetupHonorsRequestedAccount(t *testing.T) {
 		{name: "unspecified"},
 		{name: "same account", account: "example"},
 		{name: "case insensitive", account: "ExAmPlE", accountType: "user"},
-		{name: "different account", account: "another-org", wantError: "requested account another-org"},
-		{name: "different type", account: "example", accountType: "organization", wantError: "requested account example"},
+		{name: "another App pending", account: "another-org", wantError: "another GitHub App setup is pending"},
+		{name: "different type", account: "example", accountType: "organization", wantError: "requested account type"},
 		{name: "invalid account", account: "../invalid", wantError: "GitHub account is invalid"},
 		{name: "invalid type", account: "example", accountType: "invalid", wantError: "GitHub account type"},
 	} {

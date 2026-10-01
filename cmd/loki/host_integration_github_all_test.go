@@ -125,3 +125,47 @@ func TestManagedGitHubAllRepositoriesValidatesInstallationAndRevokesProbeToken(t
 		})
 	}
 }
+
+func TestManagedGitHubValidatesEveryInstallationIncludingEmptyOnes(t *testing.T) {
+	for _, invalid := range []bool{false, true} {
+		t.Run(fmt.Sprintf("invalid-second=%t", invalid), func(t *testing.T) {
+			candidate := managedGitHubCandidateFixture(t)
+			defer clear(candidate.KeyRaw)
+			candidate.ConfigRaw = []byte(strings.Replace(string(candidate.ConfigRaw), `["repo"]`, `["*"]`, 1) + "\n[[github_installations]]\naccount = \"example-user\"\naccount_type = \"user\"\ninstallation_id = 789\nrepositories = [\"*\"]\n")
+			var err error
+			candidate.Config, err = config.ParseGitHubFragment(candidate.ConfigRaw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := make(map[string]bool)
+			client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				seen[r.URL.Path] = true
+				body := ""
+				status := 200
+				switch r.URL.Path {
+				case "/app/installations/456":
+					body = `{"id":456,"app_id":123,"account":{"login":"example-org","type":"Organization"}}`
+				case "/app/installations/789":
+					body = `{"id":789,"app_id":123,"account":{"login":"example-user","type":"User"}}`
+					if invalid {
+						body = `{"id":789,"app_id":999,"account":{"login":"example-user","type":"User"}}`
+					}
+				case "/app/installations/456/access_tokens", "/app/installations/789/access_tokens":
+					status = 201
+					body = `{"token":"probe-token"}`
+				case "/installation/repositories":
+					body = `{"total_count":0,"repositories":[]}`
+				case "/installation/token":
+					status = 204
+				default:
+					t.Fatalf("unexpected request %s", r.URL.Path)
+				}
+				return githubHTTPResponse(r, status, body), nil
+			})}
+			err = validateManagedGitHubCandidate(t.Context(), candidate, client)
+			if (err != nil) != invalid || !seen["/app/installations/456"] || !seen["/app/installations/789"] {
+				t.Fatalf("second installation was not validated: seen=%v err=%v", seen, err)
+			}
+		})
+	}
+}

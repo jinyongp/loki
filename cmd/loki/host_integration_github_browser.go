@@ -23,19 +23,21 @@ import (
 )
 
 type githubSetupSession struct {
-	Version      int       `json:"version"`
-	Phase        string    `json:"phase"`
-	State        string    `json:"state"`
-	CreatedAt    time.Time `json:"created_at"`
-	RedirectURL  string    `json:"redirect_url"`
-	Account      string    `json:"account,omitempty"`
-	AccountType  string    `json:"account_type"`
-	AppID        int64     `json:"app_id,omitempty"`
-	Slug         string    `json:"slug,omitempty"`
-	OwnerID      int64     `json:"owner_id,omitempty"`
-	PrivateKey   []byte    `json:"private_key,omitempty"`
-	ConfigRaw    []byte    `json:"config,omitempty"`
-	Repositories []string  `json:"repositories,omitempty"`
+	Version        int       `json:"version"`
+	Phase          string    `json:"phase"`
+	State          string    `json:"state"`
+	CreatedAt      time.Time `json:"created_at"`
+	RedirectURL    string    `json:"redirect_url"`
+	Account        string    `json:"account,omitempty"`
+	AccountType    string    `json:"account_type"`
+	AppID          int64     `json:"app_id,omitempty"`
+	Slug           string    `json:"slug,omitempty"`
+	OwnerID        int64     `json:"owner_id,omitempty"`
+	PrivateKey     []byte    `json:"private_key,omitempty"`
+	ConfigRaw      []byte    `json:"config,omitempty"`
+	Repositories   []string  `json:"repositories,omitempty"`
+	BaseConfig     []byte    `json:"base_config,omitempty"`
+	AppSettingsURL string    `json:"app_settings_url,omitempty"`
 }
 type hostGitHubSetup struct {
 	Store     *lifecycle.FileStore
@@ -78,40 +80,6 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 	if err != nil {
 		return githubsetup.View{}, err
 	}
-	if current.GitHub.Configured {
-		_, parsed, configErr := loadManagedGitHubPublicConfig(ctx, h.Store)
-		if configErr != nil {
-			return githubsetup.View{}, configErr
-		}
-		accounts := make([]string, 0, len(parsed.GitHubInstallations))
-		matched := request.Account == ""
-		for _, installation := range parsed.GitHubInstallations {
-			accounts = append(accounts, installation.Account)
-			if strings.EqualFold(request.Account, installation.Account) && (request.AccountType == "" || request.AccountType == installation.AccountType) {
-				matched = true
-			}
-		}
-		if !matched {
-			return githubsetup.View{}, fmt.Errorf("GitHub is configured for %s; requested account %s is not configured with the requested account type. Browser setup manages one App; use file-based configuration for additional installations, or explicitly remove the existing integration to replace it", strings.Join(accounts, ", "), request.Account)
-		}
-		if !current.GitHub.Enabled {
-			return githubsetup.View{}, errors.New("GitHub is configured but disabled; run integration enable github")
-		}
-		if h.Ready == nil {
-			return githubsetup.View{}, errors.New("GitHub readiness check is unavailable")
-		}
-		ready, checkErr := h.Ready(ctx)
-		if checkErr != nil {
-			return githubsetup.View{}, checkErr
-		}
-		if !ready {
-			return githubsetup.View{}, errors.New("GitHub is configured but not ready; run integration doctor github")
-		}
-		if err = h.Store.ClearGitHubSetup(ctx); err != nil {
-			return githubsetup.View{}, err
-		}
-		return githubsetup.View{SchemaVersion: 1, Phase: "ready", Account: strings.Join(accounts, ", "), Repositories: append([]string(nil), parsed.GitHubTargets...)}, nil
-	}
 	raw, err := h.Store.ReadGitHubSetup(ctx)
 	if err != nil {
 		return githubsetup.View{}, err
@@ -130,6 +98,15 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		}
 	}
 	defer func() { clear(session.PrivateKey) }()
+	if current.GitHub.Configured {
+		view, configuredErr := h.configuredSetup(ctx, request, current, &session)
+		if configuredErr != nil {
+			return githubsetup.View{}, configuredErr
+		}
+		if view != nil {
+			return *view, nil
+		}
+	}
 	if request.Action == "begin" {
 		if request.AccountType == "" {
 			if session.Phase != "" && (request.Account == "" || strings.EqualFold(request.Account, session.Account)) {
@@ -302,6 +279,12 @@ func (s githubSetupSession) valid() bool {
 		if s.AppID <= 0 || s.OwnerID <= 0 || !setupName(s.Slug, 100) || !setupName(s.Account, 39) || githubapp.ValidatePrivateKey(string(s.PrivateKey)) != nil {
 			return false
 		}
+		if len(s.BaseConfig) > 0 {
+			base, err := config.ParseGitHubFragment(s.BaseConfig)
+			if err != nil || base.GitHubAppID != s.AppID || len(base.GitHubInstallations) == 0 {
+				return false
+			}
+		}
 		return s.Phase != "configured" || len(s.ConfigRaw) > 0
 	default:
 		return false
@@ -316,7 +299,7 @@ func (h *hostGitHubSetup) save(ctx context.Context, session githubSetupSession) 
 	return h.Store.WriteGitHubSetup(ctx, raw)
 }
 func (s githubSetupSession) view() githubsetup.View {
-	view := githubsetup.View{SchemaVersion: 1, Phase: s.Phase, Account: s.Account, Repositories: append([]string(nil), s.Repositories...)}
+	view := githubsetup.View{SchemaVersion: 1, Phase: s.Phase, Account: s.Account, Repositories: append([]string(nil), s.Repositories...), AppSettingsURL: s.AppSettingsURL}
 	if s.Phase == "registration" {
 		target := "https://github.com/settings/apps/new"
 		if s.AccountType == "organization" {
@@ -358,24 +341,29 @@ func validateGitHubSetupBegin(request githubsetup.Request) error {
 }
 
 func (h *hostGitHubSetup) accountType(ctx context.Context, account string) (string, error) {
+	_, kind, err := h.accountIdentity(ctx, account)
+	return kind, err
+}
+
+func (h *hostGitHubSetup) accountIdentity(ctx context.Context, account string) (int64, string, error) {
 	var result struct {
 		ID    int64  `json:"id"`
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	}
 	if err := h.api(ctx, http.MethodGet, "/users/"+url.PathEscape(account), "", nil, &result); err != nil {
-		return "", fmt.Errorf("cannot detect GitHub account type; verify --account or provide --account-type: %w", err)
+		return 0, "", fmt.Errorf("cannot detect GitHub account type; verify --account or provide --account-type: %w", err)
 	}
 	if result.ID <= 0 || !strings.EqualFold(result.Login, account) {
-		return "", errors.New("GitHub account lookup returned invalid metadata")
+		return 0, "", errors.New("GitHub account lookup returned invalid metadata")
 	}
 	switch result.Type {
 	case "Organization":
-		return "organization", nil
+		return result.ID, "organization", nil
 	case "User":
-		return "user", nil
+		return result.ID, "user", nil
 	default:
-		return "", errors.New("GitHub account is not a user or organization")
+		return 0, "", errors.New("GitHub account is not a user or organization")
 	}
 }
 func setupName(value string, max int) bool {
@@ -513,7 +501,14 @@ func (h *hostGitHubSetup) discover(ctx context.Context, s *githubSetupSession) e
 	}
 	// GitHub checks the installation's current selection when issuing each
 	// repository-scoped token. Keep the installation binding, not a snapshot.
-	s.ConfigRaw = []byte(fmt.Sprintf("github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [\"*\"]\n", s.AppID, strconv.Quote(s.Account), strconv.Quote(s.AccountType), chosen.ID))
+	if chosen.Account.Type != "" && ((s.AccountType == "user" && chosen.Account.Type != "User") || (s.AccountType == "organization" && chosen.Account.Type != "Organization")) {
+		return errors.New("GitHub installation account type does not match setup")
+	}
+	base := s.BaseConfig
+	if len(base) == 0 {
+		base = []byte(fmt.Sprintf("github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n", s.AppID))
+	}
+	s.ConfigRaw = append(append([]byte(nil), base...), []byte(fmt.Sprintf("\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [\"*\"]\n", strconv.Quote(s.Account), strconv.Quote(s.AccountType), chosen.ID))...)
 	if _, err = config.ParseGitHubFragment(s.ConfigRaw); err != nil {
 		return errors.New("GitHub setup generated invalid configuration")
 	}

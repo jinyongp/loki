@@ -63,12 +63,16 @@ func runHostGitHubBrowserSetup(options hostIntegrationOptions, store *lifecycle.
 		if err != nil {
 			return err
 		}
+		action := "setup"
 		if current.GitHub.Configured {
-			return errors.New("GitHub was configured during setup; inspect the current integration before continuing")
+			if err = validateGitHubInstallationAddition(ctx, store, current, candidate); err != nil {
+				return err
+			}
+			action = "rotate"
 		}
 		reporter, stop := startHostIntegrationProgress(ctx, stderr, "setup", "github")
 		defer stop()
-		return applyManagedGitHubCandidate(ctx, "setup", options, store, current, candidate, reporter)
+		return applyManagedGitHubCandidate(ctx, action, options, store, current, candidate, reporter)
 	}
 	var err error
 	if relay {

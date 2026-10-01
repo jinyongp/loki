@@ -50,6 +50,7 @@ type View struct {
 	InstallationURL string    `json:"installation_url,omitempty"`
 	Account         string    `json:"account,omitempty"`
 	Repositories    []string  `json:"repositories,omitempty"`
+	AppSettingsURL  string    `json:"app_settings_url,omitempty"`
 }
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
@@ -182,6 +183,10 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 		return printReady(output, view)
 	}
 	if view.Phase == "installation" {
+		if view.AppSettingsURL != "" {
+			fmt.Fprintln(output, "Adding an account installation to the existing GitHub App. Existing accounts remain configured.")
+			fmt.Fprintln(output, "If GitHub does not offer the requested account, check the App's installation visibility and the organization's App policy:", view.AppSettingsURL)
+		}
 		fmt.Fprintln(output, "Choose All repositories or Only select repositories, then click Install. Waiting for GitHub installation...")
 		if !installationRedirected {
 			show(view.InstallationURL)

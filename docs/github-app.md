@@ -49,10 +49,22 @@ account type and does not repeat the lookup.
 You need permission to create and install Apps for the chosen owner. Organization
 approval can leave installation pending.
 
-Browser setup creates a private App, which GitHub allows to be installed only on
-the account that owns it. An organization repository therefore requires an
-organization-owned App in this flow. A personal-account App does not grant access
-to organization repositories just because its owner belongs to the organization.
+Loki supports one App with installations on multiple personal or organization
+accounts. Once an integration is configured, rerun setup with a new `--account`
+to install that same App on the additional account. Existing installations,
+repository restrictions, credentials and limits are preserved. Loki discovers
+an existing installation automatically or opens the App's installation page,
+then verifies and applies the combined configuration through the managed backup
+and recovery transaction. An organization approval request can remain pending;
+rerun the same command to resume.
+
+Browser registration creates a private App. GitHub permits private Apps to be
+installed only on their owning account. Installing an App on another account
+requires an App whose installation visibility allows that account; organization
+App policies also apply. Setup prints the App's settings link when adding an
+account. App visibility remains under the owner's control and is not changed by
+Loki. Membership in an organization alone does not grant the App access to its
+repositories.
 
 Choose the repository access you want in GitHub. Browser setup stores
 `repositories = ["*"]` for that account with its installation ID. GitHub checks
@@ -75,14 +87,16 @@ loki integration setup github --account example-org
 Removal clears Loki's saved GitHub configuration and pending setup credentials;
 if an integration was configured, it also disables that integration. It does not
 delete the App or its installation on GitHub. Remove an unused App in GitHub
-settings separately. Browser setup configures one account at a time.
+settings separately. Each setup run handles one account installation; configured
+accounts remain available together.
 
 Rerunning setup for an existing integration reports the configured accounts and
-repository access after checking readiness. An explicit `--account` must match
-an existing installation; a different account or account type returns an error
-and preserves the current integration. Browser setup does not add a second App
-to an existing integration. File-based configuration supports multiple
-installations of the same App as described below.
+repository access after checking readiness. An existing account is reused;
+a new account starts an installation addition. An account type mismatch returns
+an error. Pending additions preserve the active integration and resume without
+creating another App. Configuration or credential changes during an addition
+stop application before any existing settings can be overwritten. File-based
+configuration also supports multiple installations of the same App below.
 
 The Linux host owns GitHub API calls, the App private key, private resumable
 setup state, and the managed integration transaction. Windows opens the browser
