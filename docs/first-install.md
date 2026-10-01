@@ -225,10 +225,11 @@ fingerprint; register that public key with the Git provider when verified
 signatures are desired. An explicit signing key file is an import source, not
 the durable credential location.
 
-GitHub setup opens the browser to create a private App and select individual
-repositories, then discovers its identifiers automatically. Rerun the same
+GitHub setup opens the browser to create a private App, then continues in the
+same tab to select all or individual repositories and discovers its identifiers
+automatically. Rerun the same
 command after an installation wait or apply failure to continue with the saved
-App. Use `--account OWNER --account-type organization` for organization ownership,
+App. Use `--account OWNER` to detect organization or personal-account ownership,
 `--no-browser` to print the local registration URL, or import an existing App
 with `--config-file PATH --private-key-file PATH`. See [GitHub App setup](github-app.md).
 

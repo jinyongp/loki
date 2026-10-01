@@ -23,22 +23,29 @@ Windows and user-scoped Linux. It prints a URL; registration still requires a
 browser on the same machine.
 
 The browser page submits a [GitHub App manifest](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest).
-Approve creation of the private App, then choose **Only select repositories**
-on its installation page. Loki discovers the App ID, installation ID, account,
-and selected repositories, validates repository access, applies the integration,
+Approve creation of the private App. The same browser tab continues to its
+installation page, where you choose **All repositories** or **Only select
+repositories**. Loki discovers the App ID, installation ID, account,
+and repository access, validates the installation, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
 read access and Contents, Issues, and Pull requests read/write access, with
-webhooks and user OAuth authorization disabled. Installation selection is
-limited to 64 repositories on one account.
+webhooks and user OAuth authorization disabled. Both repository selections follow
+the installation's current access on GitHub, without a local repository snapshot.
+Each command still receives a token scoped to its one requested repository.
 
-Personal-account ownership is the default. To create an organization-owned App:
+With no account argument, setup creates a personal-account App for the signed-in
+GitHub user. When `--account` is supplied, Loki detects whether it identifies a
+user or organization through GitHub's public account API:
 
 ```powershell
-loki integration setup github --account example-org --account-type organization
+loki integration setup github --account example-org
 ```
 
 The Linux equivalent is
-`loki host integration setup --account example-org --account-type organization github`.
+`loki host integration setup --account example-org github`.
+Use `--account-type user|organization` to specify the type explicitly, such as
+when public account lookup is unavailable. A resumed setup retains its known
+account type and does not repeat the lookup.
 You need permission to create and install Apps for the chosen owner. Organization
 approval can leave installation pending.
 
@@ -47,17 +54,22 @@ the account that owns it. An organization repository therefore requires an
 organization-owned App in this flow. A personal-account App does not grant access
 to organization repositories just because its owner belongs to the organization.
 
-If you chose **All repositories**, change the existing App installation to
-**Only select repositories**, select the repositories, and rerun the same setup
-command. Loki preserves the pending App and its key. Installation status polls
-run quietly while the terminal waits; setup and application progress remain
-visible.
+Choose the repository access you want in GitHub. Browser setup stores
+`repositories = ["*"]` for that account with its installation ID. GitHub checks
+the requested repository when Loki obtains a repository-scoped token, and
+rejects requests outside the installation's current access. Changes to either
+**All repositories** or **Only select repositories** take effect without
+rerunning Loki setup. Existing tokens are reused until near expiry; GitHub also
+enforces access when processing API calls. File-based configurations can retain
+an explicit repository allowlist as an additional local restriction.
+Installation status polls run quietly while the terminal waits; setup and
+application progress remain visible.
 
 To abandon a pending personal-account setup and start an organization setup, run:
 
 ```powershell
 loki integration remove github
-loki integration setup github --account example-org --account-type organization
+loki integration setup github --account example-org
 ```
 
 Removal clears Loki's saved GitHub configuration and pending setup credentials;
@@ -95,7 +107,7 @@ Configure the registration as follows:
 - Add **Actions: Read**, **Workflows: Read and write**, **Checks: Read and write**, **Commit statuses: Read and write**, **Deployments: Read and write**, **Variables: Read and write**, or **Secrets: Read and write** only for commands the deployment must run.
 - Grant the organization Issue Fields permission when the typed `github_issue_fields` tool is required.
 
-After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **Only select repositories** and select the repositories in the Loki workspace allowlist. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.
+After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **All repositories** or select individual repositories. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.
 
 A public App can have installations on both organizations and personal accounts;
 a private App can be installed only on its owning account. To use one App across
@@ -123,7 +135,12 @@ installation_id = 345678
 repositories = ["private-repository"]
 ```
 
-Repository names are relative to `account`. Loki accepts 1-16 installations and at most 64 unique `owner/repository` targets in total. The configuration file contains identifiers and allowlists, not the private key.
+Repository names are relative to `account`. Use `repositories = ["*"]` alone to
+follow the GitHub installation's current repository access. Loki accepts 1-16
+installations and at most 64 configured target entries; an installation-wide
+entry delegates repository selection to GitHub. Calls use a concrete
+`owner/repository`, never `owner/*`. The configuration file contains identifiers
+and access selections, not the private key.
 
 Store the generated PEM in an operator-owned directory:
 
@@ -147,7 +164,7 @@ For prompted entry of an existing App's identifiers on Windows, use
 `loki integration setup github --manual`. The file-based path also supports
 multiple installations and additional App permissions.
 
-On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository before setup succeeds. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
+On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. For explicit repository lists, Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository. For `repositories = ["*"]`, Loki checks the installation's account and authentication, and reads one accessible repository when available; an installation with no repositories can still be configured. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
 
 ## Start with Compose
 
