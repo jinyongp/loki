@@ -35,9 +35,20 @@ type hostIngressReport struct {
 	PublicHosts []string `json:"public_hosts"`
 }
 
+func hostIngressUsage(action string) string {
+	switch action {
+	case "list":
+		return "usage: loki host ingress list [--system] [--state-root PATH] [--json]"
+	case "allow", "remove":
+		return fmt.Sprintf("usage: loki host ingress %s [--system] [--state-root PATH] [--json] [--interrupt-active-jobs] HOST", action)
+	default:
+		return "usage: loki host ingress list|allow|remove [--system] [--state-root PATH] [--json] [HOST]"
+	}
+}
+
 func parseHostIngressOptions(action string, args []string, stderr io.Writer) (hostIngressOptions, error) {
 	if action != "list" && action != "allow" && action != "remove" {
-		return hostIngressOptions{}, errors.New("usage: loki host ingress list|allow|remove [--system] [--state-root PATH] [--json] [HOST]")
+		return hostIngressOptions{}, errors.New(hostIngressUsage(action))
 	}
 	flags := flag.NewFlagSet("host ingress "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -53,7 +64,7 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 		wantArgs = 1
 	}
 	if flags.NArg() != wantArgs {
-		return hostIngressOptions{}, errors.New("usage: loki host ingress list|allow|remove [--system] [--state-root PATH] [--json] [HOST]")
+		return hostIngressOptions{}, errors.New(hostIngressUsage(action))
 	}
 	result := hostIngressOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
@@ -74,7 +85,7 @@ func parseHostIngressOptions(action string, args []string, stderr io.Writer) (ho
 
 func runHostIngress(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host ingress list|allow|remove [--system] [--state-root PATH] [--json] [HOST]")
+		fmt.Fprintln(stderr, hostIngressUsage(""))
 		return 2
 	}
 	action := args[0]

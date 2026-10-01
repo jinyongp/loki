@@ -34,7 +34,15 @@ func checkpointJobRunner(layout mcpLayout) (*jobsremote.Executor, error) {
 func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 	counts := map[string]int{"list": 1, "show": 2, "restore": 2}
 	if len(args) == 0 || counts[args[0]] != len(args) {
-		fmt.Fprintln(stderr, "usage: loki checkpoint list | show ID | restore ID")
+		if len(args) > 0 && counts[args[0]] != 0 {
+			suffix := ""
+			if counts[args[0]] == 2 {
+				suffix = " ID"
+			}
+			fmt.Fprintf(stderr, "usage: loki checkpoint %s%s\n", args[0], suffix)
+		} else {
+			fmt.Fprintln(stderr, "usage: loki checkpoint list | show ID | restore ID")
+		}
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
