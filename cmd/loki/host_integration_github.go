@@ -166,7 +166,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	} else {
 		fmt.Fprintln(stdout, "GitHub App integration is configured.")
 		fmt.Fprintf(stdout, "  App ID: %d\n", candidate.Config.GitHubAppID)
-		fmt.Fprintf(stdout, "  Repositories: %d\n", len(candidate.Config.GitHubTargets))
+		fmt.Fprintf(stdout, "  Repository access rules: %d\n", len(candidate.Config.GitHubTargets))
 		fmt.Fprintf(stdout, "  Enabled: %t\n", enabled)
 	}
 	return 0
@@ -318,6 +318,16 @@ func validateManagedGitHubCandidate(ctx context.Context, candidate managedGitHub
 		HTTP: client, Tokens: broker,
 	}
 	target := candidate.Config.GitHubTargets[0]
+	if strings.HasSuffix(target, "/*") {
+		var err error
+		target, err = validateManagedGitHubInstallation(validationCtx, candidate, client)
+		if err != nil {
+			return err
+		}
+		if target == "" {
+			return nil // An authorized installation may not have repositories yet.
+		}
+	}
 	result, err := provider.Read(validationCtx, githubapp.ProviderReadRequest{
 		Target: target, Action: githubapp.ProviderReadRepository,
 	})
@@ -328,6 +338,65 @@ func validateManagedGitHubCandidate(ctx context.Context, candidate managedGitHub
 		return errors.New("GitHub repository validation returned an invalid result")
 	}
 	return nil
+}
+
+func validateManagedGitHubInstallation(ctx context.Context, candidate managedGitHubCandidate, client *http.Client) (string, error) {
+	installation := candidate.Config.GitHubInstallations[0]
+	api := &hostGitHubSetup{Client: client}
+	jwt, err := githubapp.AppJWT(candidate.KeyRaw, candidate.Config.GitHubAppID, time.Now())
+	if err != nil {
+		return "", err
+	}
+	var installed struct {
+		ID      int64 `json:"id"`
+		AppID   int64 `json:"app_id"`
+		Account struct {
+			Login string `json:"login"`
+			Type  string `json:"type"`
+		} `json:"account"`
+	}
+	path := fmt.Sprintf("/app/installations/%d", installation.InstallationID)
+	if err = api.api(ctx, http.MethodGet, path, jwt, nil, &installed); err != nil {
+		return "", err
+	}
+	wantType := "User"
+	if installation.AccountType == "organization" {
+		wantType = "Organization"
+	}
+	if installed.ID != installation.InstallationID || installed.AppID != candidate.Config.GitHubAppID || !strings.EqualFold(installed.Account.Login, installation.Account) || installed.Account.Type != wantType {
+		return "", errors.New("GitHub installation does not match the configured account")
+	}
+	var credential struct {
+		Token string `json:"token"`
+	}
+	if err = api.api(ctx, http.MethodPost, path+"/access_tokens", jwt, map[string]any{"permissions": map[string]string{"metadata": "read"}}, &credential); err != nil {
+		return "", err
+	}
+	if credential.Token == "" || len(credential.Token) > 4096 {
+		return "", errors.New("GitHub installation token is invalid")
+	}
+	defer func() {
+		_ = api.api(context.WithoutCancel(ctx), http.MethodDelete, "/installation/token", credential.Token, nil, nil)
+	}()
+	var listing struct {
+		TotalCount   int `json:"total_count"`
+		Repositories []struct {
+			Name  string `json:"name"`
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repositories"`
+	}
+	if err = api.api(ctx, http.MethodGet, "/installation/repositories?per_page=1", credential.Token, nil, &listing); err != nil {
+		return "", err
+	}
+	if listing.TotalCount == 0 && len(listing.Repositories) == 0 {
+		return "", nil
+	}
+	if listing.TotalCount <= 0 || len(listing.Repositories) != 1 || !strings.EqualFold(listing.Repositories[0].Owner.Login, installation.Account) || !setupRepositoryName(listing.Repositories[0].Name) {
+		return "", errors.New("GitHub installation returned invalid repository metadata")
+	}
+	return installation.Account + "/" + strings.ToLower(listing.Repositories[0].Name), nil
 }
 
 func toggleManagedGitHub(

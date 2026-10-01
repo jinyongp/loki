@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -492,74 +491,16 @@ func (h *hostGitHubSetup) discover(ctx context.Context, s *githubSetupSession) e
 	if chosen.SuspendedAt != nil {
 		return errors.New("GitHub App installation is suspended")
 	}
-	if chosen.Selection != "selected" {
-		return errors.New("select individual repositories in the GitHub App installation settings, then rerun setup")
+	if chosen.Selection != "selected" && chosen.Selection != "all" {
+		return errors.New("GitHub installation returned an invalid repository selection")
 	}
-	var credential struct {
-		Token string `json:"token"`
-	}
-	if err = h.api(ctx, "POST", fmt.Sprintf("/app/installations/%d/access_tokens", chosen.ID), jwt, map[string]any{"permissions": map[string]string{"metadata": "read"}}, &credential); err != nil {
-		return err
-	}
-	if credential.Token == "" || len(credential.Token) > 4096 {
-		return errors.New("GitHub installation token is invalid")
-	}
-	defer func() {
-		_ = h.api(context.WithoutCancel(ctx), "DELETE", "/installation/token", credential.Token, nil, nil)
-		credential.Token = ""
-	}()
-	var repositories []string
-	for page := 1; page <= 2; page++ {
-		var listing struct {
-			TotalCount   int `json:"total_count"`
-			Repositories []struct {
-				Name  string `json:"name"`
-				Owner struct {
-					ID    int64  `json:"id"`
-					Login string `json:"login"`
-				} `json:"owner"`
-			} `json:"repositories"`
-		}
-		if err = h.api(ctx, "GET", fmt.Sprintf("/installation/repositories?per_page=100&page=%d", page), credential.Token, nil, &listing); err != nil {
-			return err
-		}
-		if listing.TotalCount < 0 {
-			return errors.New("GitHub repository count is invalid")
-		}
-		if listing.TotalCount > 64 {
-			return errors.New("Loki supports at most 64 repositories; narrow the GitHub App installation selection")
-		}
-		for _, repo := range listing.Repositories {
-			if repo.Owner.ID != s.OwnerID || !strings.EqualFold(repo.Owner.Login, s.Account) || !setupRepositoryName(repo.Name) {
-				return errors.New("GitHub returned a repository outside the selected account")
-			}
-			repositories = append(repositories, strings.ToLower(repo.Name))
-		}
-		if len(repositories) == listing.TotalCount {
-			break
-		}
-		if len(listing.Repositories) == 0 || page == 2 {
-			return errors.New("GitHub repository listing is incomplete")
-		}
-	}
-	if len(repositories) == 0 {
-		return errors.New("select at least one repository for the GitHub App")
-	}
-	sort.Strings(repositories)
-	quoted := make([]string, len(repositories))
-	for i, r := range repositories {
-		if i > 0 && repositories[i-1] == r {
-			return errors.New("GitHub repository listing contains duplicates")
-		}
-		quoted[i] = strconv.Quote(r)
-	}
-	s.ConfigRaw = []byte(fmt.Sprintf("github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [%s]\n", s.AppID, strconv.Quote(s.Account), strconv.Quote(s.AccountType), chosen.ID, strings.Join(quoted, ", ")))
+	// GitHub checks the installation's current selection when issuing each
+	// repository-scoped token. Keep the installation binding, not a snapshot.
+	s.ConfigRaw = []byte(fmt.Sprintf("github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [\"*\"]\n", s.AppID, strconv.Quote(s.Account), strconv.Quote(s.AccountType), chosen.ID))
 	if _, err = config.ParseGitHubFragment(s.ConfigRaw); err != nil {
 		return errors.New("GitHub setup generated invalid configuration")
 	}
-	for _, r := range repositories {
-		s.Repositories = append(s.Repositories, s.Account+"/"+r)
-	}
+	s.Repositories = []string{s.Account + "/*"}
 	s.Phase = "configured"
 	return nil
 }

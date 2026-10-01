@@ -152,6 +152,11 @@ type Broker struct {
 func (b *Broker) Token(ctx context.Context, target string) (string, error) {
 	canonical := strings.ToLower(strings.TrimSpace(target))
 	resolved, ok := b.Config.Targets[canonical]
+	if !ok && targetName(canonical) {
+		owner, repository, _ := strings.Cut(canonical, "/")
+		resolved, ok = b.Config.Targets[owner+"/*"]
+		resolved.Repository = repository
+	}
 	if !ok || !targetName(canonical) || resolved.InstallationID <= 0 || !repositoryName(resolved.Repository) {
 		return "", errors.New("GitHub repository target is not allowed")
 	}
@@ -183,6 +188,21 @@ func (b *Broker) Token(ctx context.Context, target string) (string, error) {
 func targetName(value string) bool {
 	owner, repository, ok := strings.Cut(value, "/")
 	return ok && owner != "" && !strings.Contains(repository, "/") && repositoryName(owner) && repositoryName(repository)
+}
+
+// TargetAllowed matches an exact repository or an explicitly configured
+// installation-managed selection. Requests still name one concrete repository.
+func TargetAllowed(targets []string, target string) bool {
+	if !targetName(target) {
+		return false
+	}
+	owner, _, _ := strings.Cut(target, "/")
+	for _, allowed := range targets {
+		if allowed == target || allowed == owner+"/*" {
+			return true
+		}
+	}
+	return false
 }
 
 func repositoryName(value string) bool {

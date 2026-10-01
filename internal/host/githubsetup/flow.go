@@ -220,7 +220,9 @@ func printReady(output io.Writer, view View) error {
 	if view.Account != "" {
 		fmt.Fprintln(output, "Account:", view.Account)
 	}
-	if len(view.Repositories) > 0 {
+	if len(view.Repositories) == 1 && strings.HasSuffix(view.Repositories[0], "/*") {
+		fmt.Fprintln(output, "Repository access follows your GitHub App installation settings.")
+	} else if len(view.Repositories) > 0 {
 		fmt.Fprintln(output, "Repositories:", strings.Join(view.Repositories, ", "))
 	}
 	return nil

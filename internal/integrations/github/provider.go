@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -242,7 +241,7 @@ func (p *Provider) target(raw string) (string, string, string, error) {
 		return "", "", "", errors.New("GitHub provider is not configured")
 	}
 	target := strings.ToLower(strings.TrimSpace(raw))
-	if !slices.Contains(p.Config.Targets, target) {
+	if !TargetAllowed(p.Config.Targets, target) {
 		return "", "", "", errors.New("GitHub repository target is not allowed")
 	}
 	owner, repo, ok := strings.Cut(target, "/")

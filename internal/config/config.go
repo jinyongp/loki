@@ -372,7 +372,10 @@ func parseGitHub(raw map[string]any, c *Config) error {
 		installation := GitHubInstallation{Account: account, AccountType: accountType, InstallationID: id}
 		for _, repository := range repositories {
 			repository = strings.ToLower(strings.TrimSpace(repository))
-			if !githubRepositoryPattern.MatchString(repository) || strings.Contains(repository, "..") {
+			if repository == "*" && len(repositories) != 1 {
+				return errors.New("installation-managed GitHub access must use repositories = [\"*\"] alone")
+			}
+			if repository != "*" && (!githubRepositoryPattern.MatchString(repository) || strings.Contains(repository, "..")) {
 				return errors.New("invalid GitHub repository name")
 			}
 			target := account + "/" + repository

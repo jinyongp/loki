@@ -21,8 +21,12 @@ import (
 
 func browserSetupFixture(t *testing.T, ownerTypes ...string) (*hostGitHubSetup, *atomic.Int32) {
 	ownerType := "User"
+	selection := "selected"
 	if len(ownerTypes) > 0 {
 		ownerType = ownerTypes[0]
+	}
+	if len(ownerTypes) > 1 {
+		selection = ownerTypes[1]
 	}
 	t.Helper()
 	root := t.TempDir()
@@ -54,27 +58,7 @@ func browserSetupFixture(t *testing.T, ownerTypes ...string) (*hostGitHubSetup, 
 			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ey") {
 				t.Error("installation discovery requires App JWT")
 			}
-			fmt.Fprintf(w, `[{"id":456,"app_id":123,"account":{"id":42,"login":"example","type":%q},"repository_selection":"selected","suspended_at":null}]`, ownerType)
-		case r.URL.Path == "/app/installations/456/access_tokens":
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Error(err)
-				http.Error(w, "invalid token request", 400)
-				return
-			}
-			permissions, _ := body["permissions"].(map[string]any)
-			if len(permissions) != 1 || permissions["metadata"] != "read" {
-				t.Error("discovery token must have metadata read only")
-			}
-			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{"token":"discovery-token"}`)
-		case r.URL.Path == "/installation/repositories":
-			if r.Header.Get("Authorization") != "Bearer discovery-token" {
-				t.Error("repository discovery uses installation token")
-			}
-			fmt.Fprint(w, `{"total_count":2,"repositories":[{"name":"RepoB","owner":{"id":42,"login":"example"}},{"name":"RepoA","owner":{"id":42,"login":"example"}}]}`)
-		case r.URL.Path == "/installation/token":
-			w.WriteHeader(http.StatusNoContent)
+			fmt.Fprintf(w, `[{"id":456,"app_id":123,"account":{"id":42,"login":"example","type":%q},"repository_selection":%q,"suspended_at":null}]`, ownerType, selection)
 		default:
 			t.Errorf("unexpected API request %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -117,11 +101,11 @@ func TestHostGitHubBrowserFlowResumesWithoutExposingPrivateKey(t *testing.T) {
 		t.Fatal("conversion replay created another App")
 	}
 	configured, err := h.Handle(ctx, githubsetup.Request{Action: "poll"})
-	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/repoa,example/repob" {
+	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/*" {
 		t.Fatalf("poll=%#v %v", configured, err)
 	}
 	h.Apply = func(ctx context.Context, candidate managedGitHubCandidate) error {
-		if candidate.Config.GitHubAppID != 123 || len(candidate.Config.GitHubTargets) != 2 || len(candidate.KeyRaw) == 0 {
+		if candidate.Config.GitHubAppID != 123 || len(candidate.Config.GitHubTargets) != 1 || candidate.Config.GitHubTargets[0] != "example/*" || len(candidate.KeyRaw) == 0 {
 			t.Fatal("invalid apply candidate")
 		}
 		return nil
@@ -168,12 +152,12 @@ func TestGitHubConversionUncertaintyDoesNotRepeatSideEffect(t *testing.T) {
 		t.Fatal("unexpected conversion")
 	}
 }
-func TestGitHubDiscoveryRejectsBroaderOrIncompleteRepositorySelection(t *testing.T) {
-	for _, test := range []struct{ name, installation, repos string }{
-		{"all", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"all"}]`, ""},
-		{"too-many", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected"}]`, `{"total_count":65,"repositories":[]}`},
-		{"incomplete", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected"}]`, `{"total_count":2,"repositories":[]}`},
-		{"other-owner", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected"}]`, `{"total_count":1,"repositories":[{"name":"repo","owner":{"id":99,"login":"other"}}]}`},
+func TestGitHubDiscoveryRejectsInvalidInstallation(t *testing.T) {
+	for _, test := range []struct{ name, installation string }{
+		{"invalid-selection", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"unknown"}]`},
+		{"invalid-id", `[{"id":0,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected"}]`},
+		{"suspended", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected","suspended_at":"2026-09-15T01:00:00Z"}]`},
+		{"duplicate", `[{"id":456,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"selected"},{"id":457,"app_id":123,"account":{"id":42,"login":"example"},"repository_selection":"all"}]`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h, _ := browserSetupFixture(t)
@@ -189,21 +173,15 @@ func TestGitHubDiscoveryRejectsBroaderOrIncompleteRepositorySelection(t *testing
 				switch r.URL.Path {
 				case "/app/installations":
 					fmt.Fprint(w, test.installation)
-				case "/app/installations/456/access_tokens":
-					w.WriteHeader(201)
-					fmt.Fprint(w, `{"token":"token"}`)
-				case "/installation/repositories":
-					fmt.Fprint(w, test.repos)
-				case "/installation/token":
-					w.WriteHeader(204)
 				default:
+					t.Errorf("unexpected discovery request: %s", r.URL.Path)
 					http.NotFound(w, r)
 				}
 			}))
 			defer server.Close()
 			h.APIURL = server.URL
 			if _, err = h.Handle(ctx, githubsetup.Request{Action: "poll"}); err == nil {
-				t.Fatal("unsafe or incomplete selection accepted")
+				t.Fatal("invalid installation accepted")
 			}
 		})
 	}
@@ -380,7 +358,7 @@ func TestGitHubSetupResumePreservesExplicitOwnerType(t *testing.T) {
 	}
 }
 
-func TestGitHubDiscoveryAcceptsExistingRepositoryNameContract(t *testing.T) {
+func TestGitHubDiscoveryWaitsForMatchingInstallation(t *testing.T) {
 	h, _ := browserSetupFixture(t)
 	begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback"})
 	if err != nil {
@@ -391,14 +369,14 @@ func TestGitHubDiscoveryAcceptsExistingRepositoryNameContract(t *testing.T) {
 	}
 	transport := h.Client.Transport
 	h.Client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.Path == "/installation/repositories" {
-			return githubHTTPResponse(request, http.StatusOK, `{"total_count":2,"repositories":[{"name":"-repo","owner":{"id":42,"login":"example"}},{"name":"repo-","owner":{"id":42,"login":"example"}}]}`), nil
+		if request.URL.Path == "/app/installations" {
+			return githubHTTPResponse(request, http.StatusOK, `[{"id":456,"app_id":123,"account":{"id":99,"login":"other"},"repository_selection":"all"},{"id":457,"app_id":999,"account":{"id":42,"login":"example"},"repository_selection":"all"}]`), nil
 		}
 		return transport.RoundTrip(request)
 	})
 	configured, err := h.Handle(t.Context(), githubsetup.Request{Action: "poll"})
-	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/-repo,example/repo-" {
-		t.Fatalf("existing repository names rejected: view=%+v err=%v", configured, err)
+	if err != nil || configured.Phase != "installation" || len(configured.Repositories) != 0 {
+		t.Fatalf("unrelated installation accepted: view=%+v err=%v", configured, err)
 	}
 }
 

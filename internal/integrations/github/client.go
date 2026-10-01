@@ -196,7 +196,7 @@ func encodeValues(values []Value) ([]byte, error) {
 
 func (c *Client) target(target string) (string, string, error) {
 	target = strings.ToLower(strings.TrimSpace(target))
-	if !slices.Contains(c.Config.Targets, target) {
+	if !TargetAllowed(c.Config.Targets, target) {
 		return "", "", errors.New("GitHub repository target is not allowed")
 	}
 	owner, repo, ok := strings.Cut(target, "/")
