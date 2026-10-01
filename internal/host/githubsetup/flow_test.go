@@ -18,6 +18,7 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	var exchanges atomic.Int32
 	var opened int
 	var polls int
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	transport := func(ctx context.Context, req Request) (View, error) {
 		switch req.Action {
 		case "begin":
@@ -43,12 +44,6 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	}
 	open := func(link string) error {
 		opened++
-		if opened == 2 {
-			if link != "https://github.com/apps/loki-test/installations/new" {
-				t.Errorf("installation URL=%s", link)
-			}
-			return nil
-		}
 		res, err := http.Get(link)
 		if err != nil {
 			return err
@@ -82,14 +77,16 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 			t.Error("foreign host accepted")
 		}
 		for i := 0; i < 2; i++ {
-			response, err := http.Get(redirect + "?state=expected-state&code=one-time-code")
+			response, err := client.Get(redirect + "?state=expected-state&code=one-time-code")
 			if err != nil {
 				return err
 			}
 			response.Body.Close()
-			want := 200
+			want := http.StatusSeeOther
 			if i == 1 {
 				want = 409
+			} else if response.Header.Get("Location") != "https://github.com/apps/loki-test/installations/new" {
+				t.Errorf("callback redirect=%s", response.Header.Get("Location"))
 			}
 			if response.StatusCode != want {
 				t.Errorf("callback status=%d want=%d", response.StatusCode, want)
@@ -101,10 +98,10 @@ func TestRunRelaysValidatedCallbackAndAppliesReadyInstallation(t *testing.T) {
 	if err := Run(t.Context(), transport, Options{OpenBrowser: open, PollInterval: time.Millisecond}, &output); err != nil {
 		t.Fatal(err)
 	}
-	if exchanges.Load() != 1 || opened != 2 || !strings.Contains(output.String(), "GitHub integration ready.") || !strings.Contains(output.String(), "example/repo") {
+	if exchanges.Load() != 1 || opened != 1 || !strings.Contains(output.String(), "GitHub integration ready.") || !strings.Contains(output.String(), "example/repo") {
 		t.Fatalf("exchanges=%d opened=%d output=%s", exchanges.Load(), opened, output.String())
 	}
-	if polls != 4 || strings.Count(output.String(), "Only select repositories") != 1 || strings.Count(output.String(), "Opening repository selection") != 1 {
+	if polls != 4 || strings.Count(output.String(), "All repositories or Only select repositories") != 1 {
 		t.Fatalf("polls=%d output=%s", polls, output.String())
 	}
 }

@@ -89,6 +89,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 		err  error
 	}
 	completed := make(chan callbackResult, 1)
+	installationRedirected := false
 	tokenBytes := make([]byte, 32)
 	if _, err = rand.Read(tokenBytes); err != nil {
 		return err
@@ -139,9 +140,13 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			return
 		}
 		submitted = true
+		if next.Phase == "installation" && next.InstallationURL != "" {
+			http.Redirect(w, r, next.InstallationURL, http.StatusSeeOther)
+		} else {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = io.WriteString(w, "App created. Return to the terminal to continue setup.")
+		}
 		completed <- callbackResult{view: next}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = io.WriteString(w, "App created. Return to the terminal to continue repository selection.")
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 45 * time.Second, MaxHeaderBytes: 8192}
 	defer server.Close()
@@ -168,6 +173,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 				return result.err
 			}
 			view = result.view
+			installationRedirected = view.Phase == "installation" && view.InstallationURL != ""
 		case <-ctx.Done():
 			return errors.New("GitHub setup stopped; rerun the same setup command to continue")
 		}
@@ -176,9 +182,10 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 		return printReady(output, view)
 	}
 	if view.Phase == "installation" {
-		fmt.Fprintln(output, "Opening repository selection...")
-		fmt.Fprintln(output, "Choose Only select repositories, select your repositories, then click Install. Waiting for GitHub installation...")
-		show(view.InstallationURL)
+		fmt.Fprintln(output, "Choose All repositories or Only select repositories, then click Install. Waiting for GitHub installation...")
+		if !installationRedirected {
+			show(view.InstallationURL)
+		}
 	}
 	interval := options.PollInterval
 	if interval == 0 {
