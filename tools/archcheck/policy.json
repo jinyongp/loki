@@ -321,6 +321,10 @@
       "to": "loki/internal/platform/safeio"
     },
     {
+      "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/progress"
+    },
+    {
       "from": "loki/internal/host/lifecycle/compose",
       "to": "loki/internal/host/assets"
     },
@@ -335,6 +339,10 @@
     {
       "from": "loki/internal/host/lifecycle/compose",
       "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/progress"
     },
     {
       "from": "loki/internal/host/policy",
