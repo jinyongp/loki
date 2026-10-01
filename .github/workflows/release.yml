@@ -498,18 +498,28 @@ jobs:
           inputs="$RUNNER_TEMP/release-inputs"
           core_ref="ghcr.io/jinyongp/loki:candidate-${GITHUB_SHA}"
           browser_ref="ghcr.io/jinyongp/loki-browser:candidate-${GITHUB_SHA}"
-          export LOKI_BUILD_METADATA="$RUNNER_TEMP/core-image.json"
-          export LOKI_BUILD_CACHE_SCOPE=loki-core
-          ./scripts/build/build-oci.sh "$core_ref" \
-            "$inputs/devtools/amd64/devtools" \
-            "$inputs/devtools/arm64/devtools" \
-            "$inputs/ripgrep/amd64/rg" \
-            "$inputs/ripgrep/arm64/rg" \
-            "$inputs/gh/amd64/gh" \
-            "$inputs/gh/arm64/gh"
-          export LOKI_BUILD_METADATA="$RUNNER_TEMP/browser-image.json"
-          export LOKI_BUILD_CACHE_SCOPE=loki-browser
-          ./scripts/build/build-browser-oci.sh "$browser_ref"
+          (
+            export LOKI_BUILD_METADATA="$RUNNER_TEMP/core-image.json"
+            export LOKI_BUILD_CACHE_SCOPE=loki-core
+            ./scripts/build/build-oci.sh "$core_ref" \
+              "$inputs/devtools/amd64/devtools" \
+              "$inputs/devtools/arm64/devtools" \
+              "$inputs/ripgrep/amd64/rg" \
+              "$inputs/ripgrep/arm64/rg" \
+              "$inputs/gh/amd64/gh" \
+              "$inputs/gh/arm64/gh"
+          ) &
+          core_pid=$!
+          (
+            export LOKI_BUILD_METADATA="$RUNNER_TEMP/browser-image.json"
+            export LOKI_BUILD_CACHE_SCOPE=loki-browser
+            ./scripts/build/build-browser-oci.sh "$browser_ref"
+          ) &
+          browser_pid=$!
+          image_build_failed=0
+          wait "$core_pid" || image_build_failed=1
+          wait "$browser_pid" || image_build_failed=1
+          test "$image_build_failed" -eq 0
           core_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/core-image.json")
           browser_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/browser-image.json")
           {
