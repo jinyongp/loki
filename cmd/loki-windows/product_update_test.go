@@ -45,6 +45,67 @@ func noProductApplianceAdvisory(context.Context, io.Writer) error {
 	return nil
 }
 
+func TestProductUpdateAllContinuesOnlyAfterVerifiedFrontend(t *testing.T) {
+	for _, scenario := range []string{"current", "updated", "replacement-fails", "invalid-installed"} {
+		t.Run(scenario, func(t *testing.T) {
+			client := &fakeProductUpdateClient{pointer: windowshost.FrontendReleasePointer{ReleaseTag: "v0.1.40"}, comparison: -1, download: []byte("candidate")}
+			if scenario == "current" || scenario == "invalid-installed" {
+				client.comparison = 0
+			}
+			continued := 0
+			deps := productUpdateDependencies{
+				CurrentBinding: func() (windowshost.ReleaseBinding, error) {
+					return windowshost.ReleaseBinding{ReleaseTag: "v0.1.40"}, nil
+				},
+				Client: client,
+				Stage: func(context.Context, []byte, windowshost.FrontendReleasePointer) (string, func(), error) {
+					return "candidate.exe", func() {}, nil
+				},
+				Inspect: func(_ context.Context, path string) (windowshost.ReleaseBinding, error) {
+					tag := "v0.1.40"
+					if scenario == "invalid-installed" && path == "canonical.exe" {
+						tag = "v0.1.39"
+					}
+					return windowshost.ReleaseBinding{ReleaseTag: tag}, nil
+				},
+				RunCandidate: func(_ context.Context, path string, args []string, _, _ io.Writer) int {
+					if path != "candidate.exe" || !slices.Equal(args, []string{"bootstrap", "update"}) {
+						t.Fatalf("candidate=%s args=%v", path, args)
+					}
+					if scenario == "replacement-fails" {
+						return 5
+					}
+					return 0
+				},
+				CanonicalPath: func() (string, error) { return "canonical.exe", nil },
+				ApplianceAdvisory: func(context.Context, io.Writer) error {
+					t.Fatal("combined update must not print manual-update advisory")
+					return nil
+				},
+				AfterFrontend: func(_ context.Context, path, tag string, _, _ io.Writer) int {
+					if path != "canonical.exe" || tag != "v0.1.40" {
+						t.Fatalf("continuation path=%s tag=%s", path, tag)
+					}
+					continued++
+					return 6 // Appliance failures must remain failures of --all.
+				},
+			}
+			var out, errOut bytes.Buffer
+			code := runProductUpdateWith(t.Context(), deps, &out, &errOut)
+			wantCode, wantContinued := 6, 1
+			if scenario == "replacement-fails" {
+				wantCode, wantContinued = 5, 0
+			}
+			if scenario == "invalid-installed" {
+				wantCode, wantContinued = 1, 0
+			}
+			if code != wantCode || continued != wantContinued {
+				t.Fatalf("code=%d continued=%d stderr=%s", code, continued, errOut.String())
+			}
+		})
+	}
+}
+
 func TestProductUpdateCurrentFrontendDoesNotMutateAppliance(t *testing.T) {
 	client := &fakeProductUpdateClient{
 		pointer:    windowshost.FrontendReleasePointer{ReleaseTag: "v0.1.23"},

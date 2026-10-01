@@ -25,10 +25,10 @@ type frontendVersionEnvelope struct {
 	Binding windowshost.ReleaseBinding `json:"release_binding"`
 }
 
-func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
+func runProductUpdate(ctx context.Context, options productUpdateOptions, stdout, stderr io.Writer) int {
 	reporter := progress.NewLineReporter(stderr)
 	client := windowshost.FrontendReleaseClient{Progress: reporter}
-	return runProductUpdateWith(ctx, productUpdateDependencies{
+	deps := productUpdateDependencies{
 		CurrentBinding:    windowshost.CurrentReleaseBinding,
 		Client:            client,
 		Stage:             stageFrontendUpdateCandidate,
@@ -37,7 +37,15 @@ func runProductUpdate(ctx context.Context, stdout, stderr io.Writer) int {
 		CanonicalPath:     canonicalFrontendPath,
 		ApplianceAdvisory: reportWindowsApplianceUpdateAdvisory,
 		Progress:          reporter,
-	}, stdout, stderr)
+	}
+	if options.All {
+		deps.AfterFrontend = func(ctx context.Context, executable, releaseTag string, stdout, stderr io.Writer) int {
+			return runAllApplianceUpdateWith(ctx, allUpdateDependencies{
+				Executable: executable, ReleaseTag: releaseTag, Run: runFrontendCandidate,
+			}, options, stdout, stderr)
+		}
+	}
+	return runProductUpdateWith(ctx, deps, stdout, stderr)
 }
 
 func reportWindowsApplianceUpdateAdvisory(ctx context.Context, stdout io.Writer) error {

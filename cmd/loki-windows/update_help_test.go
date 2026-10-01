@@ -37,6 +37,7 @@ func TestPrintUpdateHelpSeparatesFrontendAndApplianceLifecycle(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"loki update",
+		"loki update --all",
 		"loki update prepare",
 		"loki update apply",
 		"updates only the Windows frontend and reports appliance update readiness",

@@ -23,6 +23,7 @@ type productUpdateDependencies struct {
 	RunCandidate      func(context.Context, string, []string, io.Writer, io.Writer) int
 	CanonicalPath     func() (string, error)
 	ApplianceAdvisory func(context.Context, io.Writer) error
+	AfterFrontend     func(context.Context, string, string, io.Writer, io.Writer) int
 	Progress          progress.Reporter
 }
 
@@ -59,7 +60,7 @@ func runProductUpdateWith(
 	}
 	if comparison == 0 {
 		fmt.Fprintf(stdout, "Windows Loki frontend is current at %s.\n", current.ReleaseTag)
-		return finishProductUpdateAdvisory(ctx, deps, stdout, stderr)
+		return finishProductUpdate(ctx, deps, "", pointer.ReleaseTag, stdout, stderr)
 	}
 
 	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "download-frontend", State: progress.StateStarted, Message: fmt.Sprintf("Downloading Windows frontend %s...", pointer.ReleaseTag)})
@@ -112,7 +113,31 @@ func runProductUpdateWith(
 		return 1
 	}
 	fmt.Fprintf(stdout, "Windows Loki frontend is updated to %s.\n", pointer.ReleaseTag)
-	return finishProductUpdateAdvisory(ctx, deps, stdout, stderr)
+	return finishProductUpdate(ctx, deps, canonical, pointer.ReleaseTag, stdout, stderr)
+}
+
+func finishProductUpdate(ctx context.Context, deps productUpdateDependencies, canonical, releaseTag string, stdout, stderr io.Writer) int {
+	if deps.AfterFrontend == nil {
+		return finishProductUpdateAdvisory(ctx, deps, stdout, stderr)
+	}
+	if canonical == "" {
+		var err error
+		canonical, err = deps.CanonicalPath()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		binding, err := deps.Inspect(ctx, canonical)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot verify Windows frontend before appliance update:", err)
+			return 1
+		}
+		if binding.ReleaseTag != releaseTag {
+			fmt.Fprintf(stderr, "installed Windows frontend %s does not match verified release %s\n", binding.ReleaseTag, releaseTag)
+			return 1
+		}
+	}
+	return deps.AfterFrontend(ctx, canonical, releaseTag, stdout, stderr)
 }
 
 func finishProductUpdateAdvisory(

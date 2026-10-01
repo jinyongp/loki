@@ -30,10 +30,13 @@ func printUpdateHelp(output io.Writer, path ...string) {
 	}
 	fmt.Fprintln(output, "usage:")
 	fmt.Fprintln(output, "  loki update")
+	fmt.Fprintln(output, "  loki update --all [--distribution NAME] [--interrupt-active-jobs]")
 	fmt.Fprintln(output, "  loki update status [--distribution NAME] [--json]")
 	fmt.Fprintln(output, "  loki update prepare [--distribution NAME] [--json]")
 	fmt.Fprintln(output, "  loki update apply [--distribution NAME] [--json] [--approve] [--interrupt-active-jobs]")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Bare 'loki update' updates only the Windows frontend and reports appliance update readiness.")
-	fmt.Fprintln(output, "It never prepares or applies an appliance update; use status, prepare, and apply explicitly for the appliance lifecycle.")
+	fmt.Fprintln(output, "Bare update never prepares or applies an appliance update.")
+	fmt.Fprintln(output, "--all updates the frontend, prepares and applies the appliance update, and approves apply without another prompt.")
+	fmt.Fprintln(output, "Active jobs are interrupted only with --interrupt-active-jobs. Use status, prepare, and apply for individual lifecycle steps.")
 }

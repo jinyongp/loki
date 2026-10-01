@@ -564,11 +564,24 @@ func newWindowsConnectionManagerWithAdaptersAndProgress(
 
 func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return runProductUpdate(ctx, stdout, stderr)
+		return runProductUpdate(ctx, productUpdateOptions{}, stdout, stderr)
+	}
+	if productUpdateHelpRequested(args) {
+		printUpdateHelp(stdout)
+		return 0
 	}
 	if updateHelpRequested(args) {
 		printUpdateHelp(stdout, args[:len(args)-1]...)
 		return 0
+	}
+	if strings.HasPrefix(args[0], "-") {
+		options, err := parseProductUpdateOptions(args, defaultDistribution())
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			printUpdateHelp(stderr)
+			return 2
+		}
+		return runProductUpdate(ctx, options, stdout, stderr)
 	}
 	action := args[0]
 	if action != "status" && action != "prepare" && action != "apply" {
