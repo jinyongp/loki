@@ -105,14 +105,42 @@ func TestWindowsOpenAISetupUsesReferenceOnlySecretInputs(t *testing.T) {
 }
 
 func TestTopLevelUsageExposesOnlyCanonicalConnectionSurface(t *testing.T) {
-	var stderr bytes.Buffer
-	printUsage(&stderr)
-	usage := stderr.String()
-	if !strings.Contains(usage, "connection [COMMAND]") {
+	var output bytes.Buffer
+	printUsage(&output)
+	usage := output.String()
+	if !strings.Contains(usage, "\n  connection ") {
 		t.Fatalf("usage lacks canonical connection surface: %s", usage)
 	}
-	if strings.Contains(usage, "| connect ") {
+	if strings.Contains(usage, "\n  connect ") {
 		t.Fatalf("usage exposes legacy connect surface: %s", usage)
+	}
+}
+
+func TestRootHelpSucceedsWithoutAccessingWindowsHost(t *testing.T) {
+	for _, alias := range []string{"--help", "-h", "help"} {
+		t.Run(alias, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{alias}, &stdout, &stderr); code != 0 {
+				t.Fatalf("code=%d stderr=%s", code, &stderr)
+			}
+			if stderr.Len() != 0 || !strings.Contains(stdout.String(), "loki <command> [options]") {
+				t.Fatalf("stdout=%s stderr=%s", &stdout, &stderr)
+			}
+		})
+	}
+}
+
+func TestRootUsageErrors(t *testing.T) {
+	for _, args := range [][]string{nil, {"--help", "unexpected"}, {"-h", "unexpected"}, {"help", "unexpected"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != 2 {
+				t.Fatalf("code=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+			}
+			if stdout.Len() != 0 || !strings.Contains(stderr.String(), "loki <command> [options]") {
+				t.Fatalf("stdout=%s stderr=%s", &stdout, &stderr)
+			}
+		})
 	}
 }
 

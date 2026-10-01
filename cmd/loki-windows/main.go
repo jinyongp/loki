@@ -20,6 +20,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "--help", "-h", "help":
+		if len(args) != 1 {
+			printUsage(stderr)
+			return 2
+		}
+		printUsage(stdout)
+		return 0
 	case "version":
 		if len(args) == 1 {
 			fmt.Fprintln(stdout, buildinfo.String())
@@ -55,6 +62,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func printUsage(stderr io.Writer) {
-	fmt.Fprintln(stderr, "usage: loki version [--json] | install [OPTIONS] | status [--json] | doctor [--json] | connection [COMMAND] | integration [COMMAND] | update [status|prepare|apply] [--json] [OPTIONS] | backup [--json] [OPTIONS] | rollback [--json] [OPTIONS] | restore [--json] [OPTIONS] BACKUP_ID | uninstall [OPTIONS]")
+func printUsage(output io.Writer) {
+	fmt.Fprint(output, `Usage:
+  loki <command> [options]
+
+Commands:
+  version      Show the installed frontend version
+  install      Install the Loki WSL appliance
+  status       Show installation and appliance status
+  doctor       Diagnose appliance health
+  connection   Manage local and remote MCP connections
+  integration  Manage browser, GitHub, and signing integrations
+  update       Update the frontend or manage appliance updates
+  backup       Create an appliance backup
+  rollback     Roll back the appliance lifecycle state
+  restore      Restore an appliance backup
+  uninstall    Remove the Loki WSL appliance
+
+Examples:
+  loki status
+  loki update --help
+  loki connection --help
+`)
 }
