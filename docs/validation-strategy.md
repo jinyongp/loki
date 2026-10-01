@@ -21,6 +21,30 @@ Two rules apply across profiles:
 
 Independent acceptance domains must execute independently. Browser, signing, OCI, authority, recovery and bootstrap failures should be reported in the same release run whenever their fixtures do not depend on one another; a serial fail-fast script must not hide unrelated defects.
 
+### Managed WSL OS contract
+
+`internal/host/appliance/requirements.tsv` declares boot packages, exact image
+build versions, required files, executable permissions, systemd units, and
+package version peers. The rootfs build and offline archive verifier read this
+file; the Linux CLI embeds it for diagnostics and approved reconciliation.
+Change the contract and `packaging/wsl/apt-delta.lock` together when the image's
+package transaction changes. Runtime checks report the embedded contract hash
+and preserve installed OS versions rather than enforcing the image build pins.
+
+Source tests cover each missing file, execute permissions, repeated repair,
+PAM/systemd pairing, skipped kernel-dependent kmod units, repository failure,
+unrelated failed services, candidate identity, and doctor failure with a healthy
+runtime. Offline archive checks additionally verify contract bytes and appliance
+directory permissions. They cannot establish systemd boot health.
+
+Native WSL acceptance calls `host appliance check` after installation, recovery,
+and cold startup, and checks the default user from a real WSL user invocation.
+The recovery scenario removes boot prerequisites only from its owned disposable
+distribution, requires doctor to fail, repairs twice, and verifies Loki health.
+Public Windows acceptance checks fresh installation and cold startup after an
+upgrade from the previous published release. A successful update must restore
+OS prerequisites as well as the Loki runtime.
+
 ### Local validation and release entrypoints
 
 Use the complete preflight for a completed implementation batch:

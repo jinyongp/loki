@@ -90,8 +90,7 @@ function Assert-WSLBootHealthy([string]$Distribution) {
     $userTarget = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--exec", "/usr/bin/systemctl", "--user", "is-active", "default.target")
     if ($userTarget -ne "active") { Fail "default WSL user systemd session is not active: $userTarget" }
 
-    $failedUnits = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/bin/systemctl", "--failed", "--no-legend", "--plain")
-    if ($failedUnits) { Fail "WSL boot left failed systemd units: $failedUnits" }
+    Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "check") | Out-Null
 }
 
 function Wait-LokiHealthy([string]$Distribution, [int]$Attempts = 90) {
@@ -384,6 +383,15 @@ try {
     }
 
     if ($Scenario -in @("full", "recovery")) {
+        # Exercise an existing appliance with missing OS prerequisites while
+        # keeping its Loki release, runtime, and durable state intact.
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/dpkg", "--remove", "kmod", "libpam-systemd") | Out-Null
+        & wsl.exe -d $distributionName --user root --exec /usr/local/bin/loki host doctor --system *> $null
+        if ($LASTEXITCODE -eq 0) { Fail "doctor accepted missing WSL boot prerequisites" }
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve") | Out-Null
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve") | Out-Null
+        Wait-LokiHealthy $distributionName
+
         $flatLegacyConnection = [ordered]@{
             endpoint = "http://127.0.0.1:18765/mcp"
             transport = "streamable-http"

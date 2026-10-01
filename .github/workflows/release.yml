@@ -1483,6 +1483,22 @@ jobs:
                   throw "explicit appliance apply produced $afterApplyRelease; expected $expectedApplianceRelease"
               }
 
+              # Check the upgraded OS prerequisites after a real cold start.
+              Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+              & wsl.exe --terminate $distribution
+              if ($LASTEXITCODE -ne 0) { throw "updated appliance termination failed" }
+              Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+              & wsl.exe -d $distribution --exec /usr/bin/systemctl --user is-active default.target
+              if ($LASTEXITCODE -ne 0) { throw "updated appliance user session failed after cold start" }
+              & wsl.exe -d $distribution --user root --exec /usr/local/bin/loki host appliance check
+              if ($LASTEXITCODE -ne 0) { throw "updated appliance OS prerequisites failed after cold start" }
+              for ($attempt = 0; $attempt -lt 60; $attempt++) {
+                  & $loki doctor --distribution $distribution *> $null
+                  if ($LASTEXITCODE -eq 0) { break }
+                  Start-Sleep -Seconds 2
+              }
+              if ($LASTEXITCODE -ne 0) { throw "updated appliance runtime did not recover after cold start" }
+
               & $loki doctor --distribution $distribution
               if ($LASTEXITCODE -ne 0) { throw "self-update doctor failed" }
               & $loki connection show --distribution $distribution --json local
@@ -1573,6 +1589,10 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "public Windows status failed" }
               & $loki doctor --distribution $distribution
               if ($LASTEXITCODE -ne 0) { throw "public Windows doctor failed" }
+              & wsl.exe -d $distribution --exec /usr/bin/systemctl --user is-active default.target
+              if ($LASTEXITCODE -ne 0) { throw "public Windows default user session failed" }
+              & wsl.exe -d $distribution --user root --exec /usr/local/bin/loki host appliance check
+              if ($LASTEXITCODE -ne 0) { throw "public Windows OS prerequisites failed" }
               & $loki connection show --distribution $distribution --json local
               if ($LASTEXITCODE -ne 0) { throw "public Windows connection refresh failed" }
               $catalogRaw = (& $loki connection list --distribution $distribution --json 2>&1 | Out-String).Trim()

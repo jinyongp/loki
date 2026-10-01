@@ -71,6 +71,7 @@ $expectedScopes = @{
     'denied stale reinstall removed Windows state' = 'migration'
     'explicit non-interactive stale reinstall failed' = 'migration'
     'legacy orphan recovery failed' = 'recovery'
+    'doctor accepted missing WSL boot prerequisites' = 'recovery'
     'legacy orphan recovery Windows token does not match the reinstalled appliance' = 'recovery'
     'Loki did not recover when the owned keepalive task was started' = 'recovery'
     'verified Windows uninstall failed' = 'recovery'
