@@ -89,6 +89,36 @@ func TestOperatorUpdateApplyRequiresExplicitApproval(t *testing.T) {
 	}
 }
 
+func TestUpdateApplyRelaysRepairToNewLinuxBinaryAndPreservesUpdateOutput(t *testing.T) {
+	for _, repairCode := range []int{0, 1} {
+		runner := &fakeNativeRunner{results: []NativeProbe{
+			{ExitCode: 0, Stdout: ownedManifest("0.1.36")},
+			{ExitCode: 0, Stdout: "loki 0.1.36"},
+			{ExitCode: 0, Stdout: `{"plan_id":"applied"}`},
+			{ExitCode: repairCode, Stderr: "WSL boot prerequisites"},
+		}}
+		result, err := (OperatorClient{WSL: WSLClient{Runner: runner}}).Execute(t.Context(), "loki-mcp", OperatorRequest{Command: "update", Action: "apply", Approve: true})
+		if repairCode != 0 && err == nil {
+			t.Fatal("repair failure reported successful update")
+		}
+		if repairCode == 0 && (err != nil || result.Probe.Stdout != `{"plan_id":"applied"}`) {
+			t.Fatalf("update output changed: %+v %v", result, err)
+		}
+		want := []string{"-d", "loki-mcp", "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve"}
+		if len(runner.calls) != 4 || !slices.Equal(runner.calls[3].arguments, want) {
+			t.Fatalf("repair argv=%+v", runner.calls)
+		}
+	}
+}
+
+func TestFailedUpdateDoesNotRepairAppliance(t *testing.T) {
+	runner := &fakeNativeRunner{results: []NativeProbe{{ExitCode: 0, Stdout: ownedManifest("0.1.36")}, {ExitCode: 0, Stdout: "loki 0.1.36"}, {ExitCode: 1}}}
+	result, err := (OperatorClient{WSL: WSLClient{Runner: runner}}).Execute(t.Context(), "loki-mcp", OperatorRequest{Command: "update", Action: "apply", Approve: true})
+	if err != nil || result.Probe.ExitCode != 1 || len(runner.calls) != 3 {
+		t.Fatalf("failed apply changed prerequisites: %+v %v", result, err)
+	}
+}
+
 func TestOperatorIntegrationSetupUsesStdinWithoutCredentialArgv(t *testing.T) {
 	secret := []byte("-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n")
 	runner := &fakeNativeRunner{results: []NativeProbe{

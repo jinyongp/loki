@@ -117,6 +117,25 @@ func (client OperatorClient) execute(
 			return OperatorResult{}, err
 		}
 	}
+	if result.ExitCode == 0 && request.Command == "update" && request.Action == "apply" {
+		// Compatibility bridge for appliances whose running manager predates
+		// prerequisite reconciliation. The newly activated Linux binary owns
+		// the repair policy; Windows only relays the already approved action.
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "appliance-prerequisites", State: progress.StateStarted, Message: "Checking WSL boot prerequisites..."})
+		repairArgs := []string{"-d", distribution, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve"}
+		var repair NativeProbe
+		if reporter == nil {
+			repair, err = client.WSL.run(ctx, repairArgs...)
+		} else {
+			repair, err = client.WSL.runStreaming(ctx, reporter, repairArgs...)
+		}
+		if err != nil {
+			return OperatorResult{}, err
+		}
+		if repair.ExitCode != 0 {
+			return OperatorResult{}, nativeFailure("release applied but WSL prerequisite repair failed", repair)
+		}
+	}
 	return OperatorResult{Probe: result, DistributionVersion: version}, nil
 }
 

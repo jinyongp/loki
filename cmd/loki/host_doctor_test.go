@@ -223,6 +223,44 @@ func TestHostDoctorUsesRuntimeProbeForComposeState(t *testing.T) {
 	}
 }
 
+func TestHostDoctorReportsWSLBootFailureEvenWhenRuntimeHealthy(t *testing.T) {
+	options, runtime, now := hostDoctorFixture(t)
+	options.System = true
+	report, err := inspectHostDoctor(t.Context(), options, hostDoctorDependencies{
+		OpenRuntime: func(*lifecycle.FileStore) (hostDoctorRuntime, error) { return runtime, nil },
+		Now:         func() time.Time { return now },
+		InspectAppliance: func(context.Context) ([]hostdiagnostics.Check, error) {
+			return []hostdiagnostics.Check{hostdiagnostics.Blocked("wsl.user", "wsl_user_session_unhealthy", "default WSL user systemd session is not ready")}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Healthy() {
+		t.Fatal("healthy runtime concealed unhealthy WSL boot")
+	}
+	for _, check := range report.Checks {
+		if check.Name == "runtime" && check.Status != hostdiagnostics.StatusHealthy {
+			t.Fatalf("runtime unexpectedly unhealthy: %#v", check)
+		}
+	}
+}
+
+func TestUserScopedDoctorDoesNotInspectApplianceOS(t *testing.T) {
+	options, runtime, now := hostDoctorFixture(t)
+	_, err := inspectHostDoctor(t.Context(), options, hostDoctorDependencies{
+		OpenRuntime: func(*lifecycle.FileStore) (hostDoctorRuntime, error) { return runtime, nil },
+		Now:         func() time.Time { return now },
+		InspectAppliance: func(context.Context) ([]hostdiagnostics.Check, error) {
+			t.Fatal("user-scoped diagnostics inspected system appliance")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHostRuntimeProbeEmitsValidatedRuntimeState(t *testing.T) {
 	options, _, _ := hostDoctorFixture(t)
 	var stdout, stderr bytes.Buffer

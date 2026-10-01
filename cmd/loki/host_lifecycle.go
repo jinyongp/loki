@@ -173,6 +173,12 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 
 	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "runtime", State: progress.StateStarted, Message: "Checking the container runtime and workspace..."})
 	ctx := context.Background()
+	if options.System {
+		if err = repairManagedAppliance(ctx); err != nil {
+			fmt.Fprintln(stderr, "WSL installation prerequisites:", err)
+			return 1
+		}
+	}
 	executor := execHostCommandExecutor{}
 	prompter := defaultHostInstallPrompter(stdout)
 	probe, err := interactiveDockerRuntime(ctx, &options, release.Runtime, prompter, executor)

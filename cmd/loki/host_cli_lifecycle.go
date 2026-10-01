@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"loki/internal/host/appliance"
 	"loki/internal/host/lifecycle"
 )
 
 type managedHostCLIReleaseAssets struct {
-	System bool
+	System          bool
+	RepairAppliance func(context.Context, string) error
 }
 
 func managedHostCLIReleaseAssetsForStore(ctx context.Context, store *lifecycle.FileStore) (*managedHostCLIReleaseAssets, error) {
@@ -46,6 +48,30 @@ func (m *managedHostCLIReleaseAssets) ValidateCurrent(ctx context.Context, gener
 }
 
 func (m *managedHostCLIReleaseAssets) Activate(ctx context.Context, generation lifecycle.Generation) error {
+	paths, err := resolveHostCLIInstallPaths(m != nil && m.System, generation.ID)
+	if err != nil {
+		return err
+	}
+	if err = verifyFileDigest(paths.Binary, generation.Spec.HostBinaryDigest); err != nil {
+		return err
+	}
+	if m != nil && m.RepairAppliance != nil {
+		if err = m.RepairAppliance(ctx, paths.Binary); err != nil {
+			return err
+		}
+	} else if m != nil && m.System {
+		managed, inspectErr := (appliance.Host{}).Managed()
+		if inspectErr != nil {
+			return inspectErr
+		}
+		if managed {
+			// The verified candidate owns the next release's requirements, even
+			// while the running manager still belongs to the previous release.
+			if _, err = appliance.Exec(ctx, paths.Binary, "host", "appliance", "repair", "--approve"); err != nil {
+				return err
+			}
+		}
+	}
 	return m.switchTo(ctx, generation)
 }
 

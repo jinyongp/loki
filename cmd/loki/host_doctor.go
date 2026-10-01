@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/daemon"
+	"loki/internal/host/appliance"
 	hostdiagnostics "loki/internal/host/diagnostics"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
@@ -42,8 +43,9 @@ type hostDoctorRuntimeProber interface {
 }
 
 type hostDoctorDependencies struct {
-	OpenRuntime func(*lifecycle.FileStore) (hostDoctorRuntime, error)
-	Now         func() time.Time
+	OpenRuntime      func(*lifecycle.FileStore) (hostDoctorRuntime, error)
+	Now              func() time.Time
+	InspectAppliance func(context.Context) ([]hostdiagnostics.Check, error)
 }
 
 func defaultHostDoctorDependencies() hostDoctorDependencies {
@@ -225,6 +227,18 @@ func inspectHostDoctor(
 	}
 
 	checks := make([]hostdiagnostics.Check, 0, 8)
+	if options.System {
+		inspect := dependencies.InspectAppliance
+		if inspect == nil {
+			inspect = inspectManagedAppliance
+		}
+		applianceChecks, inspectErr := inspect(ctx)
+		if inspectErr != nil {
+			checks = append(checks, hostdiagnostics.Blocked("wsl.boot", "wsl_inspection_failed", "managed WSL boot state could not be inspected"))
+		} else {
+			checks = append(checks, applianceChecks...)
+		}
+	}
 	var (
 		store            *lifecycle.FileStore
 		snapshot         lifecycle.Snapshot
@@ -462,6 +476,15 @@ func inspectHostDoctor(
 	)
 
 	return hostdiagnostics.NewReport(dependencies.Now(), checks...)
+}
+
+func inspectManagedAppliance(ctx context.Context) ([]hostdiagnostics.Check, error) {
+	host := appliance.Host{}
+	managed, err := host.Managed()
+	if err != nil || !managed {
+		return nil, err
+	}
+	return host.Inspect(ctx), nil
 }
 
 func jobDoctorCheck(activeJobs []string, maxConcurrentJobs int, err error) hostdiagnostics.Check {

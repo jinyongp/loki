@@ -89,3 +89,18 @@ func encodeHostApplianceReport(stdout, stderr io.Writer, report diagnostics.Repo
 	}
 	return 0
 }
+
+func repairManagedAppliance(ctx context.Context) error {
+	managed, err := (appliance.Host{}).Managed()
+	if err != nil || !managed {
+		return err
+	}
+	// Use the command boundary so every entry point gets the same approval,
+	// timeout, root requirement, serialization, and post-repair validation.
+	binary, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	_, err = appliance.Exec(ctx, binary, "host", "appliance", "repair", "--approve")
+	return err
+}
