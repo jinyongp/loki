@@ -62,6 +62,7 @@ func TestWSLApplianceContract(t *testing.T) {
 		"COPY --from=release --chmod=0600 release-manifest.json /usr/lib/loki-appliance/release-manifest.json",
 		"systemctl enable docker.service containerd.service loki-appliance-provision.service",
 		"rm -f /var/lib/dbus/machine-id",
+		"chmod 0755 /usr/lib/loki-appliance",
 		"truncate -s 0 /etc/machine-id",
 		"FROM scratch",
 		"COPY --from=rootfs --exclude=etc/resolv.conf / /",

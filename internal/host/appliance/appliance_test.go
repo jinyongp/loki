@@ -74,6 +74,12 @@ func newFixture(t *testing.T) *fixture {
 			case "--failed":
 				return f.failed, nil
 			case "show":
+				if args[len(args)-1] == "--value" {
+					if f.unhealthy[args[1]] {
+						return "failed", nil
+					}
+					return "active", nil
+				}
 				if f.unhealthy[args[1]] {
 					return "LoadState=loaded\nActiveState=failed\nResult=exit-code\nConditionResult=yes", nil
 				}
@@ -248,5 +254,52 @@ func TestEmbeddedContractIsConsistent(t *testing.T) {
 		if item.Peer != "-" && versions[item.Peer] != item.Version {
 			t.Fatalf("invalid version peer: %#v", item)
 		}
+	}
+}
+
+func TestOfflineInitSymlinkUsesImageFiles(t *testing.T) {
+	f := newFixture(t)
+	init := f.host.path("/usr/sbin/init")
+	if err := os.Remove(init); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/usr/lib/systemd/systemd", init); err != nil {
+		t.Fatal(err)
+	}
+	if missing := f.host.MissingFiles(); len(missing) != 0 {
+		t.Fatalf("valid image symlink rejected: %v", missing)
+	}
+	if err := os.Remove(f.host.path("/usr/lib/systemd/systemd")); err != nil {
+		t.Fatal(err)
+	}
+	missing := f.host.MissingFiles()
+	if len(missing) != 2 {
+		t.Fatalf("image borrowed host init target: %v", missing)
+	}
+}
+
+func TestRepairStartsUnloadedUserInstanceWithoutResettingIt(t *testing.T) {
+	f := newFixture(t)
+	f.unhealthy["user@1000.service"] = true
+	original := f.host.Run
+	f.host.Run = func(ctx context.Context, name string, args ...string) (string, error) {
+		if filepath.Base(name) == "systemctl" && len(args) > 1 && args[1] == "user@1000.service" && f.unhealthy[args[1]] {
+			switch args[0] {
+			case "show":
+				if args[len(args)-1] == "--value" {
+					return "inactive", nil
+				}
+				return "LoadState=loaded\nActiveState=inactive\nResult=success\nConditionResult=yes", nil
+			case "reset-failed":
+				t.Fatal("reset attempted on unloaded user instance")
+			}
+		}
+		return original(ctx, name, args...)
+	}
+	if err := f.host.Repair(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !healthy(t, f) {
+		t.Fatal("unloaded user instance was not started")
 	}
 }

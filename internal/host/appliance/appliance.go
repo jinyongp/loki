@@ -93,12 +93,63 @@ func (h Host) Managed() (bool, error) {
 func (h Host) MissingFiles() []string {
 	var missing []string
 	for _, item := range requirements() {
-		info, err := os.Stat(h.path(item.Path))
+		path, err := h.resolveFile(item.Path)
+		if err != nil {
+			missing = append(missing, item.Path)
+			continue
+		}
+		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() || (item.Kind == "executable" && info.Mode()&0111 == 0) {
 			missing = append(missing, item.Path)
 		}
 	}
 	return missing
+}
+
+// Absolute image symlinks (including /usr/sbin/init) resolve inside the image,
+// rather than borrowing a matching executable from the validation host.
+func (h Host) resolveFile(path string) (string, error) {
+	if h.Root == "" {
+		return path, nil
+	}
+	pending := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	var resolved []string
+	links := 0
+	for len(pending) != 0 {
+		part := pending[0]
+		pending = pending[1:]
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			if len(resolved) > 0 {
+				resolved = resolved[:len(resolved)-1]
+			}
+			continue
+		}
+		candidate := h.path("/" + strings.Join(append(append([]string(nil), resolved...), part), "/"))
+		info, err := os.Lstat(candidate)
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			links++
+			if links > 40 {
+				return "", errors.New("WSL image symlink loop")
+			}
+			target, err := os.Readlink(candidate)
+			if err != nil {
+				return "", err
+			}
+			if filepath.IsAbs(target) {
+				resolved = nil
+			}
+			pending = append(strings.Split(target, "/"), pending...)
+		} else {
+			resolved = append(resolved, part)
+		}
+	}
+	return h.path("/" + strings.Join(resolved, "/")), nil
 }
 
 func (h Host) packageVersion(ctx context.Context, name string) (string, error) {
@@ -225,6 +276,13 @@ func (h Host) Inspect(ctx context.Context) []diagnostics.Check {
 // migration flag: a later package removal is detected and repaired again.
 // Existing versions are preserved; PAM is always paired with installed systemd.
 func (h Host) Repair(ctx context.Context) error {
+	managed, err := h.Managed()
+	if err != nil {
+		return err
+	}
+	if !managed {
+		return errors.New("prerequisite repair requires a managed Loki WSL appliance")
+	}
 	problems, versions := h.packageProblems(ctx)
 	missing := h.MissingFiles()
 	wanted := make(map[string]string)
@@ -276,9 +334,16 @@ func (h Host) Repair(ctx context.Context) error {
 		if h.unitReady(ctx, unit) {
 			continue
 		}
-		// Reset only the prerequisite being repaired. Other failures remain visible.
-		if _, err := h.run(ctx, "/usr/bin/systemctl", "reset-failed", unit); err != nil {
+		state, err := h.run(ctx, "/usr/bin/systemctl", "show", unit, "--property=ActiveState", "--value")
+		if err != nil {
 			return err
+		}
+		// An inactive template instance may be unloaded; reset-failed would
+		// reject it. Reset only actual failures of the declared prerequisites.
+		if strings.TrimSpace(state) == "failed" {
+			if _, err := h.run(ctx, "/usr/bin/systemctl", "reset-failed", unit); err != nil {
+				return err
+			}
 		}
 		if _, err := h.run(ctx, "/usr/bin/systemctl", "start", unit); err != nil {
 			return err

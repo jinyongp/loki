@@ -101,13 +101,28 @@ awk '$NF == "home/ubuntu/workspace/" && $2 == "1000/1000" { ok=1 } END { exit ok
 
 tar --same-permissions -xzf "$archive" -C "$root"
 
+test "$(stat -c '%a' "$root/usr/lib/loki-appliance")" = 755 || {
+  echo "WSL appliance directory must be traversable with mode 755" >&2
+  exit 1
+}
 cmp "$requirements" "$root/usr/lib/loki-appliance/requirements.tsv"
 tab=$(printf '\t')
 while IFS="$tab" read -r package version path kind unit peer; do
   case "$package" in ''|'#'*) continue ;; esac
-  test -f "$root$path" || { echo "WSL archive lacks $path" >&2; exit 1; }
+  resolved=$root$path
+  links=0
+  while test -L "$resolved"; do
+    links=$((links + 1))
+    test "$links" -le 40 || { echo "WSL archive has a symlink loop: $path" >&2; exit 1; }
+    target=$(readlink "$resolved")
+    case "$target" in
+      /*) resolved=$root$target ;;
+      *) resolved=$(dirname "$resolved")/$target ;;
+    esac
+  done
+  test -f "$resolved" || { echo "WSL archive lacks $path" >&2; exit 1; }
   if test "$kind" = executable; then
-    test -x "$root$path" || { echo "WSL archive file is not executable: $path" >&2; exit 1; }
+    test -x "$resolved" || { echo "WSL archive file is not executable: $path" >&2; exit 1; }
   fi
 done <"$requirements"
 

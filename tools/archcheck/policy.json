@@ -126,6 +126,14 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/appliance"
+    },
+    {
+      "from": "loki/internal/host/appliance",
+      "to": "loki/internal/host/diagnostics"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/host/githubsetup"
     },
     {
@@ -1062,6 +1070,12 @@
         "provider-private-key"
       ],
       "target": "integrations/github"
+    },
+    "loki/internal/host/appliance": {
+      "kind": "host",
+      "owner": "appliance",
+      "tags": ["host-state"],
+      "target": "host/appliance"
     },
     "loki/internal/host/bootstrap": {
       "kind": "host",

@@ -98,6 +98,7 @@ RUN chown root:root \
       /usr/lib/loki-appliance/release-manifest.json \
       /usr/lib/systemd/system/loki-appliance-provision.service \
  && chmod 0644 /etc/wsl.conf /etc/wsl-distribution.conf \
+ && chmod 0755 /usr/lib/loki-appliance \
  && chmod 0755 /usr/lib/loki-appliance/configure-install /usr/lib/loki-appliance/provision /usr/lib/loki-appliance/loki \
  && chmod 0600 /usr/lib/loki-appliance/release-manifest.json \
  && systemctl enable docker.service containerd.service loki-appliance-provision.service \
