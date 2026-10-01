@@ -59,6 +59,11 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 	default:
 		return githubsetup.View{}, errors.New("invalid GitHub setup request")
 	}
+	if request.Action == "begin" {
+		if err := validateGitHubSetupBegin(request); err != nil {
+			return githubsetup.View{}, err
+		}
+	}
 	lock, err := h.Store.GitHubSetupLock(ctx)
 	if err != nil {
 		return githubsetup.View{}, err
@@ -74,6 +79,21 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		return githubsetup.View{}, err
 	}
 	if current.GitHub.Configured {
+		_, parsed, configErr := loadManagedGitHubPublicConfig(ctx, h.Store)
+		if configErr != nil {
+			return githubsetup.View{}, configErr
+		}
+		accounts := make([]string, 0, len(parsed.GitHubInstallations))
+		matched := request.Account == ""
+		for _, installation := range parsed.GitHubInstallations {
+			accounts = append(accounts, installation.Account)
+			if strings.EqualFold(request.Account, installation.Account) && (request.AccountType == "" || request.AccountType == installation.AccountType) {
+				matched = true
+			}
+		}
+		if !matched {
+			return githubsetup.View{}, fmt.Errorf("GitHub is configured for %s; requested account %s is not configured with the requested account type. Browser setup manages one App; use file-based configuration for additional installations, or explicitly remove the existing integration to replace it", strings.Join(accounts, ", "), request.Account)
+		}
 		if !current.GitHub.Enabled {
 			return githubsetup.View{}, errors.New("GitHub is configured but disabled; run integration enable github")
 		}
@@ -90,7 +110,7 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if err = h.Store.ClearGitHubSetup(ctx); err != nil {
 			return githubsetup.View{}, err
 		}
-		return githubsetup.View{SchemaVersion: 1, Phase: "ready"}, nil
+		return githubsetup.View{SchemaVersion: 1, Phase: "ready", Account: strings.Join(accounts, ", "), Repositories: append([]string(nil), parsed.GitHubTargets...)}, nil
 	}
 	raw, err := h.Store.ReadGitHubSetup(ctx)
 	if err != nil {
@@ -111,9 +131,6 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 	}
 	defer func() { clear(session.PrivateKey) }()
 	if request.Action == "begin" {
-		if err = validateGitHubSetupBegin(request); err != nil {
-			return githubsetup.View{}, err
-		}
 		if request.AccountType == "" {
 			if session.Phase != "" && (request.Account == "" || strings.EqualFold(request.Account, session.Account)) {
 				request.AccountType = session.AccountType

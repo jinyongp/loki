@@ -77,6 +77,13 @@ if an integration was configured, it also disables that integration. It does not
 delete the App or its installation on GitHub. Remove an unused App in GitHub
 settings separately. Browser setup configures one account at a time.
 
+Rerunning setup for an existing integration reports the configured accounts and
+repository access after checking readiness. An explicit `--account` must match
+an existing installation; a different account or account type returns an error
+and preserves the current integration. Browser setup does not add a second App
+to an existing integration. File-based configuration supports multiple
+installations of the same App as described below.
+
 The Linux host owns GitHub API calls, the App private key, private resumable
 setup state, and the managed integration transaction. Windows opens the browser
 and relays the callback code through stdin to that same host implementation.
