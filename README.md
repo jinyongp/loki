@@ -119,6 +119,11 @@ credentials.
 
 ### Maintainer and developer docs
 
+- Validate a completed source batch with `sh ./scripts/verify/verify-preflight.sh`.
+- Start a release with `sh ./scripts/maintainer/release.sh [patch|minor|major]`. It runs
+  the complete local preflight before dispatching CI for the same clean,
+  pushed main commit. See [Validation strategy](docs/validation-strategy.md)
+  for profiles, prerequisites and candidate-only runs.
 - [Self-hosting](docs/self-hosting.md) — source-tree and maintainer deployment
   paths.
 - Architecture, migration, validation, and release-engineering records are under

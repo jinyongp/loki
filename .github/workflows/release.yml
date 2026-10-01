@@ -22,6 +22,11 @@ on:
         required: true
         default: false
         type: boolean
+      expected_sha:
+        description: Locally validated source commit; required for publication.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -56,6 +61,9 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Require main HEAD
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PUBLISH_RELEASE: ${{ inputs.publish }}
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +71,16 @@ jobs:
           git fetch origin main --tags --force
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if test "$PUBLISH_RELEASE" = true && test -z "$EXPECTED_SHA"; then
+            echo "publication requires local preflight; use scripts/maintainer/release.sh" >&2
+            exit 1
+          fi
+          if test -n "$EXPECTED_SHA"; then
+            if test "$GITHUB_SHA" != "$EXPECTED_SHA"; then
+              echo "main changed after local validation; rerun scripts/maintainer/release.sh" >&2
+              exit 1
+            fi
+          fi
 
       - name: Resolve version
         id: version

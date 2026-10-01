@@ -21,6 +21,40 @@ Two rules apply across profiles:
 
 Independent acceptance domains must execute independently. Browser, signing, OCI, authority, recovery and bootstrap failures should be reported in the same release run whenever their fixtures do not depend on one another; a serial fail-fast script must not hide unrelated defects.
 
+### Local validation and release entrypoints
+
+Use the complete preflight for a completed implementation batch:
+
+```sh
+sh ./scripts/verify/verify-preflight.sh
+```
+
+Commit and push the intended source, then start a release through:
+
+```sh
+sh ./scripts/maintainer/release.sh                 # patch release
+sh ./scripts/maintainer/release.sh minor           # minor release
+sh ./scripts/maintainer/release.sh --validate-only # candidate CI without publication
+```
+
+The release entrypoint always invokes the existing source + race preflight.
+Any failed check prevents workflow dispatch. It requires a clean main checkout
+matching the live origin/main before and after validation, and passes the
+validated commit to CI. CI rejects a different commit before artifact builds
+or acceptance start. There is no local validation bypass option.
+
+`--oci` adds the disposable local OCI fixture; `--check-updates` requests live
+dependency freshness checks in CI. The command returns after dispatch and does
+not watch the run. A successful dispatch is not release completion.
+
+Direct GitHub workflow dispatch with `publish=false` remains available for CI
+diagnosis and still runs all required CI gates. Publication requires the
+locally validated source commit input; an unbound publication request fails
+before the expensive jobs start. The commit input binds source identity, not
+a cryptographic proof of local execution; the full CI gates still establish
+publication evidence. Narrow source/race commands remain useful while
+developing and as the parallel CI job entrypoints.
+
 ### Release fan-out and publication barrier
 
 The release workflow deliberately separates candidate identity from validation. `preflight` only establishes that the workflow is operating on the intended main-branch commit and resolves the candidate version/tag. After that point, independent evidence fans out:
@@ -54,12 +88,12 @@ This cadence intentionally favors long uninterrupted implementation runs while p
 These checks must not require Docker, Chromium, root, systemd, POSIX ACL utilities, live providers, or real credentials:
 
 ```sh
-go run ./tools/archcheck
-go test -vet=off ./...
-go test -race -vet=off ./...
-go vet ./...
-go build ./cmd/...
+sh ./scripts/verify/verify-preflight.sh
 ```
+
+This includes tests, vet, command builds, the executable architecture checker,
+module tidiness, diff hygiene and race detection. Testing the checker package
+alone does not check the repository dependency graph.
 
 The source profile owns the full `go vet` pass. Tests and race checks disable
 their implicit vet pass, and the explicit build links command binaries while
