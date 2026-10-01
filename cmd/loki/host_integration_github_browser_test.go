@@ -373,3 +373,25 @@ func TestGitHubSetupResumePreservesExplicitOwnerType(t *testing.T) {
 		})
 	}
 }
+
+func TestGitHubDiscoveryAcceptsExistingRepositoryNameContract(t *testing.T) {
+	h, _ := browserSetupFixture(t)
+	begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"}); err != nil {
+		t.Fatal(err)
+	}
+	transport := h.Client.Transport
+	h.Client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/installation/repositories" {
+			return githubHTTPResponse(request, http.StatusOK, `{"total_count":2,"repositories":[{"name":"-repo","owner":{"id":42,"login":"example"}},{"name":"repo-","owner":{"id":42,"login":"example"}}]}`), nil
+		}
+		return transport.RoundTrip(request)
+	})
+	configured, err := h.Handle(t.Context(), githubsetup.Request{Action: "poll"})
+	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/-repo,example/repo-" {
+		t.Fatalf("existing repository names rejected: view=%+v err=%v", configured, err)
+	}
+}

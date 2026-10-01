@@ -326,6 +326,12 @@ func setupName(value string, max int) bool {
 	if value == "" || len(value) > max || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") || strings.Contains(value, "..") {
 		return false
 	}
+	return setupRepositoryName(value)
+}
+func setupRepositoryName(value string) bool {
+	if value == "" || len(value) > 100 || strings.Contains(value, "..") {
+		return false
+	}
 	for _, r := range value {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_.-", r)) {
 			return false
@@ -484,7 +490,7 @@ func (h *hostGitHubSetup) discover(ctx context.Context, s *githubSetupSession) e
 			return errors.New("Loki supports at most 64 repositories; narrow the GitHub App installation selection")
 		}
 		for _, repo := range listing.Repositories {
-			if repo.Owner.ID != s.OwnerID || !strings.EqualFold(repo.Owner.Login, s.Account) || !setupName(repo.Name, 100) {
+			if repo.Owner.ID != s.OwnerID || !strings.EqualFold(repo.Owner.Login, s.Account) || !setupRepositoryName(repo.Name) {
 				return errors.New("GitHub returned a repository outside the selected account")
 			}
 			repositories = append(repositories, strings.ToLower(repo.Name))
