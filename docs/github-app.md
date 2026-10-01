@@ -42,6 +42,29 @@ The Linux equivalent is
 You need permission to create and install Apps for the chosen owner. Organization
 approval can leave installation pending.
 
+Browser setup creates a private App, which GitHub allows to be installed only on
+the account that owns it. An organization repository therefore requires an
+organization-owned App in this flow. A personal-account App does not grant access
+to organization repositories just because its owner belongs to the organization.
+
+If you chose **All repositories**, change the existing App installation to
+**Only select repositories**, select the repositories, and rerun the same setup
+command. Loki preserves the pending App and its key. Installation status polls
+run quietly while the terminal waits; setup and application progress remain
+visible.
+
+To abandon a pending personal-account setup and start an organization setup, run:
+
+```powershell
+loki integration remove github
+loki integration setup github --account example-org --account-type organization
+```
+
+Removal clears Loki's saved GitHub configuration and pending setup credentials;
+if an integration was configured, it also disables that integration. It does not
+delete the App or its installation on GitHub. Remove an unused App in GitHub
+settings separately. Browser setup configures one account at a time.
+
 The Linux host owns GitHub API calls, the App private key, private resumable
 setup state, and the managed integration transaction. Windows opens the browser
 and relays the callback code through stdin to that same host implementation.
@@ -74,7 +97,10 @@ Configure the registration as follows:
 
 After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **Only select repositories** and select the repositories in the Loki workspace allowlist. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.
 
-One App can have installations on both organizations and personal accounts. Each installation is declared separately.
+A public App can have installations on both organizations and personal accounts;
+a private App can be installed only on its owning account. To use one App across
+accounts, enable public installation in its GitHub settings and declare each
+installation separately in the configuration below.
 
 ## Create the public configuration
 
