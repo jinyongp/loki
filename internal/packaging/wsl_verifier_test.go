@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"loki/internal/host/appliance"
 )
 
 func TestWSLShellScriptsParse(t *testing.T) {
@@ -61,6 +63,11 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("usr/lib/pam.d/systemd-user", 0644, "session optional pam_systemd.so\n")
 	write("usr/lib/x86_64-linux-gnu/security/pam_systemd.so", 0644, "fixture-pam-module\n")
 	write("usr/bin/kmod", 0755, "fixture-kmod\n")
+	write("usr/bin/dbus-daemon", 0755, "fixture-dbus\n")
+	write("usr/lib/systemd/systemd", 0755, "fixture-systemd\n")
+	write("usr/sbin/init", 0755, "fixture-init\n")
+	write("usr/sbin/runuser", 0755, "fixture-runuser\n")
+	write("usr/lib/loki-appliance/requirements.tsv", 0444, appliance.Requirements)
 	write("usr/lib/loki-appliance/loki", 0755, "fixture-host-binary\n")
 	write("usr/lib/loki-appliance/release-manifest.json", 0600, "{\"fixture\":true}\n")
 	write("usr/lib/loki-appliance/configure-install", 0755, "#!/bin/sh\nsystemctl start --no-block loki-appliance-provision.service\n")

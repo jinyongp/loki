@@ -1,0 +1,8 @@
+# package	build-version	path	kind	unit	version-peer
+dbus	1.14.10-4ubuntu4.1	/usr/bin/dbus-daemon	executable	dbus.service	-
+kmod	31+20240202-2ubuntu7.2	/usr/bin/kmod	executable	kmod-static-nodes.service	-
+libpam-systemd	255.4-1ubuntu8.17	/usr/lib/x86_64-linux-gnu/security/pam_systemd.so	file	user@1000.service	systemd
+systemd	255.4-1ubuntu8.17	/usr/lib/systemd/systemd	executable	systemd-logind.service	-
+systemd	255.4-1ubuntu8.17	/usr/lib/pam.d/systemd-user	file	-	-
+systemd-sysv	255.4-1ubuntu8.17	/usr/sbin/init	executable	-	-
+util-linux	2.39.3-9ubuntu6.6	/usr/sbin/runuser	executable	-	-

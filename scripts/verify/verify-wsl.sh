@@ -10,6 +10,8 @@ fi
 archive=$1
 host=$2
 manifest=$3
+repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
+requirements=$repo/internal/host/appliance/requirements.tsv
 
 test -f "$archive" || { echo "WSL archive is missing" >&2; exit 1; }
 test -x "$host" || { echo "host binary is missing or not executable" >&2; exit 1; }
@@ -42,9 +44,7 @@ for required in \
   etc/passwd \
   etc/group \
   etc/shadow \
-  usr/lib/pam.d/systemd-user \
-  usr/bin/kmod \
-  usr/lib/x86_64-linux-gnu/security/pam_systemd.so \
+  usr/lib/loki-appliance/requirements.tsv \
   usr/lib/loki-appliance/loki \
   usr/lib/loki-appliance/release-manifest.json \
   usr/lib/loki-appliance/configure-install \
@@ -101,6 +101,16 @@ awk '$NF == "home/ubuntu/workspace/" && $2 == "1000/1000" { ok=1 } END { exit ok
 
 tar --same-permissions -xzf "$archive" -C "$root"
 
+cmp "$requirements" "$root/usr/lib/loki-appliance/requirements.tsv"
+tab=$(printf '\t')
+while IFS="$tab" read -r package version path kind unit peer; do
+  case "$package" in ''|'#'*) continue ;; esac
+  test -f "$root$path" || { echo "WSL archive lacks $path" >&2; exit 1; }
+  if test "$kind" = executable; then
+    test -x "$root$path" || { echo "WSL archive file is not executable: $path" >&2; exit 1; }
+  fi
+done <"$requirements"
+
 cmp "$host" "$root/usr/lib/loki-appliance/loki"
 cmp "$manifest" "$root/usr/lib/loki-appliance/release-manifest.json"
 test "$(stat -c '%a' "$root/etc/wsl.conf")" = 644
@@ -108,7 +118,6 @@ test "$(stat -c '%a' "$root/etc/wsl-distribution.conf")" = 644
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/release-manifest.json")" = 600
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/loki")" = 755
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/configure-install")" = 755
-test -x "$root/usr/bin/kmod"
 test "$(stat -c '%a' "$root/home/ubuntu/workspace")" = 750
 
 grep -Fxq 'systemd=true' "$root/etc/wsl.conf"

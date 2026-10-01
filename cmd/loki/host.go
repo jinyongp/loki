@@ -142,6 +142,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return runHostConnection(args[1:], stdout, stderr)
 	case "doctor":
 		return runHostDoctor(args[1:], stdout, stderr)
+	case "appliance":
+		return runHostAppliance(args[1:], stdout, stderr)
 	case "ingress":
 		return runHostIngress(args[1:], stdout, stderr)
 	case "integration":

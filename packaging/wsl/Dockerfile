@@ -6,13 +6,8 @@ ARG SOURCE_DATE_EPOCH=0
 ARG UBUNTU_ACL_VERSION=2.3.2-1build1.1
 ARG UBUNTU_CA_CERTIFICATES_VERSION=20260601~24.04.1
 ARG UBUNTU_CURL_VERSION=8.5.0-2ubuntu10.15
-ARG UBUNTU_DBUS_VERSION=1.14.10-4ubuntu4.1
 ARG UBUNTU_IPTABLES_VERSION=1.8.10-3ubuntu2
-ARG UBUNTU_KMOD_VERSION=31+20240202-2ubuntu7.2
-ARG UBUNTU_LIBPAM_SYSTEMD_VERSION=255.4-1ubuntu8.17
 ARG UBUNTU_PASSWD_VERSION=1:4.13+dfsg1-4ubuntu3.2
-ARG UBUNTU_SYSTEMD_VERSION=255.4-1ubuntu8.17
-ARG UBUNTU_SYSTEMD_SYSV_VERSION=255.4-1ubuntu8.17
 ARG DOCKER_CE_VERSION=5:29.8.1-1~ubuntu.24.04~noble
 ARG CONTAINERD_VERSION=2.3.6-1~ubuntu.24.04~noble
 ARG DOCKER_BUILDX_VERSION=0.37.1-1~ubuntu.24.04~noble
@@ -21,6 +16,7 @@ ARG DOCKER_COMPOSE_VERSION=5.5.1-1~ubuntu.24.04~noble
 ENV DEBIAN_FRONTEND=noninteractive
 
 COPY --chmod=0444 packaging/wsl/apt-delta.lock /tmp/loki-wsl-apt-delta.lock
+COPY --chmod=0444 internal/host/appliance/requirements.tsv /usr/lib/loki-appliance/requirements.tsv
 
 RUN dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /tmp/loki-wsl-base-packages \
  && apt-get update \
@@ -28,13 +24,9 @@ RUN dpkg-query -W -f='${binary:Package}=${Version}\n' | LC_ALL=C sort > /tmp/lok
       "acl=$UBUNTU_ACL_VERSION" \
       "ca-certificates=$UBUNTU_CA_CERTIFICATES_VERSION" \
       "curl=$UBUNTU_CURL_VERSION" \
-      "dbus=$UBUNTU_DBUS_VERSION" \
       "iptables=$UBUNTU_IPTABLES_VERSION" \
-      "kmod=$UBUNTU_KMOD_VERSION" \
-      "libpam-systemd=$UBUNTU_LIBPAM_SYSTEMD_VERSION" \
       "passwd=$UBUNTU_PASSWD_VERSION" \
-      "systemd=$UBUNTU_SYSTEMD_VERSION" \
-      "systemd-sysv=$UBUNTU_SYSTEMD_SYSV_VERSION" \
+      $(awk -F '\t' '!/^#/ && NF { print $1 "=" $2 }' /usr/lib/loki-appliance/requirements.tsv | LC_ALL=C sort -u) \
  && install -m 0755 -d /etc/apt/keyrings \
  && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
  && chmod a+r /etc/apt/keyrings/docker.asc \
