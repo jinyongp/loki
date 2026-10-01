@@ -130,8 +130,8 @@ func brokerFixture(t *testing.T, handler http.HandlerFunc) (*Broker, *atomic.Int
 		Config: BrokerConfig{
 			AppID: 123, APIVersion: "2026-03-10", MaxResponseBytes: 4096,
 			Targets: map[string]Target{
-				"connextable/loki":  {InstallationID: 456, Repository: "loki"},
-				"jinyongp/personal": {InstallationID: 789, Repository: "personal"},
+				"example-org/loki":  {InstallationID: 456, Repository: "loki"},
+				"example-user/personal": {InstallationID: 789, Repository: "personal"},
 			},
 		},
 		Client: server.Client(),
@@ -171,15 +171,15 @@ func TestBrokerScopesAndCachesTokensPerTarget(t *testing.T) {
 		io.WriteString(w, "{\"token\":\""+token+"\",\"expires_at\":\"2026-09-15T01:00:00Z\"}")
 	})
 	for target, want := range map[string]string{
-		"connextable/loki":  "organization-token",
-		"JINYONGP/PERSONAL": "personal-token",
+		"example-org/loki":  "organization-token",
+		"EXAMPLE-USER/PERSONAL": "personal-token",
 	} {
 		got, err := broker.Token(t.Context(), target)
 		if err != nil || got != want {
 			t.Fatalf("%s: %q %v", target, got, err)
 		}
 	}
-	if _, err := broker.Token(t.Context(), "connextable/loki"); err != nil {
+	if _, err := broker.Token(t.Context(), "example-org/loki"); err != nil {
 		t.Fatal(err)
 	}
 	if requests.Load() != 2 || keyReads.Load() != 2 {
@@ -222,17 +222,17 @@ func TestBrokerSerializesSameTargetWithoutBlockingOtherTargets(t *testing.T) {
 	})
 	slowResults := make(chan error, 2)
 	go func() {
-		_, err := broker.Token(t.Context(), "connextable/loki")
+		_, err := broker.Token(t.Context(), "example-org/loki")
 		slowResults <- err
 	}()
 	<-slowStarted
 	go func() {
-		_, err := broker.Token(t.Context(), "connextable/loki")
+		_, err := broker.Token(t.Context(), "example-org/loki")
 		slowResults <- err
 	}()
 	fastResult := make(chan error, 1)
 	go func() {
-		token, err := broker.Token(t.Context(), "jinyongp/personal")
+		token, err := broker.Token(t.Context(), "example-user/personal")
 		if err == nil && token != "personal-token" {
 			err = errors.New("wrong token")
 		}

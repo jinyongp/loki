@@ -324,14 +324,14 @@ def test_run_pnpm_passes_native_argv_through_corepack(tmp_path: Path, monkeypatc
         return {"exit_code": 0, "output": "11.24.0", "truncated": False}
 
     monkeypatch.setattr(tools, "_run", fake_run)
-    result = tools.run_pnpm(["-C", "docs", "--filter", "@sectile/core", "test"])
+    result = tools.run_pnpm(["-C", "docs", "--filter", "@example-team/core", "test"])
     assert result["exit_code"] == 0
     assert captured[-1][-6:] == [
         "pnpm",
         "-C",
         "docs",
         "--filter",
-        "@sectile/core",
+        "@example-team/core",
         "test",
     ]
 

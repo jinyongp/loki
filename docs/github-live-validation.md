@@ -2,23 +2,25 @@
 
 Validated on 2026-09-16 (Asia/Seoul) using an isolated Compose project named
 `loki-validation`. Existing Python deployment services and state were not changed.
+Account names, repository names, installation IDs and local operator paths below
+are anonymized examples.
 
 ## Deployment
 
 - Endpoint: `http://127.0.0.1:18765/mcp` (Bearer authentication required).
 - Image: `loki:release-e71e706`, built from commit `e71e706` using the core OCI
   build script for amd64 and arm64. Browser image: `loki-browser:release-e71e706`.
-- Workspace: `/home/jinyongp/loki-validation-workspace`.
-- Lifecycle state: `/home/jinyongp/.local/state/loki-validation`.
-- GitHub configuration: `/home/jinyongp/.config/loki/github-validation.toml`.
-- PEM source: `/home/jinyongp/.config/loki/secrets/github-app.pem` (mode 0600).
+- Workspace: `/home/operator/loki-validation-workspace`.
+- Lifecycle state: `/home/operator/.local/state/loki-validation`.
+- GitHub configuration: `/home/operator/.config/loki/github-validation.toml`.
+- PEM source: `/home/operator/.config/loki/secrets/github-app.pem` (mode 0600).
 - MCP client token: `mcp-token` in the private lifecycle state directory.
-- Configured targets: `jinyongp/loki`, `sectile/sectile`,
-  `connextable/homebrew-tap`, `connextable/stamp.is-api`,
-  `connextable/stamp.is-web`, `connextable/stamp.is-fab`.
+- Configured targets: `example-user/sample-repo`, `example-team/example-team`,
+  `example-org/sample-tools`, `example-org/sample-api`,
+  `example-org/sample-web`, `example-org/sample-fab`.
 
-The host configuration maps personal installation `162035578`, sectile
-installation `162041287`, and connextable installation `162041495` to these
+The host configuration maps personal installation `1001`, example-team
+installation `1002`, and example-org installation `1003` to these
 repositories. GitHub App installation access to other repositories does not
 automatically add them to Loki's target map.
 
@@ -26,7 +28,7 @@ automatically add them to Loki's target map.
 
 - GitHub App signature, installation identity, token issuance and repository listing passed.
 - MCP initialize and the `github` tool passed through runtime and the bundled gh CLI.
-- `repo view jinyongp/loki --json nameWithOwner,isPrivate`, `issue list` and
+- `repo view example-user/sample-repo --json nameWithOwner,isPrivate`, `issue list` and
   `pr list` returned exit code 0. Issue and PR lists were empty.
 - Requests for an unconfigured target were rejected.
 - Runner UID 10000 could not read the PEM; the MCP container had no PEM mount.
@@ -48,7 +50,7 @@ automatically add them to Loki's target map.
   Its deployment filesystem hash was not collected from this Ubuntu session.
 
 Compressed release logs and the write-test result are stored under
-`/home/jinyongp/.local/state/loki-validation/evidence/e71e706` (private host state).
+`/home/operator/.local/state/loki-validation/evidence/e71e706` (private host state).
 
 ## Defects found
 
@@ -70,8 +72,8 @@ Organization writes were not exercised.
 Both installations now grant organization-level Issue Fields and Projects write
 permissions. Runtime and MCP were recreated to discard installation tokens issued
 before the permission update. Issue Fields and organization Projects listing then
-passed through MCP for both organizations: sectile returned five issue fields and
-one project; connextable returned four issue fields and no projects. No project or
+passed through MCP for both organizations: example-team returned five issue fields and
+one project; example-org returned four issue fields and no projects. No project or
 organization Issue Fields mutations were made during this read-only validation.
 
 The personal repository and release gates passed. This is a running validation

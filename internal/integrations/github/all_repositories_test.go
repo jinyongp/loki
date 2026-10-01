@@ -18,13 +18,13 @@ func TestAllRepositoryBrokerIssuesOneRepositoryTokenForNewTargets(t *testing.T) 
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprint(w, `{"token":"scoped-token","expires_at":"2026-09-15T01:00:00Z"}`)
 	})
-	broker.Config.Targets = map[string]Target{"connextable/*": {InstallationID: 456, Repository: "*"}}
-	for _, target := range []string{"connextable/new-repo", "connextable/second"} {
+	broker.Config.Targets = map[string]Target{"example-org/*": {InstallationID: 456, Repository: "*"}}
+	for _, target := range []string{"example-org/new-repo", "example-org/second"} {
 		if _, err := broker.Token(t.Context(), target); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, target := range []string{"other/new-repo", "connextable/*", "connextable/../other", "connextable/new/repo"} {
+	for _, target := range []string{"other/new-repo", "example-org/*", "example-org/../other", "example-org/new/repo"} {
 		if _, err := broker.Token(t.Context(), target); err == nil {
 			t.Fatalf("invalid target accepted: %s", target)
 		}
@@ -63,12 +63,12 @@ func TestInstallationRepositoryAccessChangesWithoutReconfiguration(t *testing.T)
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprint(w, `{"token":"scoped-token","expires_at":"2026-09-15T01:00:00Z"}`)
 	})
-	broker.Config.Targets = map[string]Target{"connextable/*": {InstallationID: 456, Repository: "*"}}
-	if _, err := broker.Token(t.Context(), "connextable/new-repo"); err == nil {
+	broker.Config.Targets = map[string]Target{"example-org/*": {InstallationID: 456, Repository: "*"}}
+	if _, err := broker.Token(t.Context(), "example-org/new-repo"); err == nil {
 		t.Fatal("GitHub access denial was ignored")
 	}
 	allowed = true
-	if _, err := broker.Token(t.Context(), "connextable/new-repo"); err != nil {
+	if _, err := broker.Token(t.Context(), "example-org/new-repo"); err != nil {
 		t.Fatalf("new GitHub selection requires no local refresh: %v", err)
 	}
 	if requests.Load() != 2 {

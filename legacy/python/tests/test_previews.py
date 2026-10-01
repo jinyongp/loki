@@ -28,7 +28,7 @@ def test_preview_store_routes_stack_paths_and_reserves_internal_namespace() -> N
     store = PreviewStore("preview.example.com")
     published = store.publish_stack(
         routes={"/": 42100, "/_loki/api": 41280, "/_loki/ops": 41281},
-        cwd="/workspace/stamp.is-web",
+        cwd="/workspace/sample-web",
         command="pnpm dev",
         ttl_seconds=60,
     )

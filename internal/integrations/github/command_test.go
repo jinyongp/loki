@@ -25,7 +25,7 @@ func commandRunnerFixture(t *testing.T) (*CommandRunner, *atomic.Int32) {
 		"if [ \"$1\" = api ] && [ \"$2\" = loud ]; then head -c 5000 /dev/zero | tr '\\\\0' x; exit 0; fi\n" +
 		"if [ \"$1\" = api ] && [ \"$2\" = leak ]; then printf '%s' \"$GH_TOKEN\"; exit 7; fi\n" +
 		"[ \"$GH_TOKEN\" = installation-token ] || exit 21\n" +
-		"[ \"$GH_REPO\" = connextable/loki ] || exit 22\n" +
+		"[ \"$GH_REPO\" = example-org/loki ] || exit 22\n" +
 		"[ \"$GH_HOST\" = github.com ] || exit 23\n" +
 		"[ \"$GH_PROMPT_DISABLED\" = 1 ] || exit 24\n" +
 		"[ -z \"$AMBIENT_SECRET\" ] || exit 25\n" +
@@ -46,7 +46,7 @@ func commandRunnerFixture(t *testing.T) (*CommandRunner, *atomic.Int32) {
 		},
 		Tokens: repositoryTokenFunc(func(_ context.Context, target string) (string, error) {
 			calls.Add(1)
-			if target != "connextable/loki" {
+			if target != "example-org/loki" {
 				return "", errors.New("wrong target")
 			}
 			return "installation-token", nil
@@ -59,7 +59,7 @@ func TestCommandRunnerUsesFixedRepositoryAndCleanEnvironment(t *testing.T) {
 	runner, calls := commandRunnerFixture(t)
 	runner.Config.TempDir = t.TempDir()
 	result, err := runner.Run(t.Context(), CommandRequest{
-		Target: " Connextable/Loki ",
+		Target: " Example-Org/Loki ",
 		Args:   []string{"issue", "list", "--limit", "1"},
 		Input:  []byte("payload"),
 	})
@@ -83,10 +83,10 @@ func TestCommandRunnerUsesFixedRepositoryAndCleanEnvironment(t *testing.T) {
 		t.Fatalf("temporary gh config remains: %v", statErr)
 	}
 	search, err := runner.Run(t.Context(), CommandRequest{
-		Target: "connextable/loki", Args: []string{"search", "issues", "is:open"},
+		Target: "example-org/loki", Args: []string{"search", "issues", "is:open"},
 	})
 	if err != nil || !strings.Contains(search.Output, "arg=--repo") ||
-		!strings.Contains(search.Output, "arg=connextable/loki") {
+		!strings.Contains(search.Output, "arg=example-org/loki") {
 		t.Fatal("search was not fixed to the target repository", search, err)
 	}
 }
@@ -102,17 +102,17 @@ func TestCommandRunnerRejectsCommandAndScopeOverridesBeforeTokenAccess(t *testin
 		{"pr", "create", "--web"},
 	}
 	for _, args := range cases {
-		if _, err := runner.Run(t.Context(), CommandRequest{Target: "connextable/loki", Args: args}); err == nil {
+		if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: args}); err == nil {
 			t.Errorf("accepted %#v", args)
 		}
 	}
 	if _, err := runner.Run(t.Context(), CommandRequest{
-		Target: "connextable/loki", Args: []string{"issue", "create", "--", "--repo"},
+		Target: "example-org/loki", Args: []string{"issue", "create", "--", "--repo"},
 	}); err != nil {
 		t.Fatalf("positional value after -- rejected: %v", err)
 	}
 	if _, err := runner.Run(t.Context(), CommandRequest{
-		Target: "connextable/loki", Args: []string{"search", "repos", "loki"},
+		Target: "example-org/loki", Args: []string{"search", "repos", "loki"},
 	}); err == nil {
 		t.Fatal("cross-repository search accepted")
 	}
@@ -125,18 +125,18 @@ func TestCommandRunnerBoundsInputOutputAndTime(t *testing.T) {
 	runner, calls := commandRunnerFixture(t)
 	runner.Config.MaxInputBytes = 3
 	if _, err := runner.Run(t.Context(), CommandRequest{
-		Target: "connextable/loki", Args: []string{"api", "/repos/x/y"}, Input: []byte("four"),
+		Target: "example-org/loki", Args: []string{"api", "/repos/x/y"}, Input: []byte("four"),
 	}); err == nil || calls.Load() != 0 {
 		t.Fatalf("oversize input accepted; calls=%d", calls.Load())
 	}
 	runner.Config.MaxInputBytes = 4096
 	runner.Config.MaxOutputBytes = 64
-	result, err := runner.Run(t.Context(), CommandRequest{Target: "connextable/loki", Args: []string{"api", "loud"}})
+	result, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"api", "loud"}})
 	if err != nil || !result.Truncated || len(result.Output) != 64 {
 		t.Fatalf("output bound: %#v %v", result, err)
 	}
 	runner.Config.Timeout = 20 * time.Millisecond
-	result, err = runner.Run(t.Context(), CommandRequest{Target: "connextable/loki", Args: []string{"api", "sleep"}})
+	result, err = runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"api", "sleep"}})
 	if err != nil || !result.TimedOut || result.ExitCode != 124 {
 		t.Fatalf("timeout: %#v %v", result, err)
 	}
@@ -144,13 +144,13 @@ func TestCommandRunnerBoundsInputOutputAndTime(t *testing.T) {
 
 func TestCommandRunnerRedactsTokenAndReturnsStableStartFailure(t *testing.T) {
 	runner, _ := commandRunnerFixture(t)
-	result, err := runner.Run(t.Context(), CommandRequest{Target: "connextable/loki", Args: []string{"api", "leak"}})
+	result, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"api", "leak"}})
 	if err != nil || result.ExitCode != 7 || result.Output != "[REDACTED]" ||
 		strings.Contains(string(result.Raw), "installation-token") {
 		t.Fatalf("token leak: %#v %v", result, err)
 	}
 	runner.Config.Binary = filepath.Join(t.TempDir(), "missing-gh")
-	result, err = runner.Run(t.Context(), CommandRequest{Target: "connextable/loki", Args: []string{"issue", "list"}})
+	result, err = runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"issue", "list"}})
 	if err == nil || err.Error() != "GitHub command could not be started" ||
 		strings.Contains(err.Error(), runner.Config.Binary) || result.Output != "" {
 		t.Fatalf("unstable start error: %#v %v", result, err)

@@ -37,7 +37,7 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 			io.WriteString(w, "{\"token\":\""+token+"\",\"expires_at\":\"2026-09-15T01:00:00Z\"}")
-		case "/orgs/connextable/issue-fields":
+		case "/orgs/example-org/issue-fields":
 			if r.Header.Get("Authorization") != "Bearer token-456" {
 				t.Error("Issue Fields used the wrong installation token")
 			}
@@ -57,8 +57,8 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 		Config: BrokerConfig{
 			AppID: 123, APIVersion: "2026-03-10", MaxResponseBytes: 4096,
 			Targets: map[string]Target{
-				"connextable/loki":  {InstallationID: 456, Repository: "loki"},
-				"jinyongp/personal": {InstallationID: 789, Repository: "personal"},
+				"example-org/loki":  {InstallationID: 456, Repository: "loki"},
+				"example-user/personal": {InstallationID: 789, Repository: "personal"},
 			},
 		},
 		Client: server.Client(),
@@ -71,7 +71,7 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "gh")
 	script := "#!/bin/sh\n" +
 		"case \"$GH_REPO:$GH_TOKEN\" in\n" +
-		"  connextable/loki:token-456|jinyongp/personal:token-789) ;;\n" +
+		"  example-org/loki:token-456|example-user/personal:token-789) ;;\n" +
 		"  *) exit 41 ;;\n" +
 		"esac\n" +
 		"printf '%s:%s:%s' \"$GH_REPO\" \"$1\" \"$2\"\n"
@@ -83,12 +83,12 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 		Tokens: broker,
 	}
 	for _, request := range []CommandRequest{
-		{Target: "connextable/loki", Args: []string{"issue", "list"}},
-		{Target: "connextable/loki", Args: []string{"pr", "list"}},
-		{Target: "jinyongp/personal", Args: []string{"pr", "view"}},
-		{Target: "jinyongp/personal", Args: []string{"api", "/repos/jinyongp/personal"}},
-		{Target: "connextable/loki", Args: []string{"search", "issues", "is:open"}},
-		{Target: "jinyongp/personal", Args: []string{"status"}},
+		{Target: "example-org/loki", Args: []string{"issue", "list"}},
+		{Target: "example-org/loki", Args: []string{"pr", "list"}},
+		{Target: "example-user/personal", Args: []string{"pr", "view"}},
+		{Target: "example-user/personal", Args: []string{"api", "/repos/example-user/personal"}},
+		{Target: "example-org/loki", Args: []string{"search", "issues", "is:open"}},
+		{Target: "example-user/personal", Args: []string{"status"}},
 	} {
 		result, err := runner.Run(t.Context(), request)
 		if err != nil || result.ExitCode != 0 || !strings.HasPrefix(result.Output, request.Target+":") {
@@ -97,13 +97,13 @@ func TestBrokerCommandAndIssueFieldsIntegration(t *testing.T) {
 	}
 
 	fields := &Client{
-		Config: ClientConfig{APIVersion: "2026-03-10", Targets: []string{"connextable/loki"}, MaxResponseBytes: 4096, MaxPages: 2},
+		Config: ClientConfig{APIVersion: "2026-03-10", Targets: []string{"example-org/loki"}, MaxResponseBytes: 4096, MaxPages: 2},
 		HTTP:   server.Client(), Tokens: broker, apiURL: server.URL,
 	}
-	if values, err := fields.ListFields(t.Context(), "connextable/loki"); err != nil || len(values) != 0 {
+	if values, err := fields.ListFields(t.Context(), "example-org/loki"); err != nil || len(values) != 0 {
 		t.Fatal(values, err)
 	}
-	if _, err := fields.ListFields(t.Context(), "jinyongp/personal"); err == nil {
+	if _, err := fields.ListFields(t.Context(), "example-user/personal"); err == nil {
 		t.Fatal("personal repository accepted for organization Issue Fields")
 	}
 	mu.Lock()

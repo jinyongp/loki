@@ -55,7 +55,7 @@ def test_runtime_cgroup_is_managed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "read_text", secret_broker_cgroup)
     assert port_guard_service._in_loki_cgroup(321) is True
     assert port_guard_service._listener_is_allowed(
-        321, 65534, Path("/srv/workspace/loki/stamp.is-web")
+        321, 65534, Path("/srv/workspace/loki/sample-web")
     ) is True
 
 
@@ -70,7 +70,7 @@ def test_action_scope_is_managed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "read_text", action_scope)
     assert port_guard_service._in_loki_cgroup(654) is True
     assert port_guard_service._listener_is_allowed(
-        654, 65534, Path("/workspace/stamp.is-web/apps/storefront")
+        654, 65534, Path("/workspace/sample-web/apps/storefront")
     ) is True
 
 

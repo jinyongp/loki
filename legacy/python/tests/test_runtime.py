@@ -131,9 +131,9 @@ def test_action_cwd_accepts_only_same_repository_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    repository = workspace / "stamp.is-web"
+    repository = workspace / "sample-web"
     other = workspace / "other"
-    worktree = workspace / "stamp.is-web-feature"
+    worktree = workspace / "sample-web-feature"
     repository.mkdir(parents=True)
     other.mkdir()
     for path in (repository, other):
@@ -152,9 +152,9 @@ def test_action_cwd_accepts_only_same_repository_worktree(
         str(worktree),
     ], check=True)
     monkeypatch.setattr(runtime, "WORKSPACE_ROOT", workspace)
-    action = {"cwd": "stamp.is-web"}
+    action = {"cwd": "sample-web"}
 
-    assert _action_cwd(action, "stamp.is-web-feature") == worktree
+    assert _action_cwd(action, "sample-web-feature") == worktree
     with pytest.raises(LokiRuntimeError, match="worktree of the registered repository"):
         _action_cwd(action, "other")
     with pytest.raises(LokiRuntimeError, match="workspace-relative"):
@@ -168,7 +168,7 @@ def test_action_cwd_accepts_only_same_repository_worktree(
             result.stdout = result.stdout.replace(str(workspace), "/workspace")
         return result
     monkeypatch.setattr(subprocess, "run", sandbox_paths)
-    assert _action_cwd(action, "stamp.is-web-feature") == worktree
+    assert _action_cwd(action, "sample-web-feature") == worktree
     with pytest.raises(LokiRuntimeError, match="worktree of the registered repository"):
         _action_cwd(action, "other")
 
@@ -177,10 +177,10 @@ def test_dynamic_port_action_returns_actual_endpoint_and_overrides_origin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    cwd = workspace / "stamp.is-web"
+    cwd = workspace / "sample-web"
     cwd.mkdir(parents=True)
     (cwd / ".node-version").write_text("24.20.0\n", encoding="utf-8")
-    action = _frontend_action("stamp.is-web")
+    action = _frontend_action("sample-web")
 
     class Store:
         def load(self) -> dict:
@@ -219,7 +219,7 @@ def test_dynamic_port_action_returns_actual_endpoint_and_overrides_origin(
     )
     assert result["port"] == 43210
     assert result["local_url"] == "http://127.0.0.1:43210"
-    assert result["cwd"] == "/workspace/stamp.is-web"
+    assert result["cwd"] == "/workspace/sample-web"
     assert captured["group"] == "web"
     assert captured["max_group_processes"] == 6
 
@@ -228,10 +228,10 @@ def test_dynamic_api_action_can_bind_fixed_local_callback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    cwd = workspace / "stamp.is-api"
+    cwd = workspace / "sample-api"
     cwd.mkdir(parents=True)
     (cwd / ".node-version").write_text("24.20.0\n", encoding="utf-8")
-    action = _backend_action("stamp.is-api")
+    action = _backend_action("sample-api")
 
     class Store:
         def load(self) -> dict:
@@ -279,10 +279,10 @@ def test_local_callback_binding_rejects_non_api_action(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    cwd = workspace / "stamp.is-web"
+    cwd = workspace / "sample-web"
     cwd.mkdir(parents=True)
     (cwd / ".node-version").write_text("24.20.0\n", encoding="utf-8")
-    action = _frontend_action("stamp.is-web")
+    action = _frontend_action("sample-web")
 
     class Store:
         def load(self) -> dict:
@@ -305,10 +305,10 @@ def test_prepared_dynamic_port_is_consumed_by_matching_action(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    cwd = workspace / "stamp.is-web"
+    cwd = workspace / "sample-web"
     cwd.mkdir(parents=True)
     (cwd / ".node-version").write_text("24.20.0\n", encoding="utf-8")
-    action = _frontend_action("stamp.is-web")
+    action = _frontend_action("sample-web")
 
     class Store:
         def load(self) -> dict:
@@ -598,7 +598,7 @@ def test_encrypted_store_never_persists_plaintext(tmp_path: Path) -> None:
 
 def test_action_policy_requires_registered_secret_and_safe_command() -> None:
     action = {
-        "cwd": "stamp.is-api",
+        "cwd": "sample-api",
         "command": ["pnpm", "dev"],
         "secrets": ["DATABASE_URL"],
         "required_secrets": ["DATABASE_URL"],
@@ -618,7 +618,7 @@ def test_action_policy_requires_registered_secret_and_safe_command() -> None:
 
 def test_action_policy_supports_explicit_dynamic_all_secrets() -> None:
     action = {
-        "cwd": "stamp.is-api",
+        "cwd": "sample-api",
         "command": ["go", "run", "./cmd/api"],
         "secrets": [],
         "all_secrets": True,
@@ -638,7 +638,7 @@ def test_action_policy_supports_explicit_dynamic_all_secrets() -> None:
 
 def test_legacy_empty_secret_selection_remains_all_secrets() -> None:
     action = {
-        "cwd": "stamp.is-api",
+        "cwd": "sample-api",
         "command": ["go", "run", "./cmd/api"],
         "secrets": [],
         "timeout_seconds": 3600,
@@ -901,7 +901,7 @@ def test_secret_runner_mounts_signing_public_key() -> None:
 
 def test_docker_access_accepts_generic_registered_commands() -> None:
     action = {
-        "cwd": "stamp.is-api",
+        "cwd": "sample-api",
         "command": ["just", "local", "deploy"],
         "secrets": [],
         "all_secrets": True,
@@ -932,11 +932,11 @@ def test_docker_action_uses_restricted_transient_proxy_wrapper(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = tmp_path / "workspace"
-    (workspace / "stamp.is-api").mkdir(parents=True)
-    (workspace / "stamp.is-api" / ".node-version").write_text("24.20.0\n", encoding="utf-8")
+    (workspace / "sample-api").mkdir(parents=True)
+    (workspace / "sample-api" / ".node-version").write_text("24.20.0\n", encoding="utf-8")
     monkeypatch.setattr(runtime, "WORKSPACE_ROOT", workspace)
     action = {
-        "cwd": "stamp.is-api",
+        "cwd": "sample-api",
         "command": ["just", "local", "deploy"],
         "secrets": [],
         "all_secrets": True,
