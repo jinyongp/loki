@@ -24,6 +24,7 @@ func (source PowerShellStartupTaskSource) Probe(ctx context.Context, taskName st
 		executable = "powershell.exe"
 	}
 	command := exec.CommandContext(ctx, executable, "-NoProfile", "-NonInteractive", "-Command", startupTaskProbeScript)
+	configureNativeProcess(command)
 	command.Env = append(withoutEnvironment(os.Environ(), "LOKI_TASK_NAME"), "LOKI_TASK_NAME="+taskName)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout

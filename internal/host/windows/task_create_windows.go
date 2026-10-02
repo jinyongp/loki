@@ -24,6 +24,7 @@ func (source PowerShellStartupTaskSource) CreateOwned(ctx context.Context, expec
 		executable = "powershell.exe"
 	}
 	command := exec.CommandContext(ctx, executable, "-NoProfile", "-NonInteractive", "-Command", createOwnedStartupTaskScript)
+	configureNativeProcess(command)
 	command.Env = append(withoutEnvironment(os.Environ(),
 		"LOKI_TASK_NAME", "LOKI_TASK_EXE", "LOKI_TASK_ARGS", "LOKI_TASK_USER"),
 		"LOKI_TASK_NAME="+expected.TaskName,

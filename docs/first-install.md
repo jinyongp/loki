@@ -145,8 +145,10 @@ restricted to the current Windows user and SYSTEM. Provider runtime
 credentials, such as an OpenAI tunnel runtime key, are stored in Windows
 Credential Manager rather than JSON state.
 
-The existing per-distribution `Loki WSL (<distribution>)` logon task retains
-its direct `wsl.exe ... /usr/bin/sleep infinity` ownership signature. When an
+The per-distribution `Loki WSL (<distribution>)` logon task keeps the appliance
+running in the background without a visible terminal. Exact owned legacy
+foreground tasks are accepted and migrated during managed connection startup.
+When an
 owned remote connection is enabled, Loki may additionally create one finite
 `Loki Connections (<distribution>)` task that invokes the absolute verified
 frontend and restores only enabled managed connection runtimes.

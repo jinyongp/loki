@@ -18,7 +18,26 @@ import (
 const startVerifiedKeepaliveTaskScript = `$ErrorActionPreference='Stop'
 $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
 $a=@($t.Actions)
-if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'}
+$current=$a.Count -eq 1 -and ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -and ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal)
+$legacy=$a.Count -eq 1 -and $env:LOKI_KEEPALIVE_LEGACY_EXE -and ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_LEGACY_EXE,[StringComparison]::OrdinalIgnoreCase) -and ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_LEGACY_ARGS,[StringComparison]::Ordinal)
+if((-not $current -and -not $legacy) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'}
+if(-not $current){
+  $wasRunning=[string]$t.State -eq 'Running'
+  $action=New-ScheduledTaskAction -Execute $env:LOKI_KEEPALIVE_TASK_EXE -Argument $env:LOKI_KEEPALIVE_TASK_ARGS
+  Set-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -Action $action -ErrorAction Stop|Out-Null
+  $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+  $a=@($t.Actions)
+  if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal)){throw 'WSL keepalive background action could not be restored'}
+  if($wasRunning){
+    Stop-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+    for($attempt=0;$attempt -lt 10;$attempt++){
+      $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+      if([string]$t.State -ne 'Running'){break}
+      Start-Sleep -Milliseconds 500
+    }
+    if([string]$t.State -eq 'Running'){throw 'WSL keepalive foreground task could not be stopped'}
+  }
+}
 if([int]$t.Settings.RestartCount -eq 0 -and -not [string]$t.Settings.RestartInterval){
   $settings=$t.Settings
   $settings.RestartCount=3
@@ -84,11 +103,14 @@ func (platform WindowsConnectionStartupPlatform) StartKeepalive(
 		executable = "powershell.exe"
 	}
 	command := exec.CommandContext(ctx, executable, "-NoProfile", "-NonInteractive", "-Command", startVerifiedKeepaliveTaskScript)
+	configureNativeProcess(command)
 	command.Env = append(withoutEnvironment(os.Environ(),
-		"LOKI_KEEPALIVE_TASK_NAME", "LOKI_KEEPALIVE_TASK_EXE", "LOKI_KEEPALIVE_TASK_ARGS"),
+		"LOKI_KEEPALIVE_TASK_NAME", "LOKI_KEEPALIVE_TASK_EXE", "LOKI_KEEPALIVE_TASK_ARGS", "LOKI_KEEPALIVE_LEGACY_EXE", "LOKI_KEEPALIVE_LEGACY_ARGS"),
 		"LOKI_KEEPALIVE_TASK_NAME="+expected.TaskName,
 		"LOKI_KEEPALIVE_TASK_EXE="+expected.TaskExecutable,
 		"LOKI_KEEPALIVE_TASK_ARGS="+expected.TaskArguments,
+		"LOKI_KEEPALIVE_LEGACY_EXE="+expected.LegacyTaskExecutable,
+		"LOKI_KEEPALIVE_LEGACY_ARGS="+expected.LegacyTaskArguments,
 	)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout

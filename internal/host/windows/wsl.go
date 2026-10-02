@@ -67,6 +67,7 @@ func (ExecNativeRunner) run(
 	input []byte,
 ) (NativeProbe, error) {
 	command := exec.CommandContext(ctx, executable, arguments...)
+	configureNativeProcess(command)
 	if progress.Verbose(reporter) {
 		command.Env = progress.VerboseEnvironment(os.Environ())
 	}

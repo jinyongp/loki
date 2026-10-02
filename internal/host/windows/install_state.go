@@ -31,11 +31,18 @@ type WindowsState struct {
 }
 
 type ExpectedInstallation struct {
-	Distribution   string
-	StateDir       string
-	TaskName       string
-	TaskExecutable string
-	TaskArguments  string
+	Distribution         string
+	StateDir             string
+	TaskName             string
+	TaskExecutable       string
+	TaskArguments        string
+	LegacyTaskExecutable string
+	LegacyTaskArguments  string
+}
+
+func matchesStartupAction(executable, arguments string, expected ExpectedInstallation) bool {
+	return (WindowsPathEqual(executable, expected.TaskExecutable) && arguments == expected.TaskArguments) ||
+		(expected.LegacyTaskExecutable != "" && WindowsPathEqual(executable, expected.LegacyTaskExecutable) && arguments == expected.LegacyTaskArguments)
 }
 
 type ownershipManifestDisk struct {
@@ -65,8 +72,7 @@ func ParseOwnershipManifest(raw []byte, expected ExpectedInstallation) (WindowsS
 		!strings.EqualFold(manifest.Distribution, expected.Distribution) ||
 		!WindowsPathEqual(manifest.StateDir, expected.StateDir) ||
 		manifest.TaskName != expected.TaskName ||
-		!WindowsPathEqual(manifest.TaskExecutable, expected.TaskExecutable) ||
-		manifest.TaskArguments != expected.TaskArguments ||
+		!matchesStartupAction(manifest.TaskExecutable, manifest.TaskArguments, expected) ||
 		!windowsReleaseTagPattern.MatchString(manifest.ReleaseTag) {
 		return WindowsState{}, errors.New("ownership manifest does not match the requested Loki installation")
 	}

@@ -67,8 +67,7 @@ func ClassifyStartupTask(probe StartupTaskProbe, expected ExpectedInstallation) 
 		return StartupTaskState{}
 	}
 	owned := len(probe.Actions) == 1 &&
-		WindowsPathEqual(probe.Actions[0].Executable, expected.TaskExecutable) &&
-		probe.Actions[0].Arguments == expected.TaskArguments &&
+		matchesStartupAction(probe.Actions[0].Executable, probe.Actions[0].Arguments, expected) &&
 		probe.Description == "Keep the Loki WSL2 appliance running."
 	return StartupTaskState{Present: true, Owned: owned, Running: probe.Running}
 }

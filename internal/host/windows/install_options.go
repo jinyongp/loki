@@ -115,11 +115,15 @@ func ExpectedFromOptions(options InstallOptions, localAppData, systemRoot string
 	systemRootPath = strings.ReplaceAll(systemRootPath, "/", "\\")
 	stateDir := joinWindowsPath(joinWindowsPath(localRoot, "Loki"), options.Distribution)
 	taskName := "Loki WSL (" + options.Distribution + ")"
+	wslExecutable := joinWindowsPath(systemRootPath, "System32\\wsl.exe")
+	wslArguments := fmt.Sprintf("-d %s --exec /usr/bin/sleep infinity", options.Distribution)
 	return ExpectedInstallation{
-		Distribution:   options.Distribution,
-		StateDir:       stateDir,
-		TaskName:       taskName,
-		TaskExecutable: joinWindowsPath(systemRootPath, "System32\\wsl.exe"),
-		TaskArguments:  fmt.Sprintf("-d %s --exec /usr/bin/sleep infinity", options.Distribution),
+		Distribution:         options.Distribution,
+		StateDir:             stateDir,
+		TaskName:             taskName,
+		TaskExecutable:       joinWindowsPath(systemRootPath, "System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+		TaskArguments:        hiddenKeepaliveArguments(wslExecutable, wslArguments),
+		LegacyTaskExecutable: wslExecutable,
+		LegacyTaskArguments:  wslArguments,
 	}, nil
 }

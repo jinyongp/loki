@@ -272,7 +272,16 @@ try {
     }
 
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    if (-not $task.Actions.Arguments.Contains($distributionName) -or -not $task.Actions.Arguments.Contains("/usr/bin/sleep infinity")) { Fail "autostart task action does not target the accepted distribution" }
+    $taskActions = @($task.Actions)
+    $expectedPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $expectedWSL = (Join-Path $env:SystemRoot 'System32\wsl.exe').Replace("'", "''")
+    $expectedScript = '$ErrorActionPreference=''Stop'';$p=New-Object System.Diagnostics.Process;$p.StartInfo.FileName=''{0}'';$p.StartInfo.Arguments=''-d {1} --exec /usr/bin/sleep infinity'';$p.StartInfo.UseShellExecute=$false;$p.StartInfo.CreateNoWindow=$true;$null=$p.Start();$p.WaitForExit();exit $p.ExitCode' -f $expectedWSL, $distributionName
+    $expectedArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($expectedScript))
+    if ($taskActions.Count -ne 1 -or
+        -not ([string]$taskActions[0].Execute).Equals($expectedPowerShell, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$taskActions[0].Arguments -ne $expectedArguments) {
+        Fail "autostart task does not use the accepted background WSL action"
+    }
     if ([string]$task.Settings.ExecutionTimeLimit -ne "PT0S") { Fail "autostart task has a finite execution time limit" }
     $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $triggerSid = Resolve-AccountSID ([string]$task.Triggers[0].UserId)

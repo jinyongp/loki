@@ -50,14 +50,16 @@ func TestResolveInstallOptionsRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-func TestExpectedFromOptionsPreservesLegacyTaskSignature(t *testing.T) {
+func TestExpectedFromOptionsUsesBackgroundTaskAndPreservesLegacyOwnership(t *testing.T) {
 	expected, err := ExpectedFromOptions(InstallOptions{Distribution: "loki-mcp"}, `C:\Users\dev\AppData\Local`, `C:\Windows`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if expected.TaskName != "Loki WSL (loki-mcp)" ||
-		expected.TaskExecutable != `C:\Windows\System32\wsl.exe` ||
-		expected.TaskArguments != "-d loki-mcp --exec /usr/bin/sleep infinity" {
+		expected.TaskExecutable != `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` ||
+		expected.TaskArguments != hiddenKeepaliveArguments(`C:\Windows\System32\wsl.exe`, "-d loki-mcp --exec /usr/bin/sleep infinity") ||
+		expected.LegacyTaskExecutable != `C:\Windows\System32\wsl.exe` ||
+		expected.LegacyTaskArguments != "-d loki-mcp --exec /usr/bin/sleep infinity" {
 		t.Fatalf("unexpected expected installation %#v", expected)
 	}
 }
