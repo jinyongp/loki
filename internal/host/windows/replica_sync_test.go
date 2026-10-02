@@ -59,7 +59,7 @@ func (reconciler *fakeReconciler) ReconcileEnabled(context.Context, string) erro
 	return reconciler.err
 }
 
-func TestReplicaSynchronizerPublishesAndReconcilesOnlyOnEffectiveChange(t *testing.T) {
+func TestReplicaSynchronizerRestoresConnectionsEvenWhenMaterialIsUnchanged(t *testing.T) {
 	expected := ExpectedInstallation{Distribution: "loki-mcp"}
 	material := ConnectionMaterial{
 		LocalOrigin: "http://127.0.0.1:18765/mcp", Transport: "streamable-http",
@@ -89,7 +89,7 @@ func TestReplicaSynchronizerPublishesAndReconcilesOnlyOnEffectiveChange(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Changed || store.publish != 2 || reconciler.calls != 1 {
+	if result.Changed || store.publish != 2 || reconciler.calls != 2 {
 		t.Fatalf("result=%+v publish=%d reconcile=%d", result, store.publish, reconciler.calls)
 	}
 }

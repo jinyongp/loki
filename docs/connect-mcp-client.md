@@ -187,7 +187,16 @@ arguments, helper ownership state, or process arguments.
 When a managed remote connection is enabled, Loki maintains one finite
 `Loki Connections (<distribution>)` logon task for the distribution. The task
 invokes the verified absolute `loki.exe`, waits boundedly for the appliance,
-and restores only enabled owned adapters.
+and restores only enabled owned adapters. OpenAI setup and startup also wait for
+the local MCP listener to become reachable from Windows, with at most 30 checks
+two seconds apart. This covers a delay in WSL localhost forwarding after the
+appliance's internal services become healthy.
+
+If startup fails, Task Scheduler retries it up to three times at one-minute
+intervals. Loki upgrades the retry settings of a verified existing connection
+task during connection reconciliation. Update apply, rollback, and restore
+reconnect enabled adapters even when the local URL and token stay unchanged.
+Disabled adapters remain disabled.
 
 OpenAI's UI and permissions can change independently of Loki. Prefer the linked
 OpenAI settings pages and official guides for account-side steps.

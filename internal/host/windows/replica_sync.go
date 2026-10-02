@@ -90,7 +90,9 @@ func (syncer ReplicaSynchronizer) Sync(
 	if err = syncer.Store.Publish(ctx, expected, material); err != nil {
 		return ReplicaSyncResult{}, err
 	}
-	if changed && syncer.Reconciler != nil {
+	// Lifecycle operations can stop a tunnel while leaving its endpoint and
+	// token unchanged. Restore enabled connections after every successful sync.
+	if syncer.Reconciler != nil {
 		if err = syncer.Reconciler.ReconcileEnabled(ctx, expected.Distribution); err != nil {
 			return ReplicaSyncResult{}, err
 		}
