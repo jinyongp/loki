@@ -425,6 +425,18 @@ try {
         Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve") | Out-Null
         Wait-LokiHealthy $distributionName
 
+        # Reconstruct the old layout: a direct WSL task and two connection files.
+        # Companions from the current release require an ownership manifest and
+        # cannot be left behind when simulating a pre-manifest installation.
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            if ([string](Get-ScheduledTask -TaskName $taskName).State -ne 'Running') { break }
+            Start-Sleep -Milliseconds 250
+        }
+        if ([string](Get-ScheduledTask -TaskName $taskName).State -eq 'Running') { Fail "keepalive did not stop before legacy fixture conversion" }
+        $legacyAction = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\wsl.exe') -Argument ("-d $distributionName --exec /usr/bin/sleep infinity")
+        Set-ScheduledTask -TaskName $taskName -Action $legacyAction -ErrorAction Stop | Out-Null
+        Remove-Item -LiteralPath (Join-Path $stateDir 'loki-keepalive.exe'), (Join-Path $stateDir 'keepalive.sha256') -Force
         $flatLegacyConnection = [ordered]@{
             endpoint = "http://127.0.0.1:18765/mcp"
             transport = "streamable-http"
