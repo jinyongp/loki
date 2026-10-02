@@ -191,6 +191,11 @@ func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) 
 		}
 		return nil, "", err
 	}
+	if p.AccountTypes[owner] == "organization" {
+		if err = p.organizationProjects(ctx, token, owner); err != nil {
+			return nil, "", err
+		}
+	}
 	// ID-based mutations can bypass gh's --owner handling. Check each node's
 	// actual project and owner before allowing the CLI to receive any token.
 	var projectID string
@@ -290,4 +295,21 @@ type projectOwner struct {
 type ownedProject struct {
 	ID    string       `json:"id"`
 	Owner projectOwner `json:"owner"`
+}
+
+func (p *ProjectAuthority) organizationProjects(ctx context.Context, token, owner string) error {
+	base := defaultAPIURL
+	if p.apiURL != "" {
+		base = p.apiURL
+	}
+	var organization struct {
+		Enabled *bool `json:"has_organization_projects"`
+	}
+	if err := authorizationJSON(ctx, p.HTTP, http.MethodGet, strings.TrimRight(base, "/")+"/orgs/"+owner, token, nil, &organization); err != nil || organization.Enabled == nil {
+		return fault.Error("GitHub organization Projects availability could not be checked")
+	}
+	if !*organization.Enabled {
+		return fault.Error("GitHub Projects are disabled for organization " + owner + "; enable 'Enable Projects for the organization' and Save at https://github.com/organizations/" + owner + "/settings/projects, then retry")
+	}
+	return nil
 }

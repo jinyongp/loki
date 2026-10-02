@@ -27,6 +27,14 @@ func personalProjectFixture(t *testing.T) (*CommandRunner, *atomic.Int32, *atomi
 	}
 	runner.Projects = &ProjectAuthority{Targets: []string{"example-user/repo", "example-org/loki"}, AccountTypes: map[string]string{"example-user": "user", "example-org": "organization"},
 		Repositories: runner.Tokens, Users: users, HTTP: http.DefaultClient}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/orgs/example-org" {
+			t.Error("unexpected organization availability request", r.Method, r.URL.Path)
+		}
+		ioJSON(w, map[string]bool{"has_organization_projects": true})
+	}))
+	t.Cleanup(server.Close)
+	runner.Projects.HTTP, runner.Projects.apiURL = server.Client(), server.URL
 	runner.Supervisor = commandCheckSupervisor(func(_ context.Context, spec process.Spec) (process.Result, error) {
 		values := map[string]string{}
 		for _, entry := range spec.Env {
@@ -39,6 +47,46 @@ func personalProjectFixture(t *testing.T) (*CommandRunner, *atomic.Int32, *atomi
 		return process.Result{Output: strings.Join(spec.Argv[1:], "|") + "|" + values["GH_TOKEN"]}, nil
 	})
 	return runner, repositoryCalls, &userCalls
+}
+
+func TestOrganizationProjectsDisabledAdvicePreventsExecution(t *testing.T) {
+	for _, scenario := range []string{"disabled", "enabled", "missing-setting", "upstream-error"} {
+		t.Run(scenario, func(t *testing.T) {
+			runner, _, userCalls := personalProjectFixture(t)
+			var executed atomic.Int32
+			runner.Supervisor = commandCheckSupervisor(func(context.Context, process.Spec) (process.Result, error) {
+				executed.Add(1)
+				return process.Result{}, nil
+			})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/orgs/example-org" || r.Header.Get("Authorization") == "Bearer ghu_personal" {
+					t.Error("incorrect organization preflight authority")
+				}
+				if scenario == "upstream-error" {
+					w.WriteHeader(http.StatusForbidden)
+					w.Write([]byte("private-upstream-detail"))
+					return
+				}
+				if scenario == "missing-setting" {
+					ioJSON(w, map[string]string{"login": "example-org"})
+					return
+				}
+				ioJSON(w, map[string]bool{"has_organization_projects": scenario == "enabled"})
+			}))
+			defer server.Close()
+			runner.Projects.HTTP, runner.Projects.apiURL = server.Client(), server.URL
+			_, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"project", "create", "--title", "Example"}})
+			if (err == nil) != (scenario == "enabled") || (executed.Load() == 1) != (scenario == "enabled") || userCalls.Load() != 0 {
+				t.Fatal("organization preflight failed", err, executed.Load())
+			}
+			if scenario == "disabled" && (!strings.Contains(fault.Public(err), "https://github.com/organizations/example-org/settings/projects") || !strings.Contains(fault.Public(err), "Enable Projects for the organization")) {
+				t.Fatal("disabled Projects did not provide enable instructions", err)
+			}
+			if err != nil && strings.Contains(err.Error(), "private-upstream-detail") {
+				t.Fatal("preflight exposed response details", err)
+			}
+		})
+	}
 }
 
 func TestProjectsAuthorityUsesUserTokenOnlyForPersonalProjects(t *testing.T) {

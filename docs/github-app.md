@@ -170,6 +170,16 @@ user-owned Projects. Personal Projects require the App user authorization below.
 Loki does not use an ambient personal `gh auth` session.
 An empty project list alone does not verify project access.
 
+The organization must also enable **Enable Projects for the organization** at
+`https://github.com/organizations/OWNER/settings/projects` and save the change.
+Loki checks this setting before organization Project commands and provides that
+settings link when Projects are disabled. GitHub exposes
+[an organization update API](https://docs.github.com/en/rest/orgs/orgs#update-an-organization)
+with `has_organization_projects: true`, but it requires **Organization
+Administration: Write**, separately from **Organization Projects: Read & write**.
+Loki directs the organization owner to the setting instead of requesting that
+additional permission.
+
 ## Personal Projects authorization
 
 Set **Account permissions > Personal Projects** to **Read & write** in the
