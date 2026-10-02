@@ -13,7 +13,7 @@ func integrationHelpRequested(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "logout", "user-status":
+	case "logout", "user-status", "refresh":
 		return len(args) == 2 || len(args) == 3 && args[1] == "github"
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return len(args) == 2
@@ -32,11 +32,15 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		fmt.Fprintln(output, "  loki integration setup|rotate signing [--distribution NAME] [--interrupt-active-jobs] [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]")
 		fmt.Fprintln(output, "  loki integration setup github [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
 		fmt.Fprintln(output, "  loki integration logout|user-status github [--distribution NAME]")
+		fmt.Fprintln(output, "  loki integration refresh github [--distribution NAME]")
 		fmt.Fprintln(output, "  loki integration import|rotate github [--distribution NAME] [--interrupt-active-jobs] --config-file PATH --private-key-file PATH")
 		return
 	}
 	action := path[0]
 	switch action {
+	case "refresh":
+		fmt.Fprintln(output, "usage: loki integration refresh github [--distribution NAME]")
+		fmt.Fprintln(output, "Clears cached installation tokens after approving GitHub App permission changes. Running work continues.")
 	case "logout", "user-status":
 		fmt.Fprintf(output, "usage: loki integration %s github [--distribution NAME]\n", action)
 		fmt.Fprintln(output, "Shows or clears local personal Projects authorization for all connected personal accounts. Use setup github to authorize them.")

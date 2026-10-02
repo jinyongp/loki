@@ -34,6 +34,8 @@ func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	action := args[0]
 	switch action {
+	case "refresh":
+		return runWindowsGitHubRefresh(ctx, args[1:], stdout, stderr)
 	case "logout", "user-status":
 		return runWindowsGitHubUser(ctx, action, args[1:], stdout, stderr)
 	case "login":

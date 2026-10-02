@@ -46,6 +46,24 @@ func TestGitHubUserAdminDoesNotForwardSocketOrReadSecrets(t *testing.T) {
 	}
 }
 
+func TestGitHubRefreshAdminForwardsOnlyClosedOperation(t *testing.T) {
+	client := githubUserAdminCaller(func(_ context.Context, input any) (json.RawMessage, error) {
+		request := input.(map[string]any)
+		if request["operation"] != "github_refresh" || len(request) != 1 {
+			t.Fatal("invalid refresh request", request)
+		}
+		return json.RawMessage(`{"refreshed":true}`), nil
+	})
+	read := func(context.Context, io.Writer, bool) (string, error) {
+		t.Fatal("refresh attempted to read a credential")
+		return "", nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := executeAdministrationInput([]string{"github", "refresh", "--runtime-socket", "/run/loki/runtime/control.sock"}, client, read, &stdout, &stderr); code != 0 || !json.Valid(stdout.Bytes()) {
+		t.Fatal("refresh administration failed", code, stderr.String())
+	}
+}
+
 func TestGitHubUserRelayRejectsCredentialAndTrailingInput(t *testing.T) {
 	for _, input := range []string{`{"action":"begin","account":"example-user","access_token":"private"}`, `{"action":"poll","device_code":"private"}`, `{} {}`, strings.Repeat("x", 4097)} {
 		if _, err := readGitHubUserRequest(strings.NewReader(input)); err == nil {

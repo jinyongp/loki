@@ -140,6 +140,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	var githubProvider GitHubProvider
 	var githubCommands GitHubCommandRunner
 	var githubUsers *githubapp.UserAuthorization
+	var githubBroker *githubapp.Broker
 	if c.GitHubAppID != 0 {
 		if !filepath.IsAbs(o.GitHubBinary) || o.GitHubPrivateKeyFile != "" && !filepath.IsAbs(o.GitHubPrivateKeyFile) {
 			return errors.New("GitHub runtime paths must be absolute")
@@ -170,6 +171,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 			Config: githubapp.BrokerConfig{AppID: c.GitHubAppID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes, Targets: targets},
 			Client: httpClient, PrivateKey: privateKey,
 		}
+		githubBroker = broker
 		accountTypes := map[string]string{}
 		personalAccounts := []string{}
 		for _, installation := range c.GitHubInstallations {
@@ -273,6 +275,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
 		GitHubUserOperations(githubUsers),
+		GitHubRefreshOperations(githubBroker),
 		GitHubIssueFieldsOperations(issueFields),
 		GitHubProviderOperations(githubProvider),
 		GitHubCommandOperations(githubCommands),

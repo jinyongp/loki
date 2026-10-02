@@ -33,6 +33,7 @@ var commands = map[string]command{
 	"secret import-env":     {"import_env", []string{"profile", "file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"secret stage-env":      {"stage_env", []string{"file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"github app-key set":    {"github_app_key_set", nil, nil},
+	"github refresh":        {"github_refresh", nil, githubUserOptions},
 	"github user begin":     {"github_user_begin", []string{"account"}, githubUserOptions},
 	"github user poll":      {"github_user_poll", []string{"session_id"}, githubUserOptions},
 	"github user status":    {"github_user_status", []string{"account"}, githubUserOptions},

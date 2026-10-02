@@ -205,6 +205,13 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		args = append(args, backupID)
 		return args, false, nil
 	case "integration":
+		if request.Action == "refresh" {
+			if request.Integration != "github" || request.GitHubUser || request.GitHubBrowser || request.UseStdin ||
+				request.IdentityName != "" || request.IdentityEmail != "" || request.BackupID != "" || request.Approve || request.InterruptActiveJobs {
+				return nil, false, errors.New("GitHub refresh accepts only the github integration")
+			}
+			return []string{"host", "integration", "refresh", "--system", "github"}, false, nil
+		}
 		if request.GitHubUser {
 			if request.Action != "login" || request.Integration != "github" || !request.UseStdin || request.GitHubBrowser ||
 				request.IdentityName != "" || request.IdentityEmail != "" || request.BackupID != "" || request.Approve || request.InterruptActiveJobs {

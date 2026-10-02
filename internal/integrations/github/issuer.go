@@ -149,6 +149,14 @@ type Broker struct {
 	apiURL  string
 }
 
+// Refresh discards cached installation tokens. Commands already in flight may
+// finish; subsequent acquisitions exchange a new token with current grants.
+func (b *Broker) Refresh() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.issuers = nil
+}
+
 func (b *Broker) Token(ctx context.Context, target string) (string, error) {
 	canonical := strings.ToLower(strings.TrimSpace(target))
 	resolved, ok := b.Config.Targets[canonical]

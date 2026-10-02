@@ -140,9 +140,19 @@ private key, and repository selection. GitHub requires installation approval
 before the new permissions can be used.
 
 An existing installation token retains its issued permissions until it expires.
-Loki caches tokens until near expiry, so permission changes are reflected when a
-new token is issued. A local CLI readiness check does not validate every GitHub
-permission or prove that a private project is accessible.
+Loki caches tokens until near expiry. After approving new permissions, clear the
+cache so subsequent commands acquire tokens with the current grants:
+
+```powershell
+loki integration refresh github
+```
+
+On a system-scoped Linux host, use
+`sudo loki host integration refresh --system github`. This clears the installation
+token cache without restarting the runtime or interrupting running work. It does
+not approve permissions at GitHub or renew personal user authorization. A local
+CLI readiness check does not validate every GitHub permission or prove that a
+private project is accessible.
 
 ## Repository operations and Projects
 

@@ -130,7 +130,7 @@ func brokerFixture(t *testing.T, handler http.HandlerFunc) (*Broker, *atomic.Int
 		Config: BrokerConfig{
 			AppID: 123, APIVersion: "2026-03-10", MaxResponseBytes: 4096,
 			Targets: map[string]Target{
-				"example-org/loki":  {InstallationID: 456, Repository: "loki"},
+				"example-org/loki":      {InstallationID: 456, Repository: "loki"},
 				"example-user/personal": {InstallationID: 789, Repository: "personal"},
 			},
 		},
@@ -171,7 +171,7 @@ func TestBrokerScopesAndCachesTokensPerTarget(t *testing.T) {
 		io.WriteString(w, "{\"token\":\""+token+"\",\"expires_at\":\"2026-09-15T01:00:00Z\"}")
 	})
 	for target, want := range map[string]string{
-		"example-org/loki":  "organization-token",
+		"example-org/loki":      "organization-token",
 		"EXAMPLE-USER/PERSONAL": "personal-token",
 	} {
 		got, err := broker.Token(t.Context(), target)
@@ -196,6 +196,40 @@ func TestBrokerRejectsUnknownTargetBeforeCredentialAccess(t *testing.T) {
 	}
 	if requests.Load() != 0 || keyReads.Load() != 0 {
 		t.Fatalf("requests=%d key reads=%d", requests.Load(), keyReads.Load())
+	}
+}
+
+func TestBrokerRefreshClearsAllInstallationTokenCaches(t *testing.T) {
+	var generation atomic.Int32
+	generation.Store(1)
+	broker, requests, _ := brokerFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		token := "old-grants"
+		if generation.Load() == 2 {
+			token = "new-grants"
+		}
+		ioJSON(w, map[string]string{"token": token, "expires_at": "2026-09-15T01:00:00Z"})
+	})
+	for _, target := range []string{"example-org/loki", "example-user/personal"} {
+		if token, err := broker.Token(t.Context(), target); err != nil || token != "old-grants" {
+			t.Fatal("initial exchange failed", err)
+		}
+	}
+	generation.Store(2)
+	if token, err := broker.Token(t.Context(), "example-org/loki"); err != nil || token != "old-grants" || requests.Load() != 2 {
+		t.Fatal("fixture did not retain cached permissions", err)
+	}
+	broker.Refresh()
+	for _, target := range []string{"example-org/loki", "example-user/personal"} {
+		if token, err := broker.Token(t.Context(), target); err != nil || token != "new-grants" {
+			t.Fatal("refresh retained old permissions", err)
+		}
+	}
+	if requests.Load() != 4 {
+		t.Fatal("refresh did not clear every target", requests.Load())
+	}
+	if _, err := broker.Token(t.Context(), "other/repo"); err == nil || requests.Load() != 4 {
+		t.Fatal("refresh widened target authority")
 	}
 }
 

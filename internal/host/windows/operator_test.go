@@ -73,6 +73,24 @@ func TestOperatorArgumentsKeepRestoreIDAsSingleArg(t *testing.T) {
 	}
 }
 
+func TestWindowsGitHubRefreshUsesNativeCommandAndRejectsMutationOptions(t *testing.T) {
+	args, machine, err := operatorCommandArguments(OperatorRequest{Command: "integration", Action: "refresh", Integration: "github"})
+	want := []string{"host", "integration", "refresh", "--system", "github"}
+	if err != nil || machine || !slices.Equal(args, want) {
+		t.Fatal("invalid Windows refresh relay", args, err)
+	}
+	for _, request := range []OperatorRequest{
+		{Command: "integration", Action: "refresh", Integration: "signing"},
+		{Command: "integration", Action: "refresh", Integration: "github", UseStdin: true},
+		{Command: "integration", Action: "refresh", Integration: "github", GitHubUser: true},
+		{Command: "integration", Action: "refresh", Integration: "github", InterruptActiveJobs: true},
+	} {
+		if _, _, err := operatorCommandArguments(request); err == nil {
+			t.Fatal("refresh accepted unrelated mutation options", request)
+		}
+	}
+}
+
 func TestOperatorUpdateApplyRequiresExplicitApproval(t *testing.T) {
 	if _, _, err := operatorCommandArguments(OperatorRequest{Command: "update", Action: "apply"}); err == nil {
 		t.Fatal("update apply without approval accepted")
