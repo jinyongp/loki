@@ -96,8 +96,9 @@ func runAllApplianceUpdateWith(ctx context.Context, deps allUpdateDependencies, 
 			// An earlier apply may have committed before its health or Windows
 			// connection refresh failed. Check readiness and finish the refresh.
 			for _, args := range [][]string{
-				{"doctor", "--distribution", options.Distribution},
 				{"connection", "show", "--distribution", options.Distribution, "local"},
+				{"connect", "startup", "--distribution", options.Distribution},
+				{"doctor", "--distribution", options.Distribution},
 			} {
 				if err := ctx.Err(); err != nil {
 					fmt.Fprintln(stderr, err)

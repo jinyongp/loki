@@ -193,8 +193,9 @@ loki update --all --distribution loki-mcp
 
 `--all` updates and verifies the frontend, then uses the installed frontend to
 prepare and apply the appliance update without another confirmation prompt.
-An appliance already at the published version is checked for health and its
-Windows connection state is refreshed without preparing another update. A prepared
+An appliance already at the published version has its Windows connection state
+refreshed, enabled managed connections restored, and health checked without
+preparing another update. A prepared
 update for the same release is reused; failed steps stop the command and can be
 continued by rerunning it. Active jobs remain protected unless you add
 `--interrupt-active-jobs`. The Linux host retains responsibility for release

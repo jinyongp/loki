@@ -35,12 +35,12 @@ func TestProductUpdateAllOptions(t *testing.T) {
 }
 
 func TestAllUpdateSequencingAndFailureRecovery(t *testing.T) {
-	for _, scenario := range []string{"update", "current", "newer", "prepared", "stale-prepared", "status-fails", "prepare-fails", "apply-fails", "changed-release", "invalid-status", "wrong-applied-release", "interrupt", "doctor-fails", "resync-fails"} {
+	for _, scenario := range []string{"update", "current", "newer", "prepared", "stale-prepared", "status-fails", "prepare-fails", "apply-fails", "changed-release", "invalid-status", "wrong-applied-release", "interrupt", "doctor-fails", "resync-fails", "startup-fails"} {
 		t.Run(scenario, func(t *testing.T) {
 			installed := machineGenerationForUpdateTest("0.1.39")
 			available := machineGenerationForUpdateTest("0.1.40")
 			var prepared *machinePreparedPlan
-			if scenario == "current" || scenario == "doctor-fails" || scenario == "resync-fails" {
+			if scenario == "current" || scenario == "doctor-fails" || scenario == "resync-fails" || scenario == "startup-fails" {
 				installed = machineGenerationForUpdateTest("0.1.40")
 			}
 			if scenario == "newer" {
@@ -56,6 +56,16 @@ func TestAllUpdateSequencingAndFailureRecovery(t *testing.T) {
 			var calls []string
 			deps := allUpdateDependencies{Executable: "updated.exe", ReleaseTag: "v0.1.40"}
 			deps.Run = func(_ context.Context, executable string, args []string, stdout, stderr io.Writer) int {
+				if args[0] == "connect" {
+					if executable != "updated.exe" || !slices.Equal(args, []string{"connect", "startup", "--distribution", "custom"}) {
+						t.Fatalf("startup=%s args=%v", executable, args)
+					}
+					calls = append(calls, "startup")
+					if scenario == "startup-fails" {
+						return 12
+					}
+					return 0
+				}
 				if args[0] == "doctor" {
 					if executable != "updated.exe" || !slices.Equal(args, []string{"doctor", "--distribution", "custom"}) {
 						t.Fatalf("doctor=%s args=%v", executable, args)
@@ -134,16 +144,18 @@ func TestAllUpdateSequencingAndFailureRecovery(t *testing.T) {
 				wantCalls = []string{"status"}
 			}
 			if scenario == "current" {
-				wantCalls = []string{"status", "doctor", "resync"}
+				wantCalls = []string{"status", "resync", "startup", "doctor"}
 			}
 			if scenario == "prepared" {
 				wantCalls = []string{"status", "apply", "status"}
 			}
 			switch scenario {
 			case "doctor-fails":
-				wantCalls, wantCode = []string{"status", "doctor"}, 10
+				wantCalls, wantCode = []string{"status", "resync", "startup", "doctor"}, 10
 			case "resync-fails":
-				wantCalls, wantCode = []string{"status", "doctor", "resync"}, 11
+				wantCalls, wantCode = []string{"status", "resync"}, 11
+			case "startup-fails":
+				wantCalls, wantCode = []string{"status", "resync", "startup"}, 12
 			case "status-fails":
 				wantCode = 7
 			case "prepare-fails":
