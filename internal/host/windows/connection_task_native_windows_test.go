@@ -78,8 +78,10 @@ func TestWindowsConnectionTaskNativeRoundTrip(t *testing.T) {
 	}
 	// Reproduce the previous release's task settings and exercise the real
 	// in-place migration. The owned task is never stopped or executed here.
+	// Remove the complete XML element: Set-ScheduledTask merges omitted CIM
+	// properties with the registered retry policy and can leave it incomplete.
 	command := exec.CommandContext(ctx, platform.delegate.powershell(), "-NoProfile", "-NonInteractive", "-Command",
-		`$ErrorActionPreference='Stop';$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;Set-ScheduledTask -TaskName $env:LOKI_TEST_TASK_NAME -Settings $settings -ErrorAction Stop|Out-Null`)
+		`$ErrorActionPreference='Stop';[xml]$xml=Export-ScheduledTask -TaskName $env:LOKI_TEST_TASK_NAME -ErrorAction Stop;$retry=$xml.Task.Settings.RestartOnFailure;if(-not $retry){throw 'Test-owned task has no retry policy'};$null=$retry.ParentNode.RemoveChild($retry);Register-ScheduledTask -TaskName $env:LOKI_TEST_TASK_NAME -Xml $xml.OuterXml -Force -ErrorAction Stop|Out-Null`)
 	command.Env = append(withoutEnvironment(os.Environ(), "LOKI_TEST_TASK_NAME"), "LOKI_TEST_TASK_NAME="+expected.TaskName)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("prepare legacy task settings: %v: %s", err, output)
