@@ -224,10 +224,16 @@ func (client WSLClient) VerifyDistributionIdentity(ctx context.Context, distribu
 	if err != nil {
 		return err
 	}
+	if manifest.ExitCode != 0 {
+		return nativeFailure("read Loki appliance identity manifest", manifest)
+	}
 	version, err := client.run(ctx, "-d", distribution, "--user", "root", "--exec",
 		"/usr/lib/loki-appliance/loki", "version")
 	if err != nil {
 		return err
+	}
+	if version.ExitCode != 0 {
+		return nativeFailure("read Loki appliance identity version", version)
 	}
 	actualVersion, owned := distributionIdentity(manifest, version)
 	if !owned || actualVersion != expectedVersion {
@@ -242,10 +248,16 @@ func (client WSLClient) OwnedDistributionVersion(ctx context.Context, distributi
 	if err != nil {
 		return "", err
 	}
+	if manifest.ExitCode != 0 {
+		return "", nativeFailure("read Loki appliance identity manifest", manifest)
+	}
 	version, err := client.run(ctx, "-d", distribution, "--user", "root", "--exec",
 		"/usr/lib/loki-appliance/loki", "version")
 	if err != nil {
 		return "", err
+	}
+	if version.ExitCode != 0 {
+		return "", nativeFailure("read Loki appliance identity version", version)
 	}
 	actualVersion, owned := distributionIdentity(manifest, version)
 	if !owned {

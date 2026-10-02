@@ -209,6 +209,34 @@ func TestVerifyDistributionIdentityRequiresApprovedVersion(t *testing.T) {
 	}
 }
 
+func TestWSLIdentityProbeFailuresPreserveNativeCause(t *testing.T) {
+	for _, operation := range []string{"owned-version", "verify"} {
+		for _, failed := range []string{"manifest", "version"} {
+			t.Run(operation+"/"+failed, func(t *testing.T) {
+				failure := NativeProbe{ExitCode: 7, Stderr: "WSL instance is shutting down"}
+				results := []NativeProbe{failure}
+				if failed == "version" {
+					results = []NativeProbe{{Stdout: ownedManifest("1.2.3")}, failure}
+				}
+				runner := &fakeNativeRunner{results: results}
+				client := WSLClient{Runner: runner}
+				var err error
+				if operation == "verify" {
+					err = client.VerifyDistributionIdentity(t.Context(), "loki-test", "1.2.3")
+				} else {
+					_, err = client.OwnedDistributionVersion(t.Context(), "loki-test")
+				}
+				if err == nil || !strings.Contains(err.Error(), "identity "+failed) || !strings.Contains(err.Error(), "exit code 7") || !strings.Contains(err.Error(), failure.Stderr) || strings.Contains(err.Error(), "does not match") {
+					t.Fatalf("native identity failure cause lost: %v", err)
+				}
+				if len(runner.calls) != len(results) {
+					t.Fatal("failed identity read continued probing")
+				}
+			})
+		}
+	}
+}
+
 func TestNativeProgressRelayHandlesChunkedRecordEndings(t *testing.T) {
 	var out bytes.Buffer
 	relay := newNativeProgressRelay(progress.NewLineReporter(progress.WithVerbose(&out)))
