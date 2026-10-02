@@ -346,16 +346,19 @@ Administrative maintenance crosses the explicit WSL root boundary.
 
 System-scoped `doctor` also checks the managed WSL OS: required packages and
 files, the PAM/systemd version pairing, boot services, the default user's
-systemd session, and all failed systemd units. Healthy Loki containers alone
-do not establish a healthy appliance boot. Inspection does not change packages
-or service state.
+systemd session and persistent linger setting, and all failed systemd units.
+Healthy Loki containers alone do not establish a healthy appliance boot.
+Inspection does not change packages or service state.
 
 Approved installation and appliance update apply reconcile these prerequisites.
 The verified candidate Linux binary owns the requirements for the next release;
 the Windows frontend relays the approved repair after an update from older
 managers. Repair preserves installed package versions, pairs PAM with the
 installed systemd version, and restores missing prerequisites without replacing
-the distribution or Loki data. These OS changes persist across Loki rollback.
+the distribution or Loki data. It enables linger for the managed `ubuntu` user
+so its systemd manager starts at boot and stays active without a login session.
+Fresh appliance images include the same persistent setting. These OS changes
+persist across Loki rollback.
 A failed repair returns an error; unrelated failed services remain visible.
 
 Run the same repeatable repair explicitly when diagnostics identify missing

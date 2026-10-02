@@ -79,6 +79,8 @@ RUN if getent group ubuntu >/dev/null; then \
     fi \
  && usermod --lock ubuntu \
  && chage --lastday -1 ubuntu \
+ && install -d -m 0755 /var/lib/systemd/linger \
+ && install -m 0644 /dev/null /var/lib/systemd/linger/ubuntu \
  && install -d -o ubuntu -g ubuntu -m 0750 /home/ubuntu/workspace
 
 COPY --chmod=0644 packaging/wsl/wsl.conf /etc/wsl.conf

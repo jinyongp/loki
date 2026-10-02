@@ -56,6 +56,8 @@ func TestWSLApplianceContract(t *testing.T) {
 		"getent passwd ubuntu",
 		"useradd --uid 1000 --gid 1000",
 		"chage --lastday -1 ubuntu",
+		"install -d -m 0755 /var/lib/systemd/linger",
+		"install -m 0644 /dev/null /var/lib/systemd/linger/ubuntu",
 		"/home/ubuntu/workspace",
 		"COPY --chmod=0755 packaging/wsl/configure-install.sh /usr/lib/loki-appliance/configure-install",
 		"COPY --from=release --chmod=0755 loki-linux-amd64 /usr/lib/loki-appliance/loki",
@@ -194,6 +196,7 @@ func TestWSLApplianceContract(t *testing.T) {
 	for _, required := range []string{
 		"etc/wsl.conf",
 		"etc/wsl-distribution.conf",
+		"var/lib/systemd/linger/ubuntu",
 		"var/lib/loki/lifecycle/mcp-token",
 		"var/lib/loki-appliance/provisioned",
 		"defaultUid=1000",

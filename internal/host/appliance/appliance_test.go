@@ -30,6 +30,7 @@ func newFixture(t *testing.T) *fixture {
 		f.write(t, item.Path, item.Kind)
 	}
 	f.write(t, "/usr/lib/loki-appliance/release-manifest.json", "file")
+	f.write(t, "/var/lib/systemd/linger/ubuntu", "file")
 	f.write(t, "/proc/sys/kernel/osrelease", "file")
 	if err := os.WriteFile(f.host.path("/proc/sys/kernel/osrelease"), []byte("6.18-microsoft-standard-WSL2"), 0644); err != nil {
 		t.Fatal(err)
@@ -51,6 +52,11 @@ func newFixture(t *testing.T) *fixture {
 				return "inactive", errors.New("user session absent")
 			}
 			return "active", nil
+		case "loginctl":
+			if strings.Join(args, " ") != "enable-linger ubuntu" {
+				t.Fatalf("unexpected loginctl mutation: %v", args)
+			}
+			f.write(t, "/var/lib/systemd/linger/ubuntu", "file")
 		case "apt-get":
 			if f.aptError {
 				return "", errors.New("repository unavailable")
@@ -135,9 +141,127 @@ func TestHealthyRepairDoesNotMutate(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, call := range f.calls {
-		if strings.HasPrefix(call, "apt-get ") || strings.HasPrefix(call, "systemctl start") || strings.HasPrefix(call, "systemctl reset") {
+		if strings.HasPrefix(call, "apt-get ") || strings.HasPrefix(call, "loginctl ") || strings.HasPrefix(call, "systemctl start") || strings.HasPrefix(call, "systemctl reset") {
 			t.Fatalf("healthy repair mutated: %s", call)
 		}
+	}
+}
+
+func TestRepairMakesUserSessionPersistentEvenWhileActive(t *testing.T) {
+	f := newFixture(t)
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := os.Remove(f.host.path("/var/lib/systemd/linger/ubuntu")); err != nil {
+			t.Fatal(err)
+		}
+		before := len(f.calls)
+		var persistenceMissing bool
+		for _, check := range f.host.Inspect(t.Context()) {
+			if check.Code == "wsl_user_linger_missing" {
+				persistenceMissing = true
+			}
+		}
+		if !persistenceMissing {
+			t.Fatal("active user session concealed missing boot persistence")
+		}
+		for _, call := range f.calls[before:] {
+			if strings.HasPrefix(call, "loginctl ") || strings.HasPrefix(call, "systemctl start") {
+				t.Fatalf("inspection mutated session state: %s", call)
+			}
+		}
+		before = len(f.calls)
+		if err := f.host.Repair(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		calls := strings.Join(f.calls[before:], "\n")
+		if strings.Count(calls, "loginctl enable-linger ubuntu") != 1 || strings.Contains(calls, "apt-get") {
+			t.Fatalf("missing linger required one targeted repair: %s", calls)
+		}
+		// Simulate losing all login sessions, then restarting the user manager
+		// during a later boot. The persistent setting survives both inspections.
+		f.unhealthy["user@1000.service"] = true
+		if healthy(t, f) {
+			t.Fatal("inactive user manager reported healthy despite persistence")
+		}
+		if err := f.host.Repair(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if !healthy(t, f) {
+			t.Fatal("repair did not restore persistent user session")
+		}
+	}
+}
+
+func TestLingerRepairFailureDoesNotStartServices(t *testing.T) {
+	for _, failure := range []string{"command", "missing-marker", "symlink"} {
+		t.Run(failure, func(t *testing.T) {
+			f := newFixture(t)
+			marker := f.host.path("/var/lib/systemd/linger/ubuntu")
+			if err := os.Remove(marker); err != nil {
+				t.Fatal(err)
+			}
+			if failure == "symlink" {
+				if err := os.Symlink("/dev/null", marker); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f.unhealthy["user@1000.service"] = true
+			original := f.host.Run
+			f.host.Run = func(ctx context.Context, name string, args ...string) (string, error) {
+				if filepath.Base(name) == "loginctl" {
+					f.calls = append(f.calls, "loginctl "+strings.Join(args, " "))
+					if failure == "command" {
+						return "", errors.New("logind unavailable")
+					}
+					return "", nil
+				}
+				return original(ctx, name, args...)
+			}
+			if healthy(t, f) || f.host.Repair(t.Context()) == nil {
+				t.Fatal("failed persistence accepted")
+			}
+			for _, call := range f.calls {
+				if strings.HasPrefix(call, "systemctl start") || strings.HasPrefix(call, "systemctl reset") || (failure == "symlink" && strings.HasPrefix(call, "loginctl ")) {
+					t.Fatalf("failed linger repair changed service or marker state: %s", call)
+				}
+			}
+		})
+	}
+}
+
+func TestRepairRestoresLogindBeforeEnablingUserPersistence(t *testing.T) {
+	f := newFixture(t)
+	if err := os.Remove(f.host.path("/var/lib/systemd/linger/ubuntu")); err != nil {
+		t.Fatal(err)
+	}
+	f.unhealthy["dbus.service"] = true
+	f.unhealthy["systemd-logind.service"] = true
+	f.unhealthy["user@1000.service"] = true
+	original := f.host.Run
+	f.host.Run = func(ctx context.Context, name string, args ...string) (string, error) {
+		if filepath.Base(name) == "loginctl" && (f.unhealthy["dbus.service"] || f.unhealthy["systemd-logind.service"]) {
+			t.Fatal("user persistence attempted before logind and its bus were ready")
+		}
+		return original(ctx, name, args...)
+	}
+	if err := f.host.Repair(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	calls := strings.Join(f.calls, "\n")
+	if strings.Index(calls, "loginctl enable-linger ubuntu") > strings.Index(calls, "systemctl start user@1000.service") || !healthy(t, f) {
+		t.Fatalf("user manager did not start after persistence was configured: %s", calls)
+	}
+}
+
+func TestUserPersistenceRepairRequiresManagedWSL(t *testing.T) {
+	f := newFixture(t)
+	if err := os.WriteFile(f.host.path("/proc/sys/kernel/osrelease"), []byte("6.18-generic"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(f.host.path("/var/lib/systemd/linger/ubuntu")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.host.Repair(t.Context()); err == nil || len(f.calls) != 0 {
+		t.Fatal("native Linux host received WSL session policy")
 	}
 }
 

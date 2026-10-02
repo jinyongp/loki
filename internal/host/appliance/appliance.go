@@ -215,6 +215,25 @@ func (h Host) unitReady(ctx context.Context, unit string) bool {
 	return properties["ActiveState"] == "active"
 }
 
+func (h Host) repairUnit(ctx context.Context, unit string) error {
+	if h.unitReady(ctx, unit) {
+		return nil
+	}
+	state, err := h.run(ctx, "/usr/bin/systemctl", "show", unit, "--property=ActiveState", "--value")
+	if err != nil {
+		return err
+	}
+	// An inactive template instance may be unloaded; reset-failed would reject
+	// it. Reset only actual failures of the declared prerequisites.
+	if strings.TrimSpace(state) == "failed" {
+		if _, err := h.run(ctx, "/usr/bin/systemctl", "reset-failed", unit); err != nil {
+			return err
+		}
+	}
+	_, err = h.run(ctx, "/usr/bin/systemctl", "start", unit)
+	return err
+}
+
 func evidence(name string, values []string) diagnostics.Evidence {
 	value := strings.Join(values, ",")
 	if value == "" {
@@ -224,6 +243,22 @@ func evidence(name string, values []string) diagnostics.Evidence {
 		value = value[:240] + "..."
 	}
 	return diagnostics.Evidence{Name: name, Value: value}
+}
+
+// logind uses this persistent marker to start the user manager at boot and keep
+// it running without a login session. Inspect it without creating a session.
+func (h Host) userLingerEnabled() (bool, error) {
+	info, err := os.Lstat(h.path("/var/lib/systemd/linger/ubuntu"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, errors.New("WSL user linger marker must be a regular file")
+	}
+	return true, nil
 }
 
 func (h Host) Inspect(ctx context.Context) []diagnostics.Check {
@@ -252,10 +287,17 @@ func (h Host) Inspect(ctx context.Context) []diagnostics.Check {
 		checks = append(checks, diagnostics.Blocked("wsl.services", "wsl_services_unhealthy", "WSL boot services are not ready", evidence("units", unhealthy)))
 	}
 	raw, err := h.run(ctx, "/usr/sbin/runuser", "-u", "ubuntu", "--", "/usr/bin/env", "XDG_RUNTIME_DIR=/run/user/1000", "/usr/bin/systemctl", "--user", "is-active", "default.target")
-	if err != nil || strings.TrimSpace(raw) != "active" {
+	linger, lingerErr := h.userLingerEnabled()
+	if lingerErr != nil {
+		checks = append(checks, diagnostics.Blocked("wsl.user", "wsl_user_linger_invalid", "default WSL user session persistence cannot be inspected"))
+	} else if !linger {
+		checks = append(checks, diagnostics.Blocked("wsl.user", "wsl_user_linger_missing", "default WSL user session persistence is not configured",
+			diagnostics.Evidence{Name: "linger", Value: "disabled"}))
+	} else if err != nil || strings.TrimSpace(raw) != "active" {
 		checks = append(checks, diagnostics.Blocked("wsl.user", "wsl_user_session_unhealthy", "default WSL user systemd session is not ready"))
 	} else {
-		checks = append(checks, diagnostics.Healthy("wsl.user", "wsl_user_session_ready", "default WSL user systemd session is active"))
+		checks = append(checks, diagnostics.Healthy("wsl.user", "wsl_user_session_ready", "default WSL user systemd session is active",
+			diagnostics.Evidence{Name: "linger", Value: "enabled"}))
 	}
 	raw, err = h.run(ctx, "/usr/bin/systemctl", "--failed", "--no-legend", "--plain", "--no-pager")
 	var failed []string
@@ -330,24 +372,29 @@ func (h Host) Repair(ctx context.Context) error {
 			return err
 		}
 	}
+	// Restore logind and its system bus before asking loginctl to persist the
+	// user manager. Start the user instance after its prerequisites are ready.
 	for _, unit := range units() {
-		if h.unitReady(ctx, unit) {
-			continue
-		}
-		state, err := h.run(ctx, "/usr/bin/systemctl", "show", unit, "--property=ActiveState", "--value")
-		if err != nil {
-			return err
-		}
-		// An inactive template instance may be unloaded; reset-failed would
-		// reject it. Reset only actual failures of the declared prerequisites.
-		if strings.TrimSpace(state) == "failed" {
-			if _, err := h.run(ctx, "/usr/bin/systemctl", "reset-failed", unit); err != nil {
+		if unit != "user@1000.service" {
+			if err := h.repairUnit(ctx, unit); err != nil {
 				return err
 			}
 		}
-		if _, err := h.run(ctx, "/usr/bin/systemctl", "start", unit); err != nil {
+	}
+	linger, err := h.userLingerEnabled()
+	if err != nil {
+		return err
+	}
+	if !linger {
+		if _, err := h.run(ctx, "/usr/bin/loginctl", "enable-linger", "ubuntu"); err != nil {
 			return err
 		}
+		if enabled, err := h.userLingerEnabled(); err != nil || !enabled {
+			return errors.New("WSL user session persistence was not enabled")
+		}
+	}
+	if err := h.repairUnit(ctx, "user@1000.service"); err != nil {
+		return err
 	}
 	for _, check := range h.Inspect(ctx) {
 		if check.Status != diagnostics.StatusHealthy {

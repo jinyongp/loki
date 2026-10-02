@@ -64,6 +64,8 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("usr/lib/x86_64-linux-gnu/security/pam_systemd.so", 0644, "fixture-pam-module\n")
 	write("usr/bin/kmod", 0755, "fixture-kmod\n")
 	write("usr/bin/dbus-daemon", 0755, "fixture-dbus\n")
+	write("usr/bin/loginctl", 0755, "fixture-loginctl\n")
+	write("var/lib/systemd/linger/ubuntu", 0644, "")
 	write("usr/lib/systemd/systemd", 0755, "fixture-systemd\n")
 	write("usr/sbin/init", 0755, "fixture-init\n")
 	write("usr/sbin/runuser", 0755, "fixture-runuser\n")
@@ -123,6 +125,8 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 		"usr/lib/pam.d/systemd-user",
 		"usr/lib/x86_64-linux-gnu/security/pam_systemd.so",
 		"usr/bin/kmod",
+		"usr/bin/loginctl",
+		"var/lib/systemd/linger/ubuntu",
 	} {
 		t.Run("missing/"+missing, func(t *testing.T) {
 			path := filepath.Join(root, filepath.FromSlash(missing))

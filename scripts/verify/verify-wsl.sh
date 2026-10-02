@@ -44,6 +44,7 @@ for required in \
   etc/passwd \
   etc/group \
   etc/shadow \
+  var/lib/systemd/linger/ubuntu \
   usr/lib/loki-appliance/requirements.tsv \
   usr/lib/loki-appliance/loki \
   usr/lib/loki-appliance/release-manifest.json \
@@ -85,6 +86,7 @@ fi
 for root_owned in \
   etc/wsl.conf \
   etc/wsl-distribution.conf \
+  var/lib/systemd/linger/ubuntu \
   usr/lib/loki-appliance/loki \
   usr/lib/loki-appliance/release-manifest.json \
   usr/lib/loki-appliance/configure-install
@@ -134,6 +136,10 @@ test "$(stat -c '%a' "$root/usr/lib/loki-appliance/release-manifest.json")" = 60
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/loki")" = 755
 test "$(stat -c '%a' "$root/usr/lib/loki-appliance/configure-install")" = 755
 test "$(stat -c '%a' "$root/home/ubuntu/workspace")" = 750
+test -f "$root/var/lib/systemd/linger/ubuntu"
+test ! -L "$root/var/lib/systemd/linger/ubuntu"
+test ! -s "$root/var/lib/systemd/linger/ubuntu"
+test "$(stat -c '%a' "$root/var/lib/systemd/linger/ubuntu")" = 644
 
 grep -Fxq 'systemd=true' "$root/etc/wsl.conf"
 grep -Fxq 'default=ubuntu' "$root/etc/wsl.conf"
