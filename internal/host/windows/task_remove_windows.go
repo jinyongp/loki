@@ -49,5 +49,8 @@ func (source PowerShellStartupTaskSource) RemoveOwned(ctx context.Context, expec
 		}
 		return fmt.Errorf("remove owned Scheduled Task %q: %w: %s", expected.TaskName, err, detail)
 	}
+	if WindowsPathEqual(expected.TaskExecutable, joinWindowsPath(expected.StateDir, "loki-keepalive.exe")) {
+		return waitForKeepaliveExecutableRelease(ctx, expected.TaskExecutable)
+	}
 	return nil
 }

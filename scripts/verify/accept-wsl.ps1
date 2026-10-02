@@ -436,7 +436,21 @@ try {
         if ([string](Get-ScheduledTask -TaskName $taskName).State -eq 'Running') { Fail "keepalive did not stop before legacy fixture conversion" }
         $legacyAction = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\wsl.exe') -Argument ("-d $distributionName --exec /usr/bin/sleep infinity")
         Set-ScheduledTask -TaskName $taskName -Action $legacyAction -ErrorAction Stop | Out-Null
-        Remove-Item -LiteralPath (Join-Path $stateDir 'loki-keepalive.exe'), (Join-Path $stateDir 'keepalive.sha256') -Force
+        # The scheduler state can change before Windows releases the image lock.
+        $companionPath = Join-Path $stateDir 'loki-keepalive.exe'
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            try {
+                Remove-Item -LiteralPath $companionPath -Force -ErrorAction Stop
+                break
+            } catch {
+                if ($attempt -eq 39) {
+                    Get-Process -Name 'loki-keepalive' -ErrorAction SilentlyContinue | Select-Object Id, Path | Format-List | Out-Host
+                    throw
+                }
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        Remove-Item -LiteralPath (Join-Path $stateDir 'keepalive.sha256') -Force
         $flatLegacyConnection = [ordered]@{
             endpoint = "http://127.0.0.1:18765/mcp"
             transport = "streamable-http"

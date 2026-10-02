@@ -149,6 +149,9 @@ func (platform WindowsConnectionStartupPlatform) runKeepaliveTask(ctx context.Co
 		}
 		return fmt.Errorf("start verified WSL keepalive Scheduled Task %q: %w: %s", expected.TaskName, err, detail)
 	}
+	if prepareOnly {
+		return waitForKeepaliveExecutableRelease(ctx, expected.TaskExecutable)
+	}
 	return nil
 }
 
