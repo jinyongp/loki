@@ -41,7 +41,20 @@ func InspectWindowsState(filesystem StateFilesystem, expected ExpectedInstallati
 		return WindowsState{}, fmt.Errorf("inspect Windows ownership manifest: %w", err)
 	}
 	if ownershipInfo.Exists && ownershipInfo.Regular && !ownershipInfo.Reparse {
-		if !sameNames(entries, []string{"connection.json", "mcp-token", "ownership.json"}) {
+		baseEntries := []string{"connection.json", "mcp-token", "ownership.json"}
+		for _, name := range []string{"loki-keepalive.exe", "keepalive.sha256"} {
+			info, statErr := filesystem.Lstat(joinWindowsPath(expected.StateDir, name))
+			if statErr != nil {
+				return WindowsState{}, statErr
+			}
+			if info.Exists {
+				if !info.Regular || info.Reparse {
+					return unverifiedWindowsState(), nil
+				}
+				baseEntries = append(baseEntries, name)
+			}
+		}
+		if !sameNames(entries, baseEntries) {
 			return unverifiedWindowsState(), nil
 		}
 		raw, readErr := filesystem.ReadFile(ownershipPath)

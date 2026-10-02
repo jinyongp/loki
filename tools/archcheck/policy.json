@@ -882,6 +882,12 @@
       ],
       "target": "cmd/loki-windows"
     },
+    "loki/cmd/loki-keepalive": {
+      "kind": "role",
+      "owner": "windows-host",
+      "tags": [],
+      "target": "cmd/loki-keepalive"
+    },
     "loki/internal/admin": {
       "kind": "legacy-mixed",
       "owner": "host-control",

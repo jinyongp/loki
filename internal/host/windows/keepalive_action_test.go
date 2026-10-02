@@ -42,8 +42,10 @@ func TestBackgroundKeepalivePreservesExactLegacyOwnership(t *testing.T) {
 	}{
 		{"background", StartupTaskAction{expected.TaskExecutable, expected.TaskArguments}, true},
 		{"legacy", StartupTaskAction{expected.LegacyTaskExecutable, expected.LegacyTaskArguments}, true},
+		{"hidden legacy", StartupTaskAction{expected.LegacyHiddenTaskExecutable, expected.LegacyHiddenTaskArguments}, true},
 		{"modified background", StartupTaskAction{expected.TaskExecutable, expected.TaskArguments + " extra"}, false},
 		{"modified legacy", StartupTaskAction{expected.LegacyTaskExecutable, expected.LegacyTaskArguments + " extra"}, false},
+		{"modified hidden legacy", StartupTaskAction{expected.LegacyHiddenTaskExecutable, expected.LegacyHiddenTaskArguments + " extra"}, false},
 		{"mixed", StartupTaskAction{expected.TaskExecutable, expected.LegacyTaskArguments}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

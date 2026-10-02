@@ -118,12 +118,14 @@ func ExpectedFromOptions(options InstallOptions, localAppData, systemRoot string
 	wslExecutable := joinWindowsPath(systemRootPath, "System32\\wsl.exe")
 	wslArguments := fmt.Sprintf("-d %s --exec /usr/bin/sleep infinity", options.Distribution)
 	return ExpectedInstallation{
-		Distribution:         options.Distribution,
-		StateDir:             stateDir,
-		TaskName:             taskName,
-		TaskExecutable:       joinWindowsPath(systemRootPath, "System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
-		TaskArguments:        hiddenKeepaliveArguments(wslExecutable, wslArguments),
-		LegacyTaskExecutable: wslExecutable,
-		LegacyTaskArguments:  wslArguments,
+		Distribution:               options.Distribution,
+		StateDir:                   stateDir,
+		TaskName:                   taskName,
+		TaskExecutable:             joinWindowsPath(stateDir, "loki-keepalive.exe"),
+		TaskArguments:              "--distribution " + options.Distribution,
+		LegacyTaskExecutable:       wslExecutable,
+		LegacyTaskArguments:        wslArguments,
+		LegacyHiddenTaskExecutable: joinWindowsPath(systemRootPath, "System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+		LegacyHiddenTaskArguments:  hiddenKeepaliveArguments(wslExecutable, wslArguments),
 	}, nil
 }

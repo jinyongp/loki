@@ -148,8 +148,9 @@ Credential Manager rather than JSON state.
 The per-distribution `Loki WSL (<distribution>)` logon task keeps the appliance
 running in the background without a visible terminal. Exact owned legacy
 foreground tasks are accepted and migrated during managed connection startup.
-When an
-owned remote connection is enabled, Loki may additionally create one finite
+The keepalive companion is included in the Windows frontend and runs without a
+console window; closing the terminal used to start a connection does not stop it.
+When an owned remote connection is enabled, Loki may additionally create one finite
 `Loki Connections (<distribution>)` task that invokes the absolute verified
 frontend and restores only enabled managed connection runtimes.
 

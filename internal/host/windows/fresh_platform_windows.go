@@ -216,7 +216,7 @@ func removeCreatedStateDirectory(target string) error {
 	if err != nil {
 		return err
 	}
-	allowed := map[string]bool{"connection.json": true, "mcp-token": true, "ownership.json": true}
+	allowed := map[string]bool{"connection.json": true, "mcp-token": true, "ownership.json": true, "loki-keepalive.exe": true, "keepalive.sha256": true}
 	for _, entry := range entries {
 		if !allowed[entry.Name()] {
 			return fmt.Errorf("created Windows state contains unexpected entry %q", entry.Name())

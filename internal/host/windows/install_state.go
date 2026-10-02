@@ -31,18 +31,21 @@ type WindowsState struct {
 }
 
 type ExpectedInstallation struct {
-	Distribution         string
-	StateDir             string
-	TaskName             string
-	TaskExecutable       string
-	TaskArguments        string
-	LegacyTaskExecutable string
-	LegacyTaskArguments  string
+	Distribution               string
+	StateDir                   string
+	TaskName                   string
+	TaskExecutable             string
+	TaskArguments              string
+	LegacyTaskExecutable       string
+	LegacyTaskArguments        string
+	LegacyHiddenTaskExecutable string
+	LegacyHiddenTaskArguments  string
 }
 
 func matchesStartupAction(executable, arguments string, expected ExpectedInstallation) bool {
 	return (WindowsPathEqual(executable, expected.TaskExecutable) && arguments == expected.TaskArguments) ||
-		(expected.LegacyTaskExecutable != "" && WindowsPathEqual(executable, expected.LegacyTaskExecutable) && arguments == expected.LegacyTaskArguments)
+		(expected.LegacyTaskExecutable != "" && WindowsPathEqual(executable, expected.LegacyTaskExecutable) && arguments == expected.LegacyTaskArguments) ||
+		(expected.LegacyHiddenTaskExecutable != "" && WindowsPathEqual(executable, expected.LegacyHiddenTaskExecutable) && arguments == expected.LegacyHiddenTaskArguments)
 }
 
 type ownershipManifestDisk struct {

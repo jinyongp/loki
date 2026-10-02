@@ -108,6 +108,37 @@ func TestInspectWindowsStateLegacyFlat(t *testing.T) {
 	}
 }
 
+func TestInspectWindowsStateWithKeepaliveCompanion(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		path  StatePath
+		owned bool
+	}{
+		{"regular companion", StatePath{Exists: true, Regular: true}, true},
+		{"reparse companion", StatePath{Exists: true, Regular: true, Reparse: true}, false},
+		{"directory companion", StatePath{Exists: true, Directory: true}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			expected := fixtureExpected()
+			ownership := joinWindowsPath(expected.StateDir, "ownership.json")
+			fs := fakeStateFilesystem{
+				paths: map[string]StatePath{
+					expected.StateDir: {Exists: true, Directory: true},
+					ownership:         {Exists: true, Regular: true},
+					joinWindowsPath(expected.StateDir, "loki-keepalive.exe"): test.path,
+					joinWindowsPath(expected.StateDir, "keepalive.sha256"):   {Exists: true, Regular: true},
+				},
+				dirs:  map[string][]string{expected.StateDir: {"connection.json", "mcp-token", "ownership.json", "loki-keepalive.exe", "keepalive.sha256"}},
+				files: map[string][]byte{ownership: manifestFixture(t, expected)},
+			}
+			state, err := InspectWindowsState(fs, expected)
+			if err != nil || state.Owned != test.owned {
+				t.Fatalf("ownership=%t, error=%v", state.Owned, err)
+			}
+		})
+	}
+}
+
 func TestInspectWindowsStateRejectsUnexpectedOrReparseState(t *testing.T) {
 	expected := fixtureExpected()
 	tests := []fakeStateFilesystem{

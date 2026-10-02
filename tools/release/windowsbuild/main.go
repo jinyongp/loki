@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -63,6 +65,35 @@ type buildRequest struct {
 type execBuildRunner struct{}
 
 func (execBuildRunner) Build(ctx context.Context, request buildRequest) error {
+	buildDir, err := os.MkdirTemp("", "loki-keepalive-build-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(buildDir)
+	companion := filepath.Join(buildDir, "loki-keepalive.exe")
+	build := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false", "-ldflags", "-s -w -H=windowsgui", "-o", companion, "./cmd/loki-keepalive")
+	build.Dir = request.SourceRoot
+	build.Env = append(filteredEnv(os.Environ(), "GOOS", "GOARCH", "CGO_ENABLED"), "GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
+	build.Stdout, build.Stderr = os.Stdout, os.Stderr
+	if err = build.Run(); err != nil {
+		return fmt.Errorf("build console-free WSL keepalive: %w", err)
+	}
+	raw, err := os.ReadFile(companion)
+	if err != nil {
+		return err
+	}
+	payload := filepath.Join(buildDir, "keepalive_payload.go")
+	if err = os.WriteFile(payload, []byte("package windows\nconst keepaliveExecutableBase64 = "+strconv.Quote(base64.StdEncoding.EncodeToString(raw))+"\n"), 0o600); err != nil {
+		return err
+	}
+	overlay := filepath.Join(buildDir, "overlay.json")
+	manifest, err := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(request.SourceRoot, "internal", "host", "windows", "keepalive_payload.go"): payload}})
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(overlay, manifest, 0o600); err != nil {
+		return err
+	}
 	ldflags := strings.Join([]string{
 		"-s", "-w",
 		"-X", "loki/internal/buildinfo.Version=" + request.Version,
@@ -73,7 +104,7 @@ func (execBuildRunner) Build(ctx context.Context, request buildRequest) error {
 		"-X", "loki/internal/host/windows.HelperCatalogSHA256=" + request.HelperCatalog.SHA256,
 		"-X", "loki/internal/host/windows.HelperCatalogLength=" + strconv.FormatInt(request.HelperCatalog.Length, 10),
 	}, " ")
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false", "-ldflags", ldflags, "-o", request.Output, "./cmd/loki-windows")
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false", "-overlay", overlay, "-ldflags", ldflags, "-o", request.Output, "./cmd/loki-windows")
 	cmd.Dir = request.SourceRoot
 	cmd.Env = append(filteredEnv(os.Environ(), "GOOS", "GOARCH", "CGO_ENABLED"),
 		"GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")

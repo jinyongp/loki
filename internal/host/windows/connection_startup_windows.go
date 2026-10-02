@@ -20,7 +20,20 @@ $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
 $a=@($t.Actions)
 $current=$a.Count -eq 1 -and ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -and ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal)
 $legacy=$a.Count -eq 1 -and $env:LOKI_KEEPALIVE_LEGACY_EXE -and ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_LEGACY_EXE,[StringComparison]::OrdinalIgnoreCase) -and ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_LEGACY_ARGS,[StringComparison]::Ordinal)
-if((-not $current -and -not $legacy) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'}
+$hidden=$a.Count -eq 1 -and $env:LOKI_KEEPALIVE_HIDDEN_EXE -and ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_HIDDEN_EXE,[StringComparison]::OrdinalIgnoreCase) -and ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_HIDDEN_ARGS,[StringComparison]::Ordinal)
+if((-not $current -and -not $legacy -and -not $hidden) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'}
+if($env:LOKI_KEEPALIVE_PREPARE_ONLY -eq '1'){
+  if([string]$t.State -eq 'Running'){
+    Stop-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+    for($attempt=0;$attempt -lt 10;$attempt++){
+      $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+      if([string]$t.State -ne 'Running'){exit 0}
+      Start-Sleep -Milliseconds 500
+    }
+    throw 'WSL keepalive task could not be stopped before companion update'
+  }
+  exit 0
+}
 if(-not $current){
   $wasRunning=[string]$t.State -eq 'Running'
   $action=New-ScheduledTaskAction -Execute $env:LOKI_KEEPALIVE_TASK_EXE -Argument $env:LOKI_KEEPALIVE_TASK_ARGS
@@ -98,6 +111,15 @@ func (platform WindowsConnectionStartupPlatform) StartKeepalive(
 	ctx context.Context,
 	expected ExpectedInstallation,
 ) error {
+	if err := ensureKeepaliveExecutable(ctx, expected, func() error {
+		return platform.runKeepaliveTask(ctx, expected, true)
+	}); err != nil {
+		return err
+	}
+	return platform.runKeepaliveTask(ctx, expected, false)
+}
+
+func (platform WindowsConnectionStartupPlatform) runKeepaliveTask(ctx context.Context, expected ExpectedInstallation, prepareOnly bool) error {
 	executable := strings.TrimSpace(platform.TaskExe)
 	if executable == "" {
 		executable = "powershell.exe"
@@ -105,13 +127,18 @@ func (platform WindowsConnectionStartupPlatform) StartKeepalive(
 	command := exec.CommandContext(ctx, executable, "-NoProfile", "-NonInteractive", "-Command", startVerifiedKeepaliveTaskScript)
 	configureNativeProcess(command)
 	command.Env = append(withoutEnvironment(os.Environ(),
-		"LOKI_KEEPALIVE_TASK_NAME", "LOKI_KEEPALIVE_TASK_EXE", "LOKI_KEEPALIVE_TASK_ARGS", "LOKI_KEEPALIVE_LEGACY_EXE", "LOKI_KEEPALIVE_LEGACY_ARGS"),
+		"LOKI_KEEPALIVE_TASK_NAME", "LOKI_KEEPALIVE_TASK_EXE", "LOKI_KEEPALIVE_TASK_ARGS", "LOKI_KEEPALIVE_LEGACY_EXE", "LOKI_KEEPALIVE_LEGACY_ARGS", "LOKI_KEEPALIVE_HIDDEN_EXE", "LOKI_KEEPALIVE_HIDDEN_ARGS", "LOKI_KEEPALIVE_PREPARE_ONLY"),
 		"LOKI_KEEPALIVE_TASK_NAME="+expected.TaskName,
 		"LOKI_KEEPALIVE_TASK_EXE="+expected.TaskExecutable,
 		"LOKI_KEEPALIVE_TASK_ARGS="+expected.TaskArguments,
 		"LOKI_KEEPALIVE_LEGACY_EXE="+expected.LegacyTaskExecutable,
 		"LOKI_KEEPALIVE_LEGACY_ARGS="+expected.LegacyTaskArguments,
+		"LOKI_KEEPALIVE_HIDDEN_EXE="+expected.LegacyHiddenTaskExecutable,
+		"LOKI_KEEPALIVE_HIDDEN_ARGS="+expected.LegacyHiddenTaskArguments,
 	)
+	if prepareOnly {
+		command.Env = append(command.Env, "LOKI_KEEPALIVE_PREPARE_ONLY=1")
+	}
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr

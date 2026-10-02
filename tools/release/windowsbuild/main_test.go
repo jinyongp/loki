@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"debug/pe"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +12,53 @@ import (
 
 	"loki/internal/host/connect"
 )
+
+func TestReleaseFrontendEmbedsConsoleFreeKeepalive(t *testing.T) {
+	root, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "loki.exe")
+	err = (execBuildRunner{}).Build(t.Context(), buildRequest{
+		SourceRoot: root, Output: output, Version: "1.2.3", SourceRevision: strings.Repeat("a", 40), ReleasedAt: "2026-10-03T00:00:00Z",
+		WSL: fileIdentity{SHA256: strings.Repeat("b", 64), Length: 1}, HelperCatalog: fileIdentity{SHA256: strings.Repeat("c", 64), Length: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	image, err := pe.NewFile(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer image.Close()
+	if image.OptionalHeader.(*pe.OptionalHeader64).Subsystem != pe.IMAGE_SUBSYSTEM_WINDOWS_CUI {
+		t.Fatal("frontend lost console CLI behavior")
+	}
+	index := bytes.Index(raw, []byte("TVqQAAMAAAAEAAAA"))
+	if index < 0 {
+		t.Fatal("release frontend has no embedded keepalive companion")
+	}
+	end := index
+	for end < len(raw) && strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=", rune(raw[end])) {
+		end++
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(raw[index:end]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	companion, err := pe.NewFile(bytes.NewReader(decoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer companion.Close()
+	if companion.OptionalHeader.(*pe.OptionalHeader64).Subsystem != pe.IMAGE_SUBSYSTEM_WINDOWS_GUI || companion.Machine != pe.IMAGE_FILE_MACHINE_AMD64 {
+		t.Fatal("embedded companion allocates a console or targets the wrong architecture")
+	}
+}
 
 type captureRunner struct {
 	request buildRequest

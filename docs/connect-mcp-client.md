@@ -198,10 +198,13 @@ The task must reach the running state before the tunnel starts. This keeps WSL
 available after a short-lived health or configuration command exits. A running
 keepalive task is reused; a failed start reports its last exit code.
 
-The keepalive task runs without a visible terminal window. Setup, start, and
-reconnection migrate an exact owned foreground task to the background action,
-preserving its trigger, user, and other settings. An existing foreground
-instance is restarted once during that migration.
+The keepalive task uses a console-free `loki-keepalive.exe` companion included
+in the Windows frontend release. It starts WSL without a console and keeps
+running independently of the terminal used to run `loki connection start`.
+Setup, start, and reconnection migrate exact owned PowerShell and direct WSL
+actions to the companion, preserving the trigger, user, and other settings.
+A running legacy instance is restarted once during migration. The companion
+and its ownership digest reside in the private distribution state directory.
 
 If startup fails, Task Scheduler retries it up to three times at one-minute
 intervals. Loki upgrades the retry settings of a verified existing connection
