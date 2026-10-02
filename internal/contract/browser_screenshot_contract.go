@@ -26,7 +26,7 @@ func browserScreenshotMetadataSchema() map[string]any {
 }
 
 func overrideBrowserScreenshot(tool *mcp.Tool) error {
-	tool.Description = "Capture a bounded PNG screenshot of the active browser tab and return both image content and closed typed metadata."
+	tool.Description = BrowserScopeGuidance + " Capture a bounded PNG screenshot of the active browser tab and return both image content and closed typed metadata."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_screenshotArguments", "additionalProperties": false,
 		"properties": browserScreenshotBaseInput(),
@@ -70,7 +70,7 @@ func overrideBrowserSaveScreenshot(tool *mcp.Tool) error {
 		"type": "string", "pattern": "^[0-9a-f]{64}$",
 		"description": "Observed SHA-256 of the existing destination; required only when overwrite=true and rejected for create-only saves.",
 	}
-	tool.Description = "Capture and atomically save a bounded PNG screenshot inside the workspace. Create-only saves reject overwrite guards; overwrite=true requires expected_sha256 and preserves the previous revision."
+	tool.Description = BrowserScopeGuidance + " Capture and atomically save a bounded PNG screenshot inside the workspace. Create-only saves reject overwrite guards; overwrite=true requires expected_sha256 and preserves the previous revision."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_save_screenshotArguments", "additionalProperties": false,
 		"properties": map[string]any{
@@ -131,7 +131,7 @@ func overrideBrowserShareScreenshot(tool *mcp.Tool) error {
 		"type": "integer", "minimum": 60, "maximum": 3600, "default": 900,
 		"description": "Temporary image-link lifetime in seconds; request-ID replay is retained for this lifetime.",
 	}
-	tool.Description = "Capture the active browser tab and publish one temporary image link. request_id makes retries replay the original share identity instead of creating duplicate links."
+	tool.Description = BrowserScopeGuidance + " Capture the active browser tab and publish one temporary image link. request_id makes retries replay the original share identity instead of creating duplicate links."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_share_screenshotArguments", "additionalProperties": false,
 		"properties": properties, "required": []string{"request_id"},

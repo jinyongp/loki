@@ -2,6 +2,8 @@ package contract
 
 import "github.com/modelcontextprotocol/go-sdk/mcp"
 
+const BrowserScopeGuidance = "Loki-managed browser only: a separate session with its own tabs and login state, not Codex/ChatGPT's built-in or in-app browser, @Browser, or the user's existing browser. Use when the task requests Loki's browser or allows a separate browser. For built-in or in-app browser requests, use the client's browser tools; if unavailable, explain the limitation and let the user choose before switching to Loki."
+
 func browserTabIDSchema() map[string]any {
 	return map[string]any{
 		"type": "string", "pattern": "^[0-9A-Fa-f]{4}$",
@@ -88,7 +90,7 @@ func overrideBrowserSession(tool *mcp.Tool) error {
 		"required": []string{"status", "browser_generation"},
 	}
 
-	tool.Description = "Control browser lifecycle and navigation with action-specific inputs. back, forward, reload, and stop_loading are generation-guarded session operations; history no-ops return performed=false without advancing browser_generation."
+	tool.Description = BrowserScopeGuidance + " Control browser lifecycle and navigation with action-specific inputs. back, forward, reload, and stop_loading are generation-guarded session operations; history no-ops return performed=false without advancing browser_generation."
 	tool.InputSchema = input
 	tool.OutputSchema = map[string]any{
 		"type":  "object",

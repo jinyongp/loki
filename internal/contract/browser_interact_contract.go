@@ -476,7 +476,7 @@ func overrideBrowserInteract(tool *mcp.Tool) error {
 		"required": []string{"closed", "active_tab_id", "browser_generation"},
 	}
 
-	tool.Description = "Interact with the active desktop browser using expected_browser_generation. Pointer, editable, keyboard, form, upload, and dialog actions use action-specific operands; every element-index action additionally requires expected_state_generation and dialog handling requires expected_dialog_generation. fill replaces complete editable content while type preserves the current caret/selection. Uploads use policy-checked workspace files staged privately by the browser service. Stale references fail as conflicts before side effects."
+	tool.Description = BrowserScopeGuidance + " Interact with the active Loki browser using expected_browser_generation. Pointer, editable, keyboard, form, upload, and dialog actions use action-specific operands; every element-index action additionally requires expected_state_generation and dialog handling requires expected_dialog_generation. fill replaces complete editable content while type preserves the current caret/selection. Uploads use policy-checked workspace files staged privately by the browser service. Stale references fail as conflicts before side effects."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "browser_interactArguments", "additionalProperties": false,
 		"properties": rootProperties, "required": []string{"action"}, "oneOf": branches,

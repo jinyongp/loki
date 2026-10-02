@@ -344,7 +344,7 @@ func overrideBrowserObserve(tool *mcp.Tool) error {
 	if err != nil {
 		return err
 	}
-	tool.Description = "Observe current browser/page state, pending JavaScript dialogs, retained download status/history, or browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; dialog returns a monotonic dialog_generation; download/event-like results report sequence retention and complete/next_sequence truthfully."
+	tool.Description = BrowserScopeGuidance + " Observe current browser/page state, pending JavaScript dialogs, retained download status/history, or browser diagnostics with action-specific filters. state returns browser_generation and state_generation for safe element references; dialog returns a monotonic dialog_generation; download/event-like results report sequence retention and complete/next_sequence truthfully."
 	tool.InputSchema = input
 	tool.OutputSchema = map[string]any{
 		"type": "object",
