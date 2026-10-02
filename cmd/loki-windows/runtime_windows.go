@@ -391,7 +391,7 @@ func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Wr
 	err = manager.Setup(ctx, *distribution, provider)
 	stopHeartbeat()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		printConnectionError(stderr, err, *distribution)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Managed %s connection setup completed.\n", provider)
@@ -485,7 +485,7 @@ func runConnectionMutation(ctx context.Context, action string, args []string, st
 	}
 	stopHeartbeat()
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		printConnectionError(stderr, err, *distribution)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Managed %s connection %s completed.\n", provider, action)
@@ -521,7 +521,7 @@ func runConnectionStartup(ctx context.Context, args []string, stdout, stderr io.
 	controller := windowshost.NewWindowsConnectionStartupController(localAppData, &manager)
 	result, err := controller.Run(ctx, expected)
 	if err != nil {
-		fmt.Fprintf(stderr, "managed connection startup failed after %d health attempts: %v\n", result.HealthAttempts, err)
+		printConnectionError(stderr, fmt.Errorf("managed connection startup failed after %d health attempts: %w", result.HealthAttempts, err), *distribution)
 		return 1
 	}
 	fmt.Fprintf(stdout, "Managed connection startup restored %d enabled connection(s); keepalive_started=%t health_attempts=%d.\n",

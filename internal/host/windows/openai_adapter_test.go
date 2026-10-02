@@ -461,14 +461,15 @@ func TestOpenAIDoctorFailureSummarizesFailedChecks(t *testing.T) {
 				{"id":"oauth_metadata","status":"FAIL","summary":"oauth discovery invalid metadata from http://127.0.0.1:13357: protected resource metadata missing resource"}
 			]
 		}`,
-	})
+	}, "http://127.0.0.1:18765/mcp")
 	if err == nil {
 		t.Fatal("expected doctor failure")
 	}
 	message := err.Error()
-	if !strings.Contains(message, "OpenAI tunnel doctor failed: oauth_metadata: oauth discovery invalid metadata") ||
-		!strings.Contains(message, "protected resource metadata missing resource") {
-		t.Fatalf("doctor failure did not explain the failing check: %v", err)
+	var failure *OpenAIDoctorError
+	if !errors.As(err, &failure) || message != "The local Loki MCP endpoint's OAuth metadata check failed." ||
+		len(failure.Details) != 1 || !strings.Contains(failure.Details[0], "protected resource metadata missing resource") {
+		t.Fatalf("doctor failure did not separate its cause and detailed check: %v", err)
 	}
 	if strings.Contains(message, "config_source") || strings.Contains(message, `"checks"`) {
 		t.Fatalf("doctor failure leaked the raw report instead of summarizing it: %v", err)
@@ -476,7 +477,7 @@ func TestOpenAIDoctorFailureSummarizesFailedChecks(t *testing.T) {
 }
 
 func TestOpenAIDoctorFailureFallsBackForUnstructuredOutput(t *testing.T) {
-	err := openAIDoctorFailure(NativeProbe{ExitCode: 2, Stderr: "helper failed before producing JSON"})
+	err := openAIDoctorFailure(NativeProbe{ExitCode: 2, Stderr: "helper failed before producing JSON"}, "http://127.0.0.1:18765/mcp")
 	if err == nil || !strings.Contains(err.Error(), "run OpenAI tunnel doctor failed with exit code 2: helper failed before producing JSON") {
 		t.Fatalf("err=%v", err)
 	}
