@@ -130,6 +130,8 @@ func TestGitHubBrowserManifestRequestsRepositoryAndProjectPermissions(t *testing
 		"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
 		"organization_projects": "write",
 		"user_projects":         "write",
+		"issue_fields":          "write",
+		"issue_types":           "write",
 	}
 	if len(view.Manifest.DefaultPermissions) != len(want) {
 		t.Fatalf("unexpected permission scope: %#v", view.Manifest.DefaultPermissions)

@@ -32,7 +32,8 @@ when you have finished. Loki discovers the App ID and all approved installation
 IDs and accounts, validates the installations, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
 read access and Contents, Issues, Pull requests, Actions, Workflows, Checks,
-Commit statuses, organization Projects, and Personal Projects read/write access.
+Commit statuses, organization Projects, organization Issue Fields, Issue Types,
+and Personal Projects read/write access.
 Webhooks and automatic user authorization during installation are disabled;
 personal Projects require the separate device login below. Both repository selections follow
 the installation's current access on GitHub, without a local repository snapshot.
@@ -249,6 +250,7 @@ Configure the registration as follows:
 - Grant **Metadata: Read-only**.
 - Grant **Contents**, **Issues**, **Pull requests**, **Actions**, **Workflows**, **Checks**, and **Commit statuses: Read and write** for repository and CI work.
 - Grant **Organization permissions > Projects: Read and write** to manage organization Projects.
+- Grant **Organization permissions > Issue Fields** and **Issue Types: Read and write** to manage organization issue fields and types.
 - Grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with the separate App user login.
 - Add **Deployments**, **Variables**, or **Secrets: Read and write** only for commands the deployment must run.
 
