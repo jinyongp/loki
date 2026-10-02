@@ -68,7 +68,8 @@ private key. See [GitHub App visibility](https://docs.github.com/en/apps/creatin
 
 Apps created by earlier Loki versions may still be private and can be installed
 only on their owning account. When adding an account, setup prints the existing
-App's Advanced settings link. Open it and choose **Make public**, then return to
+App's Advanced settings link with `loki --verbose integration setup github`
+(`loki --verbose host integration setup github` on Linux). Open it and choose **Make public**, then return to
 the installation page or rerun the same setup command. Existing installations
 and credentials remain available; recreating the App is unnecessary. Membership
 in an organization alone does not grant the App access to its repositories.
@@ -81,8 +82,9 @@ rejects requests outside the installation's current access. Changes to either
 rerunning Loki setup. Existing tokens are reused until near expiry; GitHub also
 enforces access when processing API calls. File-based configurations can retain
 an explicit repository allowlist as an additional local restriction.
-Setup waits for Enter while you configure accounts in GitHub; application
-progress remains visible after you finish.
+Setup normally prints the browser action, the Enter instruction, and the result.
+It waits while you configure accounts in GitHub. Use global `--verbose` before
+the command for migration guidance and internal application progress.
 
 To abandon a pending App registration and start again, run:
 

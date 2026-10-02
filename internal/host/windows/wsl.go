@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -66,6 +67,9 @@ func (ExecNativeRunner) run(
 	input []byte,
 ) (NativeProbe, error) {
 	command := exec.CommandContext(ctx, executable, arguments...)
+	if progress.Verbose(reporter) {
+		command.Env = progress.VerboseEnvironment(os.Environ())
+	}
 	if input != nil {
 		command.Stdin = bytes.NewReader(input)
 	}
@@ -381,7 +385,7 @@ func (client WSLClient) runStreaming(
 }
 
 func nativeFailure(operation string, result NativeProbe) error {
-	detail := result.Stderr
+	detail := progress.NonProgressText(result.Stderr)
 	if detail == "" {
 		detail = result.Stdout
 	}

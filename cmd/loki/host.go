@@ -207,6 +207,7 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 	manager := lifecycle.Manager{Store: store}
 	reporter := progress.NewLineReporter(stderr)
 	if action == "prepare" {
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "prepare", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Preparing the Loki update..."})
 		if _, err = prepareHostUpdateCandidateProgress(context.Background(), store, reporter); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -259,7 +260,7 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if action == "apply" {
-		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared update and restarting required services..."})
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Applying the Loki update..."})
 		ctx := context.Background()
 		stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
 			Operation: "update", Phase: "apply", Message: "Still applying the prepared update",

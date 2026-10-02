@@ -211,7 +211,7 @@ func TestVerifyDistributionIdentityRequiresApprovedVersion(t *testing.T) {
 
 func TestNativeProgressRelayHandlesChunkedRecordEndings(t *testing.T) {
 	var out bytes.Buffer
-	relay := newNativeProgressRelay(progress.NewLineReporter(&out))
+	relay := newNativeProgressRelay(progress.NewLineReporter(progress.WithVerbose(&out)))
 	if _, err := relay.Write([]byte("ordinary stderr\n[loki] Preparing")); err != nil {
 		t.Fatal(err)
 	}

@@ -272,12 +272,28 @@ connection mutations emit stable line-oriented progress on **stderr**. Final
 human output and machine-readable `--json` results remain on **stdout**, so
 redirecting or parsing stdout does not mix progress events into the result.
 
-The same progress contract is used in interactive terminals and non-interactive
-PowerShell/CI runs. Loki does not invent percentages or ETAs. It reports
-observable phases, measured byte counts for large downloads, WSL provisioning
-state transitions, and a bounded provisioning heartbeat while a state remains
-unchanged. Nested WSL lifecycle commands relay only Loki progress lines in real
-time; ordinary child stderr remains buffered for normal error reporting.
+Default output shows the operation summary, required input, final result, and
+actual warnings or errors. Internal inspections, per-volume backups, checksums,
+and service transitions are detailed progress. A long operation emits at most
+one waiting notice from each command's reporter.
+
+Put the global `--verbose` option before the command for detailed progress:
+
+```powershell
+loki --verbose integration setup github
+loki --verbose update --all --distribution loki-mcp
+```
+
+```sh
+loki --verbose host integration setup github
+loki --verbose host update prepare
+```
+
+Verbose output includes observable phases, measured download byte counts, and
+repeated waiting notices. The output preference follows Windows-to-WSL and
+frontend update child processes. Loki preserves unrelated environment settings
+and does not invent percentages or ETAs. Both modes keep ordinary child warnings
+and errors separate from progress and keep `--json` results on stdout.
 
 Progress lines use the stable prefix:
 

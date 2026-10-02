@@ -32,10 +32,10 @@ func TestRunAddsExistingAppInstallationWithoutRegistration(t *testing.T) {
 			return View{}, errors.New("unexpected registration")
 		}
 	}
-	if err := Run(t.Context(), transport, Options{Input: strings.NewReader(""), PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
+	if err := Run(t.Context(), transport, Options{Verbose: true, Input: strings.NewReader(""), PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
 		t.Fatal(err)
 	}
-	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts remain configured") || !strings.Contains(output.String(), "Make public") || !strings.Contains(output.String(), "https://github.com/settings/apps/existing-app/advanced") || !strings.Contains(output.String(), "GitHub integration ready") {
+	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts and local repository restrictions") || !strings.Contains(output.String(), "Make public") || !strings.Contains(output.String(), "https://github.com/settings/apps/existing-app/advanced") || !strings.Contains(output.String(), "GitHub integration ready") {
 		t.Fatalf("opened=%v output=%s", opened, output.String())
 	}
 }
@@ -113,6 +113,9 @@ func TestRunWaitsForAllAccountsBeforeApplyingBatch(t *testing.T) {
 			}
 			if finishes.Load() != 1 || applies.Load() != 1 || !strings.Contains(output.String(), "Accounts: example-user, example-org") || !strings.Contains(output.String(), "Repository access follows") || strings.Contains(output.String(), "paste its GitHub Configure") {
 				t.Fatalf("batch output=%s", output.String())
+			}
+			if strings.Count(output.String(), "\n") > 6 || strings.Contains(output.String(), "Make public") || strings.Contains(output.String(), "organization App policies") {
+				t.Fatalf("default setup output includes detailed instructions: %s", output.String())
 			}
 		})
 	}

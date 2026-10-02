@@ -11,9 +11,10 @@ import (
 )
 
 type integrationProgressRunner struct {
-	t      *testing.T
-	output *bytes.Buffer
-	input  []byte
+	t       *testing.T
+	output  *bytes.Buffer
+	input   []byte
+	verbose bool
 }
 
 func (r *integrationProgressRunner) Run(_ context.Context, _ string, args []string) (windowshost.NativeProbe, error) {
@@ -25,8 +26,8 @@ func (r *integrationProgressRunner) Run(_ context.Context, _ string, args []stri
 
 func (r *integrationProgressRunner) RunStreaming(_ context.Context, _ string, _ []string, reporter progress.Reporter) (windowshost.NativeProbe, error) {
 	progress.Emit(reporter, progress.Event{Message: "Creating a recovery backup..."})
-	if !strings.Contains(r.output.String(), "Creating a recovery backup") {
-		r.t.Error("progress was withheld until command completion")
+	if strings.Contains(r.output.String(), "Creating a recovery backup") != r.verbose {
+		r.t.Error("internal progress did not follow the selected verbosity")
 	}
 	return windowshost.NativeProbe{Stdout: `{"schema_version":1,"ready":true}`}, nil
 }
@@ -68,5 +69,14 @@ func TestWindowsIntegrationProgressCoversMutationsAndPrivateSetup(t *testing.T) 
 				}
 			})
 		}
+	}
+}
+
+func TestWindowsVerboseIntegrationStreamsDetailsBeforeCompletion(t *testing.T) {
+	var stderr bytes.Buffer
+	runner := &integrationProgressRunner{t: t, output: &stderr, verbose: true}
+	_, err := executeWindowsIntegrationWithProgress(t.Context(), windowshost.OperatorClient{WSL: windowshost.WSLClient{Runner: runner}}, "loki-mcp", windowshost.OperatorRequest{Command: "integration", Action: "enable", Integration: "github"}, nil, progress.WithVerbose(&stderr))
+	if err != nil || !strings.Contains(stderr.String(), "Creating a recovery backup") || !strings.Contains(stderr.String(), "checking the WSL appliance") {
+		t.Fatalf("verbose output=%q err=%v", stderr.String(), err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"loki/internal/host/githubsetup"
@@ -40,6 +41,9 @@ func windowsGitHubSetupTransport(client windowshost.OperatorClient, distribution
 		var view githubsetup.View
 		if err = json.Unmarshal([]byte(result.Probe.Stdout), &view); err != nil || view.SchemaVersion != 1 {
 			return view, errors.New("invalid GitHub setup response from the Loki appliance")
+		}
+		if detail := progress.NonProgressText(result.Probe.Stderr); detail != "" {
+			fmt.Fprintln(stderr, detail)
 		}
 		return view, nil
 	}

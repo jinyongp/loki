@@ -75,7 +75,7 @@ func TestWindowsConsoleOutputHelper(t *testing.T) {
 			if stdout == console || stderr == console {
 				t.Fatal("native console was not recognized as a terminal")
 			}
-			reporter := progress.NewLineReporter(stderr)
+			reporter := progress.NewLineReporter(progress.WithVerbose(stderr))
 			for index, line := range []string{"Inspecting installed release...", "Checking published release...", "Downloading verified assets..."} {
 				progress.Emit(reporter, progress.Event{Message: line})
 				var after windows.ConsoleScreenBufferInfo

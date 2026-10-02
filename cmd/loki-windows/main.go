@@ -8,6 +8,7 @@ import (
 
 	"loki/internal/buildinfo"
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 func main() {
@@ -15,6 +16,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	args, stderr = progress.CLIArguments(args, stderr)
 	if len(args) == 0 {
 		printUsage(stderr)
 		return 2
@@ -64,7 +66,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 func printUsage(output io.Writer) {
 	fmt.Fprint(output, `Usage:
-  loki <command> [options]
+  loki [--verbose] <command> [options]
+
+Global options:
+  --verbose    Show detailed progress (before the command)
 
 Commands:
   version      Show the installed frontend version

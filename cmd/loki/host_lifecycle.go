@@ -212,7 +212,7 @@ func runHostInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "apply", State: progress.StateStarted, Message: "Applying the Loki host installation..."})
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "apply", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Installing Loki..."})
 	installCtx := context.Background()
 	stopHeartbeat := progress.StartHeartbeat(installCtx, reporter, progress.HeartbeatOptions{
 		Operation: "install", Phase: "apply", Message: "Still applying the Loki host installation",
@@ -428,7 +428,7 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 		"uninstall": "Removing managed Loki host state...",
 	}[action]
 	progress.Emit(progress.NewLineReporter(stderr), progress.Event{
-		Operation: action, Phase: "execute", State: progress.StateStarted, Message: message,
+		Operation: action, Phase: "execute", State: progress.StateStarted, Level: progress.LevelSummary, Message: message,
 	})
 	return runHostMaintenanceWith(context.Background(), manager, action, options, stdout, stderr)
 }

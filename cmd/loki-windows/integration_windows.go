@@ -13,6 +13,7 @@ import (
 
 	"loki/internal/host/githubsetup"
 	windowshost "loki/internal/host/windows"
+	"loki/internal/progress"
 )
 
 const maxWindowsIntegrationFileBytes = 1 << 20
@@ -208,7 +209,7 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 		return 2
 	}
 	if action == "setup" {
-		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{NoBrowser: noBrowser}, stdout, stderr)
+		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{NoBrowser: noBrowser, Verbose: progress.Verbose(stderr)}, stdout, stderr)
 	}
 	if strings.TrimSpace(configFile) == "" || strings.TrimSpace(privateKeyFile) == "" {
 		fmt.Fprintln(stderr, "--config-file and --private-key-file are required for GitHub import or rotation")

@@ -42,7 +42,7 @@ func runProductUpdateWith(
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "resolve", State: progress.StateStarted, Message: "Checking the latest published Loki release..."})
+	progress.Emit(deps.Progress, progress.Event{Operation: "update", Phase: "resolve", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Checking for Loki updates..."})
 	pointer, err := deps.Client.Resolve(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

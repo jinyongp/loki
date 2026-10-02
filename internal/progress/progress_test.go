@@ -12,7 +12,7 @@ import (
 func TestLineReporterWritesStableProgressLine(t *testing.T) {
 	var out bytes.Buffer
 	reporter := NewLineReporter(&out)
-	Emit(reporter, Event{Operation: "update", Phase: "prepare", State: StateStarted, Message: "Preparing verified update assets..."})
+	Emit(reporter, Event{Operation: "update", Phase: "prepare", State: StateStarted, Level: LevelSummary, Message: "Preparing verified update assets..."})
 	if got, want := out.String(), "[loki] Preparing verified update assets...\n"; got != want {
 		t.Fatalf("output=%q want=%q", got, want)
 	}
@@ -63,7 +63,7 @@ func TestHeartbeatSuppressesWhileReporterIsActive(t *testing.T) {
 		Every:     50 * time.Millisecond,
 	})
 	time.Sleep(30 * time.Millisecond)
-	Emit(reporter, Event{Operation: "update", Phase: "apply", State: StateInfo, Message: "child progress"})
+	Emit(reporter, Event{Operation: "update", Phase: "apply", State: StateInfo, Level: LevelSummary, Message: "child progress"})
 	time.Sleep(35 * time.Millisecond)
 	stop()
 	if strings.Contains(out.String(), "heartbeat") {

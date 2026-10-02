@@ -59,6 +59,7 @@ type View struct {
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
 	NoBrowser    bool
+	Verbose      bool
 	OpenBrowser  func(string) error
 	PollInterval time.Duration
 	Timeout      time.Duration
@@ -188,18 +189,22 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	if view.Phase == "installation" {
 		if view.AppSettingsURL != "" {
-			fmt.Fprintln(output, "Opening the existing GitHub App's installation settings. Existing accounts remain configured.")
-			fmt.Fprintln(output, "If the account you want is missing and the App is private, open Advanced settings and choose Make public, then return to the installation page or rerun the same setup command:", view.AppSettingsURL)
-			fmt.Fprintln(output, "The selected account must approve installation; organization App policies still apply.")
+			fmt.Fprintln(output, "Opening GitHub App installation settings...")
+			if options.Verbose {
+				fmt.Fprintln(output, "Existing accounts and local repository restrictions remain configured.")
+				fmt.Fprintln(output, "If an account is missing and the App is private, choose Make public in Advanced settings:", view.AppSettingsURL)
+				fmt.Fprintln(output, "Each account must approve installation; organization App policies still apply.")
+			}
 		}
-		fmt.Fprintln(output, "Choose a personal or organization account in GitHub, then select All repositories or Only select repositories and save.")
 		if view.RequireConfirmation {
-			fmt.Fprintln(output, "Configure every account you want in GitHub, then return here and press Enter. Loki will connect all approved installations of this App and preserve existing local restrictions.")
+			fmt.Fprintln(output, "Configure your accounts and repository access in GitHub, then press Enter here.")
+			if options.Verbose {
+				fmt.Fprintln(output, "All repositories or Only select repositories are supported. All approved installations of this App will be connected.")
+			}
 		} else if view.AppSettingsURL != "" {
-			fmt.Fprintln(output, "New installations are detected automatically. After configuring an existing installation, return here and press Enter.")
-			fmt.Fprintln(output, "To connect an already installed account without changing its settings, paste its GitHub Configure page URL here and press Enter.")
+			fmt.Fprintln(output, "Configure your account in GitHub, then press Enter here or paste its Configure URL.")
 		} else {
-			fmt.Fprintln(output, "Waiting for GitHub installation...")
+			fmt.Fprintln(output, "Choose All repositories or Only select repositories in GitHub. Waiting for installation...")
 		}
 		if !installationRedirected {
 			show(view.InstallationURL)
@@ -258,7 +263,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			}
 			view, err = transport(ctx, Request{Action: action, InstallationID: installationID})
 		case "configured":
-			fmt.Fprintln(output, "Verifying and applying GitHub integration...")
+			fmt.Fprintln(output, "Applying GitHub integration...")
 			view, err = transport(ctx, Request{Action: "apply"})
 		case "ready":
 			return printReady(output, view)

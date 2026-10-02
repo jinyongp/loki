@@ -24,7 +24,18 @@ type Event struct {
 	Phase     string
 	State     State
 	Message   string
+	Level     Level
 }
+
+// Internal phases are detailed by default. Callers explicitly identify the
+// few operation summaries and long-wait notices useful in normal CLI output.
+type Level string
+
+const (
+	LevelDetail    Level = ""
+	LevelSummary   Level = "summary"
+	LevelHeartbeat Level = "heartbeat"
+)
 
 type Reporter interface {
 	Report(Event)
@@ -46,16 +57,18 @@ func Emit(reporter Reporter, event Event) {
 }
 
 type lineReporter struct {
-	mu       sync.Mutex
-	w        io.Writer
-	activity chan struct{}
+	mu           sync.Mutex
+	w            io.Writer
+	activity     chan struct{}
+	verbose      bool
+	waitReported bool
 }
 
 func NewLineReporter(w io.Writer) Reporter {
 	if w == nil {
 		return nil
 	}
-	return &lineReporter{w: w, activity: make(chan struct{}, 1)}
+	return &lineReporter{w: w, activity: make(chan struct{}, 1), verbose: Verbose(w)}
 }
 
 func (reporter *lineReporter) Report(event Event) {
@@ -64,13 +77,27 @@ func (reporter *lineReporter) Report(event Event) {
 		return
 	}
 	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	if !reporter.verbose {
+		switch event.Level {
+		case LevelSummary:
+		case LevelHeartbeat:
+			if reporter.waitReported {
+				return
+			}
+			reporter.waitReported = true
+		default:
+			return
+		}
+	}
 	_, _ = fmt.Fprintln(reporter.w, LinePrefix+message)
-	reporter.mu.Unlock()
 	select {
 	case reporter.activity <- struct{}{}:
 	default:
 	}
 }
+
+func (reporter *lineReporter) Verbose() bool { return reporter.verbose }
 
 func (reporter *lineReporter) Activity() <-chan struct{} {
 	return reporter.activity
@@ -232,6 +259,7 @@ func StartHeartbeat(
 					Phase:     options.Phase,
 					State:     StateInfo,
 					Message:   fmt.Sprintf("%s (%s elapsed)...", message, time.Since(started).Round(time.Second)),
+					Level:     LevelHeartbeat,
 				})
 				reset()
 			}

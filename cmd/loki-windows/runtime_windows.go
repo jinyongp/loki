@@ -146,7 +146,7 @@ func runInstall(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		)
 	}
 	reporter := progress.NewLineReporter(stderr)
-	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "inspect", State: progress.StateStarted, Message: "Inspecting the existing Windows Loki installation..."})
+	progress.Emit(reporter, progress.Event{Operation: "install", Phase: "inspect", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Checking the Loki installation..."})
 	result, err := windowshost.NewWindowsInstallControllerWithProgress(binding, reporter).Run(
 		ctx, expected, options, approve,
 	)
@@ -383,7 +383,7 @@ func runConnectionSetup(ctx context.Context, args []string, stdout, stderr io.Wr
 	}
 	progress.Emit(reporter, progress.Event{
 		Operation: "connection", Phase: "setup", State: progress.StateStarted,
-		Message: fmt.Sprintf("Configuring managed %s connection and verifying its helper runtime...", provider),
+		Level: progress.LevelSummary, Message: fmt.Sprintf("Configuring %s connection...", provider),
 	})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
 		Operation: "connection", Phase: "setup", Message: "Still configuring the managed connection",
@@ -468,7 +468,7 @@ func runConnectionMutation(ctx context.Context, action string, args []string, st
 		"remove": fmt.Sprintf("Removing managed %s connection...", provider),
 	}[action]
 	progress.Emit(reporter, progress.Event{
-		Operation: "connection", Phase: action, State: progress.StateStarted, Message: message,
+		Operation: "connection", Phase: action, State: progress.StateStarted, Level: progress.LevelSummary, Message: message,
 	})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
 		Operation: "connection", Phase: action, Message: "Still waiting for the managed connection operation",
@@ -653,9 +653,9 @@ func runUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	reporter := progress.NewLineReporter(stderr)
 	if action == "prepare" {
-		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "prepare", State: progress.StateStarted, Message: "Preparing the appliance update..."})
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "prepare", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Preparing the appliance update..."})
 	} else if action == "apply" {
-		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Message: "Applying the prepared appliance update..."})
+		progress.Emit(reporter, progress.Event{Operation: "update", Phase: "apply", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Applying the appliance update..."})
 	}
 	request := windowshost.OperatorRequest{
 		Command: "update", Action: action, Approve: *approve, InterruptActiveJobs: *interrupt,
@@ -739,7 +739,7 @@ func runMaintenance(ctx context.Context, command string, args []string, stdout, 
 		"backup":   "Creating an appliance lifecycle backup...",
 		"rollback": "Rolling back the appliance lifecycle state...",
 	}[command]
-	progress.Emit(reporter, progress.Event{Operation: command, Phase: "execute", State: progress.StateStarted, Message: message})
+	progress.Emit(reporter, progress.Event{Operation: command, Phase: "execute", State: progress.StateStarted, Level: progress.LevelSummary, Message: message})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
 		Operation: command, Phase: "execute", Message: "Still waiting for the appliance lifecycle operation",
 	})
@@ -806,7 +806,7 @@ func runRestore(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	reporter := progress.NewLineReporter(stderr)
-	progress.Emit(reporter, progress.Event{Operation: "restore", Phase: "execute", State: progress.StateStarted, Message: "Restoring the selected appliance lifecycle backup..."})
+	progress.Emit(reporter, progress.Event{Operation: "restore", Phase: "execute", State: progress.StateStarted, Level: progress.LevelSummary, Message: "Restoring the appliance backup..."})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{
 		Operation: "restore", Phase: "execute", Message: "Still restoring the appliance lifecycle backup",
 	})

@@ -117,13 +117,13 @@ func TestTopLevelUsageExposesOnlyCanonicalConnectionSurface(t *testing.T) {
 }
 
 func TestRootHelpSucceedsWithoutAccessingWindowsHost(t *testing.T) {
-	for _, alias := range []string{"--help", "-h", "help"} {
-		t.Run(alias, func(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"--verbose", "--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			if code := run([]string{alias}, &stdout, &stderr); code != 0 {
+			if code := run(args, &stdout, &stderr); code != 0 {
 				t.Fatalf("code=%d stderr=%s", code, &stderr)
 			}
-			if stderr.Len() != 0 || !strings.Contains(stdout.String(), "loki <command> [options]") {
+			if stderr.Len() != 0 || !strings.Contains(stdout.String(), "loki [--verbose] <command> [options]") {
 				t.Fatalf("stdout=%s stderr=%s", &stdout, &stderr)
 			}
 		})
@@ -137,7 +137,7 @@ func TestRootUsageErrors(t *testing.T) {
 			if code := run(args, &stdout, &stderr); code != 2 {
 				t.Fatalf("code=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 			}
-			if stdout.Len() != 0 || !strings.Contains(stderr.String(), "loki <command> [options]") {
+			if stdout.Len() != 0 || !strings.Contains(stderr.String(), "loki [--verbose] <command> [options]") {
 				t.Fatalf("stdout=%s stderr=%s", &stdout, &stderr)
 			}
 		})

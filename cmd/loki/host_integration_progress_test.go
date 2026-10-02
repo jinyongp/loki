@@ -17,13 +17,22 @@ func TestIntegrationInspectionsKeepJSONSeparateFromProgress(t *testing.T) {
 				if code != 0 || !json.Valid(stdout.Bytes()) {
 					t.Fatalf("code=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 				}
-				if action == "doctor" && !strings.Contains(stderr.String(), "[loki]") {
-					t.Fatal("doctor ran without progress")
+				if strings.Contains(stderr.String(), "[loki]") {
+					t.Fatal("fast integration inspection produced internal progress")
 				}
 				if action == "status" && stderr.Len() != 0 {
 					t.Fatalf("passive status produced progress: %s", &stderr)
 				}
 			})
 		}
+	}
+}
+
+func TestGlobalVerboseKeepsHostIntegrationJSONSeparate(t *testing.T) {
+	store, _ := hostIntegrationStoreFixture(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--verbose", "host", "integration", "doctor", "--state-root", store.Root, "--json", "github"}, &stdout, &stderr)
+	if code != 0 || !json.Valid(stdout.Bytes()) || !strings.Contains(stderr.String(), "[loki]") {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"loki/internal/buildinfo"
+	"loki/internal/progress"
 )
 
 func main() {
@@ -16,6 +17,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	args, stderr = progress.CLIArguments(args, stderr)
 	if len(args) > 0 {
 		switch args[0] {
 		case "checkpoint":
@@ -71,6 +73,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki [--verbose] version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
 	return 2
 }

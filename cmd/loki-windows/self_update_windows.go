@@ -170,6 +170,9 @@ func runFrontendCandidate(
 	stdout, stderr io.Writer,
 ) int {
 	command := exec.CommandContext(ctx, executable, args...)
+	if progress.Verbose(stderr) {
+		command.Env = progress.VerboseEnvironment(os.Environ())
+	}
 	command.Stdin = os.Stdin
 	command.Stdout = stdout
 	command.Stderr = stderr

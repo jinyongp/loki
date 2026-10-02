@@ -25,7 +25,7 @@ func TestNativeInputStreamingReportsBeforeProcessExits(t *testing.T) {
 			t.Setenv("LOKI_TEST_INPUT_PROGRESS_GATE", gate)
 			var output bytes.Buffer
 			var callbackErr error
-			lineReporter := progress.NewLineReporter(&output)
+			lineReporter := progress.NewLineReporter(progress.WithVerbose(&output))
 			reporter := progress.ReporterFunc(func(event progress.Event) {
 				lineReporter.Report(event)
 				callbackErr = os.WriteFile(gate, []byte("ready"), 0600)
@@ -90,7 +90,7 @@ func TestOperatorInputProgressKeepsCredentialsOnStdin(t *testing.T) {
 			if integration == "signing" {
 				request.IdentityName, request.IdentityEmail = "Signing User", "signing@example.test"
 			}
-			result, err := client.ExecuteInputStreaming(t.Context(), "loki-mcp", request, secret, progress.NewLineReporter(&output))
+			result, err := client.ExecuteInputStreaming(t.Context(), "loki-mcp", request, secret, progress.NewLineReporter(progress.WithVerbose(&output)))
 			if err != nil {
 				t.Fatal(err)
 			}

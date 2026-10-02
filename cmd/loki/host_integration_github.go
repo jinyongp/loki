@@ -102,7 +102,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	if automatic {
-		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{NoBrowser: noBrowser}, stdout, stderr)
+		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{NoBrowser: noBrowser, Verbose: progress.Verbose(stderr)}, stdout, stderr)
 	}
 	if action == "import" {
 		action = "setup"
