@@ -133,8 +133,11 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 		return 2
 	}
 	reader := bufio.NewReader(os.Stdin)
+	if strings.TrimSpace(*identityName) == "" || strings.TrimSpace(*identityEmail) == "" {
+		fmt.Fprintln(stdout, "Enter the name and email you want displayed on Git commits created by Loki.")
+	}
 	if strings.TrimSpace(*identityName) == "" {
-		value, err := promptWindowsValue(reader, stdout, "Git signing name")
+		value, err := promptWindowsValue(reader, stdout, "Name or nickname")
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -142,7 +145,7 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 		*identityName = value
 	}
 	if strings.TrimSpace(*identityEmail) == "" {
-		value, err := promptWindowsValue(reader, stdout, "Git signing email")
+		value, err := promptWindowsValue(reader, stdout, "Email address")
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
