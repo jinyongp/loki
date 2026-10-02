@@ -147,7 +147,7 @@ func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {
 	if !slices.Contains(compose.Services["runtime"].Tmpfs, "/run/loki-private:uid=0,gid=0,mode=0700") {
 		t.Fatal("GitHub private runtime tmpfs is missing")
 	}
-	if !slices.Contains(compose.Services["runtime"].Tmpfs, "/var/tmp/loki/github:uid=0,gid=10001,mode=0710") {
+	if !slices.Contains(compose.Services["runtime"].Tmpfs, "/var/tmp/loki/github:uid=0,gid=10001,mode=2710") {
 		t.Fatal("GitHub command temporary directory is missing")
 	}
 	if !slices.Contains(compose.Services["runtime"].Command, "--github-private-key-file") ||

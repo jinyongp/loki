@@ -176,6 +176,16 @@ assert_no_mount executor /run/docker.sock
 assert_not_inspectable mcp "$token"
 assert_not_inspectable egress "$token"
 
+stage=github-cli-environment
+gh_config_dir=$(compose exec -T --user 0:0 runtime /bin/sh -c 'mktemp -d /var/tmp/loki/github/loki-gh-acceptance.XXXXXX')
+compose exec -T --user 0:0 runtime chmod 0750 "$gh_config_dir"
+if ! compose exec -T --user 10000:10001 \
+  --env "HOME=$gh_config_dir" --env "GH_CONFIG_DIR=$gh_config_dir" \
+  runtime /usr/bin/gh config get git_protocol --host github.com >/dev/null; then
+  die "delegated GitHub CLI cannot read its isolated configuration directory"
+fi
+compose exec -T --user 0:0 runtime rm -rf -- "$gh_config_dir"
+
 stage=core-restart
 for service in egress launcher executor runtime mcp; do
   compose restart "$service"

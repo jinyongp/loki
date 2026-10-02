@@ -315,7 +315,7 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 		"d /var/lib/loki-go/runner/agents/skills 0700 runner runner -",
 		"d /var/cache/loki-go/runner 0700 runner runner -",
 		"d /var/tmp/loki-go/runner 0700 runner runner -",
-		"d /var/tmp/loki-go/github 0710 root workspace -",
+		"d /var/tmp/loki-go/github 2710 root workspace -",
 	} {
 		if !strings.Contains(string(tmpfiles), want) {
 			t.Fatalf("tmpfiles contract does not contain %q", want)
