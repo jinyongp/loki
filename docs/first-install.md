@@ -245,9 +245,10 @@ enabled for personal and organization accounts, then continues in the
 same tab to select all or individual repositories and discovers its identifiers
 automatically. Rerun the same
 command after an installation wait or apply failure to continue with the saved
-App. Use `--account OWNER` to detect organization or personal-account ownership,
-`--no-browser` to print the local registration URL, or import an existing App
-with `--config-file PATH --private-key-file PATH`. See [GitHub App setup](github-app.md).
+App. Choose personal or organization accounts in GitHub. Rerunning setup after
+configuration opens the existing App's installation screen. Use `--no-browser`
+to print the URL, or `loki integration import github --config-file PATH
+--private-key-file PATH` to connect an existing App. See [GitHub App setup](github-app.md).
 
 The Linux host owns App creation, private-key storage, and configuration
 application. Windows relays the one-time registration code through stdin.

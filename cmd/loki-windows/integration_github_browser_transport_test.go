@@ -46,7 +46,7 @@ func TestWindowsGitHubBrowserPollingDoesNotRepeatInspectionProgress(t *testing.T
 	var stderr bytes.Buffer
 	runner := &gitHubBrowserProgressRunner{integrationProgressRunner: integrationProgressRunner{t: t, output: &stderr}}
 	transport := windowsGitHubSetupTransport(windowshost.OperatorClient{WSL: windowshost.WSLClient{Runner: runner}}, "loki-mcp", false, &stderr)
-	for _, action := range []string{"begin", "exchange", "poll", "poll", "poll", "apply"} {
+	for _, action := range []string{"begin", "exchange", "poll", "poll", "finish", "apply"} {
 		if _, err := transport(t.Context(), githubsetup.Request{Action: action, Code: "one-time-code"}); err != nil {
 			t.Fatal(err)
 		}

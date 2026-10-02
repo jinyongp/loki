@@ -132,7 +132,7 @@ The validator compares OCI configuration and provenance labels, hashes Loki-mana
 
 ## Configure the optional GitHub App
 
-For a lifecycle-managed host, use `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github`, then inspect it with `loki host integration status github`. The source files are import inputs; the managed host owns the resulting private credential after setup.
+For a lifecycle-managed host, use `loki host integration import --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github`, then inspect it with `loki host integration status github`. The source files are import inputs; the managed host owns the resulting private credential after import.
 
 For direct self-hosted Compose, GitHub integration continues to use repository-scoped GitHub App installation tokens with external files. Supply the public App and installation configuration plus the private-key host path to the core Compose services:
 

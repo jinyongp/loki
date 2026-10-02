@@ -221,7 +221,7 @@ loki host integration setup --identity-name NAME --identity-email EMAIL signing
 loki host integration disable signing
 loki host integration remove signing
 
-loki host integration setup --config-file /secure/github.toml --private-key-file /secure/github-app.pem github
+loki host integration import --config-file /secure/github.toml --private-key-file /secure/github-app.pem github
 loki host integration disable github
 ```
 

@@ -15,7 +15,7 @@ func TestGitHubConfiguredSetupHonorsRequestedAccount(t *testing.T) {
 		name, account, accountType string
 		wantError                  string
 	}{
-		{name: "unspecified"},
+		{name: "unrelated pending registration", wantError: "another GitHub App setup is pending"},
 		{name: "same account", account: "example"},
 		{name: "case insensitive", account: "ExAmPlE", accountType: "user"},
 		{name: "another App pending", account: "another-org", wantError: "another GitHub App setup is pending"},

@@ -19,6 +19,8 @@ func TestSubcommandHelpShowsOnlySelectedCommand(t *testing.T) {
 		{"integration", []string{"status"}, func(out *bytes.Buffer) { printIntegrationUsage(out, "status") }, "[--json] NAME", []string{"integration list", "integration doctor", "integration setup", "--interrupt-active-jobs"}},
 		{"integration", []string{"enable"}, func(out *bytes.Buffer) { printIntegrationUsage(out, "enable") }, "[--interrupt-active-jobs] NAME", []string{"integration list", "integration remove", "--json"}},
 		{"integration", []string{"setup", "signing"}, func(out *bytes.Buffer) { printIntegrationUsage(out, "setup", "signing") }, "--identity-name", []string{"integration rotate", "integration setup github", "--app-id"}},
+		{"integration", []string{"setup", "github"}, func(out *bytes.Buffer) { printIntegrationUsage(out, "setup", "github") }, "--no-browser", []string{"--account", "--account-type", "--config-file", "--private-key-file", "--manual", "--app-id", "--installation-id", "--repositories"}},
+		{"integration", []string{"import", "github"}, func(out *bytes.Buffer) { printIntegrationUsage(out, "import", "github") }, "--config-file", []string{"--no-browser", "--account", "--manual", "integration import signing"}},
 		{"update", []string{"status"}, func(out *bytes.Buffer) { printUpdateHelp(out, "status") }, "[--json]", []string{"update prepare", "update apply", "--approve", "--interrupt-active-jobs", "Windows frontend"}},
 		{"update", []string{"apply"}, func(out *bytes.Buffer) { printUpdateHelp(out, "apply") }, "--approve", []string{"update status", "update prepare", "Windows frontend"}},
 		{"connection", []string{"show"}, func(out *bytes.Buffer) { printConnectionHelp(out, "show") }, "[--json] NAME", []string{"connection setup", "connection start", "--tunnel-id"}},

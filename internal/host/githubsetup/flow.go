@@ -3,6 +3,7 @@
 package githubsetup
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -18,18 +19,20 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Request struct {
-	Action      string `json:"action"`
-	RedirectURL string `json:"redirect_url,omitempty"`
-	Account     string `json:"account,omitempty"`
-	AccountType string `json:"account_type,omitempty"`
-	State       string `json:"state,omitempty"`
-	Code        string `json:"code,omitempty"`
+	Action         string `json:"action"`
+	RedirectURL    string `json:"redirect_url,omitempty"`
+	Account        string `json:"account,omitempty"`
+	AccountType    string `json:"account_type,omitempty"`
+	State          string `json:"state,omitempty"`
+	Code           string `json:"code,omitempty"`
+	InstallationID int64  `json:"installation_id,omitempty"`
 }
 type Manifest struct {
 	Name                  string            `json:"name"`
@@ -54,11 +57,11 @@ type View struct {
 }
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
-	Account, AccountType string
-	NoBrowser            bool
-	OpenBrowser          func(string) error
-	PollInterval         time.Duration
-	Timeout              time.Duration
+	NoBrowser    bool
+	OpenBrowser  func(string) error
+	PollInterval time.Duration
+	Timeout      time.Duration
+	Input        io.Reader
 }
 
 // Run hosts only a loopback registration page and relays the one-time code.
@@ -78,7 +81,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	defer listener.Close()
 	origin := "http://" + listener.Addr().String()
-	view, err := transport(ctx, Request{Action: "begin", RedirectURL: origin + "/callback", Account: options.Account, AccountType: options.AccountType})
+	view, err := transport(ctx, Request{Action: "begin", RedirectURL: origin + "/callback"})
 	if err != nil {
 		return err
 	}
@@ -184,11 +187,17 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	if view.Phase == "installation" {
 		if view.AppSettingsURL != "" {
-			fmt.Fprintln(output, "Adding an account installation to the existing GitHub App. Existing accounts remain configured.")
-			fmt.Fprintln(output, "If the requested account is missing and the App is private, open Advanced settings and choose Make public, then return to the installation page or rerun the same setup command:", view.AppSettingsURL)
-			fmt.Fprintln(output, "The requested account must approve installation; organization App policies still apply.")
+			fmt.Fprintln(output, "Opening the existing GitHub App's installation settings. Existing accounts remain configured.")
+			fmt.Fprintln(output, "If the account you want is missing and the App is private, open Advanced settings and choose Make public, then return to the installation page or rerun the same setup command:", view.AppSettingsURL)
+			fmt.Fprintln(output, "The selected account must approve installation; organization App policies still apply.")
 		}
-		fmt.Fprintln(output, "Choose All repositories or Only select repositories, then click Install. Waiting for GitHub installation...")
+		fmt.Fprintln(output, "Choose a personal or organization account in GitHub, then select All repositories or Only select repositories and save.")
+		if view.AppSettingsURL != "" {
+			fmt.Fprintln(output, "New installations are detected automatically. After configuring an existing installation, return here and press Enter.")
+			fmt.Fprintln(output, "To connect an already installed account without changing its settings, paste its GitHub Configure page URL here and press Enter.")
+		} else {
+			fmt.Fprintln(output, "Waiting for GitHub installation...")
+		}
 		if !installationRedirected {
 			show(view.InstallationURL)
 		}
@@ -199,15 +208,45 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	finished := make(chan string)
+	if view.AppSettingsURL != "" {
+		input := options.Input
+		if input == nil {
+			input = os.Stdin
+		}
+		go func() {
+			scanner := bufio.NewScanner(input)
+			for scanner.Scan() {
+				select {
+				case finished <- scanner.Text():
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
 	for {
 		switch view.Phase {
 		case "installation":
+			action := "poll"
+			var installationID int64
 			select {
 			case <-ticker.C:
+			case line := <-finished:
+				action = "finish"
+				if strings.TrimSpace(line) != "" {
+					var valid bool
+					installationID, valid = configureInstallationID(line)
+					if !valid {
+						fmt.Fprintln(output, "Paste a GitHub installation Configure URL, or press Enter to finish an already connected account.")
+						continue
+					}
+					action = "select"
+				}
 			case <-ctx.Done():
 				return errors.New("GitHub installation is pending; rerun the same setup command to continue")
 			}
-			view, err = transport(ctx, Request{Action: "poll"})
+			view, err = transport(ctx, Request{Action: action, InstallationID: installationID})
 		case "configured":
 			fmt.Fprintln(output, "Verifying and applying GitHub integration...")
 			view, err = transport(ctx, Request{Action: "apply"})
@@ -220,6 +259,23 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			return err
 		}
 	}
+}
+
+func configureInstallationID(raw string) (int64, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.Fragment != "" {
+		return 0, false
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 3 && !(len(parts) == 5 && parts[0] == "organizations" && parts[1] != "") {
+		return 0, false
+	}
+	last := len(parts) - 1
+	if parts[last-2] != "settings" || parts[last-1] != "installations" {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(parts[last], 10, 64)
+	return id, err == nil && id > 0
 }
 func printReady(output io.Writer, view View) error {
 	fmt.Fprintln(output, "GitHub integration ready.")

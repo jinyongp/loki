@@ -45,19 +45,25 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
-	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
-	privateKeyFile := flags.String("private-key-file", "", "GitHub App RSA private key PEM")
+	var configFile, privateKeyFile string
+	if action != "setup" {
+		flags.StringVar(&configFile, "config-file", "", "public GitHub App TOML configuration")
+		flags.StringVar(&privateKeyFile, "private-key-file", "", "GitHub App RSA private key PEM")
+	}
 	stdin := flags.Bool("stdin", false, "read GitHub App config and private key from stdin envelope")
 	browserRequest := flags.Bool("browser-request", false, "read a browser setup relay request from stdin")
-	noBrowser := flags.Bool("no-browser", false, "print the local registration URL")
-	account := flags.String("account", "", "GitHub App owner")
-	accountType := flags.String("account-type", "", "user or organization; omit to detect from --account")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" {
+	var noBrowser bool
+	if action == "setup" {
+		flags.BoolVar(&noBrowser, "no-browser", false, "print the local registration URL")
+	}
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		return 0
+	} else if err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" {
 		fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] github\n", action)
 		return 2
 	}
-	automatic := action == "setup" && !*stdin && strings.TrimSpace(*configFile) == "" && strings.TrimSpace(*privateKeyFile) == ""
-	if *browserRequest && (!automatic || *noBrowser || *account != "" || *accountType != "") {
+	automatic := action == "setup" && !*stdin
+	if *browserRequest && (!automatic || noBrowser) {
 		fmt.Fprintln(stderr, "browser relay requests cannot be combined with import or browser options")
 		return 2
 	}
@@ -65,16 +71,16 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "automatic setup is interactive; use integration status --json github for machine-readable status")
 		return 2
 	}
-	if !automatic && *noBrowser {
+	if !automatic && noBrowser {
 		fmt.Fprintln(stderr, "--no-browser applies to automatic setup only")
 		return 2
 	}
 	if *stdin {
-		if strings.TrimSpace(*configFile) != "" || strings.TrimSpace(*privateKeyFile) != "" {
+		if strings.TrimSpace(configFile) != "" || strings.TrimSpace(privateKeyFile) != "" {
 			fmt.Fprintln(stderr, "--stdin is mutually exclusive with --config-file and --private-key-file")
 			return 2
 		}
-	} else if !automatic && (strings.TrimSpace(*configFile) == "" || strings.TrimSpace(*privateKeyFile) == "") {
+	} else if !automatic && (strings.TrimSpace(configFile) == "" || strings.TrimSpace(privateKeyFile) == "") {
 		fmt.Fprintln(stderr, "--config-file and --private-key-file are required unless --stdin is used")
 		return 2
 	}
@@ -96,7 +102,10 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	if automatic {
-		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{Account: *account, AccountType: *accountType, NoBrowser: *noBrowser}, stdout, stderr)
+		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{NoBrowser: noBrowser}, stdout, stderr)
+	}
+	if action == "import" {
+		action = "setup"
 	}
 	setupLock, err := store.GitHubSetupLock(context.Background())
 	if err != nil {
@@ -135,7 +144,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	if *stdin {
 		candidate, err = readManagedGitHubCandidateEnvelope(context.Background(), hostIntegrationStdin)
 	} else {
-		candidate, err = loadManagedGitHubCandidate(context.Background(), strings.TrimSpace(*configFile), strings.TrimSpace(*privateKeyFile))
+		candidate, err = loadManagedGitHubCandidate(context.Background(), strings.TrimSpace(configFile), strings.TrimSpace(privateKeyFile))
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)

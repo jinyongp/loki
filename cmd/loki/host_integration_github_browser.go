@@ -23,21 +23,23 @@ import (
 )
 
 type githubSetupSession struct {
-	Version        int       `json:"version"`
-	Phase          string    `json:"phase"`
-	State          string    `json:"state"`
-	CreatedAt      time.Time `json:"created_at"`
-	RedirectURL    string    `json:"redirect_url"`
-	Account        string    `json:"account,omitempty"`
-	AccountType    string    `json:"account_type"`
-	AppID          int64     `json:"app_id,omitempty"`
-	Slug           string    `json:"slug,omitempty"`
-	OwnerID        int64     `json:"owner_id,omitempty"`
-	PrivateKey     []byte    `json:"private_key,omitempty"`
-	ConfigRaw      []byte    `json:"config,omitempty"`
-	Repositories   []string  `json:"repositories,omitempty"`
-	BaseConfig     []byte    `json:"base_config,omitempty"`
-	AppSettingsURL string    `json:"app_settings_url,omitempty"`
+	Version              int                          `json:"version"`
+	Phase                string                       `json:"phase"`
+	State                string                       `json:"state"`
+	CreatedAt            time.Time                    `json:"created_at"`
+	RedirectURL          string                       `json:"redirect_url"`
+	Account              string                       `json:"account,omitempty"`
+	AccountType          string                       `json:"account_type"`
+	AppID                int64                        `json:"app_id,omitempty"`
+	Slug                 string                       `json:"slug,omitempty"`
+	OwnerID              int64                        `json:"owner_id,omitempty"`
+	PrivateKey           []byte                       `json:"private_key,omitempty"`
+	ConfigRaw            []byte                       `json:"config,omitempty"`
+	Repositories         []string                     `json:"repositories,omitempty"`
+	BaseConfig           []byte                       `json:"base_config,omitempty"`
+	AppSettingsURL       string                       `json:"app_settings_url,omitempty"`
+	SelectInstallation   bool                         `json:"select_installation,omitempty"`
+	InstallationBaseline []githubInstallationSnapshot `json:"installation_baseline,omitempty"`
 }
 type hostGitHubSetup struct {
 	Store     *lifecycle.FileStore
@@ -57,9 +59,12 @@ func (h *hostGitHubSetup) now() time.Time {
 }
 func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Request) (githubsetup.View, error) {
 	switch request.Action {
-	case "begin", "exchange", "poll", "apply":
+	case "begin", "exchange", "poll", "finish", "select", "apply":
 	default:
 		return githubsetup.View{}, errors.New("invalid GitHub setup request")
+	}
+	if request.Action == "select" && request.InstallationID <= 0 {
+		return githubsetup.View{}, errors.New("GitHub installation ID is invalid")
 	}
 	if request.Action == "begin" {
 		if err := validateGitHubSetupBegin(request); err != nil {
@@ -155,7 +160,7 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if _, err = rand.Read(state); err != nil {
 			return githubsetup.View{}, err
 		}
-		session = githubSetupSession{Version: 1, Phase: "registration", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL, Account: strings.ToLower(request.Account), AccountType: request.AccountType}
+		session = githubSetupSession{Version: 1, Phase: "registration", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL, Account: strings.ToLower(request.Account), AccountType: request.AccountType, SelectInstallation: request.Account == ""}
 		if session.AccountType == "" {
 			session.AccountType = "user"
 		}
@@ -223,15 +228,31 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if err = h.save(context.WithoutCancel(ctx), session); err != nil {
 			return githubsetup.View{}, err
 		}
-	case "poll":
+	case "poll", "finish", "select":
 		if session.Phase == "configured" {
 			return session.view(), nil
 		}
 		if session.Phase != "installation" {
 			return githubsetup.View{}, errors.New("GitHub App is not ready for installation")
 		}
-		if err = h.discover(ctx, &session); err != nil {
+		if request.Action == "select" {
+			err = h.discoverSelectedInstallation(ctx, &session, request.InstallationID)
+		} else {
+			err = h.discover(ctx, &session)
+		}
+		if err != nil {
 			return githubsetup.View{}, err
+		}
+		if len(session.BaseConfig) > 0 && (bytes.Equal(session.ConfigRaw, session.BaseConfig) || request.Action == "finish" && session.Phase == "installation") {
+			parsed, parseErr := config.ParseGitHubFragment(session.BaseConfig)
+			if parseErr != nil {
+				return githubsetup.View{}, parseErr
+			}
+			view, readyErr := h.currentGitHubReady(ctx, parsed, true)
+			if readyErr != nil {
+				return githubsetup.View{}, readyErr
+			}
+			return *view, nil
 		}
 		if err = h.save(ctx, session); err != nil {
 			return githubsetup.View{}, err
@@ -260,6 +281,15 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		session.Phase = "ready"
 		if err = h.Store.ClearGitHubSetup(ctx); err != nil {
 			return githubsetup.View{}, err
+		}
+		if session.SelectInstallation {
+			view := session.view()
+			accounts := make([]string, 0, len(parsed.GitHubInstallations))
+			for _, installation := range parsed.GitHubInstallations {
+				accounts = append(accounts, installation.Account)
+			}
+			view.Account, view.Repositories = strings.Join(accounts, ", "), append([]string(nil), parsed.GitHubTargets...)
+			return view, nil
 		}
 	}
 	return session.view(), nil
@@ -450,6 +480,9 @@ func (h *hostGitHubSetup) api(ctx context.Context, method, path, token string, b
 	return nil
 }
 func (h *hostGitHubSetup) discover(ctx context.Context, s *githubSetupSession) error {
+	if s.SelectInstallation {
+		return h.discoverSelectedInstallation(ctx, s, 0)
+	}
 	jwt, err := githubapp.AppJWT(s.PrivateKey, s.AppID, h.now())
 	if err != nil {
 		return err

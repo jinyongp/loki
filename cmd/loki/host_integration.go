@@ -110,17 +110,21 @@ func resolveHostIntegrationOptions(options hostIntegrationOptions) (hostIntegrat
 
 func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|rotate|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|enable|disable|remove|doctor ...")
 		return 2
 	}
 	action := args[0]
-	if action == "setup" || action == "rotate" {
+	if action == "setup" || action == "rotate" || action == "import" {
 		if len(args) < 2 {
 			fmt.Fprintf(stderr, "usage: loki host integration %s [OPTIONS] signing|github\n", action)
 			return 2
 		}
 		switch args[len(args)-1] {
 		case "signing":
+			if action == "import" {
+				fmt.Fprintln(stderr, "integration import supports github only")
+				return 2
+			}
 			return runHostSigningSetup(action, args[1:], stdout, stderr)
 		case "github":
 			return runHostGitHubSetup(action, args[1:], stdout, stderr)
@@ -132,7 +136,7 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	switch action {
 	case "list", "status", "enable", "disable", "remove", "doctor":
 	default:
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|rotate|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|enable|disable|remove|doctor ...")
 		return 2
 	}
 	options, name, err := parseHostIntegrationOptions(action, args[1:], stderr)

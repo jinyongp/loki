@@ -49,16 +49,12 @@ func (h *hostGitHubSetup) configuredSetup(ctx context.Context, request githubset
 		}
 	}
 	if request.Account == "" {
-		return h.currentGitHubReady(ctx, parsed, true)
+		if request.Action != "begin" {
+			return h.currentGitHubReady(ctx, parsed, true)
+		}
 	}
 	if request.Action != "begin" {
 		return nil, errors.New("GitHub account installation setup has not started")
-	}
-	if len(parsed.GitHubInstallations) >= 16 {
-		return nil, errors.New("GitHub configuration already has the maximum of 16 installations")
-	}
-	if len(parsed.GitHubTargets) >= 64 {
-		return nil, errors.New("GitHub configuration already has the maximum of 64 target entries")
 	}
 	if session.Phase != "" && (session.AppID != parsed.GitHubAppID || lifecycle.ManagedIntegrationDigest(session.PrivateKey) != current.GitHub.CredentialSHA256) {
 		return nil, errors.New("another GitHub App setup is pending; finish that setup first")
@@ -99,9 +95,14 @@ func (h *hostGitHubSetup) currentGitHubReady(ctx context.Context, parsed config.
 }
 
 func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, request githubsetup.Request, base []byte, current lifecycle.ManagedIntegrationState) (githubSetupSession, error) {
-	accountID, accountType, err := h.accountIdentity(ctx, request.Account)
-	if err != nil {
-		return githubSetupSession{}, err
+	var accountID int64
+	var accountType string
+	var err error
+	if request.Account != "" {
+		accountID, accountType, err = h.accountIdentity(ctx, request.Account)
+		if err != nil {
+			return githubSetupSession{}, err
+		}
 	}
 	if request.AccountType != "" && request.AccountType != accountType {
 		return githubSetupSession{}, errors.New("requested account type does not match the GitHub account")
@@ -122,6 +123,7 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 		ID    int64  `json:"id"`
 		Slug  string `json:"slug"`
 		Owner struct {
+			ID    int64  `json:"id"`
 			Login string `json:"login"`
 			Type  string `json:"type"`
 		} `json:"owner"`
@@ -132,6 +134,24 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 	if app.ID != candidate.Config.GitHubAppID || !setupName(app.Slug, 100) || !setupName(app.Owner.Login, 39) || (app.Owner.Type != "User" && app.Owner.Type != "Organization") {
 		return githubSetupSession{}, errors.New("GitHub returned invalid existing App metadata")
 	}
+	account := request.Account
+	var baseline []githubInstallationSnapshot
+	if account == "" {
+		if app.Owner.ID <= 0 {
+			return githubSetupSession{}, errors.New("GitHub returned invalid existing App owner")
+		}
+		account, accountID, accountType = app.Owner.Login, app.Owner.ID, "user"
+		if app.Owner.Type == "Organization" {
+			accountType = "organization"
+		}
+		items, listErr := h.listSetupInstallations(ctx, candidate.KeyRaw, app.ID)
+		if listErr != nil {
+			return githubSetupSession{}, listErr
+		}
+		for _, item := range items {
+			baseline = append(baseline, githubInstallationSnapshot{ID: item.ID, UpdatedAt: item.UpdatedAt})
+		}
+	}
 	settings := "https://github.com/settings/apps/" + app.Slug + "/advanced"
 	if app.Owner.Type == "Organization" {
 		settings = "https://github.com/organizations/" + app.Owner.Login + "/settings/apps/" + app.Slug + "/advanced"
@@ -141,14 +161,18 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 		return githubSetupSession{}, err
 	}
 	session := githubSetupSession{Version: 1, Phase: "installation", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL,
-		Account: strings.ToLower(request.Account), AccountType: accountType, OwnerID: accountID, AppID: app.ID, Slug: app.Slug,
-		PrivateKey: append([]byte(nil), candidate.KeyRaw...), BaseConfig: append([]byte(nil), base...), AppSettingsURL: settings}
+		Account: strings.ToLower(account), AccountType: accountType, OwnerID: accountID, AppID: app.ID, Slug: app.Slug,
+		PrivateKey: append([]byte(nil), candidate.KeyRaw...), BaseConfig: append([]byte(nil), base...), AppSettingsURL: settings,
+		SelectInstallation: request.Account == "", InstallationBaseline: baseline}
 	if err = h.save(ctx, session); err != nil {
 		clear(session.PrivateKey)
 		return githubSetupSession{}, err
 	}
 	// Discover a pre-existing installation without reopening its browser page.
-	if err = h.discover(ctx, &session); err == nil {
+	if !session.SelectInstallation {
+		err = h.discover(ctx, &session)
+	}
+	if err == nil {
 		err = h.save(ctx, session)
 	}
 	if err != nil {

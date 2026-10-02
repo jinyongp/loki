@@ -54,7 +54,7 @@ func configuredGitHubAdditionFixture(t *testing.T, installed *bool, selection st
 			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ey") {
 				t.Fatal("existing App metadata was read without App authentication")
 			}
-			return githubHTTPResponse(r, 200, `{"id":123,"slug":"existing-app","owner":{"login":"example-user","type":"User"}}`), nil
+			return githubHTTPResponse(r, 200, `{"id":123,"slug":"existing-app","owner":{"id":42,"login":"example-user","type":"User"}}`), nil
 		case "/app/installations":
 			if conversions.Load() != 0 {
 				t.Fatal("adding an account created a replacement App")

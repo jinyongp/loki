@@ -35,30 +35,35 @@ webhooks and user OAuth authorization disabled. Both repository selections follo
 the installation's current access on GitHub, without a local repository snapshot.
 Each command still receives a token scoped to its one requested repository.
 
-With no account argument, setup creates a personal-account App for the signed-in
-GitHub user. When `--account` is supplied, Loki detects whether it identifies a
-user or organization through GitHub's public account API:
-
-```powershell
-loki integration setup github --account example-org
-```
-
-The Linux equivalent is
-`loki host integration setup --account example-org github`.
-Use `--account-type user|organization` to specify the type explicitly, such as
-when public account lookup is unavailable. A resumed setup retains its known
-account type and does not repeat the lookup.
-You need permission to create and install Apps for the chosen owner. Organization
-approval can leave installation pending.
+First setup creates an App owned by the signed-in personal GitHub account.
+Choose the installation account in GitHub's **Where do you want to install**
+screen. You can install the App on a different personal or organization account
+from its owner. Loki reads the selected installation's identity from the
+authenticated GitHub API. Account names and account types are not CLI options.
+Organization approval can leave installation pending.
 
 Loki supports one App with installations on multiple personal or organization
-accounts. Once an integration is configured, rerun setup with a new `--account`
-to install that same App on the additional account. Existing installations,
-repository restrictions, credentials and limits are preserved. Loki discovers
-an existing installation automatically or opens the App's installation page,
-then verifies and applies the combined configuration through the managed backup
-and recovery transaction. An organization approval request can remain pending;
-rerun the same command to resume.
+accounts. Once an integration is configured, rerun `loki integration setup github`
+to open that same App's installation screen and choose an additional account.
+The Linux equivalent is `loki host integration setup github`. Existing installations,
+repository restrictions, credentials and limits are preserved. Loki opens the
+App's installation page, then verifies new or selected installations and applies
+the combined configuration through the managed backup and recovery transaction.
+An organization approval request can remain pending;
+rerun the same command to resume. New installations are detected automatically.
+If the account is already installed on GitHub, click **Configure** and save its
+settings. Loki detects installation metadata changes; for an already connected
+account, you can also return to the terminal and press Enter to finish without
+rewriting credentials or local repository restrictions. To connect an account
+already installed on GitHub without changing its settings, paste its GitHub
+Configure page URL into the terminal. Loki verifies that installation ID against
+the authenticated App's installation list before connecting it.
+
+Setup compares authenticated installation IDs and update times with the saved
+state at the start of the browser flow. If several installations change at once,
+Loki preserves the active configuration rather than guessing which account to
+connect. Rerun setup and paste the intended Configure page URL, or use
+`integration import` with an explicit configuration.
 
 Browser registration creates a public App (`public = true` in the manifest),
 which permits installations on multiple accounts. Each account must approve
@@ -84,11 +89,11 @@ an explicit repository allowlist as an additional local restriction.
 Installation status polls run quietly while the terminal waits; setup and
 application progress remain visible.
 
-To abandon a pending personal-account setup and start an organization setup, run:
+To abandon a pending App registration and start again, run:
 
 ```powershell
 loki integration remove github
-loki integration setup github --account example-org
+loki integration setup github
 ```
 
 Removal clears Loki's saved GitHub configuration and pending setup credentials;
@@ -97,13 +102,11 @@ delete the App or its installation on GitHub. Remove an unused App in GitHub
 settings separately. Each setup run handles one account installation; configured
 accounts remain available together.
 
-Rerunning setup for an existing integration reports the configured accounts and
-repository access after checking readiness. An existing account is reused;
-a new account starts an installation addition. An account type mismatch returns
-an error. Pending additions preserve the active integration and resume without
-creating another App. Configuration or credential changes during an addition
-stop application before any existing settings can be overwritten. File-based
-configuration also supports multiple installations of the same App below.
+Rerunning setup for an existing integration opens its installation screen after
+checking readiness. Pending additions preserve the active integration and resume
+without creating another App. Configuration or credential changes during an
+addition stop application before any existing settings can be overwritten.
+File-based import also supports multiple installations of the same App below.
 
 The Linux host owns GitHub API calls, the App private key, private resumable
 setup state, and the managed integration transaction. Windows opens the browser
@@ -182,17 +185,18 @@ install -m 0600 /path/from/github.private-key.pem /secure/loki/github-app.pem
 To import an existing App on a managed Windows installation, configure it through the frontend:
 
 ```powershell
-loki integration setup github `
+loki integration import github `
   --config-file C:\secure\loki\github.toml `
   --private-key-file C:\secure\loki\github-app.pem
 loki integration doctor github
 ```
 
-For prompted entry of an existing App's identifiers on Windows, use
-`loki integration setup github --manual`. The file-based path also supports
-multiple installations and additional App permissions.
+`import` requires both files and validates their contents before applying them.
+It supports multiple installations and additional App permissions. Use `rotate`
+with both files to replace an already configured App or credentials. Browser
+setup takes no configuration, key, App ID, installation ID, or repository flags.
 
-On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration setup --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. For explicit repository lists, Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository. For `repositories = ["*"]`, Loki checks the installation's account and authentication, and reads one accessible repository when available; an installation with no repositories can still be configured. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
+On a lifecycle-managed Linux/WSL host, use the equivalent `loki host integration import --config-file /secure/loki/github.toml --private-key-file /secure/loki/github-app.pem github` command. The input PEM is imported into lifecycle-owned private credential state. For explicit repository lists, Loki validates it by minting a repository-scoped installation token and reading an allowlisted repository. For `repositories = ["*"]`, Loki checks the installation's account and authentication, and reads one accessible repository when available; an installation with no repositories can still be configured. Rotation and removal use `integration rotate github` and `integration remove github`; the runtime never falls back to ambient `gh auth` credentials.
 
 ## Start with Compose
 

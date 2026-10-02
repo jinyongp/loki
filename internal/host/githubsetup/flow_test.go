@@ -19,8 +19,8 @@ func TestRunAddsExistingAppInstallationWithoutRegistration(t *testing.T) {
 	transport := func(ctx context.Context, request Request) (View, error) {
 		switch request.Action {
 		case "begin":
-			if request.Account != "example-org" {
-				t.Fatal("requested additional account was lost")
+			if request.Account != "" || request.AccountType != "" {
+				t.Fatal("account selection belongs in GitHub")
 			}
 			return View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", AppSettingsURL: "https://github.com/settings/apps/existing-app/advanced"}, nil
 		case "poll":
@@ -32,11 +32,75 @@ func TestRunAddsExistingAppInstallationWithoutRegistration(t *testing.T) {
 			return View{}, errors.New("unexpected registration")
 		}
 	}
-	if err := Run(t.Context(), transport, Options{Account: "example-org", PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
+	if err := Run(t.Context(), transport, Options{Input: strings.NewReader(""), PollInterval: time.Millisecond, OpenBrowser: func(link string) error { opened = append(opened, link); return nil }}, &output); err != nil {
 		t.Fatal(err)
 	}
 	if len(opened) != 1 || opened[0] != "https://github.com/apps/existing-app/installations/new" || !strings.Contains(output.String(), "Existing accounts remain configured") || !strings.Contains(output.String(), "Make public") || !strings.Contains(output.String(), "https://github.com/settings/apps/existing-app/advanced") || !strings.Contains(output.String(), "GitHub integration ready") {
 		t.Fatalf("opened=%v output=%s", opened, output.String())
+	}
+}
+
+func TestRunFinishesExistingConfigureOnEnter(t *testing.T) {
+	var output bytes.Buffer
+	finished := false
+	transport := func(ctx context.Context, request Request) (View, error) {
+		switch request.Action {
+		case "begin":
+			if request.Account != "" || request.AccountType != "" {
+				t.Fatal("browser flow should choose account in GitHub")
+			}
+			return View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", AppSettingsURL: "https://github.com/settings/apps/existing-app/advanced"}, nil
+		case "finish":
+			finished = true
+			return View{Phase: "ready", Account: "example-org"}, nil
+		default:
+			t.Fatalf("existing Configure should not register or apply: %s", request.Action)
+			return View{}, errors.New("unexpected action")
+		}
+	}
+	err := Run(t.Context(), transport, Options{Input: strings.NewReader("\n"), PollInterval: time.Hour, OpenBrowser: func(string) error { return nil }}, &output)
+	if err != nil || !finished || !strings.Contains(output.String(), "press Enter") {
+		t.Fatalf("finish=%t output=%s err=%v", finished, output.String(), err)
+	}
+}
+
+func TestRunConnectsPastedGitHubConfigureURL(t *testing.T) {
+	var output bytes.Buffer
+	selected := false
+	transport := func(ctx context.Context, request Request) (View, error) {
+		switch request.Action {
+		case "begin":
+			return View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", AppSettingsURL: "https://github.com/settings/apps/existing-app/advanced"}, nil
+		case "select":
+			selected = true
+			if request.InstallationID != 789 {
+				t.Fatalf("installation=%d", request.InstallationID)
+			}
+			return View{Phase: "configured"}, nil
+		case "apply":
+			return View{Phase: "ready", Account: "example-org"}, nil
+		default:
+			t.Fatalf("unexpected selection action %s", request.Action)
+			return View{}, errors.New("unexpected action")
+		}
+	}
+	input := "https://evil.example/settings/installations/789\nhttps://github.com/organizations/example-org/settings/installations/789\n"
+	err := Run(t.Context(), transport, Options{Input: strings.NewReader(input), PollInterval: time.Hour, OpenBrowser: func(string) error { return nil }}, &output)
+	if err != nil || !selected {
+		t.Fatalf("selection=%t err=%v", selected, err)
+	}
+}
+
+func TestConfigureInstallationIDRejectsOtherURLs(t *testing.T) {
+	for _, raw := range []string{"http://github.com/settings/installations/1", "https://github.com.evil.example/settings/installations/1", "https://user@github.com/settings/installations/1", "https://github.com/settings/apps/example", "https://github.com/settings/installations/-1", "https://github.com/settings/installations/999999999999999999999", "https://github.com/organizations/example-org/settings/installations/1/other"} {
+		if _, valid := configureInstallationID(raw); valid {
+			t.Fatalf("accepted invalid installation URL: %s", raw)
+		}
+	}
+	for _, raw := range []string{"https://github.com/settings/installations/789", "https://github.com/organizations/example-org/settings/installations/789"} {
+		if id, valid := configureInstallationID(raw); !valid || id != 789 {
+			t.Fatalf("rejected valid installation URL: %s", raw)
+		}
 	}
 }
 

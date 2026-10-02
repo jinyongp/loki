@@ -201,6 +201,23 @@ func TestOwnedDistributionVersionRejectsForeignIdentity(t *testing.T) {
 	}
 }
 
+func TestOperatorGitHubImportUsesPrivateStdinTransport(t *testing.T) {
+	args, machine, err := operatorCommandArguments(OperatorRequest{Command: "integration", Action: "import", Integration: "github", UseStdin: true})
+	want := []string{"host", "integration", "import", "--system", "--stdin", "github"}
+	if err != nil || machine || !slices.Equal(args, want) {
+		t.Fatalf("import transport args=%v machine=%t err=%v", args, machine, err)
+	}
+	for _, request := range []OperatorRequest{
+		{Command: "integration", Action: "import", Integration: "github"},
+		{Command: "integration", Action: "import", Integration: "signing", UseStdin: true, IdentityName: "example", IdentityEmail: "example@example.test"},
+		{Command: "integration", Action: "import", Integration: "github", UseStdin: true, GitHubBrowser: true},
+	} {
+		if _, _, err = operatorCommandArguments(request); err == nil {
+			t.Fatalf("invalid import accepted: %+v", request)
+		}
+	}
+}
+
 func TestOperatorGitHubBrowserRelayKeepsOneTimeCodeOnStdin(t *testing.T) {
 	args, machine, err := operatorCommandArguments(OperatorRequest{Command: "integration", Action: "setup", Integration: "github", UseStdin: true, GitHubBrowser: true})
 	if err != nil {

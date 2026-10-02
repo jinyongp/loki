@@ -20,7 +20,7 @@ func windowsGitHubSetupTransport(client windowshost.OperatorClient, distribution
 		defer clear(raw)
 		request := windowshost.OperatorRequest{Command: "integration", Action: "setup", Integration: "github", UseStdin: true, GitHubBrowser: true, InterruptActiveJobs: interrupt}
 		var result windowshost.OperatorResult
-		if input.Action == "poll" || input.Action == "exchange" {
+		if input.Action == "poll" || input.Action == "exchange" || input.Action == "finish" || input.Action == "select" {
 			// The shared browser flow already announces these phases. Background
 			// requests must not repeat WSL and configuration inspection progress.
 			result, err = client.ExecuteInput(ctx, distribution, request, raw)

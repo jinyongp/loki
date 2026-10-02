@@ -3,43 +3,27 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestBuildWindowsGitHubConfigProducesRestrictedFragment(t *testing.T) {
-	raw, err := buildWindowsGitHubConfig(
-		123, "Example-Org", "organization", 456,
-		"Repo,repo-two,repo",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	for _, want := range []string{
-		"github_app_id = 123",
-		`github_api_version = "2026-03-10"`,
-		`account = "example-org"`,
-		`account_type = "organization"`,
-		"installation_id = 456",
-		`repositories = ["repo", "repo-two"]`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("config missing %q: %s", want, text)
+func TestWindowsGitHubSetupRejectsAccountAndImportOptions(t *testing.T) {
+	for _, option := range []string{"--account", "--account-type", "--manual", "--app-id", "--installation-id", "--repositories", "--config-file", "--private-key-file"} {
+		var output, stderr bytes.Buffer
+		if code := runWindowsGitHubSetup(context.Background(), "setup", []string{option, "example"}, &output, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatalf("setup accepted %s: code=%d stderr=%s", option, code, stderr.String())
 		}
 	}
-	for _, invalid := range []struct {
-		account, accountType, repositories string
-	}{
-		{"bad/name", "organization", "repo"},
-		{"example-org", "owner", "repo"},
-		{"example-org", "organization", "repo,../escape"},
-		{"example-org", "organization", ""},
-	} {
-		if _, err = buildWindowsGitHubConfig(123, invalid.account, invalid.accountType, 456, invalid.repositories); err == nil {
-			t.Fatalf("invalid GitHub config accepted: %#v", invalid)
+}
+
+func TestWindowsGitHubImportRequiresBothFiles(t *testing.T) {
+	for _, args := range [][]string{nil, {"--config-file", "example.toml"}, {"--private-key-file", "example.pem"}} {
+		var output, stderr bytes.Buffer
+		if code := runWindowsGitHubSetup(context.Background(), "import", args, &output, &stderr); code != 2 || !strings.Contains(stderr.String(), "--config-file and --private-key-file are required") {
+			t.Fatalf("import accepted incomplete input: code=%d stderr=%s", code, stderr.String())
 		}
 	}
 }

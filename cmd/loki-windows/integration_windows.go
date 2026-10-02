@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"loki/internal/host/githubsetup"
@@ -36,7 +35,7 @@ func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer
 	switch action {
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return runIntegrationAction(ctx, action, args[1:], stdout, stderr)
-	case "setup", "rotate":
+	case "setup", "rotate", "import":
 		return runIntegrationSetup(ctx, action, args[1:], stdout, stderr)
 	default:
 		printIntegrationUsage(stderr)
@@ -96,6 +95,10 @@ func runIntegrationSetup(ctx context.Context, action string, args []string, stdo
 	}
 	switch name {
 	case "signing":
+		if action == "import" {
+			fmt.Fprintln(stderr, "integration import supports github only")
+			return 2
+		}
 		return runWindowsSigningSetup(ctx, action, rest, stdout, stderr)
 	case "github":
 		return runWindowsGitHubSetup(ctx, action, rest, stdout, stderr)
@@ -179,17 +182,17 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 func runWindowsGitHubSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("integration "+action+" github", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	manual := flags.Bool("manual", false, "enter existing App credentials")
-	noBrowser := flags.Bool("no-browser", false, "print the local registration URL")
+	var noBrowser bool
+	if action == "setup" {
+		flags.BoolVar(&noBrowser, "no-browser", false, "print the local registration URL")
+	}
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
-	configFile := flags.String("config-file", "", "public GitHub App TOML configuration")
-	privateKeyFile := flags.String("private-key-file", "", "GitHub App RSA private key PEM")
-	appID := flags.Int64("app-id", 0, "GitHub App ID")
-	account := flags.String("account", "", "GitHub account/organization")
-	accountType := flags.String("account-type", "organization", "organization or user")
-	installationID := flags.Int64("installation-id", 0, "GitHub App installation ID")
-	repositories := flags.String("repositories", "", "comma-separated repository allowlist")
+	var configFile, privateKeyFile string
+	if action != "setup" {
+		flags.StringVar(&configFile, "config-file", "", "public GitHub App TOML configuration")
+		flags.StringVar(&privateKeyFile, "private-key-file", "", "GitHub App RSA private key PEM")
+	}
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		printIntegrationUsage(stdout, action, "github")
 		return 0
@@ -204,91 +207,19 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	automatic := action == "setup" && !*manual && *configFile == "" && *privateKeyFile == "" && *appID == 0 && *installationID == 0 && *repositories == ""
-	if automatic {
-		typeProvided := false
-		flags.Visit(func(f *flag.Flag) {
-			if f.Name == "account-type" {
-				typeProvided = true
-			}
-		})
-		if !typeProvided {
-			*accountType = ""
-		}
-		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{Account: *account, AccountType: *accountType, NoBrowser: *noBrowser}, stdout, stderr)
+	if action == "setup" {
+		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{NoBrowser: noBrowser}, stdout, stderr)
 	}
-	if *noBrowser {
-		fmt.Fprintln(stderr, "--no-browser applies to automatic setup only")
+	if strings.TrimSpace(configFile) == "" || strings.TrimSpace(privateKeyFile) == "" {
+		fmt.Fprintln(stderr, "--config-file and --private-key-file are required for GitHub import or rotation")
 		return 2
 	}
-	reader := bufio.NewReader(os.Stdin)
-	var configRaw []byte
-	if strings.TrimSpace(*configFile) != "" {
-		raw, err := readWindowsIntegrationFile(*configFile, maxWindowsIntegrationFileBytes)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		configRaw = raw
-	} else {
-		if *appID <= 0 {
-			value, err := promptWindowsValue(reader, stdout, "GitHub App ID")
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			parsed, parseErr := strconv.ParseInt(value, 10, 64)
-			if parseErr != nil || parsed <= 0 {
-				fmt.Fprintln(stderr, "GitHub App ID must be a positive integer")
-				return 2
-			}
-			*appID = parsed
-		}
-		if strings.TrimSpace(*account) == "" {
-			value, err := promptWindowsValue(reader, stdout, "GitHub account")
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			*account = value
-		}
-		if *installationID <= 0 {
-			value, err := promptWindowsValue(reader, stdout, "GitHub installation ID")
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			parsed, parseErr := strconv.ParseInt(value, 10, 64)
-			if parseErr != nil || parsed <= 0 {
-				fmt.Fprintln(stderr, "GitHub installation ID must be a positive integer")
-				return 2
-			}
-			*installationID = parsed
-		}
-		if strings.TrimSpace(*repositories) == "" {
-			value, err := promptWindowsValue(reader, stdout, "Repositories (comma-separated)")
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			*repositories = value
-		}
-		var err error
-		configRaw, err = buildWindowsGitHubConfig(*appID, *account, *accountType, *installationID, *repositories)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
+	configRaw, err := readWindowsIntegrationFile(configFile, maxWindowsIntegrationFileBytes)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
-	if strings.TrimSpace(*privateKeyFile) == "" {
-		value, err := promptWindowsValue(reader, stdout, "GitHub App private key file")
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		*privateKeyFile = value
-	}
-	keyRaw, err := readWindowsIntegrationFile(*privateKeyFile, maxWindowsIntegrationFileBytes)
+	keyRaw, err := readWindowsIntegrationFile(privateKeyFile, maxWindowsIntegrationFileBytes)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -359,58 +290,4 @@ func readWindowsIntegrationFile(path string, limit int) ([]byte, error) {
 		return nil, errors.New("integration file identity changed during read")
 	}
 	return raw, nil
-}
-
-func buildWindowsGitHubConfig(appID int64, account, accountType string, installationID int64, repositories string) ([]byte, error) {
-	account = strings.ToLower(strings.TrimSpace(account))
-	accountType = strings.ToLower(strings.TrimSpace(accountType))
-	if appID <= 0 || installationID <= 0 || !safeGitHubName(account, 39) ||
-		(accountType != "organization" && accountType != "user") {
-		return nil, errors.New("GitHub App installation settings are invalid")
-	}
-	items := []string{}
-	for _, repository := range strings.Split(repositories, ",") {
-		repository = strings.ToLower(strings.TrimSpace(repository))
-		if !safeGitHubName(repository, 100) || strings.Contains(repository, "..") {
-			return nil, fmt.Errorf("invalid GitHub repository %q", repository)
-		}
-		if !slicesContains(items, repository) {
-			items = append(items, repository)
-		}
-	}
-	if len(items) == 0 {
-		return nil, errors.New("at least one GitHub repository is required")
-	}
-	quoted := make([]string, len(items))
-	for i, repository := range items {
-		quoted[i] = strconv.Quote(repository)
-	}
-	raw := fmt.Sprintf(
-		"github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [%s]\n",
-		appID, strconv.Quote(account), strconv.Quote(accountType), installationID, strings.Join(quoted, ", "),
-	)
-	return []byte(raw), nil
-}
-
-func safeGitHubName(value string, max int) bool {
-	if value == "" || len(value) > max || strings.HasPrefix(value, "-") || strings.HasSuffix(value, "-") {
-		return false
-	}
-	for _, r := range value {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' ||
-			r == '-' || r == '_' || r == '.' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func slicesContains(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }

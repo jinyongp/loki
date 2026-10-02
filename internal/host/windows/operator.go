@@ -212,7 +212,7 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		}
 		action := strings.TrimSpace(request.Action)
 		if action != "list" && action != "status" && action != "doctor" &&
-			action != "setup" && action != "rotate" && action != "enable" &&
+			action != "setup" && action != "rotate" && action != "import" && action != "enable" &&
 			action != "disable" && action != "remove" {
 			return nil, false, errors.New("integration action is invalid")
 		}
@@ -244,7 +244,7 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 			}
 			args = append(args, integration)
 			return args, false, nil
-		case "setup", "rotate":
+		case "setup", "rotate", "import":
 			if request.InterruptActiveJobs {
 				args = append(args, "--interrupt-active-jobs")
 			}
@@ -252,6 +252,9 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 			case "browser":
 				return nil, false, errors.New("browser does not require setup or rotation")
 			case "signing":
+				if request.Action == "import" {
+					return nil, false, errors.New("integration import supports github only")
+				}
 				name := strings.TrimSpace(request.IdentityName)
 				email := strings.TrimSpace(request.IdentityEmail)
 				if name == "" || len(name) > 256 || strings.ContainsAny(name, "\r\n\x00") ||

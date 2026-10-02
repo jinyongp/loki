@@ -360,7 +360,7 @@ func TestGitHubSetupResumePreservesExplicitOwnerType(t *testing.T) {
 
 func TestGitHubDiscoveryWaitsForMatchingInstallation(t *testing.T) {
 	h, _ := browserSetupFixture(t)
-	begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback"})
+	begin, err := h.Handle(t.Context(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:42/callback", Account: "example"})
 	if err != nil {
 		t.Fatal(err)
 	}
