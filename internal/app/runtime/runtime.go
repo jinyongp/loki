@@ -139,6 +139,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	var issueFields IssueFieldsClient
 	var githubProvider GitHubProvider
 	var githubCommands GitHubCommandRunner
+	var githubUsers *githubapp.UserAuthorization
 	if c.GitHubAppID != 0 {
 		if !filepath.IsAbs(o.GitHubBinary) || o.GitHubPrivateKeyFile != "" && !filepath.IsAbs(o.GitHubPrivateKeyFile) {
 			return errors.New("GitHub runtime paths must be absolute")
@@ -169,6 +170,29 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 			Config: githubapp.BrokerConfig{AppID: c.GitHubAppID, APIVersion: c.GitHubAPIVersion, MaxResponseBytes: c.GitHubMaxResponseBytes, Targets: targets},
 			Client: httpClient, PrivateKey: privateKey,
 		}
+		accountTypes := map[string]string{}
+		personalAccounts := []string{}
+		for _, installation := range c.GitHubInstallations {
+			accountTypes[installation.Account] = installation.AccountType
+			if installation.AccountType == "user" {
+				personalAccounts = append(personalAccounts, installation.Account)
+			}
+		}
+		githubUsers = &githubapp.UserAuthorization{
+			AppID: c.GitHubAppID, Accounts: personalAccounts, HTTP: httpClient, PrivateKey: privateKey,
+			Load: func(ctx context.Context) (string, error) {
+				managed := controller.ManagedCredentials()
+				configured, err := managed.Configured(ctx, secret.ManagedGitHubUserTokens)
+				if err != nil || !configured {
+					return "", err
+				}
+				return managed.Get(ctx, secret.ManagedGitHubUserTokens)
+			},
+			Save: func(ctx context.Context, value string) error {
+				_, err := controller.ManagedCredentials().Set(ctx, secret.ManagedGitHubUserTokens, value)
+				return err
+			},
+		}
 		issueFields = &githubapp.Client{
 			Config: githubapp.ClientConfig{APIVersion: c.GitHubAPIVersion, Targets: issueFieldTargets, MaxResponseBytes: c.GitHubMaxResponseBytes, MaxPages: c.GitHubMaxPages},
 			HTTP:   httpClient, Tokens: broker,
@@ -195,6 +219,10 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 				MaxInputBytes: c.GitHubMaxInputBytes, MaxOutputBytes: c.GitHubMaxOutputBytes,
 			},
 			Tokens: broker,
+			Projects: &githubapp.ProjectAuthority{
+				Targets: append([]string(nil), c.GitHubTargets...), AccountTypes: accountTypes,
+				Repositories: broker, Users: githubUsers, HTTP: httpClient,
+			},
 		}
 	}
 	log := &audit.Log{Path: o.AuditPath}
@@ -244,6 +272,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		DevtoolsCoordinationMutationOperations(devtoolsClient),
 		DevtoolsOperations(devtoolsBroker),
 		GitHubOperations(controller),
+		GitHubUserOperations(githubUsers),
 		GitHubIssueFieldsOperations(issueFields),
 		GitHubProviderOperations(githubProvider),
 		GitHubCommandOperations(githubCommands),

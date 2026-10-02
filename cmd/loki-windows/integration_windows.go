@@ -34,6 +34,8 @@ func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	action := args[0]
 	switch action {
+	case "login", "logout", "user-status":
+		return runWindowsGitHubUser(ctx, action, args[1:], stdout, stderr)
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return runIntegrationAction(ctx, action, args[1:], stdout, stderr)
 	case "setup", "rotate", "import":

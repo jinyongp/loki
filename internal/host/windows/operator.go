@@ -20,6 +20,7 @@ type OperatorRequest struct {
 	IdentityName        string
 	IdentityEmail       string
 	GitHubBrowser       bool
+	GitHubUser          bool
 	UseStdin            bool
 	Approve             bool
 	InterruptActiveJobs bool
@@ -141,7 +142,7 @@ func (client OperatorClient) execute(
 
 func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 	if request.Command != "integration" &&
-		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.GitHubBrowser) {
+		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.GitHubBrowser || request.GitHubUser) {
 		return nil, false, fmt.Errorf("%s does not accept integration options", request.Command)
 	}
 	switch request.Command {
@@ -204,6 +205,13 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		args = append(args, backupID)
 		return args, false, nil
 	case "integration":
+		if request.GitHubUser {
+			if request.Action != "login" || request.Integration != "github" || !request.UseStdin || request.GitHubBrowser ||
+				request.IdentityName != "" || request.IdentityEmail != "" || request.BackupID != "" || request.Approve || request.InterruptActiveJobs {
+				return nil, false, errors.New("GitHub user authorization relay requires login github with stdin")
+			}
+			return []string{"host", "integration", "login", "--system", "--browser-request", "github"}, false, nil
+		}
 		if request.GitHubBrowser && (request.Action != "setup" || request.Integration != "github" || !request.UseStdin || request.IdentityName != "" || request.IdentityEmail != "") {
 			return nil, false, errors.New("GitHub browser relay requires setup github with stdin")
 		}

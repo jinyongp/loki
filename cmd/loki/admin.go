@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"loki/internal/admin"
@@ -19,7 +20,20 @@ import (
 
 func runAdministration(args []string, stdout, stderr io.Writer) int {
 	uid := uint32(0)
-	return executeAdministration(args, rpc.Client{Socket: "/run/loki-go/runtime/control.sock", ExpectedUID: &uid}, stdout, stderr)
+	socket := "/run/loki-go/runtime/control.sock"
+	request, err := admin.Request(args)
+	if err != nil {
+		fmt.Fprintln(stderr, "loki:", fault.Public(err))
+		return 2
+	}
+	if configured, _ := request["runtime_socket"].(string); configured != "" {
+		if !filepath.IsAbs(configured) || filepath.Clean(configured) != configured {
+			fmt.Fprintln(stderr, "runtime socket must be a clean absolute path")
+			return 2
+		}
+		socket = configured
+	}
+	return executeAdministration(args, rpc.Client{Socket: socket, ExpectedUID: &uid}, stdout, stderr)
 }
 
 func executeAdministration(args []string, client rpc.Caller, stdout, stderr io.Writer) int {
@@ -37,6 +51,7 @@ func executeAdministrationInput(args []string, client rpc.Caller, readSecret fun
 		fmt.Fprintln(stderr, "loki:", fault.Public(err))
 		return 2
 	}
+	delete(request, "runtime_socket")
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	var source *admin.Dotenv

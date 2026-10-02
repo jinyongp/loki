@@ -147,6 +147,7 @@ func TestRedirectTargetRequiresAnotherAllowlistedTunnel(t *testing.T) {
 	proxy.handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	for authority, want := range map[string]int{
 		"api.github.com:443":         http.StatusOK,
+		"github.com:443":             http.StatusOK,
 		"redirect.attacker.test:443": http.StatusForbidden,
 	} {
 		r := httptest.NewRequest("CONNECT", "http://fixture", nil)
@@ -162,6 +163,6 @@ func TestRedirectTargetRequiresAnotherAllowlistedTunnel(t *testing.T) {
 func testPolicy(dependency Profile) Policy {
 	return Policy{Version: PolicyVersion, Profiles: map[string]Profile{
 		"dependency-install": dependency,
-		"github-api":         {AllowedHosts: []string{"api.github.com"}, AllowedPorts: []int{443}},
+		"github-api":         {AllowedHosts: []string{"api.github.com", "github.com"}, AllowedPorts: []int{443}},
 	}}
 }

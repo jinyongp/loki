@@ -73,6 +73,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki [--verbose] version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki [--verbose] version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key|user ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
 	return 2
 }

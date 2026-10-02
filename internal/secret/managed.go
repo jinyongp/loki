@@ -13,6 +13,7 @@ type ManagedCredential uint8
 
 const (
 	ManagedGitHubAppPrivateKey ManagedCredential = iota + 1
+	ManagedGitHubUserTokens
 )
 
 type managedLocation struct {
@@ -22,6 +23,7 @@ type managedLocation struct {
 
 var managedCredentialLocations = map[ManagedCredential]managedLocation{
 	ManagedGitHubAppPrivateKey: {profile: "github-app", secret: "PRIVATE_KEY"},
+	ManagedGitHubUserTokens:    {profile: "github-app", secret: "USER_TOKENS"},
 }
 
 // ManagedController exposes the narrow trusted API for platform credentials.

@@ -357,6 +357,7 @@ func (s githubSetupSession) view() githubsetup.View {
 				"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write",
 				"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
 				"organization_projects": "write",
+				"user_projects":         "write",
 			},
 			DefaultEvents: []string{}, RequestOAuthOnInstall: false,
 		}

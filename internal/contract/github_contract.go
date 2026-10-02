@@ -8,18 +8,18 @@ import (
 func overrideGitHub(tool *mcp.Tool) error {
 	capabilities := githubapp.RepositoryCommandCapabilities()
 	commandGroups := append([]string(nil), capabilities.CommandGroups...)
-	tool.Description = "Run a constrained GitHub CLI escape-hatch command with a short-lived installation token issued for one configured repository. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
+	tool.Description = "Run a constrained GitHub CLI escape-hatch command. Repository commands use a repository-limited App installation token. Project commands use an installation token for organization Projects or an explicitly authorized App user token for personal Projects. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "githubArguments", "additionalProperties": false,
 		"properties": map[string]any{
 			"target": map[string]any{
 				"type":        "string",
 				"pattern":     "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
-				"description": "Configured owner/repository target used to issue a repository-limited GitHub App installation token.",
+				"description": "Configured owner/repository target. Repository commands use a repository-limited installation token; project commands are restricted to this owner's Projects and require separate user login for personal accounts.",
 			},
 			"command": map[string]any{
 				"type": "string", "enum": commandGroups,
-				"description": "Allowed top-level gh command group. Repository/host/organization scope override flags are rejected by the runtime.",
+				"description": "Allowed top-level gh command group. Project commands use checked node IDs or an injected owner; other commands use installation tokens. Scope override flags are rejected by the runtime.",
 			},
 			"args": map[string]any{
 				"type": "array", "maxItems": capabilities.MaxArguments - 1,
@@ -53,15 +53,18 @@ func overrideGitHub(tool *mcp.Tool) error {
 		tool.Meta = mcp.Meta{}
 	}
 	tool.Meta["loki/github_command"] = map[string]any{
-		"command_groups":        append([]string(nil), capabilities.CommandGroups...),
-		"search_subcommands":    append([]string(nil), capabilities.SearchSubcommands...),
-		"prohibited_flags":      append([]string(nil), capabilities.ProhibitedFlags...),
-		"max_arguments":         capabilities.MaxArguments,
-		"max_argument_bytes":    capabilities.MaxArgumentBytes,
-		"max_argument_total":    capabilities.MaxArgumentTotal,
-		"max_input_bytes":       capabilities.MaxInputBytes,
-		"repository_token_only": capabilities.RepositoryTokenOnly,
-		"preferred_surface":     "typed GitHub tools when available",
+		"command_groups":                   append([]string(nil), capabilities.CommandGroups...),
+		"search_subcommands":               append([]string(nil), capabilities.SearchSubcommands...),
+		"prohibited_flags":                 append([]string(nil), capabilities.ProhibitedFlags...),
+		"max_arguments":                    capabilities.MaxArguments,
+		"max_argument_bytes":               capabilities.MaxArgumentBytes,
+		"max_argument_total":               capabilities.MaxArgumentTotal,
+		"max_input_bytes":                  capabilities.MaxInputBytes,
+		"repository_token_only":            capabilities.RepositoryTokenOnly,
+		"project_subcommands":              append([]string(nil), capabilities.ProjectSubcommands...),
+		"personal_projects_authentication": "explicit GitHub App user authorization",
+		"repository_authentication":        "GitHub App installation tokens",
+		"preferred_surface":                "typed GitHub tools when available",
 	}
 	return ApplyOperationMetadata(tool, map[string]OperationSemantics{
 		"command": {

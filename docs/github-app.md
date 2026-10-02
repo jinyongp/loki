@@ -1,6 +1,6 @@
 # GitHub App integration
 
-Loki uses a GitHub App to run repository-scoped `gh` commands without a user OAuth token. GitHub App installation permissions and the selected repositories form the external authorization boundary. Loki adds its configured target allowlist and command constraints.
+Loki uses GitHub App installation tokens for repository and organization work. Personal Projects use an explicitly authorized user token from the same App. GitHub App permissions and selected repositories form the external authorization boundary. Loki adds its configured target allowlist, project-owner checks, and command constraints.
 
 ## Browser setup on a managed host
 
@@ -32,10 +32,11 @@ when you have finished. Loki discovers the App ID and all approved installation
 IDs and accounts, validates the installations, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
 read access and Contents, Issues, Pull requests, Actions, Workflows, Checks,
-Commit statuses, and organization Projects read/write access, with webhooks and
-user OAuth authorization disabled. Both repository selections follow
+Commit statuses, organization Projects, and Personal Projects read/write access.
+Webhooks and automatic user authorization during installation are disabled;
+personal Projects require the separate device login below. Both repository selections follow
 the installation's current access on GitHub, without a local repository snapshot.
-Each command still receives a token scoped to its one requested repository.
+Repository commands receive a token scoped to their one requested repository.
 
 Organization Projects permission applies to projects owned by an approved
 organization installation. Repository scoping limits repository access; it does
@@ -153,9 +154,84 @@ GitHub does not allow the PR author to approve or request changes on their own P
 
 Organization Projects use **Organization permissions > Projects**, independently
 of repository issue permissions. This permission does not grant authority over
-user-owned Projects. Loki's GitHub integration uses installation tokens and does
-not fall back to a personal `gh auth` session for account-level operations.
+user-owned Projects. Personal Projects require the explicit App user login below.
+Loki does not use an ambient personal `gh auth` session.
 An empty project list alone does not verify project access.
+
+## Personal Projects authorization
+
+Set **Account permissions > Personal Projects** to **Read & write** in the
+existing App's **Permissions & events**, and enable **Device flow** in its
+general settings. The personal account must already be connected as an App
+installation in Loki.
+
+On Windows:
+
+```powershell
+loki integration login github --account example-user
+loki integration user-status github --account example-user
+loki integration logout github --account example-user
+```
+
+On a system-scoped managed Linux host:
+
+```sh
+sudo loki host integration login --system --account example-user --no-browser github
+sudo loki host integration user-status --system --account example-user github
+sudo loki host integration logout --system --account example-user github
+```
+
+Login prints a short code and opens `https://github.com/login/device`. Enter the
+code there and authorize the App as the requested personal account. Loki checks
+the signed-in account before saving any token. `--no-browser` prints the URL
+without launching a browser. The login expires after 15 minutes; retry login if
+it is denied, expires, or runtime restarts while authorization is pending.
+
+Access and refresh tokens stay in Loki's encrypted managed vault, outside
+application secret profiles. Expiring device-flow tokens are refreshed before
+use, with the replacement access and refresh tokens saved together. An expired
+refresh token requires another login. `user-status` shows local authorization
+state without token values or network requests; it does not prove access to a
+private project. `logout` removes the local account's tokens and pending login.
+To revoke the App's authorization at GitHub as well, use GitHub's **Settings >
+Applications > Authorized GitHub Apps**. Backups contain the encrypted vault;
+restoring an older backup can restore local authorization state.
+
+The `github` tool's `project` command uses the configured target's owner:
+
+```json
+{"target":"example-user/repo","command":"project","args":["list","--format","json"]}
+{"target":"example-user/repo","command":"project","args":["create","--title","Roadmap","--format","json"]}
+{"target":"example-user/repo","command":"project","args":["view","1","--format","json"]}
+{"target":"example-user/repo","command":"project","args":["item-create","1","--title","Investigate a bug","--format","json"]}
+```
+
+The target must match a configured repository access rule. Projects belong to
+the target's owner; repository scoping does not limit Projects to boards linked
+to that repository. User-owned Projects use the saved App user token.
+Organization-owned Projects use the existing installation token. Repository
+commands, including `api graphql`, continue to use installation tokens and never
+fall back to the user token.
+
+Supported Project subcommands are `list`, `view`, `create`, `edit`, `close`,
+`delete`, `mark-template`, `field-list`, `field-create`, `field-delete`,
+`item-list`, `item-create`, `item-add`, `item-edit`, `item-delete`, and
+`item-archive`. Provide a project number for commands that accept one; Loki
+injects `--owner`. For ID-based field and item edits, Loki checks the node's
+project owner and requires all supplied item, field, and project IDs to refer to
+the same project. Draft edits use the draft's content ID and require the draft
+to belong to exactly one project owned by the selected account. Item URLs must
+refer to an issue or pull request in the selected repository.
+
+Scope overrides, file input, arbitrary stdin, jq/template output filters,
+linking, and cross-owner copying
+are unavailable through this command. List limits are bounded to 100. Projects
+mutations are not replay-safe: inspect the project after an uncertain result
+before retrying. After updating Loki, refresh the app's actions and start a new
+chat to load the `project` command's updated public schema.
+
+See GitHub's [App user token and device flow documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
+and [token refresh documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens).
 
 Creating a repository is a separate operation that needs **Administration**
 permission for an organization. The default App does not request it, and Loki's
@@ -167,14 +243,14 @@ Create a GitHub App under the account that will own it. Use a unique name and a 
 
 Configure the registration as follows:
 
-- Leave user authorization, OAuth redirect URIs, and Device Flow disabled.
+- Leave automatic user authorization during installation and OAuth redirect URIs disabled. Enable Device flow for personal Projects login.
 - Disable the webhook unless another service in the deployment consumes GitHub events.
 - Select **Any account** to use the same App on multiple personal or organization accounts.
 - Grant **Metadata: Read-only**.
 - Grant **Contents**, **Issues**, **Pull requests**, **Actions**, **Workflows**, **Checks**, and **Commit statuses: Read and write** for repository and CI work.
 - Grant **Organization permissions > Projects: Read and write** to manage organization Projects.
+- Grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with the separate App user login.
 - Add **Deployments**, **Variables**, or **Secrets: Read and write** only for commands the deployment must run.
-- Grant the organization Issue Fields permission when the typed `github_issue_fields` tool is required.
 
 After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **All repositories** or select individual repositories. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.
 
@@ -264,14 +340,20 @@ Recreating runtime clears cached installation tokens. GitHub installation tokens
 
 ## Use the MCP tools
 
-The `github` MCP tool accepts a configured `target`, a `gh` argument array, and optional standard input:
+The `github` MCP tool accepts a configured `target`, a top-level `command`, an
+argument array after that command, and optional standard input:
 
 ```json
-{"target":"example-org/loki","args":["issue","list","--limit","20"]}
+{"target":"example-org/loki","command":"issue","args":["list","--limit","20"]}
 ```
 
-Allowed command groups are `api`, `attestation`, `cache`, `issue`, `label`, `pr`, `release`, `repo`, `ruleset`, `run`, `search`, `secret`, `status`, `variable`, and `workflow`. Loki rejects flags that replace the configured repository or hostname and disables interactive browser or editor flows. Repository search supports `code`, `commits`, `issues`, and `prs`; Loki supplies the repository filter itself.
+Allowed command groups are `api`, `attestation`, `cache`, `issue`, `label`, `pr`, `project`, `release`, `repo`, `ruleset`, `run`, `search`, `secret`, `status`, `variable`, and `workflow`. Loki rejects flags that replace the configured repository or hostname and disables interactive browser or editor flows. Repository search supports `code`, `commits`, `issues`, and `prs`; Loki supplies the repository filter itself. `project` uses the separate authority rules described above.
 
-The `github_issue_fields` tool provides typed organization Issue Fields operations. Personal repositories and ordinary issue or pull request work use the `github` tool. A command still depends on the GitHub App permissions and installation-token support of the corresponding GitHub API. GitHub returns the command error when a permission or API capability is unavailable.
+The `github_issue_fields_read` and `github_issue_fields_write` tools provide typed
+organization Issue Fields operations. Typed repository metadata and comments use
+`github_read` and `github_write`; other issue or pull request operations use
+`github`. A command still depends on the App permissions and the corresponding
+API's token support. GitHub returns the command error when a permission or API
+capability is unavailable.
 
 See the [GitHub CLI manual](https://cli.github.com/manual/gh), [GitHub App permission reference](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps), and [GitHub App permission guidance](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app).

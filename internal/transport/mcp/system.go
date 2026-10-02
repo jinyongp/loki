@@ -77,7 +77,7 @@ func (c *SystemController) Info(ctx context.Context) map[string]any {
 	browserReady := integrationIsReady(integrations, "browser")
 	signingReady := integrationIsReady(integrations, "signing")
 	return map[string]any{
-		"name": "loki", "version": buildinfo.Version, "schema_revision": "2026-09-29.1",
+		"name": "loki", "version": buildinfo.Version, "schema_revision": contract.CatalogRevision,
 		"mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(),
 		"uptime_seconds": uptime, "server_time": time.Now().UTC().Format(time.RFC3339Nano),
 		"workspace": "/workspace", "policy_generation": c.Policy.Metadata(),

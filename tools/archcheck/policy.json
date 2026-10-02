@@ -346,6 +346,10 @@
     },
     {
       "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/githubsetup"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
       "to": "loki/internal/host/ingress"
     },
     {

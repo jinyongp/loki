@@ -326,6 +326,7 @@ func OpenBrowser(raw string) error {
 	default:
 		command = exec.Command("xdg-open", raw)
 	}
+	configureBrowserProcess(command)
 	if err = command.Start(); err != nil {
 		return err
 	}

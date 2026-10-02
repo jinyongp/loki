@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"loki/internal/fault"
 	"loki/internal/process"
 )
 
@@ -38,6 +39,7 @@ type CommandRunner struct {
 	Config     CommandConfig
 	Tokens     RepositoryTokenSource
 	Supervisor process.Supervisor
+	Projects   *ProjectAuthority
 }
 
 const (
@@ -56,12 +58,14 @@ type CommandCapabilities struct {
 	MaxArgumentTotal    int
 	MaxInputBytes       int
 	RepositoryTokenOnly bool
+	ProjectSubcommands  []string
 }
 
 var repositoryCommandGroups = map[string]bool{
 	"api": true, "attestation": true, "cache": true, "issue": true, "label": true,
 	"pr": true, "release": true, "repo": true, "ruleset": true, "run": true,
-	"search": true, "secret": true, "status": true, "variable": true, "workflow": true,
+	"project": true,
+	"search":  true, "secret": true, "status": true, "variable": true, "workflow": true,
 }
 
 var prohibitedCommandFlags = map[string]bool{
@@ -93,7 +97,7 @@ func RepositoryCommandCapabilities() CommandCapabilities {
 		CommandGroups: groups, SearchSubcommands: search, ProhibitedFlags: flags,
 		MaxArguments: MaxCommandArguments, MaxArgumentBytes: MaxCommandArgumentBytes,
 		MaxArgumentTotal: MaxCommandArgumentTotalBytes, MaxInputBytes: MaxCommandInputBytes,
-		RepositoryTokenOnly: true,
+		RepositoryTokenOnly: false, ProjectSubcommands: ProjectCommandCapabilities(),
 	}
 }
 
@@ -106,8 +110,19 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 	if err != nil {
 		return process.Result{}, err
 	}
-	token, err := r.Tokens.Token(ctx, target)
+	var token string
+	if request.Args[0] == "project" {
+		if r.Projects == nil {
+			return process.Result{}, fault.Error("GitHub Projects authority is not configured")
+		}
+		arguments, token, err = r.Projects.Prepare(ctx, request)
+	} else {
+		token, err = r.Tokens.Token(ctx, target)
+	}
 	if err != nil || token == "" {
+		if err != nil && request.Args[0] == "project" {
+			return process.Result{}, err
+		}
 		return process.Result{}, errors.New("GitHub credential is unavailable")
 	}
 	configDir, err := r.configDirectory()
@@ -191,6 +206,10 @@ func (r *CommandRunner) validate(request CommandRequest) error {
 	}
 	if len(request.Args) == 0 || len(request.Args) > MaxCommandArguments || !repositoryCommandGroups[request.Args[0]] {
 		return errors.New("GitHub command is not allowed")
+	}
+	if request.Args[0] == "project" {
+		_, err := parseProjectCommand(request)
+		return err
 	}
 	total := 0
 	for index, argument := range request.Args {

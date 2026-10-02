@@ -88,7 +88,7 @@ func TestGitHubEscapeHatchPublishesExplicitConservativeContract(t *testing.T) {
 	if !reflect.DeepEqual(meta["command_groups"], capabilities.CommandGroups) ||
 		!reflect.DeepEqual(meta["search_subcommands"], capabilities.SearchSubcommands) ||
 		!reflect.DeepEqual(meta["prohibited_flags"], capabilities.ProhibitedFlags) ||
-		meta["repository_token_only"] != true {
+		meta["repository_token_only"] != false || !reflect.DeepEqual(meta["project_subcommands"], capabilities.ProjectSubcommands) {
 		t.Fatalf("github capability metadata = %#v", meta)
 	}
 	if meta["max_arguments"] != capabilities.MaxArguments ||

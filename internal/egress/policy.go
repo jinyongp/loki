@@ -52,8 +52,8 @@ func (p Policy) Validate() error {
 		return errors.New("dependency-install egress profile is incomplete")
 	}
 	github, ok := p.Profiles["github-api"]
-	if !ok || !slices.Equal(github.AllowedHosts, []string{"api.github.com"}) || !slices.Equal(github.AllowedPorts, []int{443}) {
-		return errors.New("github-api egress profile must allow only api.github.com:443")
+	if !ok || !slices.Equal(github.AllowedHosts, []string{"api.github.com", "github.com"}) || !slices.Equal(github.AllowedPorts, []int{443}) {
+		return errors.New("github-api egress profile must allow only api.github.com:443 and github.com:443 for App user authorization")
 	}
 	for name, profile := range p.Profiles {
 		if !slices.IsSorted(profile.AllowedHosts) {

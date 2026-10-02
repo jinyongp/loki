@@ -13,6 +13,8 @@ func integrationHelpRequested(args []string) bool {
 		return false
 	}
 	switch args[0] {
+	case "login", "logout", "user-status":
+		return len(args) == 2 || len(args) == 3 && args[1] == "github"
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return len(args) == 2
 	case "setup", "rotate", "import":
@@ -29,11 +31,19 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		fmt.Fprintln(output, "  loki integration enable|disable|remove [--distribution NAME] [--interrupt-active-jobs] NAME")
 		fmt.Fprintln(output, "  loki integration setup|rotate signing [--distribution NAME] [--interrupt-active-jobs] [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]")
 		fmt.Fprintln(output, "  loki integration setup github [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
+		fmt.Fprintln(output, "  loki integration login|logout|user-status github --account OWNER [--distribution NAME]")
 		fmt.Fprintln(output, "  loki integration import|rotate github [--distribution NAME] [--interrupt-active-jobs] --config-file PATH --private-key-file PATH")
 		return
 	}
 	action := path[0]
 	switch action {
+	case "login", "logout", "user-status":
+		fmt.Fprintf(output, "usage: loki integration %s github --account OWNER [--distribution NAME]", action)
+		if action == "login" {
+			fmt.Fprint(output, " [--no-browser]")
+		}
+		fmt.Fprintln(output)
+		fmt.Fprintln(output, "Personal Projects use explicit GitHub App user authorization. Enable Device flow in the App settings before login.")
 	case "list":
 		fmt.Fprintln(output, "usage: loki integration list [--distribution NAME] [--json]")
 	case "status", "doctor":

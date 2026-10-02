@@ -32,7 +32,7 @@ func TestRepositoryDependencyPolicy(t *testing.T) {
 		}
 	}
 	github := policy.Profiles["github-api"]
-	if !slices.Equal(github.AllowedHosts, []string{"api.github.com"}) || !slices.Equal(github.AllowedPorts, []int{443}) {
+	if !slices.Equal(github.AllowedHosts, []string{"api.github.com", "github.com"}) || !slices.Equal(github.AllowedPorts, []int{443}) {
 		t.Fatalf("GitHub API policy = %#v", github)
 	}
 }
@@ -46,7 +46,7 @@ func TestPolicyRejectsAmbiguousHostsAndPorts(t *testing.T) {
 	} {
 		policy := Policy{Version: PolicyVersion, Profiles: map[string]Profile{
 			"dependency-install": profile,
-			"github-api":         {AllowedHosts: []string{"api.github.com"}, AllowedPorts: []int{443}},
+			"github-api":         {AllowedHosts: []string{"api.github.com", "github.com"}, AllowedPorts: []int{443}},
 		}}
 		if err := policy.Validate(); err == nil {
 			t.Fatalf("unsafe policy accepted: %#v", profile)
@@ -57,8 +57,8 @@ func TestPolicyRejectsAmbiguousHostsAndPorts(t *testing.T) {
 func TestPolicyRejectsGitHubAPIExpansion(t *testing.T) {
 	for _, github := range []Profile{
 		{AllowedHosts: []string{"github.com"}, AllowedPorts: []int{443}},
-		{AllowedHosts: []string{"api.github.com", "github.com"}, AllowedPorts: []int{443}},
-		{AllowedHosts: []string{"api.github.com"}, AllowedPorts: []int{80, 443}},
+		{AllowedHosts: []string{"api.github.com", "github.com", "uploads.github.com"}, AllowedPorts: []int{443}},
+		{AllowedHosts: []string{"api.github.com", "github.com"}, AllowedPorts: []int{80, 443}},
 	} {
 		policy := Policy{Version: PolicyVersion, Profiles: map[string]Profile{
 			"dependency-install": {AllowedHosts: []string{"registry.npmjs.org"}, AllowedPorts: []int{443}},
