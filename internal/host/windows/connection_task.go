@@ -13,6 +13,8 @@ const (
 	ConnectionTaskOwnershipSchemaVersion       = 1
 	connectionTaskDescription                  = "Restore enabled Loki managed connections."
 	connectionTaskExecutionTicks         int64 = 6_000_000_000
+	connectionTaskRestartCount                 = 3
+	connectionTaskRestartIntervalTicks   int64 = 600_000_000
 )
 
 type ConnectionTaskOwnership struct {
@@ -25,19 +27,22 @@ type ConnectionTaskOwnership struct {
 }
 
 type ConnectionTaskProbe struct {
-	Present            bool
-	Description        string
-	Actions            []StartupTaskAction
-	RunLevel           string
-	UserID             string
-	TriggerCount       int
-	LogonTrigger       bool
-	ExecutionTimeTicks int64
+	Present              bool
+	Description          string
+	Actions              []StartupTaskAction
+	RunLevel             string
+	UserID               string
+	TriggerCount         int
+	LogonTrigger         bool
+	ExecutionTimeTicks   int64
+	RestartCount         int
+	RestartIntervalTicks int64
 }
 
 type ConnectionTaskPlatform interface {
 	Probe(context.Context, string) (ConnectionTaskProbe, error)
 	Create(context.Context, ConnectionTaskOwnership) error
+	UpdateRetryPolicy(context.Context, ConnectionTaskOwnership) error
 	Remove(context.Context, ConnectionTaskOwnership) error
 	ReadOwnership(string) (ConnectionTaskOwnership, bool, error)
 	WriteOwnership(context.Context, ConnectionTaskOwnership) error
@@ -85,10 +90,20 @@ func (manager ConnectionTaskManager) Reconcile(ctx context.Context, distribution
 		case probe.Present && !owned:
 			return errors.New("refusing to adopt an unowned Loki connection startup task")
 		case probe.Present:
-			if err = validateConnectionTaskProbe(probe, expected, userID); err != nil {
+			if err = validateConnectionTaskProbeWithLegacyRetry(probe, expected, userID); err != nil {
 				return err
 			}
-			return nil
+			if probe.RestartCount == connectionTaskRestartCount && probe.RestartIntervalTicks == connectionTaskRestartIntervalTicks {
+				return nil
+			}
+			if err = manager.Platform.UpdateRetryPolicy(ctx, expected); err != nil {
+				return err
+			}
+			probe, err = manager.Platform.Probe(ctx, expected.TaskName)
+			if err != nil {
+				return err
+			}
+			return validateConnectionTaskProbe(probe, expected, userID)
 		case !probe.Present && owned:
 			if err = manager.Platform.Create(ctx, expected); err != nil {
 				return err
@@ -125,7 +140,7 @@ func (manager ConnectionTaskManager) Reconcile(ctx context.Context, distribution
 		if !owned {
 			return errors.New("refusing to remove an unowned Loki connection startup task")
 		}
-		if err = validateConnectionTaskProbe(probe, expected, userID); err != nil {
+		if err = validateConnectionTaskProbeWithLegacyRetry(probe, expected, userID); err != nil {
 			return err
 		}
 		if err = manager.Platform.Remove(ctx, expected); err != nil {
@@ -164,6 +179,14 @@ func validateConnectionTaskOwnership(actual, expected ConnectionTaskOwnership) e
 }
 
 func validateConnectionTaskProbe(probe ConnectionTaskProbe, expected ConnectionTaskOwnership, userID string) error {
+	return validateConnectionTaskProbeRetry(probe, expected, userID, false)
+}
+
+func validateConnectionTaskProbeWithLegacyRetry(probe ConnectionTaskProbe, expected ConnectionTaskOwnership, userID string) error {
+	return validateConnectionTaskProbeRetry(probe, expected, userID, true)
+}
+
+func validateConnectionTaskProbeRetry(probe ConnectionTaskProbe, expected ConnectionTaskOwnership, userID string, allowLegacy bool) error {
 	// Report field names, never task arguments or provider-controlled values.
 	var mismatches []string
 	if !probe.Present {
@@ -196,6 +219,15 @@ func validateConnectionTaskProbe(probe ConnectionTaskProbe, expected ConnectionT
 	}
 	if probe.ExecutionTimeTicks != connectionTaskExecutionTicks {
 		mismatches = append(mismatches, "execution_limit")
+	}
+	legacy := allowLegacy && probe.RestartCount == 0 && probe.RestartIntervalTicks == 0
+	if !legacy {
+		if probe.RestartCount != connectionTaskRestartCount {
+			mismatches = append(mismatches, "restart_count")
+		}
+		if probe.RestartIntervalTicks != connectionTaskRestartIntervalTicks {
+			mismatches = append(mismatches, "restart_interval")
+		}
 	}
 	if len(mismatches) != 0 {
 		return fmt.Errorf("Loki connection startup task does not match exact managed ownership: %s", strings.Join(mismatches, ", "))

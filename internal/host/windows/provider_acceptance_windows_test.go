@@ -48,6 +48,10 @@ func (platform *acceptanceTaskPlatform) Create(ctx context.Context, ownership Co
 	return platform.delegate.Create(ctx, ownership)
 }
 
+func (platform *acceptanceTaskPlatform) UpdateRetryPolicy(ctx context.Context, ownership ConnectionTaskOwnership) error {
+	return platform.delegate.UpdateRetryPolicy(ctx, ownership)
+}
+
 func (platform *acceptanceTaskPlatform) Remove(ctx context.Context, ownership ConnectionTaskOwnership) error {
 	return platform.delegate.Remove(ctx, ownership)
 }

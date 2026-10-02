@@ -310,6 +310,33 @@ func TestConnectionManagerStartupRestoresOnlyEnabled(t *testing.T) {
 	}
 }
 
+func TestConnectionManagerStartupUpdatesTaskBeforeTunnelFailure(t *testing.T) {
+	manager, adapter, _, store, tasks := connectionManagerFixture()
+	runtime, err := manager.runtime(t.Context(), "loki-mcp", adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Write(t.Context(), stateFromRuntime(runtime, true)); err != nil {
+		t.Fatal(err)
+	}
+	adapter.errAt = "start"
+	if err := manager.ReconcileEnabled(t.Context(), "loki-mcp"); err == nil {
+		t.Fatal("startup failure ignored")
+	}
+	if !reflect.DeepEqual(tasks.calls, []bool{true}) {
+		t.Fatalf("retry task was not reconciled before tunnel start: %v", tasks.calls)
+	}
+	state, _, _ := store.Read("loki-mcp", "provider-one")
+	if !state.Enabled {
+		t.Fatal("temporary startup failure disabled future retries")
+	}
+	adapter.calls = nil
+	tasks.err = errors.New("unverified task")
+	if err := manager.ReconcileEnabled(t.Context(), "loki-mcp"); err == nil || len(adapter.calls) != 0 {
+		t.Fatal("tunnel was mutated after task ownership verification failed")
+	}
+}
+
 func TestConnectionManagerActivationRollsBackWhenStartupTaskFails(t *testing.T) {
 	manager, adapter, _, store, tasks := connectionManagerFixture()
 	tasks.err = errors.New("task failed")

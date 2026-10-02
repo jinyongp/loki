@@ -17,6 +17,7 @@ type fakeConnectionTaskPlatform struct {
 	removeCalls int
 	writeCalls  int
 	deleteCalls int
+	updateCalls int
 	errAt       string
 }
 
@@ -37,7 +38,21 @@ func (platform *fakeConnectionTaskPlatform) Create(_ context.Context, ownership 
 		Actions:  []StartupTaskAction{{Executable: ownership.Executable, Arguments: ownership.Arguments}},
 		RunLevel: "Limited", UserID: platform.user, TriggerCount: 1, LogonTrigger: true,
 		ExecutionTimeTicks: connectionTaskExecutionTicks,
+		RestartCount:       connectionTaskRestartCount, RestartIntervalTicks: connectionTaskRestartIntervalTicks,
 	}
+	return nil
+}
+
+func (platform *fakeConnectionTaskPlatform) UpdateRetryPolicy(context.Context, ConnectionTaskOwnership) error {
+	if platform.errAt == "update" {
+		return errors.New("retry policy update failed")
+	}
+	platform.updateCalls++
+	if platform.errAt == "update-noop" {
+		return nil
+	}
+	platform.probe.RestartCount = connectionTaskRestartCount
+	platform.probe.RestartIntervalTicks = connectionTaskRestartIntervalTicks
 	return nil
 }
 
@@ -173,5 +188,71 @@ func TestConnectionTaskManagerRollsBackTaskWhenOwnershipPublishFails(t *testing.
 	}
 	if platform.createCalls != 1 || platform.removeCalls != 1 || platform.probe.Present {
 		t.Fatalf("create=%d remove=%d probe=%+v", platform.createCalls, platform.removeCalls, platform.probe)
+	}
+}
+
+func TestConnectionTaskManagerUpgradesOnlyVerifiedLegacyRetryPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		count       int
+		interval    int64
+		owned       bool
+		wantUpgrade bool
+	}{
+		{"legacy", 0, 0, true, true},
+		{"current", connectionTaskRestartCount, connectionTaskRestartIntervalTicks, true, false},
+		{"unowned", 0, 0, false, false},
+		{"drifted-count", 7, connectionTaskRestartIntervalTicks, true, false},
+		{"drifted-interval", connectionTaskRestartCount, 1, true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			platform, manager, expected := connectionTaskFixture(t)
+			if err := platform.Create(t.Context(), expected); err != nil {
+				t.Fatal(err)
+			}
+			platform.owned, platform.ownership = test.owned, expected
+			platform.probe.RestartCount, platform.probe.RestartIntervalTicks = test.count, test.interval
+			err := manager.Reconcile(t.Context(), "loki-mcp", true)
+			valid := test.wantUpgrade || test.name == "current"
+			if (err == nil) != valid || (platform.updateCalls == 1) != test.wantUpgrade || platform.removeCalls != 0 {
+				t.Fatalf("err=%v updates=%d removals=%d", err, platform.updateCalls, platform.removeCalls)
+			}
+			if valid && (platform.probe.RestartCount != connectionTaskRestartCount || platform.probe.RestartIntervalTicks != connectionTaskRestartIntervalTicks) {
+				t.Fatalf("retry policy was not installed: %+v", platform.probe)
+			}
+		})
+	}
+}
+
+func TestConnectionTaskManagerReportsLegacyUpgradeFailure(t *testing.T) {
+	platform, manager, expected := connectionTaskFixture(t)
+	if err := platform.Create(t.Context(), expected); err != nil {
+		t.Fatal(err)
+	}
+	platform.owned, platform.ownership = true, expected
+	platform.probe.RestartCount, platform.probe.RestartIntervalTicks = 0, 0
+	platform.errAt = "update"
+	if err := manager.Reconcile(t.Context(), "loki-mcp", true); err == nil {
+		t.Fatal("failed retry policy update was reported as successful")
+	}
+	if platform.removeCalls != 0 || !platform.owned {
+		t.Fatal("upgrade failure destroyed owned task")
+	}
+	platform.errAt = ""
+	if err := manager.Reconcile(t.Context(), "loki-mcp", false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConnectionTaskManagerVerifiesUpdatedRetrySettings(t *testing.T) {
+	platform, manager, expected := connectionTaskFixture(t)
+	if err := platform.Create(t.Context(), expected); err != nil {
+		t.Fatal(err)
+	}
+	platform.owned, platform.ownership = true, expected
+	platform.probe.RestartCount, platform.probe.RestartIntervalTicks = 0, 0
+	platform.errAt = "update-noop"
+	if err := manager.Reconcile(t.Context(), "loki-mcp", true); err == nil {
+		t.Fatal("unchanged legacy settings were accepted after an ineffective update")
 	}
 }

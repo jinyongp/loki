@@ -342,6 +342,7 @@ func (manager ConnectionManager) ReconcileEnabled(ctx context.Context, distribut
 	if err != nil {
 		return err
 	}
+	var runtimes []ConnectionRuntimeContext
 	for _, state := range states {
 		if !state.Enabled {
 			continue
@@ -357,13 +358,24 @@ func (manager ConnectionManager) ReconcileEnabled(ctx context.Context, distribut
 		if err = validateStateAgainstRuntime(state, runtime); err != nil {
 			return err
 		}
+		runtimes = append(runtimes, runtime)
+	}
+	// Refresh an owned legacy task's retry settings even if connecting fails.
+	// Validate every enabled adapter before making any task or runtime changes.
+	if len(runtimes) > 0 && manager.Tasks != nil {
+		if err = manager.Tasks.Reconcile(ctx, distribution, true); err != nil {
+			return fmt.Errorf("reconcile managed connection startup task: %w", err)
+		}
+	}
+	for _, runtime := range runtimes {
+		adapter := registry[runtime.Provider]
 		if err = adapter.Start(ctx, runtime); err != nil {
-			return fmt.Errorf("restore enabled managed %s connection: %w", state.Provider, err)
+			return fmt.Errorf("restore enabled managed %s connection: %w", runtime.Provider, err)
 		}
 		status, statusErr := adapter.Status(ctx, runtime)
 		if statusErr != nil || !status.Healthy {
 			return errors.Join(
-				fmt.Errorf("enabled managed %s connection did not become healthy", state.Provider),
+				fmt.Errorf("enabled managed %s connection did not become healthy", runtime.Provider),
 				statusErr,
 			)
 		}

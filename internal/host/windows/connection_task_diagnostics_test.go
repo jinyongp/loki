@@ -11,7 +11,7 @@ func TestConnectionTaskMismatchReportsOnlyFieldNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"presence", "action_count", "executable", "arguments", "description",
-		"run_level", "principal", "trigger_count", "logon_trigger", "execution_limit"} {
+		"run_level", "principal", "trigger_count", "logon_trigger", "execution_limit", "restart_count", "restart_interval"} {
 		t.Run(field, func(t *testing.T) {
 			probe := platform.probe
 			probe.Actions = append([]StartupTaskAction(nil), probe.Actions...)
@@ -37,6 +37,10 @@ func TestConnectionTaskMismatchReportsOnlyFieldNames(t *testing.T) {
 				probe.LogonTrigger = false
 			case "execution_limit":
 				probe.ExecutionTimeTicks = 0
+			case "restart_count":
+				probe.RestartCount = 0
+			case "restart_interval":
+				probe.RestartIntervalTicks = 0
 			}
 			err := validateConnectionTaskProbe(probe, expected, platform.user)
 			if err == nil || !strings.Contains(err.Error(), field) || strings.Contains(err.Error(), sensitive) {
