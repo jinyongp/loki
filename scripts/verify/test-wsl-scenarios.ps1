@@ -72,6 +72,7 @@ $expectedScopes = @{
     'explicit non-interactive stale reinstall failed' = 'migration'
     'legacy orphan recovery failed' = 'recovery'
     'doctor accepted missing WSL boot prerequisites' = 'recovery'
+    'doctor accepted a nonpersistent WSL user session' = 'recovery'
     'legacy orphan recovery Windows token does not match the reinstalled appliance' = 'recovery'
     'Loki did not recover when the owned keepalive task was started' = 'recovery'
     'verified Windows uninstall failed' = 'recovery'
@@ -86,6 +87,85 @@ foreach ($fragment in $expectedScopes.Keys) {
         if ((Get-ScenarioScope $command) -ne $expectedScopes[$fragment]) {
             throw "WSL acceptance check moved to the wrong scenario: $fragment"
         }
+    }
+}
+
+# Execute the actual root-only boot helpers with fake native commands. These
+# checks run without WSL and keep default-user probes from masking the failure.
+foreach ($name in @("Fail", "Invoke-NativeCapture", "Assert-WSLBootHealthy", "Wait-LokiHealthy", "Assert-WSLRootBootHealthy")) {
+    $definition = $ast.Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+    }, $true)
+    if ($null -eq $definition) { throw "WSL acceptance lost helper $name" }
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+
+$script:bootCalls = [Collections.Generic.List[string]]::new()
+$script:bootLinger = "yes"
+$script:bootSessions = ""
+$script:bootDoctorCalls = 0
+$script:bootDoctorFailures = 0
+function Stop-ScheduledTask {
+    param([string]$TaskName, [string]$ErrorAction)
+    $script:bootCalls.Add("stop $TaskName")
+}
+function Start-ScheduledTask {
+    param([string]$TaskName, [string]$ErrorAction)
+    $script:bootCalls.Add("start $TaskName")
+}
+function Start-Sleep {
+    param([int]$Seconds)
+    $script:bootCalls.Add("sleep $Seconds")
+}
+function wsl.exe {
+    $script:bootCalls.Add("wsl " + ($args -join " "))
+    $global:LASTEXITCODE = 0
+    if ($args[0] -eq "--terminate") { return }
+    if ($args -contains "doctor") {
+        $script:bootDoctorCalls++
+        if ($script:bootDoctorCalls -le $script:bootDoctorFailures) { $global:LASTEXITCODE = 1 }
+        return
+    }
+    if ($args -contains "/usr/bin/loginctl") {
+        if ($args -contains "--property=Linger") { return $script:bootLinger }
+        if ($args -contains "--property=Sessions") { return $script:bootSessions }
+    }
+    if ($args -contains "/usr/sbin/runuser") { return "active" }
+    if ($args -contains "check") { return }
+    throw "Unexpected WSL boot probe: $args"
+}
+
+foreach ($case in @("healthy", "delayed", "missing-linger", "login-session", "not-ready")) {
+    $script:bootCalls.Clear()
+    $script:bootDoctorCalls = 0
+    $script:bootDoctorFailures = switch ($case) { "delayed" { 2 }; "not-ready" { 90 }; default { 0 } }
+    $script:bootLinger = if ($case -eq "missing-linger") { "no" } else { "yes" }
+    $script:bootSessions = if ($case -eq "login-session") { "7" } else { "" }
+    $failure = ""
+    try { Assert-WSLRootBootHealthy "fixture-distro" "fixture-task" }
+    catch { $failure = $_.Exception.Message }
+    $expectedFailure = switch ($case) {
+        "missing-linger" { "does not persist without a login" }
+        "login-session" { "unexpectedly opened an Ubuntu login session" }
+        "not-ready" { "did not become healthy" }
+        default { "" }
+    }
+    if (($expectedFailure -and -not $failure.Contains($expectedFailure)) -or (-not $expectedFailure -and $failure)) {
+        throw "Root-only WSL case ${case}: unexpected result $failure"
+    }
+    if ($script:bootCalls[0] -ne "stop fixture-task" -or
+        $script:bootCalls[1] -ne "wsl --terminate fixture-distro" -or
+        $script:bootCalls[$script:bootCalls.Count - 1] -ne "start fixture-task") {
+        throw "Root-only WSL case ${case}: keepalive stop/terminate/restore ordering changed"
+    }
+    foreach ($call in $script:bootCalls) {
+        if ($call.StartsWith("wsl -d ") -and -not $call.Contains(" --user root --exec ")) {
+            throw "Root-only WSL boot opened a default-user session: $call"
+        }
+    }
+    if ($case -eq "delayed" -and $script:bootDoctorCalls -ne 3) {
+        throw "Root-only WSL boot did not wait for delayed readiness"
     }
 }
 Write-Host "WSL scenario routing and state dependencies passed"

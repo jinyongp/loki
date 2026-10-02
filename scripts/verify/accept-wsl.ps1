@@ -87,7 +87,7 @@ function Get-RegisteredDistributions {
 }
 
 function Assert-WSLBootHealthy([string]$Distribution) {
-    $userTarget = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--exec", "/usr/bin/systemctl", "--user", "is-active", "default.target")
+    $userTarget = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/sbin/runuser", "-u", "ubuntu", "--", "/usr/bin/env", "XDG_RUNTIME_DIR=/run/user/1000", "/usr/bin/systemctl", "--user", "is-active", "default.target")
     if ($userTarget -ne "active") { Fail "default WSL user systemd session is not active: $userTarget" }
 
     Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "check") | Out-Null
@@ -103,6 +103,22 @@ function Wait-LokiHealthy([string]$Distribution, [int]$Attempts = 90) {
         Start-Sleep -Seconds 2
     }
     Fail "Loki did not become healthy for distribution $Distribution"
+}
+
+function Assert-WSLRootBootHealthy([string]$Distribution, [string]$TaskName) {
+    # Stop the Ubuntu keepalive before the cold boot. All probes use root, so
+    # readiness cannot be supplied by opening a new default-user WSL session.
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    try {
+        Invoke-NativeCapture "wsl.exe" @("--terminate", $Distribution) | Out-Null
+        Wait-LokiHealthy $Distribution
+        $linger = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/bin/loginctl", "show-user", "ubuntu", "--property=Linger", "--value")
+        if ($linger -ne "yes") { Fail "default WSL user does not persist without a login" }
+        $sessions = Invoke-NativeCapture "wsl.exe" @("-d", $Distribution, "--user", "root", "--exec", "/usr/bin/loginctl", "show-user", "ubuntu", "--property=Sessions", "--value")
+        if ($sessions) { Fail "root-only WSL boot unexpectedly opened an Ubuntu login session: $sessions" }
+    } finally {
+        Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    }
 }
 
 function Invoke-InstallerNonInteractive([string]$Path) {
@@ -206,6 +222,7 @@ try {
     & $installer
     if ($LASTEXITCODE -ne 0) { Fail "Windows thin installer failed with code $LASTEXITCODE" }
 
+    Assert-WSLRootBootHealthy $distributionName $taskName
     $whoami = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-un")
     $uid = Invoke-NativeStdoutCapture "wsl.exe" @("-d", $distributionName, "--exec", "/usr/bin/id", "-u")
     if ($whoami -ne "ubuntu" -or $uid -ne "1000") { Fail "default WSL user is $whoami/$uid, expected ubuntu/1000" }
@@ -383,6 +400,15 @@ try {
     }
 
     if ($Scenario -in @("full", "recovery")) {
+        # An active login can hide missing persistence. Repair must reconcile
+        # the setting repeatedly and survive a later boot with only root probes.
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/loginctl", "disable-linger", "ubuntu") | Out-Null
+        & wsl.exe -d $distributionName --user root --exec /usr/local/bin/loki host doctor --system *> $null
+        if ($LASTEXITCODE -eq 0) { Fail "doctor accepted a nonpersistent WSL user session" }
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve") | Out-Null
+        Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/local/bin/loki", "host", "appliance", "repair", "--approve") | Out-Null
+        Assert-WSLRootBootHealthy $distributionName $taskName
+
         # Exercise an existing appliance with missing OS prerequisites while
         # keeping its Loki release, runtime, and durable state intact.
         Invoke-NativeCapture "wsl.exe" @("-d", $distributionName, "--user", "root", "--exec", "/usr/bin/dpkg", "--remove", "kmod", "libpam-systemd") | Out-Null

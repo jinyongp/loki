@@ -138,6 +138,8 @@ func TestWindowsWSLAcceptanceUsesVerifiedCandidateFrontend(t *testing.T) {
 		"Windows ownership manifest is missing",
 		"Windows cannot reach the WSL MCP endpoint through localhost forwarding",
 		"Assert-WSLBootHealthy $distributionName",
+		"Assert-WSLRootBootHealthy $distributionName $taskName",
+		"doctor accepted a nonpersistent WSL user session",
 		"default WSL user systemd session is not active",
 		`"host", "appliance", "check"`,
 	} {
