@@ -135,7 +135,7 @@ func TestReleaseDraftUsesVerifiedTagAndPreservesPublisherChecks(t *testing.T) {
 	var script string
 	var tagVerified bool
 	for _, step := range releaseWorkflowJobs(t)["publish"].Steps {
-		if strings.Contains(step.Run, `git push origin "refs/tags/$TAG"`) {
+		if strings.Contains(step.Run, `sh ./scripts/maintainer/publish-tag.sh "$TAG" "$GITHUB_SHA"`) {
 			tagVerified = true
 		}
 		if step.ID == "release_draft" {

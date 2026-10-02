@@ -173,6 +173,13 @@ this policy with substituted commands. Publication passes only this accepted
 helper as a commit-bound CI artifact to the public Windows gate, which runs
 without checking out repository source. The validation jobs remain independent.
 
+Release tag publication retries recognized remote or transport failures up to
+three times. It verifies the remote tag against the accepted commit before
+each push and after each result, including an ambiguous failed push. An existing
+tag for a different commit, authentication failure, or policy rejection stops
+publication. Every acceptance test remains required; test failures are not
+automatically retried.
+
 The deployed installer paths are
 `https://jinyongp.dev/loki/install.sh` and
 `https://jinyongp.dev/loki/install.ps1`. GitHub Pages must use GitHub Actions

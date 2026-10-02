@@ -1194,17 +1194,7 @@ jobs:
         env:
           TAG: ${{ needs.preflight.outputs.tag }}
         shell: bash
-        run: |
-          set -euo pipefail
-          remote=$(git ls-remote origin "refs/tags/$TAG" | awk '{print $1}')
-          if test -n "$remote"; then
-            test "$remote" = "$GITHUB_SHA"
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git tag "$TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$TAG"
+        run: sh ./scripts/maintainer/publish-tag.sh "$TAG" "$GITHUB_SHA"
 
       - name: Prepare release draft from verified tag
         id: release_draft
