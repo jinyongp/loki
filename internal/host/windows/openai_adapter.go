@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"loki/internal/progress"
 )
 
 const (
@@ -72,11 +74,13 @@ type OpenAIProviderStore interface {
 }
 
 type OpenAIAdapter struct {
-	Credentials OpenAICredentialStore
-	Runner      OpenAIHelperRunner
-	Local       OpenAILocalConnectionSource
-	Store       OpenAIProviderStore
-	SetupConfig OpenAISetupConfig
+	Credentials       OpenAICredentialStore
+	Runner            OpenAIHelperRunner
+	Local             OpenAILocalConnectionSource
+	Store             OpenAIProviderStore
+	SetupConfig       OpenAISetupConfig
+	Progress          progress.Reporter
+	WaitLocalEndpoint func(context.Context, string) error
 }
 
 func (adapter *OpenAIAdapter) Descriptor() ConnectionProviderDescriptor {
@@ -153,6 +157,9 @@ func (adapter *OpenAIAdapter) Setup(ctx context.Context, runtime ConnectionRunti
 		RuntimeAlias: openAIRuntimeAlias, ProfileName: openAIProfileName,
 		LocalOrigin: material.LocalOrigin,
 	}
+	if err = adapter.waitLocalEndpoint(ctx, material.LocalOrigin); err != nil {
+		return err
+	}
 	if present {
 		if err = adapter.stopNative(ctx, runtime, paths); err != nil {
 			return fmt.Errorf("stop existing OpenAI tunnel runtime before setup reconciliation: %w", err)
@@ -186,6 +193,9 @@ func (adapter *OpenAIAdapter) Start(ctx context.Context, runtime ConnectionRunti
 	if err != nil {
 		return err
 	}
+	if err = adapter.waitLocalEndpoint(ctx, material.LocalOrigin); err != nil {
+		return err
+	}
 	if err = adapter.stopNative(ctx, runtime, paths); err != nil {
 		return fmt.Errorf("stop OpenAI tunnel runtime before restart: %w", err)
 	}
@@ -204,6 +214,13 @@ func (adapter *OpenAIAdapter) Start(ctx context.Context, runtime ConnectionRunti
 		}
 	}
 	return nil
+}
+
+func (adapter *OpenAIAdapter) waitLocalEndpoint(ctx context.Context, endpoint string) error {
+	if adapter.WaitLocalEndpoint != nil {
+		return adapter.WaitLocalEndpoint(ctx, endpoint)
+	}
+	return (LocalEndpointWaiter{Progress: adapter.Progress}).Wait(ctx, endpoint)
 }
 
 func (adapter *OpenAIAdapter) Status(ctx context.Context, runtime ConnectionRuntimeContext) (ConnectionRuntimeStatus, error) {

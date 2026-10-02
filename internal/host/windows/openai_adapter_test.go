@@ -156,10 +156,11 @@ func openAIAdapterFixture() (*OpenAIAdapter, ConnectionRuntimeContext, *fakeOpen
 		ProfileDir: `C:\Programs\Loki\connections\loki-mcp\openai\tunnel-client-profiles`,
 	}}
 	adapter := &OpenAIAdapter{
-		Credentials: credentials,
-		Runner:      runner,
-		Local:       local,
-		Store:       store,
+		WaitLocalEndpoint: func(context.Context, string) error { return nil },
+		Credentials:       credentials,
+		Runner:            runner,
+		Local:             local,
+		Store:             store,
 		SetupConfig: OpenAISetupConfig{
 			TunnelID:   "tunnel_0123456789abcdef0123456789abcdef",
 			RuntimeKey: "runtime-key-secret",

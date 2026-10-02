@@ -139,6 +139,11 @@ func NewWindowsConnectionManagerWithProgress(
 		return ConnectionManager{}, errors.New("managed connection release binding is invalid")
 	}
 	store := NewWindowsConnectionStateStore(localAppData)
+	for _, adapter := range adapters {
+		if openAI, ok := adapter.(*OpenAIAdapter); ok {
+			openAI.Progress = reporter
+		}
+	}
 	return ConnectionManager{
 		Helpers:  NewWindowsHelperManagerWithProgress(binding, paths, reporter),
 		Store:    store,
