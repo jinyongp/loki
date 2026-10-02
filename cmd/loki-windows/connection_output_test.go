@@ -98,3 +98,35 @@ func TestConnectionListJSONHasSingleConnectionCollection(t *testing.T) {
 		t.Fatalf("payload=%#v", payload)
 	}
 }
+
+func TestDegradedManagedConnectionReportsFailureAndRecovery(t *testing.T) {
+	descriptor := windowshost.ConnectionProviderDescriptor{
+		ID: "openai", Kind: "managed", DisplayName: "OpenAI Secure MCP Tunnel",
+	}
+	status := windowshost.ManagedConnectionStatus{
+		Configured: true,
+		State:      windowshost.ConnectionState{Enabled: true},
+		Runtime: windowshost.ConnectionRuntimeStatus{
+			State:  "degraded",
+			Detail: "Local Loki MCP endpoint is unreachable. Run 'loki connection start --distribution loki-mcp openai' to restore the connection.",
+		},
+	}
+	var output bytes.Buffer
+	renderManagedConnection("loki-mcp", descriptor, status, &output)
+	for _, want := range []string{"State: degraded", "Enabled: true", "Healthy: false", "Ready: false", status.Runtime.Detail} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("missing %q: %s", want, output.String())
+		}
+	}
+	output.Reset()
+	if err := writeManagedConnectionJSON("loki-mcp", descriptor, status, &output); err != nil {
+		t.Fatal(err)
+	}
+	var payload connectionShowPayload
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Managed == nil || payload.Managed.Status.Runtime != status.Runtime || !payload.Managed.Status.State.Enabled {
+		t.Fatalf("degraded JSON status=%+v", payload)
+	}
+}

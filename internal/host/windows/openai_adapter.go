@@ -74,13 +74,14 @@ type OpenAIProviderStore interface {
 }
 
 type OpenAIAdapter struct {
-	Credentials       OpenAICredentialStore
-	Runner            OpenAIHelperRunner
-	Local             OpenAILocalConnectionSource
-	Store             OpenAIProviderStore
-	SetupConfig       OpenAISetupConfig
-	Progress          progress.Reporter
-	WaitLocalEndpoint func(context.Context, string) error
+	Credentials        OpenAICredentialStore
+	Runner             OpenAIHelperRunner
+	Local              OpenAILocalConnectionSource
+	Store              OpenAIProviderStore
+	SetupConfig        OpenAISetupConfig
+	Progress           progress.Reporter
+	WaitLocalEndpoint  func(context.Context, string) error
+	ProbeLocalEndpoint func(context.Context, string) error
 }
 
 func (adapter *OpenAIAdapter) Descriptor() ConnectionProviderDescriptor {
@@ -251,7 +252,38 @@ func (adapter *OpenAIAdapter) Status(ctx context.Context, runtime ConnectionRunt
 	if probe.ExitCode != 0 {
 		return ConnectionRuntimeStatus{}, openAIProcessFailure("inspect OpenAI tunnel runtime", probe)
 	}
-	return parseOpenAIRuntimeStatus(probe.Stdout)
+	status, err := parseOpenAIRuntimeStatus(probe.Stdout)
+	if err != nil || !status.Healthy {
+		return status, err
+	}
+	material, err := adapter.Local.Read(ctx, runtime.Distribution)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ConnectionRuntimeStatus{}, ctx.Err()
+		}
+		return degradedOpenAIStatus(runtime.Distribution, "Local Loki MCP connection could not be verified."), nil
+	}
+	if material.LocalOrigin != metadata.LocalOrigin {
+		return degradedOpenAIStatus(runtime.Distribution, "Local Loki MCP endpoint changed."), nil
+	}
+	check := adapter.ProbeLocalEndpoint
+	if check == nil {
+		check = (LocalEndpointWaiter{Attempts: 1}).Wait
+	}
+	if err = check(ctx, material.LocalOrigin); err != nil {
+		if ctx.Err() != nil {
+			return ConnectionRuntimeStatus{}, ctx.Err()
+		}
+		return degradedOpenAIStatus(runtime.Distribution, "Local Loki MCP endpoint is unreachable."), nil
+	}
+	return status, nil
+}
+
+func degradedOpenAIStatus(distribution, reason string) ConnectionRuntimeStatus {
+	return ConnectionRuntimeStatus{
+		State:  "degraded",
+		Detail: fmt.Sprintf("%s Run 'loki connection start --distribution %s openai' to restore the connection.", reason, distribution),
+	}
 }
 
 func (adapter *OpenAIAdapter) Stop(ctx context.Context, runtime ConnectionRuntimeContext) error {

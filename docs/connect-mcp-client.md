@@ -208,6 +208,12 @@ The WSL keepalive task also retries failures up to three times at one-minute
 intervals. Setup, start, and reconciliation add this retry policy to an owned
 legacy keepalive task that has no retry policy, preserving its other settings.
 
+`loki connection show openai` combines tunnel-client health with a current
+Windows loopback connection check. An unreachable or changed local MCP endpoint
+reports `degraded`, with `Healthy: false` and `Ready: false`, plus the start
+command to restore the connection. The local check makes one attempt with a
+two-second dial timeout. Status inspection does not wake WSL or start tasks.
+
 OpenAI's UI and permissions can change independently of Loki. Prefer the linked
 OpenAI settings pages and official guides for account-side steps.
 

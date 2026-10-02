@@ -290,11 +290,12 @@ func TestWindowsProviderAcceptance(t *testing.T) {
 		Token:              lokiToken,
 	}}
 	adapter := &OpenAIAdapter{
-		WaitLocalEndpoint: func(context.Context, string) error { return nil },
-		Credentials:       credentials,
-		Runner:            adapterRunner,
-		Local:             localSource,
-		Store:             openAIStore,
+		WaitLocalEndpoint:  func(context.Context, string) error { return nil },
+		ProbeLocalEndpoint: func(context.Context, string) error { return nil },
+		Credentials:        credentials,
+		Runner:             adapterRunner,
+		Local:              localSource,
+		Store:              openAIStore,
 		SetupConfig: OpenAISetupConfig{
 			TunnelID:   "tunnel_val013_" + strings.ReplaceAll(distribution, "-", "_"),
 			RuntimeKey: runtimeSecret,
