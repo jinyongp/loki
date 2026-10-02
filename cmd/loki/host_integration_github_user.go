@@ -20,14 +20,16 @@ func runHostGitHubUser(action string, args []string, stdout, stderr io.Writer) i
 	flags.SetOutput(stderr)
 	system := flags.Bool("system", false, "operate on the system host installation")
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
-	account := flags.String("account", "", "configured personal GitHub account")
 	relay := flags.Bool("browser-request", false, "read a device login relay request from stdin")
-	noBrowser := flags.Bool("no-browser", false, "print the GitHub device login URL")
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return 0
 	} else if err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" ||
-		*relay && (action != "login" || *account != "" || *noBrowser) || !*relay && strings.TrimSpace(*account) == "" || *noBrowser && action != "login" {
-		fmt.Fprintf(stderr, "usage: loki host integration %s --system --account OWNER [--no-browser] github\n", action)
+		*relay && action != "login" || !*relay && action == "login" {
+		if action == "login" {
+			fmt.Fprintln(stderr, "Use loki host integration setup --system github to authorize GitHub.")
+		} else {
+			fmt.Fprintf(stderr, "usage: loki host integration %s --system github\n", action)
+		}
 		return 2
 	}
 	options, err := resolveHostIntegrationOptions(hostIntegrationOptions{System: *system, StateRoot: strings.TrimSpace(*stateRoot)})
@@ -61,14 +63,12 @@ func runHostGitHubUser(action string, args []string, stdout, stderr io.Writer) i
 				err = json.NewEncoder(stdout).Encode(view)
 			}
 		}
-	} else if action == "login" {
-		err = githubsetup.RunUser(ctx, transport, strings.ToLower(strings.TrimSpace(*account)), githubsetup.Options{NoBrowser: *noBrowser}, stdout)
 	} else {
 		operation := "status"
 		if action == "logout" {
 			operation = "logout"
 		}
-		view, callErr := transport(ctx, githubsetup.UserRequest{Action: operation, Account: strings.ToLower(strings.TrimSpace(*account))})
+		view, callErr := transport(ctx, githubsetup.UserRequest{Action: operation})
 		err = callErr
 		if err == nil {
 			err = json.NewEncoder(stdout).Encode(view)

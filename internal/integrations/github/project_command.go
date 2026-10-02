@@ -174,7 +174,7 @@ func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) 
 	switch p.AccountTypes[owner] {
 	case "user":
 		if p.Users == nil {
-			return nil, "", fault.Error("GitHub personal Projects login is required")
+			return nil, "", fault.Error("GitHub personal Projects authorization is required; run integration setup github")
 		}
 		token, err = p.Users.AccountToken(ctx, owner)
 	case "organization":

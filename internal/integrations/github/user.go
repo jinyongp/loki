@@ -34,13 +34,20 @@ type UserAuthorization struct {
 }
 
 type UserAuthorizationView struct {
-	Status          string    `json:"status"`
-	Account         string    `json:"account"`
-	SessionID       string    `json:"session_id,omitempty"`
-	UserCode        string    `json:"user_code,omitempty"`
-	VerificationURI string    `json:"verification_uri,omitempty"`
-	Interval        int       `json:"interval,omitempty"`
-	ExpiresAt       time.Time `json:"expires_at,omitzero"`
+	Status          string            `json:"status"`
+	Account         string            `json:"account,omitempty"`
+	Accounts        []UserAccountView `json:"accounts,omitempty"`
+	SessionID       string            `json:"session_id,omitempty"`
+	UserCode        string            `json:"user_code,omitempty"`
+	VerificationURI string            `json:"verification_uri,omitempty"`
+	Interval        int               `json:"interval,omitempty"`
+	ExpiresAt       time.Time         `json:"expires_at,omitzero"`
+}
+
+type UserAccountView struct {
+	Account   string    `json:"account"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
 }
 
 type userCredential struct {
@@ -94,7 +101,14 @@ func (u *UserAuthorization) endpoint(path string, login bool) string {
 }
 
 func (u *UserAuthorization) Begin(ctx context.Context, account string) (UserAuthorizationView, error) {
-	account, err := u.account(account)
+	var err error
+	if account != "" {
+		account, err = u.account(account)
+	} else if u == nil || len(u.Accounts) == 0 {
+		err = fault.Error("GitHub user authorization is not configured")
+	} else {
+		_, err = u.account(u.Accounts[0])
+	}
 	if err != nil {
 		return UserAuthorizationView{}, err
 	}
@@ -137,7 +151,7 @@ func (u *UserAuthorization) Begin(ctx context.Context, account string) (UserAuth
 	}
 	err = authorizationJSON(ctx, u.HTTP, http.MethodPost, u.endpoint("/login/device/code", true), "", url.Values{"client_id": {app.ClientID}}, &device)
 	if device.Error == "device_flow_disabled" {
-		return UserAuthorizationView{}, fault.Error("enable Device flow in the GitHub App settings, then retry login")
+		return UserAuthorizationView{}, fault.Error("enable Device flow in the GitHub App settings, then retry setup")
 	}
 	if err != nil || device.Error != "" || !credentialText(device.DeviceCode, 4096) || !credentialText(device.UserCode, 64) ||
 		device.VerificationURI != "https://github.com/login/device" || device.ExpiresIn < 1 || device.ExpiresIn > 900 || device.Interval < 1 || device.Interval > 60 {
@@ -178,7 +192,7 @@ func (u *UserAuthorization) Poll(ctx context.Context, id string) (UserAuthorizat
 	session := u.pending[id]
 	if session == nil || !u.now().Before(session.deadline) {
 		delete(u.pending, id)
-		return UserAuthorizationView{}, fault.Error("GitHub user authorization expired; retry login")
+		return UserAuthorizationView{}, fault.Error("GitHub user authorization expired; retry setup")
 	}
 	view := UserAuthorizationView{Status: "pending", Account: session.account, SessionID: id, Interval: session.interval, ExpiresAt: session.deadline}
 	if u.now().Before(session.nextPoll) {
@@ -202,21 +216,26 @@ func (u *UserAuthorization) Poll(ctx context.Context, id string) (UserAuthorizat
 	case "":
 	default:
 		delete(u.pending, id)
-		return UserAuthorizationView{}, fault.Error("GitHub user authorization was rejected; retry login")
+		return UserAuthorizationView{}, fault.Error("GitHub user authorization was rejected; retry setup")
 	}
 	delete(u.pending, id)
 	credential, err := response.credential(u.AppID, session.account, session.clientID, u.now())
 	if err != nil {
 		return UserAuthorizationView{}, err
 	}
-	if err = u.verifyAccount(ctx, credential); err != nil {
+	if session.account == "" {
+		credential.Account, err = u.authorizedAccount(ctx, credential.AccessToken)
+	} else {
+		err = u.verifyAccount(ctx, credential)
+	}
+	if err != nil {
 		return UserAuthorizationView{}, err
 	}
 	credentials, err := u.credentials(ctx)
 	if err != nil {
 		return UserAuthorizationView{}, err
 	}
-	credentials[session.account] = credential
+	credentials[credential.Account] = credential
 	if err = u.save(ctx, credentials); err != nil {
 		return UserAuthorizationView{}, err
 	}
@@ -244,15 +263,27 @@ func (r userTokenResponse) credential(appID int64, account, clientID string, now
 	return c, nil
 }
 
-func (u *UserAuthorization) verifyAccount(ctx context.Context, credential userCredential) error {
+func (u *UserAuthorization) authorizedAccount(ctx context.Context, token string) (string, error) {
 	var user struct {
 		ID    int64  `json:"id"`
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	}
-	if err := authorizationJSON(ctx, u.HTTP, http.MethodGet, u.endpoint("/user", false), credential.AccessToken, nil, &user); err != nil ||
-		user.ID <= 0 || user.Type != "User" || !strings.EqualFold(user.Login, credential.Account) {
-		return fault.Error("authorize the configured personal account in GitHub, then retry login")
+	if err := authorizationJSON(ctx, u.HTTP, http.MethodGet, u.endpoint("/user", false), token, nil, &user); err != nil ||
+		user.ID <= 0 || user.Type != "User" {
+		return "", fault.Error("authorize the configured personal account in GitHub, then retry setup")
+	}
+	account, err := u.account(user.Login)
+	if err != nil {
+		return "", fault.Error("authorize the configured personal account in GitHub, then retry setup")
+	}
+	return account, nil
+}
+
+func (u *UserAuthorization) verifyAccount(ctx context.Context, credential userCredential) error {
+	account, err := u.authorizedAccount(ctx, credential.AccessToken)
+	if err != nil || account != credential.Account {
+		return fault.Error("authorize the configured personal account in GitHub, then retry setup")
 	}
 	return nil
 }
@@ -272,13 +303,13 @@ func (u *UserAuthorization) AccountToken(ctx context.Context, account string) (s
 	}
 	c, ok := credentials[account]
 	if !ok || c.AppID != u.AppID || c.Account != account || !strings.HasPrefix(c.AccessToken, "ghu_") || !credentialText(c.AccessToken, 4096) {
-		return "", fault.Error("GitHub personal Projects login is required")
+		return "", fault.Error("GitHub personal Projects authorization is required; run integration setup github")
 	}
 	if c.ExpiresAt.IsZero() || u.now().Before(c.ExpiresAt.Add(-cacheSkew)) {
 		return c.AccessToken, nil
 	}
 	if !credentialText(c.ClientID, 100) || !strings.HasPrefix(c.RefreshToken, "ghr_") || !credentialText(c.RefreshToken, 4096) || !u.now().Before(c.RefreshExpires) {
-		return "", fault.Error("GitHub personal Projects login expired; retry login")
+		return "", fault.Error("GitHub personal Projects authorization expired; run integration setup github")
 	}
 	var response userTokenResponse
 	if err = authorizationJSON(ctx, u.HTTP, http.MethodPost, u.endpoint("/login/oauth/access_token", true), "", url.Values{
@@ -288,7 +319,7 @@ func (u *UserAuthorization) AccountToken(ctx context.Context, account string) (s
 	}
 	rotated, err := response.credential(u.AppID, account, c.ClientID, u.now())
 	if err != nil {
-		return "", fault.Error("GitHub personal Projects token refresh failed; retry login")
+		return "", fault.Error("GitHub personal Projects token refresh failed; run integration setup github")
 	}
 	if err = u.verifyAccount(ctx, rotated); err != nil {
 		return "", err
@@ -301,6 +332,9 @@ func (u *UserAuthorization) AccountToken(ctx context.Context, account string) (s
 }
 
 func (u *UserAuthorization) Status(ctx context.Context, account string) (UserAuthorizationView, error) {
+	if account == "" {
+		return u.statusAll(ctx)
+	}
 	account, err := u.account(account)
 	if err != nil {
 		return UserAuthorizationView{}, err
@@ -313,11 +347,11 @@ func (u *UserAuthorization) Status(ctx context.Context, account string) (UserAut
 	}
 	c, ok := credentials[account]
 	view := UserAuthorizationView{Status: "unconfigured", Account: account}
-	if ok && c.AppID == u.AppID && c.Account == account && credentialText(c.AccessToken, 4096) {
+	if ok && c.AppID == u.AppID && c.Account == account && strings.HasPrefix(c.AccessToken, "ghu_") && credentialText(c.AccessToken, 4096) {
 		view.Status, view.ExpiresAt = "ready", c.ExpiresAt
 		if !c.ExpiresAt.IsZero() && !u.now().Before(c.ExpiresAt.Add(-cacheSkew)) {
 			view.Status = "refresh_required"
-			if c.RefreshToken == "" || !u.now().Before(c.RefreshExpires) {
+			if !credentialText(c.ClientID, 100) || !strings.HasPrefix(c.RefreshToken, "ghr_") || !credentialText(c.RefreshToken, 4096) || !u.now().Before(c.RefreshExpires) {
 				view.Status = "expired"
 			}
 		}
@@ -325,7 +359,45 @@ func (u *UserAuthorization) Status(ctx context.Context, account string) (UserAut
 	return view, nil
 }
 
+func (u *UserAuthorization) statusAll(ctx context.Context) (UserAuthorizationView, error) {
+	if u == nil {
+		return UserAuthorizationView{}, fault.Error("GitHub user authorization is not configured")
+	}
+	view := UserAuthorizationView{Status: "not_required"}
+	for _, account := range u.Accounts {
+		status, err := u.Status(ctx, account)
+		if err != nil {
+			return UserAuthorizationView{}, err
+		}
+		if view.Status == "not_required" {
+			view.Status = "ready"
+		}
+		if status.Status != "ready" && status.Status != "refresh_required" {
+			view.Status = "unconfigured"
+		}
+		view.Accounts = append(view.Accounts, UserAccountView{Account: account, Status: status.Status, ExpiresAt: status.ExpiresAt})
+	}
+	return view, nil
+}
+
 func (u *UserAuthorization) Logout(ctx context.Context, account string) (UserAuthorizationView, error) {
+	if account == "" {
+		if u == nil || u.Save == nil {
+			return UserAuthorizationView{}, fault.Error("GitHub user authorization is not configured")
+		}
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if err := u.save(ctx, map[string]userCredential{}); err != nil {
+			return UserAuthorizationView{}, err
+		}
+		clear(u.pending)
+		view := UserAuthorizationView{Status: "not_required"}
+		for _, account := range u.Accounts {
+			view.Status = "unconfigured"
+			view.Accounts = append(view.Accounts, UserAccountView{Account: account, Status: "unconfigured"})
+		}
+		return view, nil
+	}
 	account, err := u.account(account)
 	if err != nil {
 		return UserAuthorizationView{}, err
@@ -338,7 +410,7 @@ func (u *UserAuthorization) Logout(ctx context.Context, account string) (UserAut
 	}
 	delete(credentials, account)
 	for id, session := range u.pending {
-		if session.account == account {
+		if session.account == account || session.account == "" {
 			delete(u.pending, id)
 		}
 	}
@@ -372,7 +444,7 @@ func (u *UserAuthorization) save(ctx context.Context, credentials map[string]use
 	}
 	defer clear(raw)
 	if err = u.Save(ctx, string(raw)); err != nil {
-		return fault.Error("GitHub user credentials could not be saved; retry login")
+		return fault.Error("GitHub user credentials could not be saved; retry setup")
 	}
 	return nil
 }

@@ -15,18 +15,18 @@ func TestGitHubUserRelayUsesRuntimeSocketAndClosedCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := len(runner.snapshot())
-	_, err := backend.GitHubUserAuthorization(t.Context(), githubsetup.UserRequest{Action: "status", Account: "example-user"})
+	_, err := backend.GitHubUserAuthorization(t.Context(), githubsetup.UserRequest{Action: "status"})
 	if err == nil {
 		t.Fatal("empty runtime output accepted")
 	}
 	calls := runner.snapshot()
 	args := calls[len(calls)-1].args
-	wantSuffix := []string{"exec", "-T", "runtime", "/opt/loki/bin/loki", "github", "user", "status", "--runtime-socket", "/run/loki/runtime/control.sock", "--", "example-user"}
+	wantSuffix := []string{"exec", "-T", "runtime", "/opt/loki/bin/loki", "github", "user", "status", "--runtime-socket", "/run/loki/runtime/control.sock", "--", ""}
 	if len(calls) != before+1 || len(args) < len(wantSuffix) || !slices.Equal(args[len(args)-len(wantSuffix):], wantSuffix) {
 		t.Fatal("invalid user relay argv", args)
 	}
-	runner.outputs[strings.Join(args, "\x00")] = []byte(`{"status":"unconfigured","account":"example-user"}`)
-	if view, err := backend.GitHubUserAuthorization(t.Context(), githubsetup.UserRequest{Action: "status", Account: "example-user"}); err != nil || view.Status != "unconfigured" {
+	runner.outputs[strings.Join(args, "\x00")] = []byte(`{"status":"unconfigured","accounts":[{"account":"example-user","status":"unconfigured"}]}`)
+	if view, err := backend.GitHubUserAuthorization(t.Context(), githubsetup.UserRequest{Action: "status"}); err != nil || view.Status != "unconfigured" {
 		t.Fatal("valid runtime output rejected", view, err)
 	}
 	before = len(runner.snapshot())

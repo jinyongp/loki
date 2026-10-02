@@ -12,6 +12,7 @@ import (
 func runWindowsGitHubBrowserSetup(ctx context.Context, distribution string, interrupt bool, browser githubsetup.Options, stdout, stderr io.Writer) int {
 	client := windowshost.NewWindowsOperatorClient()
 	transport := windowsGitHubSetupTransport(client, distribution, interrupt, stderr)
+	browser.UserTransport = windowsGitHubUserTransport(client, distribution)
 	if err := githubsetup.Run(ctx, transport, browser, stdout); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

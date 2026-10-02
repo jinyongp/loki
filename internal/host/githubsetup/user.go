@@ -20,31 +20,91 @@ type UserRequest struct {
 // UserView is the public device-login relay DTO. It contains no credentials
 // and keeps the Windows frontend independent of Linux integration execution.
 type UserView struct {
-	Status          string    `json:"status"`
-	Account         string    `json:"account"`
-	SessionID       string    `json:"session_id,omitempty"`
-	UserCode        string    `json:"user_code,omitempty"`
-	VerificationURI string    `json:"verification_uri,omitempty"`
-	Interval        int       `json:"interval,omitempty"`
-	ExpiresAt       time.Time `json:"expires_at,omitzero"`
+	Status          string            `json:"status"`
+	Account         string            `json:"account,omitempty"`
+	Accounts        []UserAccountView `json:"accounts,omitempty"`
+	SessionID       string            `json:"session_id,omitempty"`
+	UserCode        string            `json:"user_code,omitempty"`
+	VerificationURI string            `json:"verification_uri,omitempty"`
+	Interval        int               `json:"interval,omitempty"`
+	ExpiresAt       time.Time         `json:"expires_at,omitzero"`
+}
+
+type UserAccountView struct {
+	Account   string    `json:"account"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
 }
 
 type UserTransport func(context.Context, UserRequest) (UserView, error)
+
+// Validate binds relay responses to their requested action. Aggregate status
+// has account entries; a completed device authorization has one identified user.
+func (v UserView) Validate(request UserRequest) error {
+	invalid := errors.New("invalid GitHub user authorization response")
+	switch request.Action {
+	case "begin", "poll":
+		if v.Status == "pending" && len(v.SessionID) == 64 && v.Interval >= 1 && v.Interval <= 900 {
+			if request.Action == "begin" && (v.UserCode == "" || v.VerificationURI != "https://github.com/login/device" || v.Interval > 60 || v.Account != request.Account) {
+				return invalid
+			}
+			if request.Action == "poll" && v.SessionID != request.SessionID {
+				return invalid
+			}
+			return nil
+		}
+		if request.Action == "poll" && v.Status == "ready" && v.Account != "" {
+			return nil
+		}
+	case "status", "logout":
+		if request.Account != "" && v.Account == request.Account && (v.Status == "ready" || v.Status == "refresh_required" || v.Status == "expired" || v.Status == "unconfigured") {
+			return nil
+		}
+		if request.Account != "" || v.Account != "" {
+			return invalid
+		}
+		if v.Status == "not_required" && len(v.Accounts) == 0 {
+			return nil
+		}
+		if (v.Status != "ready" && v.Status != "unconfigured") || len(v.Accounts) == 0 {
+			return invalid
+		}
+		seen := map[string]bool{}
+		ready := true
+		for _, account := range v.Accounts {
+			if account.Account == "" || seen[account.Account] {
+				return invalid
+			}
+			seen[account.Account] = true
+			switch account.Status {
+			case "ready", "refresh_required":
+			case "unconfigured", "expired":
+				ready = false
+			default:
+				return invalid
+			}
+		}
+		if ready == (v.Status == "ready") {
+			return nil
+		}
+	}
+	return invalid
+}
 
 // UserLoginError carries only known public runtime messages across CLI relays.
 // Docker/WSL diagnostics and arbitrary upstream text may contain private data.
 func UserLoginError(detail string) error {
 	message := strings.TrimPrefix(strings.TrimSpace(detail), "loki: ")
 	for _, allowed := range []string{
-		"enable Device flow in the GitHub App settings, then retry login",
-		"authorize the configured personal account in GitHub, then retry login",
+		"enable Device flow in the GitHub App settings, then retry setup",
+		"authorize the configured personal account in GitHub, then retry setup",
 		"GitHub personal Projects account is not allowed",
-		"GitHub user authorization expired; retry login",
-		"GitHub user authorization was rejected; retry login",
+		"GitHub user authorization expired; retry setup",
+		"GitHub user authorization was rejected; retry setup",
 		"GitHub user authorization is not configured",
 		"GitHub App client ID is unavailable",
 		"GitHub App credential is unavailable",
-		"GitHub user credentials could not be saved; retry login",
+		"GitHub user credentials could not be saved; retry setup",
 	} {
 		if message == allowed {
 			return errors.New(message)
@@ -55,20 +115,20 @@ func UserLoginError(detail string) error {
 
 // RunUser handles only the public device code and an opaque session handle.
 // Device credentials and user tokens remain in the Linux runtime vault.
-func RunUser(ctx context.Context, transport UserTransport, account string, options Options, output io.Writer) error {
+func RunUser(ctx context.Context, transport UserTransport, options Options, output io.Writer) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, 16*time.Minute)
 	defer cancel()
-	view, err := transport(ctx, UserRequest{Action: "begin", Account: account})
+	view, err := transport(ctx, UserRequest{Action: "begin"})
 	if err != nil {
 		return err
 	}
-	if view.Status != "pending" || view.Account != account || len(view.SessionID) != 64 || view.UserCode == "" ||
+	if view.Status != "pending" || view.Account != "" || len(view.SessionID) != 64 || view.UserCode == "" ||
 		view.VerificationURI != "https://github.com/login/device" || view.Interval < 1 || view.Interval > 60 {
 		return errors.New("invalid GitHub device login response")
 	}
-	fmt.Fprintln(output, "Authorize the GitHub App for personal Projects as", account)
+	fmt.Fprintln(output, "Authorize the GitHub App for personal Projects with your connected personal account.")
 	fmt.Fprintln(output, "Code:", view.UserCode)
 	fmt.Fprintln(output, "Open:", view.VerificationURI)
 	if !options.NoBrowser {
@@ -80,7 +140,7 @@ func RunUser(ctx context.Context, transport UserTransport, account string, optio
 	}
 	session := view.SessionID
 	for view.Status == "pending" {
-		if view.Interval < 1 || view.Interval > 900 || view.SessionID != session || view.Account != account {
+		if view.Interval < 1 || view.Interval > 900 || view.SessionID != session || view.Account != "" {
 			return errors.New("invalid GitHub device login response")
 		}
 		delay := time.Duration(view.Interval) * time.Second
@@ -93,7 +153,7 @@ func RunUser(ctx context.Context, transport UserTransport, account string, optio
 				delay -= step
 			case <-ctx.Done():
 				timer.Stop()
-				return errors.New("GitHub device login stopped; retry login")
+				return errors.New("GitHub device login stopped; retry setup")
 			}
 		}
 		view, err = transport(ctx, UserRequest{Action: "poll", SessionID: session})
@@ -101,9 +161,63 @@ func RunUser(ctx context.Context, transport UserTransport, account string, optio
 			return err
 		}
 	}
-	if view.Status != "ready" || view.Account != account {
+	if view.Status != "ready" || view.Account == "" {
 		return errors.New("GitHub device login did not complete")
 	}
-	fmt.Fprintln(output, "Personal Projects authorization ready for", account)
+	fmt.Fprintln(output, "Personal Projects authorization ready for", view.Account)
 	return nil
+}
+
+func finishSetup(ctx context.Context, options Options, output io.Writer, view View) error {
+	if options.UserTransport != nil {
+		for {
+			status, err := options.UserTransport(ctx, UserRequest{Action: "status"})
+			if err != nil {
+				return err
+			}
+			if err = status.Validate(UserRequest{Action: "status"}); err != nil {
+				return err
+			}
+			if status.Status == "ready" || status.Status == "not_required" {
+				break
+			}
+			if status.Status != "unconfigured" || len(status.Accounts) == 0 {
+				return errors.New("invalid GitHub personal Projects status")
+			}
+			var pending []string
+			for _, account := range status.Accounts {
+				if account.Status != "ready" && account.Status != "refresh_required" {
+					pending = append(pending, account.Account)
+				}
+			}
+			if len(pending) == 0 {
+				return errors.New("invalid GitHub personal Projects status")
+			}
+			fmt.Fprintln(output, "Personal Projects authorization required for:", strings.Join(pending, ", "))
+			if err = RunUser(ctx, options.UserTransport, options, output); err != nil {
+				return err
+			}
+			next, err := options.UserTransport(ctx, UserRequest{Action: "status"})
+			if err != nil {
+				return err
+			}
+			if err = next.Validate(UserRequest{Action: "status"}); err != nil {
+				return err
+			}
+			progress := false
+			for _, account := range next.Accounts {
+				if account.Status == "ready" || account.Status == "refresh_required" {
+					for _, name := range pending {
+						if account.Account == name {
+							progress = true
+						}
+					}
+				}
+			}
+			if !progress {
+				return errors.New("authorize a personal account listed above, then retry setup")
+			}
+		}
+	}
+	return printReady(output, view)
 }

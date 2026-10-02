@@ -110,7 +110,7 @@ func resolveHostIntegrationOptions(options hostIntegrationOptions) (hostIntegrat
 
 func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|login|logout|user-status|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|logout|user-status|enable|disable|remove|doctor ...")
 		return 2
 	}
 	action := args[0]
@@ -139,7 +139,7 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	switch action {
 	case "list", "status", "enable", "disable", "remove", "doctor":
 	default:
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|login|logout|user-status|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|logout|user-status|enable|disable|remove|doctor ...")
 		return 2
 	}
 	options, name, err := parseHostIntegrationOptions(action, args[1:], stderr)

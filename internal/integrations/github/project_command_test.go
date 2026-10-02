@@ -54,7 +54,7 @@ func TestProjectsAuthorityUsesUserTokenOnlyForPersonalProjects(t *testing.T) {
 		t.Fatal("repository API commands acquired personal credentials", err)
 	}
 	runner.Projects.Users = nil
-	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-user/repo", Args: []string{"project", "list"}}); err == nil || repositoryCalls.Load() != 2 || fault.Public(err) != "GitHub personal Projects login is required" {
+	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-user/repo", Args: []string{"project", "list"}}); err == nil || repositoryCalls.Load() != 2 || fault.Public(err) != "GitHub personal Projects authorization is required; run integration setup github" {
 		t.Fatal("personal Projects silently fell back to installation credentials")
 	}
 }

@@ -25,8 +25,11 @@ func windowsGitHubUserTransport(client windowshost.OperatorClient, distribution 
 			return githubsetup.UserView{}, githubsetup.UserLoginError(result.Probe.Stderr)
 		}
 		var view githubsetup.UserView
-		if json.Unmarshal([]byte(result.Probe.Stdout), &view) != nil || view.Status == "" || view.Account == "" {
+		if json.Unmarshal([]byte(result.Probe.Stdout), &view) != nil || view.Status == "" {
 			return view, errors.New("invalid GitHub user authorization response from the Loki appliance")
+		}
+		if err = view.Validate(request); err != nil {
+			return view, err
 		}
 		return view, nil
 	}

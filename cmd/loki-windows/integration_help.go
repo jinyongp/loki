@@ -13,7 +13,7 @@ func integrationHelpRequested(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "login", "logout", "user-status":
+	case "logout", "user-status":
 		return len(args) == 2 || len(args) == 3 && args[1] == "github"
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return len(args) == 2
@@ -31,19 +31,15 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 		fmt.Fprintln(output, "  loki integration enable|disable|remove [--distribution NAME] [--interrupt-active-jobs] NAME")
 		fmt.Fprintln(output, "  loki integration setup|rotate signing [--distribution NAME] [--interrupt-active-jobs] [--identity-name NAME] [--identity-email EMAIL] [--key-file PATH]")
 		fmt.Fprintln(output, "  loki integration setup github [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
-		fmt.Fprintln(output, "  loki integration login|logout|user-status github --account OWNER [--distribution NAME]")
+		fmt.Fprintln(output, "  loki integration logout|user-status github [--distribution NAME]")
 		fmt.Fprintln(output, "  loki integration import|rotate github [--distribution NAME] [--interrupt-active-jobs] --config-file PATH --private-key-file PATH")
 		return
 	}
 	action := path[0]
 	switch action {
-	case "login", "logout", "user-status":
-		fmt.Fprintf(output, "usage: loki integration %s github --account OWNER [--distribution NAME]", action)
-		if action == "login" {
-			fmt.Fprint(output, " [--no-browser]")
-		}
-		fmt.Fprintln(output)
-		fmt.Fprintln(output, "Personal Projects use explicit GitHub App user authorization. Enable Device flow in the App settings before login.")
+	case "logout", "user-status":
+		fmt.Fprintf(output, "usage: loki integration %s github [--distribution NAME]\n", action)
+		fmt.Fprintln(output, "Shows or clears local personal Projects authorization for all connected personal accounts. Use setup github to authorize them.")
 	case "list":
 		fmt.Fprintln(output, "usage: loki integration list [--distribution NAME] [--json]")
 	case "status", "doctor":
@@ -71,6 +67,7 @@ func printIntegrationUsage(output io.Writer, path ...string) {
 			if action == "setup" {
 				fmt.Fprintln(output, "usage: loki integration setup github [--no-browser] [--distribution NAME] [--interrupt-active-jobs]")
 				fmt.Fprintln(output, "Creates an App on first setup; reuses it on later runs. Choose personal or organization accounts and repository access in GitHub.")
+				fmt.Fprintln(output, "Personal Projects authorization continues in the same setup command; your GitHub account is detected after approval.")
 				fmt.Fprintln(output, "To connect an existing App using its configuration and key, use loki integration import github.")
 				return
 			}

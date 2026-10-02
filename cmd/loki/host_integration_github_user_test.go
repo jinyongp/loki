@@ -15,6 +15,19 @@ func (f githubUserAdminCaller) Call(ctx context.Context, request any) (json.RawM
 	return f(ctx, request)
 }
 
+func TestGitHubUserCommandsUseSetupAndRejectAccountSelectors(t *testing.T) {
+	for _, action := range []string{"login", "logout", "user-status"} {
+		var stdout, stderr bytes.Buffer
+		if code := runHostGitHubUser(action, []string{"--account", "example-user", "github"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatal("user command accepted account selector", action, code, stderr.String())
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runHostGitHubUser("login", []string{"--system", "github"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "setup --system github") {
+		t.Fatal("login did not direct users to setup", code, stderr.String())
+	}
+}
+
 func TestGitHubUserAdminDoesNotForwardSocketOrReadSecrets(t *testing.T) {
 	client := githubUserAdminCaller(func(_ context.Context, input any) (json.RawMessage, error) {
 		request := input.(map[string]any)

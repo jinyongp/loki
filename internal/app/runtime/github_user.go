@@ -32,7 +32,7 @@ func GitHubUserOperations(users *githubapp.UserAuthorization) map[string]rpc.Ope
 					}
 					return users.Poll(ctx, request.SessionID)
 				}
-				if request.Account == "" || request.SessionID != "" {
+				if request.SessionID != "" {
 					return githubapp.UserAuthorizationView{}, fault.Error("invalid GitHub user authorization arguments")
 				}
 				switch action {

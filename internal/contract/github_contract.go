@@ -15,7 +15,7 @@ func overrideGitHub(tool *mcp.Tool) error {
 			"target": map[string]any{
 				"type":        "string",
 				"pattern":     "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
-				"description": "Configured owner/repository target. Repository commands use a repository-limited installation token; project commands are restricted to this owner's Projects and require separate user login for personal accounts.",
+				"description": "Configured owner/repository target. Repository commands use a repository-limited installation token; project commands are restricted to this owner's Projects. Personal accounts require App user authorization through integration setup github.",
 			},
 			"command": map[string]any{
 				"type": "string", "enum": commandGroups,

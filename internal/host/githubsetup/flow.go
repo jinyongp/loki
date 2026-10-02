@@ -58,25 +58,31 @@ type View struct {
 }
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
-	NoBrowser    bool
-	Verbose      bool
-	OpenBrowser  func(string) error
-	PollInterval time.Duration
-	Timeout      time.Duration
-	Input        io.Reader
+	NoBrowser     bool
+	Verbose       bool
+	OpenBrowser   func(string) error
+	PollInterval  time.Duration
+	Timeout       time.Duration
+	Input         io.Reader
+	UserTransport UserTransport
 }
 
-// Run hosts only a loopback registration page and relays the one-time code.
-// It never calls GitHub APIs or receives App private keys.
+// Run hosts a loopback registration page, relays the one-time code, and
+// continues with any required personal Projects authorization. Credentials
+// and GitHub API calls stay in the Linux backend.
 func Run(ctx context.Context, transport Transport, options Options, output io.Writer) error {
 	ctx, stopSignals := signal.NotifyContext(ctx, os.Interrupt)
 	defer stopSignals()
+	userContext := ctx
 	timeout := options.Timeout
 	if timeout == 0 {
 		timeout = 10 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if options.Timeout != 0 {
+		userContext = ctx
+	}
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return errors.New("cannot start GitHub setup callback")
@@ -185,7 +191,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 		}
 	}
 	if view.Phase == "ready" {
-		return printReady(output, view)
+		return finishSetup(userContext, options, output, view)
 	}
 	if view.Phase == "installation" {
 		if view.AppSettingsURL != "" {
@@ -266,7 +272,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			fmt.Fprintln(output, "Applying GitHub integration...")
 			view, err = transport(ctx, Request{Action: "apply"})
 		case "ready":
-			return printReady(output, view)
+			return finishSetup(userContext, options, output, view)
 		default:
 			return fmt.Errorf("unexpected GitHub setup phase %q", view.Phase)
 		}

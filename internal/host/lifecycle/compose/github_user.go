@@ -15,7 +15,7 @@ func (b *Backend) GitHubUserAuthorization(ctx context.Context, request githubset
 	value := request.Account
 	switch request.Action {
 	case "begin", "status", "logout":
-		if value == "" || len(value) > 39 || strings.HasPrefix(value, "-") || request.SessionID != "" {
+		if len(value) > 39 || strings.HasPrefix(value, "-") || request.SessionID != "" {
 			return githubsetup.UserView{}, errors.New("invalid GitHub personal account")
 		}
 	case "poll":
@@ -36,8 +36,11 @@ func (b *Backend) GitHubUserAuthorization(ctx context.Context, request githubset
 		return githubsetup.UserView{}, githubsetup.UserLoginError(string(raw))
 	}
 	var view githubsetup.UserView
-	if json.Unmarshal(raw, &view) != nil || view.Status == "" || view.Account == "" {
+	if json.Unmarshal(raw, &view) != nil || view.Status == "" {
 		return view, errors.New("invalid GitHub user authorization response")
+	}
+	if err = view.Validate(request); err != nil {
+		return view, err
 	}
 	return view, nil
 }

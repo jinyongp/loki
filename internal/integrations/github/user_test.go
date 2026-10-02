@@ -64,13 +64,13 @@ func TestUserDeviceAuthorizationPersistsRefreshesAndLogsOut(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	u := &UserAuthorization{AppID: 123, Accounts: []string{"example-user"}, HTTP: server.Client(),
+	u := &UserAuthorization{AppID: 123, Accounts: []string{"another-user", "example-user"}, HTTP: server.Client(),
 		PrivateKey: func(context.Context) (string, error) { return private, nil },
 		Load:       func(context.Context) (string, error) { return stored, nil },
 		Save:       func(_ context.Context, value string) error { stored = value; return nil },
 		Now:        func() time.Time { return now }, apiURL: server.URL, loginURL: server.URL}
-	view, err := u.Begin(t.Context(), "EXAMPLE-USER")
-	if err != nil || view.Status != "pending" || len(view.SessionID) != 64 || view.UserCode != "EXAM-PLE1" {
+	view, err := u.Begin(t.Context(), "")
+	if err != nil || view.Status != "pending" || view.Account != "" || len(view.SessionID) != 64 || view.UserCode != "EXAM-PLE1" {
 		t.Fatal("device authorization did not start", view, err)
 	}
 	assertUserViewHasNoSecrets(t, view)
@@ -86,10 +86,16 @@ func TestUserDeviceAuthorizationPersistsRefreshesAndLogsOut(t *testing.T) {
 		if index == 1 && next.Interval != 10 || index == 2 && next.Status != "ready" {
 			t.Fatal("incorrect device flow state", next)
 		}
+		if index == 2 && next.Account != "example-user" {
+			t.Fatal("signed-in account was not identified", next)
+		}
 		assertUserViewHasNoSecrets(t, next)
 	}
 	if token, err := u.AccountToken(t.Context(), "example-user"); err != nil || token != "ghu_first" {
 		t.Fatal("saved user credential unavailable", err)
+	}
+	if token, err := u.AccountToken(t.Context(), "another-user"); err == nil || token != "" {
+		t.Fatal("authorization attached to a different installed account")
 	}
 	if _, err := u.Poll(t.Context(), view.SessionID); err == nil {
 		t.Fatal("completed device session replayed")
@@ -121,6 +127,40 @@ func TestUserDeviceAuthorizationPersistsRefreshesAndLogsOut(t *testing.T) {
 	}
 	if _, err := u.AccountToken(t.Context(), "example-user"); err == nil || strings.Contains(stored, "ghu_") || strings.Contains(stored, "ghr_") {
 		t.Fatal("logout retained active credentials")
+	}
+}
+
+func TestUserAuthorizationAggregateStatusAndLogout(t *testing.T) {
+	now := time.Now().UTC()
+	credentials := map[string]userCredential{
+		"example-user": {AppID: 123, Account: "example-user", ClientID: "Iv1.example", AccessToken: "ghu_example", RefreshToken: "ghr_example", ExpiresAt: now.Add(-time.Minute), RefreshExpires: now.Add(time.Hour)},
+		"another-user": {AppID: 999, Account: "another-user", AccessToken: "ghu_stale"},
+		"removed-user": {AppID: 123, Account: "removed-user", AccessToken: "ghu_removed"},
+	}
+	raw, _ := json.Marshal(credentials)
+	stored := string(raw)
+	u := &UserAuthorization{AppID: 123, Accounts: []string{"example-user", "another-user"}, HTTP: http.DefaultClient,
+		PrivateKey: func(context.Context) (string, error) {
+			t.Fatal("local status used network credentials")
+			return "", nil
+		},
+		Load: func(context.Context) (string, error) { return stored, nil }, Save: func(_ context.Context, value string) error { stored = value; return nil }, Now: func() time.Time { return now },
+		pending: map[string]*userDeviceSession{"opaque-session": {deadline: now.Add(time.Minute)}},
+	}
+	status, err := u.Status(t.Context(), "")
+	if err != nil || status.Status != "unconfigured" || len(status.Accounts) != 2 || status.Accounts[0].Status != "refresh_required" || status.Accounts[1].Status != "unconfigured" {
+		t.Fatal("aggregate status skipped missing or stale App authorization", status, err)
+	}
+	assertUserViewHasNoSecrets(t, status)
+	if _, err = u.Logout(t.Context(), ""); err != nil || stored != "{}" || len(u.pending) != 0 {
+		t.Fatal("logout retained local authorization", err)
+	}
+	u.Accounts = nil
+	if status, err := u.Status(t.Context(), ""); err != nil || status.Status != "not_required" {
+		t.Fatal("organization setup requested user authorization", status, err)
+	}
+	if _, err := u.Begin(t.Context(), ""); err == nil {
+		t.Fatal("organization-only setup began personal authorization")
 	}
 }
 
@@ -169,7 +209,7 @@ func TestUserLoginRejectsAnotherAccountAndMissingDeviceFlow(t *testing.T) {
 			if _, err := u.Begin(t.Context(), "another-user"); err == nil {
 				t.Fatal("unconfigured personal account accepted")
 			}
-			view, err := u.Begin(t.Context(), "example-user")
+			view, err := u.Begin(t.Context(), "")
 			if scenario != "disabled" {
 				if err != nil {
 					t.Fatal(err)

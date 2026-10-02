@@ -86,6 +86,13 @@ func runHostGitHubBrowserSetup(options hostIntegrationOptions, store *lifecycle.
 			}
 		}
 	} else {
+		browser.UserTransport = func(ctx context.Context, request githubsetup.UserRequest) (githubsetup.UserView, error) {
+			backend, err := newHostComposeBackend(store)
+			if err != nil {
+				return githubsetup.UserView{}, err
+			}
+			return backend.GitHubUserAuthorization(ctx, request)
+		}
 		err = githubsetup.Run(ctx, handler.Handle, browser, stdout)
 	}
 	if err != nil {

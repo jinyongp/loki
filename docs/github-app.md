@@ -35,7 +35,8 @@ read access and Contents, Issues, Pull requests, Actions, Workflows, Checks,
 Commit statuses, organization Projects, organization Issue Fields, Issue Types,
 and Personal Projects read/write access.
 Webhooks and automatic user authorization during installation are disabled;
-personal Projects require the separate device login below. Both repository selections follow
+personal Projects authorization continues through device flow during setup, as
+described below. Both repository selections follow
 the installation's current access on GitHub, without a local repository snapshot.
 Repository commands receive a token scoped to their one requested repository.
 
@@ -155,7 +156,7 @@ GitHub does not allow the PR author to approve or request changes on their own P
 
 Organization Projects use **Organization permissions > Projects**, independently
 of repository issue permissions. This permission does not grant authority over
-user-owned Projects. Personal Projects require the explicit App user login below.
+user-owned Projects. Personal Projects require the App user authorization below.
 Loki does not use an ambient personal `gh auth` session.
 An empty project list alone does not verify project access.
 
@@ -169,31 +170,37 @@ installation in Loki.
 On Windows:
 
 ```powershell
-loki integration login github --account example-user
-loki integration user-status github --account example-user
-loki integration logout github --account example-user
+loki integration setup github
+loki integration user-status github
+loki integration logout github
 ```
 
 On a system-scoped managed Linux host:
 
 ```sh
-sudo loki host integration login --system --account example-user --no-browser github
-sudo loki host integration user-status --system --account example-user github
-sudo loki host integration logout --system --account example-user github
+sudo loki host integration setup --system --no-browser github
+sudo loki host integration user-status --system github
+sudo loki host integration logout --system github
 ```
 
-Login prints a short code and opens `https://github.com/login/device`. Enter the
-code there and authorize the App as the requested personal account. Loki checks
-the signed-in account before saving any token. `--no-browser` prints the URL
-without launching a browser. The login expires after 15 minutes; retry login if
-it is denied, expires, or runtime restarts while authorization is pending.
+Setup creates or reuses the App, connects its installations, then continues with
+personal Projects authorization in the same command. It prints a short code and
+opens `https://github.com/login/device`. Enter the code there and authorize the
+App with a connected personal account. Loki identifies the signed-in account
+from GitHub and checks its installation before saving any token. Setup skips
+accounts with usable authorization and skips this step for organization-only
+installations. With multiple personal accounts, it lists those still needing
+approval and repeats this step for each. `--no-browser` prints the URL without
+launching a browser. Each device authorization expires after 15 minutes; rerun
+setup if it is denied, expires, or runtime restarts while approval is pending.
 
 Access and refresh tokens stay in Loki's encrypted managed vault, outside
 application secret profiles. Expiring device-flow tokens are refreshed before
 use, with the replacement access and refresh tokens saved together. An expired
-refresh token requires another login. `user-status` shows local authorization
+refresh token requires another setup. `user-status` shows local authorization
 state without token values or network requests; it does not prove access to a
-private project. `logout` removes the local account's tokens and pending login.
+private project. `logout` removes all locally saved user tokens and pending
+device authorizations for this integration.
 To revoke the App's authorization at GitHub as well, use GitHub's **Settings >
 Applications > Authorized GitHub Apps**. Backups contain the encrypted vault;
 restoring an older backup can restore local authorization state.
@@ -244,14 +251,14 @@ Create a GitHub App under the account that will own it. Use a unique name and a 
 
 Configure the registration as follows:
 
-- Leave automatic user authorization during installation and OAuth redirect URIs disabled. Enable Device flow for personal Projects login.
+- Leave automatic user authorization during installation and OAuth redirect URIs disabled. Enable Device flow for personal Projects authorization during setup.
 - Disable the webhook unless another service in the deployment consumes GitHub events.
 - Select **Any account** to use the same App on multiple personal or organization accounts.
 - Grant **Metadata: Read-only**.
 - Grant **Contents**, **Issues**, **Pull requests**, **Actions**, **Workflows**, **Checks**, and **Commit statuses: Read and write** for repository and CI work.
 - Grant **Organization permissions > Projects: Read and write** to manage organization Projects.
 - Grant **Organization permissions > Issue Fields** and **Issue Types: Read and write** to manage organization issue fields and types.
-- Grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with the separate App user login.
+- Grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with App user authorization during setup.
 - Add **Deployments**, **Variables**, or **Secrets: Read and write** only for commands the deployment must run.
 
 After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **All repositories** or select individual repositories. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.

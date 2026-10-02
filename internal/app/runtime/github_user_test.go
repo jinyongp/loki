@@ -34,4 +34,9 @@ func TestGitHubUserAuthorizationIsHostOnlyAndRejectsSecretInput(t *testing.T) {
 	if _, err := GitHubUserOperations(nil)["github_user_status"].Handle(t.Context(), json.RawMessage(`{"account":"example-user"}`)); err == nil {
 		t.Fatal("disabled integration accepted authorization")
 	}
+	result, err = operations["github_user_status"].Handle(t.Context(), json.RawMessage(`{}`))
+	status, ok := result.(githubapp.UserAuthorizationView)
+	if err != nil || !ok || status.Status != "unconfigured" || len(status.Accounts) != 1 || status.Accounts[0].Account != "example-user" {
+		t.Fatal("accountless runtime status failed", result, err)
+	}
 }
