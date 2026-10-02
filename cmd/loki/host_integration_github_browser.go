@@ -353,8 +353,12 @@ func (s githubSetupSession) view() githubsetup.View {
 		view.Manifest = &githubsetup.Manifest{
 			Name: "Loki-" + s.State[:12], URL: "https://github.com/jinyongp/loki", Public: true,
 			RedirectURL: s.RedirectURL, HookAttributes: map[string]any{"url": "https://github.com/jinyongp/loki", "active": false},
-			DefaultPermissions: map[string]string{"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write"},
-			DefaultEvents:      []string{}, RequestOAuthOnInstall: false,
+			DefaultPermissions: map[string]string{
+				"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write",
+				"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
+				"organization_projects": "write",
+			},
+			DefaultEvents: []string{}, RequestOAuthOnInstall: false,
 		}
 	}
 	if s.AppID > 0 {

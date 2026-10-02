@@ -119,6 +119,30 @@ func TestHostGitHubBrowserFlowResumesWithoutExposingPrivateKey(t *testing.T) {
 		t.Fatal("successful setup retained pending key copy")
 	}
 }
+func TestGitHubBrowserManifestRequestsRepositoryAndProjectPermissions(t *testing.T) {
+	h, _ := browserSetupFixture(t)
+	view, err := h.Handle(context.Background(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:12345/callback"})
+	if err != nil || view.Manifest == nil {
+		t.Fatalf("registration manifest: %#v, %v", view, err)
+	}
+	want := map[string]string{
+		"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write",
+		"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
+		"organization_projects": "write",
+	}
+	if len(view.Manifest.DefaultPermissions) != len(want) {
+		t.Fatalf("unexpected permission scope: %#v", view.Manifest.DefaultPermissions)
+	}
+	for permission, access := range want {
+		if got := view.Manifest.DefaultPermissions[permission]; got != access {
+			t.Errorf("permission %s = %q, want %q", permission, got, access)
+		}
+	}
+	if view.Manifest.RequestOAuthOnInstall || view.Manifest.HookAttributes["active"] != false {
+		t.Fatal("repository and organization Project work must use installation tokens without OAuth or webhooks")
+	}
+}
+
 func TestGitHubBrowserBeginRequiresLoopbackAndKnownAccountType(t *testing.T) {
 	for _, input := range []githubsetup.Request{
 		{RedirectURL: "https://example.com/callback"},

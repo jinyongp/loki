@@ -31,10 +31,15 @@ repositories** for each account you want. Return to the terminal and press Enter
 when you have finished. Loki discovers the App ID and all approved installation
 IDs and accounts, validates the installations, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
-read access and Contents, Issues, and Pull requests read/write access, with
-webhooks and user OAuth authorization disabled. Both repository selections follow
+read access and Contents, Issues, Pull requests, Actions, Workflows, Checks,
+Commit statuses, and organization Projects read/write access, with webhooks and
+user OAuth authorization disabled. Both repository selections follow
 the installation's current access on GitHub, without a local repository snapshot.
 Each command still receives a token scoped to its one requested repository.
+
+Organization Projects permission applies to projects owned by an approved
+organization installation. Repository scoping limits repository access; it does
+not narrow organization Projects permission to boards linked to that repository.
 
 First setup creates an App owned by the signed-in personal GitHub account.
 Choose the installation account in GitHub's **Where do you want to install**
@@ -121,6 +126,41 @@ conversion result uncertain, Loki preserves that condition and reports recovery
 instructions. Open the existing App's GitHub settings, generate a new private
 key, and import that App using the file-based setup below.
 
+## Upgrade an existing App's permissions
+
+Updating Loki does not change the permissions of an existing GitHub App. Open
+the App's **Permissions & events**, set **Actions**, **Workflows**, **Checks**, and
+**Commit statuses** to **Read & write**, and set **Organization permissions >
+Projects** to **Read & write**. Save the App settings and approve the new
+permissions in every installation that needs them. Keep the existing App ID,
+private key, and repository selection. GitHub requires installation approval
+before the new permissions can be used.
+
+An existing installation token retains its issued permissions until it expires.
+Loki caches tokens until near expiry, so permission changes are reflected when a
+new token is issued. A local CLI readiness check does not validate every GitHub
+permission or prove that a private project is accessible.
+
+## Repository operations and Projects
+
+Use the `github` tool's `api` command for GitHub REST or GraphQL operations that
+do not have a dedicated Loki tool. **Issues: Read & write** covers milestones,
+labels, assignees, parent/sub-issue relationships, and blocking dependencies.
+**Pull requests: Read & write** covers PR metadata, review requests, code review
+comments, replies, and review thread resolution. Merging also needs **Contents:
+Read & write** and must satisfy the repository's branch protection and rulesets.
+GitHub does not allow the PR author to approve or request changes on their own PR.
+
+Organization Projects use **Organization permissions > Projects**, independently
+of repository issue permissions. This permission does not grant authority over
+user-owned Projects. Loki's GitHub integration uses installation tokens and does
+not fall back to a personal `gh auth` session for account-level operations.
+An empty project list alone does not verify project access.
+
+Creating a repository is a separate operation that needs **Administration**
+permission for an organization. The default App does not request it, and Loki's
+repository-token command path requires an existing configured repository target.
+
 ## Create and install an existing App manually
 
 Create a GitHub App under the account that will own it. Use a unique name and a homepage URL that identifies this Loki deployment or its source repository.
@@ -131,8 +171,9 @@ Configure the registration as follows:
 - Disable the webhook unless another service in the deployment consumes GitHub events.
 - Select **Any account** to use the same App on multiple personal or organization accounts.
 - Grant **Metadata: Read-only**.
-- Grant **Contents**, **Issues**, and **Pull requests: Read and write** for normal repository work.
-- Add **Actions: Read**, **Workflows: Read and write**, **Checks: Read and write**, **Commit statuses: Read and write**, **Deployments: Read and write**, **Variables: Read and write**, or **Secrets: Read and write** only for commands the deployment must run.
+- Grant **Contents**, **Issues**, **Pull requests**, **Actions**, **Workflows**, **Checks**, and **Commit statuses: Read and write** for repository and CI work.
+- Grant **Organization permissions > Projects: Read and write** to manage organization Projects.
+- Add **Deployments**, **Variables**, or **Secrets: Read and write** only for commands the deployment must run.
 - Grant the organization Issue Fields permission when the typed `github_issue_fields` tool is required.
 
 After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **All repositories** or select individual repositories. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.
