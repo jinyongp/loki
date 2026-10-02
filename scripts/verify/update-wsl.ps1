@@ -1,25 +1,57 @@
 param(
-    [int]$Attempts = 3,
-    [int]$DelaySeconds = 10
+    [int]$Attempts = 4,
+    [int]$DelaySeconds = 15
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $false
 if ($Attempts -lt 1 -or $Attempts -gt 5) { throw "WSL update attempts must be between 1 and 5" }
 if ($DelaySeconds -lt 0 -or $DelaySeconds -gt 60) { throw "WSL update delay must be between 0 and 60 seconds" }
 
+function Test-WSLReady {
+    $version = (& wsl.exe --version 2>&1 | Out-String) -replace "`0", ""
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $help = (& wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
+    if ($LASTEXITCODE -ne 0) { return $false }
+    foreach ($option in @("--from-file", "--name", "--no-launch")) {
+        if (-not $help.Contains($option)) { return $false }
+    }
+    Write-Host $version.Trim()
+    return $true
+}
+
+function Test-TransientWSLDownloadError([string]$Output) {
+    # The UpdatePackage 403 seen on hosted runners is a download failure, not
+    # an operator authorization failure. Other access/configuration errors fail.
+    if ($Output -match '(?i)access(?: is)? denied|permission denied|invalid (?:command|option|parameter)|restart.*required|reboot.*required') { return $false }
+    return $Output -match '(?i)Wsl/UpdatePackage/0x80190193|\b(?:HTTP|status|error)[^\r\n]{0,40}\b(?:408|429|5\d\d)\b|0x80072(?:ee2|ee7|efd|efe)\b|\b(?:timed out|connection reset|temporary failure in name resolution)\b'
+}
+
+if (Test-WSLReady) {
+    $global:LASTEXITCODE = 0
+    Write-Host "Installed WSL supports Loki acceptance requirements; no update download needed."
+    return
+}
+
 for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
     Write-Host "Updating WSL package (attempt $attempt/$Attempts)..."
-    & wsl.exe --update --web-download
+    $output = (& wsl.exe --update --web-download 2>&1 | Out-String) -replace "`0", ""
     $exitCode = $LASTEXITCODE
-    if ($exitCode -eq 0) {
+    Write-Host $output.Trim()
+    if (Test-WSLReady) {
         $global:LASTEXITCODE = 0
-        Write-Host "WSL package update succeeded."
+        Write-Host "WSL package preparation succeeded."
         return
     }
+    if ($exitCode -eq 0) { throw "WSL update completed but required Loki acceptance options are unavailable" }
+    if (-not (Test-TransientWSLDownloadError $output)) {
+        throw "WSL environment preparation failed with a non-retryable error (exit code $exitCode)"
+    }
     if ($attempt -lt $Attempts) {
-        Write-Warning "WSL package update attempt $attempt failed with exit code $exitCode; retrying."
-        Start-Sleep -Seconds $DelaySeconds
+        $delay = [int][Math]::Min(60, $DelaySeconds * [Math]::Pow(2, $attempt - 1))
+        Write-Warning "WSL download attempt $attempt failed; retrying in $delay seconds."
+        Start-Sleep -Seconds $delay
     }
 }
 
-throw "WSL package update unavailable after $Attempts attempts"
+throw "WSL environment preparation failed: external download unavailable after $Attempts attempts"

@@ -163,6 +163,16 @@ the workflow performs the release without a second operator handoff:
 Every cross-repository GitHub Action remains pinned to a full commit SHA. The
 adjacent version comment is maintained by `actions-up`.
 
+Windows candidate and public-install gates share `scripts/verify/update-wsl.ps1`.
+It reuses installed WSL when the version probe and required `--from-file`,
+`--name`, and `--no-launch` capabilities succeed. Otherwise it updates WSL,
+rechecks those capabilities, and retries recognized download failures up to
+four times with 15, 30, and 60 second delays. Permission, configuration, and
+post-update capability errors stop the gate. The native Windows gate exercises
+this policy with substituted commands. Publication passes only this accepted
+helper as a commit-bound CI artifact to the public Windows gate, which runs
+without checking out repository source. The validation jobs remain independent.
+
 The deployed installer paths are
 `https://jinyongp.dev/loki/install.sh` and
 `https://jinyongp.dev/loki/install.ps1`. GitHub Pages must use GitHub Actions

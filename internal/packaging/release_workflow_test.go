@@ -98,6 +98,7 @@ type releaseWorkflowJob struct {
 	Steps []struct {
 		ID, Name, Uses, Run, If string
 		Env                     map[string]string
+		With                    map[string]string
 	}
 }
 
@@ -522,13 +523,49 @@ func TestWSLUpdateUsesBoundedRetry(t *testing.T) {
 	for _, required := range []string{
 		"& wsl.exe --update --web-download",
 		"for ($attempt = 1; $attempt -le $Attempts; $attempt++)",
-		"Start-Sleep -Seconds $DelaySeconds",
-		"WSL package update attempt $attempt failed",
-		"WSL package update unavailable after $Attempts attempts",
+		"Start-Sleep -Seconds $delay",
+		"Test-WSLReady",
+		"Test-TransientWSLDownloadError $output",
+		"external download unavailable after $Attempts attempts",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("WSL update helper lacks %q", required)
 		}
+	}
+	jobs := releaseWorkflowJobs(t)
+	for job, invocation := range map[string]string{
+		"wsl-accept":            `.\scripts\verify\update-wsl.ps1`,
+		"verify-public-windows": `& "$env:RUNNER_TEMP\wsl-ci-preparation\update-wsl.ps1"`,
+	} {
+		prepared := false
+		for _, step := range jobs[job].Steps {
+			prepared = prepared || step.Run == invocation
+			if strings.Contains(step.Run, "wsl.exe --update") {
+				t.Fatalf("%s bypasses the shared WSL preparation helper", job)
+			}
+		}
+		if !prepared {
+			t.Fatalf("%s does not prepare the WSL environment", job)
+		}
+	}
+	var uploaded, downloaded bool
+	for _, step := range jobs["publish"].Steps {
+		uploaded = uploaded || (strings.HasPrefix(step.Uses, "actions/upload-artifact@") &&
+			step.With["name"] == "wsl-ci-preparation-${{ github.sha }}" && step.With["path"] == "scripts/verify/update-wsl.ps1" && step.With["overwrite"] == "true")
+	}
+	for _, step := range jobs["verify-public-windows"].Steps {
+		downloaded = downloaded || (strings.HasPrefix(step.Uses, "actions/download-artifact@") &&
+			step.With["name"] == "wsl-ci-preparation-${{ github.sha }}" && step.With["path"] == `${{ runner.temp }}\wsl-ci-preparation`)
+	}
+	if !uploaded || !downloaded {
+		t.Fatal("public Windows gate does not receive the accepted helper artifact")
+	}
+	checked := false
+	for _, step := range jobs["windows-native"].Steps {
+		checked = checked || strings.Contains(step.Run, "test-update-wsl.ps1")
+	}
+	if !checked {
+		t.Fatal("native Windows gate does not run WSL preparation regression tests")
 	}
 }
 

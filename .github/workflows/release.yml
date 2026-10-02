@@ -701,9 +701,9 @@ jobs:
           name: ${{ needs.build.outputs.candidate_artifact }}
           path: ${{ runner.temp }}\candidate
 
-      - name: Install current WSL package for acceptance
+      - name: Prepare WSL acceptance environment
         shell: pwsh
-        run: .\scripts\verify\update-wsl.ps1 -Attempts 3 -DelaySeconds 10
+        run: .\scripts\verify\update-wsl.ps1
 
       - name: Require current WSL2
         shell: pwsh
@@ -752,6 +752,7 @@ jobs:
             [void][scriptblock]::Create([IO.File]::ReadAllText($_.FullName))
           }
           .\scripts\verify\test-wsl-scenarios.ps1
+          .\scripts\verify\test-update-wsl.ps1
 
       - name: Run native Windows unit and ACL regression tests
         shell: pwsh
@@ -1241,6 +1242,15 @@ jobs:
         with:
           path: publication/pages
 
+      - name: Upload accepted WSL preparation helper
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wsl-ci-preparation-${{ github.sha }}
+          path: scripts/verify/update-wsl.ps1
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 7
+
   pages:
     name: Deploy installer
     needs:
@@ -1330,12 +1340,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install current WSL package for public acceptance
+      - name: Download accepted WSL preparation helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wsl-ci-preparation-${{ github.sha }}
+          path: ${{ runner.temp }}\wsl-ci-preparation
+
+      - name: Prepare WSL acceptance environment
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          wsl.exe --update --web-download
-          if ($LASTEXITCODE -ne 0) { throw "WSL package update failed" }
+        run: '& "$env:RUNNER_TEMP\wsl-ci-preparation\update-wsl.ps1"'
 
       - name: Require current WSL2 for public acceptance
         shell: pwsh
