@@ -195,7 +195,10 @@ launching a browser. Each device authorization expires after 15 minutes; rerun
 setup if it is denied, expires, or runtime restarts while approval is pending.
 
 Access and refresh tokens stay in Loki's encrypted managed vault, outside
-application secret profiles. Expiring device-flow tokens are refreshed before
+application secret profiles. Setup initializes this vault when saving the first
+user authorization; a separate `secret init` command is unnecessary. Existing
+vault contents are preserved, and damaged vaults are rejected. Expiring
+device-flow tokens are refreshed before
 use, with the replacement access and refresh tokens saved together. An expired
 refresh token requires another setup. `user-status` shows local authorization
 state without token values or network requests; it does not prove access to a

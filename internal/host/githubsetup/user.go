@@ -102,6 +102,8 @@ func UserLoginError(detail string) error {
 		"GitHub user authorization expired; retry setup",
 		"GitHub user authorization was rejected; retry setup",
 		"GitHub user authorization is not configured",
+		"GitHub user credentials are unavailable",
+		"GitHub user credentials are invalid",
 		"GitHub App client ID is unavailable",
 		"GitHub App credential is unavailable",
 		"GitHub user credentials could not be saved; retry setup",
@@ -110,7 +112,7 @@ func UserLoginError(detail string) error {
 			return errors.New(message)
 		}
 	}
-	return errors.New("GitHub user authorization failed; check Device flow and the configured personal account")
+	return errors.New("GitHub user authorization failed; run integration doctor github and retry setup")
 }
 
 // RunUser handles only the public device code and an opaque session handle.

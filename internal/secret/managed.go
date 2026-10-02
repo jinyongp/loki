@@ -2,8 +2,10 @@ package secret
 
 import (
 	"context"
+	"errors"
 
 	"loki/internal/fault"
+	"loki/internal/state"
 )
 
 // ManagedCredential is a closed identifier for a platform credential owned by
@@ -88,6 +90,13 @@ func (m ManagedController) Set(ctx context.Context, id ManagedCredential, value 
 	if err != nil {
 		return nil, err
 	}
+	// Device authorization owns provisioning of its encrypted token store.
+	// Initialize preserves existing vault contents and rejects damaged stores.
+	if id == ManagedGitHubUserTokens {
+		if _, err = m.vault.Initialize(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return m.vault.mutate(ctx, func(document document) (map[string]any, error) {
 		profiles := object(document["profiles"])
 		valueProfile := object(profiles[location.profile])
@@ -107,7 +116,14 @@ func (m ManagedController) Configured(ctx context.Context, id ManagedCredential)
 	if err != nil {
 		return false, err
 	}
-	document, err := m.vault.load(ctx)
+	snapshot, err := m.vault.backend().Load(ctx)
+	if errors.Is(err, state.ErrUninitialized) {
+		return false, nil
+	}
+	if err != nil {
+		return false, publicStateError(err)
+	}
+	document, err := decode(snapshot.Data)
 	if err != nil {
 		return false, err
 	}

@@ -162,6 +162,11 @@ func TestDeviceLoginRelayKeepsActionableErrorsAndDropsPrivateDetails(t *testing.
 	if err := UserLoginError("loki: " + message + "\n"); err.Error() != message {
 		t.Fatal("safe login advice lost", err)
 	}
+	for _, diagnostic := range []string{"GitHub user credentials are unavailable", "GitHub user credentials are invalid"} {
+		if err := UserLoginError("loki: " + diagnostic); err.Error() != diagnostic {
+			t.Fatal("credential diagnostic was replaced with Device flow advice", err)
+		}
+	}
 	for _, detail := range []string{"ghu_private", "loki: authorize ghp_private", "docker failed with ghr_private", "loki: " + message + "\nghu_private"} {
 		if err := UserLoginError(detail); strings.Contains(err.Error(), "private") {
 			t.Fatal("relay exposed private diagnostic", err)
