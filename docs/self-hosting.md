@@ -91,6 +91,12 @@ docker compose ps
 
 Only MCP is published, on `127.0.0.1:18765`. Runtime and runner state stay in their named volumes. Browser and signing remain optional profiles.
 
+The signing agent locks its socket directories and recovers verified stale
+sockets after an unclean shutdown. Live sockets and unrelated files remain
+protected; the configured signing key and identity are retained. Signing
+topology acceptance includes a forced stop and restart before checking access
+from the workload identity.
+
 ## Run Linux or WSL2 topology acceptance
 
 Run the disposable topology/isolation harness with the exact image intended for validation:

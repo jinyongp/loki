@@ -116,6 +116,7 @@ services:
     profiles: [signing]
     command: [signing-agent, --private-socket, /run/loki/signing/private.sock, --public-socket, /run/loki/signing/agent.sock, --key, /var/lib/loki/signing/key, --runner-uid, "10000", --socket-gid, "10001"]
     user: "0:0"
+    group_add: ["10001"]
     cap_add: [CHOWN]
     network_mode: none
     depends_on:

@@ -20,14 +20,20 @@ type AgentOptions struct {
 }
 
 // RunAgent owns the private SSH agent and its restricted public proxy together.
-// Existing socket paths are left intact; the service manager owns stale-runtime
-// directory cleanup before this role starts.
+// Directory locks exclude concurrent agents while verified stale sockets are
+// reclaimed after an unclean shutdown.
 func RunAgent(ctx context.Context, o AgentOptions) error {
 	if !filepath.IsAbs(o.Key) || !filepath.IsAbs(o.PrivateSocket) || !filepath.IsAbs(o.PublicSocket) ||
 		filepath.Clean(o.PrivateSocket) == filepath.Clean(o.PublicSocket) || !o.Grant.valid || o.SocketUID < 0 || o.SocketGID < 0 {
 		return errors.New("invalid signing agent layout or grant")
 	}
 	parents := map[string]struct{}{}
+	var locks []int
+	defer func() {
+		for _, fd := range locks {
+			_ = unix.Close(fd)
+		}
+	}()
 	for _, socket := range []string{o.PrivateSocket, o.PublicSocket} {
 		parent := filepath.Dir(socket)
 		resolved, err := filepath.EvalSymlinks(parent)
@@ -39,6 +45,14 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 			return errors.New("signing socket directory must be service-owned and not writable by other users")
 		}
 		if _, ok := parents[parent]; !ok {
+			fd, err := unix.Open(parent, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return errors.New("cannot lock signing socket directory")
+			}
+			locks = append(locks, fd)
+			if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
+				return errors.New("signing socket directory is already in use")
+			}
 			// Job containers intentionally do not receive the workspace
 			// supplementary group. Keep the directory non-listable/non-writable
 			// while allowing traversal to the public socket; the socket inode
@@ -47,9 +61,6 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 				return errors.New("cannot prepare signing socket directory traversal")
 			}
 			parents[parent] = struct{}{}
-		}
-		if _, err = os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
-			return errors.New("signing socket already exists or cannot be inspected")
 		}
 	}
 	fd, err := unix.Open(o.Key, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
@@ -61,6 +72,9 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 	var stat unix.Stat_t
 	if err = unix.Fstat(fd, &stat); err != nil || stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Uid != uint32(os.Getuid()) || stat.Mode&0077 != 0 {
 		return errors.New("signing key must be a private service-owned regular file")
+	}
+	if err = reclaimAgentSockets(ctx, o); err != nil {
+		return err
 	}
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -135,4 +149,47 @@ func RunAgent(ctx context.Context, o AgentOptions) error {
 		}
 		return err
 	}
+}
+
+func reclaimAgentSockets(ctx context.Context, o AgentOptions) error {
+	paths := []string{o.PrivateSocket, o.PublicSocket}
+	owners := []uint32{uint32(os.Getuid()), uint32(o.SocketUID)}
+	stale := make(map[string]os.FileInfo)
+	for i, path := range paths {
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil || info.Mode()&os.ModeSocket == 0 {
+			return errors.New("signing socket path is occupied or cannot be inspected")
+		}
+		var stat unix.Stat_t
+		if err = unix.Lstat(path, &stat); err != nil || (stat.Uid != owners[i] && !(i == 1 && stat.Uid == uint32(os.Getuid()))) {
+			return errors.New("signing socket ownership does not match")
+		}
+		connection, err := (&net.Dialer{Timeout: 250 * time.Millisecond}).DialContext(ctx, "unix", path)
+		if err == nil {
+			_ = connection.Close()
+			return errors.New("signing socket is already in use")
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !errors.Is(err, unix.ECONNREFUSED) {
+			return errors.New("cannot verify signing socket is stale")
+		}
+		stale[path] = info
+	}
+	for _, path := range paths {
+		if info := stale[path]; info != nil {
+			current, err := os.Lstat(path)
+			if err != nil || !os.SameFile(info, current) {
+				return errors.New("signing socket changed during recovery")
+			}
+			if err = os.Remove(path); err != nil {
+				return errors.New("cannot remove stale signing socket")
+			}
+		}
+	}
+	return nil
 }

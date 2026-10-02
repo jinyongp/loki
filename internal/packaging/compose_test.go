@@ -36,6 +36,7 @@ type composeService struct {
 	ReadOnly    bool     `yaml:"read_only"`
 	CapDrop     []string `yaml:"cap_drop"`
 	CapAdd      []string `yaml:"cap_add"`
+	GroupAdd    []string `yaml:"group_add"`
 	Security    []string `yaml:"security_opt"`
 	NetworkMode string   `yaml:"network_mode"`
 	Profiles    []string `yaml:"profiles"`
@@ -227,7 +228,8 @@ func TestComposeSigningProfileIsPrivateAndOptional(t *testing.T) {
 	}
 	signing := compose.Services["signing"]
 	if !slices.Equal(signing.Profiles, []string{"signing"}) || signing.NetworkMode != "none" ||
-		!signing.ReadOnly || !slices.Equal(signing.CapDrop, []string{"ALL"}) || !slices.Equal(signing.CapAdd, []string{"CHOWN"}) {
+		!signing.ReadOnly || !slices.Equal(signing.CapDrop, []string{"ALL"}) || !slices.Equal(signing.CapAdd, []string{"CHOWN"}) ||
+		!slices.Equal(signing.GroupAdd, []string{"10001"}) {
 		t.Fatalf("signing hardening: %#v", signing)
 	}
 	for _, destination := range []string{"/var/lib/loki/signing", "/run/loki/signing"} {

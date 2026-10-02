@@ -210,6 +210,11 @@ if test -n "${LOKI_SIGNING_KEY_FILE:-}"; then
   test -f "$LOKI_SIGNING_KEY_FILE" || die "signing key does not exist"
   LOKI_SIGNING_KEY_FILE=$LOKI_SIGNING_KEY_FILE compose --profile signing up -d signing
   wait_healthy signing || die "signing profile is unhealthy"
+  # A hard stop retains socket inodes in the named volume. Recovery must
+  # restore the same signing identity without requiring manual cleanup.
+  compose kill -s SIGKILL signing
+  compose start signing
+  wait_healthy signing || die "signing profile cannot recover from a hard stop"
   assert_no_mount signing /workspace
   assert_no_mount signing /var/lib/loki/runtime
   assert_not_inspectable signing "$token"

@@ -3,6 +3,7 @@ package signing
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,17 @@ func TestAgentLifecycle(t *testing.T) {
 	}
 	public := filepath.Join(root, "public.sock")
 	private := filepath.Join(root, "private.sock")
+	// Hard shutdowns leave both socket inodes in the persistent Docker volume.
+	for _, path := range []string{private, public} {
+		listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		listener.SetUnlinkOnClose(false)
+		if err = listener.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	ready := make(chan struct{})
@@ -34,6 +46,9 @@ func TestAgentLifecycle(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("readiness timeout")
+	}
+	if err := RunAgent(t.Context(), AgentOptions{PrivateSocket: private, PublicSocket: public, Key: key, Grant: NewSSHSignatureGrant(uint32(os.Getuid())), SocketUID: os.Getuid(), SocketGID: os.Getgid()}); err == nil {
+		t.Fatal("concurrent signing agent accepted")
 	}
 	var stat unix.Stat_t
 	if err := unix.Stat(public, &stat); err != nil {
@@ -81,6 +96,57 @@ func TestAgentLifecycle(t *testing.T) {
 		if _, err = os.Lstat(path); !os.IsNotExist(err) {
 			t.Fatal("socket retained", path, err)
 		}
+	}
+}
+
+func TestAgentSocketRecoveryPreservesOccupiedPaths(t *testing.T) {
+	for _, kind := range []string{"live-socket", "file", "symlink", "wrong-owner"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "public.sock")
+			uid := os.Getuid()
+			switch kind {
+			case "live-socket", "wrong-owner":
+				listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				listener.SetUnlinkOnClose(false)
+				t.Cleanup(func() { _ = listener.Close() })
+				if kind == "wrong-owner" {
+					// Probe as a private socket: it must belong to the service.
+					if os.Getuid() != 0 {
+						t.Skip("foreign socket ownership fixture requires root")
+					}
+					if err = os.Chown(path, 12345, os.Getgid()); err != nil {
+						t.Fatal(err)
+					}
+				}
+			case "file":
+				if err := os.WriteFile(path, []byte("preserve"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "symlink":
+				if err := os.Symlink(filepath.Join(root, "target"), path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			options := AgentOptions{PrivateSocket: filepath.Join(root, "private.sock"), PublicSocket: path, SocketUID: uid}
+			if kind == "wrong-owner" {
+				options.PrivateSocket, options.PublicSocket = path, options.PrivateSocket
+			}
+			if err = reclaimAgentSockets(t.Context(), options); err == nil {
+				t.Fatal("occupied socket path accepted")
+			}
+			after, err := os.Lstat(path)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatal("occupied socket path modified", err)
+			}
+		})
 	}
 }
 
