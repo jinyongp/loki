@@ -28,7 +28,7 @@ func waitForKeepaliveExecutableRelease(ctx context.Context, path string) error {
 		if openErr == nil {
 			return windows.CloseHandle(handle)
 		}
-		if errors.Is(openErr, windows.ERROR_FILE_NOT_FOUND) {
+		if errors.Is(openErr, windows.ERROR_FILE_NOT_FOUND) || errors.Is(openErr, windows.ERROR_PATH_NOT_FOUND) {
 			return nil
 		}
 		if !errors.Is(openErr, windows.ERROR_ACCESS_DENIED) && !errors.Is(openErr, windows.ERROR_SHARING_VIOLATION) {

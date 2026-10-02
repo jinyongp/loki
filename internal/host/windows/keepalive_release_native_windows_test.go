@@ -51,6 +51,9 @@ func TestWindowsKeepaliveExecutableRelease(t *testing.T) {
 	if err := waitForKeepaliveExecutableRelease(ctx, path+".missing"); err != nil {
 		t.Fatalf("missing companion prevented cleanup: %v", err)
 	}
+	if err := waitForKeepaliveExecutableRelease(ctx, filepath.Join(filepath.Dir(path), "missing-directory", "loki-keepalive.exe")); err != nil {
+		t.Fatalf("missing companion directory prevented cleanup: %v", err)
+	}
 	canceled, stop := context.WithCancel(t.Context())
 	stop()
 	if err := waitForKeepaliveExecutableRelease(canceled, path); !errors.Is(err, context.Canceled) {
