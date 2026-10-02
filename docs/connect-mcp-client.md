@@ -192,11 +192,21 @@ the local MCP listener to become reachable from Windows, with at most 30 checks
 two seconds apart. This covers a delay in WSL localhost forwarding after the
 appliance's internal services become healthy.
 
+Before setup, manual start, and lifecycle reconnection, Loki verifies and starts
+its owned WSL keepalive task, even when an appliance health probe already passes.
+The task must reach the running state before the tunnel starts. This keeps WSL
+available after a short-lived health or configuration command exits. A running
+keepalive task is reused; a failed start reports its last exit code.
+
 If startup fails, Task Scheduler retries it up to three times at one-minute
 intervals. Loki upgrades the retry settings of a verified existing connection
 task during connection reconciliation. Update apply, rollback, and restore
 reconnect enabled adapters even when the local URL and token stay unchanged.
 Disabled adapters remain disabled.
+
+The WSL keepalive task also retries failures up to three times at one-minute
+intervals. Setup, start, and reconciliation add this retry policy to an owned
+legacy keepalive task that has no retry policy, preserving its other settings.
 
 OpenAI's UI and permissions can change independently of Loki. Prefer the linked
 OpenAI settings pages and official guides for account-side steps.

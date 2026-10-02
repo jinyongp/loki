@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const createOwnedStartupTaskScript = `$ErrorActionPreference='Stop';$existing=Get-ScheduledTask -TaskName $env:LOKI_TASK_NAME -ErrorAction SilentlyContinue;if($existing){throw 'Scheduled Task already exists'};$action=New-ScheduledTaskAction -Execute $env:LOKI_TASK_EXE -Argument $env:LOKI_TASK_ARGS;$trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:LOKI_TASK_USER;$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;Register-ScheduledTask -TaskName $env:LOKI_TASK_NAME -Action $action -Trigger $trigger -Settings $settings -Description 'Keep the Loki WSL2 appliance running.' -ErrorAction Stop|Out-Null`
+const createOwnedStartupTaskScript = `$ErrorActionPreference='Stop';$existing=Get-ScheduledTask -TaskName $env:LOKI_TASK_NAME -ErrorAction SilentlyContinue;if($existing){throw 'Scheduled Task already exists'};$action=New-ScheduledTaskAction -Execute $env:LOKI_TASK_EXE -Argument $env:LOKI_TASK_ARGS;$trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:LOKI_TASK_USER;$settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;Register-ScheduledTask -TaskName $env:LOKI_TASK_NAME -Action $action -Trigger $trigger -Settings $settings -Description 'Keep the Loki WSL2 appliance running.' -ErrorAction Stop|Out-Null`
 
 func (source PowerShellStartupTaskSource) CreateOwned(ctx context.Context, expected ExpectedInstallation) (bool, error) {
 	current, err := user.Current()

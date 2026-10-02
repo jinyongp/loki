@@ -15,7 +15,27 @@ import (
 	"loki/internal/progress"
 )
 
-const startVerifiedKeepaliveTaskScript = `$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop;$a=@($t.Actions);if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'};Start-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop`
+const startVerifiedKeepaliveTaskScript = `$ErrorActionPreference='Stop'
+$t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+$a=@($t.Actions)
+if($a.Count -ne 1 -or -not ([string]$a[0].Execute).Equals($env:LOKI_KEEPALIVE_TASK_EXE,[StringComparison]::OrdinalIgnoreCase) -or -not ([string]$a[0].Arguments).Equals($env:LOKI_KEEPALIVE_TASK_ARGS,[StringComparison]::Ordinal) -or -not ([string]$t.Description).Equals('Keep the Loki WSL2 appliance running.',[StringComparison]::Ordinal)){throw 'Scheduled Task no longer matches Loki WSL ownership'}
+if([int]$t.Settings.RestartCount -eq 0 -and -not [string]$t.Settings.RestartInterval){
+  $settings=$t.Settings
+  $settings.RestartCount=3
+  $settings.RestartInterval='PT1M'
+  Set-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -Settings $settings -ErrorAction Stop|Out-Null
+  $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+  if([int]$t.Settings.RestartCount -ne 3 -or [System.Xml.XmlConvert]::ToTimeSpan([string]$t.Settings.RestartInterval) -ne [TimeSpan]::FromMinutes(1)){throw 'WSL keepalive retry settings could not be restored'}
+}
+if([string]$t.State -eq 'Running'){exit 0}
+Start-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+for($attempt=0;$attempt -lt 10;$attempt++){
+  Start-Sleep -Milliseconds 500
+  $t=Get-ScheduledTask -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+  if([string]$t.State -eq 'Running'){exit 0}
+}
+$info=Get-ScheduledTaskInfo -TaskName $env:LOKI_KEEPALIVE_TASK_NAME -ErrorAction Stop
+throw ('WSL keepalive task did not remain running (last exit code: '+$info.LastTaskResult+'). Check the Loki WSL task in Task Scheduler.')`
 
 type WindowsConnectionStartupPlatform struct {
 	LocalAppData string
@@ -23,6 +43,7 @@ type WindowsConnectionStartupPlatform struct {
 	WSL          WSLClient
 	TaskExe      string
 	SleepFunc    SleepFunc
+	Progress     progress.Reporter
 }
 
 func NewWindowsConnectionStartupPlatform(localAppData string) WindowsConnectionStartupPlatform {
@@ -80,6 +101,15 @@ func (platform WindowsConnectionStartupPlatform) StartKeepalive(
 		return fmt.Errorf("start verified WSL keepalive Scheduled Task %q: %w: %s", expected.TaskName, err, detail)
 	}
 	return nil
+}
+
+func (platform WindowsConnectionStartupPlatform) Prepare(ctx context.Context, distribution string) error {
+	expected, err := ExpectedFromOptions(InstallOptions{Distribution: distribution}, platform.LocalAppData, os.Getenv("SystemRoot"))
+	if err != nil {
+		return err
+	}
+	_, err = (ConnectionStartupController{Platform: platform, Progress: platform.Progress}).EnsureAppliance(ctx, expected)
+	return err
 }
 
 func (platform WindowsConnectionStartupPlatform) Doctor(
@@ -144,12 +174,15 @@ func NewWindowsConnectionManagerWithProgress(
 			openAI.Progress = reporter
 		}
 	}
+	appliance := NewWindowsConnectionStartupPlatform(localAppData)
+	appliance.Progress = reporter
 	return ConnectionManager{
-		Helpers:  NewWindowsHelperManagerWithProgress(binding, paths, reporter),
-		Store:    store,
-		Tasks:    NewWindowsConnectionTaskManager(localAppData),
-		Adapters: append([]RemoteConnectionAdapter(nil), adapters...),
-		Platform: FrontendArchitecture,
+		Appliance: appliance,
+		Helpers:   NewWindowsHelperManagerWithProgress(binding, paths, reporter),
+		Store:     store,
+		Tasks:     NewWindowsConnectionTaskManager(localAppData),
+		Adapters:  append([]RemoteConnectionAdapter(nil), adapters...),
+		Platform:  FrontendArchitecture,
 	}, nil
 }
 

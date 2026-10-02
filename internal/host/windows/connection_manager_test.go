@@ -3,6 +3,7 @@ package windows
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -167,6 +168,83 @@ func connectionManagerFixture() (ConnectionManager, *fakeConnectionAdapter, *fak
 		Platform: "windows-amd64",
 	}
 	return manager, adapter, helpers, store, tasks
+}
+
+type fakeConnectionAppliance struct {
+	calls   int
+	prepare func(context.Context, string) error
+}
+
+func (appliance *fakeConnectionAppliance) Prepare(ctx context.Context, distribution string) error {
+	appliance.calls++
+	return appliance.prepare(ctx, distribution)
+}
+
+func TestConnectionManagerPreparesApplianceBeforeActivation(t *testing.T) {
+	for _, action := range []string{"setup", "start", "reconcile"} {
+		for _, fail := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/fail=%t", action, fail), func(t *testing.T) {
+				manager, adapter, _, store, _ := connectionManagerFixture()
+				if action != "setup" {
+					runtime, err := manager.runtime(t.Context(), "loki-mcp", adapter)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err = store.Write(t.Context(), stateFromRuntime(runtime, true)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				appliance := &fakeConnectionAppliance{prepare: func(_ context.Context, distribution string) error {
+					if distribution != "loki-mcp" || len(adapter.calls) != 0 {
+						t.Fatal("appliance preparation did not precede runtime activation")
+					}
+					if fail {
+						return errors.New("keepalive failed")
+					}
+					return nil
+				}}
+				manager.Appliance = appliance
+				var err error
+				switch action {
+				case "setup":
+					err = manager.Setup(t.Context(), "loki-mcp", adapter.provider)
+				case "start":
+					err = manager.Start(t.Context(), "loki-mcp", adapter.provider)
+				case "reconcile":
+					err = manager.ReconcileEnabled(t.Context(), "loki-mcp")
+				}
+				if appliance.calls != 1 || (err != nil) != fail || (fail && len(adapter.calls) != 0) {
+					t.Fatalf("appliance calls=%d runtime=%v err=%v", appliance.calls, adapter.calls, err)
+				}
+			})
+		}
+	}
+}
+
+func TestConnectionManagerAppliancePreparationPreservesPassiveAndDisabledOperations(t *testing.T) {
+	manager, adapter, _, store, _ := connectionManagerFixture()
+	if err := manager.Setup(t.Context(), "loki-mcp", adapter.provider); err != nil {
+		t.Fatal(err)
+	}
+	appliance := &fakeConnectionAppliance{prepare: func(context.Context, string) error { t.Fatal("unexpected appliance startup"); return nil }}
+	manager.Appliance = appliance
+	if _, err := manager.Status(t.Context(), "loki-mcp", adapter.provider); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Stop(t.Context(), "loki-mcp", adapter.provider); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.ReconcileEnabled(t.Context(), "loki-mcp"); err != nil {
+		t.Fatal(err)
+	}
+	state, _, _ := store.Read("loki-mcp", adapter.provider)
+	state.HelperVersion = "foreign"
+	if err := store.Write(t.Context(), state); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Start(t.Context(), "loki-mcp", adapter.provider); err == nil {
+		t.Fatal("foreign state accepted")
+	}
 }
 
 func TestConnectionManagerProviderDescriptors(t *testing.T) {

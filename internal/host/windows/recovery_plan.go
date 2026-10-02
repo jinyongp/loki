@@ -52,6 +52,7 @@ func BuildRecoveryPlan(snapshot ExistingSnapshot, staleApproved bool) RecoveryPl
 
 type StartupTaskProbe struct {
 	Present     bool
+	Running     bool
 	Description string
 	Actions     []StartupTaskAction
 }
@@ -69,5 +70,5 @@ func ClassifyStartupTask(probe StartupTaskProbe, expected ExpectedInstallation) 
 		WindowsPathEqual(probe.Actions[0].Executable, expected.TaskExecutable) &&
 		probe.Actions[0].Arguments == expected.TaskArguments &&
 		probe.Description == "Keep the Loki WSL2 appliance running."
-	return StartupTaskState{Present: true, Owned: owned}
+	return StartupTaskState{Present: true, Owned: owned, Running: probe.Running}
 }

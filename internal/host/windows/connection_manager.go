@@ -104,6 +104,10 @@ type ConnectionStartupTaskReconciler interface {
 	Reconcile(context.Context, string, bool) error
 }
 
+type ConnectionAppliancePreparer interface {
+	Prepare(context.Context, string) error
+}
+
 type ManagedConnectionStatus struct {
 	Configured bool                    `json:"configured"`
 	State      ConnectionState         `json:"connection,omitempty"`
@@ -111,11 +115,12 @@ type ManagedConnectionStatus struct {
 }
 
 type ConnectionManager struct {
-	Helpers  ManagedHelperEnsurer
-	Store    ConnectionStateStore
-	Tasks    ConnectionStartupTaskReconciler
-	Adapters []RemoteConnectionAdapter
-	Platform string
+	Appliance ConnectionAppliancePreparer
+	Helpers   ManagedHelperEnsurer
+	Store     ConnectionStateStore
+	Tasks     ConnectionStartupTaskReconciler
+	Adapters  []RemoteConnectionAdapter
+	Platform  string
 }
 
 func (manager ConnectionManager) ProviderDescriptors() ([]ConnectionProviderDescriptor, error) {
@@ -178,6 +183,9 @@ func (manager ConnectionManager) Setup(ctx context.Context, distribution, provid
 	if err != nil {
 		return err
 	}
+	if err = manager.prepareAppliance(ctx, distribution); err != nil {
+		return err
+	}
 	if err = adapter.Setup(ctx, runtime); err != nil {
 		return manager.rollbackSetup(ctx, adapter, runtime, previous, hadPrevious,
 			fmt.Errorf("setup managed %s connection: %w", provider, err))
@@ -211,6 +219,9 @@ func (manager ConnectionManager) Start(ctx context.Context, distribution, provid
 		return fmt.Errorf("managed %s connection is not configured; run 'loki connection setup %s' first", provider, provider)
 	}
 	if err = validateStateAgainstRuntime(previous, runtime); err != nil {
+		return err
+	}
+	if err = manager.prepareAppliance(ctx, distribution); err != nil {
 		return err
 	}
 	if err = adapter.Start(ctx, runtime); err != nil {
@@ -367,6 +378,11 @@ func (manager ConnectionManager) ReconcileEnabled(ctx context.Context, distribut
 			return fmt.Errorf("reconcile managed connection startup task: %w", err)
 		}
 	}
+	if len(runtimes) > 0 {
+		if err = manager.prepareAppliance(ctx, distribution); err != nil {
+			return err
+		}
+	}
 	for _, runtime := range runtimes {
 		adapter := registry[runtime.Provider]
 		if err = adapter.Start(ctx, runtime); err != nil {
@@ -379,6 +395,16 @@ func (manager ConnectionManager) ReconcileEnabled(ctx context.Context, distribut
 				statusErr,
 			)
 		}
+	}
+	return nil
+}
+
+func (manager ConnectionManager) prepareAppliance(ctx context.Context, distribution string) error {
+	if manager.Appliance == nil {
+		return nil
+	}
+	if err := manager.Appliance.Prepare(ctx, distribution); err != nil {
+		return fmt.Errorf("prepare Loki appliance for managed connection: %w", err)
 	}
 	return nil
 }

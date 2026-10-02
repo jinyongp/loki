@@ -111,7 +111,7 @@ func TestWindowsConnectionTaskNativeRoundTrip(t *testing.T) {
 }
 
 func TestWindowsConnectionTaskScriptsParse(t *testing.T) {
-	for _, script := range []string{connectionTaskProbeScript, createConnectionTaskScript, removeConnectionTaskScript, updateConnectionTaskRetryScript} {
+	for _, script := range []string{connectionTaskProbeScript, createConnectionTaskScript, removeConnectionTaskScript, updateConnectionTaskRetryScript, startupTaskProbeScript, createOwnedStartupTaskScript, startVerifiedKeepaliveTaskScript} {
 		command := exec.CommandContext(t.Context(), "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
 			`$tokens=$null;$parseErrors=$null;$null=[System.Management.Automation.Language.Parser]::ParseInput($env:LOKI_TEST_TASK_SCRIPT,[ref]$tokens,[ref]$parseErrors);if($parseErrors.Count -gt 0){$parseErrors|Out-String|Write-Error;exit 1}`)
 		command.Env = append(withoutEnvironment(os.Environ(), "LOKI_TEST_TASK_SCRIPT"), "LOKI_TEST_TASK_SCRIPT="+script)

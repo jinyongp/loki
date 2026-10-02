@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"loki/internal/progress"
 )
 
 type ConnectionStartupConnections interface {
@@ -31,6 +33,7 @@ type ConnectionStartupController struct {
 	Connections ConnectionStartupConnections
 	Attempts    int
 	RetryDelay  time.Duration
+	Progress    progress.Reporter
 }
 
 func (controller ConnectionStartupController) Run(
@@ -51,6 +54,31 @@ func (controller ConnectionStartupController) Run(
 	if enabled == 0 {
 		return result, nil
 	}
+	prepared, err := controller.EnsureAppliance(ctx, expected)
+	result.KeepaliveStarted = prepared.KeepaliveStarted
+	result.HealthAttempts = prepared.HealthAttempts
+	if err != nil {
+		return result, err
+	}
+	if err = controller.Connections.ReconcileEnabled(ctx, expected.Distribution); err != nil {
+		return result, fmt.Errorf("restore enabled managed connections: %w", err)
+	}
+	return result, nil
+}
+
+// EnsureAppliance also serves manual setup/start and lifecycle reconciliation.
+// A successful WSL health probe can wake an appliance without keeping it alive.
+func (controller ConnectionStartupController) EnsureAppliance(
+	ctx context.Context,
+	expected ExpectedInstallation,
+) (ConnectionStartupResult, error) {
+	result := ConnectionStartupResult{}
+	if controller.Platform == nil {
+		return result, errors.New("managed connection startup platform is unavailable")
+	}
+	if _, err := controller.Platform.VerifyCanonicalFrontend(ctx); err != nil {
+		return result, fmt.Errorf("verify canonical Windows frontend before appliance startup: %w", err)
+	}
 
 	snapshot, err := controller.Platform.Collect(ctx, expected)
 	if err != nil {
@@ -60,16 +88,24 @@ func (controller ConnectionStartupController) Run(
 		return result, errors.New("refusing connection startup without verified Windows appliance ownership")
 	}
 	switch snapshot.Distribution.State {
-	case DistributionHealthy:
-		result.HealthAttempts = 1
-	case DistributionStale:
+	case DistributionHealthy, DistributionStale:
 		if !snapshot.StartupTask.Present || !snapshot.StartupTask.Owned {
-			return result, errors.New("Loki appliance is not healthy and the verified WSL keepalive task is unavailable")
+			return result, errors.New("WSL keepalive task is missing or no longer owned by Loki")
+		}
+		if !snapshot.StartupTask.Running {
+			progress.Emit(controller.Progress, progress.Event{
+				Operation: "connection", Phase: "appliance", State: progress.StateStarted, Level: progress.LevelSummary,
+				Message: "Restoring the WSL keepalive task before starting the connection...",
+			})
 		}
 		if err = controller.Platform.StartKeepalive(ctx, expected); err != nil {
 			return result, fmt.Errorf("start verified Loki WSL keepalive task: %w", err)
 		}
-		result.KeepaliveStarted = true
+		result.KeepaliveStarted = !snapshot.StartupTask.Running
+		if snapshot.Distribution.State == DistributionHealthy {
+			result.HealthAttempts = 1
+			break
+		}
 		attempts := controller.Attempts
 		if attempts <= 0 {
 			attempts = 30
@@ -109,8 +145,5 @@ func (controller ConnectionStartupController) Run(
 		return result, fmt.Errorf("unsupported Loki appliance state %q", snapshot.Distribution.State)
 	}
 
-	if err = controller.Connections.ReconcileEnabled(ctx, expected.Distribution); err != nil {
-		return result, fmt.Errorf("restore enabled managed connections: %w", err)
-	}
 	return result, nil
 }

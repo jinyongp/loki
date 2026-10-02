@@ -388,6 +388,7 @@ func parseSystemdProperties(raw string) map[string]string {
 type StartupTaskState struct {
 	Present bool
 	Owned   bool
+	Running bool
 }
 
 type ExistingSnapshot struct {
