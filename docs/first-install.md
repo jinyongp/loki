@@ -242,8 +242,9 @@ the durable credential location.
 
 GitHub setup opens the browser to create an App with **Any account** installation
 enabled for personal and organization accounts, then continues in the
-same tab to select all or individual repositories and discovers its identifiers
-automatically. Rerun the same
+same tab to select all or individual repositories for your accounts. Return to
+the terminal and press Enter to connect all approved installations of the App
+in one transaction. Rerun the same
 command after an installation wait or apply failure to continue with the saved
 App. Choose personal or organization accounts in GitHub. Rerunning setup after
 configuration opens the existing App's installation screen. Use `--no-browser`

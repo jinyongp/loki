@@ -30,7 +30,7 @@ func TestGitHubBrowserFollowsInstallationSelectionWithoutRepositorySnapshot(t *t
 				}
 				return transport.RoundTrip(r)
 			})
-			view, err := h.Handle(t.Context(), githubsetup.Request{Action: "poll"})
+			view, err := h.Handle(t.Context(), githubsetup.Request{Action: "finish"})
 			if err != nil || view.Phase != "configured" || len(view.Repositories) != 1 || view.Repositories[0] != "example/*" {
 				t.Fatalf("view=%+v err=%v", view, err)
 			}

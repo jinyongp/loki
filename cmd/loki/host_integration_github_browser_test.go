@@ -100,7 +100,7 @@ func TestHostGitHubBrowserFlowResumesWithoutExposingPrivateKey(t *testing.T) {
 	if _, err = h.Handle(ctx, githubsetup.Request{Action: "exchange", State: begin.State, Code: "validcode"}); err != nil || conversions.Load() != 1 {
 		t.Fatal("conversion replay created another App")
 	}
-	configured, err := h.Handle(ctx, githubsetup.Request{Action: "poll"})
+	configured, err := h.Handle(ctx, githubsetup.Request{Action: "finish"})
 	if err != nil || configured.Phase != "configured" || strings.Join(configured.Repositories, ",") != "example/*" {
 		t.Fatalf("poll=%#v %v", configured, err)
 	}
@@ -180,7 +180,7 @@ func TestGitHubDiscoveryRejectsInvalidInstallation(t *testing.T) {
 			}))
 			defer server.Close()
 			h.APIURL = server.URL
-			if _, err = h.Handle(ctx, githubsetup.Request{Action: "poll"}); err == nil {
+			if _, err = h.Handle(ctx, githubsetup.Request{Action: "finish"}); err == nil {
 				t.Fatal("invalid installation accepted")
 			}
 		})
@@ -242,7 +242,7 @@ func TestHostGitHubBrowserApplyFailureKeepsPrivateStateAndDoesNotClaimReady(t *t
 			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "poll"}); err != nil {
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "finish"}); err != nil {
 				t.Fatal(err)
 			}
 			h.Apply = func(context.Context, managedGitHubCandidate) error {
@@ -399,7 +399,7 @@ func TestGitHubSetupResumesInterruptedLifecycleApply(t *testing.T) {
 			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "exchange", State: begin.State, Code: "code"}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "poll"}); err != nil {
+			if _, err = h.Handle(t.Context(), githubsetup.Request{Action: "finish"}); err != nil {
 				t.Fatal(err)
 			}
 			backend := &fakeHostRuntimeBackend{active: generation.ID}

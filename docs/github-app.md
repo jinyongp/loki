@@ -27,8 +27,9 @@ Approve creation of the App. Registration enables **Any account** installation
 so the same App can be installed on personal and organization accounts. The
 same browser tab continues to its
 installation page, where you choose **All repositories** or **Only select
-repositories**. Loki discovers the App ID, installation ID, account,
-and repository access, validates the installation, applies the integration,
+repositories** for each account you want. Return to the terminal and press Enter
+when you have finished. Loki discovers the App ID and all approved installation
+IDs and accounts, validates the installations, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
 read access and Contents, Issues, and Pull requests read/write access, with
 webhooks and user OAuth authorization disabled. Both repository selections follow
@@ -38,7 +39,7 @@ Each command still receives a token scoped to its one requested repository.
 First setup creates an App owned by the signed-in personal GitHub account.
 Choose the installation account in GitHub's **Where do you want to install**
 screen. You can install the App on a different personal or organization account
-from its owner. Loki reads the selected installation's identity from the
+from its owner. Loki reads installation identities from the
 authenticated GitHub API. Account names and account types are not CLI options.
 Organization approval can leave installation pending.
 
@@ -47,23 +48,17 @@ accounts. Once an integration is configured, rerun `loki integration setup githu
 to open that same App's installation screen and choose an additional account.
 The Linux equivalent is `loki host integration setup github`. Existing installations,
 repository restrictions, credentials and limits are preserved. Loki opens the
-App's installation page, then verifies new or selected installations and applies
+App's installation page, then verifies all approved installations and applies
 the combined configuration through the managed backup and recovery transaction.
 An organization approval request can remain pending;
-rerun the same command to resume. New installations are detected automatically.
-If the account is already installed on GitHub, click **Configure** and save its
-settings. Loki detects installation metadata changes; for an already connected
-account, you can also return to the terminal and press Enter to finish without
-rewriting credentials or local repository restrictions. To connect an account
-already installed on GitHub without changing its settings, paste its GitHub
-Configure page URL into the terminal. Loki verifies that installation ID against
-the authenticated App's installation list before connecting it.
-
-Setup compares authenticated installation IDs and update times with the saved
-state at the start of the browser flow. If several installations change at once,
-Loki preserves the active configuration rather than guessing which account to
-connect. Rerun setup and paste the intended Configure page URL, or use
-`integration import` with an explicit configuration.
+rerun the same command to resume. Configure every account you want in GitHub,
+then return to the terminal and press Enter. Setup collects all approved,
+active installations of this App, including accounts already installed before
+this run. Several accounts are added together in one managed transaction.
+When every installation is already connected, setup reports all configured
+accounts without rewriting credentials or local repository restrictions.
+Suspended installations are not added. File-based `integration import` can
+connect a specific set of installations using an explicit configuration.
 
 Browser registration creates a public App (`public = true` in the manifest),
 which permits installations on multiple accounts. Each account must approve
@@ -86,8 +81,8 @@ rejects requests outside the installation's current access. Changes to either
 rerunning Loki setup. Existing tokens are reused until near expiry; GitHub also
 enforces access when processing API calls. File-based configurations can retain
 an explicit repository allowlist as an additional local restriction.
-Installation status polls run quietly while the terminal waits; setup and
-application progress remain visible.
+Setup waits for Enter while you configure accounts in GitHub; application
+progress remains visible after you finish.
 
 To abandon a pending App registration and start again, run:
 

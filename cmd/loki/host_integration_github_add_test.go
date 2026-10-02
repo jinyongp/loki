@@ -130,7 +130,7 @@ func TestGitHubBrowserAddsOrganizationAndPreservesExistingAccount(t *testing.T) 
 			if view, err = h.Handle(t.Context(), request); err != nil || view.Phase != "configured" {
 				t.Fatalf("failed apply did not resume: view=%+v err=%v", view, err)
 			}
-			if view, err = h.Handle(t.Context(), githubsetup.Request{Action: "apply"}); err != nil || view.Phase != "ready" || view.Account != "example-org" {
+			if view, err = h.Handle(t.Context(), githubsetup.Request{Action: "apply"}); err != nil || view.Phase != "ready" || view.Account != "example-user, example-org" {
 				t.Fatalf("apply=%+v err=%v", view, err)
 			}
 			if view, err = h.Handle(t.Context(), request); err != nil || view.Phase != "ready" || view.Account != "example-user, example-org" || applies != 2 {

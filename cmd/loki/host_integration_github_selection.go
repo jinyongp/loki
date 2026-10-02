@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,72 +57,77 @@ func (h *hostGitHubSetup) listSetupInstallations(ctx context.Context, key []byte
 	return nil, errors.New("GitHub installation listing is incomplete")
 }
 
-// Infer the installation selected in GitHub from authenticated API changes,
-// never from the App owner or from an unverified browser query parameter.
+// Collect approved installations from the App-authenticated API when the user
+// finishes browser setup. A legacy Configure URL can still select one verified ID.
 func (h *hostGitHubSetup) discoverSelectedInstallation(ctx context.Context, s *githubSetupSession, installationID int64) error {
 	items, err := h.listSetupInstallations(ctx, s.PrivateKey, s.AppID)
 	if err != nil {
 		return err
 	}
-	baseline := map[int64]time.Time{}
-	for _, item := range s.InstallationBaseline {
-		baseline[item.ID] = item.UpdatedAt
-	}
-	var chosen *setupInstallation
-	for i := range items {
-		item := &items[i]
-		if installationID > 0 {
-			if item.ID != installationID {
-				continue
-			}
-		} else {
-			if previous, exists := baseline[item.ID]; exists && previous.Equal(item.UpdatedAt) {
-				continue
-			}
-		}
-		if item.SuspendedAt != nil {
-			return errors.New("GitHub App installation is suspended")
-		}
-		if chosen != nil {
-			return errors.New("multiple GitHub installations changed during setup; use integration import with an explicit configuration to select accounts")
-		}
-		chosen = item
-	}
-	if chosen == nil {
-		if installationID > 0 {
-			return errors.New("the selected installation does not belong to this GitHub App")
-		}
-		return nil
-	}
-	accountType := "user"
-	if chosen.Account.Type == "Organization" {
-		accountType = "organization"
-	}
 	base := s.BaseConfig
+	existing := map[int64]config.GitHubInstallation{}
 	if len(base) > 0 {
 		parsed, parseErr := config.ParseGitHubFragment(base)
 		if parseErr != nil {
 			return parseErr
 		}
-		for _, existing := range parsed.GitHubInstallations {
-			if existing.InstallationID == chosen.ID {
-				if !strings.EqualFold(existing.Account, chosen.Account.Login) || existing.AccountType != accountType {
-					return errors.New("GitHub installation identity changed")
-				}
-				s.ConfigRaw = append([]byte(nil), base...)
-				s.Phase = "configured"
-				return nil
-			}
+		for _, installation := range parsed.GitHubInstallations {
+			existing[installation.InstallationID] = installation
 		}
 	} else {
 		base = []byte(fmt.Sprintf("github_app_id = %d\ngithub_api_version = \"2026-03-10\"\n", s.AppID))
 	}
-	account := strings.ToLower(chosen.Account.Login)
-	s.ConfigRaw = append(append([]byte(nil), base...), []byte(fmt.Sprintf("\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [\"*\"]\n", strconv.Quote(account), strconv.Quote(accountType), chosen.ID))...)
-	if _, err = config.ParseGitHubFragment(s.ConfigRaw); err != nil {
+	sort.Slice(items, func(i, j int) bool {
+		return strings.ToLower(items[i].Account.Login) < strings.ToLower(items[j].Account.Login)
+	})
+	raw := append([]byte(nil), base...)
+	var selected *setupInstallation
+	for i := range items {
+		item := &items[i]
+		if installationID > 0 && item.ID != installationID {
+			continue
+		}
+		accountType := "user"
+		if item.Account.Type == "Organization" {
+			accountType = "organization"
+		}
+		if configured, ok := existing[item.ID]; ok {
+			if !strings.EqualFold(configured.Account, item.Account.Login) || configured.AccountType != accountType {
+				return errors.New("GitHub installation identity changed")
+			}
+			if item.SuspendedAt != nil {
+				return errors.New("a configured GitHub App installation is suspended")
+			}
+		} else {
+			if item.SuspendedAt != nil {
+				if installationID > 0 {
+					return errors.New("GitHub App installation is suspended")
+				}
+				continue
+			}
+			account := strings.ToLower(item.Account.Login)
+			raw = append(raw, []byte(fmt.Sprintf("\n[[github_installations]]\naccount = %s\naccount_type = %s\ninstallation_id = %d\nrepositories = [\"*\"]\n", strconv.Quote(account), strconv.Quote(accountType), item.ID))...)
+		}
+		selected = item
+	}
+	if selected == nil {
+		if installationID > 0 {
+			return errors.New("the selected installation does not belong to this GitHub App")
+		}
+		if len(existing) == 0 {
+			return nil
+		}
+	}
+	parsed, err := config.ParseGitHubFragment(raw)
+	if err != nil {
 		return errors.New("GitHub setup generated invalid configuration")
 	}
-	s.Account, s.AccountType, s.OwnerID = account, accountType, chosen.Account.ID
-	s.Repositories, s.Phase = []string{account + "/*"}, "configured"
+	if selected != nil {
+		s.Account, s.OwnerID, s.AccountType = strings.ToLower(selected.Account.Login), selected.Account.ID, "user"
+		if selected.Account.Type == "Organization" {
+			s.AccountType = "organization"
+		}
+	}
+	s.ConfigRaw, s.Repositories, s.Phase = raw, append([]string(nil), parsed.GitHubTargets...), "configured"
 	return nil
 }

@@ -38,6 +38,12 @@ func (h *hostGitHubSetup) configuredSetup(ctx context.Context, request githubset
 		if !bytes.Equal(raw, session.BaseConfig) {
 			return nil, errors.New("GitHub configuration changed during setup; the current integration was preserved")
 		}
+		if request.Action == "begin" && request.Account == "" && session.Phase == "installation" && !session.SelectInstallation {
+			session.SelectInstallation = true
+			if err = h.save(ctx, *session); err != nil {
+				return nil, err
+			}
+		}
 		return nil, nil
 	}
 	for _, installation := range parsed.GitHubInstallations {
@@ -135,7 +141,6 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 		return githubSetupSession{}, errors.New("GitHub returned invalid existing App metadata")
 	}
 	account := request.Account
-	var baseline []githubInstallationSnapshot
 	if account == "" {
 		if app.Owner.ID <= 0 {
 			return githubSetupSession{}, errors.New("GitHub returned invalid existing App owner")
@@ -143,13 +148,6 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 		account, accountID, accountType = app.Owner.Login, app.Owner.ID, "user"
 		if app.Owner.Type == "Organization" {
 			accountType = "organization"
-		}
-		items, listErr := h.listSetupInstallations(ctx, candidate.KeyRaw, app.ID)
-		if listErr != nil {
-			return githubSetupSession{}, listErr
-		}
-		for _, item := range items {
-			baseline = append(baseline, githubInstallationSnapshot{ID: item.ID, UpdatedAt: item.UpdatedAt})
 		}
 	}
 	settings := "https://github.com/settings/apps/" + app.Slug + "/advanced"
@@ -163,7 +161,7 @@ func (h *hostGitHubSetup) beginGitHubInstallationAddition(ctx context.Context, r
 	session := githubSetupSession{Version: 1, Phase: "installation", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL,
 		Account: strings.ToLower(account), AccountType: accountType, OwnerID: accountID, AppID: app.ID, Slug: app.Slug,
 		PrivateKey: append([]byte(nil), candidate.KeyRaw...), BaseConfig: append([]byte(nil), base...), AppSettingsURL: settings,
-		SelectInstallation: request.Account == "", InstallationBaseline: baseline}
+		SelectInstallation: request.Account == ""}
 	if err = h.save(ctx, session); err != nil {
 		clear(session.PrivateKey)
 		return githubSetupSession{}, err
@@ -190,7 +188,7 @@ func validateGitHubInstallationAddition(ctx context.Context, store *lifecycle.Fi
 		return err
 	}
 	if candidate.Config.GitHubAppID != parsed.GitHubAppID || lifecycle.ManagedIntegrationDigest(candidate.KeyRaw) != current.GitHub.CredentialSHA256 ||
-		len(candidate.Config.GitHubInstallations) != len(parsed.GitHubInstallations)+1 || !bytes.HasPrefix(candidate.ConfigRaw, append(append([]byte(nil), raw...), '\n')) {
+		len(candidate.Config.GitHubInstallations) <= len(parsed.GitHubInstallations) || !bytes.HasPrefix(candidate.ConfigRaw, append(append([]byte(nil), raw...), '\n')) {
 		return errors.New("GitHub setup must preserve the existing App, credentials and installations")
 	}
 	return nil

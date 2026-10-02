@@ -45,15 +45,16 @@ type Manifest struct {
 	RequestOAuthOnInstall bool              `json:"request_oauth_on_install"`
 }
 type View struct {
-	SchemaVersion   int       `json:"schema_version"`
-	Phase           string    `json:"phase"`
-	State           string    `json:"state,omitempty"`
-	RegistrationURL string    `json:"registration_url,omitempty"`
-	Manifest        *Manifest `json:"manifest,omitempty"`
-	InstallationURL string    `json:"installation_url,omitempty"`
-	Account         string    `json:"account,omitempty"`
-	Repositories    []string  `json:"repositories,omitempty"`
-	AppSettingsURL  string    `json:"app_settings_url,omitempty"`
+	SchemaVersion       int       `json:"schema_version"`
+	Phase               string    `json:"phase"`
+	State               string    `json:"state,omitempty"`
+	RegistrationURL     string    `json:"registration_url,omitempty"`
+	Manifest            *Manifest `json:"manifest,omitempty"`
+	InstallationURL     string    `json:"installation_url,omitempty"`
+	Account             string    `json:"account,omitempty"`
+	Repositories        []string  `json:"repositories,omitempty"`
+	AppSettingsURL      string    `json:"app_settings_url,omitempty"`
+	RequireConfirmation bool      `json:"require_confirmation,omitempty"`
 }
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
@@ -192,7 +193,9 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			fmt.Fprintln(output, "The selected account must approve installation; organization App policies still apply.")
 		}
 		fmt.Fprintln(output, "Choose a personal or organization account in GitHub, then select All repositories or Only select repositories and save.")
-		if view.AppSettingsURL != "" {
+		if view.RequireConfirmation {
+			fmt.Fprintln(output, "Configure every account you want in GitHub, then return here and press Enter. Loki will connect all approved installations of this App and preserve existing local restrictions.")
+		} else if view.AppSettingsURL != "" {
 			fmt.Fprintln(output, "New installations are detected automatically. After configuring an existing installation, return here and press Enter.")
 			fmt.Fprintln(output, "To connect an already installed account without changing its settings, paste its GitHub Configure page URL here and press Enter.")
 		} else {
@@ -209,7 +212,7 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	finished := make(chan string)
-	if view.AppSettingsURL != "" {
+	if view.RequireConfirmation || view.AppSettingsURL != "" {
 		input := options.Input
 		if input == nil {
 			input = os.Stdin
@@ -232,9 +235,16 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			var installationID int64
 			select {
 			case <-ticker.C:
+				if view.RequireConfirmation {
+					continue
+				}
 			case line := <-finished:
 				action = "finish"
 				if strings.TrimSpace(line) != "" {
+					if view.RequireConfirmation {
+						fmt.Fprintln(output, "After configuring your accounts in GitHub, press Enter to connect all approved installations.")
+						continue
+					}
 					var valid bool
 					installationID, valid = configureInstallationID(line)
 					if !valid {
@@ -280,9 +290,17 @@ func configureInstallationID(raw string) (int64, bool) {
 func printReady(output io.Writer, view View) error {
 	fmt.Fprintln(output, "GitHub integration ready.")
 	if view.Account != "" {
-		fmt.Fprintln(output, "Account:", view.Account)
+		label := "Account:"
+		if strings.Contains(view.Account, ", ") {
+			label = "Accounts:"
+		}
+		fmt.Fprintln(output, label, view.Account)
 	}
-	if len(view.Repositories) == 1 && strings.HasSuffix(view.Repositories[0], "/*") {
+	installationAccess := len(view.Repositories) > 0
+	for _, target := range view.Repositories {
+		installationAccess = installationAccess && strings.HasSuffix(target, "/*")
+	}
+	if installationAccess {
 		fmt.Fprintln(output, "Repository access follows your GitHub App installation settings.")
 	} else if len(view.Repositories) > 0 {
 		fmt.Fprintln(output, "Repositories:", strings.Join(view.Repositories, ", "))

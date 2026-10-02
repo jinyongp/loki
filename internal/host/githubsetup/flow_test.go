@@ -64,6 +64,60 @@ func TestRunFinishesExistingConfigureOnEnter(t *testing.T) {
 	}
 }
 
+func TestRunWaitsForAllAccountsBeforeApplyingBatch(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial", true: "existing"}[existing], func(t *testing.T) {
+			reader, writer := io.Pipe()
+			defer reader.Close()
+			defer writer.Close()
+			var output bytes.Buffer
+			var finishes, applies atomic.Int32
+			opened := make(chan struct{})
+			transport := func(_ context.Context, request Request) (View, error) {
+				switch request.Action {
+				case "begin":
+					view := View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", RequireConfirmation: true}
+					if existing {
+						view.AppSettingsURL = "https://github.com/settings/apps/existing-app/advanced"
+					}
+					return view, nil
+				case "finish":
+					finishes.Add(1)
+					return View{Phase: "configured"}, nil
+				case "apply":
+					applies.Add(1)
+					return View{Phase: "ready", Account: "example-user, example-org", Repositories: []string{"example-user/*", "example-org/*"}}, nil
+				default:
+					t.Errorf("batch must wait for Enter, received %s", request.Action)
+					return View{}, errors.New("unexpected action")
+				}
+			}
+			result := make(chan error, 1)
+			go func() {
+				result <- Run(t.Context(), transport, Options{Input: reader, PollInterval: time.Millisecond, OpenBrowser: func(string) error { close(opened); return nil }}, &output)
+			}()
+			<-opened
+			select {
+			case err := <-result:
+				t.Fatalf("setup ended before Enter: %v", err)
+			case <-time.After(15 * time.Millisecond):
+			}
+			if finishes.Load() != 0 || applies.Load() != 0 {
+				t.Fatal("batch applied before browser selection was complete")
+			}
+			if _, err := io.WriteString(writer, "\n"); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-result; err != nil {
+				t.Fatal(err)
+			}
+			if finishes.Load() != 1 || applies.Load() != 1 || !strings.Contains(output.String(), "Accounts: example-user, example-org") || !strings.Contains(output.String(), "Repository access follows") || strings.Contains(output.String(), "paste its GitHub Configure") {
+				t.Fatalf("batch output=%s", output.String())
+			}
+		})
+	}
+}
+
 func TestRunConnectsPastedGitHubConfigureURL(t *testing.T) {
 	var output bytes.Buffer
 	selected := false

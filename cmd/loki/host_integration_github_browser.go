@@ -136,6 +136,12 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 			if request.Account != "" && (!strings.EqualFold(request.Account, session.Account) || accountType != session.AccountType) {
 				return githubsetup.View{}, errors.New("a GitHub setup for another account is pending; finish that setup first")
 			}
+			if request.Account == "" && session.Phase == "installation" && !session.SelectInstallation {
+				session.SelectInstallation = true
+				if err = h.save(ctx, session); err != nil {
+					return githubsetup.View{}, err
+				}
+			}
 			return session.view(), nil
 		}
 		if session.Phase == "registration" {
@@ -235,6 +241,10 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if session.Phase != "installation" {
 			return githubsetup.View{}, errors.New("GitHub App is not ready for installation")
 		}
+		if session.SelectInstallation && request.Action == "poll" {
+			// The user may configure several accounts before completing setup.
+			return session.view(), nil
+		}
 		if request.Action == "select" {
 			err = h.discoverSelectedInstallation(ctx, &session, request.InstallationID)
 		} else {
@@ -242,6 +252,9 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		}
 		if err != nil {
 			return githubsetup.View{}, err
+		}
+		if session.SelectInstallation && request.Action == "finish" && session.Phase == "installation" {
+			return githubsetup.View{}, errors.New("no approved GitHub App installations found; complete installation in GitHub and rerun setup")
 		}
 		if len(session.BaseConfig) > 0 && (bytes.Equal(session.ConfigRaw, session.BaseConfig) || request.Action == "finish" && session.Phase == "installation") {
 			parsed, parseErr := config.ParseGitHubFragment(session.BaseConfig)
@@ -282,15 +295,6 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if err = h.Store.ClearGitHubSetup(ctx); err != nil {
 			return githubsetup.View{}, err
 		}
-		if session.SelectInstallation {
-			view := session.view()
-			accounts := make([]string, 0, len(parsed.GitHubInstallations))
-			for _, installation := range parsed.GitHubInstallations {
-				accounts = append(accounts, installation.Account)
-			}
-			view.Account, view.Repositories = strings.Join(accounts, ", "), append([]string(nil), parsed.GitHubTargets...)
-			return view, nil
-		}
 	}
 	return session.view(), nil
 }
@@ -329,7 +333,16 @@ func (h *hostGitHubSetup) save(ctx context.Context, session githubSetupSession) 
 	return h.Store.WriteGitHubSetup(ctx, raw)
 }
 func (s githubSetupSession) view() githubsetup.View {
-	view := githubsetup.View{SchemaVersion: 1, Phase: s.Phase, Account: s.Account, Repositories: append([]string(nil), s.Repositories...), AppSettingsURL: s.AppSettingsURL}
+	view := githubsetup.View{SchemaVersion: 1, Phase: s.Phase, Account: s.Account, Repositories: append([]string(nil), s.Repositories...), AppSettingsURL: s.AppSettingsURL, RequireConfirmation: s.SelectInstallation}
+	if len(s.ConfigRaw) > 0 {
+		if parsed, err := config.ParseGitHubFragment(s.ConfigRaw); err == nil {
+			accounts := make([]string, 0, len(parsed.GitHubInstallations))
+			for _, installation := range parsed.GitHubInstallations {
+				accounts = append(accounts, installation.Account)
+			}
+			view.Account = strings.Join(accounts, ", ")
+		}
+	}
 	if s.Phase == "registration" {
 		target := "https://github.com/settings/apps/new"
 		if s.AccountType == "organization" {
