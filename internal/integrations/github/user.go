@@ -150,10 +150,14 @@ func (u *UserAuthorization) Begin(ctx context.Context, account string) (UserAuth
 		Error           string `json:"error"`
 	}
 	err = authorizationJSON(ctx, u.HTTP, http.MethodPost, u.endpoint("/login/device/code", true), "", url.Values{"client_id": {app.ClientID}}, &device)
-	if device.Error == "device_flow_disabled" {
+	var rejected *authorizationRejection
+	if device.Error == "device_flow_disabled" || (errors.As(err, &rejected) && rejected.deviceFlowDisabled) {
 		return UserAuthorizationView{}, fault.Error("enable Device flow in the GitHub App settings, then retry setup")
 	}
-	if err != nil || device.Error != "" || !credentialText(device.DeviceCode, 4096) || !credentialText(device.UserCode, 64) ||
+	if err != nil {
+		return UserAuthorizationView{}, err
+	}
+	if device.Error != "" || !credentialText(device.DeviceCode, 4096) || !credentialText(device.UserCode, 64) ||
 		device.VerificationURI != "https://github.com/login/device" || device.ExpiresIn < 1 || device.ExpiresIn > 900 || device.Interval < 1 || device.Interval > 60 {
 		return UserAuthorizationView{}, fault.Error("GitHub device authorization could not start; check the App's Device flow setting")
 	}
@@ -303,13 +307,13 @@ func (u *UserAuthorization) AccountToken(ctx context.Context, account string) (s
 	}
 	c, ok := credentials[account]
 	if !ok || c.AppID != u.AppID || c.Account != account || !strings.HasPrefix(c.AccessToken, "ghu_") || !credentialText(c.AccessToken, 4096) {
-		return "", fault.Error("GitHub personal Projects authorization is required; run integration setup github")
+		return "", fault.Error("GitHub personal Projects authorization is required; run integration setup github --personal-projects")
 	}
 	if c.ExpiresAt.IsZero() || u.now().Before(c.ExpiresAt.Add(-cacheSkew)) {
 		return c.AccessToken, nil
 	}
 	if !credentialText(c.ClientID, 100) || !strings.HasPrefix(c.RefreshToken, "ghr_") || !credentialText(c.RefreshToken, 4096) || !u.now().Before(c.RefreshExpires) {
-		return "", fault.Error("GitHub personal Projects authorization expired; run integration setup github")
+		return "", fault.Error("GitHub personal Projects authorization expired; run integration setup github --personal-projects")
 	}
 	var response userTokenResponse
 	if err = authorizationJSON(ctx, u.HTTP, http.MethodPost, u.endpoint("/login/oauth/access_token", true), "", url.Values{
@@ -319,7 +323,7 @@ func (u *UserAuthorization) AccountToken(ctx context.Context, account string) (s
 	}
 	rotated, err := response.credential(u.AppID, account, c.ClientID, u.now())
 	if err != nil {
-		return "", fault.Error("GitHub personal Projects token refresh failed; run integration setup github")
+		return "", fault.Error("GitHub personal Projects token refresh failed; run integration setup github --personal-projects")
 	}
 	if err = u.verifyAccount(ctx, rotated); err != nil {
 		return "", err
@@ -473,6 +477,14 @@ func authorizationJSON(ctx context.Context, client *http.Client, method, endpoin
 	return authorizationBodyJSON(ctx, client, method, endpoint, token, input, contentType, out)
 }
 
+// Retain only the recognized setting error, never upstream descriptions or tokens.
+type authorizationRejection struct {
+	deviceFlowDisabled bool
+}
+
+func (*authorizationRejection) Error() string   { return "GitHub authorization request was rejected" }
+func (e *authorizationRejection) Unwrap() error { return fault.Error(e.Error()) }
+
 func authorizationBodyJSON(ctx context.Context, client *http.Client, method, endpoint, token string, input io.Reader, contentType string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, issuerTimeout)
 	defer cancel()
@@ -493,16 +505,24 @@ func authorizationBodyJSON(ctx context.Context, client *http.Client, method, end
 	boundedClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := boundedClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fault.Error("GitHub authorization request timed out; retry setup")
+		}
 		return fault.Error("GitHub authorization request failed")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fault.Error("GitHub authorization request was rejected")
-	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, (64<<10)+1))
 	defer clear(raw)
 	if err != nil || len(raw) > 64<<10 {
 		return fault.Error("GitHub authorization response is invalid")
+	}
+	if resp.StatusCode != http.StatusOK {
+		var rejection struct {
+			Error string `json:"error"`
+		}
+		// A non-success response must never populate a success DTO.
+		valid := json.Unmarshal(raw, &rejection) == nil
+		return &authorizationRejection{deviceFlowDisabled: valid && resp.StatusCode == http.StatusBadRequest && rejection.Error == "device_flow_disabled"}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	var trailing any

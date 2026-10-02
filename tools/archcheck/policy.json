@@ -329,6 +329,10 @@
       "to": "loki/internal/platform/safeio"
     },
     {
+      "from": "loki/internal/host/githubsetup",
+      "to": "loki/internal/progress"
+    },
+    {
       "from": "loki/internal/host/lifecycle",
       "to": "loki/internal/host/ingress"
     },

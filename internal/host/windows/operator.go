@@ -21,6 +21,7 @@ type OperatorRequest struct {
 	IdentityEmail       string
 	GitHubBrowser       bool
 	GitHubUser          bool
+	PersonalProjects    bool
 	UseStdin            bool
 	Approve             bool
 	InterruptActiveJobs bool
@@ -142,7 +143,7 @@ func (client OperatorClient) execute(
 
 func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 	if request.Command != "integration" &&
-		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.GitHubBrowser || request.GitHubUser) {
+		(request.Integration != "" || request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.GitHubBrowser || request.GitHubUser || request.PersonalProjects) {
 		return nil, false, fmt.Errorf("%s does not accept integration options", request.Command)
 	}
 	switch request.Command {
@@ -205,6 +206,9 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		args = append(args, backupID)
 		return args, false, nil
 	case "integration":
+		if request.PersonalProjects && (request.Integration != "github" || (request.Action != "status" && request.Action != "doctor") || request.GitHubBrowser || request.GitHubUser) {
+			return nil, false, errors.New("--personal-projects is valid only for status or doctor github")
+		}
 		if request.Action == "refresh" {
 			if request.Integration != "github" || request.GitHubUser || request.GitHubBrowser || request.UseStdin ||
 				request.IdentityName != "" || request.IdentityEmail != "" || request.BackupID != "" || request.Approve || request.InterruptActiveJobs {
@@ -247,6 +251,9 @@ func operatorCommandArguments(request OperatorRequest) ([]string, bool, error) {
 		case "status", "doctor":
 			if request.IdentityName != "" || request.IdentityEmail != "" || request.UseStdin || request.InterruptActiveJobs {
 				return nil, false, errors.New("integration inspection does not accept mutation options")
+			}
+			if request.PersonalProjects {
+				args = append(args, "--personal-projects")
 			}
 			args = append(args, "--json", integration)
 			return args, true, nil

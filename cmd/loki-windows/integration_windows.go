@@ -36,10 +36,10 @@ func runIntegration(ctx context.Context, args []string, stdout, stderr io.Writer
 	switch action {
 	case "refresh":
 		return runWindowsGitHubRefresh(ctx, args[1:], stdout, stderr)
-	case "logout", "user-status":
+	case "logout":
 		return runWindowsGitHubUser(ctx, action, args[1:], stdout, stderr)
 	case "login":
-		fmt.Fprintln(stderr, "Use loki integration setup github to authorize GitHub.")
+		fmt.Fprintln(stderr, "Use loki integration setup github --personal-projects to authorize personal Projects.")
 		return 2
 	case "list", "status", "doctor", "enable", "disable", "remove":
 		return runIntegrationAction(ctx, action, args[1:], stdout, stderr)
@@ -65,6 +65,7 @@ func runIntegrationAction(ctx context.Context, action string, args []string, std
 	request := windowshost.OperatorRequest{
 		Command: "integration", Action: action, Integration: options.Name,
 		InterruptActiveJobs: options.InterruptJobs,
+		PersonalProjects:    options.PersonalProjects,
 	}
 	client := windowshost.NewWindowsOperatorClient()
 	var result windowshost.OperatorResult
@@ -193,9 +194,10 @@ func runWindowsSigningSetup(ctx context.Context, action string, args []string, s
 func runWindowsGitHubSetup(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("integration "+action+" github", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var noBrowser bool
+	var noBrowser, personalProjects bool
 	if action == "setup" {
 		flags.BoolVar(&noBrowser, "no-browser", false, "print the local registration URL")
+		flags.BoolVar(&personalProjects, "personal-projects", false, "optionally authorize personal Projects with GitHub Device Flow")
 	}
 	distribution := flags.String("distribution", defaultDistribution(), "WSL distribution name")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
@@ -219,7 +221,7 @@ func runWindowsGitHubSetup(ctx context.Context, action string, args []string, st
 		return 2
 	}
 	if action == "setup" {
-		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{NoBrowser: noBrowser, Verbose: progress.Verbose(stderr)}, stdout, stderr)
+		return runWindowsGitHubBrowserSetup(ctx, *distribution, *interrupt, githubsetup.Options{NoBrowser: noBrowser, PersonalProjects: personalProjects, Verbose: progress.Verbose(stderr)}, stdout, stderr)
 	}
 	if strings.TrimSpace(configFile) == "" || strings.TrimSpace(privateKeyFile) == "" {
 		fmt.Fprintln(stderr, "--config-file and --private-key-file are required for GitHub import or rotation")

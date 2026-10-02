@@ -28,6 +28,13 @@ func personalProjectFixture(t *testing.T) (*CommandRunner, *atomic.Int32, *atomi
 	runner.Projects = &ProjectAuthority{Targets: []string{"example-user/repo", "example-org/loki"}, AccountTypes: map[string]string{"example-user": "user", "example-org": "organization"},
 		Repositories: runner.Tokens, Users: users, HTTP: http.DefaultClient}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/graphql" {
+			var input projectFixtureRequest
+			if json.NewDecoder(r.Body).Decode(&input) != nil || !projectFixtureResponse(w, input) {
+				t.Error("unexpected repository Projects query")
+			}
+			return
+		}
 		if r.Method != http.MethodGet || r.URL.Path != "/orgs/example-org" {
 			t.Error("unexpected organization availability request", r.Method, r.URL.Path)
 		}
@@ -59,6 +66,13 @@ func TestOrganizationProjectsDisabledAdvicePreventsExecution(t *testing.T) {
 				return process.Result{}, nil
 			})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost && r.URL.Path == "/graphql" && scenario == "enabled" {
+					var input projectFixtureRequest
+					if json.NewDecoder(r.Body).Decode(&input) != nil || !projectFixtureResponse(w, input) {
+						t.Error("unexpected repository Projects preflight")
+					}
+					return
+				}
 				if r.Method != http.MethodGet || r.URL.Path != "/orgs/example-org" || r.Header.Get("Authorization") == "Bearer ghu_personal" {
 					t.Error("incorrect organization preflight authority")
 				}
@@ -75,7 +89,7 @@ func TestOrganizationProjectsDisabledAdvicePreventsExecution(t *testing.T) {
 			}))
 			defer server.Close()
 			runner.Projects.HTTP, runner.Projects.apiURL = server.Client(), server.URL
-			_, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"project", "create", "--title", "Example"}})
+			_, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"project", "view", "1"}})
 			if (err == nil) != (scenario == "enabled") || (executed.Load() == 1) != (scenario == "enabled") || userCalls.Load() != 0 {
 				t.Fatal("organization preflight failed", err, executed.Load())
 			}
@@ -92,17 +106,21 @@ func TestOrganizationProjectsDisabledAdvicePreventsExecution(t *testing.T) {
 func TestProjectsAuthorityUsesUserTokenOnlyForPersonalProjects(t *testing.T) {
 	runner, repositoryCalls, userCalls := personalProjectFixture(t)
 	result, err := runner.Run(t.Context(), CommandRequest{Target: "Example-User/Repo", Args: []string{"project", "create", "--title", "Example", "--format", "json"}})
-	if err != nil || !strings.Contains(result.Output, "--owner|example-user") || !strings.Contains(result.Output, "[REDACTED]") || strings.Contains(result.Output, "ghu_personal") || repositoryCalls.Load() != 0 || userCalls.Load() != 1 {
+	if err != nil || !strings.Contains(result.Output, "created-project") || strings.Contains(result.Output, "ghu_personal") || repositoryCalls.Load() != 0 || userCalls.Load() != 1 {
 		t.Fatal("personal Projects authority or redaction failed", result, err)
 	}
-	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"project", "list"}}); err != nil || repositoryCalls.Load() != 1 || userCalls.Load() != 1 {
+	result, err = runner.Run(t.Context(), CommandRequest{Target: "example-user/repo", Args: []string{"project", "view", "1"}})
+	if err != nil || !strings.Contains(result.Output, "--owner|example-user") || !strings.Contains(result.Output, "[REDACTED]") || strings.Contains(result.Output, "ghu_personal") {
+		t.Fatal("delegated Projects token was not redacted", result, err)
+	}
+	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"project", "list"}}); err != nil || repositoryCalls.Load() != 1 || userCalls.Load() != 2 {
 		t.Fatal("organization Projects did not use the installation token", err)
 	}
-	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"api", "graphql"}}); err != nil || repositoryCalls.Load() != 2 || userCalls.Load() != 1 {
+	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-org/loki", Args: []string{"api", "graphql"}}); err != nil || repositoryCalls.Load() != 2 || userCalls.Load() != 2 {
 		t.Fatal("repository API commands acquired personal credentials", err)
 	}
 	runner.Projects.Users = nil
-	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-user/repo", Args: []string{"project", "list"}}); err == nil || repositoryCalls.Load() != 2 || fault.Public(err) != "GitHub personal Projects authorization is required; run integration setup github" {
+	if _, err := runner.Run(t.Context(), CommandRequest{Target: "example-user/repo", Args: []string{"project", "list"}}); err == nil || repositoryCalls.Load() != 2 || fault.Public(err) != "GitHub personal Projects authorization is required; run integration setup github --personal-projects" {
 		t.Fatal("personal Projects silently fell back to installation credentials")
 	}
 }
@@ -111,6 +129,7 @@ func TestProjectsRejectUnsafeCommandsBeforeCredentialAccess(t *testing.T) {
 	runner, repositoryCalls, userCalls := personalProjectFixture(t)
 	for _, args := range [][]string{
 		{"project"}, {"project", "copy", "1"}, {"project", "link", "1", "--repo", "other/repo"},
+		{"project", "create"}, {"project", "create", "--title", " "},
 		{"project", "list", "--owner", "another-user"}, {"project", "list", "--owner=another-user"},
 		{"project", "list", "--", "--owner", "another-user"}, {"project", "list", "-Rother/repo"},
 		{"project", "list", "--format", "yaml"}, {"project", "list", "--web"},
@@ -154,10 +173,18 @@ func TestProjectsNodeMutationsVerifyOwnerAndSameProject(t *testing.T) {
 					t.Error("invalid node authorization")
 				}
 				var input struct {
+					Query     string            `json:"query"`
 					Variables map[string]string `json:"variables"`
 				}
 				if json.NewDecoder(r.Body).Decode(&input) != nil {
 					t.Error("invalid node lookup")
+				}
+				vars := map[string]any{}
+				for name, value := range input.Variables {
+					vars[name] = value
+				}
+				if projectFixtureResponse(w, projectFixtureRequest{Query: input.Query, Variables: vars}) {
+					return
 				}
 				id := input.Variables["id"]
 				owner := "example-user"

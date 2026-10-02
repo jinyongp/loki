@@ -16,15 +16,22 @@ func (f githubUserAdminCaller) Call(ctx context.Context, request any) (json.RawM
 }
 
 func TestGitHubUserCommandsUseSetupAndRejectAccountSelectors(t *testing.T) {
-	for _, action := range []string{"login", "logout", "user-status"} {
+	for _, action := range []string{"login", "logout"} {
 		var stdout, stderr bytes.Buffer
 		if code := runHostGitHubUser(action, []string{"--account", "example-user", "github"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
 			t.Fatal("user command accepted account selector", action, code, stderr.String())
 		}
 	}
 	var stdout, stderr bytes.Buffer
-	if code := runHostGitHubUser("login", []string{"--system", "github"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "setup --system github") {
+	if code := runHostGitHubUser("login", []string{"--system", "github"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "setup --system --personal-projects github") {
 		t.Fatal("login did not direct users to setup", code, stderr.String())
+	}
+}
+
+func TestHostIntegrationRejectsSeparateUserStatus(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := runHostIntegration([]string{"user-status", "github"}, &stdout, &stderr); code != 2 || strings.Contains(stderr.String(), "user-status") {
+		t.Fatal("removed authorization status command is exposed", code, stderr.String())
 	}
 }
 

@@ -32,11 +32,13 @@ when you have finished. Loki discovers the App ID and all approved installation
 IDs and accounts, validates the installations, applies the integration,
 and checks readiness before reporting success. The default App grants Metadata
 read access and Contents, Issues, Pull requests, Actions, Workflows, Checks,
-Commit statuses, organization Projects, organization Issue Fields, Issue Types,
-and Personal Projects read/write access.
-Webhooks and automatic user authorization during installation are disabled;
-personal Projects authorization continues through device flow during setup, as
-described below. Both repository selections follow
+Commit statuses, organization Projects, organization Issue Fields, and Issue
+Types read/write access. Personal Projects permission and Device Flow
+authorization are optional: select `--personal-projects` during setup to request
+them. Default setup finishes with App installation access and does not query or
+start personal authorization. Webhooks and automatic user authorization during
+installation are disabled.
+Both repository selections follow
 the installation's current access on GitHub, without a local repository snapshot.
 Repository commands receive a token scoped to their one requested repository.
 
@@ -180,31 +182,67 @@ Administration: Write**, separately from **Organization Projects: Read & write**
 Loki directs the organization owner to the setting instead of requesting that
 additional permission.
 
-## Personal Projects authorization
+## Projects linked to a repository
+
+GitHub's repository **Projects** tab lists projects linked to that repository.
+The project is owned by the repository's user or organization; linking it does
+not create a separate repository-owned Projects resource. See
+[adding your project to a repository](https://docs.github.com/en/issues/planning-and-tracking-with-projects/managing-your-project/adding-your-project-to-a-repository).
+
+To query only projects linked to an allowed repository, use the installation
+token path through `github api graphql`:
+
+```json
+{"target":"example-org/repo","command":"api","args":["graphql","-f","query=query { repository(owner:\"example-org\",name:\"repo\") { projectsV2(first:20) { nodes { id number title url } } } }"]}
+```
+
+An empty connection does not prove private-project access. Organization Projects
+can be created and linked to the selected repository with an installation token
+using `createProjectV2` with both `ownerId` and `repositoryId`; the App also needs
+repository Contents permission for that link. This path does not use Device
+Flow. See [GitHub's Projects API authentication guidance](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
+Linking to a personal repository does not grant an installation token permission
+to create projects owned by that user. Personal-project write authorization
+remains an optional, separate capability.
+
+## Optional personal Projects authorization
 
 Set **Account permissions > Personal Projects** to **Read & write** in the
 existing App's **Permissions & events**, and enable **Device flow** in its
 general settings. The personal account must already be connected as an App
 installation in Loki.
 
+These settings are needed only when opting into personal Projects. GitHub's
+manifest does not expose a Device Flow setting; under **Identifying and
+authorizing users** in the App's general settings, select **Enable Device Flow**
+and save. When this is disabled, optional setup prints the settings link and
+the exact remedy.
+
+Setup announces configuration checks, installation validation after Enter,
+personal authorization checks, device-code requests, and the browser approval
+wait when personal Projects are selected. Slow steps show an elapsed-time
+notice. `integration doctor github` announces work before host startup. App
+readiness depends on installation access and runtime readiness. Optional
+personal authorization never blocks repository setup or readiness.
+
 On Windows:
 
 ```powershell
-loki integration setup github
-loki integration user-status github
+loki integration setup github --personal-projects
+loki integration status --personal-projects github
 loki integration logout github
 ```
 
 On a system-scoped managed Linux host:
 
 ```sh
-sudo loki host integration setup --system --no-browser github
-sudo loki host integration user-status --system github
+sudo loki host integration setup --system --personal-projects --no-browser github
+sudo loki host integration status --system --personal-projects github
 sudo loki host integration logout --system github
 ```
 
-Setup creates or reuses the App, connects its installations, then continues with
-personal Projects authorization in the same command. It prints a short code and
+With `--personal-projects`, setup creates or reuses the App, connects its
+installations, then continues with personal Projects authorization. It prints a short code and
 opens `https://github.com/login/device`. Enter the code there and authorize the
 App with a connected personal account. Loki identifies the signed-in account
 from GitHub and checks its installation before saving any token. Setup skips
@@ -220,15 +258,22 @@ user authorization; a separate `secret init` command is unnecessary. Existing
 vault contents are preserved, and damaged vaults are rejected. Expiring
 device-flow tokens are refreshed before
 use, with the replacement access and refresh tokens saved together. An expired
-refresh token requires another setup. `user-status` shows local authorization
-state without token values or network requests; it does not prove access to a
-private project. `logout` removes all locally saved user tokens and pending
+refresh token requires another `setup github --personal-projects`.
+`status --personal-projects github` and `doctor --personal-projects github`
+include each personal account's local authorization and expiration state
+without token values or an OAuth request. Missing, expired, or unavailable
+personal authorization is informational; App readiness is reported separately.
+Default `status github` and `doctor github` do not query personal credentials
+and report `Personal Projects (optional): not_requested`.
+Status does not prove access to a private project. `logout` removes all locally
+saved user tokens and pending
 device authorizations for this integration.
 To revoke the App's authorization at GitHub as well, use GitHub's **Settings >
 Applications > Authorized GitHub Apps**. Backups contain the encrypted vault;
 restoring an older backup can restore local authorization state.
 
-The `github` tool's `project` command uses the configured target's owner:
+The `github` tool's `project` command operates on projects linked to its
+configured repository target:
 
 ```json
 {"target":"example-user/repo","command":"project","args":["list","--format","json"]}
@@ -237,9 +282,16 @@ The `github` tool's `project` command uses the configured target's owner:
 {"target":"example-user/repo","command":"project","args":["item-create","1","--title","Investigate a bug","--format","json"]}
 ```
 
-The target must match a configured repository access rule. Projects belong to
-the target's owner; repository scoping does not limit Projects to boards linked
-to that repository. User-owned Projects use the saved App user token.
+The target must match a configured repository access rule. `list` queries the
+repository's linked projects; `create` supplies both the verified owner ID and
+repository ID in one mutation, so the new board appears in that repository's
+Projects tab. Both commands return JSON, including when `--format` is omitted.
+List output contains `projects`, `totalCount` (all linked boards, including
+closed boards), and `complete`. The default limit is 30, up to 100. Closed boards
+are omitted unless `--closed` is supplied; `complete: false` means the limit or
+bounded scan left results unexamined or omitted.
+
+User-owned Projects use the saved, optional App user token.
 Organization-owned Projects use the existing installation token. Repository
 commands, including `api graphql`, continue to use installation tokens and never
 fall back to the user token.
@@ -249,9 +301,12 @@ Supported Project subcommands are `list`, `view`, `create`, `edit`, `close`,
 `item-list`, `item-create`, `item-add`, `item-edit`, `item-delete`, and
 `item-archive`. Provide a project number for commands that accept one; Loki
 injects `--owner`. For ID-based field and item edits, Loki checks the node's
-project owner and requires all supplied item, field, and project IDs to refer to
-the same project. Draft edits use the draft's content ID and require the draft
-to belong to exactly one project owned by the selected account. Item URLs must
+project owner and exact repository linkage, and requires all supplied item,
+field, project IDs and project numbers to refer to the same project. A board
+owned by the same account but not linked to the target is rejected. Linkage
+checks paginate and fail closed if the scan cannot establish the link within
+ten pages of 100 associations. Draft edits use the draft's content ID and require
+the draft to belong to exactly one verified, linked project. Item URLs must
 refer to an issue or pull request in the selected repository.
 
 Scope overrides, file input, arbitrary stdin, jq/template output filters,
@@ -274,14 +329,14 @@ Create a GitHub App under the account that will own it. Use a unique name and a 
 
 Configure the registration as follows:
 
-- Leave automatic user authorization during installation and OAuth redirect URIs disabled. Enable Device flow for personal Projects authorization during setup.
+- Leave automatic user authorization during installation and OAuth redirect URIs disabled. Enable Device flow when opting into personal Projects authorization.
 - Disable the webhook unless another service in the deployment consumes GitHub events.
 - Select **Any account** to use the same App on multiple personal or organization accounts.
 - Grant **Metadata: Read-only**.
 - Grant **Contents**, **Issues**, **Pull requests**, **Actions**, **Workflows**, **Checks**, and **Commit statuses: Read and write** for repository and CI work.
 - Grant **Organization permissions > Projects: Read and write** to manage organization Projects.
 - Grant **Organization permissions > Issue Fields** and **Issue Types: Read and write** to manage organization issue fields and types.
-- Grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with App user authorization during setup.
+- Optionally grant **Account permissions > Personal Projects: Read and write** to manage personal Projects with `setup github --personal-projects`.
 - Add **Deployments**, **Variables**, or **Secrets: Read and write** only for commands the deployment must run.
 
 After creating the App, record the numeric **App ID** from its settings page and generate a private key. Install the App on each organization or personal account Loki must access. Choose **All repositories** or select individual repositories. Record each numeric installation ID from the installation settings URL ending in `/settings/installations/<installation-id>`.

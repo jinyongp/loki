@@ -178,7 +178,8 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	if instructions := client.InitializeResult().Instructions; !strings.Contains(instructions, "project_coordination") ||
 		!strings.Contains(instructions, "project_coordination_write") || !strings.Contains(instructions, "job action=start") ||
 		!strings.Contains(instructions, "this Loki server's authority boundary") ||
-		!strings.Contains(instructions, "never ambient gh auth credentials") ||
+		!strings.Contains(instructions, "never use ambient gh auth credentials") ||
+		!strings.Contains(instructions, "explicitly authorized App user tokens") ||
 		strings.Contains(instructions, "task queues") {
 		t.Fatal("stale MCP instructions", instructions)
 	}

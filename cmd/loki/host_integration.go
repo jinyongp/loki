@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"loki/internal/host/githubsetup"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
 	"loki/internal/progress"
@@ -20,32 +21,35 @@ import (
 var hostIntegrationStdin io.Reader = os.Stdin
 
 type hostIntegrationReport struct {
-	SchemaVersion        int      `json:"schema_version"`
-	Name                 string   `json:"name"`
-	Supported            bool     `json:"supported"`
-	Configured           bool     `json:"configured"`
-	Enabled              bool     `json:"enabled"`
-	Ready                bool     `json:"ready"`
-	State                string   `json:"state"`
-	ProjectionConsistent bool     `json:"projection_consistent"`
-	RequiredServices     []string `json:"required_services,omitempty"`
-	RunningServices      []string `json:"running_services,omitempty"`
-	PublicKey            string   `json:"public_key,omitempty"`
-	Fingerprint          string   `json:"fingerprint,omitempty"`
-	IdentityName         string   `json:"identity_name,omitempty"`
-	IdentityEmail        string   `json:"identity_email,omitempty"`
-	GitHubAppID          int64    `json:"github_app_id,omitempty"`
-	TargetCount          int      `json:"target_count,omitempty"`
-	Authentication       string   `json:"authentication,omitempty"`
-	Detail               string   `json:"detail,omitempty"`
+	SchemaVersion        int                     `json:"schema_version"`
+	Name                 string                  `json:"name"`
+	Supported            bool                    `json:"supported"`
+	Configured           bool                    `json:"configured"`
+	Enabled              bool                    `json:"enabled"`
+	Ready                bool                    `json:"ready"`
+	State                string                  `json:"state"`
+	ProjectionConsistent bool                    `json:"projection_consistent"`
+	RequiredServices     []string                `json:"required_services,omitempty"`
+	RunningServices      []string                `json:"running_services,omitempty"`
+	PublicKey            string                  `json:"public_key,omitempty"`
+	Fingerprint          string                  `json:"fingerprint,omitempty"`
+	IdentityName         string                  `json:"identity_name,omitempty"`
+	IdentityEmail        string                  `json:"identity_email,omitempty"`
+	GitHubAppID          int64                   `json:"github_app_id,omitempty"`
+	TargetCount          int                     `json:"target_count,omitempty"`
+	Authentication       string                  `json:"authentication,omitempty"`
+	Detail               string                  `json:"detail,omitempty"`
+	AppReady             bool                    `json:"app_ready,omitempty"`
+	PersonalProjects     *githubsetup.UserStatus `json:"personal_projects,omitempty"`
 }
 
 type hostIntegrationOptions struct {
-	System         bool
-	StateRoot      string
-	LauncherLayout string
-	JSON           bool
-	InterruptJobs  bool
+	System           bool
+	StateRoot        string
+	LauncherLayout   string
+	JSON             bool
+	InterruptJobs    bool
+	PersonalProjects bool
 }
 
 func parseHostIntegrationOptions(action string, args []string, stderr io.Writer) (hostIntegrationOptions, string, error) {
@@ -56,6 +60,7 @@ func parseHostIntegrationOptions(action string, args []string, stderr io.Writer)
 	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
 	jsonOutput := flags.Bool("json", false, "emit machine-readable JSON")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
+	personalProjects := flags.Bool("personal-projects", false, "inspect optional personal Projects authorization")
 	if err := flags.Parse(args); err != nil {
 		return hostIntegrationOptions{}, "", err
 	}
@@ -65,6 +70,10 @@ func parseHostIntegrationOptions(action string, args []string, stderr io.Writer)
 	result := hostIntegrationOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
 		LauncherLayout: strings.TrimSpace(*launcherLayout), JSON: *jsonOutput, InterruptJobs: *interrupt,
+		PersonalProjects: *personalProjects,
+	}
+	if result.PersonalProjects && ((action != "status" && action != "doctor") || flags.NArg() != 1 || flags.Arg(0) != "github") {
+		return hostIntegrationOptions{}, "", errors.New("--personal-projects is valid only for status or doctor github")
 	}
 	for name, value := range map[string]string{"--state-root": result.StateRoot, "--launcher-layout": result.LauncherLayout} {
 		if value != "" && (!filepath.IsAbs(value) || filepath.Clean(value) != value ||
@@ -110,14 +119,14 @@ func resolveHostIntegrationOptions(options hostIntegrationOptions) (hostIntegrat
 
 func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|refresh|logout|user-status|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|refresh|logout|enable|disable|remove|doctor ...")
 		return 2
 	}
 	action := args[0]
 	if action == "refresh" {
 		return runHostGitHubRefresh(args[1:], stdout, stderr)
 	}
-	if action == "login" || action == "logout" || action == "user-status" {
+	if action == "login" || action == "logout" {
 		return runHostGitHubUser(action, args[1:], stdout, stderr)
 	}
 	if action == "setup" || action == "rotate" || action == "import" {
@@ -142,7 +151,7 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	switch action {
 	case "list", "status", "enable", "disable", "remove", "doctor":
 	default:
-		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|refresh|logout|user-status|enable|disable|remove|doctor ...")
+		fmt.Fprintln(stderr, "usage: loki host integration list|status|setup|import|rotate|refresh|logout|enable|disable|remove|doctor ...")
 		return 2
 	}
 	options, name, err := parseHostIntegrationOptions(action, args[1:], stderr)
@@ -233,7 +242,7 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	report, err := inspectHostIntegration(ctx, store, backend, name)
+	report, err := inspectHostIntegration(ctx, store, backend, name, options.PersonalProjects)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -241,16 +250,19 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 	if action == "doctor" && name == "github" && report.Configured && report.Enabled {
 		progress.Emit(reporter, progress.Event{
 			Operation: "integration", Phase: "validate-github", State: progress.StateStarted,
+			Level:   progress.LevelSummary,
 			Message: "Checking GitHub App authentication and repository access...",
 		})
 		candidate, loadErr := loadManagedGitHubFromStore(ctx, store)
 		if loadErr != nil {
+			report.AppReady = false
 			report.Ready = false
 			report.State = "degraded"
 			report.Detail = loadErr.Error()
 		} else {
 			defer clear(candidate.KeyRaw)
 			if validateErr := validateManagedGitHubCandidate(ctx, candidate, nil); validateErr != nil {
+				report.AppReady = false
 				report.Ready = false
 				report.State = "degraded"
 				report.Detail = "GitHub App validation failed: " + validateErr.Error()
@@ -271,6 +283,10 @@ func runHostIntegration(args []string, stdout, stderr io.Writer) int {
 		if report.GitHubAppID != 0 {
 			fmt.Fprintf(stdout, "  App ID: %d\n", report.GitHubAppID)
 			fmt.Fprintf(stdout, "  Repositories: %d\n", report.TargetCount)
+			fmt.Fprintf(stdout, "  App ready: %t\n", report.AppReady)
+		}
+		if report.PersonalProjects != nil {
+			githubsetup.RenderUserStatus(stdout, *report.PersonalProjects)
 		}
 		if report.Detail != "" {
 			fmt.Fprintf(stdout, "  Detail: %s\n", report.Detail)
@@ -291,6 +307,7 @@ func inspectHostIntegration(
 	store *lifecycle.FileStore,
 	backend hostIntegrationRuntime,
 	name string,
+	personalProjects ...bool,
 ) (hostIntegrationReport, error) {
 	snapshot, err := store.Snapshot(ctx)
 	if err != nil {
@@ -375,6 +392,19 @@ func inspectHostIntegration(
 		}
 		report.GitHubAppID = githubConfig.GitHubAppID
 		report.TargetCount = len(githubConfig.GitHubTargets)
+		personalAccounts := []string{}
+		for _, installation := range githubConfig.GitHubInstallations {
+			if installation.AccountType == "user" {
+				personalAccounts = append(personalAccounts, installation.Account)
+			}
+		}
+		inspectPersonal := len(personalProjects) != 0 && personalProjects[0]
+		report.PersonalProjects = &githubsetup.UserStatus{Status: "not_requested"}
+		if inspectPersonal && len(personalAccounts) == 0 {
+			report.PersonalProjects.Status = "not_required"
+		} else if inspectPersonal {
+			report.PersonalProjects.Status = "unavailable"
+		}
 		if !report.Enabled {
 			report.State = "disabled"
 			break
@@ -386,12 +416,16 @@ func inspectHostIntegration(
 			break
 		}
 		report.RunningServices = append([]string(nil), readiness.RunningServices...)
-		report.Ready = readiness.Ready()
+		report.AppReady = readiness.Ready()
+		report.Ready = report.AppReady
 		if report.Ready {
 			report.State = "ready"
 		} else {
 			report.State = "degraded"
 			report.Detail = "core runtime services are not ready"
+		}
+		if inspectPersonal && report.AppReady && len(personalAccounts) != 0 {
+			inspectGitHubUserStatus(ctx, backend, personalAccounts, &report)
 		}
 	default:
 		return hostIntegrationReport{}, errors.New("integration name is invalid")

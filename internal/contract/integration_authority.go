@@ -23,13 +23,19 @@ func applyIntegrationAuthorityMetadata(tools []*mcp.Tool) {
 				"readiness": "system_inspect action=server",
 			}
 		case tool.Name == "github" || strings.HasPrefix(tool.Name, "github_"):
-			tool.Description = strings.TrimSpace(tool.Description) + " Uses only GitHub App installation-token authority configured in this Loki server; it never uses ambient gh auth credentials."
+			authority := "this Loki server's configured GitHub App installations"
+			guidance := " Uses only GitHub App installation-token authority configured in this Loki server; it never uses ambient gh auth credentials."
+			if tool.Name == "github" {
+				authority = "this Loki server's GitHub App installations and optional user authorization for repository-linked personal Projects"
+				guidance = " Uses only this Loki server's configured GitHub App authority, including optional user authorization for repository-linked personal Projects; it never uses ambient gh auth credentials."
+			}
+			tool.Description = strings.TrimSpace(tool.Description) + guidance
 			if tool.Meta == nil {
 				tool.Meta = mcp.Meta{}
 			}
 			tool.Meta["loki/integration"] = map[string]any{
 				"name":      "github",
-				"authority": "this Loki server's configured GitHub App installations",
+				"authority": authority,
 				"readiness": "system_inspect action=server",
 			}
 		}

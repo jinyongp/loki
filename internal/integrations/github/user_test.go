@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"loki/internal/fault"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -178,7 +180,7 @@ func assertUserViewHasNoSecrets(t *testing.T, view UserAuthorizationView) {
 
 func TestUserLoginRejectsAnotherAccountAndMissingDeviceFlow(t *testing.T) {
 	private := testKey(t, 2048)
-	for _, scenario := range []string{"wrong-user", "disabled", "denied", "expired"} {
+	for _, scenario := range []string{"wrong-user", "disabled", "disabled-http400", "denied", "expired"} {
 		t.Run(scenario, func(t *testing.T) {
 			now := time.Now().UTC()
 			var saves int
@@ -187,7 +189,10 @@ func TestUserLoginRejectsAnotherAccountAndMissingDeviceFlow(t *testing.T) {
 				case "/app":
 					ioJSON(w, map[string]any{"id": 123, "client_id": "Iv1.example"})
 				case "/login/device/code":
-					if scenario == "disabled" {
+					if strings.HasPrefix(scenario, "disabled") {
+						if scenario == "disabled-http400" {
+							w.WriteHeader(http.StatusBadRequest)
+						}
 						ioJSON(w, map[string]any{"error": "device_flow_disabled"})
 					} else {
 						ioJSON(w, map[string]any{"device_code": "private-device-code", "user_code": "EXAM-PLE1", "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 5})
@@ -210,7 +215,7 @@ func TestUserLoginRejectsAnotherAccountAndMissingDeviceFlow(t *testing.T) {
 				t.Fatal("unconfigured personal account accepted")
 			}
 			view, err := u.Begin(t.Context(), "")
-			if scenario != "disabled" {
+			if !strings.HasPrefix(scenario, "disabled") {
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -223,7 +228,41 @@ func TestUserLoginRejectsAnotherAccountAndMissingDeviceFlow(t *testing.T) {
 			if err == nil || saves != 0 || strings.Contains(err.Error(), "private-device-code") || strings.Contains(err.Error(), "ghu_") {
 				t.Fatal("failed authorization saved or leaked credentials", err)
 			}
+			if strings.HasPrefix(scenario, "disabled") && fault.Public(err) != "enable Device flow in the GitHub App settings, then retry setup" {
+				t.Fatal("Device Flow setting advice lost", err)
+			}
 		})
+	}
+}
+
+func TestAuthorizationHTTPRejectionsNeverAcceptSuccessOrLeakUpstreamText(t *testing.T) {
+	for _, scenario := range []struct {
+		name   string
+		status int
+		body   string
+		want   string
+	}{
+		{"disabled", 400, `{"error":"device_flow_disabled","error_description":"ghu_private"}`, "GitHub authorization request was rejected"},
+		{"unknown", 400, `{"error":"ghu_private","error_description":"private-device-code"}`, "GitHub authorization request was rejected"},
+		{"forbidden-success-body", 403, `{"access_token":"ghu_private"}`, "GitHub authorization request was rejected"},
+		{"rate-limit", 429, `{"error":"private-device-code"}`, "GitHub authorization request was rejected"},
+		{"malformed", 400, `private-device-code`, "GitHub authorization request was rejected"},
+		{"oversized", 400, strings.Repeat("x", 65537), "GitHub authorization response is invalid"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			client := &http.Client{Transport: providerRoundTripper(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: scenario.status, Body: io.NopCloser(strings.NewReader(scenario.body))}, nil
+			})}
+			var response userTokenResponse
+			err := authorizationJSON(t.Context(), client, http.MethodPost, "https://github.com/login/device/code", "", nil, &response)
+			if err == nil || fault.Public(err) != scenario.want || response.AccessToken != "" {
+				t.Fatalf("rejection=%v response=%#v", err, response)
+			}
+		})
+	}
+	client := &http.Client{Transport: providerRoundTripper(func(*http.Request) (*http.Response, error) { return nil, context.DeadlineExceeded })}
+	if err := authorizationJSON(t.Context(), client, http.MethodPost, "https://github.com/login/device/code", "", nil, &userTokenResponse{}); fault.Public(err) != "GitHub authorization request timed out; retry setup" {
+		t.Fatal("timeout advice lost", err)
 	}
 }
 

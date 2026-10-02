@@ -16,6 +16,10 @@ import (
 )
 
 func runHostGitHubUser(action string, args []string, stdout, stderr io.Writer) int {
+	if action != "login" && action != "logout" {
+		fmt.Fprintln(stderr, "Use loki host integration status --system github to inspect GitHub authorization.")
+		return 2
+	}
 	flags := flag.NewFlagSet("host integration "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	system := flags.Bool("system", false, "operate on the system host installation")
@@ -26,7 +30,7 @@ func runHostGitHubUser(action string, args []string, stdout, stderr io.Writer) i
 	} else if err != nil || flags.NArg() != 1 || flags.Arg(0) != "github" ||
 		*relay && action != "login" || !*relay && action == "login" {
 		if action == "login" {
-			fmt.Fprintln(stderr, "Use loki host integration setup --system github to authorize GitHub.")
+			fmt.Fprintln(stderr, "Use loki host integration setup --system --personal-projects github to authorize personal Projects.")
 		} else {
 			fmt.Fprintf(stderr, "usage: loki host integration %s --system github\n", action)
 		}
@@ -64,11 +68,7 @@ func runHostGitHubUser(action string, args []string, stdout, stderr io.Writer) i
 			}
 		}
 	} else {
-		operation := "status"
-		if action == "logout" {
-			operation = "logout"
-		}
-		view, callErr := transport(ctx, githubsetup.UserRequest{Action: operation})
+		view, callErr := transport(ctx, githubsetup.UserRequest{Action: "logout"})
 		err = callErr
 		if err == nil {
 			err = json.NewEncoder(stdout).Encode(view)

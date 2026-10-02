@@ -8,18 +8,18 @@ import (
 func overrideGitHub(tool *mcp.Tool) error {
 	capabilities := githubapp.RepositoryCommandCapabilities()
 	commandGroups := append([]string(nil), capabilities.CommandGroups...)
-	tool.Description = "Run a constrained GitHub CLI escape-hatch command. Repository commands use a repository-limited App installation token. Project commands use an installation token for organization Projects or an explicitly authorized App user token for personal Projects. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
+	tool.Description = "Run a constrained GitHub CLI escape-hatch command. Project commands list and operate only on projects linked to the configured target repository; create links the new project to that repository in the same mutation. Repository and organization Project commands use App installation tokens. Personal repository Projects use an optional, explicitly authorized App user token. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "githubArguments", "additionalProperties": false,
 		"properties": map[string]any{
 			"target": map[string]any{
 				"type":        "string",
 				"pattern":     "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
-				"description": "Configured owner/repository target. Repository commands use a repository-limited installation token; project commands are restricted to this owner's Projects. Personal accounts require App user authorization through integration setup github.",
+				"description": "Configured owner/repository target. Project commands are restricted to projects linked to this exact repository. Personal repository Projects require optional App user authorization through integration setup github --personal-projects.",
 			},
 			"command": map[string]any{
 				"type": "string", "enum": commandGroups,
-				"description": "Allowed top-level gh command group. Project commands use checked node IDs or an injected owner; other commands use installation tokens. Scope override flags are rejected by the runtime.",
+				"description": "Allowed top-level gh command group. Project commands verify owner, repository linkage, and supplied node IDs; other commands use installation tokens. Scope override flags are rejected by the runtime.",
 			},
 			"args": map[string]any{
 				"type": "array", "maxItems": capabilities.MaxArguments - 1,
@@ -63,6 +63,7 @@ func overrideGitHub(tool *mcp.Tool) error {
 		"repository_token_only":            capabilities.RepositoryTokenOnly,
 		"project_subcommands":              append([]string(nil), capabilities.ProjectSubcommands...),
 		"personal_projects_authentication": "explicit GitHub App user authorization",
+		"project_scope":                    "projects linked to the configured target repository",
 		"repository_authentication":        "GitHub App installation tokens",
 		"preferred_surface":                "typed GitHub tools when available",
 	}

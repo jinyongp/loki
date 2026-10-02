@@ -20,7 +20,7 @@ func TestWindowsGitHubSetupRejectsAccountAndImportOptions(t *testing.T) {
 }
 
 func TestWindowsGitHubUserCommandsUseSetupAndRejectAccountSelectors(t *testing.T) {
-	for _, action := range []string{"logout", "user-status"} {
+	for _, action := range []string{"logout"} {
 		var stdout, stderr bytes.Buffer
 		if code := runWindowsGitHubUser(t.Context(), action, []string{"github", "--account", "example-user"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
 			t.Fatal("user command accepted account selector", action, code, stderr.String())
@@ -32,8 +32,15 @@ func TestWindowsGitHubUserCommandsUseSetupAndRejectAccountSelectors(t *testing.T
 	}
 	stdout.Reset()
 	printIntegrationUsage(&stdout)
-	if strings.Contains(stdout.String(), "--account") || strings.Contains(stdout.String(), "integration login") {
+	if strings.Contains(stdout.String(), "--account") || strings.Contains(stdout.String(), "integration login") || strings.Contains(stdout.String(), "user-status") {
 		t.Fatal("help advertises superseded authorization commands", stdout.String())
+	}
+}
+
+func TestWindowsIntegrationRejectsSeparateUserStatus(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := runIntegration(t.Context(), []string{"user-status", "github"}, &stdout, &stderr); code != 2 {
+		t.Fatal("removed user status command is accepted", code)
 	}
 }
 

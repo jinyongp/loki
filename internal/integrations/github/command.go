@@ -115,7 +115,22 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 		if r.Projects == nil {
 			return process.Result{}, fault.Error("GitHub Projects authority is not configured")
 		}
-		arguments, token, err = r.Projects.Prepare(ctx, request)
+		projectContext, cancel := context.WithTimeout(ctx, r.Config.Timeout)
+		defer cancel()
+		prepared, prepareErr := r.Projects.Prepare(projectContext, request)
+		if prepareErr != nil {
+			return process.Result{}, prepareErr
+		}
+		arguments, token = prepared.arguments, prepared.token
+		if prepared.result != nil {
+			result := redactCommandResult(*prepared.result, token)
+			if len(result.Output) > r.Config.MaxOutputBytes {
+				result.Output = result.Output[:r.Config.MaxOutputBytes]
+				result.Truncated = true
+			}
+			return result, nil
+		}
+		ctx = projectContext
 	} else {
 		token, err = r.Tokens.Token(ctx, target)
 	}

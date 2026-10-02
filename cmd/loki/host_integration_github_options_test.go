@@ -23,3 +23,30 @@ func TestGitHubImportRequiresConfigurationAndKey(t *testing.T) {
 		}
 	}
 }
+
+func TestHostPersonalProjectsSelectionIsExplicitAndActionBound(t *testing.T) {
+	for _, action := range []string{"status", "doctor"} {
+		var stderr bytes.Buffer
+		defaults, _, err := parseHostIntegrationOptions(action, []string{"github"}, &stderr)
+		if err != nil || defaults.PersonalProjects {
+			t.Fatal("default inspection selected personal authorization", defaults, err)
+		}
+		selected, _, err := parseHostIntegrationOptions(action, []string{"--personal-projects", "github"}, &stderr)
+		if err != nil || !selected.PersonalProjects {
+			t.Fatal("personal authorization selection lost", selected, err)
+		}
+	}
+	for _, action := range []string{"enable", "disable", "remove", "list"} {
+		if _, _, err := parseHostIntegrationOptions(action, []string{"--personal-projects", "github"}, &bytes.Buffer{}); err == nil {
+			t.Fatal("personal inspection accepted outside status/doctor", action)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runHostGitHubSetup("setup", []string{"--personal-projects", "--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stderr.String(), "personal-projects") {
+		t.Fatal("setup does not expose optional personal Projects", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := runHostGitHubSetup("setup", []string{"--personal-projects", "--stdin", "github"}, &stdout, &stderr); code != 2 {
+		t.Fatal("personal authorization accepted with import transport", code)
+	}
+}

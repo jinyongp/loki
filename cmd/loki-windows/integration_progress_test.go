@@ -164,3 +164,34 @@ func TestWindowsVerboseIntegrationStreamsDetailsBeforeCompletion(t *testing.T) {
 		t.Fatalf("verbose output=%q err=%v", stderr.String(), err)
 	}
 }
+
+func TestGitHubDoctorAnnouncesWorkBeforeWSLReturns(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var stderr signingProgressBuffer
+		runner := &waitingSigningProgressRunner{
+			integrationProgressRunner: integrationProgressRunner{t: t, output: &stderr},
+			entered:                   make(chan struct{}), resume: make(chan struct{}),
+		}
+		done := make(chan error, 1)
+		go func() {
+			_, err := executeWindowsIntegrationWithProgress(t.Context(), windowshost.OperatorClient{
+				WSL: windowshost.WSLClient{Runner: runner},
+			}, "loki-mcp", windowshost.OperatorRequest{Command: "integration", Action: "doctor", Integration: "github"}, nil, &stderr)
+			done <- err
+		}()
+		<-runner.entered
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Running github integration doctor; checking the WSL appliance...") {
+			t.Error("GitHub doctor remained silent during WSL inspection")
+		}
+		time.Sleep(45 * time.Second)
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Still waiting for github integration doctor (45s elapsed)") {
+			t.Error("GitHub doctor long wait notice missing", stderr.String())
+		}
+		close(runner.resume)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	})
+}

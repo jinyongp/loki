@@ -91,6 +91,27 @@ func TestWindowsGitHubRefreshUsesNativeCommandAndRejectsMutationOptions(t *testi
 	}
 }
 
+func TestWindowsOptionalPersonalInspectionUsesClosedNativeFlags(t *testing.T) {
+	for _, action := range []string{"status", "doctor"} {
+		args, machine, err := operatorCommandArguments(OperatorRequest{Command: "integration", Action: action, Integration: "github", PersonalProjects: true})
+		want := []string{"host", "integration", action, "--system", "--personal-projects", "--json", "github"}
+		if err != nil || !machine || !slices.Equal(args, want) {
+			t.Fatal("optional inspection relay lost selection", args, err)
+		}
+	}
+	for _, request := range []OperatorRequest{
+		{Command: "status", PersonalProjects: true},
+		{Command: "integration", Action: "status", Integration: "signing", PersonalProjects: true},
+		{Command: "integration", Action: "refresh", Integration: "github", PersonalProjects: true},
+		{Command: "integration", Action: "login", Integration: "github", GitHubUser: true, UseStdin: true, PersonalProjects: true},
+		{Command: "integration", Action: "setup", Integration: "github", GitHubBrowser: true, UseStdin: true, PersonalProjects: true},
+	} {
+		if _, _, err := operatorCommandArguments(request); err == nil {
+			t.Fatal("optional inspection reached unrelated operator action", request)
+		}
+	}
+}
+
 func TestOperatorUpdateApplyRequiresExplicitApproval(t *testing.T) {
 	if _, _, err := operatorCommandArguments(OperatorRequest{Command: "update", Action: "apply"}); err == nil {
 		t.Fatal("update apply without approval accepted")

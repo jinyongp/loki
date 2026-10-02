@@ -129,7 +129,6 @@ func TestGitHubBrowserManifestRequestsRepositoryAndProjectPermissions(t *testing
 		"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write",
 		"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
 		"organization_projects": "write",
-		"user_projects":         "write",
 		"issue_fields":          "write",
 		"issue_types":           "write",
 	}
@@ -143,6 +142,14 @@ func TestGitHubBrowserManifestRequestsRepositoryAndProjectPermissions(t *testing
 	}
 	if view.Manifest.RequestOAuthOnInstall || view.Manifest.HookAttributes["active"] != false {
 		t.Fatal("repository and organization Project work must use installation tokens without OAuth or webhooks")
+	}
+	optIn, err := h.Handle(context.Background(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:12345/callback", PersonalProjects: true})
+	if err != nil || optIn.Manifest == nil || optIn.Manifest.DefaultPermissions["user_projects"] != "write" || len(optIn.Manifest.DefaultPermissions) != len(want)+1 {
+		t.Fatal("optional personal Projects permission omitted", optIn, err)
+	}
+	defaultAgain, err := h.Handle(context.Background(), githubsetup.Request{Action: "begin", RedirectURL: "http://127.0.0.1:12345/callback"})
+	if err != nil || defaultAgain.Manifest == nil || defaultAgain.Manifest.DefaultPermissions["user_projects"] != "" {
+		t.Fatal("registration retained personal permission without opt-in", defaultAgain, err)
 	}
 }
 

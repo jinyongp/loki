@@ -19,8 +19,8 @@ func TestIntegrationInspectionsKeepJSONSeparateFromProgress(t *testing.T) {
 				if code != 0 || !json.Valid(stdout.Bytes()) {
 					t.Fatalf("code=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 				}
-				if strings.Contains(stderr.String(), "[loki]") {
-					t.Fatal("fast integration inspection produced internal progress")
+				if strings.Contains(stderr.String(), "[loki]") != (action == "doctor" && name == "github") {
+					t.Fatal("GitHub doctor start notice missing or passive inspection produced progress", stderr.String())
 				}
 				if action == "status" && stderr.Len() != 0 {
 					t.Fatalf("passive status produced progress: %s", &stderr)

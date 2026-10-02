@@ -52,9 +52,10 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 	}
 	stdin := flags.Bool("stdin", false, "read GitHub App config and private key from stdin envelope")
 	browserRequest := flags.Bool("browser-request", false, "read a browser setup relay request from stdin")
-	var noBrowser bool
+	var noBrowser, personalProjects bool
 	if action == "setup" {
 		flags.BoolVar(&noBrowser, "no-browser", false, "print the local registration URL")
+		flags.BoolVar(&personalProjects, "personal-projects", false, "optionally authorize personal Projects with GitHub Device Flow")
 	}
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		return 0
@@ -63,7 +64,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 	automatic := action == "setup" && !*stdin
-	if *browserRequest && (!automatic || noBrowser) {
+	if *browserRequest && (!automatic || noBrowser || personalProjects) {
 		fmt.Fprintln(stderr, "browser relay requests cannot be combined with import or browser options")
 		return 2
 	}
@@ -71,8 +72,8 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "automatic setup is interactive; use integration status --json github for machine-readable status")
 		return 2
 	}
-	if !automatic && noBrowser {
-		fmt.Fprintln(stderr, "--no-browser applies to automatic setup only")
+	if !automatic && (noBrowser || personalProjects) {
+		fmt.Fprintln(stderr, "--no-browser and --personal-projects apply to automatic setup only")
 		return 2
 	}
 	if *stdin {
@@ -102,7 +103,7 @@ func runHostGitHubSetup(action string, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	if automatic {
-		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{NoBrowser: noBrowser, Verbose: progress.Verbose(stderr)}, stdout, stderr)
+		return runHostGitHubBrowserSetup(options, store, *browserRequest, githubsetup.Options{NoBrowser: noBrowser, PersonalProjects: personalProjects, Verbose: progress.Verbose(stderr)}, stdout, stderr)
 	}
 	if action == "import" {
 		action = "setup"

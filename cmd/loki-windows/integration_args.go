@@ -11,10 +11,11 @@ import (
 )
 
 type integrationActionOptions struct {
-	Distribution  string
-	JSON          bool
-	InterruptJobs bool
-	Name          string
+	Distribution     string
+	JSON             bool
+	InterruptJobs    bool
+	Name             string
+	PersonalProjects bool
 }
 
 func parseIntegrationAction(action string, args []string, distribution string) (integrationActionOptions, error) {
@@ -24,6 +25,7 @@ func parseIntegrationAction(action string, args []string, distribution string) (
 	flags.StringVar(&options.Distribution, "distribution", distribution, "WSL distribution name")
 	flags.BoolVar(&options.JSON, "json", false, "emit machine-readable JSON")
 	flags.BoolVar(&options.InterruptJobs, "interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
+	flags.BoolVar(&options.PersonalProjects, "personal-projects", false, "inspect optional personal Projects authorization")
 	if err := flags.Parse(args); err != nil {
 		return options, err
 	}
@@ -48,6 +50,9 @@ func parseIntegrationAction(action string, args []string, distribution string) (
 	}
 	if action != "list" && action != "status" && action != "doctor" && options.JSON {
 		return options, errors.New("--json is valid only for list, status, or doctor")
+	}
+	if options.PersonalProjects && ((action != "status" && action != "doctor") || options.Name != "github") {
+		return options, errors.New("--personal-projects is valid only for status or doctor github")
 	}
 	return options, nil
 }

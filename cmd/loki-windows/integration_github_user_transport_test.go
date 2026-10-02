@@ -14,6 +14,8 @@ import (
 type githubUserRelayRunner struct {
 	integrationProgressRunner
 	response string
+	detail   string
+	exitCode int
 	input    []byte
 }
 
@@ -22,7 +24,24 @@ func (r *githubUserRelayRunner) RunInput(_ context.Context, _ string, args []str
 		r.t.Fatal("invalid device relay argv", args)
 	}
 	r.input = append([]byte(nil), input...)
-	return windowshost.NativeProbe{Stdout: r.response}, nil
+	return windowshost.NativeProbe{Stdout: r.response, Stderr: r.detail, ExitCode: r.exitCode}, nil
+}
+
+func TestWindowsGitHubUserRelayPreservesSanitizedRuntimeAdvice(t *testing.T) {
+	var output bytes.Buffer
+	runner := &githubUserRelayRunner{integrationProgressRunner: integrationProgressRunner{t: t, output: &output}, exitCode: 1}
+	transport := windowsGitHubUserTransport(windowshost.OperatorClient{WSL: windowshost.WSLClient{Runner: runner}}, "loki-mcp")
+	for _, advice := range []string{"enable Device flow in the GitHub App settings, then retry setup", "GitHub authorization request timed out; retry setup", "GitHub authorization request was rejected"} {
+		// Native host relay has already sanitized the runtime diagnostic.
+		runner.detail = "[loki] Checking authorization...\nloki: " + githubsetup.UserLoginError("loki: "+advice).Error() + "\n"
+		if _, err := transport(t.Context(), githubsetup.UserRequest{Action: "begin"}); err == nil || err.Error() != advice {
+			t.Fatal("Windows relay lost safe advice", err)
+		}
+	}
+	runner.detail = "loki: ghu_private-device-code"
+	if _, err := transport(t.Context(), githubsetup.UserRequest{Action: "begin"}); err == nil || strings.Contains(err.Error(), "private") {
+		t.Fatal("Windows relay exposed private diagnostics", err)
+	}
 }
 
 func TestWindowsGitHubUserRelayPreservesPublicRequestsAndRejectsBadViews(t *testing.T) {

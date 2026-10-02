@@ -105,7 +105,7 @@ func TestSetupIncludesPersonalProjectsAndSkipsUsableAuthorization(t *testing.T) 
 					return UserView{}, nil
 				}
 			}
-			err := Run(t.Context(), setup, Options{NoBrowser: true, UserTransport: users}, &output)
+			err := Run(t.Context(), setup, Options{NoBrowser: true, PersonalProjects: true, UserTransport: users}, &output)
 			if scenario == "wrong-account" || scenario == "disabled" {
 				if err == nil || strings.Contains(output.String(), "GitHub integration ready") {
 					t.Fatal("incomplete authorization reported as ready", err, output.String())
@@ -162,14 +162,37 @@ func TestDeviceLoginRelayKeepsActionableErrorsAndDropsPrivateDetails(t *testing.
 	if err := UserLoginError("loki: " + message + "\n"); err.Error() != message {
 		t.Fatal("safe login advice lost", err)
 	}
-	for _, diagnostic := range []string{"GitHub user credentials are unavailable", "GitHub user credentials are invalid"} {
-		if err := UserLoginError("loki: " + diagnostic); err.Error() != diagnostic {
+	for _, diagnostic := range []string{"GitHub user credentials are unavailable", "GitHub user credentials are invalid", message, "GitHub authorization request timed out; retry setup", "GitHub authorization request was rejected"} {
+		// Both CLI relays may prepend progress; the second relay must preserve
+		// the sanitized first relay's advice, too.
+		first := UserLoginError("[loki] Checking authorization...\r\nloki: " + diagnostic)
+		if err := UserLoginError(first.Error()); err.Error() != diagnostic {
 			t.Fatal("credential diagnostic was replaced with Device flow advice", err)
 		}
 	}
 	for _, detail := range []string{"ghu_private", "loki: authorize ghp_private", "docker failed with ghr_private", "loki: " + message + "\nghu_private"} {
 		if err := UserLoginError(detail); strings.Contains(err.Error(), "private") {
 			t.Fatal("relay exposed private diagnostic", err)
+		}
+	}
+}
+
+func TestDeviceFlowSettingAdviceLinksToAppGeneralSettings(t *testing.T) {
+	for _, settings := range []struct{ input, want string }{
+		{"https://github.com/settings/apps/loki/advanced", "https://github.com/settings/apps/loki"},
+		{"https://github.com/organizations/example/settings/apps/loki/advanced", "https://github.com/organizations/example/settings/apps/loki"},
+		{"https://private.example/settings/apps/loki/advanced", "https://github.com/settings/apps"},
+	} {
+		var output bytes.Buffer
+		users := func(_ context.Context, request UserRequest) (UserView, error) {
+			if request.Action == "status" {
+				return UserView{Status: "unconfigured", Accounts: []UserAccountView{{Account: "example-user", Status: "unconfigured"}}}, nil
+			}
+			return UserView{}, errors.New("enable Device flow in the GitHub App settings, then retry setup")
+		}
+		err := finishSetup(t.Context(), Options{NoBrowser: true, PersonalProjects: true, UserTransport: users}, &output, View{Phase: "ready", AppSettingsURL: settings.input})
+		if err == nil || !strings.Contains(output.String(), "Open GitHub App settings: "+settings.want) || !strings.Contains(output.String(), "select Enable Device Flow and save") || strings.Contains(output.String(), "GitHub integration ready") {
+			t.Fatal("missing setup remedy", err, output.String())
 		}
 	}
 }
@@ -186,5 +209,35 @@ func TestUserStatusRejectsIncompleteOrContradictoryViews(t *testing.T) {
 		if err := view.Validate(request); err == nil {
 			t.Fatal("incomplete authorization was accepted", view)
 		}
+	}
+}
+
+func TestDefaultSetupNeverQueriesOrStartsPersonalAuthorization(t *testing.T) {
+	var output bytes.Buffer
+	setup := func(_ context.Context, request Request) (View, error) {
+		if request.PersonalProjects {
+			t.Fatal("default setup requested personal Projects permissions")
+		}
+		return View{Phase: "ready", Account: "example-user"}, nil
+	}
+	users := func(context.Context, UserRequest) (UserView, error) {
+		t.Fatal("default setup queried optional user authorization")
+		return UserView{}, errors.New("unexpected user authorization")
+	}
+	if err := Run(t.Context(), setup, Options{NoBrowser: true, UserTransport: users}, &output); err != nil || !strings.Contains(output.String(), "GitHub integration ready") || strings.Contains(output.String(), "device") {
+		t.Fatal("default repository setup failed", err, output.String())
+	}
+}
+
+func TestPersonalProjectsOptInReachesRegistrationAndNeedsTransport(t *testing.T) {
+	var output bytes.Buffer
+	setup := func(_ context.Context, request Request) (View, error) {
+		if request.Action != "begin" || !request.PersonalProjects {
+			t.Fatal("personal Projects selection lost before registration")
+		}
+		return View{Phase: "ready"}, nil
+	}
+	if err := Run(t.Context(), setup, Options{PersonalProjects: true}, &output); err == nil || strings.Contains(output.String(), "GitHub integration ready") {
+		t.Fatal("explicit authorization request succeeded without transport", err)
 	}
 }

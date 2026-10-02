@@ -26,13 +26,14 @@ import (
 )
 
 type Request struct {
-	Action         string `json:"action"`
-	RedirectURL    string `json:"redirect_url,omitempty"`
-	Account        string `json:"account,omitempty"`
-	AccountType    string `json:"account_type,omitempty"`
-	State          string `json:"state,omitempty"`
-	Code           string `json:"code,omitempty"`
-	InstallationID int64  `json:"installation_id,omitempty"`
+	Action           string `json:"action"`
+	PersonalProjects bool   `json:"personal_projects,omitempty"`
+	RedirectURL      string `json:"redirect_url,omitempty"`
+	Account          string `json:"account,omitempty"`
+	AccountType      string `json:"account_type,omitempty"`
+	State            string `json:"state,omitempty"`
+	Code             string `json:"code,omitempty"`
+	InstallationID   int64  `json:"installation_id,omitempty"`
 }
 type Manifest struct {
 	Name                  string            `json:"name"`
@@ -58,13 +59,14 @@ type View struct {
 }
 type Transport func(context.Context, Request) (View, error)
 type Options struct {
-	NoBrowser     bool
-	Verbose       bool
-	OpenBrowser   func(string) error
-	PollInterval  time.Duration
-	Timeout       time.Duration
-	Input         io.Reader
-	UserTransport UserTransport
+	PersonalProjects bool
+	NoBrowser        bool
+	Verbose          bool
+	OpenBrowser      func(string) error
+	PollInterval     time.Duration
+	Timeout          time.Duration
+	Input            io.Reader
+	UserTransport    UserTransport
 }
 
 // Run hosts a loopback registration page, relays the one-time code, and
@@ -89,7 +91,9 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	defer listener.Close()
 	origin := "http://" + listener.Addr().String()
-	view, err := transport(ctx, Request{Action: "begin", RedirectURL: origin + "/callback"})
+	view, err := requestWithProgress(ctx, output, "Checking GitHub App configuration...", func() (View, error) {
+		return transport(ctx, Request{Action: "begin", RedirectURL: origin + "/callback", PersonalProjects: options.PersonalProjects})
+	})
 	if err != nil {
 		return err
 	}
@@ -178,6 +182,9 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	if view.Phase == "registration" {
 		fmt.Fprintln(output, "Opening GitHub App registration...")
+		if options.PersonalProjects {
+			fmt.Fprintln(output, "After creating the App, select Enable Device Flow in its settings for personal Projects.")
+		}
 		show(origin + localPath)
 		select {
 		case result := <-completed:
@@ -267,10 +274,17 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			case <-ctx.Done():
 				return errors.New("GitHub installation is pending; rerun the same setup command to continue")
 			}
-			view, err = transport(ctx, Request{Action: action, InstallationID: installationID})
+			if action == "finish" || action == "select" {
+				view, err = requestWithProgress(ctx, output, "Checking approved GitHub installations and repository access...", func() (View, error) {
+					return transport(ctx, Request{Action: action, InstallationID: installationID})
+				})
+			} else {
+				view, err = transport(ctx, Request{Action: action, InstallationID: installationID})
+			}
 		case "configured":
-			fmt.Fprintln(output, "Applying GitHub integration...")
-			view, err = transport(ctx, Request{Action: "apply"})
+			view, err = requestWithProgress(ctx, output, "Applying GitHub integration...", func() (View, error) {
+				return transport(ctx, Request{Action: "apply"})
+			})
 		case "ready":
 			return finishSetup(userContext, options, output, view)
 		default:

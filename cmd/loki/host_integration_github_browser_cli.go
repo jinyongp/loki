@@ -42,7 +42,7 @@ func runHostGitHubBrowserSetup(options hostIntegrationOptions, store *lifecycle.
 		if err != nil {
 			return false, err
 		}
-		if !report.Ready {
+		if !report.AppReady {
 			return false, nil
 		}
 		candidate, err := loadManagedGitHubFromStore(ctx, store)

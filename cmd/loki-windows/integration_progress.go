@@ -26,6 +26,7 @@ func executeWindowsIntegrationWithProgress(ctx context.Context, client windowsho
 	}
 	progress.Emit(reporter, progress.Event{
 		Operation: "integration", Phase: "inspect", State: progress.StateStarted,
+		Level:   integrationProgressLevel(request.Action, request.Integration),
 		Message: fmt.Sprintf("Running %s integration %s; checking the WSL appliance...", request.Integration, request.Action),
 	})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, heartbeat)
@@ -34,4 +35,11 @@ func executeWindowsIntegrationWithProgress(ctx context.Context, client windowsho
 		return client.ExecuteInputStreaming(ctx, distribution, request, input, reporter)
 	}
 	return client.ExecuteStreaming(ctx, distribution, request, reporter)
+}
+
+func integrationProgressLevel(action, name string) progress.Level {
+	if action == "doctor" && name == "github" {
+		return progress.LevelSummary
+	}
+	return progress.LevelDetail
 }

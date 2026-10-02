@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"loki/internal/fault"
+	"loki/internal/process"
 	"net/http"
 	"net/url"
 	"sort"
@@ -21,8 +22,8 @@ type ProjectAuthority struct {
 	apiURL       string
 }
 
-// Only Projects commands with a fixed owner or checked node IDs are exposed.
-// File input, owner overrides, linking, and cross-owner copies are excluded.
+// Projects must be linked to the selected repository. Creation links the new
+// project in the same mutation. Caller-controlled linking and copying are excluded.
 var projectCommandFlags = map[string]string{
 	"list":          "limit closed",
 	"view":          "",
@@ -52,8 +53,9 @@ func ProjectCommandCapabilities() []string {
 }
 
 type projectCommand struct {
-	name  string
-	flags map[string]string
+	name   string
+	flags  map[string]string
+	number int
 }
 
 func parseProjectCommand(request CommandRequest) (projectCommand, error) {
@@ -88,6 +90,7 @@ func parseProjectCommand(request CommandRequest) (projectCommand, error) {
 				return projectCommand{}, invalid
 			}
 			positionals++
+			parsed.number = int(number)
 			continue
 		}
 		flag, value, inline := strings.Cut(strings.TrimPrefix(arg, "--"), "=")
@@ -150,6 +153,9 @@ func parseProjectCommand(request CommandRequest) (projectCommand, error) {
 			return projectCommand{}, invalid
 		}
 	}
+	if name == "create" && strings.TrimSpace(parsed.flags["title"]) == "" {
+		return projectCommand{}, invalid
+	}
 	return parsed, nil
 }
 
@@ -160,45 +166,68 @@ func uPath(u *url.URL) string {
 	return u.Path
 }
 
-func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) ([]string, string, error) {
+type projectExecution struct {
+	arguments []string
+	token     string
+	result    *process.Result
+}
+
+func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) (projectExecution, error) {
 	command, err := parseProjectCommand(request)
 	if err != nil {
-		return nil, "", err
+		return projectExecution{}, err
 	}
 	target := strings.ToLower(strings.TrimSpace(request.Target))
 	if p == nil || !TargetAllowed(p.Targets, target) || p.HTTP == nil {
-		return nil, "", fault.Error("GitHub Projects target is not allowed")
+		return projectExecution{}, fault.Error("GitHub Projects target is not allowed")
 	}
 	owner, _, _ := strings.Cut(target, "/")
 	var token string
 	switch p.AccountTypes[owner] {
 	case "user":
 		if p.Users == nil {
-			return nil, "", fault.Error("GitHub personal Projects authorization is required; run integration setup github")
+			return projectExecution{}, fault.Error("GitHub personal Projects authorization is required; run integration setup github --personal-projects")
 		}
 		token, err = p.Users.AccountToken(ctx, owner)
 	case "organization":
 		if p.Repositories == nil {
-			return nil, "", fault.Error("GitHub Projects installation token is unavailable")
+			return projectExecution{}, fault.Error("GitHub Projects installation token is unavailable")
 		}
 		token, err = p.Repositories.Token(ctx, target)
 	default:
-		return nil, "", fault.Error("GitHub Projects owner is not allowed")
+		return projectExecution{}, fault.Error("GitHub Projects owner is not allowed")
 	}
 	if err != nil || token == "" {
 		if err == nil {
 			err = fault.Error("GitHub Projects credential is unavailable")
 		}
-		return nil, "", err
+		return projectExecution{}, err
 	}
 	if p.AccountTypes[owner] == "organization" {
 		if err = p.organizationProjects(ctx, token, owner); err != nil {
-			return nil, "", err
+			return projectExecution{}, err
 		}
+	}
+	repository, err := p.projectRepository(ctx, token, target)
+	if err != nil {
+		return projectExecution{}, err
+	}
+	if command.name == "list" || command.name == "create" {
+		result, err := p.repositoryProjectResult(ctx, token, target, repository, command)
+		return projectExecution{token: token, result: &result}, err
 	}
 	// ID-based mutations can bypass gh's --owner handling. Check each node's
 	// actual project and owner before allowing the CLI to receive any token.
 	var projectID string
+	if command.number > 0 {
+		projectID, err = p.numberProject(ctx, token, owner, command.number)
+		if err != nil {
+			return projectExecution{}, err
+		}
+		if err = p.projectLinked(ctx, token, projectID, repository.ID); err != nil {
+			return projectExecution{}, err
+		}
+	}
 	for _, flag := range []string{"id", "project-id", "field-id"} {
 		id := command.flags[flag]
 		if id == "" {
@@ -215,7 +244,12 @@ func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) 
 		}
 		resolved, err := p.nodeProject(ctx, token, id, kind, owner)
 		if err != nil || projectID != "" && resolved != projectID {
-			return nil, "", fault.Error("GitHub Projects node is outside the selected owner's project")
+			return projectExecution{}, fault.Error("GitHub Projects node is outside the selected repository's project")
+		}
+		if projectID == "" {
+			if err = p.projectLinked(ctx, token, resolved, repository.ID); err != nil {
+				return projectExecution{}, err
+			}
 		}
 		projectID = resolved
 	}
@@ -223,7 +257,7 @@ func (p *ProjectAuthority) Prepare(ctx context.Context, request CommandRequest) 
 	if command.name != "field-delete" && command.name != "item-edit" {
 		arguments = append(arguments, "--owner", owner)
 	}
-	return arguments, token, nil
+	return projectExecution{arguments: arguments, token: token}, nil
 }
 
 func (p *ProjectAuthority) nodeProject(ctx context.Context, token, id, kind, owner string) (string, error) {
@@ -293,8 +327,12 @@ type projectOwner struct {
 }
 
 type ownedProject struct {
-	ID    string       `json:"id"`
-	Owner projectOwner `json:"owner"`
+	ID     string       `json:"id"`
+	Owner  projectOwner `json:"owner"`
+	Number int          `json:"number,omitempty"`
+	Title  string       `json:"title,omitempty"`
+	URL    string       `json:"url,omitempty"`
+	Closed bool         `json:"closed"`
 }
 
 func (p *ProjectAuthority) organizationProjects(ctx context.Context, token, owner string) error {

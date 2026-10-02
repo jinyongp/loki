@@ -10,8 +10,13 @@ import (
 
 func startHostIntegrationProgress(ctx context.Context, stderr io.Writer, action, name string) (progress.Reporter, func()) {
 	reporter := progress.NewLineReporter(stderr)
+	level := progress.LevelDetail
+	if action == "doctor" && name == "github" {
+		level = progress.LevelSummary
+	}
 	progress.Emit(reporter, progress.Event{
 		Operation: "integration", Phase: "inspect", State: progress.StateStarted,
+		Level:   level,
 		Message: fmt.Sprintf("Running %s integration %s; inspecting the current configuration...", name, action),
 	})
 	stopHeartbeat := progress.StartHeartbeat(ctx, reporter, progress.HeartbeatOptions{

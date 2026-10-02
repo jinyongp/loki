@@ -46,11 +46,17 @@ func TestRunFinishesExistingConfigureOnEnter(t *testing.T) {
 	transport := func(ctx context.Context, request Request) (View, error) {
 		switch request.Action {
 		case "begin":
+			if !strings.Contains(output.String(), "Checking GitHub App configuration...") {
+				t.Fatal("setup did not announce work before transport")
+			}
 			if request.Account != "" || request.AccountType != "" {
 				t.Fatal("browser flow should choose account in GitHub")
 			}
 			return View{Phase: "installation", InstallationURL: "https://github.com/apps/existing-app/installations/new", AppSettingsURL: "https://github.com/settings/apps/existing-app/advanced"}, nil
 		case "finish":
+			if !strings.Contains(output.String(), "Checking approved GitHub installations and repository access...") {
+				t.Fatal("setup did not announce work after Enter")
+			}
 			finished = true
 			return View{Phase: "ready", Account: "example-org"}, nil
 		default:
@@ -114,7 +120,7 @@ func TestRunWaitsForAllAccountsBeforeApplyingBatch(t *testing.T) {
 			if finishes.Load() != 1 || applies.Load() != 1 || !strings.Contains(output.String(), "Accounts: example-user, example-org") || !strings.Contains(output.String(), "Repository access follows") || strings.Contains(output.String(), "paste its GitHub Configure") {
 				t.Fatalf("batch output=%s", output.String())
 			}
-			if strings.Count(output.String(), "\n") > 6 || strings.Contains(output.String(), "Make public") || strings.Contains(output.String(), "organization App policies") {
+			if strings.Count(output.String(), "\n") > 8 || strings.Contains(output.String(), "Make public") || strings.Contains(output.String(), "organization App policies") {
 				t.Fatalf("default setup output includes detailed instructions: %s", output.String())
 			}
 		})

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	"loki/internal/progress"
 )
 
 type UserRequest struct {
@@ -94,7 +97,7 @@ func (v UserView) Validate(request UserRequest) error {
 // UserLoginError carries only known public runtime messages across CLI relays.
 // Docker/WSL diagnostics and arbitrary upstream text may contain private data.
 func UserLoginError(detail string) error {
-	message := strings.TrimPrefix(strings.TrimSpace(detail), "loki: ")
+	message := strings.TrimPrefix(progress.NonProgressText(detail), "loki: ")
 	for _, allowed := range []string{
 		"enable Device flow in the GitHub App settings, then retry setup",
 		"authorize the configured personal account in GitHub, then retry setup",
@@ -106,6 +109,15 @@ func UserLoginError(detail string) error {
 		"GitHub user credentials are invalid",
 		"GitHub App client ID is unavailable",
 		"GitHub App credential is unavailable",
+		"GitHub App authentication failed",
+		"GitHub device authorization could not start; check the App's Device flow setting",
+		"GitHub device authorization could not start",
+		"GitHub authorization request failed",
+		"GitHub authorization request was rejected",
+		"GitHub authorization request timed out; retry setup",
+		"GitHub authorization response is invalid",
+		"GitHub user token response is invalid",
+		"GitHub user credentials could not be saved",
 		"GitHub user credentials could not be saved; retry setup",
 	} {
 		if message == allowed {
@@ -122,7 +134,9 @@ func RunUser(ctx context.Context, transport UserTransport, options Options, outp
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, 16*time.Minute)
 	defer cancel()
-	view, err := transport(ctx, UserRequest{Action: "begin"})
+	view, err := requestWithProgress(ctx, output, "Requesting a GitHub device code for personal Projects...", func() (UserView, error) {
+		return transport(ctx, UserRequest{Action: "begin"})
+	})
 	if err != nil {
 		return err
 	}
@@ -140,6 +154,11 @@ func RunUser(ctx context.Context, transport UserTransport, options Options, outp
 		}
 		_ = open(view.VerificationURI)
 	}
+	fmt.Fprintln(output, "Waiting for approval in GitHub; complete authorization in your browser.")
+	stopHeartbeat := progress.StartHeartbeat(ctx, progress.NewLineReporter(output), progress.HeartbeatOptions{
+		Operation: "github-setup", Phase: "user-authorization", Message: "Still waiting for personal Projects authorization in GitHub",
+	})
+	defer stopHeartbeat()
 	session := view.SessionID
 	for view.Status == "pending" {
 		if view.Interval < 1 || view.Interval > 900 || view.SessionID != session || view.Account != "" {
@@ -166,14 +185,20 @@ func RunUser(ctx context.Context, transport UserTransport, options Options, outp
 	if view.Status != "ready" || view.Account == "" {
 		return errors.New("GitHub device login did not complete")
 	}
+	stopHeartbeat()
 	fmt.Fprintln(output, "Personal Projects authorization ready for", view.Account)
 	return nil
 }
 
 func finishSetup(ctx context.Context, options Options, output io.Writer, view View) error {
-	if options.UserTransport != nil {
+	if options.PersonalProjects && options.UserTransport == nil {
+		return errors.New("personal Projects authorization is unavailable")
+	}
+	if options.PersonalProjects && options.UserTransport != nil {
 		for {
-			status, err := options.UserTransport(ctx, UserRequest{Action: "status"})
+			status, err := requestWithProgress(ctx, output, "Checking personal Projects authorization...", func() (UserView, error) {
+				return options.UserTransport(ctx, UserRequest{Action: "status"})
+			})
 			if err != nil {
 				return err
 			}
@@ -197,6 +222,10 @@ func finishSetup(ctx context.Context, options Options, output io.Writer, view Vi
 			}
 			fmt.Fprintln(output, "Personal Projects authorization required for:", strings.Join(pending, ", "))
 			if err = RunUser(ctx, options.UserTransport, options, output); err != nil {
+				if err.Error() == "enable Device flow in the GitHub App settings, then retry setup" {
+					fmt.Fprintln(output, "Open GitHub App settings:", deviceFlowSettingsURL(view.AppSettingsURL))
+					fmt.Fprintln(output, "Under Identifying and authorizing users, select Enable Device Flow and save, then rerun setup.")
+				}
 				return err
 			}
 			next, err := options.UserTransport(ctx, UserRequest{Action: "status"})
@@ -222,4 +251,16 @@ func finishSetup(ctx context.Context, options Options, output io.Writer, view Vi
 		}
 	}
 	return printReady(output, view)
+}
+
+func deviceFlowSettingsURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err == nil && u.Scheme == "https" && u.Host == "github.com" && u.User == nil && u.RawQuery == "" && u.Fragment == "" {
+		parts := strings.Split(strings.TrimSuffix(u.Path, "/advanced"), "/")
+		if (len(parts) == 4 && parts[1] == "settings" && parts[2] == "apps" && parts[3] != "") ||
+			(len(parts) == 6 && parts[1] == "organizations" && parts[2] != "" && parts[3] == "settings" && parts[4] == "apps" && parts[5] != "") {
+			return "https://github.com" + strings.TrimSuffix(u.Path, "/advanced")
+		}
+	}
+	return "https://github.com/settings/apps"
 }

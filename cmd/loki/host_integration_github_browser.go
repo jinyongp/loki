@@ -23,6 +23,7 @@ import (
 )
 
 type githubSetupSession struct {
+	PersonalProjects     bool                         `json:"personal_projects,omitempty"`
 	Version              int                          `json:"version"`
 	Phase                string                       `json:"phase"`
 	State                string                       `json:"state"`
@@ -156,6 +157,7 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 				// Retain the App name and callback state when restarting registration.
 				// A concurrent callback is serialized and cannot replay conversion.
 				session.RedirectURL = request.RedirectURL
+				session.PersonalProjects = request.PersonalProjects
 				if err = h.save(ctx, session); err != nil {
 					return githubsetup.View{}, err
 				}
@@ -166,7 +168,7 @@ func (h *hostGitHubSetup) Handle(ctx context.Context, request githubsetup.Reques
 		if _, err = rand.Read(state); err != nil {
 			return githubsetup.View{}, err
 		}
-		session = githubSetupSession{Version: 1, Phase: "registration", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL, Account: strings.ToLower(request.Account), AccountType: request.AccountType, SelectInstallation: request.Account == ""}
+		session = githubSetupSession{Version: 1, Phase: "registration", State: hex.EncodeToString(state), CreatedAt: h.now(), RedirectURL: request.RedirectURL, Account: strings.ToLower(request.Account), AccountType: request.AccountType, SelectInstallation: request.Account == "", PersonalProjects: request.PersonalProjects}
 		if session.AccountType == "" {
 			session.AccountType = "user"
 		}
@@ -357,11 +359,13 @@ func (s githubSetupSession) view() githubsetup.View {
 				"metadata": "read", "contents": "write", "issues": "write", "pull_requests": "write",
 				"actions": "write", "workflows": "write", "checks": "write", "statuses": "write",
 				"organization_projects": "write",
-				"user_projects":         "write",
 				"issue_fields":          "write",
 				"issue_types":           "write",
 			},
 			DefaultEvents: []string{}, RequestOAuthOnInstall: false,
+		}
+		if s.PersonalProjects {
+			view.Manifest.DefaultPermissions["user_projects"] = "write"
 		}
 	}
 	if s.AppID > 0 {

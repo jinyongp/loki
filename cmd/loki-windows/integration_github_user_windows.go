@@ -13,6 +13,10 @@ import (
 )
 
 func runWindowsGitHubUser(ctx context.Context, action string, args []string, stdout, stderr io.Writer) int {
+	if action != "logout" {
+		fmt.Fprintln(stderr, "Use loki integration status github to inspect GitHub authorization.")
+		return 2
+	}
 	if len(args) > 0 && args[0] == "github" {
 		args = args[1:]
 	} else if len(args) > 0 && args[len(args)-1] == "github" {
@@ -35,11 +39,7 @@ func runWindowsGitHubUser(ctx context.Context, action string, args []string, std
 		return 2
 	}
 	transport := windowsGitHubUserTransport(windowshost.NewWindowsOperatorClient(), *distribution)
-	operation := "status"
-	if action == "logout" {
-		operation = "logout"
-	}
-	view, err := transport(ctx, githubsetup.UserRequest{Action: operation})
+	view, err := transport(ctx, githubsetup.UserRequest{Action: "logout"})
 	if err == nil {
 		err = json.NewEncoder(stdout).Encode(view)
 	}

@@ -5,24 +5,27 @@ import (
 	"fmt"
 	"io"
 
+	"loki/internal/host/githubsetup"
 	windowshost "loki/internal/host/windows"
 )
 
 type windowsIntegrationReport struct {
-	SchemaVersion  int    `json:"schema_version"`
-	Name           string `json:"name"`
-	Configured     bool   `json:"configured"`
-	Enabled        bool   `json:"enabled"`
-	Ready          bool   `json:"ready"`
-	State          string `json:"state"`
-	PublicKey      string `json:"public_key,omitempty"`
-	Fingerprint    string `json:"fingerprint,omitempty"`
-	IdentityName   string `json:"identity_name,omitempty"`
-	IdentityEmail  string `json:"identity_email,omitempty"`
-	GitHubAppID    int64  `json:"github_app_id,omitempty"`
-	TargetCount    int    `json:"target_count,omitempty"`
-	Authentication string `json:"authentication,omitempty"`
-	Detail         string `json:"detail,omitempty"`
+	SchemaVersion    int                     `json:"schema_version"`
+	Name             string                  `json:"name"`
+	Configured       bool                    `json:"configured"`
+	Enabled          bool                    `json:"enabled"`
+	Ready            bool                    `json:"ready"`
+	State            string                  `json:"state"`
+	PublicKey        string                  `json:"public_key,omitempty"`
+	Fingerprint      string                  `json:"fingerprint,omitempty"`
+	IdentityName     string                  `json:"identity_name,omitempty"`
+	IdentityEmail    string                  `json:"identity_email,omitempty"`
+	GitHubAppID      int64                   `json:"github_app_id,omitempty"`
+	TargetCount      int                     `json:"target_count,omitempty"`
+	Authentication   string                  `json:"authentication,omitempty"`
+	Detail           string                  `json:"detail,omitempty"`
+	AppReady         bool                    `json:"app_ready,omitempty"`
+	PersonalProjects *githubsetup.UserStatus `json:"personal_projects,omitempty"`
 }
 
 // Doctor reports are useful precisely when exit status is nonzero. Decode them
@@ -84,6 +87,10 @@ func renderWindowsIntegration(report windowsIntegrationReport, stdout io.Writer)
 	}
 	if report.Authentication != "" {
 		fmt.Fprintf(stdout, "  Authentication: %s\n", report.Authentication)
+	}
+	if report.PersonalProjects != nil {
+		fmt.Fprintf(stdout, "  App ready: %t\n", report.AppReady)
+		githubsetup.RenderUserStatus(stdout, *report.PersonalProjects)
 	}
 	if report.Detail != "" {
 		fmt.Fprintf(stdout, "  Detail: %s\n", report.Detail)
