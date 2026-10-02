@@ -14,8 +14,9 @@ function wsl.exe {
             Write-Output "WSL version: 3.0.0"
         }
         '--help' {
+            $global:LASTEXITCODE = $global:lokiWSLPreparationFixture.HelpExitCode
             if ($global:lokiWSLPreparationFixture.HelpFailure -and $global:lokiWSLPreparationFixture.Updates -eq 0) {
-                $global:LASTEXITCODE = 1
+                $global:LASTEXITCODE = 7
             }
             if ($global:lokiWSLPreparationFixture.Ready) { Write-Output '--from-file --name --no-launch' }
             else { Write-Output '--name --no-launch' }
@@ -44,7 +45,13 @@ function Start-Sleep {
 $download403 = 'Forbidden (403). Error code: Wsl/UpdatePackage/0x80190193'
 $cases = @(
     @{ Name = 'installed-ready'; Ready = $true; Updates = 0 },
+    @{ Name = 'help-exit-one'; Ready = $true; HelpExitCode = 1; Updates = 0 },
+    @{ Name = 'help-exit-minus-one'; Ready = $true; HelpExitCode = -1; Updates = 0 },
+    @{ Name = 'help-exit-unsigned-minus-one'; Ready = $true; HelpExitCode = 4294967295; Updates = 0 },
+    @{ Name = 'help-exit-unknown'; Ready = $true; HelpExitCode = 7; Updates = 1; Reject = $true },
     @{ Name = 'upgrade'; Updates = 1 },
+    @{ Name = 'upgrade-with-help-exit-minus-one'; HelpExitCode = -1; Updates = 1 },
+    @{ Name = 'missing-capability-help-exit-one'; HelpExitCode = 1; Incompatible = $true; Updates = 1; Reject = $true },
     @{ Name = 'version-probe-failed'; Ready = $true; VersionFailure = $true; Updates = 1 },
     @{ Name = 'help-probe-failed'; Ready = $true; HelpFailure = $true; Updates = 1 },
     @{ Name = 'download-403'; Failures = 1; Error = $download403; Updates = 2; Delays = '15' },
@@ -66,6 +73,7 @@ foreach ($case in $cases) {
         Ready = [bool]$case['Ready']; Failures = [int]$case['Failures']; Error = [string]$case['Error']
         Incompatible = [bool]$case['Incompatible']; ReadyAfterFailure = [bool]$case['ReadyAfterFailure']
         VersionFailure = [bool]$case['VersionFailure']; HelpFailure = [bool]$case['HelpFailure']
+        HelpExitCode = [long]$case['HelpExitCode']
         Calls = [Collections.Generic.List[string]]::new(); Updates = 0
         Delays = [Collections.Generic.List[int]]::new()
     }

@@ -10,11 +10,22 @@ if ($DelaySeconds -lt 0 -or $DelaySeconds -gt 60) { throw "WSL update delay must
 
 function Test-WSLReady {
     $version = (& wsl.exe --version 2>&1 | Out-String) -replace "`0", ""
-    if ($LASTEXITCODE -ne 0) { return $false }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WSL version probe unavailable (exit code $LASTEXITCODE): $($version.Trim())"
+        return $false
+    }
     $help = (& wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
-    if ($LASTEXITCODE -ne 0) { return $false }
+    # Match WSLClient.RequireInstallCapabilities: WSL help may return 1 or -1
+    # even when it prints valid capabilities. Some hosts expose -1 unsigned.
+    if ($LASTEXITCODE -notin @(0, 1, -1, 4294967295)) {
+        Write-Host "WSL capability probe failed (exit code $LASTEXITCODE): $($help.Trim())"
+        return $false
+    }
     foreach ($option in @("--from-file", "--name", "--no-launch")) {
-        if (-not $help.Contains($option)) { return $false }
+        if (-not $help.Contains($option)) {
+            Write-Host "Installed WSL lacks required option $option."
+            return $false
+        }
     }
     Write-Host $version.Trim()
     return $true
