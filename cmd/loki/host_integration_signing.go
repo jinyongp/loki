@@ -92,7 +92,7 @@ func runHostSigningSetup(action string, args []string, stdout, stderr io.Writer)
 	reporter, stopHeartbeat := startHostIntegrationProgress(context.Background(), stderr, action, "signing")
 	defer stopHeartbeat()
 	progress.Emit(reporter, progress.Event{
-		Operation: "integration", Phase: "prepare-signing", State: progress.StateStarted,
+		Operation: "integration", Phase: "prepare-signing", State: progress.StateStarted, Level: progress.LevelSummary,
 		Message: "Preparing and validating the SSH signing key and Git identity...",
 	})
 	var material managedSigningMaterial

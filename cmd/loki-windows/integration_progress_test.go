@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	windowshost "loki/internal/host/windows"
 	"loki/internal/progress"
@@ -12,12 +15,16 @@ import (
 
 type integrationProgressRunner struct {
 	t       *testing.T
-	output  *bytes.Buffer
+	output  interface{ String() string }
 	input   []byte
 	verbose bool
+	signing bool
 }
 
 func (r *integrationProgressRunner) Run(_ context.Context, _ string, args []string) (windowshost.NativeProbe, error) {
+	if r.signing && !strings.Contains(r.output.String(), "Setting up Git commit signing") {
+		r.t.Error("signing setup did not announce work before the WSL inspection")
+	}
 	if args[len(args)-1] == "version" {
 		return windowshost.NativeProbe{Stdout: "loki 1.2.3"}, nil
 	}
@@ -48,7 +55,7 @@ func TestWindowsIntegrationProgressCoversMutationsAndPrivateSetup(t *testing.T) 
 			}
 			t.Run(integration+"/"+action, func(t *testing.T) {
 				var stderr bytes.Buffer
-				runner := &integrationProgressRunner{t: t, output: &stderr}
+				runner := &integrationProgressRunner{t: t, output: &stderr, signing: integration == "signing" && (action == "setup" || action == "rotate")}
 				request := windowshost.OperatorRequest{Command: "integration", Action: action, Integration: integration}
 				var input []byte
 				if action == "setup" || action == "rotate" {
@@ -67,9 +74,86 @@ func TestWindowsIntegrationProgressCoversMutationsAndPrivateSetup(t *testing.T) 
 				if !bytes.Equal(runner.input, input) || strings.Contains(stderr.String(), "synthetic-private-key") {
 					t.Fatal("private input was dropped or leaked into progress")
 				}
+				if runner.signing && strings.Count(stderr.String(), "Setting up Git commit signing") != 1 {
+					t.Fatalf("signing start notice was missing or repeated: %s", &stderr)
+				}
 			})
 		}
 	}
+}
+
+type waitingSigningProgressRunner struct {
+	integrationProgressRunner
+	entered, resume chan struct{}
+	waited          bool
+}
+
+type signingProgressBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (buffer *signingProgressBuffer) Write(raw []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.buffer.Write(raw)
+}
+
+func (buffer *signingProgressBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.buffer.String()
+}
+
+func (r *waitingSigningProgressRunner) Run(ctx context.Context, executable string, args []string) (windowshost.NativeProbe, error) {
+	if !r.waited {
+		r.waited = true
+		close(r.entered)
+		select {
+		case <-r.resume:
+		case <-ctx.Done():
+			return windowshost.NativeProbe{}, ctx.Err()
+		}
+	}
+	return r.integrationProgressRunner.Run(ctx, executable, args)
+}
+
+func (r *waitingSigningProgressRunner) RunStreaming(context.Context, string, []string, progress.Reporter) (windowshost.NativeProbe, error) {
+	return windowshost.NativeProbe{Stdout: `{"schema_version":1,"ready":true}`}, nil
+}
+
+func TestSigningSetupAnnouncesWorkAndLongWaitBeforeWSLReturns(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var stderr signingProgressBuffer
+		runner := &waitingSigningProgressRunner{
+			integrationProgressRunner: integrationProgressRunner{t: t, output: &stderr},
+			entered:                   make(chan struct{}), resume: make(chan struct{}),
+		}
+		done := make(chan error, 1)
+		go func() {
+			_, err := executeWindowsIntegrationWithProgress(t.Context(), windowshost.OperatorClient{
+				WSL: windowshost.WSLClient{Runner: runner},
+			}, "loki-mcp", windowshost.OperatorRequest{
+				Command: "integration", Action: "setup", Integration: "signing",
+				IdentityName: "Signing Fixture", IdentityEmail: "signing@example.test",
+			}, nil, &stderr)
+			done <- err
+		}()
+		<-runner.entered
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Setting up Git commit signing") {
+			t.Error("signing work was not announced while the WSL inspection was blocked")
+		}
+		time.Sleep(30 * time.Second)
+		synctest.Wait()
+		if !strings.Contains(stderr.String(), "Still setting up Git commit signing (30s elapsed)") {
+			t.Errorf("signing wait notice missing: %s", &stderr)
+		}
+		close(runner.resume)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestWindowsVerboseIntegrationStreamsDetailsBeforeCompletion(t *testing.T) {

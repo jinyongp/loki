@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -25,6 +27,25 @@ func TestIntegrationInspectionsKeepJSONSeparateFromProgress(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSigningSetupAnnouncesKeyPreparationBeforeValidation(t *testing.T) {
+	store, _ := hostIntegrationStoreFixture(t)
+	key := filepath.Join(t.TempDir(), "invalid-key")
+	if err := os.WriteFile(key, []byte("invalid signing key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := runHostIntegration([]string{
+		"setup", "--state-root", store.Root, "--identity-name", "Signing Fixture",
+		"--identity-email", "signing@example.test", "--key-file", key, "signing",
+	}, &stdout, &stderr)
+	if code != 1 || !strings.HasPrefix(stderr.String(), "[loki] Preparing and validating the SSH signing key and Git identity...\n") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stderr.String(), "invalid signing key") || stdout.Len() != 0 {
+		t.Fatal("failed signing setup leaked key input or printed a success result")
 	}
 }
 
