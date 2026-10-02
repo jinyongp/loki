@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"loki/internal/process"
 )
 
 type repositoryTokenFunc func(context.Context, string) (string, error)
@@ -154,5 +156,38 @@ func TestCommandRunnerRedactsTokenAndReturnsStableStartFailure(t *testing.T) {
 	if err == nil || err.Error() != "GitHub command could not be started" ||
 		strings.Contains(err.Error(), runner.Config.Binary) || result.Output != "" {
 		t.Fatalf("unstable start error: %#v %v", result, err)
+	}
+}
+
+type commandCheckSupervisor func(context.Context, process.Spec) (process.Result, error)
+
+func (f commandCheckSupervisor) Run(ctx context.Context, spec process.Spec) (process.Result, error) {
+	return f(ctx, spec)
+}
+
+func TestCommandCheckIsLocalCredentialFreeAndCleansUp(t *testing.T) {
+	runner, calls := commandRunnerFixture(t)
+	runner.Config.TempDir = t.TempDir()
+	for _, result := range []process.Result{{ExitCode: 0}, {ExitCode: 1}, {TimedOut: true}, {Canceled: true}, {Truncated: true}} {
+		runner.Supervisor = commandCheckSupervisor(func(_ context.Context, spec process.Spec) (process.Result, error) {
+			if strings.Join(spec.Argv[1:], " ") != "config get git_protocol --host github.com" ||
+				!strings.Contains(strings.Join(spec.Env, "\n"), "\nGH_TOKEN=\n") ||
+				strings.Contains(strings.Join(spec.Env, "\n"), "installation-token") || spec.Timeout > 5*time.Second {
+				t.Fatalf("check environment: %#v", spec)
+			}
+			return result, nil
+		})
+		err := runner.Check(t.Context())
+		wantReady := result.ExitCode == 0 && !result.TimedOut && !result.Canceled && !result.Truncated
+		if (err == nil) != wantReady {
+			t.Fatalf("result=%#v err=%v", result, err)
+		}
+		entries, err := os.ReadDir(runner.Config.TempDir)
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("retained configuration: %#v %v", entries, err)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatal("check issued credentials")
 	}
 }

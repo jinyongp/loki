@@ -207,6 +207,8 @@ docker compose up -d --force-recreate launcher executor runtime mcp
 
 Compose mounts the public configuration into `launcher`, `executor`, `runtime`, and `mcp` so their effective policy stays consistent. It mounts the PEM only into `runtime` at `/run/loki-private/github-app-private-key`; a root-owned `0700` tmpfs protects its parent directory from the MCP and runner identities. The PEM is never copied into the image, named volumes, workspace, or backup state.
 
+The runtime creates an isolated configuration directory for each `gh` invocation. Its temporary root uses mode `2710` and the workspace group so the delegated process can read its own configuration. Compose and native Linux packaging use the same group inheritance rule. `system_inspect` reports GitHub as ready only when the delegated CLI can read this configuration; this local check does not verify every repository permission or contact GitHub.
+
 The core stack remains usable with the repository's empty GitHub configuration and no PEM. `loki status` reports whether GitHub is configured and whether its credential source is available without reading or returning the key.
 
 To rotate a key, atomically replace the host PEM and recreate `runtime`. Recreate `mcp` as well when the public installation configuration changes:

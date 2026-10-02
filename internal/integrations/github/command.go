@@ -110,17 +110,11 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 	if err != nil || token == "" {
 		return process.Result{}, errors.New("GitHub credential is unavailable")
 	}
-	configDir, err := os.MkdirTemp(r.Config.TempDir, "loki-gh-")
+	configDir, err := r.configDirectory()
 	if err != nil {
-		return process.Result{}, errors.New("GitHub command environment is unavailable")
+		return process.Result{}, err
 	}
 	defer os.RemoveAll(configDir)
-	// App-backed commands receive credentials through GH_TOKEN. Keep their
-	// config directory readable by the delegated workspace group without
-	// requiring CAP_CHOWN in the root runtime service.
-	if err = os.Chmod(configDir, 0750); err != nil {
-		return process.Result{}, errors.New("GitHub command environment is unavailable")
-	}
 	supervisor := r.Supervisor
 	if supervisor == nil {
 		supervisor = process.SystemdSupervisor{}
@@ -140,6 +134,46 @@ func (r *CommandRunner) Run(ctx context.Context, request CommandRequest) (proces
 		return result, errors.New("GitHub command could not be started")
 	}
 	return result, nil
+}
+
+// Check verifies the same CLI, directory and delegated identity as Run without
+// issuing credentials or making a network request.
+func (r *CommandRunner) Check(ctx context.Context) error {
+	if r == nil || !filepath.IsAbs(r.Config.Binary) || !filepath.IsAbs(r.Config.CWD) || r.Config.Timeout <= 0 {
+		return errors.New("GitHub command runner is not configured")
+	}
+	configDir, err := r.configDirectory()
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(configDir)
+	supervisor := r.Supervisor
+	if supervisor == nil {
+		supervisor = process.SystemdSupervisor{}
+	}
+	result, err := supervisor.Run(ctx, process.Spec{
+		Argv: []string{r.Config.Binary, "config", "get", "git_protocol", "--host", "github.com"},
+		CWD:  r.Config.CWD, Env: commandEnvironment(r.Config.Environment, configDir, "", ""),
+		Identity: r.Config.Identity, Timeout: min(r.Config.Timeout, 5*time.Second), MaxOutput: 4096,
+	})
+	if err != nil || result.ExitCode != 0 || result.TimedOut || result.Canceled || result.Truncated {
+		return errors.New("GitHub CLI environment is not ready")
+	}
+	return nil
+}
+
+func (r *CommandRunner) configDirectory() (string, error) {
+	configDir, err := os.MkdirTemp(r.Config.TempDir, "loki-gh-")
+	if err != nil {
+		return "", errors.New("GitHub command environment is unavailable")
+	}
+	// The service-owned temporary root carries setgid so children inherit the
+	// workspace group. Delegated commands can read configuration without CHOWN.
+	if err = os.Chmod(configDir, 0750); err != nil {
+		os.RemoveAll(configDir)
+		return "", errors.New("GitHub command environment is unavailable")
+	}
+	return configDir, nil
 }
 
 func (r *CommandRunner) validate(request CommandRequest) error {

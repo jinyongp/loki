@@ -157,6 +157,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	system := &mcptransport.SystemController{
 		Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(),
 		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, SigningSocket: signingSocket,
+		Runtime:   options.Runtime,
 		Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment,
 		InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 			return mcptransport.InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)

@@ -3,10 +3,12 @@ package mcptransport
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
+	"loki/internal/rpc"
 )
 
 const (
@@ -37,6 +39,17 @@ func (c *SystemController) integrationStatus(ctx context.Context) map[string]any
 	githubConfigured := c.Config.GitHubAppID != 0
 	githubEnabled := githubConfigured
 	githubReady := githubConfigured && len(c.Config.GitHubTargets) > 0
+	if githubReady {
+		githubReady = false
+		if c.Runtime != nil {
+			checkContext, cancel := context.WithTimeout(ctx, 6*time.Second)
+			var check struct {
+				Ready bool `json:"ready"`
+			}
+			githubReady = rpc.DecodeCall(checkContext, c.Runtime, map[string]any{"operation": "github_command_check"}, &check) == nil && check.Ready
+			cancel()
+		}
+	}
 
 	signingPublicKey := exists("/home/runner/.ssh/id_ed25519.pub")
 	signingAgent := c.SigningSocket != "" && socketExists(c.SigningSocket)

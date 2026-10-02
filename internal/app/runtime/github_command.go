@@ -15,6 +15,7 @@ import (
 
 type GitHubCommandRunner interface {
 	Run(context.Context, githubapp.CommandRequest) (process.Result, error)
+	Check(context.Context) error
 }
 
 type githubCommandRequest struct {
@@ -25,32 +26,54 @@ type githubCommandRequest struct {
 }
 
 func GitHubCommandOperations(runner GitHubCommandRunner) map[string]rpc.Operation {
-	return map[string]rpc.Operation{"github_command": {
-		Grant: controlpolicy.Agent,
-		Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
-			var request githubCommandRequest
-			decoder := json.NewDecoder(bytes.NewReader(raw))
-			decoder.DisallowUnknownFields()
-			if decoder.Decode(&request) != nil {
-				return nil, errors.New("invalid GitHub command arguments")
-			}
-			var trailing any
-			if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-				return nil, errors.New("invalid GitHub command arguments")
-			}
-			if request.Operation != "github_command" || runner == nil {
-				return nil, errors.New("GitHub command is not configured")
-			}
-			result, err := runner.Run(ctx, githubapp.CommandRequest{
-				Target: request.Target, Args: request.Args, Input: []byte(request.Input),
-			})
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{
-				"exit_code": result.ExitCode, "output": result.Output, "truncated": result.Truncated,
-				"timed_out": result.TimedOut, "canceled": result.Canceled,
-			}, nil
+	return map[string]rpc.Operation{
+		"github_command_check": {
+			Grant: controlpolicy.Agent,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var request struct {
+					Operation string `json:"operation"`
+				}
+				decoder := json.NewDecoder(bytes.NewReader(raw))
+				decoder.DisallowUnknownFields()
+				var trailing any
+				if decoder.Decode(&request) != nil || !errors.Is(decoder.Decode(&trailing), io.EOF) || request.Operation != "github_command_check" {
+					return nil, errors.New("invalid GitHub command check arguments")
+				}
+				if runner == nil {
+					return nil, errors.New("GitHub command is not configured")
+				}
+				if err := runner.Check(ctx); err != nil {
+					return nil, err
+				}
+				return map[string]any{"ready": true}, nil
+			},
 		},
-	}}
+		"github_command": {
+			Grant: controlpolicy.Agent,
+			Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var request githubCommandRequest
+				decoder := json.NewDecoder(bytes.NewReader(raw))
+				decoder.DisallowUnknownFields()
+				if decoder.Decode(&request) != nil {
+					return nil, errors.New("invalid GitHub command arguments")
+				}
+				var trailing any
+				if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+					return nil, errors.New("invalid GitHub command arguments")
+				}
+				if request.Operation != "github_command" || runner == nil {
+					return nil, errors.New("GitHub command is not configured")
+				}
+				result, err := runner.Run(ctx, githubapp.CommandRequest{
+					Target: request.Target, Args: request.Args, Input: []byte(request.Input),
+				})
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{
+					"exit_code": result.ExitCode, "output": result.Output, "truncated": result.Truncated,
+					"timed_out": result.TimedOut, "canceled": result.Canceled,
+				}, nil
+			},
+		}}
 }

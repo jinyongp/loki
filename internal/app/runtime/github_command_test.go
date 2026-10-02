@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"loki/internal/integrations/github"
@@ -11,8 +12,11 @@ import (
 )
 
 type fakeGitHubCommandRunner struct {
-	request githubapp.CommandRequest
+	request    githubapp.CommandRequest
+	checkError error
 }
+
+func (f *fakeGitHubCommandRunner) Check(context.Context) error { return f.checkError }
 
 func (f *fakeGitHubCommandRunner) Run(_ context.Context, request githubapp.CommandRequest) (process.Result, error) {
 	f.request = request
@@ -61,5 +65,30 @@ func TestGitHubCommandMCPBuildsNarrowRequest(t *testing.T) {
 	}
 	if _, exists := runtime.request["token"]; exists {
 		t.Fatal("credential field forwarded")
+	}
+}
+
+func TestGitHubCommandCheckDoesNotAcceptCommandOrCredentialInput(t *testing.T) {
+	runner := &fakeGitHubCommandRunner{}
+	operation := GitHubCommandOperations(runner)["github_command_check"]
+	result, err := operation.Handle(t.Context(), json.RawMessage(`{"operation":"github_command_check"}`))
+	if err != nil || result.(map[string]any)["ready"] != true {
+		t.Fatal(result, err)
+	}
+	for _, raw := range []string{
+		`{"operation":"github_command_check","args":["api","/user"]}`,
+		`{"operation":"github_command_check","token":"private"}`,
+		`{"operation":"github_command_check"} {}`,
+	} {
+		if _, err := operation.Handle(t.Context(), json.RawMessage(raw)); err == nil {
+			t.Fatalf("accepted %s", raw)
+		}
+	}
+	runner.checkError = errors.New("CLI unavailable")
+	if _, err := operation.Handle(t.Context(), json.RawMessage(`{"operation":"github_command_check"}`)); !errors.Is(err, runner.checkError) {
+		t.Fatal(err)
+	}
+	if _, err := GitHubCommandOperations(nil)["github_command_check"].Handle(t.Context(), json.RawMessage(`{"operation":"github_command_check"}`)); err == nil {
+		t.Fatal("disabled GitHub accepted")
 	}
 }

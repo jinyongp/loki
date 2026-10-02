@@ -22,6 +22,7 @@ import (
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/process"
+	"loki/internal/rpc"
 	"loki/internal/work/workspace"
 )
 
@@ -38,6 +39,7 @@ type SystemController struct {
 	GitEnvironment                              []string
 	ToolNames                                   []string
 	Audit                                       *audit.Log
+	Runtime                                     rpc.Caller
 }
 
 func catalogInfo(effective []string) map[string]any {

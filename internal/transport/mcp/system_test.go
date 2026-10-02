@@ -2,6 +2,8 @@ package mcptransport
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -98,5 +100,43 @@ func TestBrowserIntegrationStatusTracksSocketDynamically(t *testing.T) {
 	browser = status["browser"].(map[string]any)
 	if browser["state"] != integrationReady || browser["enabled"] != true || browser["ready"] != true {
 		t.Fatalf("browser status after enable=%#v", browser)
+	}
+}
+
+func TestGitHubReadinessTracksDelegatedCLICheck(t *testing.T) {
+	paths := serviceFixture(t)
+	cfg, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Root = paths.Root()
+	cfg.AuditLog = filepath.Join(t.TempDir(), "audit.jsonl")
+	cfg.GitHubAppID = 123
+	cfg.GitHubTargets = []string{"example-org/repo"}
+	controller := &SystemController{
+		Config: cfg, Paths: paths,
+		GitEnvironment: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"},
+	}
+	for _, checkError := range []error{errors.New("CLI permission denied"), nil, errors.New("runtime unavailable")} {
+		controller.Runtime = runtimeFixture(func(_ context.Context, request any) (json.RawMessage, error) {
+			if request.(map[string]any)["operation"] != "github_command_check" {
+				t.Fatalf("request=%#v", request)
+			}
+			return json.RawMessage(`{"ready":true}`), checkError
+		})
+		for _, info := range []map[string]any{controller.Info(t.Context()), controller.Diagnostics(t.Context())} {
+			github := info["integrations"].(map[string]any)["github"].(map[string]any)
+			wantState := integrationDegraded
+			if checkError == nil {
+				wantState = integrationReady
+			}
+			if github["ready"] != (checkError == nil) || github["state"] != wantState {
+				t.Fatalf("status=%#v", github)
+			}
+		}
+	}
+	controller.Runtime = nil
+	if github := controller.integrationStatus(t.Context())["github"].(map[string]any); github["ready"] != false || github["state"] != integrationDegraded {
+		t.Fatal(github)
 	}
 }
