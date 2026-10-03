@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 )
 
 const ManifestSchema = 1
@@ -130,9 +131,9 @@ func ParseManifest(data []byte) (Manifest, error) {
 }
 
 func cloneManifest(m Manifest) Manifest {
-	m.Targets = append([]Target(nil), m.Targets...)
-	m.Requires = append([]ID(nil), m.Requires...)
-	m.Tools = append([]string(nil), m.Tools...)
-	m.Capabilities = append([]string(nil), m.Capabilities...)
+	m.Targets = slices.Clone(m.Targets)
+	m.Requires = slices.Clone(m.Requires)
+	m.Tools = slices.Clone(m.Tools)
+	m.Capabilities = slices.Clone(m.Capabilities)
 	return m
 }
