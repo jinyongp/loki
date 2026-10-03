@@ -10,6 +10,7 @@ import asyncio
 import base64
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import zipfile
@@ -33,8 +34,14 @@ async def protocol(binary, root, workspace, invoke):
         snapshot = result(await client.request("tools/call", {"name":"browser_snapshot", "arguments":{}}))
         if "Loki native candidate fixture" not in json.dumps(snapshot):
             raise ValueError("Playwright did not observe the synthetic native fixture")
-        result(await client.request("tools/call", {"name":"navigate_page", "arguments":{"type":"url", "url":url}}))
-        snapshot = result(await client.request("tools/call", {"name":"take_snapshot", "arguments":{}}))
+        opened = result(await client.request("tools/call", {"name":"new_page", "arguments":{"url":url}}))
+        text = "\n".join(item.get("text", "") for item in opened.get("content", []) if item.get("type") == "text")
+        selected = re.findall(r"^(\d+): .* \[selected\]", text, re.MULTILINE)
+        if len(selected) != 1:
+            raise ValueError("DevTools did not identify its owned selected fixture page")
+        page_id = int(selected[0])
+        result(await client.request("tools/call", {"name":"navigate_page", "arguments":{"pageId":page_id, "type":"url", "url":url}}))
+        snapshot = result(await client.request("tools/call", {"name":"take_snapshot", "arguments":{"pageId":page_id}}))
         if "Loki native candidate fixture" not in json.dumps(snapshot):
             raise ValueError("DevTools did not observe its independent synthetic fixture")
         engine = next(name for name in tools["loki_browser_files"]["inputSchema"]["properties"]["engine"]["enum"] if name.endswith("/playwright"))
@@ -80,7 +87,10 @@ def accept(candidate):
         marker = workspace / "user-fixture.txt"
         marker.write_text("Keep this project file", encoding="utf-8")
         def invoke(*arguments):
-            return subprocess.check_output([str(binary), "--root", str(root), *arguments], text=True)
+            completed = subprocess.run([str(binary), "--root", str(root), *arguments], capture_output=True, text=True)
+            if completed.returncode:
+                raise ValueError("Candidate command failed: " + " ".join(arguments) + "\n" + completed.stdout + completed.stderr)
+            return completed.stdout
         invoke("tools", "configure", "--mode", "project-host")
         invoke("tools", "install", "browser", "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
         status = json.loads(invoke("status"))

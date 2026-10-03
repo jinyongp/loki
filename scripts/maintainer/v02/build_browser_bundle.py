@@ -97,7 +97,7 @@ def materialize(source, destination, root=None, ancestors=()):
 
 
 def preserve_chrome_tree(source, destination):
-    # macOS seals include framework aliases. Validate links before copying,
+    # macOS app layouts include framework aliases. Validate links before copying,
     # preserve their exact relative spelling and keep all aliases in one app.
     for directory, directories, files in os.walk(source, followlinks=False):
         for name in (*directories, *files):

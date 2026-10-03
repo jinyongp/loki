@@ -74,5 +74,6 @@ class Client:
 
 def result(response):
     if "error" in response or response.get("result", {}).get("isError"):
-        raise ValueError("native candidate rejected an expected successful MCP operation")
+        details = response.get("error") or [item.get("text", "") for item in response.get("result", {}).get("content", []) if item.get("type") == "text"]
+        raise ValueError("native candidate rejected an expected successful MCP operation: " + json.dumps(details, ensure_ascii=True)[:8192])
     return response["result"]

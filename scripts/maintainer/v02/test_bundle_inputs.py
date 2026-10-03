@@ -63,7 +63,7 @@ class VendorInputs(unittest.TestCase):
             self.assertEqual(alias.readlink().as_posix(), "Versions/Current/X")
             self.assertEqual(alias.read_text(), "signed payload")
             (source / "outside-app").write_text("unrelated payload")
-            (framework / "escape").symlink_to("../../../outside-app")
+            (framework / "escape").symlink_to("../../../../outside-app")
             with self.assertRaises(ValueError):
                 bundle.preserve_chrome_tree(source, root / "rejected")
 
