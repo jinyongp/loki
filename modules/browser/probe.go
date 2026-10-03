@@ -32,9 +32,14 @@ process.stdin.once('data', async () => {
     const version = browser.version();
     // Video is in the pinned default catalog. Exercise its bundled FFmpeg
     // dependency too, using an owned about:blank page and temporary files.
-    const context = await browser.newContext({recordVideo: {dir: videoDirectory, size: {width: 320, height: 240}}});
+    const context = await browser.newContext({viewport: {width: 320, height: 240}, recordVideo: {dir: videoDirectory, size: {width: 320, height: 240}}});
     const page = await context.newPage();
     await page.setContent('<html><body>Browser readiness</body></html>');
+    // setContent observes DOM readiness; capture requires a painted frame too.
+    await page.evaluate(() => Promise.race([
+      new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Browser frame readiness timed out')), 3000))
+    ]));
     await page.screenshot();
     await page.waitForTimeout(300);
     const video = page.video();
