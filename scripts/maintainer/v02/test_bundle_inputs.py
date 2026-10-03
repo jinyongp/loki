@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 spec = importlib.util.spec_from_file_location("bundle", Path(__file__).with_name("build_browser_bundle.py"))
@@ -15,6 +16,21 @@ acquisition_spec.loader.exec_module(acquisition)
 
 
 class VendorInputs(unittest.TestCase):
+    def test_chrome_signature_scope_resolves_root_alias(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            actual = root / "actual"
+            executable = "Chrome.app/Contents/MacOS/Chrome"
+            binary = actual / executable
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"fixture")
+            alias = root / "alias"
+            alias.symlink_to(actual, target_is_directory=True)
+            with patch.object(bundle.platform, "machine", return_value="x86_64"), patch.object(bundle, "verify_chrome_signature_kind") as verify, patch.object(bundle.subprocess, "run") as run:
+                bundle.verify_chrome_signature(alias, executable, "darwin")
+                verify.assert_called_once_with(binary.resolve(), "amd64")
+                run.assert_not_called()
+
     def test_native_receipts_keep_architecture_specific_ffmpeg(self):
         target = {"os": "darwin", "arch": "arm64", "mode": "project-host"}
         self.assertTrue(acquisition.urls(target)["ffmpeg"].endswith("ffmpeg-mac-arm64.zip"))
