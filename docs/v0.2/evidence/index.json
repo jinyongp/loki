@@ -1,6 +1,6 @@
 {
   "recorded_at": "2026-10-04",
-  "source_head": "afbe582ca99b6b1d58325dec837ac8b450aa06d8",
+  "source_head": "24dce9b5d6f943db9a53de1648d86faf369677d6",
   "worktree_dirty": true,
   "files": {
     ".github/workflows/v02-browser-final-inspection.yml": "897d529261094b1ea71f1f856f682379eae8bb6cefec9c55003eb2917bd73759",
@@ -53,7 +53,7 @@
     "docs/v0.2/evidence/source-checks.json": "70e4616b5a1ed4c552fa1442ae42ec606c903fe789b0f2f0c476b553c8809c86",
     "docs/v0.2/evidence/source-imports.json": "a5b39fa6e8c66e192ec0d92672cca6ba03a0d647ced2a02688f90bedbfd6abc2",
     "docs/v0.2/external-checks.md": "235c8cbb3474c9273038a7f9eed299c8ab07a12abaee9ffc7fc29aafae44b8e9",
-    "docs/v0.2/final-acceptance.md": "3894413548762b799fd50e3961e82b12caecd24bf0930b4d82594f55dc2d9a38",
+    "docs/v0.2/final-acceptance.md": "693ec8ad1b09c976d8e9538762281ad7fbb2d164d096a220bcdd8bc97a866d9c",
     "docs/v0.2/implementation.md": "2409695482d6f74b6ab06a0cb7a11e5dc50d19213857425940f3270667aed155",
     "docs/v0.2/plan.md": "9e366484d74bdfa3a6a224087289741bc0006e2187e492046cc1e392de4ff175",
     "docs/v0.2/preflight.md": "f8377f7d2f047c34ca33fe8326a3b12578e19d84ae86a43a7890730cfafc6be0",
@@ -93,6 +93,8 @@
     "internal/control/policy/grant.go": "7869fe138da5e213e18f0fd34c5ec6ee0565a497650103603591dc965695c5f4",
     "internal/control/policy/grant_test.go": "5fa61f0300ac5e2fa813b5649048ba7046a5a10ebabf4797abcdc8d08b0d28f7",
     "internal/control/policy/port_inspector_test.go": "1b36567ef4fe378e27a2ee5d2b442fa80ef15deb8b2de5780f86ddff84019832",
+    "internal/execution/contract.go": "68d45337581ecf9fca54df7abac4201215f5d7aac42514fbd6535d258e317f6f",
+    "internal/execution/contract_test.go": "de9c3fdaff2576b17ff827ec0aa3bab06e23b45b86f5c2e9e46d24a1ab92fae7",
     "internal/integrations/github/setup/flow.go": "95a36e9abec561cc6227060cd95bc1b9420ec584f7fefaca6bb89e67d23d79dc",
     "internal/management/acquire.go": "dff26e6d161d4f9cc51af995270adb32f1290f322ae9ff18a291c623b3757a5d",
     "internal/management/archive.go": "52467aa0d7861f2ce9191635173764957d8f3b7dda1557735155eb9806f504d8",
