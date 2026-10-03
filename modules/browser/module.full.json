@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "id": "browser",
+  "release": "0.2.0",
+  "targets": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "full"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "full"
+    }
+  ],
+  "tools": [
+    "loki_browser_files"
+  ],
+  "requires": [
+    "runtime-core"
+  ],
+  "capabilities": [
+    "unsafe-code",
+    "vision",
+    "pdf",
+    "devtools",
+    "network",
+    "storage",
+    "testing",
+    "tracing",
+    "config",
+    "extensions",
+    "pwa",
+    "webmcp",
+    "third-party",
+    "memory"
+  ]
+}

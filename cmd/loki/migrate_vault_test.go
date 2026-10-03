@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/secret"
+	"loki/modules/secrets"
 	"loki/internal/state"
 )
 

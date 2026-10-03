@@ -1,0 +1,95 @@
+{
+  "tests_passed": 2360,
+  "packages_passed": 76,
+  "failed": [],
+  "skipped": [
+    {
+      "Package": "loki/cmd/loki-keepalive"
+    },
+    {
+      "Package": "loki/internal/devtools",
+      "Test": "TestRealProcessInheritsBrokerSecrets"
+    },
+    {
+      "Package": "loki/internal/devtools/cmd/gencatalog"
+    },
+    {
+      "Package": "loki/internal/e2e",
+      "Test": "TestProjectExecutionContract"
+    },
+    {
+      "Package": "loki/internal/execution",
+      "Test": "TestLinuxRunnerCanWriteStateButCannotReadVaultKey"
+    },
+    {
+      "Package": "loki/internal/host/lifecycle/compose",
+      "Test": "TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance"
+    },
+    {
+      "Package": "loki/internal/integrations/browser/internal/cdp",
+      "Test": "TestChromiumPipe"
+    },
+    {
+      "Package": "loki/internal/integrations/github",
+      "Test": "TestRealDelegatedGitHubCLIConfiguration"
+    },
+    {
+      "Package": "loki/internal/integrations/signing",
+      "Test": "TestAgentSocketRecoveryPreservesOccupiedPaths/wrong-owner"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumSharedDownloads"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumLifecycle"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumInteractions"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumDebugObservation"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobScriptAuthorityBoundary"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobLifecycle"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobDetachedDescendantCleanup"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobRecoveryAndBoundedOutput"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobWritableEnvironmentAndGitPersistence"
+    },
+    {
+      "Package": "loki/internal/platform/sandbox",
+      "Test": "TestRealOCIJobNetworkEndpointPreview"
+    },
+    {
+      "Package": "loki/tools/readinessprobe"
+    },
+    {
+      "Package": "loki/tools/renderhostassets"
+    },
+    {
+      "Package": "loki/tools/toolchainfetch"
+    },
+    {
+      "Package": "loki/internal/packaging",
+      "Test": "TestOCIArchiveContents"
+    }
+  ],
+  "failure_output": []
+}

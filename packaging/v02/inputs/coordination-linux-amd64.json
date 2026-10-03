@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "module": "coordination",
+  "target": {
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "full"
+  },
+  "programs": {},
+  "assets": {},
+  "images": {}
+}

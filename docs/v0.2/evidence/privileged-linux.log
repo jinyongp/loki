@@ -1,0 +1,14 @@
+gh version 2.100.0 (2026-09-03)
+https://github.com/cli/cli/releases/tag/v2.100.0
+=== RUN   TestLinuxRunnerCanWriteStateButCannotReadVaultKey
+--- PASS: TestLinuxRunnerCanWriteStateButCannotReadVaultKey (0.00s)
+PASS
+=== RUN   TestAgentSocketRecoveryPreservesOccupiedPaths
+=== RUN   TestAgentSocketRecoveryPreservesOccupiedPaths/wrong-owner
+--- PASS: TestAgentSocketRecoveryPreservesOccupiedPaths (0.00s)
+    --- PASS: TestAgentSocketRecoveryPreservesOccupiedPaths/wrong-owner (0.00s)
+PASS
+=== RUN   TestRealDelegatedGitHubCLIConfiguration
+--- PASS: TestRealDelegatedGitHubCLIConfiguration (0.07s)
+PASS
+exit_status execution=0 signing=0 github=0

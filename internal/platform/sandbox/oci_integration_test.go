@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/integrations/sharing/previews"
+	"loki/modules/sharing/previews"
 	mcptransport "loki/internal/transport/mcp"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 const (

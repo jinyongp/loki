@@ -1,0 +1,7 @@
+{
+  "name": "loki-tools",
+  "version": "0.2.0",
+  "private": true,
+  "workspaces": ["modules/browser"],
+  "engines": {"node": "22.22.2"}
+}

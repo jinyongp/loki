@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "module": "git",
+  "target": {
+    "os": "linux",
+    "arch": "arm64",
+    "mode": "full"
+  },
+  "programs": {},
+  "assets": {},
+  "images": {}
+}

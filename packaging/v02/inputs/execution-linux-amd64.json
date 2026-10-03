@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "module": "execution",
+  "target": {
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "full"
+  },
+  "images": {},
+  "programs": {},
+  "assets": {},
+  "inputs": []
+}

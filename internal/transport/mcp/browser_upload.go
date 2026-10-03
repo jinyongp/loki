@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/fault"
 	"loki/internal/policy"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 type stagedBrowserUpload struct {

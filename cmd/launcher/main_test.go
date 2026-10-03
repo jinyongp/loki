@@ -10,7 +10,7 @@ import (
 	applauncher "loki/internal/app/launcher"
 	"loki/internal/daemon"
 	"loki/internal/platform/sandbox"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 func validLauncherLayout(t *testing.T) launcherLayout {

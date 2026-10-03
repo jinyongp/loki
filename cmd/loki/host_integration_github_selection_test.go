@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"loki/internal/config"
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 )
 
 func TestGitHubInitialSetupUsesInstallationAccountInsteadOfAppOwner(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/fault"
 	"loki/internal/rpc"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 )
 
 func runtimeTyped[T any](handler func(context.Context, T) (map[string]any, error)) rpc.Handler {

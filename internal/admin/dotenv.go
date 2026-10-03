@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"loki/internal/fault"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 )
 
 type Dotenv struct {

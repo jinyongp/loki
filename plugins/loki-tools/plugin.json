@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "loki-tools",
+  "version": "0.2.0",
+  "description": "The explicitly enabled Loki tool groups on a selected full execution host.",
+  "author": {"name": "Loki"},
+  "extensions": {"com.openai": {"interface": {
+    "displayName": "Loki Tools",
+    "shortDescription": "Selected tools on your host",
+    "longDescription": "Connect to the tool groups enabled in the host's Loki configuration. Installation prerequisites remain private until their tool groups are selected.",
+    "developerName": "Loki",
+    "category": "Developer Tools",
+    "defaultPrompt": "Use the enabled Loki tools for this project."
+  }}}
+}

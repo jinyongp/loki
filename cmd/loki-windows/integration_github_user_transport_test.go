@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 	windowshost "loki/internal/host/windows"
 )
 

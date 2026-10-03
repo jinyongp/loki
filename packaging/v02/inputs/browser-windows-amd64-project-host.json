@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "target": {
+    "os": "windows",
+    "arch": "amd64",
+    "mode": "project-host"
+  },
+  "native_requirements": [
+    "Native vendor application signature and browser sandbox support"
+  ],
+  "assets": {
+    "node": {
+      "version": "22.22.2",
+      "url": "https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip",
+      "bytes": 35656052,
+      "sha256": "7c93e9d92bf68c07182b471aa187e35ee6cd08ef0f24ab060dfff605fcc1c57c",
+      "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
+      "root": "node-v22.22.2-win-x64",
+      "notices": [
+        "LICENSE"
+      ],
+      "executable": "node.exe",
+      "npm": "node_modules/npm/bin/npm-cli.js"
+    },
+    "chrome": {
+      "version": "154.0.8037.92",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/win64/chrome-win64.zip",
+      "bytes": 205614867,
+      "sha256": "b897ef3601c947ac0620c784556dec719ac602b0159ce105927acf645ee0f598",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": "chrome-win64",
+      "notices": [
+        "ABOUT"
+      ],
+      "executable": "chrome.exe"
+    },
+    "ffmpeg": {
+      "version": "1011",
+      "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-win64.zip",
+      "bytes": 1411741,
+      "sha256": "8d08827c019ad36e7b9d49d3648447d884534cb2acf200e71c715f6dd834cc50",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": ".",
+      "notices": [
+        "COPYING.LGPLv2.1"
+      ]
+    }
+  }
+}

@@ -2,20 +2,20 @@ package contract
 
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/integrations/github"
+	"loki/modules/github"
 )
 
 func overrideGitHub(tool *mcp.Tool) error {
 	capabilities := githubapp.RepositoryCommandCapabilities()
 	commandGroups := append([]string(nil), capabilities.CommandGroups...)
-	tool.Description = "Run a constrained GitHub CLI escape-hatch command. Project commands list and operate only on projects linked to the configured target repository; create links the new project to that repository in the same mutation. Repository and organization Project commands use App installation tokens. Personal repository Projects use an optional, explicitly authorized App user token. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
+	tool.Description = "Run a constrained GitHub CLI command. Project commands list and operate only on projects linked to the configured target repository; create links the new project to that repository in the same mutation. Repository Projects use App installation tokens by default, including personal-account repositories. The optional personal-projects capability explicitly selects authorized App user tokens for personal-account Projects. Prefer typed GitHub tools when available; this surface may mutate upstream state and is not replay-safe."
 	tool.InputSchema = map[string]any{
 		"type": "object", "title": "githubArguments", "additionalProperties": false,
 		"properties": map[string]any{
 			"target": map[string]any{
 				"type":        "string",
 				"pattern":     "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$",
-				"description": "Configured owner/repository target. Project commands are restricted to projects linked to this exact repository. Personal repository Projects require optional App user authorization through integration setup github --personal-projects.",
+				"description": "Configured owner/repository target. Project commands stay linked to this repository and use installation tokens by default. Optional personal-projects authorization is selected separately.",
 			},
 			"command": map[string]any{
 				"type": "string", "enum": commandGroups,

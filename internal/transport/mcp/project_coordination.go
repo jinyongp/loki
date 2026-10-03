@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
 )

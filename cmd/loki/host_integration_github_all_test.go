@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 )
 
 func TestGitHubBrowserFollowsInstallationSelectionWithoutRepositorySnapshot(t *testing.T) {

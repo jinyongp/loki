@@ -90,7 +90,7 @@ install -m 0755 "$ripgrep_amd64" "$artifacts/ripgrep/amd64/rg"
 install -m 0755 "$ripgrep_arm64" "$artifacts/ripgrep/arm64/rg"
 install -m 0755 "$gh_amd64" "$artifacts/gh/amd64/gh"
 install -m 0755 "$gh_arm64" "$artifacts/gh/arm64/gh"
-go run "$source_dir/internal/devtools/cmd/gencatalog" -binary "$devtools_amd64" -output "$artifacts/metadata/devtools-catalog.json"
+go run "$source_dir/modules/coordination/cmd/gencatalog" -binary "$devtools_amd64" -output "$artifacts/metadata/devtools-catalog.json"
 printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtools":%s,"binaries":{"devtools":{"amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"ripgrep":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"gh":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}}}}\n' \
   "$loki_version" "$loki_revision" "$loki_date" "$devtools_version_json" "$amd64_sha" "$arm64_sha" "$ripgrep_version" "$ripgrep_amd64_sha" "$ripgrep_arm64_sha" "$gh_version" "$gh_amd64_sha" "$gh_arm64_sha" \
   > "$artifacts/metadata/provenance.json"

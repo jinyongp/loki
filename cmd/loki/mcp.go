@@ -10,11 +10,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"syscall"
 	"time"
 
 	appbrowser "loki/internal/app/browser"
 	mcpapp "loki/internal/app/mcp"
+	appnetwork "loki/internal/app/network"
 	appruntime "loki/internal/app/runtime"
 	"loki/internal/auth"
 	"loki/internal/config"
@@ -22,26 +25,47 @@ import (
 	hostpolicy "loki/internal/host/policy"
 	cloudflareaccess "loki/internal/integrations/access/cloudflare"
 	"loki/internal/rpc"
-	jobsremote "loki/internal/work/jobs/remote"
+	"loki/internal/tools"
+	"loki/internal/transport/toolproxy"
+	projectbrowser "loki/modules/browser"
+	jobsremote "loki/modules/execution/jobs/remote"
 )
 
 type mcpLayout struct {
+	EndpointSocket                                                        string
+	Tools                                                                 []string
+	BrowserProtocol                                                       string
+	BrowserCapabilities                                                   []string
+	ToolsConfigPath                                                       string
+	ToolsConfigSnapshot                                                   bool
 	RuntimeSocket, PortGuardSocket, BrowserSocket, ExecutorSocket, RGPath string
 	ExecutionContract, PackagedSkillRoot                                  string
 	ToolchainStore, ToolchainCatalog                                      string
 	RuntimeUID, PortGuardUID, BrowserUID, ExecutorUID                     *uint32
 	GitTemplateRoots                                                      []string
+	GitBinary                                                             string
 	Environment                                                           map[string]string
 }
 
 func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
-	for _, path := range []string{l.RuntimeSocket, l.PortGuardSocket} {
-		if !filepath.IsAbs(path) {
-			return mcpapp.MCPOptions{}, errors.New("MCP core socket paths must be absolute")
-		}
+	selected, err := config.ToolSelection(l.Tools)
+	if err != nil {
+		return mcpapp.MCPOptions{}, err
 	}
-	if l.RuntimeUID == nil || l.PortGuardUID == nil {
-		return mcpapp.MCPOptions{}, errors.New("MCP layout requires explicit core service UIDs")
+	needsRuntime := selected["secrets"] || selected["github"] || selected["coordination"] || selected["execution"] || selected["sharing"]
+	needsPorts := selected["execution"] || selected["sharing"]
+	for _, peer := range []struct {
+		socket   string
+		uid      *uint32
+		required bool
+	}{
+		{l.RuntimeSocket, l.RuntimeUID, needsRuntime}, {l.PortGuardSocket, l.PortGuardUID, needsPorts},
+	} {
+		if peer.required || peer.socket != "" || peer.uid != nil {
+			if !filepath.IsAbs(peer.socket) || peer.uid == nil {
+				return mcpapp.MCPOptions{}, errors.New("selected MCP service requires an absolute core socket and explicit expected UID")
+			}
+		}
 	}
 	hasBrowserSocket := l.BrowserSocket != ""
 	hasBrowserUID := l.BrowserUID != nil
@@ -54,27 +78,84 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	if !filepath.IsAbs(l.ExecutionContract) {
 		return mcpapp.MCPOptions{}, errors.New("MCP execution contract path must be absolute")
 	}
-	if !filepath.IsAbs(l.PackagedSkillRoot) {
+	if selected["workspace"] && !filepath.IsAbs(l.PackagedSkillRoot) {
 		return mcpapp.MCPOptions{}, errors.New("MCP packaged Skill root must be absolute")
 	}
-	for _, path := range append([]string{l.RGPath, l.ExecutionContract, l.PackagedSkillRoot, l.ToolchainStore, l.ToolchainCatalog}, l.GitTemplateRoots...) {
+	for _, path := range append([]string{l.GitBinary, l.RGPath, l.ExecutionContract, l.PackagedSkillRoot, l.ToolchainStore, l.ToolchainCatalog}, l.GitTemplateRoots...) {
 		if path != "" && !filepath.IsAbs(path) {
 			return mcpapp.MCPOptions{}, errors.New("MCP resource paths must be absolute")
 		}
 	}
 
 	options := mcpapp.MCPOptions{
-		Runtime:       rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID},
-		PortGuard:     rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID},
+		Tools:         l.Tools,
 		RuntimeSocket: l.RuntimeSocket,
 		RGPath:        l.RGPath, PackagedSkillRoot: l.PackagedSkillRoot,
-		GitTemplateRoots: l.GitTemplateRoots, Environment: l.Environment, Token: token,
+		GitTemplateRoots: l.GitTemplateRoots, GitBinary: l.GitBinary, Environment: l.Environment, Token: token,
+	}
+	var gate *config.ToolGate
+	if l.ToolsConfigPath != "" {
+		gate = &config.ToolGate{Path: l.ToolsConfigPath, Release: "0.2.0", Mode: tools.Full, Snapshot: l.ToolsConfigSnapshot}
+		if gate.Revision() == "unavailable" {
+			return mcpapp.MCPOptions{}, errors.New("host-published tool selection is unavailable")
+		}
+		for module, enabled := range selected {
+			if enabled {
+				if _, err := gate.Selection(module); err != nil {
+					return mcpapp.MCPOptions{}, fmt.Errorf("MCP layout differs from enabled tools: %w", err)
+				}
+			}
+		}
+	}
+	if l.RuntimeSocket != "" {
+		options.Runtime = rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}
+	}
+	if l.PortGuardSocket != "" {
+		options.PortGuard = rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}
 	}
 	if hasBrowserSocket {
 		// Optional browser authority is dynamic. Construct the RPC client even
 		// when the socket is absent so a later lifecycle enable becomes usable
 		// without restarting the MCP process.
-		options.Browser = appbrowser.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
+		if l.BrowserProtocol == "official" {
+			options.BrowserEngines = []toolproxy.Options{{
+				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.0",
+				Transport: appbrowser.OfficialTransport{Socket: l.BrowserSocket, ExpectedUID: *l.BrowserUID},
+				RootURI:   "file:///var/lib/loki/browser/work",
+				Authorize: func(name string) error {
+					caps := l.BrowserCapabilities
+					if gate != nil {
+						current, err := gate.Selection("browser")
+						if err != nil {
+							return err
+						}
+						caps = current.Capabilities
+						if !slices.Equal(caps, l.BrowserCapabilities) {
+							return errors.New("browser capabilities changed; restart the protected service and reconnect")
+						}
+					}
+					if !selected["browser"] || !projectbrowser.Allowed(name, caps) {
+						return errors.New("browser is disabled or requires an explicit capability")
+					}
+					return nil
+				},
+				AuthorizeResource: func() error {
+					if gate != nil {
+						_, err := gate.Selection("browser")
+						return err
+					}
+					return nil
+				},
+				ForwardOwnedResources: true,
+			}}
+			if gate != nil {
+				options.BrowserEngines[0].Revision = gate.Revision
+			}
+		} else if l.BrowserProtocol == "" || l.BrowserProtocol == "rpc" {
+			options.Browser = appbrowser.NewBrowserRPC(l.BrowserSocket, *l.BrowserUID)
+		} else {
+			return mcpapp.MCPOptions{}, errors.New("unknown browser service protocol")
+		}
 		options.BrowserSocket = l.BrowserSocket
 	}
 	hasExecutorSocket := l.ExecutorSocket != ""
@@ -82,7 +163,7 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	if hasExecutorSocket != hasExecutorUID {
 		return mcpapp.MCPOptions{}, errors.New("MCP executor socket and UID must be configured together")
 	}
-	if hasExecutorSocket {
+	if hasExecutorSocket && (selected["git"] || selected["execution"] || selected["sharing"]) {
 		if !filepath.IsAbs(l.ExecutorSocket) || filepath.Clean(l.ExecutorSocket) != l.ExecutorSocket ||
 			l.ExecutorSocket == string(filepath.Separator) || *l.ExecutorUID == 0 {
 			return mcpapp.MCPOptions{}, errors.New("MCP executor peer configuration is invalid")
@@ -96,6 +177,55 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 		options.Jobs = executor
 		options.GitJobs = executor
 		options.ExecutorSocket = l.ExecutorSocket
+	}
+	if gate != nil {
+		readiness := &mcpPeerReadiness{}
+		var executor rpc.Caller
+		if hasExecutorSocket {
+			executor = rpc.Client{Socket: l.ExecutorSocket, ExpectedUID: l.ExecutorUID, Limits: rpc.Limits{Timeout: 2 * time.Second}}
+		}
+		options.AuthorizeTool = func(ctx context.Context, module, _ string) error {
+			if _, err := gate.Selection(module); err != nil {
+				return err
+			}
+			if err := readiness.authorize(ctx, module, options.Runtime, executor); err != nil {
+				return err
+			}
+			native := ""
+			if module == "git" {
+				native = l.GitBinary
+			}
+			if module == "workspace" {
+				native = l.RGPath
+			}
+			if err := readiness.native(ctx, module, native); err != nil {
+				return err
+			}
+			_, err := gate.Selection(module)
+			return err
+		}
+	}
+	if l.EndpointSocket != "" {
+		if l.EndpointSocket != "/run/loki/endpoints/control.sock" || !selected["sharing"] {
+			return mcpapp.MCPOptions{}, errors.New("MCP host endpoint relay requires selected sharing")
+		}
+		dialer := appnetwork.EndpointDialer{Socket: l.EndpointSocket, UID: 0}
+		options.EndpointDialContext = func(ctx context.Context, network, target string) (net.Conn, error) {
+			host, text, err := net.SplitHostPort(target)
+			if err != nil || network != "tcp" || host != "127.0.0.1" {
+				return nil, errors.New("only owned loopback endpoints are allowed")
+			}
+			port, err := strconv.Atoi(text)
+			if err != nil {
+				return nil, err
+			}
+			if gate != nil {
+				if _, err := gate.Selection("sharing"); err != nil {
+					return nil, err
+				}
+			}
+			return dialer.Dial(ctx, port)
+		}
 	}
 	return options, nil
 }
@@ -150,10 +280,17 @@ func runMCP(args []string, stderr io.Writer) int {
 		return 2
 	}
 	options.IngressHosts = ingressHosts
-	options.JobToolchains, err = newMCPToolchainResolver(c.Root, layout.ToolchainStore, layout.ToolchainCatalog)
+	selected, err := config.ToolSelection(layout.Tools)
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid MCP toolchain configuration")
+		fmt.Fprintln(stderr, err)
 		return 2
+	}
+	if selected["execution"] {
+		options.JobToolchains, err = newMCPToolchainResolver(c.Root, layout.ToolchainStore, layout.ToolchainCatalog)
+		if err != nil {
+			fmt.Fprintln(stderr, "invalid MCP toolchain configuration")
+			return 2
+		}
 	}
 	contract, err := loadExecutionContract(layout.ExecutionContract)
 	if err != nil {

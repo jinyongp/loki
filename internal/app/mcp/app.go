@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -19,19 +20,25 @@ import (
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
-	"loki/internal/integrations/sharing/artifacts"
-	"loki/internal/integrations/sharing/previews"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
 	"loki/internal/portguard"
 	"loki/internal/rpc"
 	mcptransport "loki/internal/transport/mcp"
 	workspacemcp "loki/internal/transport/mcp/workspace"
-	"loki/internal/work/jobs"
-	"loki/internal/work/workspace"
+	"loki/internal/transport/toolproxy"
+	"loki/modules/execution/jobs"
+	gitops "loki/modules/git"
+	"loki/modules/sharing/artifacts"
+	"loki/modules/sharing/previews"
+	"loki/modules/workspace"
 )
 
 type MCPOptions struct {
+	BrowserEngines                                       []toolproxy.Options
+	AuthorizeTool                                        func(context.Context, string, string) error
+	EndpointDialContext                                  func(context.Context, string, string) (net.Conn, error)
+	Tools                                                []string
 	OnAuditError                                         func(error)
 	Runtime, PortGuard                                   rpc.Caller
 	Browser                                              mcptransport.BrowserCaller
@@ -41,6 +48,7 @@ type MCPOptions struct {
 	RuntimeSocket, BrowserSocket, ExecutorSocket, RGPath string
 	PackagedSkillRoot                                    string
 	GitTemplateRoots                                     []string
+	GitBinary                                            string
 	Environment                                          map[string]string
 	IngressHosts                                         []string
 	Policy                                               controlpolicy.Generation
@@ -53,24 +61,33 @@ type MCPOptions struct {
 // MCPApp owns local command sessions, share stores and pinned workspace roots.
 // Runtime and browser daemons own their independent process lifecycles.
 type MCPApp struct {
-	Server    *mcp.Server
-	Artifacts *artifacts.Store
-	Previews  *previews.Store
-	Claims    *mcptransport.DevtoolsSessionClaims
-	files     *workspace.Files
-	roots     []*policy.Workspace
-	preview   *previews.Proxy
-	handler   http.Handler
-	closed    atomic.Bool
-	once      sync.Once
+	Server          *mcp.Server
+	Artifacts       *artifacts.Store
+	Previews        *previews.Store
+	Claims          *mcptransport.DevtoolsSessionClaims
+	files           *workspace.Files
+	roots           []*policy.Workspace
+	preview         *previews.Proxy
+	browserSessions *browserSessionPool
+	stopDiscovery   func()
+	handler         http.Handler
+	closed          atomic.Bool
+	once            sync.Once
 }
 
 func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
+	selected, err := config.ToolSelection(options.Tools)
+	if err != nil {
+		return nil, err
+	}
 	if len(options.Token) < 43 || strings.ContainsAny(options.Token, "\r\n") {
 		return nil, errors.New("MCP requires a valid bearer token")
 	}
-	if options.Runtime == nil || options.PortGuard == nil || options.Jobs == nil {
-		return nil, errors.New("MCP requires runtime, port-guard and executor Job clients")
+	if (selected["secrets"] || selected["github"] || selected["coordination"]) && options.Runtime == nil {
+		return nil, errors.New("selected tools require the runtime service client")
+	}
+	if selected["execution"] && (options.Jobs == nil || options.PortGuard == nil || options.Runtime == nil) {
+		return nil, errors.New("execution requires runtime, port-guard and executor Job clients")
 	}
 	if !options.Policy.Valid() {
 		return nil, errors.New("MCP requires a valid effective policy generation")
@@ -84,27 +101,36 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.RequirePreviewExternalAuth && options.PreviewExternalAuth == nil {
 		return nil, errors.New("preview external request verifier is required")
 	}
-	if options.GitJobs == nil {
+	if selected["git"] && options.GitJobs == nil {
 		return nil, errors.New("MCP requires confined Git Job execution")
 	}
-	if options.JobToolchains == nil {
+	if selected["execution"] && options.JobToolchains == nil {
 		return nil, errors.New("MCP requires managed Job toolchain resolution")
 	}
-	app = &MCPApp{Claims: mcptransport.NewDevtoolsSessionClaims()}
+	app = &MCPApp{}
+	if selected["coordination"] {
+		app.Claims = mcptransport.NewDevtoolsSessionClaims()
+	}
 	owned := app
 	defer func() {
 		if err != nil {
 			owned.Close()
 		}
 	}()
-	app.files, err = workspace.New(c)
-	if err != nil {
-		return nil, err
-	}
-	if options.RGPath != "" {
-		app.files.RGPath = options.RGPath
+	needsFiles := selected["workspace"] || selected["git"] || selected["sharing"] || selected["coordination"] || selected["browser"] && len(options.BrowserEngines) == 0
+	if needsFiles {
+		app.files, err = workspace.New(c)
+		if err != nil {
+			return nil, err
+		}
+		if options.RGPath != "" {
+			app.files.RGPath = options.RGPath
+		}
 	}
 	for _, path := range options.GitTemplateRoots {
+		if !selected["git"] {
+			break
+		}
 		root, e := policy.New(path)
 		if e != nil {
 			return nil, e
@@ -113,18 +139,26 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	gitEnvironment := toolEnvironment(options.Environment)
 	signingSocket := "/run/loki/signing/agent.sock"
-	if value := strings.TrimSpace(options.Environment["SSH_AUTH_SOCK"]); value != "" {
+	if value := strings.TrimSpace(options.Environment["SSH_AUTH_SOCK"]); selected["git"] && value != "" {
 		if !filepath.IsAbs(value) {
 			return nil, errors.New("MCP SSH_AUTH_SOCK must be absolute")
 		}
 		signingSocket = filepath.Clean(value)
 	}
-	repository, err := workspace.NewRepository(app.files.Policy, c, options.GitJobs, gitEnvironment, app.roots)
-	if err != nil {
-		return nil, err
-	}
-	if err = app.files.AttachRepository(repository); err != nil {
-		return nil, err
+	var repository *gitops.Repository
+	if selected["git"] {
+		repository, err = gitops.NewRepository(app.files.Policy, c, options.GitJobs, gitEnvironment, app.roots)
+		if err != nil {
+			return nil, err
+		}
+		if options.GitBinary != "" {
+			if err := repository.SetBinary(options.GitBinary); err != nil {
+				return nil, err
+			}
+		}
+		if err = app.files.AttachRepository(repository); err != nil {
+			return nil, err
+		}
 	}
 	userHome := options.Environment["HOME"]
 	if userHome != "" && !filepath.IsAbs(userHome) {
@@ -133,14 +167,22 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if options.PackagedSkillRoot != "" && !filepath.IsAbs(options.PackagedSkillRoot) {
 		return nil, errors.New("MCP packaged Skill root must be absolute")
 	}
-	agentProvider := &agentcontext.Provider{
-		Paths: app.files.Policy, Git: repository, UserHome: userHome, PackagedSkills: options.PackagedSkillRoot,
+	var paths *policy.Workspace
+	if app.files != nil {
+		paths = app.files.Policy
 	}
-	if c.ArtifactBaseURL != "" {
+	agentProvider := &agentcontext.Provider{Paths: paths, UserHome: userHome, PackagedSkills: options.PackagedSkillRoot}
+	if repository != nil {
+		agentProvider.Git = repository
+	}
+	if selected["sharing"] && c.ArtifactBaseURL != "" {
 		hosts := append([]string{"127.0.0.1", "127.0.0.1:" + strconv.Itoa(c.Port), "localhost", "localhost:" + strconv.Itoa(c.Port)}, c.PublicHosts...)
 		app.Artifacts = artifacts.New(artifacts.Options{BaseURL: c.ArtifactBaseURL, AllowedHosts: hosts})
 	}
-	if c.PreviewBaseDomain != "" {
+	if selected["sharing"] && c.PreviewBaseDomain != "" {
+		if options.Runtime == nil || options.PortGuard == nil || options.Jobs == nil {
+			return nil, errors.New("preview sharing requires runtime, port-guard and endpoint ownership clients")
+		}
 		app.Previews = previews.New(c.PreviewBaseDomain, 0, nil)
 	}
 	inspect := func(ctx context.Context, port int) (map[string]any, error) {
@@ -153,12 +195,13 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.RouteAllowed)
+		app.preview.SetEndpointDialer(options.EndpointDialContext)
 	}
 	browserAvailable := func() bool {
-		return mcptransport.BrowserToolsAvailable(options.Browser, options.BrowserSocket)
+		return selected["browser"] && (len(options.BrowserEngines) > 0 || mcptransport.BrowserToolsAvailable(options.Browser, options.BrowserSocket))
 	}
 	system := &mcptransport.SystemController{
-		Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(),
+		Config: c, Policy: options.Policy, Paths: paths, Started: time.Now(),
 		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, SigningSocket: signingSocket,
 		Runtime: options.Runtime, BrowserAvailable: browserAvailable,
 		Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment,
@@ -166,39 +209,66 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 			return mcptransport.InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
 		},
 	}
-	handlers := map[string]mcpserver.Handler{
-		"system_inspect": mcptransport.SystemHandler(system), "developer_view": mcptransport.DeveloperHandler(app.files),
+	handlers := map[string]mcpserver.Handler{}
+	toolOwners := map[string]string{"developer_view": "workspace"}
+	if options.Runtime != nil && paths != nil {
+		handlers["system_inspect"] = mcptransport.SystemHandler(system)
 	}
 	coordination := &mcptransport.DevtoolsSessionCoordination{Runtime: options.Runtime, Claims: app.Claims}
 	projectContext := &mcptransport.ProjectContextController{Runtime: options.Runtime, Guidance: agentProvider, Git: repository, Claims: app.Claims}
-	groups := []map[string]mcpserver.Handler{
-		workspacemcp.WorkspaceHandlers(app.files),
-		workspacemcp.GitHandlers(repository),
-		mcptransport.SecretHandlers(options.Runtime),
-		mcptransport.ProjectCoordinationHandlers(options.Runtime, coordination),
-		mcptransport.ProjectContextHandlers(projectContext),
-		mcptransport.AgentGuidanceHandlers(agentProvider),
-		mcptransport.JobHandlers(options.Jobs, options.JobToolchains),
+	groups := []map[string]mcpserver.Handler{}
+	addGroups := func(module string, additions ...map[string]mcpserver.Handler) {
+		for _, group := range additions {
+			for name := range group {
+				toolOwners[name] = module
+			}
+		}
+		groups = append(groups, additions...)
+	}
+	if selected["workspace"] {
+		handlers["developer_view"] = mcptransport.DeveloperHandler(app.files)
+		files := workspacemcp.WorkspaceHandlers(app.files)
+		if !selected["git"] {
+			delete(files, "remove_tracked_file")
+		}
+		addGroups("workspace", files, mcptransport.AgentGuidanceHandlers(agentProvider))
+	}
+	if selected["git"] {
+		addGroups("git", workspacemcp.GitHandlers(repository))
+	}
+	if selected["secrets"] {
+		addGroups("secrets", mcptransport.SecretHandlers(options.Runtime))
+	}
+	if selected["coordination"] {
+		addGroups("coordination", mcptransport.ProjectCoordinationHandlers(options.Runtime, coordination))
+		if selected["git"] {
+			addGroups("coordination", mcptransport.ProjectContextHandlers(projectContext))
+		}
+	}
+	if selected["execution"] {
+		addGroups("execution", mcptransport.JobHandlers(options.Jobs, options.JobToolchains))
 	}
 	if app.Artifacts != nil {
-		groups = append(groups, mcptransport.ArtifactHandlers(app.files, app.Artifacts))
+		addGroups("sharing", mcptransport.ArtifactHandlers(app.files, app.Artifacts))
 	}
 	var uploads mcptransport.BrowserUploadStager
 	if options.BrowserSocket != "" {
 		uploads = mcptransport.SocketBrowserUploadStager{Socket: options.BrowserSocket}
 	}
-	groups = append(groups, mcptransport.BrowserHandlers(options.Browser, uploads, app.files, app.Artifacts))
-	if app.Previews != nil || app.Artifacts != nil {
-		groups = append(groups, mcptransport.PreviewHandlers(preview, app.Artifacts))
+	if selected["browser"] && len(options.BrowserEngines) == 0 {
+		addGroups("browser", mcptransport.BrowserHandlers(options.Browser, uploads, app.files, app.Artifacts))
 	}
-	if c.GitHubAppID != 0 {
-		groups = append(groups,
+	if app.Previews != nil || app.Artifacts != nil {
+		addGroups("sharing", mcptransport.PreviewHandlers(preview, app.Artifacts))
+	}
+	if selected["github"] && c.GitHubAppID != 0 {
+		addGroups("github",
 			mcptransport.GitHubProviderHandlers(options.Runtime),
 			mcptransport.GitHubIssueFieldsHandlers(options.Runtime),
 			mcptransport.GitHubCommandHandlers(options.Runtime),
 		)
-	} else {
-		groups = append(groups, mcptransport.GitHubUnavailableHandlers())
+	} else if selected["github"] {
+		addGroups("github", mcptransport.GitHubUnavailableHandlers())
 	}
 	for _, group := range groups {
 		for name, handler := range group {
@@ -224,11 +294,73 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	system.Audit = log
 	for name, handler := range handlers {
+		if module := toolOwners[name]; module != "" && options.AuthorizeTool != nil {
+			base := handler
+			handler = func(ctx context.Context, args map[string]any) (*mcp.CallToolResult, error) {
+				if err := options.AuthorizeTool(ctx, module, name); err != nil {
+					return nil, err
+				}
+				if strings.HasPrefix(name, "project_context") {
+					if err := options.AuthorizeTool(ctx, "git", name); err != nil {
+						return nil, err
+					}
+				}
+				return base(ctx, args)
+			}
+		}
 		handlers[name] = mcptransport.AuditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, mcptransport.InstanceInstructions(c, browserAvailable()))
+	origins := mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}
+	instructions := mcptransport.InstanceInstructions(c, browserAvailable())
+	available := func(name string) bool {
+		module := toolOwners[name]
+		if module == "" || options.AuthorizeTool == nil {
+			return true
+		}
+		if options.AuthorizeTool(context.Background(), module, name) != nil {
+			return false
+		}
+		return !strings.HasPrefix(name, "project_context") || options.AuthorizeTool(context.Background(), "git", name) == nil
+	}
+	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, origins, instructions)
 	if err != nil {
 		return nil, err
+	}
+	if selected["browser"] && len(options.BrowserEngines) > 0 {
+		if err := browserSessionOptions(options.BrowserEngines); err != nil {
+			return nil, err
+		}
+		app.browserSessions = newBrowserSessionPool(app.Server, func(ctx context.Context) (*mcp.Server, *toolproxy.Group, func(), error) {
+			var group *toolproxy.Group
+			server, err := mcpserver.NewConfiguredAvailableWithInstructions(handlers, origins, instructions, &mcp.ServerOptions{
+				InitializedHandler:      func(ctx context.Context, request *mcp.InitializedRequest) { group.SyncRoots(ctx, request.Session) },
+				RootsListChangedHandler: func(ctx context.Context, request *mcp.RootsListChangedRequest) { group.SyncRoots(ctx, request.Session) },
+			})
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			group, err = toolproxy.AttachMany(ctx, server, options.BrowserEngines, system.ToolNames)
+			if err != nil {
+				if diagnostics := options.BrowserEngines[0].Stderr; diagnostics != nil {
+					fmt.Fprintln(diagnostics, "Protected browser session initialization failed:", err)
+				}
+				return nil, nil, nil, err
+			}
+			stop, err := mcpserver.WatchAvailable(ctx, server, handlers, available)
+			if err != nil {
+				group.Close()
+				return nil, nil, nil, err
+			}
+			server.AddReceivingMiddleware(rejectModernDiscovery)
+			server.AddReceivingMiddleware(mcptransport.BrowserAvailabilityMiddleware(browserAvailable))
+			return server, group, stop, nil
+		})
+	}
+	if options.AuthorizeTool != nil {
+		app.stopDiscovery, err = mcpserver.WatchAvailable(context.Background(), app.Server, handlers, available)
+		if err != nil {
+			return nil, err
+		}
 	}
 	app.Server.AddReceivingMiddleware(rejectModernDiscovery)
 	app.Server.AddReceivingMiddleware(mcptransport.BrowserAvailabilityMiddleware(browserAvailable))
@@ -238,7 +370,16 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	}
 	// The configured host allowlist below replaces the SDK's localhost-only
 	// default, allowing release-configured and operator-configured ingress hosts.
-	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return app.Server }, mcpTransportOptions())
+	getServer := func(*http.Request) *mcp.Server { return app.Server }
+	transportOptions := mcpTransportOptions()
+	if app.browserSessions != nil {
+		getServer = app.browserSessions.server
+		transportOptions.SessionTimeout = 20 * time.Minute
+	}
+	var transport http.Handler = mcp.NewStreamableHTTPHandler(getServer, transportOptions)
+	if app.browserSessions != nil {
+		transport = app.browserSessions.handler(transport)
+	}
 	mcpRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/mcp" {
 			http.NotFound(w, r)
@@ -291,6 +432,12 @@ func (a *MCPApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (a *MCPApp) Close() {
 	a.once.Do(func() {
 		a.closed.Store(true)
+		if a.stopDiscovery != nil {
+			a.stopDiscovery()
+		}
+		if a.browserSessions != nil {
+			a.browserSessions.close()
+		}
 		if a.preview != nil {
 			a.preview.Close()
 		}

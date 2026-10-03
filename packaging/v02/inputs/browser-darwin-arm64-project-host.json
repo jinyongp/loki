@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "target": {
+    "os": "darwin",
+    "arch": "arm64",
+    "mode": "project-host"
+  },
+  "native_requirements": [
+    "Native vendor application signature and browser sandbox support"
+  ],
+  "assets": {
+    "node": {
+      "version": "22.22.2",
+      "url": "https://nodejs.org/dist/v22.22.2/node-v22.22.2-darwin-arm64.tar.gz",
+      "bytes": 50017905,
+      "sha256": "db4b275b83736df67533529a18cc55de2549a8329ace6c7bcc68f8d22d3c9000",
+      "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
+      "root": "node-v22.22.2-darwin-arm64",
+      "notices": [
+        "LICENSE"
+      ],
+      "executable": "bin/node",
+      "npm": "lib/node_modules/npm/bin/npm-cli.js"
+    },
+    "chrome": {
+      "version": "154.0.8037.92",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/mac-arm64/chrome-mac-arm64.zip",
+      "bytes": 191153086,
+      "sha256": "b62e904b6571c5ff5108ed7812cf93ac6d1c4027f10ae47ac34d8e229ed88001",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": "chrome-mac-arm64",
+      "notices": [
+        "ABOUT",
+        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/154.0.8037.92/Libraries/WidevineCdm/LICENSE"
+      ],
+      "executable": "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    },
+    "ffmpeg": {
+      "version": "1011",
+      "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-mac-arm64.zip",
+      "bytes": 1097141,
+      "sha256": "7d77eb0d44b59acc4065faa2476c0df1a242cc904c346f820626818c953c5277",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": ".",
+      "notices": [
+        "COPYING.LGPLv2.1"
+      ]
+    }
+  }
+}

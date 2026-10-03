@@ -64,7 +64,7 @@ func NewConfiguredAvailable(handlers map[string]Handler, origins ResourceOrigins
 // NewConfiguredAvailableWithInstructions preserves the available-handler
 // contract while allowing the product composition root to append bounded
 // instance-specific provenance and readiness guidance.
-func NewConfiguredAvailableWithInstructions(handlers map[string]Handler, origins ResourceOrigins, instructions string) (*mcp.Server, error) {
+func NewConfiguredAvailableWithInstructions(handlers map[string]Handler, origins ResourceOrigins, instructions string, sessionOptions ...*mcp.ServerOptions) (*mcp.Server, error) {
 	if err := origins.validate(); err != nil {
 		return nil, err
 	}
@@ -92,10 +92,10 @@ func NewConfiguredAvailableWithInstructions(handlers map[string]Handler, origins
 			return nil, fmt.Errorf("unknown tool implementation %s", name)
 		}
 	}
-	return newServer(current, handlers, selected, &origins, instructions)
+	return newServer(current, handlers, selected, &origins, instructions, sessionOptions...)
 }
 
-func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string) (*mcp.Server, error) {
+func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definitions []*mcp.Tool, origins *ResourceOrigins, instructions string, sessionOptions ...*mcp.ServerOptions) (*mcp.Server, error) {
 	if len(handlers) != len(definitions) {
 		return nil, fmt.Errorf("need %d handlers, got %d", len(definitions), len(handlers))
 	}
@@ -106,10 +106,18 @@ func newServer(snapshot *contract.Snapshot, handlers map[string]Handler, definit
 	if instructions != "" {
 		init.Instructions = instructions
 	}
+	options := &mcp.ServerOptions{Instructions: init.Instructions, Capabilities: init.Capabilities, PageSize: 100}
+	if len(sessionOptions) > 1 {
+		return nil, errors.New("MCP session options must be supplied once")
+	}
+	if len(sessionOptions) == 1 && sessionOptions[0] != nil {
+		options.InitializedHandler = sessionOptions[0].InitializedHandler
+		options.RootsListChangedHandler = sessionOptions[0].RootsListChangedHandler
+	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "loki",
 		Version: buildinfo.Version,
-	}, &mcp.ServerOptions{Instructions: init.Instructions, Capabilities: init.Capabilities, PageSize: 100})
+	}, options)
 	for _, definition := range definitions {
 		handler := handlers[definition.Name]
 		if handler == nil {

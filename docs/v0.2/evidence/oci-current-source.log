@@ -1,0 +1,33 @@
+loki OCI Job acceptance: socket=/var/run/docker.sock image=127.0.0.1:32805/loki-oci-job-fixture@sha256:39639552da673b4ff896d61706c911b39a6c4d9746c2fdc353620af6b38eebcf authority=registry.npmjs.org:443 workload=10000:10000
+loki OCI Job acceptance: running TestRealOCIJobNetworkEndpointPreview
+=== RUN   TestRealOCIJobNetworkEndpointPreview
+    oci_integration_test.go:589: OCI network fixture output: "egress-auth=ok\negress-denied=ok\negress-allowed=ok\negress-direct-denied=ok\nready=1\n"
+--- PASS: TestRealOCIJobNetworkEndpointPreview (2.24s)
+PASS
+ok  	loki/internal/platform/sandbox	2.245s
+loki OCI Job acceptance: running TestRealOCIJobLifecycle
+=== RUN   TestRealOCIJobLifecycle
+--- PASS: TestRealOCIJobLifecycle (0.26s)
+PASS
+ok  	loki/internal/platform/sandbox	0.260s
+loki OCI Job acceptance: running TestRealOCIJobWritableEnvironmentAndGitPersistence
+=== RUN   TestRealOCIJobWritableEnvironmentAndGitPersistence
+--- PASS: TestRealOCIJobWritableEnvironmentAndGitPersistence (0.98s)
+PASS
+ok  	loki/internal/platform/sandbox	0.987s
+loki OCI Job acceptance: running TestRealOCIJobScriptAuthorityBoundary
+=== RUN   TestRealOCIJobScriptAuthorityBoundary
+--- PASS: TestRealOCIJobScriptAuthorityBoundary (0.27s)
+PASS
+ok  	loki/internal/platform/sandbox	0.271s
+loki OCI Job acceptance: running TestRealOCIJobDetachedDescendantCleanup
+=== RUN   TestRealOCIJobDetachedDescendantCleanup
+--- PASS: TestRealOCIJobDetachedDescendantCleanup (0.74s)
+PASS
+ok  	loki/internal/platform/sandbox	0.749s
+loki OCI Job acceptance: running TestRealOCIJobRecoveryAndBoundedOutput
+=== RUN   TestRealOCIJobRecoveryAndBoundedOutput
+--- PASS: TestRealOCIJobRecoveryAndBoundedOutput (1.27s)
+PASS
+ok  	loki/internal/platform/sandbox	1.271s
+loki OCI Job acceptance: passed

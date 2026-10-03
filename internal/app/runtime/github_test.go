@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/secret"
+	githubapp "loki/modules/github"
 )
 
 func githubTestKey(t *testing.T) string {
@@ -24,7 +24,7 @@ func githubTestKey(t *testing.T) string {
 }
 
 func TestGitHubAppKeyRotationDoesNotDisclosePrivateKey(t *testing.T) {
-	controller := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "vault")}
+	controller := githubapp.Credentials{StateDirectory: filepath.Join(t.TempDir(), "github")}
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestGitHubAppKeyRotationDoesNotDisclosePrivateKey(t *testing.T) {
 }
 
 func TestGitHubAppKeyRejectsInvalidWithoutReplacing(t *testing.T) {
-	controller := secret.Controller{StateDirectory: filepath.Join(t.TempDir(), "vault")}
+	controller := githubapp.Credentials{StateDirectory: filepath.Join(t.TempDir(), "github")}
 	controller.Initialize(t.Context())
 	op := GitHubOperations(controller)["github_app_key_set"]
 	valid := githubTestKey(t)
@@ -69,7 +69,7 @@ func TestGitHubAppKeyRejectsInvalidWithoutReplacing(t *testing.T) {
 	if _, err := op.Handle(t.Context(), raw); err == nil || strings.Contains(err.Error(), "bad-private-sentinel") {
 		t.Fatal("unsafe invalid-key result")
 	}
-	stored, err := controller.ManagedCredentials().Get(t.Context(), secret.ManagedGitHubAppPrivateKey)
+	stored, err := controller.Get(t.Context(), githubapp.AppPrivateKey)
 	if err != nil || stored != valid {
 		t.Fatal("valid key was replaced")
 	}

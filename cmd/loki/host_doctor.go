@@ -21,7 +21,7 @@ import (
 	hostdiagnostics "loki/internal/host/diagnostics"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
-	toolchain "loki/internal/work/toolchains"
+	toolchain "loki/modules/execution/toolchains"
 )
 
 const defaultHostToolchainCatalog = "/usr/share/doc/loki/toolchain-catalog.json"

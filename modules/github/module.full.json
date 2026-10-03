@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "github",
+  "release": "0.2.0",
+  "targets": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "full"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "full"
+    }
+  ],
+  "tools": [
+    "github",
+    "github_read",
+    "github_write",
+    "github_issue_fields_read",
+    "github_issue_fields_write"
+  ],
+  "requires": [
+    "runtime-core"
+  ],
+  "capabilities": [
+    "personal-projects"
+  ]
+}

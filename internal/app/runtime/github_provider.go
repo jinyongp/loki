@@ -8,7 +8,7 @@ import (
 	"io"
 
 	controlpolicy "loki/internal/control/policy"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 	"loki/internal/rpc"
 )
 

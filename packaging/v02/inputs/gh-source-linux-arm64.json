@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "owner": "github",
+  "target": {
+    "os": "linux",
+    "arch": "arm64",
+    "mode": "full"
+  },
+  "source": {
+    "url": "https://codeload.github.com/cli/cli/tar.gz/fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd",
+    "commit": "fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd",
+    "bytes": 15298570,
+    "sha256": "78542f85b4c271bc641eba52c14257c9f388d793a114ce97d0fac2bd19035773",
+    "root": "cli-fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd",
+    "notices": [
+      "LICENSE"
+    ],
+    "digest_provenance": "Maintainer measurement of exact commit archive over primary HTTPS; no detached signature claimed",
+    "archive": "gh-fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd.tar.gz",
+    "version": "2.102.0"
+  },
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/gh-2.102.0-linux-arm64.tar.gz"
+}

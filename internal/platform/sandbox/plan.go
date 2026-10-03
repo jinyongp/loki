@@ -17,17 +17,17 @@ import (
 )
 
 const (
-	minMemoryBytes    = 64 << 20
-	maxMemoryBytes    = 64 << 30
-	minTmpfsBytes     = 16 << 20
-	maxTmpfsBytes     = 4 << 30
-	minPIDs           = 16
-	maxPIDs           = 4096
-	maxArgs           = 256
-	maxArgBytes       = 64 << 10
-	maxEnv            = 256
-	maxEnvBytes       = 64 << 10
-	maxEndpoints      = 8
+	minMemoryBytes            = 64 << 20
+	maxMemoryBytes            = 64 << 30
+	minTmpfsBytes             = 16 << 20
+	maxTmpfsBytes             = 4 << 30
+	minPIDs                   = 16
+	maxPIDs                   = 4096
+	maxArgs                   = 256
+	maxArgBytes               = 64 << 10
+	maxEnv                    = 256
+	maxEnvBytes               = 64 << 10
+	maxEndpoints              = 8
 	maxToolchains             = 8
 	maxRunOutputBytes         = 64 << 20
 	jobSigningSocketDirectory = "/run/loki-signing"
@@ -95,18 +95,19 @@ type SigningPolicyOptions struct {
 }
 
 type PolicyOptions struct {
-	GenerationSHA256   string
-	Image              string
-	Gateway            GatewayPolicyOptions
-	Signing            SigningPolicyOptions
-	Workspace          string
-	InputDirectory     string
-	ToolchainDirectory string
-	UID, GID           uint32
-	Environment        []string
-	MemoryBytes        int64
-	PIDs               int64
-	TmpfsBytes         int64
+	DeploymentOwner, DeploymentID string
+	GenerationSHA256              string
+	Image                         string
+	Gateway                       GatewayPolicyOptions
+	Signing                       SigningPolicyOptions
+	Workspace                     string
+	InputDirectory                string
+	ToolchainDirectory            string
+	UID, GID                      uint32
+	Environment                   []string
+	MemoryBytes                   int64
+	PIDs                          int64
+	TmpfsBytes                    int64
 }
 
 type signingPolicy struct {
@@ -131,19 +132,20 @@ func (s signingPolicy) valid() bool {
 }
 
 type Policy struct {
-	generationSHA256   string
-	sandboxSHA256      string
-	image              string
-	gateway            GatewayPolicy
-	signing            signingPolicy
-	workspace          string
-	inputDirectory     string
-	toolchainDirectory string
-	uid, gid           uint32
-	environment        []string
-	memoryBytes        int64
-	pids               int64
-	tmpfsBytes         int64
+	deploymentOwner, deploymentID string
+	generationSHA256              string
+	sandboxSHA256                 string
+	image                         string
+	gateway                       GatewayPolicy
+	signing                       signingPolicy
+	workspace                     string
+	inputDirectory                string
+	toolchainDirectory            string
+	uid, gid                      uint32
+	environment                   []string
+	memoryBytes                   int64
+	pids                          int64
+	tmpfsBytes                    int64
 }
 
 type ToolchainMount struct {
@@ -317,9 +319,12 @@ func sandboxPolicyFingerprint(
 	memoryBytes, pids, tmpfsBytes int64,
 	gateway GatewayPolicy,
 	signing signingPolicy,
+	deploymentOwner, deploymentID string,
 ) (string, error) {
 	payload := struct {
 		GenerationSHA256   string   `json:"generation_sha256"`
+		DeploymentOwner    string   `json:"deployment_owner,omitempty"`
+		DeploymentID       string   `json:"deployment_id,omitempty"`
 		Image              string   `json:"image"`
 		Workspace          string   `json:"workspace"`
 		InputDirectory     string   `json:"input_directory,omitempty"`
@@ -348,6 +353,7 @@ func sandboxPolicyFingerprint(
 		} `json:"signing,omitempty"`
 	}{
 		GenerationSHA256: generationSHA256, Image: image, Workspace: workspace, InputDirectory: inputDirectory,
+		DeploymentOwner: deploymentOwner, DeploymentID: deploymentID,
 		ToolchainDirectory: toolchainDirectory, UID: uid, GID: gid, Environment: append([]string(nil), environment...),
 		MemoryBytes: memoryBytes, PIDs: pids, TmpfsBytes: tmpfsBytes,
 	}
@@ -372,6 +378,9 @@ func sandboxPolicyFingerprint(
 }
 
 func NewPolicy(options PolicyOptions) (Policy, error) {
+	if !validDeployment(options.DeploymentOwner, options.DeploymentID) {
+		return Policy{}, errors.New("sandbox requires a valid paired deployment owner and identity")
+	}
 	if !digestPattern.MatchString(options.GenerationSHA256) {
 		return Policy{}, errors.New("sandbox policy requires a valid effective-policy digest")
 	}
@@ -416,12 +425,13 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	}
 	sandboxSHA256, err := sandboxPolicyFingerprint(
 		options.GenerationSHA256, options.Image, options.Workspace, options.InputDirectory, options.ToolchainDirectory,
-		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway, signing,
+		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway, signing, options.DeploymentOwner, options.DeploymentID,
 	)
 	if err != nil {
 		return Policy{}, err
 	}
 	return Policy{
+		deploymentOwner: options.DeploymentOwner, deploymentID: options.DeploymentID,
 		generationSHA256: options.GenerationSHA256, sandboxSHA256: sandboxSHA256,
 		image: options.Image, gateway: gateway, signing: signing, workspace: options.Workspace, inputDirectory: options.InputDirectory,
 		toolchainDirectory: options.ToolchainDirectory, uid: options.UID, gid: options.GID, environment: environment,
@@ -430,6 +440,9 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 }
 
 func (p Policy) Valid() bool {
+	if !validDeployment(p.deploymentOwner, p.deploymentID) {
+		return false
+	}
 	if !digestPattern.MatchString(p.generationSHA256) || !digestPattern.MatchString(p.sandboxSHA256) ||
 		!imageDigestPattern.MatchString(p.image) || !p.gateway.valid() || !p.signing.valid() ||
 		!cleanAbsoluteNonRoot(p.workspace) ||
@@ -454,9 +467,16 @@ func (p Policy) Valid() bool {
 	}
 	fingerprint, err := sandboxPolicyFingerprint(
 		p.generationSHA256, p.image, p.workspace, p.inputDirectory, p.toolchainDirectory, p.uid, p.gid, p.environment,
-		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway, p.signing,
+		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway, p.signing, p.deploymentOwner, p.deploymentID,
 	)
 	return err == nil && fingerprint == p.sandboxSHA256
+}
+
+func (p Policy) Deployment() (string, string) {
+	if !p.Valid() {
+		return "", ""
+	}
+	return p.deploymentOwner, p.deploymentID
 }
 
 func (p Policy) InputDirectory() string {
@@ -626,7 +646,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	if spec.MaxOutputBytes < 0 || spec.MaxOutputBytes > maxRunOutputBytes {
 		return Plan{}, errors.New("sandbox workload output limit is outside the supported range")
 	}
-	resource, err := NewResource(spec.ID, p.generationSHA256, p.sandboxSHA256)
+	resource, err := NewDeployedResource(spec.ID, p.generationSHA256, p.sandboxSHA256, p.deploymentOwner, p.deploymentID)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -677,8 +697,8 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		create.HostConfig.Mounts = append(create.HostConfig.Mounts,
 			dockerMount{Type: "volume", Source: p.signing.socketVolume, Target: jobSigningSocketDirectory, ReadOnly: true},
 			dockerMount{Type: "bind", Source: p.signing.publicKey, Target: "/home/runner/.ssh/id_ed25519.pub", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
-			dockerMount{Type: "bind", Source: p.signing.gitConfig, Target: "/etc/loki-go/signing.gitconfig", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
-			dockerMount{Type: "bind", Source: p.signing.allowedSigners, Target: "/etc/loki-go/allowed_signers", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
+			dockerMount{Type: "bind", Source: p.signing.gitConfig, Target: "/etc/loki/signing.gitconfig", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
+			dockerMount{Type: "bind", Source: p.signing.allowedSigners, Target: "/etc/loki/allowed-signers", ReadOnly: true, BindOptions: &dockerBindOptions{Propagation: "rprivate"}},
 		)
 	}
 	for _, toolchain := range toolchains {

@@ -1,0 +1,6 @@
+{
+  "scope": "Owned scratch Chrome binaries and temporary test resource names after all browser/OCI/privileged/project probes; existing user browsers/containers untouched",
+  "chrome_processes_remaining": [],
+  "test_containers_remaining": [],
+  "docker_query_exit": 0
+}

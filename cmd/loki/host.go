@@ -15,7 +15,7 @@ import (
 	"loki/internal/daemon"
 	"loki/internal/host/lifecycle"
 	"loki/internal/progress"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 const (

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "git",
+  "release": "0.2.0",
+  "targets": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "full"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "full"
+    }
+  ],
+  "tools": [
+    "git_inspect",
+    "git_stage"
+  ],
+  "requires": [
+    "runtime-core",
+    "execution"
+  ],
+  "capabilities": [
+    "signing"
+  ]
+}

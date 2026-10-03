@@ -10,6 +10,7 @@ dist/
 htmlcov/
 
 .venv/
+node_modules/
 venv/
 .tmp/
 tmp/

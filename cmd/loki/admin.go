@@ -14,7 +14,7 @@ import (
 
 	"loki/internal/admin"
 	"loki/internal/fault"
-	"loki/internal/integrations/github"
+	"loki/modules/github"
 	"loki/internal/rpc"
 )
 

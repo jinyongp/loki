@@ -163,7 +163,7 @@ jobs:
         run: >-
           go test -vet=off
           ./internal/app/launcher
-          ./internal/devtools
+          ./modules/coordination
           ./internal/platform/sandbox
           ./internal/packaging
           ./internal/host/policy
@@ -340,7 +340,7 @@ jobs:
         continue-on-error: true
         env:
           LOKI_DEVTOOLS_BINARY: ${{ runner.temp }}/release-inputs/devtools/amd64/devtools
-        run: go test ./internal/devtools -run '^TestRealProcessInheritsBrokerSecrets$' -v -count=1
+        run: go test ./modules/coordination -run '^TestRealProcessInheritsBrokerSecrets$' -v -count=1
 
       - name: Run CI-sensitive Go tests
         id: sensitive_tests
@@ -351,7 +351,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          go test -json -vet=off ./internal/secret ./internal/work/workspace | tee "$RUNNER_TEMP/go-sensitive-test.json"
+          go test -json -vet=off ./modules/secrets ./modules/workspace | tee "$RUNNER_TEMP/go-sensitive-test.json"
           status=${PIPESTATUS[0]}
           set -e
           if test "$status" -ne 0; then

@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"loki/internal/config"
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 	"loki/internal/host/lifecycle"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 )
 
 // configuredSetup resumes an additive installation session or returns the

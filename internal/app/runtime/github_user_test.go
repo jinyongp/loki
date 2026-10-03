@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	controlpolicy "loki/internal/control/policy"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 )
 
 func TestGitHubUserAuthorizationIsHostOnlyAndRejectsSecretInput(t *testing.T) {

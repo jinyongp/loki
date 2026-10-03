@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"loki/internal/work/toolchains"
+	"loki/modules/execution/toolchains"
 )
 
 const managedToolchainRoot = "/opt/loki/managed"

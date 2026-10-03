@@ -17,9 +17,9 @@ import (
 	"golang.org/x/sys/unix"
 
 	"loki/internal/config"
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 	"loki/internal/host/lifecycle"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 	"loki/internal/progress"
 )
 

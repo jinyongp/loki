@@ -16,7 +16,7 @@ import (
 	"loki/internal/fault"
 	"loki/internal/platform/sandbox"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type fakeRunner struct {
@@ -368,7 +368,7 @@ func TestPrepareRunInputUsesLauncherOwnedReadOnlyFile(t *testing.T) {
 func TestLifecycleOperationsExposeOnlyExecutorJobLifecycle(t *testing.T) {
 	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Second, 8)
 	operations := l.operations()
-	if len(operations) != 6 {
+	if len(operations) != 7 {
 		t.Fatalf("operations = %#v", operations)
 	}
 	for _, name := range []string{"run", "start", "inspect", "output", "wait", "cancel"} {

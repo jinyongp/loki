@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"loki/internal/config"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 )
 
 type githubInstallationSnapshot struct {

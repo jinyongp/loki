@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "target": {
+    "os": "darwin",
+    "arch": "amd64",
+    "mode": "project-host"
+  },
+  "native_requirements": [
+    "Native vendor application signature and browser sandbox support"
+  ],
+  "assets": {
+    "node": {
+      "version": "22.22.2",
+      "url": "https://nodejs.org/dist/v22.22.2/node-v22.22.2-darwin-x64.tar.gz",
+      "bytes": 51202827,
+      "sha256": "12a6abb9c2902cf48a21120da13f87fde1ed1b71a13330712949e8db818708ba",
+      "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
+      "root": "node-v22.22.2-darwin-x64",
+      "notices": [
+        "LICENSE"
+      ],
+      "executable": "bin/node",
+      "npm": "lib/node_modules/npm/bin/npm-cli.js"
+    },
+    "chrome": {
+      "version": "154.0.8037.92",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/mac-x64/chrome-mac-x64.zip",
+      "bytes": 202045791,
+      "sha256": "9ddd0959603a3cdb90926427b2942279d81414c9aad856c97d405bb406d50e8b",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": "chrome-mac-x64",
+      "notices": [
+        "ABOUT",
+        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/154.0.8037.92/Libraries/WidevineCdm/LICENSE"
+      ],
+      "executable": "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    },
+    "ffmpeg": {
+      "version": "1011",
+      "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-mac.zip",
+      "bytes": 1353430,
+      "sha256": "17ed15a2fa60d3c74181befcb2bdf7c9bb288d19b2a3b9893b94b63f2ce260e4",
+      "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
+      "root": ".",
+      "notices": [
+        "COPYING.LGPLv2.1"
+      ]
+    }
+  }
+}

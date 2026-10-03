@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	appbrowser "loki/internal/app/browser"
@@ -28,6 +29,10 @@ func runBrowser(args []string, stderr io.Writer) int {
 	configPath := flags.String("config", "/etc/loki-go/config.toml", "Loki public configuration")
 	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "administrator-owned execution contract")
 	proxy := flags.String("proxy", defaultBrowserProxyURL, "confined browser proxy")
+	bundle := flags.String("bundle", "", "official browser artifact generation; selects the 0.2 MCP service")
+	data := flags.String("data", "", "official browser service-owned profiles and results")
+	workspace := flags.String("workspace", "", "browser service's private working directory")
+	capabilities := flags.String("capabilities", "", "explicit official browser optional capabilities")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -47,6 +52,21 @@ func runBrowser(args []string, stderr io.Writer) int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
+	if *bundle != "" {
+		var caps []string
+		if *capabilities != "" {
+			caps = strings.Split(*capabilities, ",")
+		}
+		err := appbrowser.RunOfficialBrowser(ctx, appbrowser.OfficialOptions{
+			Socket: *socket, AgentUID: uint32(*uid), SocketGID: *gid,
+			Bundle: *bundle, Data: *data, Workspace: *workspace, Proxy: *proxy, Capabilities: caps, Stderr: stderr,
+		}, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") })
+		if err != nil {
+			fmt.Fprintln(stderr, "official browser service failed:", err)
+			return 1
+		}
+		return 0
+	}
 	options := appbrowser.BrowserOptions{
 		Socket: *socket, AgentUID: uint32(*uid), SocketGID: *gid,
 		Browser: browser.Options{

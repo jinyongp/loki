@@ -7,7 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 type developerRequest struct {

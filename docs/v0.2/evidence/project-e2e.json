@@ -1,0 +1,8 @@
+{
+  "scope": "Existing project fixture and actual installed devtools; not 0.2 product acceptance; fixture deliberately disables Chrome sandbox, independently tested enabled by upstream probes",
+  "passed": [
+    "TestProjectExecutionContract"
+  ],
+  "failed": [],
+  "failure_output": []
+}

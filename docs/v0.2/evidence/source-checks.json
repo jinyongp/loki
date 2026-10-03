@@ -1,0 +1,13 @@
+{
+  "archcheck": {
+    "variants": [
+      "linux-amd64",
+      "windows-amd64"
+    ],
+    "packages": 81,
+    "production_edges": 208,
+    "baseline_exceptions": null
+  },
+  "contracts_race_command": "go test -race ./internal/tools",
+  "contracts_race_output": "ok  \tloki/internal/tools\t(cached)\n"
+}

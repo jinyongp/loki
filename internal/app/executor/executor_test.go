@@ -14,7 +14,7 @@ import (
 	"loki/internal/control/identity"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type fakeJobRunner struct {
@@ -62,7 +62,7 @@ func TestOperationsExposeAgentJobLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(operations) != 5 {
+	if len(operations) != 6 {
 		t.Fatalf("operations = %#v", operations)
 	}
 	for _, name := range []string{"run", "start", "inspect", "output", "cancel"} {

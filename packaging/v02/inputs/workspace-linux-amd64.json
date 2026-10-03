@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "module": "workspace",
+  "target": {
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "full"
+  },
+  "programs": {
+    "rg": "vendor/ripgrep-15.2.0-x86_64-unknown-linux-musl/rg"
+  },
+  "assets": {},
+  "images": {},
+  "inputs": [
+    {
+      "version": "15.2.0",
+      "url": "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz",
+      "bytes": 2265718,
+      "sha256": "33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c",
+      "root": "ripgrep-15.2.0-x86_64-unknown-linux-musl",
+      "destination": "vendor/ripgrep-15.2.0-x86_64-unknown-linux-musl",
+      "notices": [
+        "COPYING",
+        "LICENSE-MIT",
+        "UNLICENSE"
+      ],
+      "digest_provenance": "Official GitHub release asset SHA-256/length from primary release API over HTTPS. Native ABI and full notice completeness remain final checks."
+    }
+  ]
+}

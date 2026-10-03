@@ -20,6 +20,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	args, stderr = progress.CLIArguments(args, stderr)
 	if len(args) > 0 {
 		switch args[0] {
+		case "owned-endpoints":
+			return runFullEndpoints(args[1:], stderr)
+		case "full-signing-setup":
+			return runFullSigningSetup(args[1:], os.Stdin, stdout, stderr)
+		case "full-provider-import":
+			return runFullProviderImport(args[1:], os.Stdin, stdout, stderr)
+		case "full-administration":
+			return runFullAdministration(args[1:], os.Stdin, stdout, stderr)
+		case "full-probe":
+			return runFullProbe(args[1:], stderr)
 		case "checkpoint":
 			return runCheckpoint(args[1:], stdout, stderr)
 		case "health":

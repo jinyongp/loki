@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"loki/internal/work/toolchains"
+	"loki/modules/execution/toolchains"
 )
 
 func main() {

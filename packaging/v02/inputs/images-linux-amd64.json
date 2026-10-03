@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "target": {
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "full"
+  },
+  "base": "docker.io/library/ubuntu@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b",
+  "buildkit": "docker.io/moby/buildkit@sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
+  "frontend": "docker.io/docker/dockerfile@sha256:7b32114e84ca21aeb2d6f871a0b62b3a0762193f75d9afd048ee4cbe889f3148",
+  "base_notices": [
+    "/usr/share/doc/base-files/copyright",
+    "/usr/share/common-licenses"
+  ],
+  "repository": "ghcr.io/jinyongp/loki/v02",
+  "roles": [
+    "service",
+    "gateway",
+    "workload",
+    "git-workload",
+    "browser"
+  ],
+  "payloads": {},
+  "registry_provenance": {
+    "base": {
+      "reference": "docker.io/library/ubuntu@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b",
+      "version": "24.04",
+      "index_sha256": "a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60",
+      "native_manifest_sha256": "sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b",
+      "provenance": "Primary Docker Hub registry index/native manifest over HTTPS; registry content digest, not detached signature acceptance."
+    },
+    "buildkit": {
+      "reference": "docker.io/moby/buildkit@sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
+      "version": "v0.33.1",
+      "index_sha256": "cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea",
+      "native_manifest_sha256": "sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
+      "provenance": "Primary Docker Hub registry index/native manifest over HTTPS; registry content digest, not detached signature acceptance."
+    },
+    "frontend": {
+      "reference": "docker.io/docker/dockerfile@sha256:7b32114e84ca21aeb2d6f871a0b62b3a0762193f75d9afd048ee4cbe889f3148",
+      "version": "1",
+      "index_sha256": "4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e",
+      "native_manifest_sha256": "sha256:7b32114e84ca21aeb2d6f871a0b62b3a0762193f75d9afd048ee4cbe889f3148",
+      "provenance": "Primary Docker Hub registry index/native manifest over HTTPS; registry content digest, not detached signature acceptance."
+    }
+  }
+}

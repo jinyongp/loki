@@ -14,8 +14,8 @@ import (
 	"loki/internal/daemon"
 	"loki/internal/fault"
 	"loki/internal/policy"
-	jobsremote "loki/internal/work/jobs/remote"
-	"loki/internal/work/workspace"
+	jobsremote "loki/modules/execution/jobs/remote"
+	gitops "loki/modules/git"
 )
 
 func checkpointJobRunner(layout mcpLayout) (*jobsremote.Executor, error) {
@@ -71,7 +71,7 @@ func runCheckpoint(args []string, stdout, stderr io.Writer) int {
 	}
 	defer paths.Close()
 	configuration, _ := config.Parse(nil)
-	repository, err := workspace.OpenRepository(
+	repository, err := gitops.OpenRepository(
 		paths, configuration,
 		[]string{"PATH=/usr/bin:/bin", "HOME=/home/runner", "LANG=C.UTF-8", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"},
 		nil,

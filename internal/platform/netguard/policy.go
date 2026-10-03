@@ -79,7 +79,10 @@ func ValidateURL(value string) (string, error) {
 
 type Policy struct {
 	ValidatePort func(context.Context, int) bool
-	Lookup       func(context.Context, string) ([]netip.Addr, error)
+	// DialLocal is an administrator-provided protected endpoint relay. It
+	// accepts only literal loopback managed ports, never private DNS/IPs.
+	DialLocal func(context.Context, int) (net.Conn, error)
+	Lookup    func(context.Context, string) ([]netip.Addr, error)
 }
 
 func (p Policy) Addresses(ctx context.Context, host string, port int) ([]netip.Addr, error) {
@@ -127,6 +130,9 @@ func (p Policy) Dial(ctx context.Context, network, target string) (net.Conn, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	if host == "127.0.0.1" && validManagedPort(port) && p.DialLocal != nil {
+		return p.DialLocal(ctx, port)
+	}
 	addresses, err := p.Addresses(ctx, host, port)
 	if err != nil {
 		return nil, err

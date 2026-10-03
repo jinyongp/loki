@@ -15,8 +15,8 @@ import (
 	applauncher "loki/internal/app/launcher"
 	"loki/internal/platform/sandbox"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
-	"loki/internal/work/jobs/remote"
+	"loki/modules/execution/jobs"
+	"loki/modules/execution/jobs/remote"
 )
 
 type recordingSandboxRunner struct {

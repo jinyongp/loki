@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 )
 
 func TestDotenvStagingAndSourceOwnership(t *testing.T) {

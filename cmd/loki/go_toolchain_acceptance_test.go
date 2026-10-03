@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/work/toolchains"
+	"loki/modules/execution/toolchains"
 )
 
 func provisionAcceptanceGo(t *testing.T, store toolchain.GenerationStore, release toolchain.GoRelease) toolchain.Generation {

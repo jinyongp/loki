@@ -16,9 +16,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
 	"loki/internal/contract"
-	"loki/internal/integrations/sharing/artifacts"
+	"loki/modules/sharing/artifacts"
 	"loki/internal/mcpserver"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 type browserMCPFixture struct{ browserFixture }

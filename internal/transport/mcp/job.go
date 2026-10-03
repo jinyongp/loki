@@ -8,7 +8,7 @@ import (
 
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type jobMCPRequest struct {

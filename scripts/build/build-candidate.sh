@@ -40,7 +40,7 @@ cmp "$SOURCE_DIR/packaging/native/toolchain-catalog.json" "$TOOLCHAIN_BUNDLE/cat
 VERSION=$("$DEVTOOLS" version)
 CATALOG=$(mktemp /tmp/loki-devtools-catalog.XXXXXX)
 trap 'rm -f "$CATALOG"' EXIT HUP INT TERM
-go run "$SOURCE_DIR/internal/devtools/cmd/gencatalog" -binary "$DEVTOOLS" -output "$CATALOG"
+go run "$SOURCE_DIR/modules/coordination/cmd/gencatalog" -binary "$DEVTOOLS" -output "$CATALOG"
 
 ROOT="$OUTPUT/rootfs"
 install -d "$ROOT/opt/loki/bin" "$ROOT/opt/loki/libexec" "$ROOT/opt/loki/share/skills"

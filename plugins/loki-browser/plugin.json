@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "loki-browser",
+  "version": "0.2.0",
+  "description": "Explicit project browser connection using official Playwright and Chrome DevTools engines on the execution host.",
+  "author": {"name": "Loki"},
+  "extensions": {"com.openai": {"interface": {
+    "displayName": "Loki Project Browser",
+    "shortDescription": "Browser on your project host",
+    "longDescription": "An explicitly selected browser connection with separate profiles, tabs and login state. Configure its workspace on the execution host before connecting.",
+    "developerName": "Loki",
+    "category": "Developer Tools",
+    "defaultPrompt": "Use Loki Project Browser to check this project."
+  }}}
+}

@@ -9,10 +9,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"syscall"
 
+	"loki/internal/config"
 	"loki/internal/daemon"
-	"loki/internal/integrations/signing"
+	"loki/internal/tools"
+	"loki/modules/git/signing"
 )
 
 func runSigning(args []string, stderr io.Writer) int {
@@ -61,6 +64,9 @@ func runSigningAgent(args []string, stderr io.Writer) int {
 	private := flags.String("private-socket", "", "private SSH agent socket")
 	public := flags.String("public-socket", "", "restricted SSH agent socket")
 	key := flags.String("key", "", "service-owned signing key")
+	agentBinary := flags.String("agent-binary", "/usr/bin/ssh-agent", "Git module-owned SSH agent executable")
+	addBinary := flags.String("add-binary", "/usr/bin/ssh-add", "Git module-owned key loader executable")
+	activation := flags.String("tools-config", "", "full host's atomic activation snapshot")
 	runner := flags.Int64("runner-uid", -1, "authorized runner UID")
 	group := flags.Int("socket-gid", -1, "workspace group ID")
 	if err := flags.Parse(args); err != nil {
@@ -73,8 +79,24 @@ func runSigningAgent(args []string, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	grant := signing.NewSSHSignatureGrant(uint32(*runner))
+	var authorize func(context.Context) error
+	if *activation != "" {
+		gate := config.ToolGate{Path: *activation, Release: "0.2.0", Mode: tools.Full, Snapshot: true}
+		authorize = func(context.Context) error {
+			choice, err := gate.Selection("git")
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(choice.Capabilities, "signing") {
+				return fmt.Errorf("Git signing capability is disabled")
+			}
+			return nil
+		}
+	}
 	err := signing.RunAgent(ctx, signing.AgentOptions{
 		PrivateSocket: *private, PublicSocket: *public, Key: *key, Grant: grant,
+		AgentBinary: *agentBinary, AddBinary: *addBinary,
+		Authorize: authorize,
 		SocketUID: int(*runner), SocketGID: *group,
 		Ready: func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") },
 	})

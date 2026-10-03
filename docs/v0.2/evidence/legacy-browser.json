@@ -1,0 +1,32 @@
+{
+  "passed": [
+    {
+      "Package": "loki/internal/integrations/browser/internal/cdp",
+      "Test": "TestChromiumPipe"
+    },
+    {
+      "Package": "loki/internal/integrations/browser/internal/cdp"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumSharedDownloads"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumLifecycle"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumInteractions"
+    },
+    {
+      "Package": "loki/internal/integrations/browser",
+      "Test": "TestChromiumDebugObservation"
+    },
+    {
+      "Package": "loki/internal/integrations/browser"
+    }
+  ],
+  "failed": [],
+  "failure_output": []
+}

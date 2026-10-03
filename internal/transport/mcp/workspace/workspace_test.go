@@ -10,7 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
 	"loki/internal/mcpserver"
-	workworkspace "loki/internal/work/workspace"
+	workworkspace "loki/modules/workspace"
 )
 
 func TestWorkspaceReadClampsRequestsThroughMCP(t *testing.T) {

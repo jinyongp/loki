@@ -24,7 +24,7 @@ import (
 	"loki/internal/policy"
 	"loki/internal/process"
 	"loki/internal/rpc"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 var browserTools = []string{"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot"}

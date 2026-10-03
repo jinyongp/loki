@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "owner": "coordination",
+  "target": {
+    "os": "linux",
+    "arch": "arm64",
+    "mode": "full"
+  },
+  "source": {
+    "url": "https://codeload.github.com/jinyongp/devtools/tar.gz/b66fcfc024c5b4f1b8ce49a21e7a4e0e1fd75b11",
+    "commit": "b66fcfc024c5b4f1b8ce49a21e7a4e0e1fd75b11",
+    "bytes": 688511,
+    "sha256": "e84cb6f8ced75ca37ec0b5099b159ecdcc2b8f96f6a437b36972d6fb98135eae",
+    "root": "devtools-b66fcfc024c5b4f1b8ce49a21e7a4e0e1fd75b11",
+    "notices": [
+      "LICENSE"
+    ],
+    "digest_provenance": "Maintainer measurement of exact commit archive over primary HTTPS; no detached signature claimed",
+    "archive": "devtools-b66fcfc024c5b4f1b8ce49a21e7a4e0e1fd75b11.tar.gz",
+    "version": "0.23.0"
+  },
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/devtools-0.23.0-linux-arm64.tar.gz"
+}

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 func TestDeveloperViews(t *testing.T) {

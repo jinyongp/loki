@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "module": "sharing",
+  "target": {
+    "os": "linux",
+    "arch": "arm64",
+    "mode": "full"
+  },
+  "images": {},
+  "programs": {},
+  "assets": {},
+  "inputs": []
+}

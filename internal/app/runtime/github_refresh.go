@@ -6,7 +6,7 @@ import (
 
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/fault"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 	"loki/internal/rpc"
 )
 

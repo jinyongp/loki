@@ -13,7 +13,7 @@ import (
 
 	"loki/internal/host/lifecycle"
 	"loki/internal/host/releases"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type fakeHostLifecycle struct {

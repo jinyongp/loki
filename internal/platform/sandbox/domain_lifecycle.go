@@ -761,6 +761,9 @@ func (e *Engine) EndpointBindings(
 		}
 		return nil, errors.New("sandbox resource domain is incomplete")
 	}
+	if len(normalized) != 0 && (!snapshot.workload.state.Running || !snapshot.gateway.state.Running || !snapshot.publisher.state.Running) {
+		return nil, errors.New("sandbox endpoint domain is not running")
+	}
 	return endpointBindingsFromSnapshot(snapshot, normalized)
 }
 

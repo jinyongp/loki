@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"loki/internal/config"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 type browserUploadFixture struct {

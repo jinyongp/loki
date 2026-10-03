@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 )
 
 const (

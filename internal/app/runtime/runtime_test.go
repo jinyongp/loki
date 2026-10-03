@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"loki/internal/config"
-	"loki/internal/devtools"
 	"loki/internal/execution"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/rpc"
-	"loki/internal/secret"
+	"loki/modules/coordination"
+	githubapp "loki/modules/github"
+	"loki/modules/secrets"
 )
 
 func TestRuntimeRoleSocketLifecycle(t *testing.T) {
@@ -67,7 +68,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "devtools", "testdata", "catalog-protocol-v5.json"))
+	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "modules", "coordination", "testdata", "catalog-protocol-v6.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +157,8 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if _, err := controller.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := controller.ManagedCredentials().Set(t.Context(), secret.ManagedGitHubAppPrivateKey, "synthetic-platform"); err != nil {
+	credentials := githubapp.Credentials{StateDirectory: filepath.Join(o.StateDirectory, "providers", "github")}
+	if _, err := credentials.Set(t.Context(), githubapp.AppPrivateKey, githubTestKey(t)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,7 +217,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	if status["initialized"] != true || status["profiles"] != float64(0) ||
 		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
-		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "vault" ||
+		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "provider-store" ||
 		githubStatus["credential_available"] != true ||
 		devtoolsStatus["version"] != "0.17.0" || devtoolsStatus["commit"] != "runtime-test" ||
 		devtoolsStatus["protocol_version"] != float64(devtools.ProtocolVersion) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||

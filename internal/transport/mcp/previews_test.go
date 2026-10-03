@@ -7,7 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/previews"
+	"loki/modules/sharing/previews"
 )
 
 func TestPreviewServerAndSharedHandlers(t *testing.T) {

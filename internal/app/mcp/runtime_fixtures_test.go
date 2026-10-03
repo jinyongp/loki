@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type runtimeFixture func(context.Context, any) (json.RawMessage, error)

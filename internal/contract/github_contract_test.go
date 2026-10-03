@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 )
 
 func TestGitHubEscapeHatchPublishesExplicitConservativeContract(t *testing.T) {

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "coordination",
+  "release": "0.2.0",
+  "targets": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "full"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "full"
+    }
+  ],
+  "tools": [
+    "project_coordination",
+    "project_coordination_write"
+  ],
+  "requires": [
+    "runtime-core"
+  ]
+}

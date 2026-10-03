@@ -15,8 +15,8 @@ import (
 	appexecutor "loki/internal/app/executor"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
-	"loki/internal/work/jobs"
-	"loki/internal/work/jobs/remote"
+	"loki/modules/execution/jobs"
+	"loki/modules/execution/jobs/remote"
 )
 
 const maxExecutorRunTimeoutSeconds = 24 * 60 * 60

@@ -1,5 +1,22 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/app/network","to":"loki/internal/rpc"},
+    {"from":"loki/modules/github","to":"loki/internal/config"},
+    {"from":"loki/modules/github","to":"loki/internal/integrations/github/setup"},
+    {"from":"loki/internal/app/runtime","to":"loki/internal/integrations/github/setup"},
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/config"},
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/integrations/github/setup"},
+    {"from":"loki/cmd/loki-manager","to":"loki/modules/github/keys"},
+    {"from":"loki/cmd/loki-manager","to":"loki/modules/git/signing/public"},
+    {"from":"loki/modules/git/signing","to":"loki/internal/daemon"},
+    {"from":"loki/modules/git/signing","to":"loki/internal/process"},
+    {"from":"loki/modules/git/signing","to":"loki/modules/git/signing/public"},
+    {"from":"loki/modules/github","to":"loki/modules/github/keys"},
+    {"from":"loki/modules/github/keys","to":"loki/internal/fault"},
+    {
+      "from": "loki/cmd/bootstrap",
+      "to": "loki/internal/host/bootstrap"
+    },
     {
       "from": "loki/cmd/executor",
       "to": "loki/internal/app/executor"
@@ -14,11 +31,11 @@
     },
     {
       "from": "loki/cmd/executor",
-      "to": "loki/internal/work/jobs"
+      "to": "loki/modules/execution/jobs"
     },
     {
       "from": "loki/cmd/executor",
-      "to": "loki/internal/work/jobs/remote"
+      "to": "loki/modules/execution/jobs/remote"
     },
     {
       "from": "loki/cmd/launcher",
@@ -38,19 +55,31 @@
     },
     {
       "from": "loki/cmd/launcher",
-      "to": "loki/internal/work/toolchains"
+      "to": "loki/modules/execution/jobs"
     },
     {
       "from": "loki/cmd/launcher",
-      "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/cmd/bootstrap",
-      "to": "loki/internal/host/bootstrap"
+      "to": "loki/modules/execution/toolchains"
     },
     {
       "from": "loki/cmd/loki",
       "to": "loki/internal/admin"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/browser"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/mcp"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/network"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/app/runtime"
     },
     {
       "from": "loki/cmd/loki",
@@ -62,43 +91,15 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/integrations/access/cloudflare"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/integrations/browser"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
-      "from": "loki/cmd/loki",
       "to": "loki/internal/buildinfo"
-    },
-    {
-      "from": "loki/cmd/loki-windows",
-      "to": "loki/internal/buildinfo"
-    },
-    {
-      "from": "loki/cmd/loki-windows",
-      "to": "loki/internal/host/githubsetup"
-    },
-    {
-      "from": "loki/cmd/loki-windows",
-      "to": "loki/internal/host/windows"
-    },
-    {
-      "from": "loki/cmd/loki-windows",
-      "to": "loki/internal/progress"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/progress"
     },
     {
       "from": "loki/cmd/loki",
       "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/control/identity"
     },
     {
       "from": "loki/cmd/loki",
@@ -118,23 +119,15 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/integrations/github"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/host/diagnostics"
-    },
-    {
-      "from": "loki/cmd/loki",
       "to": "loki/internal/host/appliance"
     },
     {
-      "from": "loki/internal/host/appliance",
+      "from": "loki/cmd/loki",
       "to": "loki/internal/host/diagnostics"
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/host/githubsetup"
+      "to": "loki/internal/integrations/github/setup"
     },
     {
       "from": "loki/cmd/loki",
@@ -146,15 +139,23 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/host/releases"
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/work/workspace"
+      "to": "loki/internal/integrations/access/cloudflare"
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/host/policy"
+      "to": "loki/internal/integrations/browser"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/internal/platform/netguard"
     },
     {
       "from": "loki/cmd/loki",
@@ -166,15 +167,11 @@
     },
     {
       "from": "loki/cmd/loki",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/cmd/loki",
       "to": "loki/internal/rpc"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/secret"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/integrations/signing"
     },
     {
       "from": "loki/cmd/loki",
@@ -182,15 +179,127 @@
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/work/toolchains"
+      "to": "loki/internal/tools"
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/work/jobs"
+      "to": "loki/internal/transport/toolproxy"
     },
     {
       "from": "loki/cmd/loki",
-      "to": "loki/internal/work/jobs/remote"
+      "to": "loki/modules/browser"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/execution/jobs/remote"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/execution/toolchains"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/git"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/git/signing"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/github"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/secrets"
+    },
+    {
+      "from": "loki/cmd/loki",
+      "to": "loki/modules/workspace"
+    },
+    {
+      "from": "loki/cmd/loki-manager",
+      "to": "loki/internal/management"
+    },
+    {
+      "from": "loki/cmd/loki-manager",
+      "to": "loki/internal/tools"
+    },
+    {
+      "from": "loki/cmd/loki-manager",
+      "to": "loki/internal/transport/toolproxy"
+    },
+    {
+      "from": "loki/cmd/loki-manager",
+      "to": "loki/modules/browser"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/integrations/github/setup"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/host/windows"
+    },
+    {
+      "from": "loki/cmd/loki-windows",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/internal/admin",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/admin",
+      "to": "loki/modules/secrets"
+    },
+    {
+      "from": "loki/internal/agentcontext",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/agentcontext",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/integrations/browser"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/internal/transport/toolproxy"
+    },
+    {
+      "from": "loki/internal/app/browser",
+      "to": "loki/modules/browser"
     },
     {
       "from": "loki/internal/app/executor",
@@ -210,7 +319,7 @@
     },
     {
       "from": "loki/internal/app/executor",
-      "to": "loki/internal/work/jobs"
+      "to": "loki/modules/execution/jobs"
     },
     {
       "from": "loki/internal/app/launcher",
@@ -238,387 +347,7 @@
     },
     {
       "from": "loki/internal/app/launcher",
-      "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/internal/admin",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/admin",
-      "to": "loki/internal/secret"
-    },
-    {
-      "from": "loki/internal/agentcontext",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/agentcontext",
-      "to": "loki/internal/policy"
-    },
-    {
-      "from": "loki/internal/integrations/access/cloudflare",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/internal/integrations/access/cloudflare",
-      "to": "loki/internal/daemon"
-    },
-    {
-      "from": "loki/internal/integrations/access/cloudflare",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
-      "from": "loki/internal/integrations/browser",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
-      "from": "loki/internal/integrations/browser",
-      "to": "loki/internal/integrations/browser/internal/cdp"
-    },
-    {
-      "from": "loki/internal/integrations/browser",
-      "to": "loki/internal/daemon"
-    },
-    {
-      "from": "loki/internal/integrations/browser",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/contract",
-      "to": "loki/internal/integrations/github"
-    },
-    {
-      "from": "loki/internal/devtools",
-      "to": "loki/internal/policy"
-    },
-    {
-      "from": "loki/internal/devtools",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/internal/devtools/cmd/gencatalog",
-      "to": "loki/internal/devtools"
-    },
-    {
-      "from": "loki/internal/dockerproxy",
-      "to": "loki/internal/portguard"
-    },
-    {
-      "from": "loki/internal/dockerproxy",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/internal/egress",
-      "to": "loki/internal/platform/netguard"
-    },
-    {
-      "from": "loki/internal/integrations/github",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/integrations/github",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/internal/host/bootstrap",
-      "to": "loki/internal/host/releases"
-    },
-    {
-      "from": "loki/internal/host/assets",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/host/githubsetup",
-      "to": "loki/internal/progress"
-    },
-    {
-      "from": "loki/internal/host/lifecycle",
-      "to": "loki/internal/host/ingress"
-    },
-    {
-      "from": "loki/internal/host/lifecycle",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/host/lifecycle",
-      "to": "loki/internal/progress"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/host/assets"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/host/githubsetup"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/host/ingress"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/host/lifecycle"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/host/lifecycle/compose",
-      "to": "loki/internal/progress"
-    },
-    {
-      "from": "loki/internal/host/policy",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/internal/host/policy",
-      "to": "loki/internal/control/policy"
-    },
-    {
-      "from": "loki/internal/host/policy",
-      "to": "loki/internal/execution"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/daemon"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/policy"
-    },
-    {
-      "from": "loki/internal/work/workspace/git",
-      "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/internal/mcpserver",
-      "to": "loki/internal/buildinfo"
-    },
-    {
-      "from": "loki/internal/mcpserver",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/internal/mcpserver",
-      "to": "loki/internal/contract"
-    },
-    {
-      "from": "loki/internal/mcpserver",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/policy",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/control/identity"
-    },
-    {
-      "from": "loki/internal/control/policy",
-      "to": "loki/internal/control/identity"
-    },
-    {
-      "from": "loki/internal/rpc",
-      "to": "loki/internal/control/identity"
-    },
-    {
-      "from": "loki/internal/rpc",
-      "to": "loki/internal/control/policy"
-    },
-    {
-      "from": "loki/internal/rpc",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/work/jobs",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/work/jobs/remote",
-      "to": "loki/internal/rpc"
-    },
-    {
-      "from": "loki/internal/work/jobs/remote",
-      "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/internal/secret",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/secret",
-      "to": "loki/internal/state"
-    },
-    {
-      "from": "loki/internal/integrations/signing",
-      "to": "loki/internal/rpc"
-    },
-    {
-      "from": "loki/internal/state",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/tools/release/bootstrapbuild",
-      "to": "loki/internal/host/releases"
-    },
-    {
-      "from": "loki/tools/release/releasebuild",
-      "to": "loki/internal/host/assets"
-    },
-    {
-      "from": "loki/tools/release/releasebuild",
-      "to": "loki/internal/host/policy"
-    },
-    {
-      "from": "loki/tools/release/releasebuild",
-      "to": "loki/internal/host/releases"
-    },
-    {
-      "from": "loki/tools/release/evidencebuild",
-      "to": "loki/internal/host/releases"
-    },
-    {
-      "from": "loki/tools/release/evidencebuild",
-      "to": "loki/tools/release/internal/bootstrapinfo"
-    },
-    {
-      "from": "loki/tools/release/publishprep",
-      "to": "loki/internal/host/releases"
-    },
-    {
-      "from": "loki/tools/release/publishprep",
-      "to": "loki/tools/release/internal/bootstrapinfo"
-    },
-    {
-      "from": "loki/tools/release/publishprep",
-      "to": "loki/internal/host/connect"
-    },
-    {
-      "from": "loki/tools/release/windowsbuild",
-      "to": "loki/internal/host/connect"
-    },
-    {
-      "from": "loki/tools/release/helperfetch",
-      "to": "loki/internal/host/connect"
-    },
-    {
-      "from": "loki/internal/host/windows",
-      "to": "loki/internal/buildinfo"
-    },
-    {
-      "from": "loki/internal/host/windows",
-      "to": "loki/internal/host/connect"
-    },
-    {
-      "from": "loki/internal/host/windows",
-      "to": "loki/internal/progress"
-    },
-    {
-      "from": "loki/tools/toolchainfetch",
-      "to": "loki/internal/work/toolchains"
-    },
-    {
-      "from": "loki/tools/renderhostassets",
-      "to": "loki/internal/host/assets"
-    },
-    {
-      "from": "loki/internal/transport/mcp/workspace",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/transport/mcp/workspace",
-      "to": "loki/internal/mcpserver"
-    },
-    {
-      "from": "loki/internal/transport/mcp/workspace",
-      "to": "loki/internal/work/workspace"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/config"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/work/jobs"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/work/workspace/git"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/platform/safeio"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/policy"
-    },
-    {
-      "from": "loki/internal/work/workspace",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/tools/readinessprobe",
-      "to": "loki/internal/process"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/app/browser"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/app/mcp"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/app/network"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/internal/app/runtime"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/control/identity"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/control/policy"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/daemon"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/integrations/browser"
-    },
-    {
-      "from": "loki/internal/app/browser",
-      "to": "loki/internal/rpc"
+      "to": "loki/modules/execution/jobs"
     },
     {
       "from": "loki/internal/app/mcp",
@@ -643,14 +372,6 @@
     {
       "from": "loki/internal/app/mcp",
       "to": "loki/internal/daemon"
-    },
-    {
-      "from": "loki/internal/app/mcp",
-      "to": "loki/internal/integrations/sharing/artifacts"
-    },
-    {
-      "from": "loki/internal/app/mcp",
-      "to": "loki/internal/integrations/sharing/previews"
     },
     {
       "from": "loki/internal/app/mcp",
@@ -682,11 +403,27 @@
     },
     {
       "from": "loki/internal/app/mcp",
-      "to": "loki/internal/work/jobs"
+      "to": "loki/internal/transport/toolproxy"
     },
     {
       "from": "loki/internal/app/mcp",
-      "to": "loki/internal/work/workspace"
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/modules/git"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/modules/sharing/artifacts"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/modules/sharing/previews"
+    },
+    {
+      "from": "loki/internal/app/mcp",
+      "to": "loki/modules/workspace"
     },
     {
       "from": "loki/internal/app/network",
@@ -726,10 +463,6 @@
     },
     {
       "from": "loki/internal/app/runtime",
-      "to": "loki/internal/devtools"
-    },
-    {
-      "from": "loki/internal/app/runtime",
       "to": "loki/internal/dockerproxy"
     },
     {
@@ -739,10 +472,6 @@
     {
       "from": "loki/internal/app/runtime",
       "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/app/runtime",
-      "to": "loki/internal/integrations/github"
     },
     {
       "from": "loki/internal/app/runtime",
@@ -758,7 +487,191 @@
     },
     {
       "from": "loki/internal/app/runtime",
-      "to": "loki/internal/secret"
+      "to": "loki/modules/coordination"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/modules/github"
+    },
+    {
+      "from": "loki/internal/app/runtime",
+      "to": "loki/modules/secrets"
+    },
+    {
+      "from": "loki/internal/config",
+      "to": "loki/internal/tools"
+    },
+    {
+      "from": "loki/internal/contract",
+      "to": "loki/modules/github"
+    },
+    {
+      "from": "loki/internal/control/policy",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/dockerproxy",
+      "to": "loki/internal/portguard"
+    },
+    {
+      "from": "loki/internal/dockerproxy",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/internal/egress",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
+      "from": "loki/internal/host/appliance",
+      "to": "loki/internal/host/diagnostics"
+    },
+    {
+      "from": "loki/internal/host/assets",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/host/bootstrap",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/internal/integrations/github/setup",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/host/ingress"
+    },
+    {
+      "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/host/lifecycle",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/assets"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/integrations/github/setup"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/ingress"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/host/lifecycle"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/internal/host/lifecycle/compose",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/host/policy",
+      "to": "loki/internal/execution"
+    },
+    {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/internal/host/windows",
+      "to": "loki/internal/progress"
+    },
+    {
+      "from": "loki/internal/integrations/access/cloudflare",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/integrations/access/cloudflare",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/integrations/access/cloudflare",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
+      "from": "loki/internal/integrations/browser",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/internal/integrations/browser",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/integrations/browser",
+      "to": "loki/internal/integrations/browser/internal/cdp"
+    },
+    {
+      "from": "loki/internal/integrations/browser",
+      "to": "loki/internal/platform/netguard"
+    },
+    {
+      "from": "loki/internal/management",
+      "to": "loki/internal/platform/command"
+    },
+    {
+      "from": "loki/internal/management",
+      "to": "loki/internal/platform/filelock"
+    },
+    {
+      "from": "loki/internal/management",
+      "to": "loki/internal/tools"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/buildinfo"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/contract"
+    },
+    {
+      "from": "loki/internal/mcpserver",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/policy",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/rpc",
+      "to": "loki/internal/control/identity"
+    },
+    {
+      "from": "loki/internal/rpc",
+      "to": "loki/internal/control/policy"
+    },
+    {
+      "from": "loki/internal/rpc",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/state",
+      "to": "loki/internal/platform/safeio"
     },
     {
       "from": "loki/internal/transport/mcp",
@@ -786,23 +699,7 @@
     },
     {
       "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/devtools"
-    },
-    {
-      "from": "loki/internal/transport/mcp",
       "to": "loki/internal/fault"
-    },
-    {
-      "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/integrations/github"
-    },
-    {
-      "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/integrations/sharing/artifacts"
-    },
-    {
-      "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/integrations/sharing/previews"
     },
     {
       "from": "loki/internal/transport/mcp",
@@ -826,11 +723,223 @@
     },
     {
       "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/work/jobs"
+      "to": "loki/modules/coordination"
     },
     {
       "from": "loki/internal/transport/mcp",
-      "to": "loki/internal/work/workspace"
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/modules/git"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/modules/github"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/modules/sharing/artifacts"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/modules/sharing/previews"
+    },
+    {
+      "from": "loki/internal/transport/mcp",
+      "to": "loki/modules/workspace"
+    },
+    {
+      "from": "loki/internal/transport/mcp/workspace",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/internal/transport/mcp/workspace",
+      "to": "loki/internal/mcpserver"
+    },
+    {
+      "from": "loki/internal/transport/mcp/workspace",
+      "to": "loki/modules/workspace"
+    },
+    {
+      "from": "loki/internal/transport/toolproxy",
+      "to": "loki/internal/platform/command"
+    },
+    {
+      "from": "loki/internal/transport/toolproxy",
+      "to": "loki/internal/tools"
+    },
+    {
+      "from": "loki/modules/browser",
+      "to": "loki/internal/platform/command"
+    },
+    {
+      "from": "loki/modules/browser",
+      "to": "loki/internal/platform/filelock"
+    },
+    {
+      "from": "loki/modules/coordination",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/modules/coordination",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/modules/coordination/cmd/gencatalog",
+      "to": "loki/modules/coordination"
+    },
+    {
+      "from": "loki/modules/execution/jobs",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/modules/execution/jobs/remote",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/modules/execution/jobs/remote",
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/daemon"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/internal/workcommand"
+    },
+    {
+      "from": "loki/modules/git",
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/modules/git/signing",
+      "to": "loki/internal/rpc"
+    },
+    {
+      "from": "loki/modules/github",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/modules/github",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/modules/github",
+      "to": "loki/internal/state"
+    },
+    {
+      "from": "loki/modules/secrets",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/modules/secrets",
+      "to": "loki/internal/state"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/config"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/fault"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/platform/safeio"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/policy"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/internal/workcommand"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/modules/execution/jobs"
+    },
+    {
+      "from": "loki/modules/workspace",
+      "to": "loki/modules/git"
+    },
+    {
+      "from": "loki/tools/readinessprobe",
+      "to": "loki/internal/process"
+    },
+    {
+      "from": "loki/tools/release/bootstrapbuild",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/tools/release/evidencebuild",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/tools/release/evidencebuild",
+      "to": "loki/tools/release/internal/bootstrapinfo"
+    },
+    {
+      "from": "loki/tools/release/helperfetch",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/tools/release/publishprep",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/tools/release/publishprep",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/tools/release/publishprep",
+      "to": "loki/tools/release/internal/bootstrapinfo"
+    },
+    {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/assets"
+    },
+    {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/policy"
+    },
+    {
+      "from": "loki/tools/release/releasebuild",
+      "to": "loki/internal/host/releases"
+    },
+    {
+      "from": "loki/tools/release/windowsbuild",
+      "to": "loki/internal/host/connect"
+    },
+    {
+      "from": "loki/tools/renderhostassets",
+      "to": "loki/internal/host/assets"
+    },
+    {
+      "from": "loki/tools/toolchainfetch",
+      "to": "loki/modules/execution/toolchains"
     }
   ],
   "edge_exceptions": [],
@@ -900,11 +1009,11 @@
       "tags": [],
       "target": "work/agentcontext"
     },
-    "loki/internal/integrations/sharing/artifacts": {
+    "loki/modules/sharing/artifacts": {
       "kind": "integration",
       "owner": "sharing",
       "tags": [],
-      "target": "integrations/sharing/artifacts"
+      "target": "modules/sharing/artifacts"
     },
     "loki/internal/audit": {
       "kind": "control",
@@ -1028,22 +1137,22 @@
       "tags": [],
       "target": "host/config + host/releases"
     },
-    "loki/internal/devtools": {
+    "loki/modules/coordination": {
       "kind": "integration",
-      "owner": "devtools",
+      "owner": "coordination",
       "tags": [
         "devtools",
         "project-execution-local"
       ],
-      "target": "integrations/devtools"
+      "target": "modules/coordination"
     },
-    "loki/internal/devtools/cmd/gencatalog": {
+    "loki/modules/coordination/cmd/gencatalog": {
       "kind": "tooling",
-      "owner": "devtools",
+      "owner": "coordination",
       "tags": [
         "tooling"
       ],
-      "target": "tools/cataloggen"
+      "target": "modules/coordination/cmd/gencatalog"
     },
     "loki/internal/dockerproxy": {
       "kind": "legacy-work",
@@ -1077,18 +1186,20 @@
       "tags": [],
       "target": "feature errors + control/operations"
     },
-    "loki/internal/integrations/github": {
+    "loki/modules/github": {
       "kind": "integration",
       "owner": "github",
       "tags": [
         "provider-private-key"
       ],
-      "target": "integrations/github"
+      "target": "modules/github"
     },
     "loki/internal/host/appliance": {
       "kind": "host",
       "owner": "appliance",
-      "tags": ["host-state"],
+      "tags": [
+        "host-state"
+      ],
       "target": "host/appliance"
     },
     "loki/internal/host/bootstrap": {
@@ -1115,11 +1226,11 @@
       ],
       "target": "host/diagnostics"
     },
-    "loki/internal/host/githubsetup": {
-      "kind": "host-adapter",
+    "loki/internal/integrations/github/setup": {
+      "kind": "integration",
       "owner": "github-browser-relay",
       "tags": [],
-      "target": "host/githubsetup"
+      "target": "integrations/github/setup"
     },
     "loki/internal/host/ingress": {
       "kind": "host",
@@ -1136,6 +1247,12 @@
         "host-state"
       ],
       "target": "host/lifecycle"
+    },
+    "loki/internal/tools": {
+      "kind": "contract",
+      "owner": "tools-composition",
+      "tags": [],
+      "target": "tools/manifest-registry-state"
     },
     "loki/internal/host/lifecycle/compose": {
       "kind": "host-adapter",
@@ -1179,13 +1296,13 @@
       ],
       "target": "host/windows"
     },
-    "loki/internal/work/workspace/git": {
+    "loki/modules/git": {
       "kind": "work-adapter",
-      "owner": "workspace",
+      "owner": "git",
       "tags": [
         "project-execution-local"
       ],
-      "target": "work/workspace/git"
+      "target": "modules/git"
     },
     "loki/internal/transport/mcp": {
       "kind": "transport",
@@ -1240,7 +1357,9 @@
     "loki/internal/platform/sandbox": {
       "kind": "platform",
       "owner": "sandbox",
-      "tags": ["launcher-implementation"],
+      "tags": [
+        "launcher-implementation"
+      ],
       "target": "platform/sandbox"
     },
     "loki/internal/policy": {
@@ -1255,11 +1374,11 @@
       "tags": [],
       "target": "platform/proc + work/endpoints"
     },
-    "loki/internal/integrations/sharing/previews": {
+    "loki/modules/sharing/previews": {
       "kind": "integration",
       "owner": "sharing",
       "tags": [],
-      "target": "integrations/sharing/previews"
+      "target": "modules/sharing/previews"
     },
     "loki/internal/process": {
       "kind": "legacy-platform",
@@ -1275,20 +1394,22 @@
       "tags": [],
       "target": "transport/rpc"
     },
-    "loki/internal/secret": {
-      "kind": "legacy-mixed",
-      "owner": "credentials",
+    "loki/modules/secrets": {
+      "kind": "work",
+      "owner": "secrets",
       "tags": [
         "platform-credential-store"
       ],
-      "target": "work/secrets + control/credentials"
+      "target": "modules/secrets"
     },
-    "loki/internal/integrations/signing": {
+    "loki/modules/git/signing": {
       "kind": "integration",
-      "owner": "signing",
-      "tags": [],
-      "target": "integrations/signing"
+      "owner": "git",
+      "tags": ["signing-private"],
+      "target": "modules/git/signing"
     },
+    "loki/modules/git/signing/public": {"kind":"work-core","owner":"git-public-signing","tags":[],"target":"modules/git/signing/public"},
+    "loki/modules/github/keys": {"kind":"work-core","owner":"github-key-input-validation","tags":[],"target":"modules/github/keys"},
     "loki/internal/state": {
       "kind": "legacy-platform",
       "owner": "persistence",
@@ -1297,13 +1418,13 @@
       ],
       "target": "platform/securestore + safeio"
     },
-    "loki/internal/work/toolchains": {
+    "loki/modules/execution/toolchains": {
       "kind": "work",
-      "owner": "toolchains",
+      "owner": "execution",
       "tags": [
         "project-selector"
       ],
-      "target": "work/toolchains"
+      "target": "modules/execution/toolchains"
     },
     "loki/tools/release/bootstrapbuild": {
       "kind": "tooling",
@@ -1393,23 +1514,23 @@
       ],
       "target": "tools/renderhostassets"
     },
-    "loki/internal/work/jobs": {
+    "loki/modules/execution/jobs": {
       "kind": "work",
-      "owner": "jobs",
+      "owner": "execution",
       "tags": [],
-      "target": "work/jobs"
+      "target": "modules/execution/jobs"
     },
-    "loki/internal/work/jobs/remote": {
+    "loki/modules/execution/jobs/remote": {
       "kind": "work-adapter",
-      "owner": "jobs",
+      "owner": "execution",
       "tags": [],
-      "target": "work/jobs/remote"
+      "target": "modules/execution/jobs/remote"
     },
-    "loki/internal/work/workspace": {
+    "loki/modules/workspace": {
       "kind": "work",
       "owner": "workspace",
       "tags": [],
-      "target": "work/workspace"
+      "target": "modules/workspace"
     },
     "loki/tools/archcheck": {
       "kind": "tooling",
@@ -1427,6 +1548,54 @@
         "diagnostic"
       ],
       "target": "tools/readinessprobe"
+    },
+    "loki/cmd/loki-manager": {
+      "kind": "entrypoint",
+      "owner": "management",
+      "tags": [],
+      "target": "cmd/loki-manager"
+    },
+    "loki/internal/management": {
+      "kind": "host",
+      "owner": "management",
+      "tags": [],
+      "target": "internal/management"
+    },
+    "loki/internal/platform/command": {
+      "kind": "platform",
+      "owner": "process",
+      "tags": [
+        "project-execution-local"
+      ],
+      "target": "internal/platform/command"
+    },
+    "loki/internal/transport/toolproxy": {
+      "kind": "transport",
+      "owner": "tool-composition",
+      "tags": [
+        "mcp-wire"
+      ],
+      "target": "internal/transport/toolproxy"
+    },
+    "loki/modules/browser": {
+      "kind": "integration",
+      "owner": "browser",
+      "tags": [
+        "browser-worker"
+      ],
+      "target": "modules/browser"
+    },
+    "loki/internal/workcommand": {
+      "kind": "contract",
+      "owner": "scoped-command",
+      "tags": [],
+      "target": "shared/bounded-command"
+    },
+    "loki/internal/platform/filelock": {
+      "kind": "platform",
+      "owner": "resource-lifecycle",
+      "tags": [],
+      "target": "internal/platform/filelock"
     }
   },
   "roles": [
@@ -1479,6 +1648,18 @@
       "name": "windows-host",
       "optional": true,
       "root": "loki/cmd/loki-windows"
+    },
+    {
+      "name": "portable-manager",
+      "root": "loki/cmd/loki-manager",
+      "optional": false,
+      "forbidden_tags": [
+        "signing-private",
+        "provider-private-key",
+        "platform-credential-store",
+        "launcher-implementation",
+        "devtools"
+      ]
     }
   ],
   "third_party_rules": [
@@ -1523,6 +1704,26 @@
         "./cmd/loki-windows"
       ],
       "tags": []
+    },
+    {
+      "name": "windows-manager-amd64",
+      "goos": "windows",
+      "goarch": "amd64",
+      "tags": [],
+      "partial": true,
+      "patterns": [
+        "./cmd/loki-manager"
+      ]
+    },
+    {
+      "name": "darwin-manager-amd64",
+      "goos": "darwin",
+      "goarch": "amd64",
+      "tags": [],
+      "partial": true,
+      "patterns": [
+        "./cmd/loki-manager"
+      ]
     }
   ],
   "version": 1

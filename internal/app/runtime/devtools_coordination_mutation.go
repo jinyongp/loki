@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 	"loki/internal/rpc"
 )
 

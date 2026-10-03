@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"loki/internal/integrations/github"
+	"loki/modules/github"
 	"loki/internal/process"
 	mcptransport "loki/internal/transport/mcp"
 )

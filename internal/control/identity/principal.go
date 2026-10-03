@@ -7,6 +7,7 @@ const (
 	Agent
 	HostAdministrator
 	Executor
+	PortInspector
 )
 
 type Principal struct {
@@ -26,7 +27,8 @@ func (f ResolverFunc) Resolve(pid int32, uid, gid uint32) Principal {
 }
 
 type UnixResolver struct {
-	AgentUID uint32
+	AgentUID         uint32
+	PortInspectorUID *uint32
 }
 
 func (r UnixResolver) Resolve(pid int32, uid, gid uint32) Principal {
@@ -36,6 +38,8 @@ func (r UnixResolver) Resolve(pid int32, uid, gid uint32) Principal {
 		kind = HostAdministrator
 	case uid == r.AgentUID:
 		kind = Agent
+	case r.PortInspectorUID != nil && *r.PortInspectorUID != 0 && *r.PortInspectorUID != r.AgentUID && uid == *r.PortInspectorUID:
+		kind = PortInspector
 	}
 	return Principal{Kind: kind, PID: pid, UID: uid, GID: gid}
 }

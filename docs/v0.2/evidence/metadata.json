@@ -1,0 +1,168 @@
+{
+  "recorded_at": "2026-10-03",
+  "repository_head": "6a99bc1a8b6cb44e2c73c1c06e7b16a47d2fb336",
+  "system": {
+    "os_release": "PRETTY_NAME=\"Ubuntu 24.04.3 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.3 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "arch": "x86_64",
+    "glibc": [
+      "glibc",
+      "2.39"
+    ]
+  },
+  "versions": {
+    "node": "v22.22.2",
+    "npm": "10.9.7",
+    "go": "go version go1.27.1 linux/amd64"
+  },
+  "packages": [
+    {
+      "name": "@playwright/mcp",
+      "version": "0.0.83",
+      "engines": {
+        "node": ">=18"
+      },
+      "license": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/@playwright/mcp/-/mcp-0.0.83.tgz",
+      "integrity": "sha512-oNcl+Ae2/IAjhfPeP46BfIkSakfmprY+aOtkv5MjrQ4lPav4/yNtPhL0iq8SlIM90oApWgBDUxaNKvktazUKOg==",
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "9a7110fc2d2f964038e5dc49128f908f29f47a574c961cba16085914e879cbda"
+        }
+      ]
+    },
+    {
+      "name": "chrome-devtools-mcp",
+      "version": "1.10.1",
+      "engines": {
+        "node": "^20.19.0 || ^22.12.0 || >=23"
+      },
+      "license": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/chrome-devtools-mcp/-/chrome-devtools-mcp-1.10.1.tgz",
+      "integrity": "sha512-Klw6HWDqHC/XS1JwZldd2r49aUhbUJN9m9Mvcx4SEueIPXtzuQX+QelxAViobv8YUkDZ7HWDrmViR6LeYK0wAw==",
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+        },
+        {
+          "path": "build/src/third_party/THIRD_PARTY_NOTICES",
+          "sha256": "6ae0ce181dbc9ba4217b6aad679d7503ed3ab56c45e6f3647e9ab753aa97b67b"
+        }
+      ]
+    },
+    {
+      "name": "playwright",
+      "version": "1.64.0-alpha-1790635538000",
+      "engines": {
+        "node": ">=20"
+      },
+      "license": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.64.0-alpha-1790635538000.tgz",
+      "integrity": "sha512-/5XDUMxpOd/9AojJtWDFIRV3EJZNQ0AwvK69wgt3CPzy8wTgiBG9pX45VfxtqtvIRGwfWzMhrvawNKreG69Snw==",
+      "notices": [
+        {
+          "path": "NOTICE",
+          "sha256": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d"
+        },
+        {
+          "path": "ThirdPartyNotices.txt",
+          "sha256": "b17ac0bd6f4b8207e440639cc8e0ba1bf1d9eaf9b12236764ab93b346c7abd8e"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb"
+        },
+        {
+          "path": "lib/transform/esmLoader.js.LICENSE",
+          "sha256": "3cec0c446526a449e4613b0defee0adb585f88f1d7fdba919421226d69be078e"
+        },
+        {
+          "path": "lib/transform/babelBundle.js.LICENSE",
+          "sha256": "2018f402988d0cff56531005b77bce7c2816a34d0c157ecb510043abd41b1ad3"
+        },
+        {
+          "path": "lib/matchers/expect.js.LICENSE",
+          "sha256": "78b2f60563d28cb3f9ea17e4cdc0657681e641e2f72766771d9e2da9ca94c065"
+        }
+      ]
+    },
+    {
+      "name": "playwright-core",
+      "version": "1.64.0-alpha-1790635538000",
+      "engines": {
+        "node": ">=20"
+      },
+      "license": "Apache-2.0",
+      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.64.0-alpha-1790635538000.tgz",
+      "integrity": "sha512-pNwaXirhXMRLaRQs4NQ18EpTdtDoFwyPH9FOaaDC7YXG4hpwE2xmwCic/1srbuExVQC7zT9LJSJpDBAru+Vo9A==",
+      "notices": [
+        {
+          "path": "NOTICE",
+          "sha256": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d"
+        },
+        {
+          "path": "ThirdPartyNotices.txt",
+          "sha256": "a549d329bad8806fe279f0ecae0fc0270dec7e7c2dc8ec10f90e394f7c32b144"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb"
+        },
+        {
+          "path": "lib/serverRegistry.js.LICENSE",
+          "sha256": "3098a6efcbc11752cbdf6075fa65480f5470f78c8d981fab9c0796dc9a41cefe"
+        },
+        {
+          "path": "lib/webp_codec.LICENSE",
+          "sha256": "995c7ee35aceb7666829b7a501ca89c0864e12b493c1174b155774ab1e03d831"
+        },
+        {
+          "path": "lib/utilsBundle.js.LICENSE",
+          "sha256": "bbdb64d9b0d1e22e44c3371557b36e7c592386dbfa966dedd493ee8b871070f2"
+        }
+      ]
+    }
+  ],
+  "chrome": {
+    "version": "154.0.8037.92",
+    "manifest_timestamp": "2026-10-03T01:32:42.960Z",
+    "platforms": [
+      "linux-arm64",
+      "linux64",
+      "mac-arm64",
+      "mac-x64",
+      "win32",
+      "win64"
+    ],
+    "download_url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/linux64/chrome-linux64.zip",
+    "download_bytes": 196202491,
+    "download_sha256": "ff43322f335e436b2f4dcdfeeec5db032299e335a7e8c1c618b326e100ce8732",
+    "digest_provenance": "Measured downloaded bytes; not an independently published upstream signature"
+  },
+  "ffmpeg": {
+    "revision": 1011,
+    "binary_sha256": "460d44f3416005662f528d4b92e7b94ace924e8a0288106d3803b73c56eaadc8",
+    "license_file": "COPYING.LGPLv2.1",
+    "license_sha256": "b634ab5640e258563c536e658cad87080553df6f34f62269a21d554844e58bfe",
+    "source": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-linux.zip"
+  },
+  "native_deps": [
+    {
+      "file": "libasound2t64_1.2.11-1ubuntu0.3_amd64.deb",
+      "sha256": "5d17bfb5683eb99f1be951fe48e1be5bf3c52391913b6b74a8aecf9b4f5e779f",
+      "metadata": "Package: libasound2t64\nVersion: 1.2.11-1ubuntu0.3"
+    },
+    {
+      "file": "libnspr4_2%3a4.35-1.1build1_amd64.deb",
+      "sha256": "e579e72d091f6c7a13f5a756c31065b15aae5b81840d61b069355aa2283c07b4",
+      "metadata": "Package: libnspr4\nVersion: 2:4.35-1.1build1"
+    },
+    {
+      "file": "libnss3_2%3a3.98-1ubuntu0.2_amd64.deb",
+      "sha256": "4254f11d782dfb970e78113519a59d440112ed43c4b56f709da0aef81da8651a",
+      "metadata": "Package: libnss3\nVersion: 2:3.98-1ubuntu0.2"
+    }
+  ]
+}

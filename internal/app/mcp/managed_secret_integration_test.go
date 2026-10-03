@@ -12,7 +12,7 @@ import (
 	appruntime "loki/internal/app/runtime"
 	"loki/internal/contract"
 	"loki/internal/mcpserver"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 	mcptransport "loki/internal/transport/mcp"
 )
 

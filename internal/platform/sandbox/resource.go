@@ -21,15 +21,41 @@ const (
 )
 
 var resourceNamePattern = regexp.MustCompile(`^loki-job-[0-9a-f]{32}$`)
+var deploymentOwnerPattern = regexp.MustCompile(`^loki-v02-[0-9a-f]{16}$`)
+var deploymentIDPattern = regexp.MustCompile(`^deployment-[0-9a-f]{32}$`)
 
 var ErrInstanceMismatch = errors.New("sandbox resource instance does not match")
 
 // Resource is Loki's stable identity for one sandbox resource domain.
 // It intentionally does not expose Docker container or network IDs.
 type Resource struct {
-	jobID         string
-	policySHA256  string
-	sandboxSHA256 string
+	jobID                         string
+	policySHA256                  string
+	sandboxSHA256                 string
+	deploymentOwner, deploymentID string
+}
+
+func validDeployment(owner, id string) bool {
+	return owner == "" && id == "" || deploymentOwnerPattern.MatchString(owner) && deploymentIDPattern.MatchString(id)
+}
+
+func NewDeployedResource(jobID, policySHA256, sandboxSHA256, owner, id string) (Resource, error) {
+	resource, err := NewResource(jobID, policySHA256, sandboxSHA256)
+	if err != nil {
+		return resource, err
+	}
+	if !validDeployment(owner, id) {
+		return Resource{}, errors.New("invalid sandbox deployment owner")
+	}
+	resource.deploymentOwner, resource.deploymentID = owner, id
+	return resource, nil
+}
+
+func (r Resource) Deployment() (owner, id string) {
+	if !r.Valid() {
+		return "", ""
+	}
+	return r.deploymentOwner, r.deploymentID
 }
 
 func NewResource(jobID, policySHA256, sandboxSHA256 string) (Resource, error) {
@@ -42,7 +68,7 @@ func NewResource(jobID, policySHA256, sandboxSHA256 string) (Resource, error) {
 
 func (r Resource) Valid() bool {
 	return jobIDPattern.MatchString(r.jobID) && digestPattern.MatchString(r.policySHA256) &&
-		digestPattern.MatchString(r.sandboxSHA256)
+		digestPattern.MatchString(r.sandboxSHA256) && validDeployment(r.deploymentOwner, r.deploymentID)
 }
 
 func (r Resource) JobID() string {
@@ -115,13 +141,18 @@ func (r Resource) labelsFor(component string) map[string]string {
 	if !r.Valid() || !validResourceComponent(component) {
 		return nil
 	}
-	return map[string]string{
+	labels := map[string]string{
 		resourceOwnerLabel:     resourceOwnerValue,
 		resourceJobLabel:       r.jobID,
 		resourcePolicyLabel:    r.policySHA256,
 		resourceSandboxLabel:   r.sandboxSHA256,
 		resourceComponentLabel: component,
 	}
+	if r.deploymentOwner != "" {
+		labels["io.loki.full.owner"] = r.deploymentOwner
+		labels["io.loki.full.deployment"] = r.deploymentID
+	}
+	return labels
 }
 
 func (r Resource) labels() map[string]string {
@@ -130,6 +161,9 @@ func (r Resource) labels() map[string]string {
 
 func (r Resource) ownsComponent(labels map[string]string, component string) bool {
 	if !r.Valid() {
+		return false
+	}
+	if labels["io.loki.full.owner"] != r.deploymentOwner || labels["io.loki.full.deployment"] != r.deploymentID {
 		return false
 	}
 	expected := r.labelsFor(component)

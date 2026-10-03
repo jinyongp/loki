@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"loki/internal/fault"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type fakeJobsController struct {

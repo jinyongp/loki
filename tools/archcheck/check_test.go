@@ -29,17 +29,17 @@ func TestDirectDependencyPolicy(t *testing.T) {
 func TestNestedInternalVisibility(t *testing.T) {
 	policy := fixturePolicy(map[string]PackageRule{
 		"loki/internal/work/other":                 {Kind: "feature", Owner: "other", Target: "work/other"},
-		"loki/internal/work/jobs/internal/journal": {Kind: "private", Owner: "jobs", Target: "work/jobs/internal/journal"},
+		"loki/modules/execution/jobs/internal/journal": {Kind: "private", Owner: "jobs", Target: "work/jobs/internal/journal"},
 	})
-	policy.AllowedEdges = []Edge{{From: "loki/internal/work/other", To: "loki/internal/work/jobs/internal/journal"}}
+	policy.AllowedEdges = []Edge{{From: "loki/internal/work/other", To: "loki/modules/execution/jobs/internal/journal"}}
 	graph := Graph{Packages: map[string]PackageInfo{
-		"loki/internal/work/other":                 {ImportPath: "loki/internal/work/other", Imports: []string{"loki/internal/work/jobs/internal/journal"}},
-		"loki/internal/work/jobs/internal/journal": {ImportPath: "loki/internal/work/jobs/internal/journal"},
+		"loki/internal/work/other":                 {ImportPath: "loki/internal/work/other", Imports: []string{"loki/modules/execution/jobs/internal/journal"}},
+		"loki/modules/execution/jobs/internal/journal": {ImportPath: "loki/modules/execution/jobs/internal/journal"},
 	}}
 	if !hasViolation(checkVariant(policy, graph, Variant{}), "private-package") {
 		t.Fatal("cross-feature nested internal import was accepted")
 	}
-	if !internalImportAllowed("loki/internal/work/jobs/local", "loki/internal/work/jobs/internal/journal") {
+	if !internalImportAllowed("loki/modules/execution/jobs/local", "loki/modules/execution/jobs/internal/journal") {
 		t.Fatal("owning subtree should be allowed to use nested internal package")
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 )
 
 type hostGitHubUserRuntime interface {

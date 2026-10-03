@@ -6,7 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
 	"loki/internal/mcpserver"
-	workworkspace "loki/internal/work/workspace"
+	workworkspace "loki/modules/workspace"
 )
 
 type workspaceRead struct {

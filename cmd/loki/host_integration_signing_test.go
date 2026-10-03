@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"loki/internal/integrations/signing"
+	"loki/modules/git/signing"
 )
 
 func TestManagedSigningMaterialGeneratesAndSignsGitCommit(t *testing.T) {

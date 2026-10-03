@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 )
 
 type recordingCoordinationMutator struct {

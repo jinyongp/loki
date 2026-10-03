@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 )
 
 func TestGitHubBrowserDetectsAccountTypeAndResumesWithoutLookup(t *testing.T) {

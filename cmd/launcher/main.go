@@ -17,8 +17,8 @@ import (
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/sandbox"
-	"loki/internal/work/jobs"
-	"loki/internal/work/toolchains"
+	"loki/modules/execution/jobs"
+	"loki/modules/execution/toolchains"
 )
 
 const (
@@ -29,39 +29,40 @@ const (
 )
 
 type launcherLayout struct {
-	Socket                   string
-	SocketGID                int
-	ExecutorUID              uint32
-	StateDirectory           string
-	DockerSocket             string
-	DockerPeerUID            uint32
-	PolicySHA256             string
-	Image                    string
-	GatewayImage             string
-	GatewayBinary            string
-	GatewayExecutionContract string
-	GatewayEgressPolicy      string
-	GatewayProxyPort         int
-	GatewayMemoryBytes       int64
-	GatewayPIDs              int64
-	GatewayTmpfsBytes        int64
-	Workspace                string
-	ToolchainStore           string
-	SigningSocketVolume      string
-	SigningPublicKey         string
-	SigningGitConfig         string
-	SigningAllowedSigners    string
-	Environment              []string
-	WorkloadUID              uint32
-	WorkloadGID              uint32
-	MemoryBytes              int64
-	PIDs                     int64
-	TmpfsBytes               int64
-	RunTimeoutSeconds        int
-	ResultRetentionSeconds   int
-	MaxJobs                  int
-	MaxConcurrentJobs        int
-	MaxOutputBytes           int
+	DeploymentOwner, DeploymentID string
+	Socket                        string
+	SocketGID                     int
+	ExecutorUID                   uint32
+	StateDirectory                string
+	DockerSocket                  string
+	DockerPeerUID                 uint32
+	PolicySHA256                  string
+	Image                         string
+	GatewayImage                  string
+	GatewayBinary                 string
+	GatewayExecutionContract      string
+	GatewayEgressPolicy           string
+	GatewayProxyPort              int
+	GatewayMemoryBytes            int64
+	GatewayPIDs                   int64
+	GatewayTmpfsBytes             int64
+	Workspace                     string
+	ToolchainStore                string
+	SigningSocketVolume           string
+	SigningPublicKey              string
+	SigningGitConfig              string
+	SigningAllowedSigners         string
+	Environment                   []string
+	WorkloadUID                   uint32
+	WorkloadGID                   uint32
+	MemoryBytes                   int64
+	PIDs                          int64
+	TmpfsBytes                    int64
+	RunTimeoutSeconds             int
+	ResultRetentionSeconds        int
+	MaxJobs                       int
+	MaxConcurrentJobs             int
+	MaxOutputBytes                int
 }
 
 func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
@@ -100,6 +101,7 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	}
 	inputDirectory := filepath.Join(layout.StateDirectory, "run-inputs")
 	policy, err := sandbox.NewPolicy(sandbox.PolicyOptions{
+		DeploymentOwner: layout.DeploymentOwner, DeploymentID: layout.DeploymentID,
 		GenerationSHA256: layout.PolicySHA256,
 		Image:            layout.Image,
 		InputDirectory:   inputDirectory,

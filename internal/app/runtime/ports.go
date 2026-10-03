@@ -22,7 +22,7 @@ func ProtectedPortPolicy(mcpPort int, contract execution.Contract) (portguard.Po
 
 func PortOperations(guard *portguard.Guard) map[string]rpc.Operation {
 	return map[string]rpc.Operation{
-		"inspect": {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Inspect(ctx, r.Port) })},
+		"inspect": {Grant: controlpolicy.PortInspection, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Inspect(ctx, r.Port) })},
 		"stop":    {Grant: controlpolicy.Agent, Handle: runtimeTyped(func(ctx context.Context, r portRequest) (map[string]any, error) { return guard.Stop(ctx, r.Port) })},
 	}
 }

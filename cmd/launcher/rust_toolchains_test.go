@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"loki/internal/work/jobs"
-	"loki/internal/work/toolchains"
+	"loki/modules/execution/jobs"
+	"loki/modules/execution/toolchains"
 )
 
 func TestLauncherToolchainResolverAcceptsRustGeneration(t *testing.T) {

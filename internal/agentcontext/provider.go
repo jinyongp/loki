@@ -67,7 +67,7 @@ func (p *Provider) targetDirectory(target string) (string, error) {
 }
 
 func (p *Provider) project(ctx context.Context, cwd, target string) (*projectScope, error) {
-	if p == nil || p.Paths == nil || p.Git == nil {
+	if p == nil || p.Paths == nil {
 		return nil, errors.New("agent context provider is unavailable")
 	}
 	if cwd == "" {
@@ -99,9 +99,12 @@ func (p *Provider) project(ctx context.Context, cwd, target string) (*projectSco
 	if err != nil {
 		return nil, err
 	}
-	root, err := p.Git.RepositoryRoot(ctx, ownerDirectory)
-	if err != nil {
-		return nil, err
+	root := p.Paths.Root()
+	if p.Git != nil {
+		root, err = p.Git.RepositoryRoot(ctx, ownerDirectory)
+		if err != nil {
+			return nil, err
+		}
 	}
 	absoluteTarget := filepath.Join(p.Paths.Root(), filepath.FromSlash(workspaceTarget))
 	if outside(root, absoluteTarget) {

@@ -70,7 +70,7 @@ LOKI_DEVTOOLS_BINARY="$devtools" go test ./internal/app/mcp   -run '^(TestSecret
 
 section "direct broker and generic managed-process boundary"
 broker_log=$root/devtools-broker.log
-LOKI_DEVTOOLS_BINARY="$devtools" go test ./internal/devtools   -run '^(TestBrokerRejectsManagedCredentialInjection|TestBrokerRejectsPrivateOutputAndUnapprovedInjection|TestBrokerRejectsProcessWithoutEncryptedSecrets|TestRealProcessInheritsBrokerSecrets)$'   -v -count=1 | tee "$broker_log"
+LOKI_DEVTOOLS_BINARY="$devtools" go test ./modules/coordination   -run '^(TestBrokerRejectsManagedCredentialInjection|TestBrokerRejectsPrivateOutputAndUnapprovedInjection|TestBrokerRejectsProcessWithoutEncryptedSecrets|TestRealProcessInheritsBrokerSecrets)$'   -v -count=1 | tee "$broker_log"
 grep -F -- '--- PASS: TestRealProcessInheritsBrokerSecrets' "$broker_log" >/dev/null ||
   fail "real release-image devtools broker fixture did not pass"
 if grep -F -- '--- SKIP: TestRealProcessInheritsBrokerSecrets' "$broker_log" >/dev/null; then
@@ -78,18 +78,18 @@ if grep -F -- '--- SKIP: TestRealProcessInheritsBrokerSecrets' "$broker_log" >/d
 fi
 
 section "dependency-hook and Git inspection boundary"
-go test ./internal/work/workspace/git   -run '^(TestGitInspectionDisablesRepositoryExecutables|TestGitRejectsExecutableFiltersBeforeWorktreeOperations|TestGitIndexMutationDisablesRepositoryHooksAndFsmonitor)$'   -v -count=1
+go test ./modules/git   -run '^(TestGitInspectionDisablesRepositoryExecutables|TestGitRejectsExecutableFiltersBeforeWorktreeOperations|TestGitIndexMutationDisablesRepositoryHooksAndFsmonitor)$'   -v -count=1
 
 section "launcher, executor and forged-authority boundary"
 go test ./internal/app/executor -run '^TestExecutorToLauncherTrustedAuthorityBoundary$' -v -count=1
 go test ./internal/app/launcher   -run '^(TestStartRejectsNetworkAuthorityFieldsBeforeRunner|TestAsyncStartRejectsForgedReplayIdentityBeforeRunner)$'   -v -count=1
-go test ./internal/work/jobs/remote -run '^TestLauncherRejectsUntrustedPeer$' -v -count=1
+go test ./modules/execution/jobs/remote -run '^TestLauncherRejectsUntrustedPeer$' -v -count=1
 
 section "network destination and proxy credential boundary"
 go test ./internal/egress   -run '^(TestAuthenticatedProxyRequiresAndStripsCredential|TestAllowedHostResolvingToPrivateAddressIsBlocked|TestRedirectTargetRequiresAnotherAllowlistedTunnel)$'   -v -count=1
 
 section "toolchain archive and trusted-release boundary"
-go test ./internal/work/toolchains   -run '^(TestInstallZipArtifactPreservesExecutables|TestInstallZipRejectsPathEscape|TestInstallZipRejectsChainedSymlinkEscape|TestInstallTarRejectsUnsafeSymlinkTarget|TestNodeReleaseRejectsUntrustedIdentityAndTamperedArtifact)$'   -v -count=1
+go test ./modules/execution/toolchains   -run '^(TestInstallZipArtifactPreservesExecutables|TestInstallZipRejectsPathEscape|TestInstallZipRejectsChainedSymlinkEscape|TestInstallTarRejectsUnsafeSymlinkTarget|TestNodeReleaseRejectsUntrustedIdentityAndTamperedArtifact)$'   -v -count=1
 
 section "host-plan and protocol/config authority boundary"
 go test ./internal/host/lifecycle   -run '^(TestManagerApplyRejectsStalePreparedPlanBeforeJobInspection|TestManagerApplyExplicitInterruptionPassesExactPlanAndJobs)$'   -v -count=1

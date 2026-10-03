@@ -20,7 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/config"
 	"loki/internal/portguard"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type bearerTransport struct{ token string }

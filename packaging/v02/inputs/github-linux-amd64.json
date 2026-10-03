@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "module": "github",
+  "target": {
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "full"
+  },
+  "programs": {},
+  "assets": {},
+  "images": {}
+}

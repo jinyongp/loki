@@ -9,7 +9,7 @@ import (
 
 	"loki/internal/app/executor"
 	"loki/internal/daemon"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 func validExecutorLayout(t *testing.T) executorLayout {

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	githubapp "loki/internal/integrations/github"
+	githubapp "loki/modules/github"
 	mcptransport "loki/internal/transport/mcp"
 )
 

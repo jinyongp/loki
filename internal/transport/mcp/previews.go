@@ -12,12 +12,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/artifacts"
-	"loki/internal/integrations/sharing/previews"
+	"loki/modules/sharing/artifacts"
+	"loki/modules/sharing/previews"
 	"loki/internal/mcpserver"
 	"loki/internal/portguard"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type PreviewController struct {

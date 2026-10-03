@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"loki/internal/daemon"
-	jobsremote "loki/internal/work/jobs/remote"
+	jobsremote "loki/modules/execution/jobs/remote"
 )
 
 func TestCheckpointJobRunnerUsesConfiguredExecutor(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 const maxRunTimeout = 24 * time.Hour
@@ -44,6 +44,7 @@ func Operations(runner Runner, timeout time.Duration) (map[string]rpc.Operation,
 	}
 	controlTimeout := min(timeout, 30*time.Second)
 	return map[string]rpc.Operation{
+		"health": {Grant: controlpolicy.Agent, Timeout: controlTimeout, Handle: func(context.Context, json.RawMessage) (any, error) { return map[string]any{"initialized": true}, nil }},
 		"run": {
 			Grant:   controlpolicy.Agent,
 			Timeout: timeout,

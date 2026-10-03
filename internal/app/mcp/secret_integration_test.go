@@ -18,7 +18,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 	"loki/internal/state"
 	mcptransport "loki/internal/transport/mcp"
 )

@@ -12,9 +12,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/artifacts"
+	"loki/modules/sharing/artifacts"
 	"loki/internal/mcpserver"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 func BrowserToolsAvailable(client BrowserCaller, socket string) bool {

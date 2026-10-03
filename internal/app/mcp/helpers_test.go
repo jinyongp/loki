@@ -14,7 +14,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/policy"
 	"loki/internal/process"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 type serviceTestJobRunner struct {

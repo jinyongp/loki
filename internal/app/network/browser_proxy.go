@@ -11,8 +11,15 @@ import (
 )
 
 func RunBrowserProxy(ctx context.Context, listener *net.TCPListener, policy netguard.Policy, ready func() error) error {
+	return RunBrowserProxyListener(ctx, listener, policy, false, ready)
+}
+
+// Container listeners are explicitly selected by the administrator-owned
+// service layout. The full backend attaches only the private browser network
+// to this listener and publishes no proxy port on the host.
+func RunBrowserProxyListener(ctx context.Context, listener *net.TCPListener, policy netguard.Policy, container bool, ready func() error) error {
 	proxy := netguard.New(policy)
-	return runHTTPProxy(ctx, listener, proxy, proxy.Close, ready, false)
+	return runHTTPProxy(ctx, listener, proxy, proxy.Close, ready, container)
 }
 func runHTTPProxy(ctx context.Context, listener *net.TCPListener, handler http.Handler, closeProxy func(), ready func() error, allowUnspecified bool) error {
 	defer closeProxy()

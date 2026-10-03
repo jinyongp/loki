@@ -14,9 +14,9 @@ import (
 
 	appruntime "loki/internal/app/runtime"
 	"loki/internal/control/identity"
-	"loki/internal/integrations/github"
+	"loki/modules/github"
 	"loki/internal/rpc"
-	"loki/internal/secret"
+	"loki/modules/secrets"
 )
 
 type adminCall func(context.Context, any) (json.RawMessage, error)

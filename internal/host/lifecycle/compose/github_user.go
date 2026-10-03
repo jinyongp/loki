@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"loki/internal/host/githubsetup"
+	"loki/internal/integrations/github/setup"
 )
 
 // GitHubUserAuthorization forwards a closed host-administration command into

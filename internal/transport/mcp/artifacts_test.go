@@ -14,9 +14,9 @@ import (
 	"loki/internal/config"
 	"loki/internal/contract"
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/artifacts"
+	"loki/modules/sharing/artifacts"
 	"loki/internal/mcpserver"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 func TestArtifactMCP(t *testing.T) {

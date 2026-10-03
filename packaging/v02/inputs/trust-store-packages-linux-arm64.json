@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "owner": "trust-store",
+  "target": {
+    "os": "linux",
+    "arch": "arm64",
+    "mode": "full"
+  },
+  "distribution": "ubuntu-24.04",
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/trust-store-ubuntu-24.04-arm64.tar.gz",
+  "packages": [
+    "ca-certificates",
+    "base-files"
+  ]
+}

@@ -12,7 +12,7 @@ import (
 	"loki/internal/config"
 	"loki/internal/policy"
 	"loki/internal/process"
-	"loki/internal/work/workspace/git"
+	"loki/modules/git"
 )
 
 type providerTestGitRunner struct {
@@ -96,6 +96,27 @@ func TestProviderResolvesRepositoryFromCWD(t *testing.T) {
 	}
 	if skill.Item.Scope != "project" || skill.Item.Content == "" || len(skill.Item.Resources) != 1 {
 		t.Fatalf("skill = %#v", skill)
+	}
+}
+
+func TestProviderResolvesScopedGuidanceWithoutGit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeGuidance(t, root, "workspace rules\n")
+	paths, err := policy.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer paths.Close()
+	provider := &Provider{Paths: paths}
+	result, err := provider.Context(t.Context(), ".", "src/new.go")
+	if err != nil || result.Guidance.Target != "src/new.go" || len(result.Guidance.Sources) != 1 {
+		t.Fatalf("scoped guidance required Git: %+v %v", result, err)
+	}
+	if _, err := provider.Context(t.Context(), ".", "../outside"); err == nil {
+		t.Fatal("unscoped guidance accepted without Git")
 	}
 }
 

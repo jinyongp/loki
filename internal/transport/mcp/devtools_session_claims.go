@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 	"loki/internal/mcpserver"
 	"loki/internal/rpc"
 )

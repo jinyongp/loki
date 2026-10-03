@@ -14,8 +14,8 @@ import (
 	hostdiagnostics "loki/internal/host/diagnostics"
 	"loki/internal/host/lifecycle"
 	lifecyclecompose "loki/internal/host/lifecycle/compose"
-	"loki/internal/work/jobs"
-	toolchain "loki/internal/work/toolchains"
+	"loki/modules/execution/jobs"
+	toolchain "loki/modules/execution/toolchains"
 )
 
 type fakeHostDoctorRuntime struct {

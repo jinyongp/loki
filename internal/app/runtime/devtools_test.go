@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/devtools"
+	"loki/modules/coordination"
 )
 
 type recordingDevtoolsCaller struct {

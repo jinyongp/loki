@@ -1,0 +1,203 @@
+[
+  {
+    "package": "loki/internal/app/mcp",
+    "internal_imports": [
+      "loki/internal/agentcontext",
+      "loki/internal/audit",
+      "loki/internal/auth",
+      "loki/internal/config",
+      "loki/internal/control/policy",
+      "loki/internal/daemon",
+      "loki/internal/integrations/sharing/artifacts",
+      "loki/internal/integrations/sharing/previews",
+      "loki/internal/mcpserver",
+      "loki/internal/policy",
+      "loki/internal/portguard",
+      "loki/internal/process",
+      "loki/internal/rpc",
+      "loki/internal/transport/mcp",
+      "loki/internal/transport/mcp/workspace",
+      "loki/internal/work/jobs",
+      "loki/internal/work/workspace"
+    ],
+    "source_files": [
+      "app.go",
+      "discovery_fallback.go",
+      "environment.go",
+      "run.go"
+    ]
+  },
+  {
+    "package": "loki/internal/work/workspace",
+    "internal_imports": [
+      "loki/internal/config",
+      "loki/internal/fault",
+      "loki/internal/platform/safeio",
+      "loki/internal/policy",
+      "loki/internal/process",
+      "loki/internal/work/jobs",
+      "loki/internal/work/workspace/git"
+    ],
+    "source_files": [
+      "batch.go",
+      "bundle.go",
+      "files.go",
+      "images.go",
+      "report.go",
+      "repository.go",
+      "revisions.go",
+      "search_patch.go"
+    ]
+  },
+  {
+    "package": "loki/internal/work/workspace/git",
+    "internal_imports": [
+      "loki/internal/config",
+      "loki/internal/daemon",
+      "loki/internal/fault",
+      "loki/internal/platform/safeio",
+      "loki/internal/policy",
+      "loki/internal/work/jobs"
+    ],
+    "source_files": [
+      "checkpoint.go",
+      "context_evidence.go",
+      "git.go",
+      "restore.go",
+      "runner.go"
+    ]
+  },
+  {
+    "package": "loki/internal/agentcontext",
+    "internal_imports": [
+      "loki/internal/platform/safeio",
+      "loki/internal/policy"
+    ],
+    "source_files": [
+      "basis.go",
+      "guidance.go",
+      "journal.go",
+      "provider.go",
+      "skills.go"
+    ]
+  },
+  {
+    "package": "loki/internal/integrations/signing",
+    "internal_imports": [
+      "loki/internal/rpc"
+    ],
+    "source_files": [
+      "agent.go",
+      "proxy.go"
+    ]
+  },
+  {
+    "package": "loki/internal/integrations/github",
+    "internal_imports": [
+      "loki/internal/fault",
+      "loki/internal/process"
+    ],
+    "source_files": [
+      "client.go",
+      "command.go",
+      "issuer.go",
+      "key.go",
+      "project_command.go",
+      "provider.go",
+      "repository_projects.go",
+      "user.go"
+    ]
+  },
+  {
+    "package": "loki/internal/secret",
+    "internal_imports": [
+      "loki/internal/fault",
+      "loki/internal/state"
+    ],
+    "source_files": [
+      "environment.go",
+      "imports.go",
+      "managed.go",
+      "migration.go",
+      "request_mutations.go",
+      "requests.go",
+      "vault.go",
+      "vault_document.go"
+    ]
+  },
+  {
+    "package": "loki/internal/transport/mcp",
+    "internal_imports": [
+      "loki/internal/agentcontext",
+      "loki/internal/audit",
+      "loki/internal/buildinfo",
+      "loki/internal/config",
+      "loki/internal/contract",
+      "loki/internal/control/policy",
+      "loki/internal/devtools",
+      "loki/internal/fault",
+      "loki/internal/integrations/github",
+      "loki/internal/integrations/sharing/artifacts",
+      "loki/internal/integrations/sharing/previews",
+      "loki/internal/mcpserver",
+      "loki/internal/policy",
+      "loki/internal/portguard",
+      "loki/internal/process",
+      "loki/internal/rpc",
+      "loki/internal/work/jobs",
+      "loki/internal/work/workspace"
+    ],
+    "source_files": [
+      "activity.go",
+      "agent_guidance.go",
+      "artifacts.go",
+      "audit.go",
+      "browser.go",
+      "browser_upload.go",
+      "developer.go",
+      "devtools_session_claims.go",
+      "github_command.go",
+      "github_issue_fields.go",
+      "github_provider.go",
+      "instructions.go",
+      "integration_state.go",
+      "job.go",
+      "previews.go",
+      "project_context.go",
+      "project_coordination.go",
+      "result.go",
+      "runtime.go",
+      "secret.go",
+      "system.go"
+    ]
+  },
+  {
+    "package": "loki/internal/platform/sandbox",
+    "internal_imports": [],
+    "source_files": [
+      "domain_lifecycle.go",
+      "engine.go",
+      "job_lifecycle.go",
+      "lifecycle.go",
+      "peer_linux.go",
+      "plan.go",
+      "resource.go"
+    ]
+  },
+  {
+    "package": "loki/internal/integrations/sharing/artifacts",
+    "internal_imports": [],
+    "source_files": [
+      "replay.go",
+      "store.go"
+    ]
+  },
+  {
+    "package": "loki/internal/integrations/sharing/previews",
+    "internal_imports": [],
+    "source_files": [
+      "proxy.go",
+      "store.go"
+    ]
+  }
+]

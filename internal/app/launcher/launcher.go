@@ -18,7 +18,7 @@ import (
 	"loki/internal/fault"
 	"loki/internal/platform/sandbox"
 	"loki/internal/rpc"
-	"loki/internal/work/jobs"
+	"loki/modules/execution/jobs"
 )
 
 const (
@@ -162,6 +162,20 @@ func normalizeMaxConcurrentJobs(value int) (int, error) {
 
 func (l *lifecycle) operations() map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"endpoint_resolve": {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			request, err := rpc.Decode[struct {
+				Port int `json:"port"`
+			}](raw)
+			if err != nil {
+				return nil, err
+			}
+			return l.resolveEndpoint(ctx, request.Port)
+		}},
+		"health": {Grant: controlpolicy.WorkloadLaunch, Handle: func(context.Context, json.RawMessage) (any, error) {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			return map[string]any{"initialized": !l.closed, "active_jobs": len(l.active) + len(l.runs)}, nil
+		}},
 		"run": {
 			Grant:   controlpolicy.WorkloadLaunch,
 			Timeout: l.timeout,
@@ -829,10 +843,20 @@ func terminalCleanup(value sandbox.CleanupStatus, err error) jobs.CleanupStatus 
 }
 
 func backendReference(plan sandbox.Plan) string {
+	if owner, id := plan.Resource().Deployment(); owner != "" {
+		return "oci-v02:" + owner + ":" + id + ":" + plan.PolicySHA256() + ":" + plan.SandboxSHA256()
+	}
 	return "oci:" + plan.PolicySHA256() + ":" + plan.SandboxSHA256()
 }
 
 func resourceFromRecord(record jobs.Record) (sandbox.Resource, error) {
+	if data, ok := strings.CutPrefix(record.BackendRef, "oci-v02:"); ok {
+		parts := strings.Split(data, ":")
+		if len(parts) != 4 {
+			return sandbox.Resource{}, errors.New("invalid deployed job reference")
+		}
+		return sandbox.NewDeployedResource(record.ID, parts[2], parts[3], parts[0], parts[1])
+	}
 	digests, ok := strings.CutPrefix(record.BackendRef, "oci:")
 	if !ok {
 		return sandbox.Resource{}, errors.New("job record backend is unsupported")

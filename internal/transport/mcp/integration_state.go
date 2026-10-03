@@ -120,7 +120,7 @@ func GitHubUnavailableHandlers() map[string]mcpserver.Handler {
 			fault.CodeUnavailable,
 			"GitHub integration is not configured for this Loki server",
 			false,
-			"configure it with `loki integration setup github` and retry",
+			"configure it with `loki integrations setup github` and retry",
 		)
 	}
 	return map[string]mcpserver.Handler{

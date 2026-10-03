@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/artifacts"
+	"loki/modules/sharing/artifacts"
 )
 
 func TestBrowserShareCapacityErrorsAreRetryableQuota(t *testing.T) {

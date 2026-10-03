@@ -12,10 +12,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/fault"
-	"loki/internal/integrations/sharing/artifacts"
+	"loki/modules/sharing/artifacts"
 	"loki/internal/mcpserver"
 	"loki/internal/policy"
-	"loki/internal/work/workspace"
+	"loki/modules/workspace"
 )
 
 type artifactRequest struct {

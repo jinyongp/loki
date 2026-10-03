@@ -1,0 +1,28 @@
+{
+  "scope": "Current-source static tests inside installed immutable 0.1 runtime image; synthetic state; no network/host Docker socket; not 0.2 deployment acceptance",
+  "image": "loki@sha256:f4379c91c587a357192795c6be89f11f5094f7a383757a23c8e8748a862905db",
+  "github_cli": "2.100.0",
+  "root_capabilities": [
+    "CHOWN",
+    "SETUID",
+    "SETGID",
+    "DAC_OVERRIDE"
+  ],
+  "passed": [
+    "TestLinuxRunnerCanWriteStateButCannotReadVaultKey",
+    "TestAgentSocketRecoveryPreservesOccupiedPaths/wrong-owner",
+    "TestRealDelegatedGitHubCLIConfiguration"
+  ],
+  "exit_status": {
+    "execution": 0,
+    "signing": 0,
+    "github": 0
+  },
+  "binary_sha256": {
+    "execution.test": "2b69d048b996ceda664f4e2c5824673b8e550a0cafc7c851280fbe5cfd03a6e8",
+    "signing.test": "9cb872ad7172d771ece737c68401f48011741a4a35ad93ebcd8774779e222d55",
+    "github.test": "6a94bf1b8132da875f6cc69790af7925aa271ad93ef7ea676c6b2cf1ec115288"
+  },
+  "command": "docker run --rm --name loki-v02-preflight-privileged --network none --read-only --user 0:0 --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE --tmpfs /tmp:rw,nosuid,nodev,mode=1777 --tmpfs /var/tmp/loki/github:rw,nosuid,nodev,mode=2750,gid=10001 -v /tmp/loki-v02-preflight/privileged-tests:/fixtures:ro --entrypoint /bin/sh loki@sha256:f4379c91c587a357192795c6be89f11f5094f7a383757a23c8e8748a862905db",
+  "notes": "Initial execution fixture without DAC_OVERRIDE could not read back delegated-user 0700 output; no product source change was made. Host sudo unavailable without password."
+}
