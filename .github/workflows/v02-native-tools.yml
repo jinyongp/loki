@@ -48,6 +48,12 @@ jobs:
           run-id: ${{ inputs.inputs_run }}
           github-token: ${{ github.token }}
           path: reviewed-native-inputs
+      - name: Restore authenticated Ubuntu keyring permissions on the disposable runner
+        if: inputs.mode == 'full'
+        shell: bash
+        run: |
+          printf '%s  %s\n' '80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31' '/usr/share/keyrings/ubuntu-archive-keyring.gpg' | sha256sum --check --strict
+          sudo chmod 0644 /usr/share/keyrings/ubuntu-archive-keyring.gpg
       - name: Prepare the exact native target
         env:
           CANDIDATE_MODE: ${{ inputs.mode }}

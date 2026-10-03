@@ -69,6 +69,12 @@ Linux architectures are under `packaging/v02/inputs`; actual resolved versions
 are frozen in the emitted closure recipe. A keyring with untrusted ownership
 blocks this acquisition rather than weakening signature verification.
 
+The disposable GitHub Ubuntu runner currently exposes the archive keyring as
+root-owned mode 0777. Full preparation verifies its bytes against the retained
+administrator-owned Ubuntu keyring SHA-256 before restoring mode 0644. The
+producer still requires administrator ownership and denies writable keyrings;
+the CI repair does not apply to installed user environments.
+
 Exact GitHub CLI and devtools commit/source receipts are retained in the source
 input recipes. Workspace recipes use the official ripgrep release asset
 SHA-256/length for Linux amd64 and arm64. These receipts prepare inputs; actual
