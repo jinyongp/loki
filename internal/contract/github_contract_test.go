@@ -19,7 +19,7 @@ func TestGitHubEscapeHatchPublishesExplicitConservativeContract(t *testing.T) {
 	if tool == nil {
 		t.Fatal("github definition missing")
 	}
-	if !strings.Contains(tool.Description, "escape-hatch") || !strings.Contains(tool.Description, "not replay-safe") {
+	if !strings.Contains(tool.Description, "constrained GitHub CLI command") || !strings.Contains(tool.Description, "not replay-safe") {
 		t.Fatalf("github description = %q", tool.Description)
 	}
 	hint := func(value *bool) bool { return value != nil && *value }

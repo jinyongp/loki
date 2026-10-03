@@ -144,7 +144,9 @@ func TestCatalogRejectsUnsafeApprovedContracts(t *testing.T) {
 			}
 		})
 	}
-	raw, err := os.ReadFile("testdata/catalog-protocol-v6.json")
+	envelope, data := catalogData(t)
+	data["protocol_version"] = 1
+	raw, err := json.Marshal(envelope)
 	if err != nil {
 		t.Fatal(err)
 	}

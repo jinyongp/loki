@@ -219,7 +219,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 		githubStatus["configured"] != true || githubStatus["installation_count"] != float64(2) ||
 		githubStatus["target_count"] != float64(2) || githubStatus["credential_source"] != "provider-store" ||
 		githubStatus["credential_available"] != true ||
-		devtoolsStatus["version"] != "0.17.0" || devtoolsStatus["commit"] != "runtime-test" ||
+		devtoolsStatus["version"] != "0.23.0" || devtoolsStatus["commit"] != "runtime-test" ||
 		devtoolsStatus["protocol_version"] != float64(devtools.ProtocolVersion) || devtoolsStatus["approved_commands"] != float64(len(devtools.ApprovedNames())) ||
 		len(devtoolsStatus["catalog_sha256"].(string)) != 64 {
 		t.Fatal(status)

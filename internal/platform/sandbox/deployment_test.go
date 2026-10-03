@@ -39,7 +39,7 @@ func TestDeploymentIdentityChangesSandboxFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstPlan, err := first.Plan(WorkloadSpec{ID: strings.Repeat("c", 32), CWD: ".", Argv: []string{"/usr/bin/true"}})
+	firstPlan, err := first.Plan(validWorkloadSpec())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestDeploymentIdentityChangesSandboxFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPlan, err := second.Plan(WorkloadSpec{ID: strings.Repeat("c", 32), CWD: ".", Argv: []string{"/usr/bin/true"}})
+	secondPlan, err := second.Plan(validWorkloadSpec())
 	if err != nil {
 		t.Fatal(err)
 	}

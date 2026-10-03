@@ -176,14 +176,14 @@ func TestPlanInjectsOnlyTrustedSigningAuthority(t *testing.T) {
 			Target: "/home/runner/.ssh/id_ed25519.pub", ReadOnly: true,
 			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
 		},
-		"/etc/loki-go/signing.gitconfig": {
+		"/etc/loki/signing.gitconfig": {
 			Type: "bind", Source: options.Signing.GitConfig,
-			Target: "/etc/loki-go/signing.gitconfig", ReadOnly: true,
+			Target: "/etc/loki/signing.gitconfig", ReadOnly: true,
 			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
 		},
-		"/etc/loki-go/allowed_signers": {
+		"/etc/loki/allowed-signers": {
 			Type: "bind", Source: options.Signing.AllowedSigners,
-			Target: "/etc/loki-go/allowed_signers", ReadOnly: true,
+			Target: "/etc/loki/allowed-signers", ReadOnly: true,
 			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
 		},
 	}
