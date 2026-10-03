@@ -24,7 +24,7 @@ def accept(candidate):
     if receipt["schema"] != 1 or receipt["release"] != "0.2.0" or receipt["included_tools"] != []:
         raise ValueError("candidate is not a management-only 0.2.0 artifact")
     native_os = {"Windows": "windows", "Darwin": "darwin", "Linux": "linux"}.get(platform.system())
-    native_arch = {"AMD64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine())
+    native_arch = {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine().lower())
     if receipt["os"] != native_os or receipt["arch"] != native_arch:
         raise ValueError("candidate acceptance requires its actual native execution host")
     if receipt["binary"] != ("loki.exe" if native_os == "windows" else "loki") or receipt["archive"] != f"loki-manager-0.2.0-{native_os}-{native_arch}.zip":

@@ -19,7 +19,7 @@ from build_full_images import oci_manifest
 
 def prepare(recipe_path, output):
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
-    arch = {"x86_64":"amd64", "AMD64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     host = {"Linux":"linux", "Windows":"windows", "Darwin":"darwin"}.get(platform.system())
     target = recipe.get("target", {})
     if recipe.get("schema") != 1 or recipe.get("release") != "0.2.0" or target.get("os") != host or target.get("arch") != arch or target.get("mode") not in ("project-host", "full") or target["mode"] == "full" and host != "linux":

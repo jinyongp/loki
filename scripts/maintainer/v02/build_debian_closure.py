@@ -123,7 +123,7 @@ def package_files(archive, root, prefixes):
 
 def prepare(recipe_path, output):
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
-    arch = {"x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     target = {"os":"linux", "arch":arch, "mode":"full"}
     owner = recipe.get("owner")
     if platform.system() != "Linux" or arch is None or recipe.get("schema") != 1 or recipe.get("target") != target or recipe.get("distribution") != "ubuntu-24.04" or owner not in ("git", "browser", "trust-store") or not recipe.get("packages"):

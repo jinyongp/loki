@@ -80,7 +80,7 @@ def validate_recipe(recipe, target, payload_only=False):
 
 
 def assemble(recipe_path, output, release_url, payload_only=False):
-    arch = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+    arch = {"amd64": "amd64", "x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
     if platform.system() != "Linux" or arch is None:
         raise ValueError("full module preparation requires its native Linux host")
     target = {"os": "linux", "arch": arch, "mode": "full"}

@@ -14,7 +14,7 @@ import zipfile
 
 
 def go_notices(repo, bundle, env, packages=("./cmd/loki-manager",)):
-    raw = subprocess.check_output(["go", "list", "-mod=readonly", "-buildvcs=false", "-deps", "-json", *packages], cwd=repo, env=env, text=True)
+    raw = subprocess.check_output(["go", "list", "-mod=readonly", "-buildvcs=false", "-deps", "-json", *packages], cwd=repo, env=env, text=True, encoding="utf-8")
     decoder = json.JSONDecoder()
     modules = {}
     while raw.strip():
@@ -63,7 +63,7 @@ def go_notices(repo, bundle, env, packages=("./cmd/loki-manager",)):
 
 def produce(output):
     target_os = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(platform.system())
-    target_arch = {"x86_64": "amd64", "AMD64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+    target_arch = {"amd64": "amd64", "x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
     if not target_os or not target_arch:
         raise ValueError("native manager target is not supported")
     repo = Path(__file__).resolve().parents[3]

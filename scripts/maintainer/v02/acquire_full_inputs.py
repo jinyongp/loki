@@ -17,7 +17,7 @@ from build_full_bundle import validate_recipe
 
 
 def acquire(recipe_path, output):
-    arch = {"x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     if platform.system() != "Linux" or arch is None:
         raise ValueError("full module inputs require their exact native Linux host")
     target = {"os":"linux", "arch":arch, "mode":"full"}

@@ -138,7 +138,7 @@ def assemble(recipe_path, output, release_url):
         raise ValueError("recipe requires schema 1 and exact Node, Chrome and FFmpeg assets")
     target = recipe["target"]
     native_os = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(platform.system())
-    native_arch = {"x86_64": "amd64", "AMD64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+    native_arch = {"amd64": "amd64", "x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
     mode = target.get("mode")
     if mode not in ("project-host", "full") or target != {"os": native_os, "arch": native_arch, "mode": mode}:
         raise ValueError("browser artifacts must be assembled on their exact native target")

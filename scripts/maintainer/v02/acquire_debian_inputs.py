@@ -30,7 +30,7 @@ def fields(text):
 
 def acquire(recipe_path, output):
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
-    arch = {"x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     target = {"os":"linux", "arch":arch, "mode":"full"}
     packages = recipe.get("packages", [])
     if platform.system() != "Linux" or arch is None or recipe.get("schema") != 1 or recipe.get("target") != target or recipe.get("owner") not in ("git", "browser", "trust-store") or not packages or any(not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*(?:=[A-Za-z0-9+:~._-]+)?", name) for name in packages):
@@ -38,7 +38,7 @@ def acquire(recipe_path, output):
     keyring = Path("/usr/share/keyrings/ubuntu-archive-keyring.gpg")
     key = keyring.stat()
     if not keyring.is_file() or keyring.is_symlink() or key.st_uid != 0 or key.st_mode & 0o022:
-        raise ValueError("Ubuntu archive verification requires an administrator-owned keyring")
+        raise ValueError(f"Ubuntu archive verification requires an administrator-owned keyring: uid={key.st_uid}, mode={oct(key.st_mode & 0o777)}, symlink={keyring.is_symlink()}")
     output.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory(prefix="loki-apt-inputs-") as temporary:
         root = Path(temporary)

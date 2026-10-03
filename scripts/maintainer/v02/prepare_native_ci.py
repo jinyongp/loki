@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     target_os = {"Linux":"linux", "Windows":"windows", "Darwin":"darwin"}.get(platform.system())
-    arch = {"x86_64":"amd64", "AMD64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     mode = os.environ.get("CANDIDATE_MODE", "")
     if target_os is None or arch is None or mode not in ("project-host", "full"):
         raise ValueError("CI candidate requires an explicit supported native target/mode")

@@ -114,7 +114,7 @@ def oci_manifest(archive, target):
 
 
 def assemble(recipe_path, output):
-    arch = {"x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine())
+    arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     target = {"os":"linux", "arch":arch, "mode":"full"}
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
     if platform.system() != "Linux" or arch is None or recipe.get("schema") != 1 or recipe.get("target") != target or not IMAGE.fullmatch(recipe.get("base", "")) or not recipe.get("base_notices") or not IMAGE.fullmatch(recipe.get("buildkit", "")) or not IMAGE.fullmatch(recipe.get("frontend", "")):

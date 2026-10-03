@@ -28,7 +28,7 @@ PLATFORMS = {
 
 def native_target(mode):
     target_os = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(platform.system())
-    arch = {"x86_64": "amd64", "AMD64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine())
+    arch = {"amd64": "amd64", "x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
     if (target_os, arch) not in PLATFORMS or mode not in ("project-host", "full") or mode == "full" and target_os != "linux":
         raise ValueError("no pinned browser acquisition contract for this native target/runtime mode")
     return {"os": target_os, "arch": arch, "mode": mode}
