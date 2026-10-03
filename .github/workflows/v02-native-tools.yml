@@ -102,6 +102,9 @@ jobs:
       - name: Accept packaged independent browser engines and lifecycle
         if: inputs.mode == 'project-host'
         run: python3 scripts/maintainer/v02/accept_browser_candidate.py --candidate native-tool-candidate
+      - name: Accept optional capabilities and owned output bytes
+        if: inputs.mode == 'project-host'
+        run: python3 scripts/maintainer/v02/accept_browser_capabilities.py --candidate native-tool-candidate
       - name: Remove the owned disposable runner sandbox profile
         if: always() && inputs.mode == 'project-host' && runner.os == 'Linux'
         shell: bash

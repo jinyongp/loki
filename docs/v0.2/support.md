@@ -27,7 +27,10 @@ Native preparation runs and retained inputs are recorded in
 been prepared on six targets and project-browser artifacts on all five declared
 targets, including both macOS architectures. Native input inspection established
 the pinned unsigned Intel and linker ad-hoc arm64 signature forms, and corrected
-macOS candidate preparation succeeded. Final acceptance reports remain pending.
+macOS candidate preparation succeeded. The five native project-host browser
+targets have passed baseline acceptance as recorded in
+[final-acceptance.md](final-acceptance.md). Current-source rebuilds, optional
+features and full-runtime acceptance remain separate gates.
 Windows Codex desktop-to-SSH-to-WSL rendering and execution location
 remain an additional required check beyond native CI.
 

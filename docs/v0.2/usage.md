@@ -5,9 +5,10 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
-The commands below describe the new source interface. Candidate preparation
-and final native acceptance are still pending; use receipt-bound 0.2 artifacts
-when they are available. Existing 0.1 installation data has a separate owner.
+The commands below describe the new source interface. Receipt-bound 0.2
+candidates have been prepared and baseline native browser acceptance has passed.
+See [the final acceptance report](final-acceptance.md) for current results and
+remaining gates. Existing 0.1 installation data has a separate owner.
 
 For a prepared offline candidate, append `--archives ABSOLUTE_DIRECTORY` to
 `tools install` or `tools update`. The directory contains `<sha256>.zip` files

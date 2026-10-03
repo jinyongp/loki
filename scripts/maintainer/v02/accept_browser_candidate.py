@@ -72,7 +72,7 @@ async def protocol(binary, root, workspace, invoke):
         await client.close()
 
 
-def accept(candidate):
+def accept(candidate, protocol_check=protocol):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
     if document.get("schema") != 1 or document.get("release") != "0.2.0" or document.get("target", {}).get("mode") != "project-host" or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json":
         raise ValueError("browser acceptance requires a complete project-host candidate")
@@ -106,7 +106,7 @@ def accept(candidate):
             raise ValueError("installation implicitly enabled browser tools")
         invoke("tools", "enable", "browser")
         invoke("doctor")
-        asyncio.run(protocol(binary, root, workspace, invoke))
+        asyncio.run(protocol_check(binary, root, workspace, invoke))
         invoke("tools", "remove", "browser")
         if marker.read_text(encoding="utf-8") != "Keep this project file":
             raise ValueError("browser lifecycle changed the project workspace")
