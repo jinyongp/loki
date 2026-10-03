@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"loki/internal/control/identity"
 	"loki/internal/daemon"
 	"loki/internal/rpc"
@@ -140,5 +139,5 @@ func serveOfficialPeer(ctx context.Context, o OfficialOptions, connection *net.U
 			AuthorizeResource: func() error { return nil },
 		})
 	}
-	return toolproxy.RunManyTransport(ctx, options, &mcp.IOTransport{Reader: connection, Writer: connection, MaxLineLength: 16 << 20})
+	return toolproxy.RunManyStream(ctx, options, connection)
 }

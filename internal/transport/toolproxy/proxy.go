@@ -46,6 +46,11 @@ func RunMany(ctx context.Context, options []Options) error {
 	return RunManyTransport(ctx, options, &mcp.StdioTransport{})
 }
 
+// RunManyStream serves official engines over an already authenticated stream.
+func RunManyStream(ctx context.Context, options []Options, stream io.ReadWriteCloser) error {
+	return RunManyTransport(ctx, options, &mcp.IOTransport{Reader: stream, Writer: stream, MaxLineLength: 16 << 20})
+}
+
 // RunManyTransport serves the same official engine implementation through an
 // explicitly supplied transport, including a verified protected service peer.
 func RunManyTransport(ctx context.Context, options []Options, transport mcp.Transport) error {

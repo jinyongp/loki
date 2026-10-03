@@ -1,5 +1,7 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki","to":"loki/internal/process"},
+    {"from":"loki/internal/transport/toolproxy","to":"loki/internal/rpc"},
     {"from":"loki/internal/app/network","to":"loki/internal/rpc"},
     {"from":"loki/modules/github","to":"loki/internal/config"},
     {"from":"loki/modules/github","to":"loki/internal/integrations/github/setup"},
@@ -216,10 +218,6 @@
     {
       "from": "loki/cmd/loki",
       "to": "loki/modules/secrets"
-    },
-    {
-      "from": "loki/cmd/loki",
-      "to": "loki/modules/workspace"
     },
     {
       "from": "loki/cmd/loki-manager",
@@ -876,14 +874,6 @@
     {
       "from": "loki/modules/workspace",
       "to": "loki/internal/workcommand"
-    },
-    {
-      "from": "loki/modules/workspace",
-      "to": "loki/modules/execution/jobs"
-    },
-    {
-      "from": "loki/modules/workspace",
-      "to": "loki/modules/git"
     },
     {
       "from": "loki/tools/readinessprobe",

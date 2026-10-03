@@ -1,15 +1,19 @@
-package browserapp
+package toolproxy
 
 import (
 	"context"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
 
-func TestOfficialTransportRejectsWrongPeerBeforeInitialization(t *testing.T) {
+func TestProtectedBrowserTransportRejectsWrongPeerBeforeInitialization(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("protected browser service peer credentials belong to Linux full mode")
+	}
 	path := filepath.Join(t.TempDir(), "browser.sock")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
@@ -31,7 +35,7 @@ func TestOfficialTransportRejectsWrongPeerBeforeInitialization(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	transport := OfficialTransport{Socket: path, ExpectedUID: uint32(os.Getuid()) + 1}
+	transport := ProtectedBrowserTransport{Socket: path, ExpectedUID: uint32(os.Getuid()) + 1}
 	if _, err := transport.Connect(ctx); err == nil {
 		t.Fatal("accepted another service identity")
 	}

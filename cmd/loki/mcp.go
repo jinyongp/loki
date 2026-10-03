@@ -120,7 +120,7 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 		if l.BrowserProtocol == "official" {
 			options.BrowserEngines = []toolproxy.Options{{
 				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.0",
-				Transport: appbrowser.OfficialTransport{Socket: l.BrowserSocket, ExpectedUID: *l.BrowserUID},
+				Transport: toolproxy.ProtectedBrowserTransport{Socket: l.BrowserSocket, ExpectedUID: *l.BrowserUID},
 				RootURI:   "file:///var/lib/loki/browser/work",
 				Authorize: func(name string) error {
 					caps := l.BrowserCapabilities
