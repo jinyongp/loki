@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "release": "0.2.0",
+  "phase": "candidate preparation",
+  "accepted": false,
+  "published": false,
+  "product_checks_executed": false,
+  "manager": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37143736900",
+    "source": "3361550",
+    "status": "prepared on all six native targets",
+    "receipts": [
+      {
+        "os": "darwin",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-darwin-arm64.zip",
+        "archive_sha256": "dbc1a6835c180d1112ba03451e3bd592802afe8322a7502051e7be941112ee5e",
+        "archive_bytes": 4909036,
+        "included_tools": []
+      },
+      {
+        "os": "darwin",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-darwin-amd64.zip",
+        "archive_sha256": "54a8e944e5e5d5ff80da6ea4202431431ec773567de4aeec359b9f4134810c89",
+        "archive_bytes": 5357376,
+        "included_tools": []
+      },
+      {
+        "os": "linux",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-linux-amd64.zip",
+        "archive_sha256": "40ba2e60149f934af2bcb4c18d55acdaf909c70c8ca73514c750cb1451a91748",
+        "archive_bytes": 5371650,
+        "included_tools": []
+      },
+      {
+        "os": "linux",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-linux-arm64.zip",
+        "archive_sha256": "066200e1ee0bb8138e55d853b5423672f15120532c0e330e029033997e858b80",
+        "archive_bytes": 4821889,
+        "included_tools": []
+      },
+      {
+        "os": "windows",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-windows-arm64.zip",
+        "archive_sha256": "4ecfde400e249cee49822f05447d26950303bbec6739baf4f2a7361d615ae101",
+        "archive_bytes": 4804645,
+        "included_tools": []
+      },
+      {
+        "os": "windows",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-windows-amd64.zip",
+        "archive_sha256": "5b506ba428c8e8f3ef0df21f2c7a719b15412af8f003ce10529fe97f66e59ecc",
+        "archive_bytes": 5414156,
+        "included_tools": []
+      }
+    ]
+  },
+  "project_browser": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37144148472",
+    "source": "70b1b0e",
+    "prepared_targets": [
+      "linux/amd64",
+      "linux/arm64",
+      "windows/amd64"
+    ],
+    "blocked_targets": [
+      "darwin/amd64",
+      "darwin/arm64"
+    ],
+    "blocker": "Pinned upstream Chrome app fails codesign resource-seal verification before repackaging."
+  },
+  "full": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37144659611",
+    "source": "7c22963",
+    "status": "prepared on both native Linux targets",
+    "artifacts": [
+      {
+        "name": "loki-v02-tools-ubuntu-24.04-full",
+        "bytes": 3344320046,
+        "digest": "sha256:d87ab71bd2df4d5a6024c2fbc29cf171f3a2f0ef6bf90027b0a677a147441e38"
+      },
+      {
+        "name": "loki-v02-tools-ubuntu-24.04-arm-full",
+        "bytes": 3309240984,
+        "digest": "sha256:d30405f2f5e0cbbae9083198e5bf6a00f148a95a197d10e5d941e33b687aa8e3"
+      }
+    ]
+  },
+  "final_acceptance": "pending; candidate preparation gate remains open"
+}

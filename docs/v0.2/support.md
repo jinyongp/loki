@@ -22,8 +22,12 @@ The native manager workflow covers six OS/architecture combinations; the
 native project-browser workflow covers five; full candidate preparation covers
 the two Linux architectures. Runner labels are explicitly selected from
 [GitHub's official native runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
-Actual runs, archived input receipts and final acceptance reports are still
-pending. Windows Codex desktop-to-SSH-to-WSL rendering and execution location
+Native preparation runs and retained inputs are recorded in
+[candidate-preparation.md](candidate-preparation.md). Management artifacts have
+been prepared on six targets and project-browser artifacts on Windows amd64
+and both Linux targets. macOS browser preparation is blocked by the pinned
+upstream app's resource-seal failure. Final acceptance reports remain pending.
+Windows Codex desktop-to-SSH-to-WSL rendering and execution location
 remain an additional required check beyond native CI.
 
 | Tool group | Public responsibility | Full private prerequisites |
