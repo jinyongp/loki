@@ -24,8 +24,9 @@ def acquire(recipe_path, output):
     recipe = validate_recipe(json.loads(recipe_path.read_text(encoding="utf-8")), target, payload_only=True)
     output.mkdir(parents=True, exist_ok=False)
     for index, asset in enumerate(recipe.get("inputs", [])):
-        suffix = "".join(Path(urlsplit(asset["url"]).path).suffixes)
-        if suffix not in (".tar.gz", ".tar.xz", ".zip", ".tgz"):
+        filename = Path(urlsplit(asset["url"]).path).name
+        suffix = next((extension for extension in (".tar.gz", ".tar.xz", ".zip", ".tgz") if filename.endswith(extension)), None)
+        if suffix is None:
             raise ValueError("native input requires a supported archive format")
         name = f"input-{index}"+suffix
         partial, destination = output / (name+".part"), output / name
