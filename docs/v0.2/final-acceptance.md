@@ -105,7 +105,13 @@ passed native Linux amd64/arm64 preparation and focused Go/manager checks from
 `2f08a0d`. That workflow did not execute the actual full frontend connection and
 therefore did not catch the publication failure. Run 37151479175 also passed
 native Linux amd64/arm64 preparation and focused checks after the contract fix.
-The next native full run includes actual workspace transport acceptance.
+Current-source [full run 37153576451](https://github.com/jinyongp/loki/actions/runs/37153576451)
+includes actual workspace transport acceptance from `cdb9c7c`.
+The matching [browser run 37153578467](https://github.com/jinyongp/loki/actions/runs/37153578467)
+and [manager run 37153581256](https://github.com/jinyongp/loki/actions/runs/37153581256)
+are also under final native validation. The common transport correction passed
+a local independent Playwright/DevTools navigation, transfer, owned/inline PNG
+and immediate browser-disable regression check.
 
 ## Remaining required gates
 
