@@ -266,13 +266,9 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 					if err := o.Authorize(name); err != nil {
 						return nil, err
 					}
-					params := &mcp.CallToolParams{Name: name, Arguments: req.Params.Arguments, Meta: req.Params.Meta, InputResponses: req.Params.InputResponses, RequestState: req.Params.RequestState}
+					params := &mcp.CallToolParams{Name: name, Arguments: req.Params.Arguments, Meta: upstreamMeta(req.Params.Meta), InputResponses: req.Params.InputResponses, RequestState: req.Params.RequestState}
 					if original := req.Params.GetProgressToken(); original != nil {
 						token := fmt.Sprintf("%s-progress-%d", o.Owner, serial.Add(1))
-						params.Meta = make(mcp.Meta, len(req.Params.Meta)+1)
-						for k, v := range req.Params.Meta {
-							params.Meta[k] = v
-						}
 						params.SetProgressToken(token)
 						progressMu.Lock()
 						progress[token] = progressTarget{req.Session, original}
@@ -284,7 +280,7 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 					result, err := engine.CallTool(callCtx, params)
 					if callCtx.Err() != nil {
 						_ = engine.Close()
-						return nil, fmt.Errorf("browser call canceled or timed out; owned session stopped, reconnect to continue: %w", callCtx.Err())
+						return nil, fmt.Errorf("upstream call canceled or timed out; owned session stopped, reconnect to continue: %w", callCtx.Err())
 					}
 					return result, err
 				})
@@ -292,7 +288,7 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 			}
 		})
 	}
-	fmt.Fprintf(o.Stderr, "Starting %s official engine...\n", o.Name)
+	fmt.Fprintf(o.Stderr, "Starting %s MCP connection...\n", o.Name)
 	startCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	var err error
 	transport := o.Transport
@@ -302,11 +298,11 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 	upstream, err = client.Connect(startCtx, transport, nil)
 	cancel()
 	if err != nil {
-		return nil, fmt.Errorf("official engine initialization: %w", err)
+		return nil, fmt.Errorf("upstream MCP initialization: %w", err)
 	}
 	if err := refresh(ctx, upstream); err != nil {
 		_ = upstream.Close()
-		return nil, fmt.Errorf("official engine discovery: %w", err)
+		return nil, fmt.Errorf("upstream MCP discovery: %w", err)
 	}
 	if o.ForwardOwnedResources {
 		if err := resources.refresh(ctx, upstream); err != nil {
@@ -343,7 +339,7 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 			}
 		}()
 	}
-	fmt.Fprintf(o.Stderr, "%s MCP connected; project-host session has its own tabs and login state.\n", o.Name)
+	fmt.Fprintf(o.Stderr, "%s MCP connected.\n", o.Name)
 	return &engineSession{syncRoots: syncRoots, close: func() {
 		stopWatch()
 		_ = upstream.Close()

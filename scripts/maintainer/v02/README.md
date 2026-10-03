@@ -282,3 +282,12 @@ Run `test_bundle_inputs.py`, archive/install checks, actual engine probes, nativ
 library diagnostics, and license completeness checks during final validation.
 The input recipe itself is a trust boundary; checksums embedded in downloaded
 archives do not authenticate those archives.
+
+`accept_full_workspace_candidate.py --candidate DIRECTORY` verifies the native
+manager and core OCI receipt, loads the core image into the local Docker cache,
+and starts an isolated full workspace deployment. It checks private stdio
+discovery, actual create/read, cached invocation rejection after disable, and
+owned shutdown. Failure preserves the private root for recovery. It certifies
+workspace transport only; execution, Git, browser, sharing and endpoint flows
+have separate acceptance requirements. The full native validation workflow runs
+this check after preparation without publishing images or a release.

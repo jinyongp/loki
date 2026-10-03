@@ -3,8 +3,8 @@ package management
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strconv"
+	"os"
+	"strings"
 )
 
 func (b *DockerFullBackend) Connection(ctx context.Context) (FullConnection, error) {
@@ -38,19 +38,21 @@ func (b *DockerFullBackend) Connection(ctx context.Context) (FullConnection, err
 			if !inspection.State.Running {
 				return FullConnection{}, fmt.Errorf("MCP service is stopped; run loki tools start")
 			}
-			bindings := inspection.NetworkSettings.Ports["18765/tcp"]
-			if len(bindings) != 1 || bindings[0].HostIP != "127.0.0.1" {
-				return FullConnection{}, fmt.Errorf("MCP service does not have its owned loopback publication")
-			}
-			port, err := strconv.Atoi(bindings[0].HostPort)
-			if err != nil || port < 1024 || port > 65535 {
-				return FullConnection{}, fmt.Errorf("MCP service has an invalid loopback port")
+			if len(inspection.ID) != 64 || !dockerIDPattern.MatchString(inspection.ID) || spec.User != "10000:10000" || len(spec.Command) == 0 || spec.Publish != "" {
+				return FullConnection{}, fmt.Errorf("MCP connection requires its owned non-root role and private stdio adapter")
 			}
 			current, err := b.Store.PlanFull()
 			if err != nil || fullPlanDigest(current) != reservation.PlanDigest {
 				return FullConnection{}, fmt.Errorf("selection changed while connecting; reconnect the MCP server")
 			}
-			return FullConnection{Endpoint: "http://127.0.0.1:" + strconv.Itoa(port) + "/mcp", TokenFile: filepath.Join(b.Store.Root, "auth", "mcp", "token")}, nil
+			environment := []string{}
+			for _, value := range os.Environ() {
+				key, _, _ := strings.Cut(value, "=")
+				if key != "DOCKER_HOST" && key != "DOCKER_CONTEXT" && key != "DOCKER_API_VERSION" {
+					environment = append(environment, value)
+				}
+			}
+			return FullConnection{Command: []string{b.Binary, "--host", "unix://" + b.Socket, "exec", "--interactive", "--user", spec.User, inspection.ID, spec.Command[0], "full-mcp-connect"}, Environment: append(environment, "DOCKER_API_VERSION=1.47")}, nil
 		}
 	}
 	return FullConnection{}, fmt.Errorf("selected MCP service has not started; run loki tools start")

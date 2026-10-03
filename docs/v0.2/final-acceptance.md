@@ -76,21 +76,36 @@ program, module archive and OCI images, isolated workspace-only service start,
 doctor readiness and owned-resource stop passed. The core archive SHA-256 was
 `63a03cbb00aef20df997882f4838140318329eea2d9c05446bb3a1ace5b48fa4`.
 
-Actual frontend MCP connection then exposed a separate unresolved publication
+Actual frontend MCP connection then exposed a separate publication
 failure on Docker 29.4.1. Docker retained the requested loopback mapping in
 `HostConfig.PortBindings` but returned no usable `NetworkSettings.Ports` mapping
 for the internal-only bridge. The adapter correctly rejected that missing
 owned endpoint. This behavior is also described in the
 [Moby project's internal-network publication discussion](https://github.com/moby/moby/discussions/53256).
-The private network and literal loopback connection contract must both be
-preserved when repairing this path. Service readiness is not end-to-end full
-connection acceptance. Every temporary deployment was stopped successfully.
+The corrected frontend starts a private stdio adapter in the exact inspected
+MCP container by immutable container ID and non-root role. Only that adapter
+reads its bearer and connects to container loopback. The internal network stays
+private. Upstream request metadata now belongs to each negotiated proxy session,
+so a newer downstream protocol does not override the stateful service protocol.
+Named volume mounts disable Docker copy-up so image directory metadata cannot
+replace bootstrap ownership of an empty workspace volume.
+
+The rebuilt local Linux amd64 candidate passed actual private stdio discovery,
+workspace file create/read, immediate cached-call rejection after disabling
+workspace, and owned service shutdown. `accept_full_workspace_candidate.py`
+checks receipt-bound manager and OCI bytes and executes these checks on both
+native Linux full CI targets. This is workspace acceptance; other full modules
+retain their required execution gates. Every temporary deployment was stopped
+successfully. The current full changes also passed the whole Go suite, the
+90-package/245-edge architecture check, and race checks for toolproxy, MCP and
+management.
 
 [Full run 37150598895](https://github.com/jinyongp/loki/actions/runs/37150598895)
 passed native Linux amd64/arm64 preparation and focused Go/manager checks from
 `2f08a0d`. That workflow did not execute the actual full frontend connection and
-therefore did not catch the publication failure. Current-source full preparation
-after the execution-contract fix remains in progress in run 37151479175.
+therefore did not catch the publication failure. Run 37151479175 also passed
+native Linux amd64/arm64 preparation and focused checks after the contract fix.
+The next native full run includes actual workspace transport acceptance.
 
 ## Remaining required gates
 

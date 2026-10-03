@@ -70,6 +70,17 @@ func TestFullMountArgumentsPreserveCommasAsOneCSVField(t *testing.T) {
 	}
 }
 
+func TestFullVolumesPreserveBootstrapOwnership(t *testing.T) {
+	argument, err := dockerMountArgument(FullMount{Kind: "volume", Source: "loki-v02-fixture-data-workspace", Target: "/workspace"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields, err := csv.NewReader(strings.NewReader(argument)).Read()
+	if err != nil || len(fields) != 4 || fields[3] != "volume-nocopy" {
+		t.Fatalf("volume can replace bootstrap ownership: %q (%v)", argument, err)
+	}
+}
+
 func TestFullProbesShareObservationAndOmitInactiveModules(t *testing.T) {
 	store := lifecycleStore(t)
 	plan, err := store.PlanFull()

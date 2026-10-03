@@ -28,6 +28,11 @@ func dockerMountArgument(mount FullMount) (string, error) {
 		return "", fmt.Errorf("invalid full mount source")
 	}
 	fields := []string{"type=" + mount.Kind, "source=" + mount.Source, "target=" + mount.Target}
+	if mount.Kind == "volume" {
+		// Bootstrap owns directory identities. Docker's empty-volume copy-up
+		// would replace them with the image's root-owned directory metadata.
+		fields = append(fields, "volume-nocopy")
+	}
 	if mount.ReadOnly {
 		fields = append(fields, "readonly")
 	}

@@ -30,6 +30,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runFullAdministration(args[1:], os.Stdin, stdout, stderr)
 		case "full-probe":
 			return runFullProbe(args[1:], stderr)
+		case "full-mcp-connect":
+			return runFullMCPConnection(args[1:], stderr)
 		case "checkpoint":
 			return runCheckpoint(args[1:], stdout, stderr)
 		case "health":

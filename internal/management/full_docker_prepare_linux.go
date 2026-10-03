@@ -241,7 +241,7 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 		return err
 	}
 	record := fullDockerRecord{Schema: 1, Reservation: r, Worker: worker, Specs: []fullContainerSpec{}, Order: order}
-	config := []byte("root = \"/workspace\"\nhost = \"0.0.0.0\"\nport = 18765\naudit_log = \"/var/lib/loki/mcp/audit.jsonl\"\n")
+	config := []byte("root = \"/workspace\"\nhost = \"127.0.0.1\"\nport = 18765\naudit_log = \"/var/lib/loki/mcp/audit.jsonl\"\n")
 	if err := writeFullFile(filepath.Join(layoutDirectory, "loki.toml"), config); err != nil {
 		return err
 	}
@@ -384,7 +384,6 @@ func (b *DockerFullBackend) serviceSpecification(r DeploymentReservation, t Full
 		result.Tmpfs["/var/tmp/loki/runner"] = "rw,nosuid,nodev,size=134217728,uid=10000,gid=10000,mode=0700"
 	case "mcp":
 		result.Command = append([]string{worker, "mcp", "--layout", "/etc/loki/layout/mcp.json", "--token-file", "/etc/loki/auth/token", "--ingress-config", "/etc/loki/layout/ingress.toml"}, common...)
-		result.Publish = "127.0.0.1::18765"
 	case "executor":
 		program, err := t.Resources.ServiceProgram("execution", "executor")
 		if err != nil {

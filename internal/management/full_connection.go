@@ -2,11 +2,11 @@ package management
 
 import "context"
 
-// FullConnection contains local connection metadata, never the bearer itself.
+// FullConnection contains an owned-container stdio command, never a bearer.
 // It is returned only to the management transport, not public status reports.
 type FullConnection struct {
-	Endpoint  string
-	TokenFile string
+	Command     []string
+	Environment []string
 }
 
 type FullConnectionBackend interface {

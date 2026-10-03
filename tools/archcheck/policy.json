@@ -1,5 +1,6 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/platform/command"},
     {"from":"loki/cmd/loki","to":"loki/internal/process"},
     {"from":"loki/internal/transport/toolproxy","to":"loki/internal/rpc"},
     {"from":"loki/internal/app/network","to":"loki/internal/rpc"},

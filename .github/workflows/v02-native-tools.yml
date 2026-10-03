@@ -87,6 +87,9 @@ jobs:
         run: go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
       - name: Accept the exact native manager
         run: python3 scripts/maintainer/v02/accept_manager_bundle.py --candidate native-tool-candidate/manager
+      - name: Accept actual confined full workspace transport and revocation
+        if: inputs.mode == 'full'
+        run: python3 scripts/maintainer/v02/accept_full_workspace_candidate.py --candidate native-tool-candidate
       - name: Allow the owned test Chrome to create its sandbox on the disposable Ubuntu runner
         if: inputs.mode == 'project-host' && runner.os == 'Linux'
         shell: bash

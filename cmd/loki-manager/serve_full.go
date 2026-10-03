@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 
 	"loki/internal/management"
+	managedcommand "loki/internal/platform/command"
 	"loki/internal/transport/toolproxy"
 )
 
@@ -54,32 +54,12 @@ func serveFull(ctx context.Context, store management.Store, diagnostics io.Write
 	if err != nil {
 		return err
 	}
-	// Bootstrap grants the service group read access. The bearer must remain
-	// a bounded regular file with no world access or group write authority.
-	info, err := os.Lstat(connection.TokenFile)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != 64 || info.Mode().Perm()&0037 != 0 {
-		return fmt.Errorf("MCP bearer is not an owned private regular file")
+	if len(connection.Command) < 2 {
+		return fmt.Errorf("full connection did not provide its owned stdio adapter")
 	}
-	file, err := os.Open(connection.TokenFile)
-	if err != nil {
-		return fmt.Errorf("private MCP bearer could not be opened")
-	}
-	opened, statErr := file.Stat()
-	if statErr != nil || !os.SameFile(info, opened) {
-		file.Close()
-		return fmt.Errorf("private MCP bearer changed while opening")
-	}
-	token, err := io.ReadAll(io.LimitReader(file, 65))
-	file.Close()
-	defer clear(token)
-	if err != nil || len(token) != 64 {
-		return fmt.Errorf("private MCP bearer is invalid")
-	}
-	transport, cleanup, err := toolproxy.LocalHTTPTransport(connection.Endpoint, token)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
+	command := managedcommand.New(ctx, connection.Command[0], connection.Command[1:]...)
+	command.Env = connection.Environment
+	command.Stderr = diagnostics
 	authorize := func(string) error {
 		current, err := store.PlanFull()
 		if err != nil || !reflect.DeepEqual(plan, current) {
@@ -98,5 +78,5 @@ func serveFull(ctx context.Context, store management.Store, diagnostics io.Write
 		}
 		return string(data)
 	}
-	return toolproxy.Run(ctx, toolproxy.Options{Name: "loki-full", Owner: "full", Version: management.Release, Instructions: "Selected Loki tools on the execution host. Browser sessions belong to this connection and have separate state from the desktop app browser. Workspace paths refer to /workspace on the selected host.", Transport: transport, RootURI: "file:///workspace", Authorize: authorize, Revision: revision, AuthorizeResource: func() error { return authorize("") }, ForwardOwnedResources: true, Stderr: diagnostics})
+	return toolproxy.Run(ctx, toolproxy.Options{Name: "loki-full", Owner: "full", Version: management.Release, Instructions: "Selected Loki tools on the execution host. Browser sessions belong to this connection and have separate state from the desktop app browser. Workspace paths refer to /workspace on the selected host.", Command: command, RootURI: "file:///workspace", Authorize: authorize, Revision: revision, AuthorizeResource: func() error { return authorize("") }, ForwardOwnedResources: true, Stderr: diagnostics})
 }
