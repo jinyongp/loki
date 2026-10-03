@@ -38,7 +38,7 @@ func TestSystemInformation(t *testing.T) {
 			metadata := value["policy_generation"].(controlpolicy.GenerationMetadata)
 			capabilities := value["capabilities"].(map[string]any)
 			integrations := value["integrations"].(map[string]any)
-			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 35 || metadata.SHA256 != generation.Digest() ||
+			if value["python_version"] != nil || value["go_version"] == "" || value["tool_catalog"].(map[string]any)["count"] != 29 || metadata.SHA256 != generation.Digest() ||
 				capabilities["signed_git_commits"] != false ||
 				integrations["browser"].(map[string]any)["state"] != integrationDisabled ||
 				integrations["github"].(map[string]any)["state"] != integrationUnconfigured ||

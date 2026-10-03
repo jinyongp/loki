@@ -291,7 +291,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 }
 
-func TestNewMCPKeepsOptionalIntegrationToolSurfaceStableAndFailClosed(t *testing.T) {
+func TestNewMCPHidesDisabledBrowserAndKeepsGitHubFailClosed(t *testing.T) {
 	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -330,16 +330,14 @@ func TestNewMCPKeepsOptionalIntegrationToolSurfaceStableAndFailClosed(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Tools) != 30 {
-		t.Fatalf("disabled integration tool count = %d, want 30", len(listed.Tools))
+	if len(listed.Tools) != 24 {
+		t.Fatalf("disabled integration tool count = %d, want 24", len(listed.Tools))
 	}
 	seen := map[string]bool{}
 	for _, tool := range listed.Tools {
 		seen[tool.Name] = true
 	}
 	for _, required := range []string{
-		"browser_session", "browser_observe", "browser_interact",
-		"browser_screenshot", "browser_save_screenshot", "browser_share_screenshot",
 		"github_read", "github_write", "github", "github_issue_fields_read", "github_issue_fields_write",
 	} {
 		if !seen[required] {
@@ -362,7 +360,8 @@ func TestNewMCPKeepsOptionalIntegrationToolSurfaceStableAndFailClosed(t *testing
 			t.Fatalf("%s error does not identify unavailable integration: %s", unavailable.name, raw)
 		}
 	}
-	for _, absent := range []string{"share_image", "artifact_publish", "preview_publish", "shared_resources", "revoke_share"} {
+	for _, absent := range []string{"share_image", "artifact_publish", "preview_publish", "shared_resources", "revoke_share",
+		"browser_session", "browser_observe", "browser_interact", "browser_screenshot", "browser_save_screenshot", "browser_share_screenshot"} {
 		if seen[absent] {
 			t.Fatalf("unconfigured non-stable surface was registered: %s", absent)
 		}

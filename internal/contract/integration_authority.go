@@ -13,6 +13,7 @@ func applyIntegrationAuthorityMetadata(tools []*mcp.Tool) {
 		}
 		switch {
 		case strings.HasPrefix(tool.Name, "browser_"):
+			tool.Title = "Loki Browser: " + strings.ReplaceAll(strings.TrimPrefix(tool.Name, "browser_"), "_", " ") + " (explicit opt-in)"
 			tool.Description = strings.TrimSpace(tool.Description) + " Requires this Loki server's managed browser integration to be ready; tool presence alone does not imply runtime readiness."
 			if tool.Meta == nil {
 				tool.Meta = mcp.Meta{}
@@ -21,6 +22,7 @@ func applyIntegrationAuthorityMetadata(tools []*mcp.Tool) {
 				"name":      "browser",
 				"authority": "this Loki server's managed browser runtime",
 				"readiness": "system_inspect action=server",
+				"selection": "explicit user request for the Loki browser",
 			}
 		case tool.Name == "github" || strings.HasPrefix(tool.Name, "github_"):
 			authority := "this Loki server's configured GitHub App installations"

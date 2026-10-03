@@ -34,6 +34,9 @@ func effectiveIntegrationState(configured, enabled, ready bool) string {
 func (c *SystemController) integrationStatus(ctx context.Context) map[string]any {
 	browserConfigured := true
 	browserEnabled := c.BrowserSocket != "" && socketExists(c.BrowserSocket)
+	if c.BrowserAvailable != nil {
+		browserEnabled = c.BrowserAvailable()
+	}
 	browserReady := browserEnabled
 
 	githubConfigured := c.Config.GitHubAppID != 0
@@ -69,6 +72,7 @@ func (c *SystemController) integrationStatus(ctx context.Context) map[string]any
 			"ready":      browserReady,
 			"state":      effectiveIntegrationState(browserConfigured, browserEnabled, browserReady),
 			"authority":  "this Loki server's managed browser runtime",
+			"selection":  "explicit user request for the Loki browser",
 		},
 		"github": map[string]any{
 			"supported":      true,

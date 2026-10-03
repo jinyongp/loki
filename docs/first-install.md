@@ -218,6 +218,12 @@ loki restore <backup-id>
 Optional integrations are managed through the Windows frontend; normal users
 do not enter WSL or edit Compose directly:
 
+The Loki browser starts disabled on a new installation. Enable it when you want
+the separate Loki browser session; routine browser checks use the client's
+browser plugin. Disabling it removes its six tools from MCP discovery and blocks
+cached calls. Refresh the client's tools after enabling or disabling it. Updates
+preserve the integration's existing enabled/disabled setting.
+
 ```powershell
 loki integration list
 

@@ -154,10 +154,13 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if app.Previews != nil {
 		app.preview = previews.NewProxy(app.Previews, preview.RouteAllowed)
 	}
+	browserAvailable := func() bool {
+		return mcptransport.BrowserToolsAvailable(options.Browser, options.BrowserSocket)
+	}
 	system := &mcptransport.SystemController{
 		Config: c, Policy: options.Policy, Paths: app.files.Policy, Started: time.Now(),
 		RuntimeSocket: options.RuntimeSocket, BrowserSocket: options.BrowserSocket, SigningSocket: signingSocket,
-		Runtime:   options.Runtime,
+		Runtime: options.Runtime, BrowserAvailable: browserAvailable,
 		Artifacts: app.Artifacts != nil, Previews: app.Previews != nil, GitEnvironment: gitEnvironment,
 		InspectPort: func(ctx context.Context, port int) (map[string]any, error) {
 			return mcptransport.InspectWorkspacePort(ctx, options.Ports, inspect, options.Runtime, port)
@@ -223,11 +226,12 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	for name, handler := range handlers {
 		handlers[name] = mcptransport.AuditHandler(log, name, handler, options.OnAuditError)
 	}
-	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, mcptransport.InstanceInstructions(c, options.Browser != nil))
+	app.Server, err = mcpserver.NewConfiguredAvailableWithInstructions(handlers, mcpserver.ResourceOrigins{ArtifactBaseURL: c.ArtifactBaseURL, PreviewDomain: c.PreviewBaseDomain}, mcptransport.InstanceInstructions(c, browserAvailable()))
 	if err != nil {
 		return nil, err
 	}
 	app.Server.AddReceivingMiddleware(rejectModernDiscovery)
+	app.Server.AddReceivingMiddleware(mcptransport.BrowserAvailabilityMiddleware(browserAvailable))
 	listenerHosts, err := config.NormalizePublicHosts(append(append([]string(nil), c.PublicHosts...), options.IngressHosts...))
 	if err != nil {
 		return nil, errors.New("MCP ingress Host allowlist is invalid")

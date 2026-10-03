@@ -103,11 +103,17 @@ Once connected, an MCP client can work through Loki to:
 - use encrypted application secrets without exposing their values through MCP;
 - use optional browser, GitHub, and signing integrations when enabled.
 
-Loki's browser tools control a separate managed browser with its own tabs and
-login state. For the Codex or ChatGPT built-in browser, use the client's browser
-tools. If those tools are unavailable, explain the limitation and let the user
-choose whether to use Loki's separate browser instead. Loki browser health and
-errors describe only the Loki browser.
+Loki's browser is an explicit opt-in integration with its own tabs and login
+state. Agents use it only when the user specifically requests the Loki browser
+or explicitly accepts that separate session. Ordinary UI checks and generic
+"Browser Plugin" instructions use the client's browser plugin. When that plugin
+is unavailable, agents report the verification gap and continue other checks.
+
+Use `loki integration disable browser` to hide all six Loki browser tools from
+MCP discovery and block cached calls. Enable them with
+`loki integration enable browser` when needed, then refresh the client's tools.
+New installations start with the browser disabled; updates preserve the existing
+integration choice. Loki browser health and errors describe only the Loki browser.
 
 Loki keeps host management separate from project execution. Normal project jobs
 do not receive the raw Docker socket, host-management state, or platform

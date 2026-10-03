@@ -2,7 +2,7 @@ package contract
 
 import "github.com/modelcontextprotocol/go-sdk/mcp"
 
-const BrowserScopeGuidance = "Loki-managed browser only: a separate session with its own tabs and login state, not Codex/ChatGPT's built-in or in-app browser, @Browser, or the user's existing browser. Use when the task requests Loki's browser or allows a separate browser. For built-in or in-app browser requests, use the client's browser tools; if unavailable, explain the limitation and let the user choose before switching to Loki."
+const BrowserScopeGuidance = "Explicit user opt-in only: use these tools only when the user specifically requests the Loki-managed browser or explicitly accepts it as a separate browser. Ordinary UI implementation, browser checks, screenshots, and generic 'Browser Plugin' instructions do not select Loki. Use the client's browser plugin for those tasks; if unavailable, report that browser verification is unavailable and continue other checks. Do not automatically switch to Loki, enable its integration, or retry a failed Loki browser for unrelated work. Loki controls a separate session with its own tabs and login state, not Codex/ChatGPT's built-in or in-app browser, @Browser, or the user's existing browser."
 
 func browserTabIDSchema() map[string]any {
 	return map[string]any{

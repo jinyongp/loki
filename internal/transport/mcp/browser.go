@@ -17,6 +17,19 @@ import (
 	"loki/internal/work/workspace"
 )
 
+func BrowserToolsAvailable(client BrowserCaller, socket string) bool {
+	return client != nil && (socket == "" || socketExists(socket))
+}
+
+func BrowserAvailabilityMiddleware(available func() bool) mcp.Middleware {
+	return mcpserver.AvailableTools(browserTools, available, fault.New(
+		fault.CodeUnavailable,
+		"Loki browser integration is disabled or unavailable",
+		false,
+		"continue other checks; only enable the Loki browser when the user explicitly requests it",
+	))
+}
+
 func browserCall(ctx context.Context, client BrowserCaller, operation string, args map[string]any) (map[string]any, error) {
 	if client == nil {
 		return nil, fault.New(

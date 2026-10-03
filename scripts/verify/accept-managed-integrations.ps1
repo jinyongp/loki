@@ -138,6 +138,7 @@ foreach ($item in $list.integrations) {
 }
 $session = Connect-MCP
 $catalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
+if ($catalog -match '(?m)^browser_') { throw "Disabled browser tools are still discoverable" }
 Invoke-LokiTool $session "browser_session" @{ action = "start" } -ExpectError
 Invoke-LokiTool $session "github_read" @{ action = "repository"; target = "example-org/integration-fixture" } -ExpectError
 
@@ -146,7 +147,10 @@ Invoke-AcceptanceSection "managed browser enable, MCP use, and disable" {
     if (-not (Get-IntegrationStatus "browser").ready) { throw "Enabled browser is not ready" }
     $session = Connect-MCP
     $enabledCatalog = @((Invoke-MCP $session "tools/list" @{}).tools | ForEach-Object { $_.name } | Sort-Object) -join "`n"
-    if ($catalog -cne $enabledCatalog) { throw "Enabling browser changed the MCP tool catalog" }
+    $browserTools = @($enabledCatalog -split "`n" | Where-Object { $_ -like 'browser_*' })
+    if ($browserTools.Count -ne 6) { throw "Enabled browser did not expose all six tools" }
+    $nonBrowserCatalog = @($enabledCatalog -split "`n" | Where-Object { $_ -notlike 'browser_*' }) -join "`n"
+    if ($catalog -cne $nonBrowserCatalog) { throw "Enabling browser changed unrelated MCP tools" }
     $browser = Invoke-LokiTool $session "browser_session" @{ action = "start" }
     if ($browser.status -ne "running") { throw "Browser did not start Chromium" }
     Invoke-LokiTool $session "browser_session" @{ action = "stop" } | Out-Null

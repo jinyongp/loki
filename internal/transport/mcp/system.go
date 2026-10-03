@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type SystemController struct {
 	ToolNames                                   []string
 	Audit                                       *audit.Log
 	Runtime                                     rpc.Caller
+	BrowserAvailable                            func() bool
 }
 
 func catalogInfo(effective []string) map[string]any {
@@ -52,7 +54,25 @@ func catalogInfo(effective []string) map[string]any {
 		}
 	}
 	sort.Strings(names)
-	return map[string]any{"revision": contract.CatalogRevision, "count": len(names), "tools": names, "sha256": workspace.Digest([]byte(strings.Join(names, "\n"))), "client_sync": "ChatGPT custom-app actions are a frozen snapshot; refresh the app actions and start a new chat only when the public tool schema revision changes"}
+	return map[string]any{"revision": contract.CatalogRevision, "count": len(names), "tools": names, "sha256": workspace.Digest([]byte(strings.Join(names, "\n"))), "client_sync": "Refresh client tools after schema revision or integration enable/disable changes; clients with frozen action snapshots may require a new chat"}
+}
+
+func (c *SystemController) availableToolNames(browserEnabled bool) []string {
+	names := c.ToolNames
+	if len(names) == 0 {
+		definitions, _ := contract.CurrentDefinitions()
+		for _, definition := range definitions {
+			names = append(names, definition.Name)
+		}
+	}
+	available := make([]string, 0, len(names))
+	for _, name := range names {
+		if !browserEnabled && slices.Contains(browserTools, name) {
+			continue
+		}
+		available = append(available, name)
+	}
+	return available
 }
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
 func socketExists(path string) bool {
@@ -75,13 +95,17 @@ func (c *SystemController) Info(ctx context.Context) map[string]any {
 	integrations := c.integrationStatus(ctx)
 	github := integrations["github"].(map[string]any)
 	browserReady := integrationIsReady(integrations, "browser")
+	availableBrowserTools := []string{}
+	if browserReady {
+		availableBrowserTools = browserTools
+	}
 	signingReady := integrationIsReady(integrations, "signing")
 	return map[string]any{
 		"name": "loki", "version": buildinfo.Version, "schema_revision": contract.CatalogRevision,
 		"mcp_sdk_version": sdk, "python_version": nil, "go_version": runtime.Version(),
 		"uptime_seconds": uptime, "server_time": time.Now().UTC().Format(time.RFC3339Nano),
 		"workspace": "/workspace", "policy_generation": c.Policy.Metadata(),
-		"tool_catalog": catalogInfo(c.ToolNames), "integrations": integrations,
+		"tool_catalog": catalogInfo(c.availableToolNames(browserReady)), "integrations": integrations,
 		"capabilities": map[string]any{
 			"text_files": true, "images": []string{"gif", "jpeg", "png", "webp"},
 			"temporary_image_links": c.Artifacts, "temporary_file_links": c.Artifacts,
@@ -96,7 +120,7 @@ func (c *SystemController) Info(ctx context.Context) map[string]any {
 			"github_https":         true,
 			"structured_browser":   browserReady,
 			"browser_devtools":     browserReady,
-			"browser_tool_catalog": map[string]any{"revision": "2026-09-03.1", "count": len(browserTools), "tools": browserTools},
+			"browser_tool_catalog": map[string]any{"revision": contract.CatalogRevision, "count": len(availableBrowserTools), "tools": availableBrowserTools},
 		},
 		"limits": map[string]any{"max_file_bytes": c.Config.MaxFileBytes, "max_write_bytes": c.Config.MaxWriteBytes, "max_image_bytes": workspace.MaxImageBytes, "max_shared_file_bytes": workspace.MaxSharedBytes, "max_bundle_files": 512},
 	}
@@ -139,6 +163,10 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 	github := integrations["github"].(map[string]any)
 	signing := integrations["signing"].(map[string]any)
 	browser := integrations["browser"].(map[string]any)
+	availableBrowserTools := []string{}
+	if browser["enabled"] == true {
+		availableBrowserTools = browserTools
+	}
 	return map[string]any{
 		"healthy":      coreHealthy,
 		"core_healthy": coreHealthy,
@@ -157,10 +185,10 @@ func (c *SystemController) Diagnostics(ctx context.Context) map[string]any {
 			"ready":                   signing["ready"], "state": signing["state"],
 		},
 		"repositories": repositories,
-		"tool_catalog": catalogInfo(c.ToolNames),
+		"tool_catalog": catalogInfo(c.availableToolNames(browser["enabled"] == true)),
 		"browser": map[string]any{
 			"socket_available": browser["ready"], "ready": browser["ready"], "state": browser["state"],
-			"catalog_revision": "2026-09-03.1", "expected_tool_count": len(browserTools), "expected_tools": browserTools,
+			"catalog_revision": contract.CatalogRevision, "expected_tool_count": len(availableBrowserTools), "expected_tools": availableBrowserTools,
 		},
 	}
 }
