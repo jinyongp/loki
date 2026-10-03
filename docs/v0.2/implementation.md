@@ -55,7 +55,7 @@ full lifecycle and stdio serving, managed endpoint routing, generation pruning,
 portable relays, native frontend GitHub setup, plugin/help documentation,
 release transactions and session file/image transfer. Source delivery is
 recorded separately from final acceptance. Candidate preparation is the current workstream phase; actual native outcomes
-and the macOS vendor-seal blocker are recorded in [candidate-preparation.md](candidate-preparation.md). Browser profiles whose
+and the corrected macOS input signature policy are recorded in [candidate-preparation.md](candidate-preparation.md). Browser profiles whose
 engine absence cannot be established are conservatively retained after an abrupt
 manager death; user results are retained. Native prepare-only workflow jobs have run;
 prepared artifacts and platform availability are not accepted support claims.
@@ -76,7 +76,7 @@ trailing/unexpected probe data, bounded pipe draining and inherited module/confi
 override removal. Framework fixtures cover preserved version aliases and rejected
 escape/dangling/cyclic graphs, generic extraction denial and alias-traversing
 writes in either archive order. On macOS, doctor verifies the installed Chrome
-vendor seal before launching it. Actual native startup, signatures and sandbox
+pinned signature kind and arm64 code hashes before launching it. Actual native startup, signatures and sandbox
 acceptance remain final checks.
 
 Additional final-phase fixtures cover generation retention with current/leased

@@ -44,7 +44,7 @@ ZIPs/catalogs and five owned OCI image archives. Both final check jobs were
 skipped for the `prepare` phase. Preparation completeness remains open because
 the two macOS browser artifacts could not be produced.
 
-## Open macOS preparation blocker
+## macOS input inspection and corrected signature policy
 
 Both native macOS jobs reject the pinned Chrome for Testing 154.0.8037.92 app
 before copying it into the Loki bundle. The actual native command is
@@ -54,12 +54,17 @@ before copying it into the Loki bundle. The actual native command is
 code has no resources but signature indicates they must be present
 ```
 
-The downloaded primary-source archives contain no `_CodeSignature` resource
-entries. Their byte lengths and hashes match the reviewed recipes. This failure
-therefore precedes Loki repackaging; replacing framework aliases is not a fix.
-The producer retains its vendor-seal requirement and does not strip or replace
-the upstream signature. A usable signed upstream input or an explicit revised
-macOS signing/distribution design is needed before this gate can close.
+The original app inputs do not have a vendor resource seal. Native inspection in
+[run 37145900978](https://github.com/jinyongp/loki/actions/runs/37145900978)
+confirmed unsigned Intel code and linker ad-hoc arm64 code (flags `0x20002`,
+zero special slots). Native strict arm64 code verification with
+`--ignore-resources` succeeds. The earlier whole-app seal condition was an
+incorrect assumption in Loki's producer, rather than a corrupt upstream input.
+The corrected producer and doctor require the exact pinned Mach-O architecture
+and signature kind, retain original bytes and framework aliases, and verify
+arm64 code hashes with native codesign. Archive receipts and owned generation
+integrity bind resources. No signature is stripped or replaced. Corrected
+native candidate preparation remains pending.
 
 The final product validation tasks remain pending until candidate preparation
 is complete. Native CI compilation, source acquisition and historical upstream

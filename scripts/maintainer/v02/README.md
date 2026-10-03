@@ -254,13 +254,15 @@ release-bound browser catalog. A fresh output directory prevents accidental
 candidate replacement. The ZIP normalizes ordering, timestamps and file modes.
 
 On macOS, the producer preserves Chrome's relative framework links within
-each signed app and verifies its vendor application seal before and after
-copying. A changed seal stops candidate preparation; the producer does not
-strip or replace the vendor signature. The native macOS browser ZIP installer
+each app and checks the pinned upstream signature kind before and after copying:
+unsigned Intel code, or linker ad-hoc arm64 code without a resource seal.
+Native codesign verifies arm64 code hashes using `--strict --ignore-resources`.
+Source receipts and generation integrity bind resources. The producer preserves
+upstream signatures. The native macOS browser ZIP installer
 permits only those app-contained Chrome links, creates them after all regular
 files, and rejects dangling/cyclic/escaping links and archive writes through
 aliases. Other modules and platforms retain regular-file/directory extraction.
-The installed seal still requires verification during native final acceptance.
+Installed code integrity and sandbox startup require native final acceptance.
 
 The browser doctor starts the receipt-bound Chrome through bundled Playwright,
 with its sandbox enabled, checks the running version and closes the owned

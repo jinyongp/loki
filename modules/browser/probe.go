@@ -82,16 +82,20 @@ func CheckRuntime(ctx context.Context, bundle string) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	if runtime.GOOS == "darwin" {
-		app, err := chromeApp(bundle, chrome)
-		if err != nil {
+		if _, err := chromeApp(bundle, chrome); err != nil {
 			return err
 		}
-		verification := managedcommand.New(checkCtx, "/usr/bin/codesign", "--verify", "--deep", "--strict", app)
-		var diagnostics probeOutput
-		verification.Stdout, verification.Stderr = &diagnostics, &diagnostics
-		// Identical writers make os/exec serialize stdout and stderr writes.
-		if err := verification.Run(); err != nil {
-			return fmt.Errorf("installed Chrome vendor signature is invalid: %w: %s", err, strings.TrimSpace(diagnostics.String()))
+		if err := chromeSignatureKind(chrome, runtime.GOARCH); err != nil {
+			return err
+		}
+		if runtime.GOARCH == "arm64" {
+			verification := managedcommand.New(checkCtx, "/usr/bin/codesign", "--verify", "--strict", "--ignore-resources", chrome)
+			var diagnostics probeOutput
+			verification.Stdout, verification.Stderr = &diagnostics, &diagnostics
+			// Identical writers make os/exec serialize stdout and stderr writes.
+			if err := verification.Run(); err != nil {
+				return fmt.Errorf("installed Chrome ad-hoc code signature is invalid: %w: %s", err, strings.TrimSpace(diagnostics.String()))
+			}
 		}
 	}
 	versionCmd := managedcommand.New(checkCtx, node, "--version")

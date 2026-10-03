@@ -41,8 +41,11 @@ members beneath an alias are rejected regardless of ordering. Links outside
 Chrome apps, dangling/cyclic links, cross-app links, absolute targets and special
 files are rejected. The trusted native target selects this narrow policy;
 other modules and platforms retain the regular-file/directory contract. Candidate
-preparation verifies Chrome's vendor seal; the installed seal and native startup
-still require final platform acceptance.
+preparation preserves the pinned Chrome signature kind: unsigned Intel code and
+linker ad-hoc arm64 code without an app resource seal. arm64 code hashes are
+verified with native codesign before and after copying. Source receipts and
+owned generation integrity bind the whole app. Installed code verification and
+native sandbox startup still require final platform acceptance.
 
 Focused tests cover invalid manifest documents, target vocabulary, duplicate IDs/targets/bindings, missing and cyclic prerequisites (including unselected catalog entries), deterministic private/public resolution, unsupported private targets, immutable catalog inputs/results, disabled or unready discovery, and stale release observations. The architecture policy classifies this dependency-free contract package and permits no new internal imports.
 

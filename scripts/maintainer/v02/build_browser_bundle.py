@@ -15,6 +15,7 @@ import platform
 import re
 import shutil
 import stat
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -109,7 +110,7 @@ def preserve_chrome_tree(source, destination):
             relative_entry = entry.relative_to(source).as_posix()
             marker = relative_entry.find(".app/Contents/")
             if marker < 0:
-                raise ValueError("Chrome vendor link must belong to a signed app")
+                raise ValueError("Chrome vendor link must belong to its app")
             scope = source / relative(relative_entry[:marker + len(".app")])
             if not contained(source, entry).is_relative_to(scope.resolve()):
                 raise ValueError("Chrome framework link escapes its app")
@@ -126,10 +127,70 @@ def verify_chrome_signature(root, executable, native_os):
     binary = contained(root, root / relative(executable))
     apps = [parent for parent in binary.parents if parent.suffix == ".app" and parent.is_relative_to(root)]
     if not apps:
-        raise ValueError("macOS Chrome executable must belong to its signed vendor app")
-    # A candidate must retain the vendor seal. Materialization is not a license
-    # to strip or ad-hoc replace a signature if framework links affect that seal.
-    subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(apps[-1])], check=True)
+        raise ValueError("macOS Chrome executable must belong to its vendor app")
+    arch = {"x86_64": "amd64", "arm64": "arm64"}.get(platform.machine().lower())
+    verify_chrome_signature_kind(binary, arch)
+    if arch == "arm64":
+        subprocess.run(["/usr/bin/codesign", "--verify", "--strict", "--ignore-resources", str(binary)], check=True)
+
+
+def verify_chrome_signature_kind(binary, arch):
+    # Exact pinned upstream forms: Intel is unsigned; arm64 has a linker
+    # ad-hoc signature with zero special slots (no app resource seal).
+    # Preserve these bytes; source receipts and generation integrity bind resources.
+    expected_cpu = {"amd64": 0x1000007, "arm64": 0x100000c}.get(arch)
+    with binary.open("rb") as stream:
+        header = stream.read(32)
+        if len(header) != 32:
+            raise ValueError("truncated Chrome Mach-O header")
+        magic, cpu, _, _, count, size, _, _ = struct.unpack("<8I", header)
+        if magic != 0xfeedfacf or cpu != expected_cpu or size > 1024 * 1024:
+            raise ValueError("Chrome Mach-O architecture/header mismatch")
+        commands = stream.read(size)
+        if len(commands) != size or count > size // 8:
+            raise ValueError("invalid Chrome load commands")
+        position, signature = 0, None
+        for _ in range(count):
+            if position + 8 > size:
+                raise ValueError("truncated Chrome load command")
+            cmd, length = struct.unpack_from("<2I", commands, position)
+            if length < 8 or position + length > size:
+                raise ValueError("invalid Chrome load command size")
+            if cmd == 0x1d:
+                if signature is not None or length != 16:
+                    raise ValueError("invalid Chrome signature command")
+                offset, sigsize = struct.unpack_from("<2I", commands, position + 8)
+                if sigsize < 12 or sigsize > 1024 * 1024:
+                    raise ValueError("invalid Chrome signature size")
+                stream.seek(offset)
+                signature = stream.read(sigsize)
+                if len(signature) != sigsize:
+                    raise ValueError("truncated Chrome signature")
+            position += length
+        if position != size:
+            raise ValueError("unaccounted Chrome load command bytes")
+    if arch == "amd64":
+        if signature is not None:
+            raise ValueError("pinned Intel Chrome must retain its unsigned input")
+        return
+    if signature is None:
+        raise ValueError("missing Chrome ad-hoc signature")
+    magic, size, count = struct.unpack_from(">3I", signature)
+    if magic != 0xfade0cc0 or size < 12 or size > len(signature) or count > (size - 12) // 8:
+        raise ValueError("invalid Chrome signature container")
+    found = False
+    for i in range(count):
+        slot, offset = struct.unpack_from(">2I", signature, 12 + i * 8)
+        if slot != 0:
+            continue
+        if found or offset < 12 + count * 8 or offset > size - 28:
+            raise ValueError("invalid Chrome code directory")
+        cd = struct.unpack_from(">7I", signature, offset)
+        if cd[0] != 0xfade0c02 or cd[1] < 28 or cd[1] > size - offset or cd[3] != 0x20002 or cd[6] != 0:
+            raise ValueError("Chrome must retain its pinned linker ad-hoc signature without a resource seal")
+        found = True
+    if not found:
+        raise ValueError("missing Chrome ad-hoc code directory")
 
 
 def assemble(recipe_path, output, release_url):
