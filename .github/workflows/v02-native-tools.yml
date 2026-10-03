@@ -87,6 +87,25 @@ jobs:
         run: go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
       - name: Accept the exact native manager
         run: python3 scripts/maintainer/v02/accept_manager_bundle.py --candidate native-tool-candidate/manager
+      - name: Allow the owned test Chrome to create its sandbox on the disposable Ubuntu runner
+        if: inputs.mode == 'project-host' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/loki-native-browser-acceptance" <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile loki-native-browser-acceptance /tmp/loki-browser-accept-*/management/tools/browser/generations/*/chrome/chrome flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser --replace "$RUNNER_TEMP/loki-native-browser-acceptance"
       - name: Accept packaged independent browser engines and lifecycle
         if: inputs.mode == 'project-host'
         run: python3 scripts/maintainer/v02/accept_browser_candidate.py --candidate native-tool-candidate
+      - name: Remove the owned disposable runner sandbox profile
+        if: always() && inputs.mode == 'project-host' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/loki-native-browser-acceptance"; then
+            sudo apparmor_parser --remove "$RUNNER_TEMP/loki-native-browser-acceptance"
+          fi

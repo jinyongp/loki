@@ -53,7 +53,12 @@ async def protocol(binary, root, workspace, invoke):
             raise ValueError("native owned file resource changed its staged bytes")
         screenshot = result(await client.request("tools/call", {"name":"browser_take_screenshot", "arguments":{"type":"png", "filename":"native-fixture.png"}}))
         if not any(item["type"] == "image" and len(base64.b64decode(item["data"])) > 0 for item in screenshot["content"]):
-            readback = result(await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"read", "name":"native-fixture.png"}}))
+            response = await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"read", "name":"native-fixture.png"}})
+            if "error" in response or response.get("result", {}).get("isError"):
+                listing = await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"list"}})
+                text = [item.get("text", "") for item in screenshot["content"] if item["type"] == "text"]
+                raise ValueError("Native screenshot file read failed: " + json.dumps({"screenshot":text, "owned_files":listing, "read":response}, ensure_ascii=True)[:8192])
+            readback = result(response)
             if not any(item["type"] == "image" and len(base64.b64decode(item["data"])) > 0 for item in readback["content"]):
                 raise ValueError("native screenshot did not return usable image bytes")
         invoke("tools", "disable", "browser")

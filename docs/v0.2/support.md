@@ -31,6 +31,15 @@ macOS candidate preparation succeeded. Final acceptance reports remain pending.
 Windows Codex desktop-to-SSH-to-WSL rendering and execution location
 remain an additional required check beyond native CI.
 
+Linux project-host Chrome requires native shared libraries and a host policy
+that permits its user namespace sandbox. On Ubuntu 23.10+ this can require an
+administrator-managed AppArmor allowlist for the exact owned Chrome location;
+Chromium documents the [per-path policy](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
+Final CI grants this to owned temporary acceptance paths on disposable runners
+and removes the profile afterward. Chrome's own sandbox stays enabled. WSL
+local acceptance can use a receipt-bound temporary native library closure;
+this does not establish that those libraries are installed in the user's host.
+
 | Tool group | Public responsibility | Full private prerequisites |
 | --- | --- | --- |
 | workspace | Scoped files and developer guidance | runtime-core |
