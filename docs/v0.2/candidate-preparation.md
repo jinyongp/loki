@@ -41,8 +41,8 @@ After fixing archive suffix recognition for dotted version filenames,
 on source `7c22963` succeeded on both native Linux targets. Its uploaded
 artifacts contain the management candidate, reviewed native closures, module
 ZIPs/catalogs and five owned OCI image archives. Both final check jobs were
-skipped for the `prepare` phase. Preparation completeness remains open because
-the two macOS browser artifacts could not be produced.
+skipped for the `prepare` phase. These are historical preparation artifacts;
+fresh candidates are being retained for the corrected signature source.
 
 ## macOS input inspection and corrected signature policy
 
@@ -64,8 +64,18 @@ The corrected producer and doctor require the exact pinned Mach-O architecture
 and signature kind, retain original bytes and framework aliases, and verify
 arm64 code hashes with native codesign. Archive receipts and owned generation
 integrity bind resources. No signature is stripped or replaced. Corrected
-native candidate preparation remains pending.
+[project-browser preparation run 37146598113](https://github.com/jinyongp/loki/actions/runs/37146598113)
+on source `f3b805e` succeeded on all five native targets, including both macOS
+architectures. A follow-up fix canonicalizes macOS `/var` and `/private/var`
+paths before comparing copied app containment. Final check jobs were skipped
+for the prepare phase.
 
-The final product validation tasks remain pending until candidate preparation
-is complete. Native CI compilation, source acquisition and historical upstream
+The refreshed [management preparation run 37146490204](https://github.com/jinyongp/loki/actions/runs/37146490204)
+on source `90252cf` succeeded on all six native targets. Refreshed Linux full
+[preparation run 37146492138](https://github.com/jinyongp/loki/actions/runs/37146492138)
+on that source succeeded on both Linux architectures. All declared native
+candidates are now prepared; none are accepted or published by these runs.
+
+The final product validation tasks follow completed candidate preparation.
+Native CI compilation, source acquisition and historical upstream
 probes do not certify final product behavior or desktop SSH image rendering.

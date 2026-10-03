@@ -24,10 +24,10 @@ the two Linux architectures. Runner labels are explicitly selected from
 [GitHub's official native runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 Native preparation runs and retained inputs are recorded in
 [candidate-preparation.md](candidate-preparation.md). Management artifacts have
-been prepared on six targets and project-browser artifacts on Windows amd64
-and both Linux targets. Native macOS input inspection established the pinned
-unsigned Intel and linker ad-hoc arm64 signature forms; corrected candidate
-preparation is pending. Final acceptance reports remain pending.
+been prepared on six targets and project-browser artifacts on all five declared
+targets, including both macOS architectures. Native input inspection established
+the pinned unsigned Intel and linker ad-hoc arm64 signature forms, and corrected
+macOS candidate preparation succeeded. Final acceptance reports remain pending.
 Windows Codex desktop-to-SSH-to-WSL rendering and execution location
 remain an additional required check beyond native CI.
 
