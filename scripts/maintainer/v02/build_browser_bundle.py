@@ -124,6 +124,9 @@ def json_file(path, value):
 def verify_chrome_signature(root, executable, native_os):
     if native_os != "darwin":
         return
+    # macOS /var is an alias of /private/var. Compare canonical paths on both
+    # sides after containment has resolved the executable.
+    root = root.resolve(strict=True)
     binary = contained(root, root / relative(executable))
     apps = [parent for parent in binary.parents if parent.suffix == ".app" and parent.is_relative_to(root)]
     if not apps:
