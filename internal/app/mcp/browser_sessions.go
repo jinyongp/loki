@@ -93,10 +93,25 @@ func (p *browserSessionPool) server(request *http.Request) *mcp.Server {
 
 func (p *browserSessionPool) handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var entry *browserRequest
 		if r.Method == http.MethodPost && r.Header.Get("Mcp-Session-Id") == "" {
-			r = r.WithContext(context.WithValue(r.Context(), browserRequestKey{}, &browserRequest{}))
+			entry = &browserRequest{}
+			r = r.WithContext(context.WithValue(r.Context(), browserRequestKey{}, entry))
 		}
 		next.ServeHTTP(w, r)
+		// Protocol negotiation and malformed initialization can consult the
+		// callback without establishing a session. Release those engines now.
+		if entry != nil && entry.server != nil {
+			for range entry.server.Sessions() {
+				return
+			}
+			p.mu.Lock()
+			cancel := p.entries[entry]
+			p.mu.Unlock()
+			if cancel != nil {
+				cancel()
+			}
+		}
 	})
 }
 

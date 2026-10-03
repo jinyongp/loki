@@ -3,7 +3,9 @@ package mcpapp
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,7 +34,7 @@ func TestBrowserHTTPClientsOwnDistinctSessions(t *testing.T) {
 	connect := func() *mcp.ClientSession {
 		t.Helper()
 		client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: server.URL}, nil)
+		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: server.URL}, &mcp.ClientSessionOptions{ProtocolVersion: "2025-11-25"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,5 +76,28 @@ func TestBrowserHTTPClientsOwnDistinctSessions(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("service shutdown did not clean up owned session")
+	}
+}
+
+func TestRejectedBrowserInitializationReleasesEngines(t *testing.T) {
+	stopped := make(chan struct{}, 1)
+	base := mcp.NewServer(&mcp.Implementation{Name: "base", Version: "0.2.0"}, nil)
+	pool := newBrowserSessionPool(base, func(context.Context) (*mcp.Server, *toolproxy.Group, func(), error) {
+		server := mcp.NewServer(&mcp.Implementation{Name: "isolated", Version: "0.2.0"}, nil)
+		return server, &toolproxy.Group{}, func() { stopped <- struct{}{} }, nil
+	})
+	defer pool.close()
+	handler := pool.handler(mcp.NewStreamableHTTPHandler(pool.server, &mcp.StreamableHTTPOptions{JSONResponse: true}))
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("invalid initialization"))
+	request.Header.Set("Content-Type", "text/plain")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("rejected initialization status = %d", response.Code)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("rejected initialization retained browser engines")
 	}
 }
