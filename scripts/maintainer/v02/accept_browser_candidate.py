@@ -55,7 +55,7 @@ async def protocol(binary, root, workspace, invoke):
         # workspace. Omit it to exercise its owned output directory on every OS.
         screenshot = result(await client.request("tools/call", {"name":"browser_take_screenshot", "arguments":{"type":"png"}}))
         listing = result(await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"list"}}))
-        entries = json.loads(next(item["text"] for item in listing["content"] if item["type"] == "text"))
+        entries = json.loads(next(item["text"] for item in listing["content"] if item["type"] == "text"))["files"]
         images = [item for item in entries if item["name"].endswith(".png")]
         if len(images) != 1:
             raise ValueError("Native screenshot did not create exactly one owned PNG: " + json.dumps(entries)[:4096])
