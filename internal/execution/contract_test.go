@@ -48,6 +48,24 @@ func TestRepositoryContractIsValid(t *testing.T) {
 	}
 }
 
+func TestModularFullExecutionContractIsValid(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "v02", "config", "full-execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := Load(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contract.Environment["GIT_CONFIG_GLOBAL"] != "/etc/loki/gitconfig" {
+		t.Fatal("modular full contract does not use its owned Git configuration")
+	}
+	contract.Environment["GIT_CONFIG_GLOBAL"] = "/tmp/ambient-gitconfig"
+	if err := contract.Validate(); err == nil {
+		t.Fatal("unowned Git configuration was admitted")
+	}
+}
+
 func TestEnvironmentListIsClosedAndStable(t *testing.T) {
 	t.Setenv("PRIVATE_PARENT_VALUE", "must-not-pass")
 	environment, err := repositoryContract(t).EnvironmentList()
