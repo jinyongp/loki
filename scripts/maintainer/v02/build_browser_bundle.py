@@ -210,6 +210,12 @@ def assemble(recipe_path, output, release_url):
         workspace_link = dependencies / "@loki" / "browser"
         if workspace_link.is_symlink():
             workspace_link.unlink()
+        elif workspace_link.is_junction():
+            # npm uses a directory junction for the owned Windows workspace.
+            # Remove the link itself before validating dependency containment.
+            if workspace_link.resolve() != (npm_workspace / "modules" / "browser").resolve():
+                raise ValueError("npm workspace junction differs from its owned source")
+            workspace_link.rmdir()
         materialize(dependencies, bundle / "node_modules")
         shutil.copyfile(repo / "package-lock.json", bundle / "package-lock.json")
         browsers = bundle / "browsers"
