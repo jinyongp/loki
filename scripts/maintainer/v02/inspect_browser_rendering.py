@@ -14,19 +14,28 @@ from build_browser_bundle import digest
 PROBE = r'''
 const { chromium } = require(process.argv[1]);
 (async () => {
-  const cases = [[], ['--disable-gpu'], ['--use-gl=angle','--use-angle=swiftshader']];
-  for (const args of cases) {
+  const cases = [{video:false,frames:true,viewport:{width:800,height:600}}, {video:true,frames:false}, {video:true,frames:true}, {video:true,frames:true,viewport:{width:320,height:240}}];
+  const fs = require('node:fs');
+  const videoDir = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'loki-render-video-'));
+  for (const options of cases) {
     let browser;
     try {
-      browser = await chromium.launch({executablePath:process.argv[2], headless:true, chromiumSandbox:true, args, timeout:15000});
-      const page = await browser.newPage({viewport:{width:800,height:600}});
+      browser = await chromium.launch({executablePath:process.argv[2], headless:true, chromiumSandbox:true, timeout:15000});
+      const context = await browser.newContext({...(options.viewport ? {viewport:options.viewport}:{}), ...(options.video ? {recordVideo:{dir:videoDir,size:{width:320,height:240}}}:{})});
+      const page = await context.newPage();
       await page.setContent('<h1>Loki native rendering diagnostic</h1>');
-      await page.evaluate(() => Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise((_,reject) => setTimeout(() => reject(new Error('Frame readiness timeout')),3000))]));
+      if (options.frames) await page.evaluate(() => Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise((_,reject) => setTimeout(() => reject(new Error('Frame readiness timeout')),3000))]));
       const png = await page.screenshot({timeout:10000});
-      console.log(JSON.stringify({args, png_bytes:png.length, result:'pass'}));
-    } catch (error) {console.log(JSON.stringify({args, result:'fail', error:String(error).slice(0,4096)}));}
+      await page.waitForTimeout(300);
+      const video = page.video();
+      await context.close();
+      const videoBytes = video ? fs.statSync(await video.path()).size : 0;
+      if (options.video && !videoBytes) throw new Error('Empty video');
+      console.log(JSON.stringify({options, png_bytes:png.length, video_bytes:videoBytes, result:'pass'}));
+    } catch (error) {console.log(JSON.stringify({options, result:'fail', error:String(error).slice(0,4096)}));}
     finally {if (browser) await browser.close();}
   }
+  fs.rmSync(videoDir,{recursive:true,force:true});
 })().catch(error => {console.error(String(error));process.exitCode=1});
 '''
 

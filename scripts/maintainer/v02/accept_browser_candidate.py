@@ -51,16 +51,19 @@ async def protocol(binary, root, workspace, invoke):
         returned = result(await client.request("resources/read", {"uri":entry["uri"]}))
         if base64.b64decode(returned["contents"][0]["blob"]) != data:
             raise ValueError("native owned file resource changed its staged bytes")
-        screenshot = result(await client.request("tools/call", {"name":"browser_take_screenshot", "arguments":{"type":"png", "filename":"native-fixture.png"}}))
-        if not any(item["type"] == "image" and len(base64.b64decode(item["data"])) > 0 for item in screenshot["content"]):
-            response = await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"read", "name":"native-fixture.png"}})
-            if "error" in response or response.get("result", {}).get("isError"):
-                listing = await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"list"}})
-                text = [item.get("text", "") for item in screenshot["content"] if item["type"] == "text"]
-                raise ValueError("Native screenshot file read failed: " + json.dumps({"screenshot":text, "owned_files":listing, "read":response}, ensure_ascii=True)[:8192])
-            readback = result(response)
-            if not any(item["type"] == "image" and len(base64.b64decode(item["data"])) > 0 for item in readback["content"]):
-                raise ValueError("native screenshot did not return usable image bytes")
+        # Official Playwright resolves a supplied filename against the client
+        # workspace. Omit it to exercise its owned output directory on every OS.
+        screenshot = result(await client.request("tools/call", {"name":"browser_take_screenshot", "arguments":{"type":"png"}}))
+        listing = result(await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"list"}}))
+        entries = json.loads(next(item["text"] for item in listing["content"] if item["type"] == "text"))
+        images = [item for item in entries if item["name"].endswith(".png")]
+        if len(images) != 1:
+            raise ValueError("Native screenshot did not create exactly one owned PNG: " + json.dumps(entries)[:4096])
+        readback = result(await client.request("tools/call", {"name":"loki_browser_files", "arguments":{"engine":engine, "action":"read", "name":images[0]["name"]}}))
+        if not any(item["type"] == "image" and base64.b64decode(item["data"]).startswith(b"\x89PNG\r\n\x1a\n") for item in readback["content"]):
+            raise ValueError("native owned screenshot did not return PNG image bytes")
+        if not any(item["type"] == "image" and base64.b64decode(item["data"]).startswith(b"\x89PNG\r\n\x1a\n") for item in screenshot["content"]):
+            raise ValueError("native screenshot did not return inline PNG image bytes")
         invoke("tools", "disable", "browser")
         denied = await client.request("tools/call", {"name":"browser_navigate", "arguments":{"url":url}})
         if "error" not in denied and not denied.get("result", {}).get("isError"):
