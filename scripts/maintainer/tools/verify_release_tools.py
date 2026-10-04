@@ -39,6 +39,9 @@ def verify():
         if ref["sha"] != locked:
             raise ValueError("Action stable pin requires a reviewed update: "+repository)
     from build_go_vendor import OWNERS
+    workspace=json.loads((ROOT/"packaging/tools/inputs/workspace-linux-amd64.json").read_text())
+    if github("repos/BurntSushi/ripgrep/releases/latest")["tag_name"].removeprefix("v") != workspace["inputs"][0]["version"]:
+        raise ValueError("ripgrep stable pin requires a reviewed update")
     for owner,repository in (("github","cli/cli"),("coordination","jinyongp/devtools")):
         if github(f"repos/{repository}/releases/latest")["tag_name"] != "v"+OWNERS[owner]["version"]:
             raise ValueError("native stable tool pin requires a reviewed update: "+repository)

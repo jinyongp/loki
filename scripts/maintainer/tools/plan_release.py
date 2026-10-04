@@ -28,7 +28,7 @@ def checksum(value):
 def go_closure(packages, system, arch):
     env = dict(os.environ, GOOS=system, GOARCH=arch, CGO_ENABLED="0", GOTOOLCHAIN="local")
     env.pop("GOFLAGS", None)
-    raw = subprocess.check_output(["go", "list", "-mod=readonly", "-buildvcs=false", "-deps", "-json", *packages], cwd=ROOT, env=env, text=True)
+    raw = subprocess.check_output(["go", "list", "-mod=readonly", "-buildvcs=false", "-deps", "-json", *packages], cwd=ROOT, env=env, text=True, encoding="utf-8")
     decoder, files, modules = json.JSONDecoder(), set(), {}
     sums = {}
     for line in (ROOT / "go.sum").read_text().splitlines():
@@ -85,6 +85,7 @@ def go_tests(closure):
 
 def fingerprints(release):
     inputs, units = Inputs(), {}
+    inputs.known.update({SCRIPTS+"prepare_test_tools.py", SCRIPTS+"verify_release_tools.py"})
     common = [SCRIPTS+name for name in ("release_config.py", "input_cache.py", "plan_release.py", "release_pipeline.py")]+["LICENSE"]
     contracts = {"schema": 2, "composition": CONTRACT}
     for system, arch, runner in TARGETS:

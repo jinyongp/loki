@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import input_cache
 from plan_release import select, CONTRACT
-from release_pipeline import combine, download, write, validate_source
+from release_pipeline import combine, download, write, validate_source, native
 from release_gate import gate, evidence
 
 
@@ -34,6 +34,18 @@ def fixture():
 
 
 class SelectionTests(unittest.TestCase):
+    def test_windows_native_architecture_case_is_normalized(self):
+        with patch("release_pipeline.platform.system",return_value="Windows"),patch("release_pipeline.platform.machine",return_value="ARM64"):
+            self.assertEqual(native(),("windows","arm64"))
+
+    def test_go_dependency_json_has_explicit_utf8_on_windows(self):
+        import plan_release
+        with patch.object(plan_release.subprocess,"check_output",return_value="{}") as execute:
+            # A standard-library-only fixture avoids module bookkeeping.
+            execute.return_value='{"Standard": true}'
+            plan_release.go_closure(["./cmd/loki-manager"],"windows","amd64")
+            self.assertEqual(execute.call_args.kwargs["encoding"],"utf-8")
+
     def test_actual_plan_maps_python_test_change_to_source_checks(self):
         import plan_release
         current, old=fixture()

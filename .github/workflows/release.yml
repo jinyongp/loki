@@ -74,7 +74,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - id: plan
         env:
@@ -126,7 +126,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -173,7 +173,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -230,7 +230,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -329,8 +329,10 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - name: Prepare the pinned native search test prerequisite
+        run: python3 scripts/maintainer/tools/prepare_test_tools.py --output test-tools
       - name: Final source contracts and release selection fixtures
         env:
           GH_TOKEN: ${{ github.token }}
@@ -370,7 +372,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -430,7 +432,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -504,7 +506,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -534,6 +536,9 @@ jobs:
           PY
           sudo systemctl restart docker
       - name: Accept confined workspace service, revocation and every exact registry digest
+        run: |
+          python3 scripts/maintainer/tools/prepare_test_tools.py --output test-tools
+      - name: Run full source and product acceptance
         run: |
           go test ./internal/config ./internal/tools ./internal/management ./modules/workspace
           python3 scripts/maintainer/tools/accept_full_workspace_candidate.py --candidate acceptance-candidate

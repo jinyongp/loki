@@ -113,7 +113,7 @@ def outputs(plan):
 
 def native():
     system = {"Linux":"linux","Darwin":"darwin","Windows":"windows"}.get(platform.system())
-    arch = {"x86_64":"amd64","AMD64":"amd64","aarch64":"arm64","arm64":"arm64"}.get(platform.machine())
+    arch = {"x86_64":"amd64","amd64":"amd64","aarch64":"arm64","arm64":"arm64"}.get(platform.machine().lower())
     if not system or not arch:
         raise ValueError("unsupported native execution target")
     return system,arch
