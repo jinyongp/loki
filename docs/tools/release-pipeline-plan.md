@@ -1,9 +1,11 @@
 # 단일 릴리스 워크플로와 선택적 빌드 계획
 
-작성일: 2026-10-04. 완료: 2026-10-05 KST. 상태: 구현·최종 네이티브 CI·review-loop 완료.
-단일 job graph, 호환 계약, 선택 계획과 캐시 경로를 구현했다. CLI 6개·독립 browser 5개·Linux full 2개와 gate가 실제 `publish=false` 실행에서 통과했다. [검증 기록](evidence/release-pipeline-validation.json)과 [job별 시간](evidence/release-pipeline-timings.json)에 근거를 남겼다. 릴리스 게시와 기존 설치 전환은 별도 단계다.
+작성일: 2026-10-04. 완료: 2026-10-05 KST. 상태: 구현·최종 네이티브 CI·review-loop·0.2.4 배포·공개 baseline 반복 측정 완료.
+단일 job graph, 호환 계약, 선택 계획과 캐시 경로를 구현했다. CLI 6개·독립 browser 5개·Linux full 2개와 gate가 실제 `publish=false` 실행에서 통과했다. [구현 검증 기록](evidence/release-pipeline-validation.json)과 [job별 시간](evidence/release-pipeline-timings.json)에 근거를 남겼다. 이후 승인된 배포 단계에서 같은 워크플로로 stable `0.2.4` 게시·Pages 전환·익명 공개 설치/업그레이드 검증까지 완료했다. [공개 배포와 반복 측정](evidence/release-pipeline-public-validation.json)은 구현 완료 당시의 기록과 분리해 보존한다.
 
-최종 승인 lock으로 다음 CLI 버전의 실제 계획을 계산했을 때 browser/full build·check matrix와 OCI 전송 선택이 모두 0개였다. isolated Linux CLI 교체에서도 기존 browser 패키지·활성화 선택·Codex 설정·사용자 데이터가 유지됐다. 첫/warm 실행의 full 모듈 18개와 이미지 10개의 제품 바이트·digest·신뢰 근거가 일치했고 ARM64 full job은 634초에서 347초로 줄었다. 공개 baseline을 사용하는 선택적 dispatch의 실제 게시 시간과 아래 공개 전환 검사는 최초 승인된 배포 단계에서 측정한다. 현재 제품 release와 Pages는 전환하지 않았다.
+최종 승인 lock으로 다음 CLI 버전의 실제 계획을 계산했을 때 browser/full build·check matrix와 OCI 전송 선택이 모두 0개였다. isolated Linux CLI 교체에서도 기존 browser 패키지·활성화 선택·Codex 설정·사용자 데이터가 유지됐다. 첫/warm 실행의 full 모듈 18개와 이미지 10개의 제품 바이트·digest·신뢰 근거가 일치했고 ARM64 full job은 634초에서 347초로 줄었다.
+
+공개 `0.2.4` baseline으로 CLI-only 후보를 두 번 실행했다. 초기 대기를 제외한 실행은 7분 51초·6분 40초였고, 초기 대기는 각각 4초·3분 28초였다. 두 실행 모두 CLI 6개만 빌드·검증하고 기존 모듈·이미지 33개의 전체 lock 기록을 그대로 유지했다. 후보 `0.2.5`는 게시하지 않았다. 첫 전체 배포의 게시 시작부터 공개 확인 완료까지는 5분 23초였다. CLI-only 게시의 2분 목표는 아직 측정하지 않았으며, 공개 검증용 artifact 다운로드와 릴리스 파일 전송 비용이 다음 성능 개선 대상이다.
 
 ## 목표와 범위
 
@@ -188,7 +190,7 @@ Releaseway는 단일 `release.yml`의 `publish` job에서 사용하며 이전 6�
 - cache 없는 실행과 cache 있는 실행을 비교한다. checksum·notice·계약·프로토콜 검증 결과가 일치해야 한다. cache backend 지연/실패가 cold build로 복구되어야 한다.
 - 판정된 CLI-only 릴리스는 full image build 0개, browser rebuild 0개, OCI tar 전송 0개, 변경 없는 이미지 재게시 0개가 필수 완료 조건이다. 공유 코드 변화로 실제 worker가 달라진 경우에는 그 사유가 plan에 표시되어야 한다.
 - 각 job의 queue/setup/input download/build/test/cache import/export/artifact transfer/publish 시간을 기록한다. warm full 실행은 cold full보다 빨라야 하며 cache 비용이 이득을 넘으면 scope/mode를 조정한다.
-- 성능 목표는 CLI-only warm dispatch 시작부터 게시 준비까지 8분 이내, 게시·공개 확인 2분 이내다. 목표이며 아직 측정된 성과가 아니다. runner queue는 별도 보고하고 최소 두 번 측정해 비교한다. 못 미치면 병목·다음 개선을 기록한다.
+- 성능 목표는 CLI-only warm dispatch 시작부터 게시 준비까지 8분 이내, 게시·공개 확인 2분 이내다. runner queue는 별도 보고하고 최소 두 번 측정해 비교한다. 공개 baseline 반복 측정에서 초기 대기 제외 준비 시간은 두 번 모두 8분 이내였다. CLI-only 게시 시간은 미측정이며 첫 전체 배포의 공개 전환 시간과 병목은 별도 증거에 기록했다.
 
 ### 게시와 전환
 

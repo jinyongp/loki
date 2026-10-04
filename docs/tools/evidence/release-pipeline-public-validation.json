@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "completed_date_kst": "2026-10-05",
+  "status": "passed",
+  "source_commit": "e90a048694d13d9132606601d84445a6135b2568",
+  "implementation_acceptance": "release-pipeline-validation.json",
+  "publication": {
+    "release": "0.2.4",
+    "channel": "stable",
+    "immutable": true,
+    "asset_count": 51,
+    "run": "https://github.com/jinyongp/loki/actions/runs/37212116109",
+    "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.4",
+    "published_at_utc": "2026-10-04T15:30:12Z",
+    "native_acceptance": "Six managers, five standalone browsers, two Linux full targets and the final gate passed in the same workflow before publication.",
+    "publisher": "Pinned releaseway/actions v0.2.1; exact accepted assets and immutable GitHub Release published successfully.",
+    "pages": "passed",
+    "anonymous_public_checks": {
+      "powershell_installer": "https://jinyongp.dev/loki/install.ps1",
+      "shell_installer": "https://jinyongp.dev/loki/install.sh",
+      "installer_bytes_match_accepted_release": "passed",
+      "oci_raw_manifest_digest_matches": "passed: all ten images",
+      "linux_cli_install_and_self_upgrade": "passed: public latest lookup, forced reinstall and retained state",
+      "windows_powershell_5_1_iex": "passed on both native Windows manager targets before publication"
+    },
+    "timing_seconds": {
+      "initial_queue": 6,
+      "first_job_start_to_workflow_completion": 1203,
+      "publish_job": 207,
+      "pages_job": 10,
+      "verify_public_job": 99,
+      "publish_start_to_public_verification_completion_including_inter_job_waits": 323
+    },
+    "publication_bottlenecks_seconds": {
+      "releaseway_full_asset_publication": 161,
+      "publisher_artifact_downloads": 37,
+      "public_verifier_artifact_download": 84,
+      "actual_anonymous_public_checks": 9
+    }
+  },
+  "public_baseline_cli_only_benchmarks": {
+    "baseline": "Immutable public 0.2.4 lock and its original public artifact URLs",
+    "candidate_release": "0.2.5",
+    "publish": false,
+    "candidate_was_not_released": true,
+    "latest_public_release_after_both_runs": "0.2.4",
+    "runs": [
+      {
+        "url": "https://github.com/jinyongp/loki/actions/runs/37213395139",
+        "result": "success",
+        "initial_queue_seconds": 4,
+        "execution_seconds": 471,
+        "total_seconds": 475,
+        "longest_job": "manager-checks (windows, arm64, windows-11-arm)",
+        "longest_job_seconds": 264
+      },
+      {
+        "url": "https://github.com/jinyongp/loki/actions/runs/37213673489",
+        "result": "success",
+        "initial_queue_seconds": 208,
+        "execution_seconds": 400,
+        "total_seconds": 608,
+        "longest_job": "manager-checks (windows, arm64, windows-11-arm)",
+        "longest_job_seconds": 221
+      }
+    ],
+    "timing_definition": "Initial queue is run creation to first non-skipped job start, including workflow concurrency wait. Execution is first job start to workflow completion, including internal runner waits and final summary. Parallel job durations are not summed.",
+    "selection_in_both_runs": {
+      "manager_builds": 6,
+      "manager_checks": 6,
+      "browser_builds": 0,
+      "browser_checks": 0,
+      "full_builds": 0,
+      "full_checks": 0,
+      "oci_build_or_transfer_jobs": 0,
+      "reused_non_manager_units": 33,
+      "successful_jobs": 17,
+      "skipped_jobs": 7
+    },
+    "reuse_verification": "All 33 non-manager unit records in both accepted candidate locks equal the public 0.2.4 lock records in their entirety: artifact identity, version, digest, producer and original native acceptance evidence retained.",
+    "eight_minute_readiness_target_excluding_initial_queue": "passed twice: 7m51s and 6m40s",
+    "two_minute_cli_only_publication_target": "Not measured: both CLI-only runs deliberately skipped publish, Pages and public verification. The first full publication took 5m23s for these stages."
+  },
+  "performance_follow_up": "Reduce the public verifier download to the expected installer files and inspect release asset transfer cost on the next authorized publication. CLI-only readiness currently depends most on native Windows ARM64 manager acceptance. No unverified publishing performance claim is made.",
+  "remaining_product_gates": [
+    "Actual Windows desktop SSH image rendering",
+    "Other full execution/network/signing/endpoints/sharing combinations",
+    "Experimental browser workflows"
+  ]
+}
