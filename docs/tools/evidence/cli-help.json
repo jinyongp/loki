@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "scope": "CLI help implemented and published in stable 0.2.2",
-  "source_basis": "220d394d41d32eb7a2b0a6aba2c08285b9d23a50",
+  "scope": "CLI help implemented and published in stable 0.2.3, including upgrade options",
+  "source_basis": "eabf41d4791f10e9546c2decdcc50019d0f86314",
   "behavior": {
     "bare_loki": "descriptive help on stdout and successful exit",
     "bare_command_groups": "descriptions and contextual usage",
@@ -18,14 +18,14 @@
     "darwin_arm64_test_compilation": "pass",
     "actual_linux_cli_review": "root, tools, integrations, install and GitHub setup help reviewed",
     "native_execution": {
-      "run": 37192839658,
+      "run": 37200278215,
       "targets": "Linux/macOS/Windows amd64 and arm64",
       "result": "pass"
     }
   },
   "publication": {
-    "release": "0.2.2",
-    "publisher_run": 37193691237,
+    "release": "0.2.3",
+    "publisher_run": 37201234614,
     "verification": "docs/tools/evidence/release-publication.json"
   }
 }

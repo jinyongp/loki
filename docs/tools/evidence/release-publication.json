@@ -1,23 +1,23 @@
 {
   "schema": 1,
-  "release": "0.2.2",
+  "release": "0.2.3",
   "channel": "stable",
-  "publisher_run": 37193691237,
-  "source_commit": "220d394d41d32eb7a2b0a6aba2c08285b9d23a50",
-  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.2",
+  "publisher_run": 37201234614,
+  "source_commit": "eabf41d4791f10e9546c2decdcc50019d0f86314",
+  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.3",
   "native_acceptance": {
     "manager": {
-      "run": 37192839658,
+      "run": 37200278215,
       "targets": 6,
       "result": "pass"
     },
     "browser": {
-      "run": 37192841027,
+      "run": 37200281594,
       "targets": 5,
       "result": "pass"
     },
     "full_workspace": {
-      "run": 37192842345,
+      "run": 37200279823,
       "targets": 2,
       "result": "pass"
     }
@@ -30,13 +30,19 @@
     "windows_powershell_iex": "pass on amd64 and arm64",
     "anonymous_native_management_installation": "pass",
     "descriptive_help": "pass: native root/groups/command help and public Linux help",
-    "empty_0_2_1_state_upgrade": "pass in six native manager targets",
+    "empty_0_2_1_state_upgrade": "pass in six native manager targets; empty state follows 0.2.3",
     "codex_configuration_preservation_and_idempotence": "pass in five native browser targets",
     "historical_0_2_1_bootstrap_corrections": [
       "docs/tools/evidence/bootstrap-correction.json",
       "docs/tools/evidence/cli-installation.json",
       "docs/tools/evidence/installer-output.json"
-    ]
+    ],
+    "cli_self_upgrade": {
+      "native_previous_release_and_return": "pass on all six manager targets",
+      "public_latest_lookup_and_forced_reinstall": "pass on public native Linux installation",
+      "selection_and_cancellation": "pass",
+      "hash_version_ownership_and_configuration": "pass"
+    }
   },
   "anonymous_oci_manifest_verification": {
     "manifest_count": 10,
