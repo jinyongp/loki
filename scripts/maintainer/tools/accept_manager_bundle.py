@@ -72,6 +72,13 @@ def accept(candidate):
         if not doctor["healthy"] or doctor["issues"]:
             raise ValueError("native installed manager is not healthy")
         run(binary, root, "install", "--bin-dir", str(bin_directory))
+        state_path = root / 'control/state.json'
+        state = json.loads(state_path.read_text())
+        state['config']['release'] = '0.2.1'
+        state_path.write_text(json.dumps(state))
+        run(binary, root, 'install', '--bin-dir', str(bin_directory))
+        if json.loads(state_path.read_text())['config']['release'] != '0.2.2':
+            raise ValueError('empty previous-release CLI state did not follow the new manager')
         run(binary, root, "tools", "recover")
         unowned_bin = scratch / "unowned bin"
         unowned_bin.mkdir()

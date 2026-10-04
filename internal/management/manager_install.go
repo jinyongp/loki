@@ -185,6 +185,9 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 			if err != nil {
 				return ManagerRecord{}, err
 			}
+			if len(state.Installed) == 0 {
+				state.Config.Release = Release
+			}
 			if err := s.Save(state); err != nil {
 				return ManagerRecord{}, err
 			}
@@ -196,6 +199,11 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 	state, err := s.Load()
 	if err != nil {
 		return ManagerRecord{}, err
+	}
+	// An empty CLI installation follows the newly published manager version.
+	// Populated installations retain their release until a tool update commits.
+	if len(state.Installed) == 0 {
+		state.Config.Release = Release
 	}
 	if err := s.Save(state); err != nil {
 		return ManagerRecord{}, err

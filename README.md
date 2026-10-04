@@ -31,3 +31,8 @@ their own lifecycle and must be removed before using the same command directory.
 
 See [installation and tool selection](docs/tools/usage.md) for supported hosts,
 manual selection, remote execution and remaining acceptance gates.
+
+After installation, tools can run in an existing WSL Ubuntu distribution, on
+Linux/macOS, or in native Windows where supported. Full mode requires Linux
+and Docker Engine. Add your Codex MCP connection after installing and enabling
+the tools you need.

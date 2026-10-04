@@ -38,6 +38,11 @@ Configure the execution host, install and enable individual tool groups, then
 connect your MCP client using the commands in the tool installation guide.
 For WSL or SSH projects, install the native CLI on that execution host as well.
 
+An existing Ubuntu WSL distribution uses an absolute Linux project path.
+Full tools require Linux and Docker Engine. When configuring browser tools,
+prepare the declared host libraries and retain Chrome sandboxing. Add the
+Codex MCP connection after tool installation and activation.
+
 See [tool installation and connection](tools/usage.md) for manual controls and
 current platform support. Actual desktop SSH image display remains a user-side
 acceptance check.
