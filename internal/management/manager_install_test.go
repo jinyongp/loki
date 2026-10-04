@@ -34,6 +34,63 @@ func TestManagerPublicationProtectsUnownedCommands(t *testing.T) {
 	}
 }
 
+func TestManagerExecutableRejectsCopiedOwnership(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(source, []byte("owned binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := store.InstallManager(t.Context(), source, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone := filepath.Join(t.TempDir(), filepath.Base(owned.Executable))
+	if err := os.WriteFile(clone, []byte("owned binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(clone+".loki-owner.json", owned); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ManagerExecutable(clone); err == nil {
+		t.Fatal("copied owner record redirected executable publication")
+	}
+	if actual, err := store.ManagerExecutable(owned.Executable); err != nil || actual != owned.Executable {
+		t.Fatalf("owned command: %q %v", actual, err)
+	}
+}
+
+func TestManagerExecutablePreservesParentAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows native upgrade acceptance covers short/long paths")
+	}
+	parent := t.TempDir()
+	realParent := filepath.Join(parent, "real")
+	aliasParent := filepath.Join(parent, "alias")
+	if err := os.Mkdir(realParent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realParent, aliasParent); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Root: t.TempDir()}
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(source, []byte("owned binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := store.InstallManager(t.Context(), source, filepath.Join(aliasParent, "bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(owned.Executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual, err := store.ManagerExecutable(resolved)
+	if err != nil || actual != owned.Executable {
+		t.Fatalf("recorded alias not retained: %q %v", actual, err)
+	}
+}
+
 func TestManagerPublicationRecordsVerifiedTargetRelease(t *testing.T) {
 	store := Store{Root: t.TempDir()}
 	source := filepath.Join(t.TempDir(), "candidate")

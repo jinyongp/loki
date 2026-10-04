@@ -102,6 +102,37 @@ func managerDigest(path string) (string, int64, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), n, nil
 }
 
+// ManagerExecutable preserves the recorded installation spelling when the
+// operating system resolves an executable through a parent directory alias.
+func (s Store) ManagerExecutable(executable string) (string, error) {
+	var owned ManagerRecord
+	if err := readOwnedJSON(executable+".loki-owner.json", tools.MaxManifestBytes, &owned); err != nil {
+		return "", fmt.Errorf("CLI is not owned by this installation; install it with the public installer first: %w", err)
+	}
+	if owned.validate() != nil || owned.Root != s.Root {
+		return "", fmt.Errorf("CLI ownership differs from this management root")
+	}
+	digest, size, err := managerDigest(executable)
+	if err != nil {
+		return "", err
+	}
+	if digest != owned.SHA256 || size != owned.Bytes {
+		return "", fmt.Errorf("CLI bytes differ from their ownership record")
+	}
+	actual, err := os.Stat(executable)
+	if err != nil {
+		return "", err
+	}
+	recorded, err := os.Lstat(owned.Executable)
+	if err != nil {
+		return "", err
+	}
+	if !recorded.Mode().IsRegular() || !os.SameFile(actual, recorded) {
+		return "", fmt.Errorf("CLI ownership record points to another executable")
+	}
+	return owned.Executable, nil
+}
+
 func managerBinLock(directory string) (func(), error) {
 	if err := realDirectories(directory); err != nil {
 		return nil, err

@@ -67,6 +67,7 @@ func upgradeFixture(t *testing.T, target string, corrupt bool) (upgradeDependenc
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body))}, nil
 		})},
 		executable: func() (string, error) { return executable, nil },
+		location:   func(_ management.Store, path string) (string, error) { return path, nil },
 		run: func(ctx context.Context, binary string, args ...string) ([]byte, error) {
 			runs = append(runs, strings.Join(args, " "))
 			if data, err := os.ReadFile(binary); err != nil || string(data) != "candidate binary" {

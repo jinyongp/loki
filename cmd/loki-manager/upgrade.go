@@ -37,6 +37,7 @@ type upgradeRelease struct {
 type upgradeDependencies struct {
 	client     *http.Client
 	executable func() (string, error)
+	location   func(management.Store, string) (string, error)
 	run        func(context.Context, string, ...string) ([]byte, error)
 	install    func(context.Context, management.Store, string, string, string) error
 }
@@ -44,6 +45,9 @@ type upgradeDependencies struct {
 func defaultUpgradeDependencies() upgradeDependencies {
 	return upgradeDependencies{
 		client: &http.Client{}, executable: os.Executable,
+		location: func(store management.Store, executable string) (string, error) {
+			return store.ManagerExecutable(executable)
+		},
 		run: func(ctx context.Context, binary string, args ...string) ([]byte, error) {
 			return exec.CommandContext(ctx, binary, args...).CombinedOutput()
 		},
@@ -237,6 +241,10 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		return err
 	}
 	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		return err
+	}
+	executable, err = deps.location(store, executable)
 	if err != nil {
 		return err
 	}

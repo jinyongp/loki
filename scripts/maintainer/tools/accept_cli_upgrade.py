@@ -32,7 +32,9 @@ def accept(candidate):
             raise ValueError('native release selection/confirmation failed')
         if state.read_bytes() != before:
             raise ValueError('cancelled upgrade changed state')
-        upgraded = subprocess.run(command+['--yes'], capture_output=True, text=True, check=True)
+        upgraded = subprocess.run(command+['--yes'], capture_output=True, text=True)
+        if upgraded.returncode:
+            raise ValueError('Native self-upgrade failed:\n'+upgraded.stdout+upgraded.stderr)
         if 'Loki 0.2.2 installed.' not in upgraded.stdout:
             raise ValueError('native CLI self-publication failed')
         actual = subprocess.check_output([str(installed), 'version'], text=True).strip()
