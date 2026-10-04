@@ -12,17 +12,14 @@ Linux/macOS:
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-The installer selects native archives for your CPU, verifies their release-bound
-SHA-256, installs the manager and your chosen tools, checks their health, then
-adds its Codex MCP connection while preserving unrelated settings. Reopen your
-project after setup. Choose management only to skip tools and MCP configuration.
+The installer selects the native CLI archive for your CPU, verifies its
+release-bound SHA-256 and installs the management command. Installation completes
+without selection prompts. A fresh installation starts with an empty tool set.
 
-Windows prompts for WSL or native execution. WSL uses an existing Ubuntu
-distribution and an absolute Linux project path. Native Windows browser supports
-amd64. Ubuntu 24.04 browser setup installs declared host libraries and an
-AppArmor exception for the exact installed Chrome path when required. It does
-not disable Chrome sandboxing. Full tools require an accessible Docker Engine
-on Linux/WSL.
+After installation, use `loki --help` and `loki tools list` to inspect the CLI.
+Configure the execution host, install and enable individual tool groups, then
+connect your MCP client using the commands in the tool installation guide.
+For WSL or SSH projects, install the native CLI on that execution host as well.
 
 See [tool installation and connection](tools/usage.md) for manual controls and
 current platform support. Actual desktop SSH image display remains a user-side

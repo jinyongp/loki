@@ -16,13 +16,14 @@ irm https://jinyongp.dev/loki/install.ps1 | iex
 curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
-Select tools and an execution host when prompted. The installer downloads and
-verifies the manager and native catalog, installs and enables your selection,
-checks it, and connects Codex. Existing WSL distributions can be selected with
-`-Distribution NAME` when running a downloaded PowerShell installer. Linux/macOS
-accept `--tools browser|none|CSV`, `--workspace ABSOLUTE-PATH`, `--no-connect`,
-and explicit `--bin-dir`, `--root` and `--codex-config` paths. Full selection
-requires Docker Engine. Reopen the Codex project to load the added MCP server.
+The installer verifies and installs only the native CLI, then completes without
+selection prompts. A fresh installation has an empty tool set. Configure the
+execution host and add tool groups afterward with `loki tools` as shown below.
+Use the same CLI installer inside WSL or on an SSH execution host. Windows
+supports explicit `-BinDirectory` and `-ManagementRoot` paths; Linux/macOS
+support `--bin-dir` and `--root`. `-SourceDirectory` / `--source-dir` supply an
+offline manager archive. Tool catalogs and MCP client configuration belong to
+the later configuration steps.
 
 For manual/offline installation, download the native management ZIP and matching
 mode catalog. `SHA256SUMS` covers the published files. Reconnect an installed

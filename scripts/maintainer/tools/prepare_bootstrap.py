@@ -20,8 +20,7 @@ def prepare(output):
     sums = dict((name, digest) for digest, name in
                 (line.split() for line in download('SHA256SUMS').decode().splitlines()))
     for name, digest in sums.items():
-        if ((name.startswith('loki-manager-') and name.endswith('.zip')) or
-                (name.startswith('loki-catalog-') and name.endswith('.json'))):
+        if name.startswith('loki-manager-') and name.endswith('.zip'):
             raw = download(name)
             if hashlib.sha256(raw).hexdigest() != digest:
                 raise ValueError('immutable release asset checksum differs: ' + name)
@@ -31,11 +30,6 @@ def prepare(output):
     if hashlib.sha256(original).hexdigest() != sums['loki-install.ps1']:
         raise ValueError('original release PowerShell installer checksum differs')
     (output / 'original.ps1').write_bytes(original)
-    # Windows delegates WSL installation to this immutable release attachment.
-    # A shell bootstrap change needs its own release/delegation update.
-    shell = (output / 'pages/install.sh').read_bytes()
-    if hashlib.sha256(shell).hexdigest() != sums['loki-install.sh']:
-        raise ValueError('bootstrap-only publication must preserve the release shell installer')
 
 
 if __name__ == '__main__':

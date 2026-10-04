@@ -19,9 +19,13 @@ jobs:
         with:
           name: accepted-bootstrap-inputs
           path: publication
-  windows:
+  native:
     needs: prepare
-    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -29,10 +33,13 @@ jobs:
         with:
           name: accepted-bootstrap-inputs
           path: publication
-      - name: Reproduce original failure and accept advertised interactive IEX entry
-        run: python scripts/maintainer/tools/accept_iex_installer.py --publication publication --original publication/original.ps1
+      - name: Accept native CLI-only installation
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/maintainer/tools/accept_cli_installer.py --publication publication
+      - name: Accept advertised prompt-free Windows IEX entry
+        if: runner.os == 'Windows'
+        run: python scripts/maintainer/tools/accept_iex_installer.py --publication publication
   stage:
-    needs: [prepare, windows]
+    needs: [prepare, native]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c

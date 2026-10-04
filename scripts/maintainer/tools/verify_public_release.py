@@ -49,8 +49,10 @@ def verify(expected_directory=None):
                 raw = response.read()
             if 'sha256:'+hashlib.sha256(raw).hexdigest() != digest:
                 raise ValueError('anonymous published OCI manifest differs')
-        (root/'workspace').mkdir()
-        subprocess.run(['sh',str(root/'install.sh'),'--tools','none','--bin-dir',str(root/'bin'),'--root',str(root/'management'),'--workspace',str(root/'workspace')],check=True)
+        subprocess.run(['sh',str(root/'install.sh'),'--bin-dir',str(root/'bin'),'--root',str(root/'management')],check=True)
+        state = json.loads((root/'management/control/state.json').read_text())
+        if state['installed'] or state['config']['tools']:
+            raise ValueError('public bootstrap installed or enabled tools')
         print('Anonymous installer endpoints, 10 OCI manifests and public native management installation passed.')
 
 

@@ -37,10 +37,10 @@ def accept(candidate, browser=False):
         marker = workspace / 'keep.txt'
         marker.write_text('User project fixture')
         if platform.system() == 'Windows':
-            arguments = ['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(pages / 'install.ps1'),'-Tools','browser' if browser else 'none','-HostKind','native','-BinDirectory',str(binary_dir),'-ManagementRoot',str(root),'-SourceDirectory',str(assets),'-Workspace',str(workspace),'-CodexConfig',str(config)]
+            arguments = ['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(pages / 'install.ps1'),'-BinDirectory',str(binary_dir),'-ManagementRoot',str(root),'-SourceDirectory',str(assets)]
             path_before = subprocess.check_output(['powershell.exe','-NoProfile','-Command',"[Environment]::GetEnvironmentVariable('Path','User')"],text=True)
         else:
-            arguments = ['sh',str(pages / 'install.sh'),'--tools','browser' if browser else 'none','--bin-dir',str(binary_dir),'--root',str(root),'--source-dir',str(assets),'--workspace',str(workspace),'--codex-config',str(config),'--skip-native-deps']
+            arguments = ['sh',str(pages / 'install.sh'),'--bin-dir',str(binary_dir),'--root',str(root),'--source-dir',str(assets)]
             path_before = None
         try:
             subprocess.run(arguments, check=True)
@@ -49,7 +49,16 @@ def accept(candidate, browser=False):
                 return subprocess.check_output([str(binary),'--root',str(root),*args],text=True)
             if invoke('version').strip() != 'loki 0.2.1':
                 raise ValueError('public installer reports the wrong release')
+            state = json.loads((root / 'control/state.json').read_text())
+            if state['installed'] or state['config']['tools'] or config.read_text() != original:
+                raise ValueError('CLI bootstrap configured tools or modified Codex settings')
             if browser:
+                # Tool configuration is an explicit post-install CLI operation.
+                invoke('tools', 'configure', '--mode', 'project-host')
+                invoke('tools', 'install', '--catalog', str(candidate / 'release/catalog.json'),
+                       '--archives', str(candidate / 'release/archives'), 'browser')
+                invoke('tools', 'enable', 'browser')
+                invoke('tools', 'connect', '--workspace', str(workspace), '--config', str(config), 'codex')
                 configured = config.read_text()
                 if not configured.startswith(original) or '[mcp_servers.loki_browser]' not in configured:
                     raise ValueError('public installer did not preserve/connect Codex configuration')

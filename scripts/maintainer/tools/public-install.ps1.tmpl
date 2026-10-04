@@ -1,20 +1,9 @@
 param(
-    [string]$Tools,
-    [string]$HostKind,
-    [string]$Distribution = 'Ubuntu',
-    [string]$Workspace,
     [string]$BinDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\Loki\bin'),
     [string]$ManagementRoot = (Join-Path $env:APPDATA 'loki'),
-    [string]$SourceDirectory,
-    [string]$CodexConfig,
-    [switch]$NoConnect,
-    [switch]$SkipNativeDependencies
+    [string]$SourceDirectory
 )
 $ErrorActionPreference = 'Stop'
-# Invoke-Expression declares these optional parameters in the caller's scope.
-# ValidateSet rejects their empty initial values before Read-Host can run.
-if ($Tools -and $Tools -notin @('browser', 'full', 'none')) { throw 'Choose browser, full or none.' }
-if ($HostKind -and $HostKind -notin @('wsl', 'native')) { throw 'Choose wsl or native.' }
 $release = '@@RELEASE@@'
 $releaseUrl = "https://github.com/jinyongp/loki/releases/download/v$release"
 $pins = @'
@@ -53,60 +42,9 @@ try {
     $script:loki = Join-Path $BinDirectory 'loki.exe'
     $env:Path = "$BinDirectory;$env:Path"
     Invoke-Loki @('version')
-    if (-not $Tools) {
-        $Tools = Read-Host 'Tools to install [browser / full / none] (browser)'
-        if (-not $Tools) { $Tools = 'browser' }
-        if ($Tools -notin @('browser', 'full', 'none')) { throw 'Choose browser, full or none.' }
-    }
-    if ($Tools -eq 'none') { Invoke-Loki @('doctor'); Write-Host 'Loki management ready.'; return }
-    if (-not $HostKind) {
-        $HostKind = Read-Host 'Execution host [wsl / native] (wsl)'
-        if (-not $HostKind) { $HostKind = 'wsl' }
-        if ($HostKind -notin @('wsl', 'native')) { throw 'Choose wsl or native.' }
-    }
-    if ($HostKind -eq 'wsl') {
-        $distributions = @(& wsl.exe --list --quiet) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }
-        if ($LASTEXITCODE -ne 0 -or $Distribution -notin $distributions) { throw "WSL distribution '$Distribution' is unavailable. Install Ubuntu or select -Distribution EXISTING-NAME." }
-        if (-not $Workspace) {
-            $userHome = (& wsl.exe -d $Distribution --exec sh -c 'printf "%s" "$HOME"' | Out-String).Trim()
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the WSL user home.' }
-            $Workspace = Read-Host "WSL project directory ($userHome)"
-            if (-not $Workspace) { $Workspace = $userHome }
-        }
-        $shellInstaller = Fetch-ReleaseFile 'loki-install.sh' $scratch
-        $linuxTools = if ($Tools -eq 'full') { 'workspace,execution,git,github,secrets,sharing,coordination,browser' } else { 'browser' }
-        $linuxArguments = @('--tools', $linuxTools, '--workspace', $Workspace, '--remote')
-        if ($NoConnect) { $linuxArguments += '--no-connect' }
-        if ($SkipNativeDependencies) { $linuxArguments += '--skip-native-deps' }
-        # WSL owns its native state and uses the same release-bound shell installer.
-        # Download again on that host so Windows paths never become project paths.
-        $launch = 'set -eu; scratch=$(mktemp -d); trap ''rm -rf "$scratch"'' EXIT; curl -fL --retry 3 "$1" -o "$scratch/install.sh"; actual=$(sha256sum "$scratch/install.sh"); actual=${actual%% *}; test "$actual" = "$2"; shift 2; bash "$scratch/install.sh" "$@"'
-        Write-Host "[loki] Installing selected tools in WSL '$Distribution'..."
-        & wsl.exe -d $Distribution --exec bash -c $launch -- "$releaseUrl/loki-install.sh" $pins.'loki-install.sh' @linuxArguments
-        if ($LASTEXITCODE -ne 0) { throw 'WSL tool installation failed; see the preceding error.' }
-        Write-Host 'WSL tools and Codex connection ready. Reopen the SSH project.'
-        return
-    }
-    if ($Tools -eq 'full') { throw 'Full tools require WSL/Linux; rerun with -HostKind wsl.' }
-    if ($arch -eq 'arm64') { throw 'Native Windows arm64 browser is unavailable; select WSL.' }
-    if (-not $Workspace) { $Workspace = (Get-Location).Path }
-    $catalog = Fetch-ReleaseFile 'loki-catalog-windows-amd64-project-host.json' $scratch
-    $catalogDirectory = Join-Path $ManagementRoot 'catalogs'
-    New-Item -ItemType Directory -Path $catalogDirectory -Force | Out-Null
-    $catalogPath = Join-Path $catalogDirectory 'project-host.json'
-    Copy-Item -LiteralPath $catalog -Destination $catalogPath -Force
-    Invoke-Loki @('tools', 'configure', '--mode', 'project-host')
-    $installation = @('tools', 'install', '--catalog', $catalogPath)
-    if ($SourceDirectory -and (Test-Path -LiteralPath (Join-Path $SourceDirectory 'archives'))) { $installation += @('--archives', (Join-Path $SourceDirectory 'archives')) }
-    Invoke-Loki ($installation + 'browser')
-    Invoke-Loki @('tools', 'enable', 'browser')
     Invoke-Loki @('doctor')
-    if (-not $NoConnect) {
-        $connection = @('tools', 'connect', '--workspace', $Workspace)
-        if ($CodexConfig) { $connection += @('--config', $CodexConfig) }
-        Invoke-Loki ($connection + 'codex')
-    }
-    Write-Host "Loki $release ready. Reopen your Codex project."
+    Write-Host "Loki $release CLI installed."
+    Write-Host 'Configure and add tools afterward with loki tools. Run loki --help to get started.'
 } finally {
     Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
 }
