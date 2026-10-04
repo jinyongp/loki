@@ -28,7 +28,9 @@ def accept(candidate):
         state = root/'control/state.json'
         before = state.read_bytes()
         command = [str(installed), '--root', str(root), 'upgrade', '--version', '0.2.2', '--force']
-        cancelled = subprocess.run(command, input='n\n', capture_output=True, text=True, check=True)
+        cancelled = subprocess.run(command, input='n\n', capture_output=True, text=True)
+        if cancelled.returncode:
+            raise ValueError('Native upgrade confirmation failed:\n'+cancelled.stdout+cancelled.stderr)
         if 'Current: '+RELEASE not in cancelled.stdout or 'Target:  0.2.2' not in cancelled.stdout or 'Upgrade cancelled.' not in cancelled.stdout:
             raise ValueError('native release selection/confirmation failed')
         if state.read_bytes() != before:

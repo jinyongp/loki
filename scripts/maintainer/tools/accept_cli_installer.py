@@ -7,6 +7,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from release_config import RELEASE
 
 
 def quote(value):
@@ -29,7 +30,7 @@ def accept(publication):
         scratch = Path(temporary)
         assets = scratch / 'assets'
         assets.mkdir()
-        archive = 'loki-manager-0.2.3-' + target_os + '-' + target_arch + '.zip'
+        archive = 'loki-manager-'+RELEASE+'-' + target_os + '-' + target_arch + '.zip'
         shutil.copyfile(publication / 'assets' / archive, assets / archive)
         root, binary_dir, workspace = scratch / 'management', scratch / 'bin', scratch / 'workspace'
         workspace.mkdir()
@@ -57,7 +58,7 @@ def accept(publication):
                 result = subprocess.run(args, check=True, stdin=subprocess.DEVNULL, env=environment,
                                         cwd=workspace, timeout=120, capture_output=True, text=True)
                 expected_next = 'loki' if windows or str(binary_dir) in environment.get('PATH', '').split(os.pathsep) else str(binary_dir / 'loki')
-                expected = ['Installing Loki...', 'Loki 0.2.3 installed.', 'Next: ' + expected_next + ' --help']
+                expected = ['Installing Loki...', 'Loki '+RELEASE+' installed.', 'Next: ' + expected_next + ' --help']
                 if result.stdout.splitlines() != expected or result.stderr.strip():
                     raise ValueError('Installer success output is not concise: ' + result.stdout + result.stderr)
                 check_empty(root)
@@ -65,7 +66,7 @@ def accept(publication):
                     raise ValueError('CLI bootstrap changed Codex or project files')
             binary = binary_dir / ('loki.exe' if windows else 'loki')
             version = subprocess.check_output([str(binary), '--root', str(root), 'version'], text=True)
-            if version.strip() != 'loki 0.2.3':
+            if version.strip() != 'loki '+RELEASE:
                 raise ValueError('CLI bootstrap reports wrong version')
             conflict = scratch / 'unowned-bin'
             conflict.mkdir()

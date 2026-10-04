@@ -94,12 +94,12 @@ def fingerprints(release):
         paths = common+closure["files"]+[SCRIPTS+"build_manager_bundle.py", SCRIPTS+("install.ps1" if system=="windows" else "install.sh")]
         bridge = [p for p in closure["files"] if p not in {"cmd/loki-manager/help.go", "cmd/loki-manager/upgrade.go"}]
         units[key] = {"fingerprint": inputs.digest(paths, {"closure": closure, "contract": contracts}),
-                      "validation": inputs.digest(go_tests(closure)+[SCRIPTS+n for n in ("accept_manager_bundle.py", "accept_cli_upgrade.py", "accept_public_installer.py", "render_public_installers.py", "public-install.sh.tmpl", "public-install.ps1.tmpl", "release_gate.py")]),
+                      "validation": inputs.digest(go_tests(closure)+[SCRIPTS+n for n in ("accept_manager_bundle.py", "accept_cli_upgrade.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py", "render_public_installers.py", "public-install.sh.tmpl", "public-install.ps1.tmpl", "release_gate.py")]),
                       "bridge": inputs.digest(bridge), "closure": closure, "kind": "manager", "target": {"os": system, "arch": arch, "mode": "project-host"}, "runner": runner}
         if (system, arch) != ("windows", "arm64"):
             key = f"module:browser:{system}:{arch}:project-host"
             paths = common+[SCRIPTS+n for n in ("build_browser_bundle.py", "acquire_browser_inputs.py")]+["package.json", "package-lock.json", "modules/browser/package.json", f"packaging/tools/inputs/browser-{system}-{arch}-project-host.json"]
-            units[key] = {"fingerprint": inputs.digest(paths, contracts), "validation": inputs.digest([SCRIPTS+n for n in ("accept_browser_candidate.py", "accept_browser_capabilities.py", "accept_public_installer.py")]),
+            units[key] = {"fingerprint": inputs.digest(paths, contracts), "validation": inputs.digest([SCRIPTS+n for n in ("accept_browser_candidate.py", "accept_browser_capabilities.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py")]),
                           "kind": "module", "owner": "browser", "target": {"os": system, "arch": arch, "mode": "project-host"}, "runner": runner}
         if system != "linux":
             continue
