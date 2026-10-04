@@ -61,7 +61,7 @@ func runFullProviderImport(args []string, input io.Reader, output, diagnostics i
 		return 2
 	}
 	defer clear(envelope.PrivateKey)
-	gate := config.ToolGate{Path: *activation, Release: "0.2.0", Mode: tools.Full, Snapshot: true}
+	gate := config.ToolGate{Path: *activation, Release: tools.Release, Mode: tools.Full, Snapshot: true}
 	if _, err := gate.Selection("github"); err != nil {
 		fmt.Fprintln(diagnostics, "GitHub tool is disabled or unavailable")
 		return 1

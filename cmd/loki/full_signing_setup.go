@@ -27,7 +27,7 @@ func runFullSigningSetup(args []string, input io.Reader, output, diagnostics io.
 		fmt.Fprintln(diagnostics, "signing setup requires its administrator-owned Git role")
 		return 2
 	}
-	gate := config.ToolGate{Path: "/etc/loki/activation/state.json", Release: "0.2.0", Mode: tools.Full, Snapshot: true}
+	gate := config.ToolGate{Path: "/etc/loki/activation/state.json", Release: tools.Release, Mode: tools.Full, Snapshot: true}
 	choice, err := gate.Selection("git")
 	if err != nil || !slices.Contains(choice.Capabilities, "signing") {
 		fmt.Fprintln(diagnostics, "Git signing capability is disabled")

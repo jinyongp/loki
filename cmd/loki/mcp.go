@@ -95,7 +95,7 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	}
 	var gate *config.ToolGate
 	if l.ToolsConfigPath != "" {
-		gate = &config.ToolGate{Path: l.ToolsConfigPath, Release: "0.2.0", Mode: tools.Full, Snapshot: l.ToolsConfigSnapshot}
+		gate = &config.ToolGate{Path: l.ToolsConfigPath, Release: tools.Release, Mode: tools.Full, Snapshot: l.ToolsConfigSnapshot}
 		if gate.Revision() == "unavailable" {
 			return mcpapp.MCPOptions{}, errors.New("host-published tool selection is unavailable")
 		}
@@ -119,7 +119,7 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 		// without restarting the MCP process.
 		if l.BrowserProtocol == "official" {
 			options.BrowserEngines = []toolproxy.Options{{
-				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.0",
+				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.1",
 				Transport: toolproxy.ProtectedBrowserTransport{Socket: l.BrowserSocket, ExpectedUID: *l.BrowserUID},
 				RootURI:   "file:///var/lib/loki/browser/work",
 				Authorize: func(name string) error {

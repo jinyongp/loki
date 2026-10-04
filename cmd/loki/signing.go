@@ -81,7 +81,7 @@ func runSigningAgent(args []string, stderr io.Writer) int {
 	grant := signing.NewSSHSignatureGrant(uint32(*runner))
 	var authorize func(context.Context) error
 	if *activation != "" {
-		gate := config.ToolGate{Path: *activation, Release: "0.2.0", Mode: tools.Full, Snapshot: true}
+		gate := config.ToolGate{Path: *activation, Release: tools.Release, Mode: tools.Full, Snapshot: true}
 		authorize = func(context.Context) error {
 			choice, err := gate.Selection("git")
 			if err != nil {

@@ -14,7 +14,7 @@ import (
 	"slices"
 )
 
-const Release = "0.2.1"
+const Release = tools.Release
 
 type Installation struct {
 	Artifact tools.Artifact `json:"artifact"`

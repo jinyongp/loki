@@ -31,7 +31,7 @@ func runFullEndpoints(args []string, diagnostics io.Writer) int {
 		fmt.Fprintln(diagnostics, "owned endpoints require their protected host role")
 		return 2
 	}
-	gate := config.ToolGate{Path: *activation, Release: "0.2.0", Mode: tools.Full, Snapshot: true}
+	gate := config.ToolGate{Path: *activation, Release: tools.Release, Mode: tools.Full, Snapshot: true}
 	enabled := func() error {
 		if _, err := gate.Selection("execution"); err == nil {
 			return nil
