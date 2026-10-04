@@ -28,6 +28,6 @@ jobs:
       - name: Diagnose native Intel rendering with sandbox enabled
         if: runner.os == 'macOS'
         run: python3 scripts/maintainer/v02/inspect_browser_rendering.py --candidate native-tool-candidate
-      - name: Diagnose native Windows screenshot file mapping
+      - name: Diagnose native Windows painting with sandbox enabled
         if: runner.os == 'Windows'
-        run: python3 scripts/maintainer/v02/accept_browser_candidate.py --candidate native-tool-candidate
+        run: python3 scripts/maintainer/v02/inspect_browser_rendering.py --candidate native-tool-candidate

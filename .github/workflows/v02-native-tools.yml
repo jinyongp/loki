@@ -87,6 +87,20 @@ jobs:
         run: go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
       - name: Accept the exact native manager
         run: python3 scripts/maintainer/v02/accept_manager_bundle.py --candidate native-tool-candidate/manager
+      - name: Enable OCI image storage on the disposable full acceptance runner
+        if: inputs.mode == 'full'
+        shell: bash
+        run: |
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('/etc/docker/daemon.json')
+          config = json.loads(path.read_text()) if path.exists() else {}
+          config.setdefault('features', {})['containerd-snapshotter'] = True
+          path.write_text(json.dumps(config) + '\n')
+          PY
+          sudo systemctl restart docker
+          docker info --format '{{json .DriverStatus}}'
       - name: Accept actual confined full workspace transport and revocation
         if: inputs.mode == 'full'
         run: python3 scripts/maintainer/v02/accept_full_workspace_candidate.py --candidate native-tool-candidate

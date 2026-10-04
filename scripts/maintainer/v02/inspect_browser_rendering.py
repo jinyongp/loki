@@ -14,7 +14,7 @@ from build_browser_bundle import digest
 PROBE = r'''
 const { chromium } = require(process.argv[1]);
 (async () => {
-  const cases = [{video:false,frames:true,viewport:{width:800,height:600}}, {video:true,frames:false}, {video:true,frames:true}, {video:true,frames:true,viewport:{width:320,height:240}}];
+  const cases = [{video:false,frames:true,viewport:{width:800,height:600}}, {video:true,frames:false}, {video:true,frames:true}, {video:true,frames:true,viewport:{width:320,height:240}}, {video:true,frames:false,viewport:{width:320,height:240}}];
   const fs = require('node:fs');
   const videoDir = fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'loki-render-video-'));
   for (const options of cases) {
