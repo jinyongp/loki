@@ -18,7 +18,7 @@ func ProbeHTTP(ctx context.Context, endpoint string, client *http.Client) error 
 }
 
 func probeMCP(ctx context.Context, transport mcp.Transport, browser bool) error {
-	client := mcp.NewClient(&mcp.Implementation{Name: "loki-full-readiness", Version: "0.2.2"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "loki-full-readiness", Version: "0.2.3"}, nil)
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return err

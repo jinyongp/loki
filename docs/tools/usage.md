@@ -5,7 +5,7 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
-Install the stable [0.2.2 release](https://github.com/jinyongp/loki/releases/tag/v0.2.2)
+Install the stable [0.2.3 release](https://github.com/jinyongp/loki/releases/tag/v0.2.3)
 using one command:
 
 ```powershell
@@ -42,15 +42,15 @@ from the trusted catalog. The manager verifies their complete length/digest in
 owned staging before extraction; local files do not supply their own authority.
 Candidate preparation emits this directory as `release/archives`.
 
-## CLI upgrades (next release)
+## CLI upgrades
 
-The next CLI release adds `loki upgrade`. The published 0.2.2 command must first
-be updated with the installer above to obtain this command.
+CLI installations from 0.2.2 or earlier need the installer above once to obtain
+`loki upgrade`. Subsequent CLI releases can be installed with this command.
 
 ```sh
 loki upgrade
 loki upgrade --check
-loki upgrade --version 0.2.2 --force --yes
+loki upgrade --version 0.2.3 --force --yes
 ```
 
 The command shows current and target versions, then asks for confirmation.

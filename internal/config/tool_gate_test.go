@@ -43,7 +43,7 @@ func TestToolGateRechecksActivationAndPinnedRelease(t *testing.T) {
 		t.Fatal("revision did not observe atomic replacement")
 	}
 	configuration.Tools[0].Enabled = true
-	configuration.Release = "0.2.2"
+	configuration.Release = "0.2.3"
 	write()
 	if _, err := gate.Selection("browser"); err == nil {
 		t.Fatal("worker accepted a different release")

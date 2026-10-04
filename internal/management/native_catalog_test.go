@@ -8,7 +8,7 @@ import (
 func TestNativeArchiveMatchesCombinedCatalogWithoutExpandingAuthority(t *testing.T) {
 	linux := tools.Target{OS: "linux", Arch: "amd64", Mode: tools.ProjectHost}
 	mac := tools.Target{OS: "darwin", Arch: "arm64", Mode: tools.ProjectHost}
-	actual := tools.Manifest{Schema: 1, ID: "browser", Release: "0.2.2", Targets: []tools.Target{linux}, Tools: []string{"loki_browser_files"}}
+	actual := tools.Manifest{Schema: 1, ID: "browser", Release: "0.2.3", Targets: []tools.Target{linux}, Tools: []string{"loki_browser_files"}}
 	expected := actual
 	expected.Targets = []tools.Target{linux, mac}
 	if !sameTargetManifest(actual, expected, linux) {

@@ -45,7 +45,7 @@ function Invoke-RestMethod { param([string]$Uri)
     return [IO.File]::ReadAllText(%s)
 }
 function Invoke-WebRequest { param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
-    if (-not $Uri.StartsWith('https://github.com/jinyongp/loki/releases/download/v0.2.2/')) { throw 'Unexpected release URL' }
+    if (-not $Uri.StartsWith('https://github.com/jinyongp/loki/releases/download/v0.2.3/')) { throw 'Unexpected release URL' }
     Copy-Item -LiteralPath (Join-Path %s ([Uri]$Uri).Segments[-1]) -Destination $OutFile
 }
 # Caller variables must not implicitly select tools or an execution host.
@@ -67,19 +67,19 @@ irm https://jinyongp.dev/loki/install.ps1 | iex
             result, case, config, preserved = run('cli-only')
             if result.returncode:
                 raise ValueError('zero-argument CLI IEX failed')
-            expected = ['Installing Loki...', 'Loki 0.2.2 installed.', 'Next: loki --help'] * 2
+            expected = ['Installing Loki...', 'Loki 0.2.3 installed.', 'Next: loki --help'] * 2
             if result.stdout.splitlines() != expected or result.stderr.strip():
                 raise ValueError('IEX success output is not concise: ' + result.stdout + result.stderr)
             binary = case / 'local/Programs/Loki/bin/loki.exe'
             root = case / 'app/loki'
             version = subprocess.check_output([str(binary), '--root', str(root), 'version'], text=True)
-            if version.strip() != 'loki 0.2.2':
+            if version.strip() != 'loki 0.2.3':
                 raise ValueError('IEX installed the wrong manager')
             check_empty(root)
             if config.read_text() != preserved:
                 raise ValueError('CLI IEX modified Codex settings')
             arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'amd64'
-            manager = publication / ('assets/loki-manager-0.2.2-windows-' + arch + '.zip')
+            manager = publication / ('assets/loki-manager-0.2.3-windows-' + arch + '.zip')
             original_manager = manager.read_bytes()
             try:
                 manager.write_bytes(b'corrupt download')

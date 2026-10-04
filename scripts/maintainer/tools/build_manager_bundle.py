@@ -70,7 +70,7 @@ def produce(output):
     version = subprocess.check_output(["go", "version"], text=True).split()
     if len(version) < 3 or version[2] != "go1.27.1":
         raise ValueError("candidate preparation requires pinned Go 1.27.1")
-    name = f"loki-manager-0.2.2-{target_os}-{target_arch}.zip"
+    name = f"loki-manager-0.2.3-{target_os}-{target_arch}.zip"
     output.mkdir(parents=True, exist_ok=True)
     if (output / name).exists() or (output / "manager-receipt.json").exists():
         raise ValueError("use a fresh native candidate output directory")
@@ -86,7 +86,7 @@ def produce(output):
         shutil.copyfile(Path(__file__).with_name(installer), bundle / installer)
         shutil.copyfile(repo / "LICENSE", bundle / "LICENSE")
         dependencies = go_notices(repo, bundle, env)
-        receipt = {"schema": 1, "release": "0.2.2", "os": target_os, "arch": target_arch, "go": "1.27.1", "binary": binary_name, "binary_sha256": hashlib.sha256((bundle / binary_name).read_bytes()).hexdigest(), "binary_bytes": (bundle / binary_name).stat().st_size, "included_tools": [], "go_dependencies": dependencies}
+        receipt = {"schema": 1, "release": "0.2.3", "os": target_os, "arch": target_arch, "go": "1.27.1", "binary": binary_name, "binary_sha256": hashlib.sha256((bundle / binary_name).read_bytes()).hexdigest(), "binary_bytes": (bundle / binary_name).stat().st_size, "included_tools": [], "go_dependencies": dependencies}
         (bundle / "manager.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         archive = stage / name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:

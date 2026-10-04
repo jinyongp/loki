@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "sharing",
-  "release": "0.2.2",
+  "release": "0.2.3",
   "targets": [
     {
       "os": "linux",

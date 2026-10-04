@@ -71,7 +71,7 @@ func TestUpdateCommitsAllResourcesAndPreservesActivation(t *testing.T) {
 	var next []Installation
 	for _, id := range []tools.ID{"worker", "browser"} {
 		i := state.Installed[id]
-		i.Artifact.Release, i.Manifest.Release = "0.2.2", "0.2.2"
+		i.Artifact.Release, i.Manifest.Release = "0.2.3", "0.2.3"
 		i.Artifact.SHA256 = strings.Repeat("b", 64)
 		dir, err := s.Generation(i.Artifact)
 		if err != nil {
@@ -95,11 +95,11 @@ func TestUpdateCommitsAllResourcesAndPreservesActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Config.Release != "0.2.2" || !after.Config.Tools[0].Enabled || after.Config.Tools[0].Capabilities[0] != "vision" {
+	if after.Config.Release != "0.2.3" || !after.Config.Tools[0].Enabled || after.Config.Tools[0].Capabilities[0] != "vision" {
 		t.Fatal("release update changed activation")
 	}
 	for id, i := range after.Installed {
-		if i.Artifact.Release != "0.2.2" {
+		if i.Artifact.Release != "0.2.3" {
 			t.Fatalf("mixed release for %s", id)
 		}
 	}

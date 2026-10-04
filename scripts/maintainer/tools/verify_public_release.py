@@ -10,7 +10,7 @@ import urllib.request
 
 from prepare_bootstrap import prepare
 
-BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.2/'
+BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.3/'
 
 
 def download(url):
@@ -33,7 +33,7 @@ def verify(expected_directory=None):
             # Their manager/catalog pins still bind immutable release bytes.
             expected = (expected_directory / ('install.'+extension)).read_bytes()
             for attempt in range(12):
-                current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.2&attempt='+str(attempt))
+                current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.3&attempt='+str(attempt))
                 if current == expected:
                     break
                 time.sleep(5)
@@ -57,7 +57,16 @@ def verify(expected_directory=None):
             result = subprocess.run([str(root/'bin/loki'), '--root', str(root/'management'), *args], capture_output=True, text=True)
             if result.returncode or result.stderr.strip() or 'Usage:' not in result.stdout or 'Examples:' not in result.stdout:
                 raise ValueError('published CLI readable help failed')
-        print('Anonymous installer endpoints, 10 OCI manifests and public native management installation passed.')
+        binary = str(root/'bin/loki')
+        management = str(root/'management')
+        checked = subprocess.check_output([binary, '--root', management, 'upgrade', '--check'], text=True)
+        if 'Current: 0.2.3' not in checked or 'Target:  0.2.3' not in checked:
+            raise ValueError('public CLI upgrade release lookup failed')
+        before = (root/'management/control/state.json').read_bytes()
+        subprocess.run([binary, '--root', management, 'upgrade', '--version', '0.2.3', '--force', '--yes'], check=True)
+        if (root/'management/control/state.json').read_bytes() != before:
+            raise ValueError('public CLI reinstall changed management configuration')
+        print('Anonymous installer endpoints, 10 OCI manifests, native installation and CLI self-upgrade passed.')
 
 
 if __name__ == '__main__':

@@ -22,7 +22,7 @@ def prepare(output):
         if Path(name).name != name or not (source / name).is_file():
             raise ValueError("full recipe reference must be an owned source input")
         shutil.copyfile(source / name, output / name)
-    (output / "input-state.json").write_text(json.dumps({"schema":1, "release":"0.2.2", "scope":"reviewed source receipts/package selections", "package_verification":"Native runner authenticates Ubuntu InRelease before acquiring each package closure", "product_executed":False, "accepted":False, "published":False})+"\n", encoding="utf-8")
+    (output / "input-state.json").write_text(json.dumps({"schema":1, "release":"0.2.3", "scope":"reviewed source receipts/package selections", "package_verification":"Native runner authenticates Ubuntu InRelease before acquiring each package closure", "product_executed":False, "accepted":False, "published":False})+"\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

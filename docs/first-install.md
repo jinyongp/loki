@@ -21,7 +21,7 @@ command:
 
 ```text
 Installing Loki...
-Loki 0.2.2 installed.
+Loki 0.2.3 installed.
 Next: loki --help
 ```
 

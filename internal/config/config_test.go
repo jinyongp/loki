@@ -40,7 +40,7 @@ preview_access_audience="` + strings.Repeat("b", 64) + `"
 
 func TestInvalidConfiguration(t *testing.T) {
 	for _, text := range []string{
-		`host="192.0.2.2"`, `port=100`, `public_hosts="mcp.example.com"`, `public_hosts=["https://mcp.example.com"]`,
+		`host="192.0.2.3"`, `port=100`, `public_hosts="mcp.example.com"`, `public_hosts=["https://mcp.example.com"]`,
 		`cloudflare_access_team_domain="example.cloudflareaccess.com"`, `cloudflare_access_audience="` + strings.Repeat("a", 64) + `"`,
 		`preview_access_audience="` + strings.Repeat("b", 64) + `"`, `preview_base_domain="localhost"`,
 		`artifact_base_url="http://mcp.example.com/artifacts"`, `artifact_base_url="https://other.example.com/artifacts"`,

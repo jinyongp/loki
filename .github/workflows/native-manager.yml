@@ -62,3 +62,5 @@ jobs:
         run: python3 scripts/maintainer/tools/accept_manager_bundle.py --candidate native-manager-candidate
       - name: Accept the one-command management installer
         run: python3 scripts/maintainer/tools/accept_public_installer.py --candidate native-manager-candidate
+      - name: Accept actual CLI self-upgrade to an official previous release
+        run: python3 scripts/maintainer/tools/accept_cli_upgrade.py --candidate native-manager-candidate

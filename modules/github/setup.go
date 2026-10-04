@@ -110,7 +110,7 @@ func (s Setup) api(ctx context.Context, method, endpoint, token string, result a
 	}
 	r.Header.Set("Accept", "application/vnd.github+json")
 	r.Header.Set("X-GitHub-Api-Version", "2026-03-10")
-	r.Header.Set("User-Agent", "loki/0.2.2")
+	r.Header.Set("User-Agent", "loki/0.2.3")
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}

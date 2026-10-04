@@ -14,7 +14,7 @@ import (
 
 func TestOfflineAcquisitionKeepsTrustedIdentityAndCancellation(t *testing.T) {
 	data := []byte("receipt-bound archive bytes")
-	artifact := tools.Artifact{Module: "browser", Release: "0.2.2", Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.ProjectHost}, URL: "https://example.org/browser.zip", SHA256: fmt.Sprintf("%x", sha256.Sum256(data)), Bytes: int64(len(data)), Format: "zip"}
+	artifact := tools.Artifact{Module: "browser", Release: "0.2.3", Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.ProjectHost}, URL: "https://example.org/browser.zip", SHA256: fmt.Sprintf("%x", sha256.Sum256(data)), Bytes: int64(len(data)), Format: "zip"}
 	directory := t.TempDir()
 	path := filepath.Join(directory, artifact.SHA256+".zip")
 	if err := os.WriteFile(path, data, 0600); err != nil {

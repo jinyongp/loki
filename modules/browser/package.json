@@ -1,6 +1,6 @@
 {
   "name": "@loki/browser",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "engines": {"node": "22.22.2"},
   "dependencies": {

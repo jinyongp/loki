@@ -50,7 +50,7 @@ def accept(candidate, browser=False):
             binary = binary_dir / receipt['binary']
             def invoke(*args):
                 return subprocess.check_output([str(binary),'--root',str(root),*args],text=True)
-            if invoke('version').strip() != 'loki 0.2.2':
+            if invoke('version').strip() != 'loki 0.2.3':
                 raise ValueError('public installer reports the wrong release')
             state = json.loads((root / 'control/state.json').read_text())
             if state['installed'] or state['config']['tools'] or config.read_text() != original:

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-def render(assets, output, release='0.2.2'):
+def render(assets, output, release='0.2.3'):
     pins = {}
     for path in assets.iterdir():
         if path.name.startswith('loki-manager-') and path.suffix == '.zip':

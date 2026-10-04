@@ -127,7 +127,7 @@ func serveOfficialPeer(ctx context.Context, o OfficialOptions, connection *net.U
 		}
 		defer launch.Cleanup()
 		options = append(options, toolproxy.Options{
-			Name: "loki-full-browser", Owner: "browser/" + name, Version: "0.2.2", Command: launch.Command,
+			Name: "loki-full-browser", Owner: "browser/" + name, Version: "0.2.3", Command: launch.Command,
 			Instructions: "Official browser engines in the protected Loki browser service. Each engine has separate tabs, profiles and login state. Use loki_browser_files for owned screenshots and upload staging.",
 			RootURI:      launch.RootURI, Results: launch.Output, Stderr: o.Stderr,
 			Authorize: func(tool string) error {
