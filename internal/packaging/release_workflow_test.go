@@ -18,7 +18,10 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 		Jobs map[string]struct {
 			Needs yaml.Node
 			If    string
-			Steps []struct{ Uses, Run string }
+			Steps []struct {
+				Uses, Run string
+				With      map[string]string
+			}
 		}
 	}
 	if err := yaml.Unmarshal(raw, &workflow); err != nil {
@@ -50,7 +53,12 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	}
 	var lifecycle bool
 	for _, step := range jobs["publish"].Steps {
-		lifecycle = lifecycle || strings.HasPrefix(step.Uses, "releaseway/actions@22219bebc51a4127c6dffd9e79706f08cdd678dc")
+		if strings.HasPrefix(step.Uses, "releaseway/actions@31c98fec4bbf03f4e179c2a9b3031a50d771a1d3") {
+			lifecycle = true
+			if step.With["upload-concurrency"] != "4" {
+				t.Fatal("publisher must use four bounded simultaneous uploads")
+			}
+		}
 		if strings.Contains(step.Run, "gh release create") || strings.Contains(step.Run, "skopeo copy") {
 			t.Fatal("publisher bypasses Releaseway or duplicates OCI transfer")
 		}

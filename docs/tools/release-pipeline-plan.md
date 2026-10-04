@@ -135,7 +135,7 @@ GHA BuildKit backend는 기존 경로에 이미 있지만 신규 full 경로에�
 
 | 도구 | 최신 stable / commit | 현재 Loki 적용 |
 | --- | --- | --- |
-| `releaseway/actions` | v0.2.1 / `22219bebc51a4127c6dffd9e79706f08cdd678dc` | GitHub Release lifecycle, draft 재개, 원격 tag/commit 확인, exact asset set/SHA-256/immutability 검증, 재실행 확인, publication/notes 결과 기록에 사용한다. |
+| `releaseway/actions` | v0.3.0 / `31c98fec4bbf03f4e179c2a9b3031a50d771a1d3` | GitHub Release lifecycle, draft 재개, 원격 tag/commit 확인, exact asset set/SHA-256/immutability 검증, 재실행 확인, publication/notes 결과 기록에 사용한다. 업로드는 최대 4개를 동시에 진행하고 upload·verify-assets·publish·verify-publication 시간을 기록한다. |
 | `releaseway/homebrew-actions` | v0.2.0 / `4bbfa6aafc92a6cb8e823a51d54a6573237e0a76` | 현재 Loki Formula/tap 배포 설정이 없으므로 현행 ZIP/웹 설치기 배포에는 필요하지 않다. Homebrew 채널을 추가하는 작업에서는 native Formula 검사와 tap 게시를 이 도구가 소유하도록 한다. |
 | `releaseway/npm-actions` | v0.4.0 / `269fbdeac83fed2df2880915726ed91edbe1bbdd` | 현재 browser package는 private이며 실행용 npm launcher가 없다. 내부 upstream npm 입력 취득은 npm 게시 기능과 다르다. npm 배포 채널을 추가할 때 native launcher와 Trusted Publishing을 이 도구가 소유하도록 한다. |
 
@@ -205,7 +205,7 @@ Releaseway는 단일 `release.yml`의 `publish` job에서 사용하며 이전 6�
 - [Docker GHA cache](https://docs.docker.com/build/cache/backends/gha/): image별 scope, 수동 buildx의 인증 환경, timeout과 API 제한. 기존 경로 조사 근거.
 - [actions/setup-go](https://github.com/actions/setup-go): Go module/build cache 지원.
 - [GitHub job dependencies](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs): needs의 skipped/failed 전파와 조건부 job 처리.
-- [Releaseway GitHub Release v0.2.1](https://github.com/releaseway/actions/tree/22219bebc51a4127c6dffd9e79706f08cdd678dc): exact assets, immutable lifecycle, notes 및 재개 계약.
+- [Releaseway GitHub Release v0.3.0](https://github.com/releaseway/actions/tree/31c98fec4bbf03f4e179c2a9b3031a50d771a1d3): exact assets, immutable lifecycle, notes, 재개 및 제한된 병렬 업로드 계약.
 - [Releaseway Homebrew v0.2.0](https://github.com/releaseway/homebrew-actions/tree/4bbfa6aafc92a6cb8e823a51d54a6573237e0a76): Formula/native 검사와 tap 게시 계약.
 - [Releaseway npm v0.4.0](https://github.com/releaseway/npm-actions/tree/269fbdeac83fed2df2880915726ed91edbe1bbdd): npm Trusted Publishing과 native launcher 계약.
 - [0.2.3 게시 실행](https://github.com/jinyongp/loki/actions/runs/37201234614), [현재 릴리스 근거](evidence/release-publication.json).
