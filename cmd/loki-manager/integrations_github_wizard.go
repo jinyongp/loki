@@ -81,6 +81,5 @@ func runGitHubWizard(ctx context.Context, store management.Store, backend manage
 	if err := githubsetup.Run(ctx, transport, githubsetup.Options{PersonalProjects: personal, NoBrowser: noBrowser, Input: input, UserTransport: githubUserTransport(backend)}, diagnostics); err != nil {
 		return err
 	}
-	fmt.Fprintln(output, "GitHub integration ready. Repository-linked Projects use installation tokens.")
-	return nil
+	return githubSetupResult(output)
 }

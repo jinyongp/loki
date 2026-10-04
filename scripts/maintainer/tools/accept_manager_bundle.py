@@ -66,10 +66,13 @@ def accept(candidate):
             help_result = subprocess.run([str(installed), '--root', str(root), *args], capture_output=True, text=True)
             if help_result.returncode or help_result.stderr.strip() or 'Usage:' not in help_result.stdout or 'Examples:' not in help_result.stdout:
                 raise ValueError('native manager readable help failed: ' + str(args))
-        status = json.loads(run(installed, root, "status"))
+        readable_status = run(installed, root, "status")
+        if 'Tools: none installed' not in readable_status or 'Version: ' + RELEASE not in readable_status:
+            raise ValueError("default native status output is not readable")
+        status = json.loads(run(installed, root, "status", "--json"))
         if not status["installed"] or status["tools"] != {}:
             raise ValueError("management-only installation initialized product tools")
-        doctor = json.loads(run(installed, root, "doctor"))
+        doctor = json.loads(run(installed, root, "doctor", "--json"))
         if not doctor["healthy"] or doctor["issues"]:
             raise ValueError("native installed manager is not healthy")
         run(binary, root, "install", "--bin-dir", str(bin_directory))

@@ -65,7 +65,7 @@ func runGitIntegration(ctx context.Context, store management.Store, args []strin
 		}
 	}
 	if action == "status" {
-		return json.NewEncoder(output).Encode(map[string]any{"integration": "git", "signing_enabled": slices.Contains(choice.Capabilities, "signing"), "configured": len(metadata) != 0, "readiness": "unknown", "identity": material.Identity})
+		return result(output, "Git integration", map[string]any{"integration": "git", "signing_enabled": slices.Contains(choice.Capabilities, "signing"), "configured": len(metadata) != 0, "readiness": "unknown", "identity": material.Identity})
 	}
 	full, err := management.NewFullBackend(store, diagnostics)
 	if err != nil {
@@ -90,7 +90,7 @@ func runGitIntegration(ctx context.Context, store management.Store, args []strin
 		if slices.Contains(choice.Capabilities, "signing") && len(metadata) == 0 {
 			return fmt.Errorf("Git signing requires setup")
 		}
-		return json.NewEncoder(output).Encode(map[string]any{"integration": "git", "ready": true, "signing_enabled": slices.Contains(choice.Capabilities, "signing"), "identity": material.Identity})
+		return result(output, "Git integration", map[string]any{"integration": "git", "ready": true, "signing_enabled": slices.Contains(choice.Capabilities, "signing"), "identity": material.Identity})
 	}
 	if *name == "" {
 		*name = material.Identity.Name
@@ -139,8 +139,5 @@ func runGitIntegration(ctx context.Context, store management.Store, args []strin
 	if _, err := store.ReconcileFull(ctx, backend); err != nil {
 		return err
 	}
-	fmt.Fprintln(output, "Git signing ready.")
-	fmt.Fprintln(output, "Public signing key:", material.Identity.PublicKey)
-	fmt.Fprintln(output, "Add this public key as a signing key to the account that verifies your commits.")
-	return nil
+	return success(output, "Git signing ready.\nPublic signing key: "+material.Identity.PublicKey+"\nAdd this public key as a signing key to the account that verifies your commits.", map[string]any{"integration": "git", "ready": true, "identity": material.Identity})
 }

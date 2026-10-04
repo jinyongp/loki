@@ -102,7 +102,7 @@ def accept(candidate, protocol_check=protocol):
             return completed.stdout
         invoke("tools", "configure", "--mode", "project-host")
         invoke("tools", "install", "browser", "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
-        status = json.loads(invoke("status"))
+        status = json.loads(invoke("status", "--json"))
         if status["tools"]["browser"]["enabled"]:
             raise ValueError("installation implicitly enabled browser tools")
         invoke("tools", "enable", "browser")

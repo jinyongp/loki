@@ -18,6 +18,7 @@ var globalHelpOptions = []string{
 	"--distribution NAME      Existing WSL distribution",
 	"--address USER@HOST      SSH destination",
 	"--remote-command PATH    Remote manager executable (default: loki)",
+	"--json                   Print a structured result (before or after command)",
 	"-h, --help               Show help without running the command",
 }
 
@@ -135,6 +136,11 @@ func printHelp(out io.Writer, entry helpEntry) {
 		}
 	}
 	if entry.path != "" {
+		if entry.path == "tools serve" {
+			fmt.Fprintln(out, "\nOutput: MCP protocol stream. Management --json does not apply.")
+		} else {
+			fmt.Fprintln(out, "\nOutput: readable text by default; add --json for a structured result.")
+		}
 		fmt.Fprintln(out, "\nHost options: loki --help")
 	}
 }
@@ -193,7 +199,7 @@ func contextualHelp(args []string, out io.Writer) (bool, error) {
 func helpValueOption(option string) bool {
 	option = "--" + strings.TrimLeft(option, "-")
 	switch option {
-	case "--version", "--timeout", "--mode", "--bin-dir", "--catalog", "--archives", "--capabilities", "--keep", "--workspace", "--engine", "--config", "--config-file", "--private-key-file", "--identity-name", "--identity-email", "--key-file":
+	case "--root", "--host", "--distribution", "--address", "--remote-command", "--version", "--timeout", "--mode", "--bin-dir", "--catalog", "--archives", "--capabilities", "--keep", "--workspace", "--engine", "--config", "--config-file", "--private-key-file", "--identity-name", "--identity-email", "--key-file":
 		return true
 	}
 	return false

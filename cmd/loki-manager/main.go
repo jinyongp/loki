@@ -34,6 +34,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
+	var structured bool
+	var err error
+	args, structured, err = outputArguments(args)
+	if err != nil {
+		return err
+	}
 	flags := flag.NewFlagSet("loki", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	flags.Usage = func() {
@@ -55,6 +61,10 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if handled, err := contextualHelp(args, out); handled {
 		return err
 	}
+	out = &commandOutput{Writer: out, json: structured}
+	if structured && len(args) >= 2 && args[0] == "tools" && args[1] == "serve" {
+		return fmt.Errorf("tools serve uses MCP protocol output; --json applies to management commands")
+	}
 	host := tools.Host{Kind: *hostKind, Distribution: *distribution, Address: *address}
 	if err := host.Validate(); err != nil {
 		return err
@@ -66,6 +76,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		remoteArgs := args
 		if *root != "" {
 			remoteArgs = append([]string{"--root", *root}, args...)
+		}
+		if structured {
+			remoteArgs = append([]string{"--json"}, remoteArgs...)
 		}
 		relay, err := management.Relay(ctx, host, *remoteCommand, remoteArgs)
 		if err != nil {
@@ -91,8 +104,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return runGitHubSetupRelay(ctx, store, os.Stdin, out, diagnostics)
 	}
 	if len(args) == 1 && args[0] == "version" {
-		fmt.Fprintln(out, "loki", management.ManagerRelease)
-		return nil
+		if structured {
+			return result(out, "Loki", map[string]any{"version": management.ManagerRelease})
+		}
+		_, err := fmt.Fprintln(out, "loki", management.ManagerRelease)
+		return err
 	}
 	if len(args) > 0 && args[0] == "install" {
 		f := flag.NewFlagSet("install", flag.ContinueOnError)
@@ -117,9 +133,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(out, "Loki management installed:", record.Executable)
-			fmt.Fprintln(out, "Add its directory to PATH, then select tools with 'loki tools install'.")
-			return nil
+			return success(out, "Loki management installed: "+record.Executable+"\nAdd its directory to PATH, then select tools with 'loki tools install'.", map[string]any{"manager": record})
 		}
 		unlock, err := store.Lock()
 		if err != nil {
@@ -136,8 +150,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := store.Save(state); err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "Loki management installed. Select tools with 'loki tools install'.")
-		return nil
+		return success(out, "Loki management installed. Select tools with 'loki tools install'.", nil)
 	}
 	if len(args) == 1 && (args[0] == "status" || args[0] == "doctor") {
 		return status(ctx, store, out, diagnostics, args[0] == "doctor")
@@ -171,12 +184,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			if err := store.StopFull(ctx, backend); err != nil {
 				return err
 			}
-			fmt.Fprintln(out, "Full services stopped. Owned tool data is retained.")
-			return nil
+			return success(out, "Full services stopped. Owned tool data is retained.", map[string]any{"state": "stopped"})
 		}
 		fmt.Fprintln(diagnostics, "Preparing selected full services...")
 		report, err := store.ReconcileFull(ctx, backend)
-		if encodeErr := json.NewEncoder(out).Encode(report); encodeErr != nil {
+		if encodeErr := result(out, "Full services", report); encodeErr != nil {
 			return encodeErr
 		}
 		return err
@@ -188,7 +200,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(out).Encode(topology)
+		return result(out, "Full tool topology", topology)
 	case "layouts":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools layouts")
@@ -201,7 +213,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(out).Encode(layouts)
+		return result(out, "Full tool layouts", layouts)
 	case "resources":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools resources")
@@ -210,7 +222,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(out).Encode(resources)
+		return result(out, "Full tool resources", resources)
 	case "plan":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools plan")
@@ -219,7 +231,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(out).Encode(plan)
+		return result(out, "Full tool plan", plan)
 	case "configure":
 		f := flag.NewFlagSet("tools configure", flag.ContinueOnError)
 		f.SetOutput(diagnostics)
@@ -233,8 +245,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := store.ConfigureMode(tools.Mode(*mode)); err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "Runtime mode:", *mode)
-		return nil
+		return success(out, "Runtime mode: "+*mode, map[string]any{"mode": *mode})
 	case "list", "status", "doctor":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools %s", args[1])
@@ -244,7 +255,10 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools recover")
 		}
-		return store.Recover()
+		if err := store.Recover(); err != nil {
+			return err
+		}
+		return success(out, "Tool recovery completed.", nil)
 	case "install", "update":
 		f := flag.NewFlagSet("tools "+args[1], flag.ContinueOnError)
 		f.SetOutput(diagnostics)
@@ -278,8 +292,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			if err := store.UpdateTools(ctx, release, diagnostics); err != nil {
 				return err
 			}
-			fmt.Fprintln(out, "Updated all installed tools to", release.Release, "; activation and data are preserved.")
-			return nil
+			return success(out, "Updated all installed tools to "+release.Release+"; activation and data are preserved.", map[string]any{"release": release.Release})
 		}
 		selected := make([]tools.ID, 0, f.NArg())
 		for _, id := range f.Args() {
@@ -288,8 +301,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := store.InstallTools(ctx, release, selected, diagnostics); err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "Installed", strings.Join(f.Args(), ", "), "with private prerequisites (activation is separate).")
-		return nil
+		return success(out, "Installed "+strings.Join(f.Args(), ", ")+" with private prerequisites (activation is separate).", map[string]any{"tools": selected, "release": release.Release})
 	case "enable", "disable":
 		f := flag.NewFlagSet("tools enable", flag.ContinueOnError)
 		f.SetOutput(diagnostics)
@@ -309,12 +321,18 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 				}
 			}
 		})
-		return store.SetEnabled(tools.ID(f.Arg(0)), args[1] == "enable", caps)
+		if err := store.SetEnabled(tools.ID(f.Arg(0)), args[1] == "enable", caps); err != nil {
+			return err
+		}
+		return success(out, "Tool "+f.Arg(0)+" "+args[1]+"d.", map[string]any{"tool": f.Arg(0), "enabled": args[1] == "enable"})
 	case "remove":
 		if len(args) != 3 {
 			return fmt.Errorf("select exactly one tool to remove; see 'loki tools remove --help'")
 		}
-		return store.Remove(tools.ID(args[2]))
+		if err := store.Remove(tools.ID(args[2])); err != nil {
+			return err
+		}
+		return success(out, "Tool "+args[2]+" removed.", map[string]any{"tool": args[2]})
 	case "prune":
 		f := flag.NewFlagSet("tools prune", flag.ContinueOnError)
 		f.SetOutput(diagnostics)
@@ -326,7 +344,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return fmt.Errorf("usage: loki tools prune TOOL --keep COUNT")
 		}
 		report, err := store.Prune(ctx, tools.ID(f.Arg(0)), *keep, diagnostics)
-		if encodeErr := json.NewEncoder(out).Encode(report); encodeErr != nil {
+		if encodeErr := result(out, "Tool generation cleanup", report); encodeErr != nil {
 			return encodeErr
 		}
 		return err
@@ -371,7 +389,7 @@ func status(ctx context.Context, store management.Store, out, diagnostics io.Wri
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(out).Encode(report); err != nil {
+	if err := result(out, "Loki", report); err != nil {
 		return err
 	}
 	if report.Healthy != nil && !*report.Healthy {

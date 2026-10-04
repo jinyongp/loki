@@ -95,10 +95,10 @@ def accept(candidate):
         invoke("tools", "install", "workspace", "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
         invoke("tools", "enable", "workspace")
         started = True
-        observation = json.loads(invoke("tools", "start"))["observation"]
+        observation = json.loads(invoke("tools", "start", "--json"))["observation"]
         if not observation["ready"]:
             raise ValueError("full workspace did not become ready")
-        if not json.loads(invoke("doctor"))["healthy"]:
+        if not json.loads(invoke("doctor", "--json"))["healthy"]:
             raise ValueError("full candidate doctor is unhealthy")
         asyncio.run(protocol(binary, root, scratch, invoke))
         passed = True

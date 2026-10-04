@@ -5,6 +5,14 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
+Management commands print readable text by default. Add `--json` before or
+after the command for one structured result, for example `loki status --json`,
+`loki --json doctor` or `loki tools plan --json`. This also applies to commands
+that change configuration, integration setup and CLI upgrades. Progress and
+interactive prompts use stderr in JSON mode. Help stays readable; `tools serve`
+uses its MCP protocol stream and rejects `--json`. Internal host relay messages
+retain their protocol encoding.
+
 Install the stable [0.2.3 release](https://github.com/jinyongp/loki/releases/tag/v0.2.3)
 using one command:
 

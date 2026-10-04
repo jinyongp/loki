@@ -117,8 +117,7 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 		return err
 	}
 	if bytes.Equal(old, next) {
-		fmt.Fprintln(out, "Codex tool connection is already configured.")
-		return nil
+		return success(out, "Codex tool connection is already configured.", map[string]any{"config": *config, "server": server, "changed": false})
 	}
 	file, err := os.CreateTemp(filepath.Dir(*config), ".loki-codex-*")
 	if err != nil {
@@ -146,7 +145,5 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 	if err := os.Rename(file.Name(), *config); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "Codex tool connection configured:", *config)
-	fmt.Fprintln(out, "Reopen the Codex project to load", server)
-	return nil
+	return success(out, "Codex tool connection configured: "+*config+"\nReopen the Codex project to load "+server, map[string]any{"config": *config, "server": server, "changed": true})
 }

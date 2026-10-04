@@ -225,20 +225,37 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if err != nil || minimum < 0 {
 		return fmt.Errorf("upgrade requires a native 0.2 or newer release")
 	}
-	fmt.Fprintln(out, "Current:", management.ManagerRelease)
-	fmt.Fprintln(out, "Target: ", target)
-	if *check {
+	finish := func(state string, changed bool, message string) error {
+		if jsonOutput(out) {
+			return result(out, "Loki upgrade", map[string]any{"current": management.ManagerRelease, "target": target, "update_available": comparison > 0, "state": state, "changed": changed})
+		}
+		if message != "" {
+			_, err := fmt.Fprintln(out, message)
+			return err
+		}
 		return nil
 	}
+	if !jsonOutput(out) {
+		fmt.Fprintln(out, "Current:", management.ManagerRelease)
+		fmt.Fprintln(out, "Target: ", target)
+	}
+	if *check {
+		return finish("checked", false, "")
+	}
 	if comparison == 0 && !*force {
-		fmt.Fprintln(out, "Loki is already up to date.")
-		return nil
+		return finish("up_to_date", false, "Loki is already up to date.")
 	}
 	if comparison < 0 && !*force {
 		return fmt.Errorf("target is older than the current CLI; use --force to allow a downgrade")
 	}
 	if !*yes {
-		fmt.Fprint(out, "Upgrade CLI to "+target+"? [y/N]: ")
+		prompt := out
+		if jsonOutput(out) {
+			prompt = diagnostics
+			fmt.Fprintln(prompt, "Current:", management.ManagerRelease)
+			fmt.Fprintln(prompt, "Target: ", target)
+		}
+		fmt.Fprint(prompt, "Upgrade CLI to "+target+"? [y/N]: ")
 		reader := bufio.NewReader(input)
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
@@ -246,8 +263,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		}
 		answer := strings.ToLower(strings.TrimSpace(line))
 		if err == io.EOF || (answer != "y" && answer != "yes") {
-			fmt.Fprintln(out, "Upgrade cancelled.")
-			return nil
+			return finish("cancelled", false, "Upgrade cancelled.")
 		}
 	}
 	executable, err := deps.executable()
@@ -298,6 +314,5 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if err := deps.install(ctx, store, candidate, filepath.Dir(executable), target); err != nil {
 		return fmt.Errorf("CLI upgrade failed: %w", err)
 	}
-	fmt.Fprintln(out, "Loki "+target+" installed.")
-	return nil
+	return finish("installed", true, "Loki "+target+" installed.")
 }

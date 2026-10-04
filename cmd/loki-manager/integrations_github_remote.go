@@ -128,8 +128,7 @@ func runRemoteGitHubWizard(ctx context.Context, host tools.Host, command, root s
 	if err := githubsetup.Run(ctx, setup, githubsetup.Options{PersonalProjects: *personal, NoBrowser: *noBrowser, Input: input, UserTransport: users}, diagnostics); err != nil {
 		return err
 	}
-	fmt.Fprintln(output, "GitHub integration ready. Repository-linked Projects use installation tokens.")
-	return nil
+	return githubSetupResult(output)
 }
 
 // The one-request relay accepts public setup DTOs and one-time codes through

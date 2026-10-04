@@ -155,8 +155,7 @@ func runIntegrations(ctx context.Context, store management.Store, args []string,
 		if err != nil {
 			return err
 		}
-		_, err = output.Write(append(response, '\n'))
-		return err
+		return result(output, "GitHub installation permissions refreshed", json.RawMessage(response))
 	}
 	if *personal && !slices.Contains(choice.Capabilities, "personal-projects") {
 		caps := append(slices.Clone(choice.Capabilities), "personal-projects")
@@ -213,13 +212,12 @@ func runIntegrations(ctx context.Context, store management.Store, args []string,
 			return err
 		}
 	}
-	fmt.Fprintln(output, "GitHub integration ready. Repository-linked Projects use installation tokens.")
-	return nil
+	return githubSetupResult(output)
 }
 
 func githubIntegrationStatus(ctx context.Context, backend management.IntegrationBackend, choice tools.Selection, doctor bool, output, diagnostics io.Writer) error {
 	fmt.Fprintln(diagnostics, "Checking GitHub installation and optional account authorization...")
-	result, err := backend.Administration(ctx, map[string]any{"operation": "status"})
+	response, err := backend.Administration(ctx, map[string]any{"operation": "status"})
 	if err != nil {
 		return err
 	}
@@ -230,7 +228,7 @@ func githubIntegrationStatus(ctx context.Context, backend management.Integration
 			Targets             int  `json:"target_count"`
 		} `json:"github"`
 	}
-	if err := json.Unmarshal(result, &runtime); err != nil {
+	if err := json.Unmarshal(response, &runtime); err != nil {
 		return fmt.Errorf("invalid GitHub status response")
 	}
 	ready := runtime.GitHub.Configured && runtime.GitHub.CredentialAvailable && runtime.GitHub.Targets > 0
@@ -248,11 +246,15 @@ func githubIntegrationStatus(ctx context.Context, backend management.Integration
 		}
 		ready = ready && (user.Status == "ready" || user.Status == "not_required")
 	}
-	if err := json.NewEncoder(output).Encode(map[string]any{"integration": "github", "authentication": "GitHub App installation tokens", "ready": ready, "github": runtime.GitHub, "personal_projects": personalStatus}); err != nil {
+	if err := result(output, "GitHub integration", map[string]any{"integration": "github", "authentication": "GitHub App installation tokens", "ready": ready, "github": runtime.GitHub, "personal_projects": personalStatus}); err != nil {
 		return err
 	}
 	if doctor && !ready {
 		return fmt.Errorf("GitHub needs configuration or authorization; run loki integrations setup github")
 	}
 	return nil
+}
+
+func githubSetupResult(output io.Writer) error {
+	return success(output, "GitHub integration ready. Repository-linked Projects use installation tokens.", map[string]any{"integration": "github", "ready": true, "authentication": "GitHub App installation tokens"})
 }
