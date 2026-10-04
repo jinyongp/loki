@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"loki/internal/config"
+	hostconfig "loki/internal/config"
 	"loki/internal/management"
 	"loki/internal/tools"
 	"os"
@@ -112,7 +112,7 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 		block.WriteString("experimental_environment = \"remote\"\n")
 	}
 	block.WriteString(end)
-	next, err := config.MergeClientConnection(old, []byte(block.String()), server, begin, end)
+	next, err := hostconfig.MergeClientConnection(old, []byte(block.String()), server, begin, end)
 	if err != nil {
 		return err
 	}
