@@ -5,6 +5,7 @@ This step downloads inputs only. Their checksums come from the trusted recipe,
 never from the acquired archives. It does not build or accept product artifacts.
 """
 import argparse
+from input_cache import restore, save, size_digest
 import hashlib
 import json
 from pathlib import Path
@@ -34,26 +35,29 @@ def acquire(recipe_path, output):
         started = reported = time.monotonic()
         print(f"Acquiring {recipe['module']} input {index+1} ({asset['version']})...", flush=True)
         try:
-            with urlopen(asset["url"], timeout=30) as response, partial.open("xb") as sink:
-                redirect = urlsplit(response.url)
-                if redirect.scheme != "https" or redirect.username or redirect.fragment:
-                    raise ValueError("native input redirect weakened its acquisition contract")
-                length = response.headers.get("Content-Length")
-                if length is not None and int(length) != asset["bytes"]:
-                    raise ValueError("native input response differs from trusted byte length")
-                while chunk := response.read(1024*1024):
-                    size += len(chunk)
-                    if size > asset["bytes"]:
-                        raise ValueError("native input exceeded trusted byte length")
-                    sink.write(chunk)
-                    checksum.update(chunk)
-                    now = time.monotonic()
-                    if now-reported >= 10:
-                        print(f"Still acquiring input {index+1}: {size}/{asset['bytes']} bytes ({int(now-started)}s elapsed)...", flush=True)
-                        reported = now
+            if not restore(partial, asset):
+                with urlopen(asset["url"], timeout=30) as response, partial.open("xb") as sink:
+                    redirect = urlsplit(response.url)
+                    if redirect.scheme != "https" or redirect.username or redirect.fragment:
+                        raise ValueError("native input redirect weakened its acquisition contract")
+                    length = response.headers.get("Content-Length")
+                    if length is not None and int(length) != asset["bytes"]:
+                        raise ValueError("native input response differs from trusted byte length")
+                    while chunk := response.read(1024*1024):
+                        size += len(chunk)
+                        if size > asset["bytes"]:
+                            raise ValueError("native input exceeded trusted byte length")
+                        sink.write(chunk)
+                        checksum.update(chunk)
+                        now = time.monotonic()
+                        if now-reported >= 10:
+                            print(f"Still acquiring input {index+1}: {size}/{asset['bytes']} bytes ({int(now-started)}s elapsed)...", flush=True)
+                            reported = now
+            size, checksum = size_digest(partial)
             if size != asset["bytes"] or checksum.hexdigest() != asset["sha256"]:
                 raise ValueError("native input differs from its independently trusted receipt")
             partial.rename(destination)
+            save(destination, asset)
             asset["archive"] = name
         finally:
             partial.unlink(missing_ok=True)

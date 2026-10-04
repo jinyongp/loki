@@ -43,6 +43,9 @@ func (r deploymentRegistry) validate() error {
 	}
 	seen := map[string]bool{}
 	for _, deployment := range r.Deployments {
+		if err := (tools.Config{Schema: 1, Release: deployment.Release, Host: tools.Host{Kind: "local"}, Mode: tools.Full}).Validate(); err != nil {
+			return err
+		}
 		if !deploymentIDPattern.MatchString(deployment.ID) || !deploymentDigestPattern.MatchString(deployment.PlanDigest) || seen[deployment.ID] || len(deployment.Artifacts) == 0 || len(deployment.Services) == 0 {
 			return fmt.Errorf("invalid deployment reservation")
 		}
@@ -52,7 +55,7 @@ func (r deploymentRegistry) validate() error {
 			if err := artifact.Validate(); err != nil {
 				return err
 			}
-			if artifact.Target.Mode != tools.Full || artifact.Release != deployment.Release || modules[artifact.Module] {
+			if artifact.Target.Mode != tools.Full || modules[artifact.Module] {
 				return fmt.Errorf("deployment generation identity mismatch")
 			}
 			modules[artifact.Module] = true

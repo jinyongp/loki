@@ -5,6 +5,7 @@ Candidate assembly checks archive identity and prerequisite completeness; it
 does not run product acceptance, upload archives or publish container images.
 """
 import argparse
+from release_config import RELEASE, CONTRACT, artifact_release
 import json
 from pathlib import Path
 import re
@@ -34,12 +35,12 @@ def merge(inputs, output):
     manifests, artifacts, receipts = {}, {}, []
     for path in inputs:
         catalog = document(path)
-        if set(catalog) != {"schema", "release", "modules", "artifacts"} or catalog["schema"] != 1 or catalog["release"] != "0.2.3":
+        if set(catalog) != {"schema", "release", "contract", "modules", "artifacts"} or catalog["schema"] != 1 or catalog["release"] != RELEASE or catalog["contract"] != CONTRACT:
             raise ValueError("candidate catalog must identify the exact 0.2.3 release")
         local_manifests = {}
         for manifest in catalog["modules"]:
             owner = manifest.get("id", "")
-            if not ID.fullmatch(owner) or manifest.get("schema") != 1 or manifest.get("release") != "0.2.3" or set(manifest) - {"schema", "id", "release", "targets", "requires", "tools", "capabilities"}:
+            if not ID.fullmatch(owner) or manifest.get("schema") != 1 or manifest.get("release") != artifact_release(owner) or manifest.get("contract") != CONTRACT or set(manifest) - {"schema", "id", "release", "contract", "targets", "requires", "tools", "capabilities"}:
                 raise ValueError("candidate has an invalid module manifest")
             if owner in local_manifests:
                 raise ValueError("input catalog repeats a module owner")
@@ -56,7 +57,7 @@ def merge(inputs, output):
                 manifests[owner] = (base, dict(targets))
             local_manifests[owner] = manifest
         for artifact in catalog["artifacts"]:
-            if set(artifact) != {"module", "release", "target", "url", "sha256", "bytes", "format"} or artifact["release"] != "0.2.3" or artifact["format"] != "zip":
+            if set(artifact) != {"module", "release", "target", "url", "sha256", "bytes", "format"} or artifact["release"] != artifact_release(artifact.get("module")) or artifact["format"] != "zip":
                 raise ValueError("candidate artifact contract differs")
             owner = artifact["module"]
             target = target_key(artifact["target"])
@@ -102,7 +103,7 @@ def merge(inputs, output):
                     raise ValueError("native candidate lacks its exact-target prerequisite")
     if not artifacts:
         raise ValueError("candidate catalog requires at least one module artifact")
-    merged = {"schema":1, "release":"0.2.3", "modules":[dict(manifests[owner][0], targets=[manifests[owner][1][target] for target in sorted(manifests[owner][1])]) for owner in sorted(manifests)], "artifacts":[artifacts[key] for key in sorted(artifacts)]}
+    merged = {"schema":1, "contract":CONTRACT, "release":RELEASE, "modules":[dict(manifests[owner][0], targets=[manifests[owner][1][target] for target in sorted(manifests[owner][1])]) for owner in sorted(manifests)], "artifacts":[artifacts[key] for key in sorted(artifacts)]}
     encoded = json.dumps(merged, indent=2, sort_keys=True)+"\n"
     if len(encoded.encode()) > LIMIT:
         raise ValueError("assembled catalog exceeds the management input bound")
@@ -115,7 +116,7 @@ def merge(inputs, output):
         if destination.stat().st_size != receipt["bytes"] or digest(destination) != receipt["sha256"]:
             raise ValueError("candidate archive changed while preparing offline inputs")
     (output / "catalog.json").write_text(encoded, encoding="utf-8")
-    (output / "candidate-receipts.json").write_text(json.dumps({"schema":1, "release":"0.2.3", "accepted":False, "published":False, "artifacts":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+    (output / "candidate-receipts.json").write_text(json.dumps({"schema":1, "release":RELEASE, "accepted":False, "published":False, "artifacts":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
     print(output / "catalog.json", flush=True)
 
 

@@ -51,6 +51,16 @@ func TestToolGateRechecksActivationAndPinnedRelease(t *testing.T) {
 	if gate.Revision() != "unavailable" {
 		t.Fatal("invalid release was exposed as available")
 	}
+	configuration.Contract = tools.CompositionContract
+	write()
+	if _, err := gate.Selection("browser"); err != nil {
+		t.Fatal("compatible independently versioned composition rejected:", err)
+	}
+	configuration.Tools[0].Enabled = false
+	write()
+	if _, err := gate.Selection("browser"); err == nil {
+		t.Fatal("v2 composition cached a revoked selection")
+	}
 }
 
 func TestToolGateRejectsUntrustedFileShapes(t *testing.T) {

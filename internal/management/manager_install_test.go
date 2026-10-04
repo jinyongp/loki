@@ -191,6 +191,40 @@ func TestManagerPublicationAdvancesOnlyEmptyRelease(t *testing.T) {
 	}
 }
 
+func TestManagerPublicationPreservesExplicitCompositionAndRejectsLegacyDowngrade(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	state, _ := store.Load()
+	state.Config.Contract = tools.CompositionContract
+	state.Config.Release = "0.2.4"
+	state.Installed["browser"] = ownedFixture(t, store, "browser")
+	installed := state.Installed["browser"]
+	installed.Manifest.Contract = tools.CompositionContract
+	state.Installed["browser"] = installed
+	state.Config.Tools = []tools.Selection{{ID: "browser", Enabled: true}}
+	if err := store.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(store.ActivationPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "candidate")
+	if err := os.WriteFile(source, []byte("manager fixture"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	if _, err := store.InstallManagerVersion(t.Context(), source, bin, "0.2.5"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.InstallManagerVersion(t.Context(), source, bin, "0.2.3"); err == nil {
+		t.Fatal("legacy CLI replaced explicit composition")
+	}
+	after, err := os.ReadFile(store.ActivationPath())
+	if err != nil || string(before) != string(after) {
+		t.Fatal("CLI upgrade/downgrade changed configured tools")
+	}
+}
+
 func TestManagerPublicationRecoversBetweenBinaryAndMarker(t *testing.T) {
 	s := Store{Root: t.TempDir()}
 	source := filepath.Join(t.TempDir(), "candidate")

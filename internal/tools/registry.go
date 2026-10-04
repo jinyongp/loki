@@ -9,10 +9,11 @@ type Registry struct {
 	modules map[ID]Manifest
 }
 
-// NewRegistry validates and snapshots a same-release catalog before resolution.
+// NewRegistry validates an explicit composition contract before resolution.
 func NewRegistry(manifests []Manifest) (*Registry, error) {
 	registry := &Registry{modules: make(map[ID]Manifest, len(manifests))}
 	var release string
+	var contract string
 	for _, manifest := range manifests {
 		if err := manifest.Validate(); err != nil {
 			return nil, err
@@ -20,10 +21,11 @@ func NewRegistry(manifests []Manifest) (*Registry, error) {
 		if _, exists := registry.modules[manifest.ID]; exists {
 			return nil, fmt.Errorf("duplicate tool ID %q", manifest.ID)
 		}
-		if release != "" && manifest.Release != release {
+		if release != "" && !CompatibleComposition(contract, release, manifest) {
 			return nil, fmt.Errorf("tool %s belongs to a different release train", manifest.ID)
 		}
 		release = manifest.Release
+		contract = manifest.Contract
 		registry.modules[manifest.ID] = cloneManifest(manifest)
 	}
 	ids := make([]ID, 0, len(registry.modules))

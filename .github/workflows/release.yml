@@ -1,1251 +1,645 @@
-name: release
+name: Loki release
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
-      bump:
-        description: Semantic version increment.
-        required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-      publish:
-        description: Publish the accepted release after validation.
-        required: true
-        default: true
-        type: boolean
-      check_updates:
-        description: Also check dependency updates against live upstream registries.
-        required: true
-        default: false
-        type: boolean
-      expected_sha:
-        description: Locally validated source commit; required for publication.
-        required: false
-        default: ''
+      version:
+        description: Stable 0.2.x version (empty selects the next patch)
         type: string
+        default: ''
+      publish:
+        description: Publish the accepted release and installers
+        type: boolean
+        default: false
+      force_rebuild:
+        description: Rebuild every supported target with cold product inputs
+        type: boolean
+        default: false
+      expected_sha:
+        description: Optional source SHA bound by the maintainer command
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: loki-release
+  group: ${{ github.event_name == 'workflow_dispatch' && 'loki-release' || format('loki-checks-{0}', github.ref) }}
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  preflight:
-    name: Resolve release
+  plan:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      previous_tag: ${{ steps.version.outputs.previous_tag }}
-      released_at: ${{ steps.version.outputs.released_at }}
+      version: ${{ steps.plan.outputs.version }}
+      manager: ${{ steps.plan.outputs.manager }}
+      manager-count: ${{ steps.plan.outputs.manager-count }}
+      manager-checks: ${{ steps.plan.outputs.manager-checks }}
+      manager-checks-count: ${{ steps.plan.outputs.manager-checks-count }}
+      browser: ${{ steps.plan.outputs.browser }}
+      browser-count: ${{ steps.plan.outputs.browser-count }}
+      full: ${{ steps.plan.outputs.full }}
+      full-count: ${{ steps.plan.outputs.full-count }}
+      browser-checks: ${{ steps.plan.outputs.browser-checks }}
+      browser-checks-count: ${{ steps.plan.outputs.browser-checks-count }}
+      full-checks: ${{ steps.plan.outputs.full-checks }}
+      full-checks-count: ${{ steps.plan.outputs.full-checks-count }}
     steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Require main HEAD
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - id: plan
         env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_VERSION: ${{ inputs.version }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          PUBLISH_REQUEST: ${{ inputs.publish }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
-          PUBLISH_RELEASE: ${{ inputs.publish }}
-        shell: bash
         run: |
-          set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
-          git fetch origin main --tags --force
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          if test "$PUBLISH_RELEASE" = true && test -z "$EXPECTED_SHA"; then
-            echo "publication requires local preflight; use scripts/maintainer/release.sh" >&2
-            exit 1
-          fi
-          if test -n "$EXPECTED_SHA"; then
-            if test "$GITHUB_SHA" != "$EXPECTED_SHA"; then
-              echo "main changed after local validation; rerun scripts/maintainer/release.sh" >&2
-              exit 1
-            fi
-          fi
-
-      - name: Resolve version
-        id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUMP: ${{ inputs.bump }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          latest_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
-          if test -n "$latest_tag"; then
-            tag_commit=$(git rev-list -n 1 "$latest_tag")
-            release_state=missing
-            release_immutable=false
-            if release_json=$(gh release view "$latest_tag" --json isDraft,isImmutable 2>/dev/null); then
-              release_immutable=$(jq -r '.isImmutable' <<<"$release_json")
-              if test "$(jq -r '.isDraft' <<<"$release_json")" = true; then
-                release_state=draft
-              else
-                release_state=published
-              fi
-            fi
-            if test "$tag_commit" = "$GITHUB_SHA"; then
-              case "$release_state" in
-                missing|draft)
-                  version=${latest_tag#v}
-                  tag=$latest_tag
-                  previous_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | sed -n '2p')
-                  ;;
-                published)
-                  if test "$release_immutable" = true; then
-                    echo "current commit is already published immutably as $latest_tag" >&2
-                    exit 1
-                  fi
-                  echo "current commit has a mutable failed release at $latest_tag; advancing to the next version" >&2
-                  ;;
-              esac
-            elif test "$release_state" != published; then
-              echo "latest tag $latest_tag is not a published release and points to another commit" >&2
-              exit 1
-            fi
-          fi
-          if test -z "${version:-}"; then
-            resolved=$(go run ./tools/release/version --bump "$BUMP")
-            version=$(jq -r '.version' <<<"$resolved")
-            tag=$(jq -r '.tag' <<<"$resolved")
-            previous_tag=$(jq -r '.previous_tag // ""' <<<"$resolved")
-          fi
-          released_at=$(git show -s --format=%cI "$GITHUB_SHA")
-          {
-            echo "version=$version"
-            echo "tag=$tag"
-            echo "previous_tag=$previous_tag"
-            echo "released_at=$released_at"
-          } >>"$GITHUB_OUTPUT"
-
-  release-contracts:
-    name: Verify release contracts and pins
-    needs: preflight
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          args=()
+          if test -n "$REQUEST_VERSION"; then args+=(--version "$REQUEST_VERSION"); fi
+          if test "$FORCE_REBUILD" = true; then args+=(--force); fi
+          python3 scripts/maintainer/tools/release_pipeline.py plan "${args[@]}" --output plan/plan.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
+          name: release-plan
+          path: plan/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Run fast release contract tests
-        id: contract_tests
-        continue-on-error: true
-        run: >-
-          go test -vet=off
-          ./internal/app/launcher
-          ./modules/coordination
-          ./internal/platform/sandbox
-          ./internal/packaging
-          ./internal/host/policy
-          ./internal/host/releases
-          ./tools/release/bootstrapbuild
-          ./tools/release/evidencebuild
-          ./tools/release/publishprep
-          ./tools/release/releasebuild
-
-      - name: Verify GitHub Action pins are current
-        id: action_pins
-        if: ${{ inputs.check_updates }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm exec --yes actions-up@1.21.0 -- \
-            --dir .github \
-            --dry-run \
-            --json \
-            --mode major \
-            --style sha \
-            --prefer-tags \
-            --min-age 0 \
-            >"$RUNNER_TEMP/actions-up.raw"
-          sed -n '/^{/,$p' "$RUNNER_TEMP/actions-up.raw" >"$RUNNER_TEMP/actions-up.json"
-          jq -e '.summary.totalUpdates == 0 and .summary.totalBlockedByMode == 0 and .summary.totalBlockedByAge == 0' \
-            "$RUNNER_TEMP/actions-up.json" >/dev/null
-
-      - name: Verify release dependency pins are current
-        id: metadata_pins
-        if: ${{ inputs.check_updates }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: sh ./scripts/verify/release-pins.sh metadata
-
-      - name: Set up Docker Buildx
-        if: ${{ inputs.check_updates }}
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Verify release container pins are current
-        id: container_pins
-        if: ${{ inputs.check_updates }}
-        continue-on-error: true
-        run: sh ./scripts/verify/release-pins.sh containers
-
-      - name: Require all release contract and pin checks
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "${{ steps.contract_tests.outcome }}" = success
-          if test "${{ inputs.check_updates }}" = true; then
-            test "${{ steps.action_pins.outcome }}" = success
-            test "${{ steps.metadata_pins.outcome }}" = success
-            test "${{ steps.container_pins.outcome }}" = success
-          fi
-
-  release-inputs:
-    name: Build release inputs (${{ matrix.arch }})
-    needs: preflight
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+  manager-build:
+    needs: plan
+    if: needs.plan.outputs.manager-count != '0'
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Expose GitHub cache runtime
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-
-      - name: Build native release inputs
-        env:
-          LOKI_BUILD_CACHE_SCOPE: release-inputs
-        run: sh ./scripts/build/build-release-inputs.sh "$RUNNER_TEMP/release-inputs" "${{ matrix.arch }}"
-
-      - name: Upload release inputs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: loki-release-inputs-${{ matrix.arch }}
-          path: ${{ runner.temp }}/release-inputs
-          if-no-files-found: error
-          retention-days: 7
-
-
-  source-gates:
-    name: Verify deterministic source
-    needs:
-      - preflight
-      - release-inputs
-    if: ${{ always() && needs.preflight.result == 'success' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Download pinned source-test tools
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: loki-release-inputs-amd64
-          path: ${{ runner.temp }}/release-inputs
-
-      - name: Restore source-test tool executable mode
-        run: chmod 0755 "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg"
-
-      - name: Run deterministic source profile
-        env:
-          LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
-        run: sh ./scripts/verify/verify-source.sh
-
-  source-runtime-contracts:
-    name: Verify source runtime fixtures
-    needs:
-      - preflight
-      - release-inputs
-    if: ${{ always() && needs.preflight.result == 'success' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Download pinned source-test tools
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: loki-release-inputs-amd64
-          path: ${{ runner.temp }}/release-inputs
-
-      - name: Restore test tool executable modes
-        run: chmod 0755 "$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg"
-
-      - name: Verify pinned devtools runtime contract
-        id: devtools_contract
-        continue-on-error: true
-        env:
-          LOKI_DEVTOOLS_BINARY: ${{ runner.temp }}/release-inputs/devtools/amd64/devtools
-        run: go test ./modules/coordination -run '^TestRealProcessInheritsBrokerSecrets$' -v -count=1
-
-      - name: Run CI-sensitive Go tests
-        id: sensitive_tests
-        continue-on-error: true
-        env:
-          LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +e
-          go test -json -vet=off ./modules/secrets ./modules/workspace | tee "$RUNNER_TEMP/go-sensitive-test.json"
-          status=${PIPESTATUS[0]}
-          set -e
-          if test "$status" -ne 0; then
-            jq -r 'select(.Action == "fail" and .Test != null) | (.Package + "::" + .Test)' "$RUNNER_TEMP/go-sensitive-test.json" |
-              sort -u |
-              while IFS= read -r failure; do
-                test -n "$failure" && printf '::error title=CI-sensitive Go test failed::%s\n' "$failure"
-              done
-            jq -r 'select(.Action == "output" and .Test != null and (.Output | contains("_test.go:"))) | (.Package + "::" + .Test + "::" + (.Output | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")))' "$RUNNER_TEMP/go-sensitive-test.json" |
-              tail -n 40 |
-              while IFS= read -r detail; do
-                test -n "$detail" && printf '::error title=CI-sensitive Go test detail::%s\n' "$detail"
-              done
-            exit "$status"
-          fi
-
-      - name: Require all source runtime fixture checks
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "${{ steps.devtools_contract.outcome }}" = success
-          test "${{ steps.sensitive_tests.outcome }}" = success
-
-  oci-gates:
-    name: Verify OCI runtime
-    needs: preflight
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Run real OCI job acceptance
-        run: sh ./scripts/verify/accept-oci-jobs.sh
-
-  source-race:
-    name: Verify race safety
-    needs:
-      - preflight
-      - release-inputs
-    if: ${{ always() && needs.preflight.result == 'success' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Download pinned source-test tools
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: loki-release-inputs-amd64
-          path: ${{ runner.temp }}/release-inputs
-
-      - name: Restore source-test tool executable mode
-        run: chmod 0755 "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg"
-
-      - name: Run Go race profile
-        env:
-          LOKI_TEST_RG: ${{ runner.temp }}/release-inputs/ripgrep/amd64/rg
-        run: sh ./scripts/verify/verify-race.sh
-
-  build:
-    name: Build immutable release
-    needs:
-      - preflight
-      - release-inputs
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      core_image: ${{ steps.images.outputs.core_image }}
-      browser_image: ${{ steps.images.outputs.browser_image }}
-      candidate_artifact: ${{ steps.candidate.outputs.name }}
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Expose GitHub cache runtime
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Download release inputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: loki-release-inputs-*
-          path: ${{ runner.temp }}/release-inputs
-          merge-multiple: true
-
-      - name: Restore release input executable modes
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod 0755 \
-            "$RUNNER_TEMP/release-inputs/devtools/amd64/devtools" \
-            "$RUNNER_TEMP/release-inputs/devtools/arm64/devtools" \
-            "$RUNNER_TEMP/release-inputs/ripgrep/amd64/rg" \
-            "$RUNNER_TEMP/release-inputs/ripgrep/arm64/rg" \
-            "$RUNNER_TEMP/release-inputs/gh/amd64/gh" \
-            "$RUNNER_TEMP/release-inputs/gh/arm64/gh"
-
-      - name: Build and push candidate images
-        id: images
-        env:
-          LOKI_VERSION: ${{ needs.preflight.outputs.version }}
-          LOKI_REVISION: ${{ github.sha }}
-          LOKI_DATE: ${{ needs.preflight.outputs.released_at }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export SOURCE_DATE_EPOCH
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GITHUB_SHA")
-          inputs="$RUNNER_TEMP/release-inputs"
-          core_ref="ghcr.io/jinyongp/loki:candidate-${GITHUB_SHA}"
-          browser_ref="ghcr.io/jinyongp/loki-browser:candidate-${GITHUB_SHA}"
-          (
-            export LOKI_BUILD_METADATA="$RUNNER_TEMP/core-image.json"
-            export LOKI_BUILD_CACHE_SCOPE=loki-core
-            ./scripts/build/build-oci.sh "$core_ref" \
-              "$inputs/devtools/amd64/devtools" \
-              "$inputs/devtools/arm64/devtools" \
-              "$inputs/ripgrep/amd64/rg" \
-              "$inputs/ripgrep/arm64/rg" \
-              "$inputs/gh/amd64/gh" \
-              "$inputs/gh/arm64/gh"
-          ) &
-          core_pid=$!
-          (
-            export LOKI_BUILD_METADATA="$RUNNER_TEMP/browser-image.json"
-            export LOKI_BUILD_CACHE_SCOPE=loki-browser
-            ./scripts/build/build-browser-oci.sh "$browser_ref"
-          ) &
-          browser_pid=$!
-          image_build_failed=0
-          wait "$core_pid" || image_build_failed=1
-          wait "$browser_pid" || image_build_failed=1
-          test "$image_build_failed" -eq 0
-          core_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/core-image.json")
-          browser_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/browser-image.json")
-          {
-            echo "core_image=ghcr.io/jinyongp/loki@$core_digest"
-            echo "browser_image=ghcr.io/jinyongp/loki-browser@$browser_digest"
-          } >>"$GITHUB_OUTPUT"
-
-      - name: Require anonymously pullable runtime images
-        env:
-          CORE_IMAGE: ${{ steps.images.outputs.core_image }}
-          BROWSER_IMAGE: ${{ steps.images.outputs.browser_image }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          anonymous_config="$RUNNER_TEMP/docker-anonymous"
-          mkdir -p "$anonymous_config"
-          DOCKER_CONFIG="$anonymous_config" docker buildx imagetools inspect "$CORE_IMAGE" >/dev/null
-          DOCKER_CONFIG="$anonymous_config" docker buildx imagetools inspect "$BROWSER_IMAGE" >/dev/null
-
-      - name: Generate release notes
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          notes="$RUNNER_TEMP/release-notes.md"
-          {
-            printf '# Loki %s\n\n' "$TAG"
-            if test -n "$PREVIOUS_TAG"; then
-              git log --no-merges --format='- %s (%h)' "$PREVIOUS_TAG..$GITHUB_SHA"
-            else
-              git log --no-merges --format='- %s (%h)' "$GITHUB_SHA"
-            fi
-            printf '\n'
-          } >"$notes"
-
-      - name: Assemble release metadata and bootstrap
-        env:
-          VERSION: ${{ needs.preflight.outputs.version }}
-          RELEASED_AT: ${{ needs.preflight.outputs.released_at }}
-          CORE_IMAGE: ${{ steps.images.outputs.core_image }}
-          BROWSER_IMAGE: ${{ steps.images.outputs.browser_image }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          go run ./tools/release/releasebuild \
-            --output "$RUNNER_TEMP/release" \
-            --version "$VERSION" \
-            --source-revision "$GITHUB_SHA" \
-            --released-at "$RELEASED_AT" \
-            --core-image "$CORE_IMAGE" \
-            --browser-image "$BROWSER_IMAGE" \
-            --release-notes "$RUNNER_TEMP/release-notes.md" \
-            --source-root "$GITHUB_WORKSPACE"
-
-      - name: Fetch reviewed connection helper inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          go run ./tools/release/helperfetch \
-            --catalog "$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json" \
-            --output "$RUNNER_TEMP/connect-helpers"
-
-      - name: Build WSL appliance
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./scripts/build/build-wsl.sh \
-            "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
-            "$RUNNER_TEMP/release"
-
-      - name: Build Windows frontend
-        env:
-          VERSION: ${{ needs.preflight.outputs.version }}
-          RELEASED_AT: ${{ needs.preflight.outputs.released_at }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          go run ./tools/release/windowsbuild \
-            --output "$RUNNER_TEMP/loki-windows-amd64.exe" \
-            --release-tag "v$VERSION" \
-            --source-revision "$GITHUB_SHA" \
-            --released-at "$RELEASED_AT" \
-            --wsl-appliance "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
-            --helper-catalog "$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json" \
-            --source-root "$GITHUB_WORKSPACE"
-
-      - name: Assemble candidate evidence
-        id: candidate
-        env:
-          CORE_IMAGE: ${{ steps.images.outputs.core_image }}
-          BROWSER_IMAGE: ${{ steps.images.outputs.browser_image }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release="$RUNNER_TEMP/release"
-          candidate="$RUNNER_TEMP/candidate"
-          helper_catalog="$GITHUB_WORKSPACE/packaging/windows/connect-helpers.json"
-          test "$(jq -er '.helpers | length' "$helper_catalog")" -eq 1
-          helper_archive=$(jq -er '.helpers[0].archive.mirror_asset' "$helper_catalog")
-          helper_license=$(jq -er '.helpers[0].license_report.mirror_asset' "$helper_catalog")
-          helper_notice=$(jq -er '.helpers[0].notice.mirror_asset' "$helper_catalog")
-          helper_spdx=$(jq -er '.helpers[0].spdx.mirror_asset' "$helper_catalog")
-          go run ./tools/release/evidencebuild \
-            --output "$candidate" \
-            --source-revision "$GITHUB_SHA" \
-            --release-index "$release/release-index.json" \
-            --release-manifest "$release/release-manifest.json" \
-            --host-binary "$release/loki-linux-amd64" \
-            --bootstrap "$release/loki-bootstrap-linux-amd64" \
-            --host-assets "$release/host-assets.tar.gz" \
-            --wsl-appliance "$RUNNER_TEMP/loki-wsl-amd64.wsl" \
-            --windows-frontend "$RUNNER_TEMP/loki-windows-amd64.exe" \
-            --connect-helper-catalog "$helper_catalog" \
-            --connect-helper-archive "$RUNNER_TEMP/connect-helpers/$helper_archive" \
-            --connect-helper-license "$RUNNER_TEMP/connect-helpers/$helper_license" \
-            --connect-helper-notice "$RUNNER_TEMP/connect-helpers/$helper_notice" \
-            --connect-helper-spdx "$RUNNER_TEMP/connect-helpers/$helper_spdx" \
-            --toolchain-catalog "$release/toolchain-catalog.json" \
-            --provenance "$release/provenance.bundle.json" \
-            --notices "$release/notices.tar.gz" \
-            --release-notes "$release/release-notes.md" \
-            --effective-policy "$release/effective-policy.json" \
-            --effective-config "$release/effective-config.toml" \
-            --core-image "$CORE_IMAGE" \
-            --browser-image "$BROWSER_IMAGE"
-          name="loki-release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "name=$name" >>"$GITHUB_OUTPUT"
-
-      - name: Upload release candidate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ steps.candidate.outputs.name }}
-          path: ${{ runner.temp }}/candidate
-          if-no-files-found: error
-          retention-days: 7
-
-  wsl-accept:
-    name: Verify Windows WSL appliance (${{ matrix.scenario }})
-    needs:
-      - preflight
-      - build
-    runs-on: windows-2025
+    timeout-minutes: 40
     strategy:
       fail-fast: false
-      matrix:
-        scenario: [integrations, migration, recovery]
-    permissions:
-      contents: read
+      matrix: ${{ fromJSON(needs.plan.outputs.manager) }}
     steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Download release candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}\candidate
-
-      - name: Prepare WSL acceptance environment
-        shell: pwsh
-        run: .\scripts\verify\update-wsl.ps1
-
-      - name: Require current WSL2
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          wsl.exe --version
-          if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
-          $help = (wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
-          foreach ($option in @("--from-file", "--name", "--no-launch")) {
-            if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
-          }
-          $global:LASTEXITCODE = 0
-
-      - name: Run exact-candidate WSL appliance acceptance
-        shell: pwsh
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-        run: .\scripts\verify\accept-wsl.ps1 -Candidate "$env:RUNNER_TEMP\candidate" -Tag "$env:TAG" -Scenario "${{ matrix.scenario }}"
-
-  windows-native:
-    name: Verify Windows native source
-    needs: preflight
-    runs-on: windows-2025
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Parse Windows verification scripts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          Get-ChildItem -LiteralPath .\scripts\verify -Filter *.ps1 | ForEach-Object {
-            [void][scriptblock]::Create([IO.File]::ReadAllText($_.FullName))
-          }
-          .\scripts\verify\test-wsl-scenarios.ps1
-          .\scripts\verify\test-update-wsl.ps1
-
-      - name: Run native Windows unit and ACL regression tests
-        shell: pwsh
-        env:
-          LOKI_WINDOWS_TASK_ACCEPTANCE: "1"
-        run: go test ./internal/host/windows ./cmd/loki-windows ./cmd/loki-keepalive -count=1 -timeout=5m
-
-  windows-provider-acceptance:
-    name: Verify Windows provider acceptance
-    needs:
-      - preflight
-      - build
-    runs-on: windows-2025
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Download release candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}\candidate
-
-      - name: Run Windows provider acceptance
-        shell: pwsh
-        env:
-          LOKI_WINDOWS_PROVIDER_ACCEPTANCE: "1"
-          LOKI_ACCEPTANCE_RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
-          LOKI_ACCEPTANCE_HELPER_CATALOG: ${{ runner.temp }}\candidate\inputs\connect-helpers.json
-          LOKI_ACCEPTANCE_HELPER_ARCHIVE: ${{ runner.temp }}\candidate\inputs\connect-helper-archive.zip
-          LOKI_ACCEPTANCE_FRONTEND: ${{ runner.temp }}\candidate\inputs\loki-windows-amd64.exe
-        run: go test ./internal/host/windows -run '^TestWindowsProviderAcceptance$' -v -count=1
-
-  accept-runtime:
-    name: Verify release runtime contracts
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Install runtime acceptance prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libarchive-tools
-
-      - name: Run runner/vault OS permission acceptance
-        run: |
-          go test -c -o "$RUNNER_TEMP/execution-permission.test" ./internal/execution
-          sudo "$RUNNER_TEMP/execution-permission.test" -test.run '^TestLinuxRunnerCanWriteStateButCannotReadVaultKey$' -test.v
-
-      - name: Download release candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}/candidate
-
-      - name: Prepare release candidate
-        run: sh ./scripts/verify/prepare-candidate.sh "$RUNNER_TEMP/candidate"
-
-      - name: Build canonical toolchain bundle
-        run: ./scripts/build/build-toolchain-bundle.sh "$RUNNER_TEMP/toolchain-bundle"
-
-      - name: Install candidate toolchain runtime libraries
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(jq -r '.apt_packages[].name' packaging/native/toolchain-manifest.json)
-          test "${#packages[@]}" -gt 0
-          sudo apt-get install --yes "${packages[@]}"
-
-      - name: Run MCP-only project execution acceptance
-        env:
-          LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
-        run: bash ./scripts/verify/accept-project-execution.sh "$LOKI_IMAGE" "$RUNNER_TEMP/toolchain-bundle"
-
-      - name: Run MCP client-neutral recovery acceptance
-        run: >-
-          go test
-          ./internal/app/mcp
-          ./internal/contract
-          ./internal/integrations/sharing/artifacts
-          -run
-          'TestProjectContextRecoversAcrossMCPRestartAfterPostCheckpointChange|TestWorkspaceEditUsesGeneratedActionContract|TestGitStageUsesGeneratedActionContract|TestSecretMutationContractsAreGuardedAndDiscriminated|TestArtifactPublishUsesDiscriminatedReplaySafeContract|TestBrowserInteractUsesGenerationGuardedDiscriminatedContract|TestStore|TestReplay'
-          -v -count=1
-
-      - name: Run provider-neutral MCP ingress acceptance
-        run: go test ./internal/app/mcp -run '^TestProviderNeutralExternalIngressAcceptance$' -v -count=1
-
-      - name: Run provider release contract acceptance
-        run: go test ./internal/integrations/github -v -count=1
-
-  accept-recovery:
-    name: Verify release recovery and projection
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Download release candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
         with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}/candidate
-
-      - name: Prepare release candidate
-        run: sh ./scripts/verify/prepare-candidate.sh "$RUNNER_TEMP/candidate"
-
-      - name: Run published release lifecycle recovery acceptance
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - name: Build selected native manager units
         env:
-          GH_TOKEN: ${{ github.token }}
-          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$PREVIOUS_TAG"
-          release_json=$(gh release view "$PREVIOUS_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable)
-          jq -e '.isDraft == false and .isImmutable == true' <<<"$release_json" >/dev/null
-          previous="$RUNNER_TEMP/previous-release"
-          mkdir -p "$previous"
-          gh release download "$PREVIOUS_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern loki-release-manifest.json \
-            --dir "$previous"
-          LOKI_ACCEPTANCE_RELEASE_A_MANIFEST="$previous/loki-release-manifest.json" \
-          LOKI_ACCEPTANCE_RELEASE_B_MANIFEST="$RUNNER_TEMP/candidate/inputs/release-manifest.json" \
-            go test ./internal/host/lifecycle/compose \
-              -run '^TestPublishedReleaseTransactionalUpdateFailureRecoveryRollbackAcceptance$' \
-              -v -count=1
+          LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
+        run: python3 scripts/maintainer/tools/release_pipeline.py manager --plan plan/plan.json --output candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-manager
+          path: candidate/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Verify candidate publication projection
+  browser-build:
+    needs: plan
+    if: needs.plan.outputs.browser-count != '0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.browser) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: .release-input-cache
+          key: public-inputs-v1-${{ matrix.os }}-${{ matrix.arch }}-browser-${{ hashFiles('packaging/tools/inputs/**', 'package-lock.json') }}
+          restore-keys: public-inputs-v1-${{ matrix.os }}-${{ matrix.arch }}-browser-
+      - name: Build selected native browser units
         env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-        run: |
-          go run ./tools/release/publishprep \
-            --candidate "$RUNNER_TEMP/candidate" \
-            --output "$RUNNER_TEMP/publication-check" \
-            --tag "$TAG" \
-            --commit "$GITHUB_SHA" \
-            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl" \
-            --windows-installer-template "$GITHUB_WORKSPACE/tools/release/install.ps1.tmpl"
-          sh -n "$RUNNER_TEMP/publication-check/pages/install.sh"
+          LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
+        run: python3 scripts/maintainer/tools/release_pipeline.py browser --plan plan/plan.json --output candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-browser
+          path: candidate/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
-  accept-oci:
-    name: Verify exact-candidate OCI lifecycle
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
+  full-build:
+    needs: plan
+    if: needs.plan.outputs.full-count != '0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.full) }}
     permissions:
       contents: read
-      packages: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Run release OCI authority acceptance
-        env:
-          LOKI_OCI_ACCEPTANCE_IMAGE: ${{ needs.build.outputs.core_image }}
-        run: sh ./scripts/verify/accept-oci-jobs.sh
-
-  accept-authority:
-    name: Verify exact-candidate authority matrix
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Install authority runtime libraries
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          mapfile -t packages < <(jq -r '.apt_packages[].name' packaging/native/toolchain-manifest.json)
-          test "${#packages[@]}" -gt 0
-          sudo apt-get install --yes "${packages[@]}"
-
-      - name: Run protected-resource cross-path authority matrix
-        env:
-          LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
-        run: bash ./scripts/verify/accept-authority-matrix.sh
-
-  accept-compose:
-    name: Verify exact-candidate Compose integrations
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Install Compose acceptance prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes acl openssh-client
-
-      - name: Run release Compose, browser and signing acceptance
-        env:
-          LOKI_IMAGE: ${{ needs.build.outputs.core_image }}
-          LOKI_BROWSER_IMAGE: ${{ needs.build.outputs.browser_image }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          key="$RUNNER_TEMP/signing-key"
-          ssh-keygen -q -t ed25519 -N "" -C "loki release acceptance" -f "$key"
-          sudo chown root:root "$key"
-          sudo chmod 0600 "$key"
-          cleanup() {
-            sudo rm -f "$key"
-            rm -f "$key.pub"
-          }
-          trap cleanup EXIT
-          LOKI_SIGNING_KEY_FILE="$key" ./scripts/verify/accept-compose.sh
-
-  accept-bootstrap:
-    name: Verify release bootstrap
-    needs:
-      - preflight
-      - build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Run bootstrap acceptance
-        run: sh ./scripts/verify/accept-bootstrap.sh
-
-  publish:
-    name: Publish immutable release
-    if: ${{ inputs.publish }}
-    needs:
-      - preflight
-      - release-contracts
-      - build
-      - source-gates
-      - source-runtime-contracts
-      - source-race
-      - oci-gates
-      - windows-native
-      - accept-runtime
-      - accept-recovery
-      - accept-oci
-      - accept-authority
-      - accept-compose
-      - accept-bootstrap
-      - wsl-accept
-      - windows-provider-acceptance
-    runs-on: ubuntu-24.04
-    permissions:
       actions: read
-      contents: write
       packages: write
-    outputs:
-      release_url: ${{ steps.release.outputs['release-url'] }}
     steps:
-      - name: Check out accepted source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Download accepted candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.build.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}/candidate
-
-      - name: Prepare release candidate
-        run: sh ./scripts/verify/prepare-candidate.sh "$RUNNER_TEMP/candidate"
-
-      - name: Prepare public assets and Pages installer
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
         run: |
-          go run ./tools/release/publishprep \
-            --candidate "$RUNNER_TEMP/candidate" \
-            --output "$GITHUB_WORKSPACE/publication" \
-            --tag "$TAG" \
-            --commit "$GITHUB_SHA" \
-            --installer-template "$GITHUB_WORKSPACE/tools/release/install.sh.tmpl" \
-            --windows-installer-template "$GITHUB_WORKSPACE/tools/release/install.ps1.tmpl"
-
-      - name: Promote accepted OCI image tags
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-          CORE_IMAGE: ${{ needs.build.outputs.core_image }}
-          BROWSER_IMAGE: ${{ needs.build.outputs.browser_image }}
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: .release-input-cache
+          key: public-inputs-v1-${{ matrix.os }}-${{ matrix.arch }}-full-${{ hashFiles('packaging/tools/inputs/**', 'package-lock.json') }}
+          restore-keys: public-inputs-v1-${{ matrix.os }}-${{ matrix.arch }}-full-
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+        with:
+          version: v0.37.2
+          install: true
+      - name: Install registry client and authenticated native package tooling
         run: |
-          docker buildx imagetools create --tag "ghcr.io/jinyongp/loki:$TAG" "$CORE_IMAGE"
-          docker buildx imagetools create --tag "ghcr.io/jinyongp/loki-browser:$TAG" "$BROWSER_IMAGE"
-
-      - name: Create or verify release tag
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends skopeo
+          printf '%s  %s\n' '80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31' '/usr/share/keyrings/ubuntu-archive-keyring.gpg' | sha256sum --check --strict
+          sudo chmod 0644 /usr/share/keyrings/ubuntu-archive-keyring.gpg
+      - name: Build selected native full units
         env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-        shell: bash
-        run: sh ./scripts/maintainer/publish-tag.sh "$TAG" "$GITHUB_SHA"
+          LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
+          LOKI_REGISTRY_TOKEN: ${{ github.token }}
+          LOKI_BUILD_CACHE: registry
+          LOKI_CACHE_WRITE: '1'
+        run: python3 scripts/maintainer/tools/release_pipeline.py full --plan plan/plan.json --output candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-full
+          path: candidate/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Prepare release draft from verified tag
-        id: release_draft
+  assemble:
+    needs: [plan, manager-build, browser-build, full-build]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.manager-build.result == 'success' || needs.manager-build.result == 'skipped') && (needs.browser-build.result == 'success' || needs.browser-build.result == 'skipped') && (needs.full-build.result == 'success' || needs.full-build.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: built-*
+          path: built
+      - run: python3 scripts/maintainer/tools/release_pipeline.py assemble --plan plan/plan.json --built built --output publication
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: publication
+          path: publication/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain small acceptance metadata
+        run: |
+          mkdir -p metadata/assets
+          cp publication/assets/*.json publication/assets/*.md publication/assets/loki-install.* metadata/assets/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: publication-metadata
+          path: metadata/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  source-checks:
+    needs: assemble
+    if: ${{ !cancelled() && (needs.assemble.result == 'success' || github.event_name != 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - name: Final source contracts and release selection fixtures
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.preflight.outputs.tag }}
-        shell: bash
         run: |
-          set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
-            exit 0
-          fi
-          # The existing tag selects the accepted commit. A branch reference
-          # avoids requesting workflow-write scope for a historical commit SHA.
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --draft --verify-tag --target "$GITHUB_REF_NAME" \
-            --title "$TAG" \
-            --notes-file publication/assets/loki-release-notes.md
+          go test ./...
+          go test -race ./internal/tools ./internal/management ./internal/config ./cmd/loki-manager
+          python3 -m unittest discover -s scripts/maintainer/tools -p 'test_*.py'
+          python3 -m compileall -q scripts/maintainer/tools
+          python3 scripts/maintainer/tools/verify_release_tools.py
 
-      - name: Publish immutable GitHub Release
-        id: release
-        uses: releaseway/actions@4fdc624aafb0c824fb81dd7aaf59031bb1f5aa0f # v0.2.0
+  manager-checks:
+    needs: [plan, assemble]
+    if: ${{ !cancelled() && needs.assemble.result == 'success' && needs.plan.outputs.manager-checks-count != '0' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.manager-checks) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          tag: ${{ needs.preflight.outputs.tag }}
-          commit: ${{ github.sha }}
-          assets: publication/assets/*
-          notes: file
-          notes-file: publication/assets/loki-release-notes.md
-          title: ${{ needs.preflight.outputs.tag }}
-          latest: "true"
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-metadata
+          path: publication
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
+          path: publication/native
+      - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host
+      - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager
+      - name: Accept native CLI, upgrade selection, installer and retained user data
+        run: |
+          python3 scripts/maintainer/tools/accept_manager_bundle.py --candidate acceptance-candidate/manager
+          go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command
+          python3 scripts/maintainer/tools/accept_cli_upgrade.py --candidate acceptance-candidate/manager
+          python3 scripts/maintainer/tools/accept_public_installer.py --candidate acceptance-candidate/manager
+      - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: checks-${{ matrix.os }}-${{ matrix.arch }}-manager
+          path: checks/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Upload Pages installer
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+  browser-checks:
+    needs: [plan, assemble]
+    if: ${{ !cancelled() && needs.assemble.result == 'success' && needs.plan.outputs.browser-checks-count != '0' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.browser-checks) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-metadata
+          path: publication
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
+          path: publication/native
+      - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host
+      - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host
+      - name: Allow owned Chrome sandbox on the disposable Linux acceptance runner
+        if: runner.os == 'Linux'
+        run: |
+          cat > "$RUNNER_TEMP/loki-browser-acceptance" <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile loki-release-browser /tmp/loki-browser-accept-*/management/tools/browser/generations/*/chrome/chrome flags=(unconfined) { userns, }
+          profile loki-release-installer /tmp/loki-installer-accept-*/management/tools/browser/generations/*/chrome/chrome flags=(unconfined) { userns, }
+          PROFILE
+          sudo apparmor_parser --replace "$RUNNER_TEMP/loki-browser-acceptance"
+      - name: Accept both packaged engines, capabilities, installation and connection
+        run: |
+          python3 scripts/maintainer/tools/accept_browser_candidate.py --candidate acceptance-candidate
+          go test ./modules/browser ./internal/transport/toolproxy
+          python3 scripts/maintainer/tools/accept_browser_capabilities.py --candidate acceptance-candidate
+          python3 scripts/maintainer/tools/accept_public_installer.py --candidate acceptance-candidate --browser
+      - name: Remove owned sandbox profile
+        if: always() && runner.os == 'Linux'
+        run: |
+          if test -f "$RUNNER_TEMP/loki-browser-acceptance"; then sudo apparmor_parser --remove "$RUNNER_TEMP/loki-browser-acceptance"; fi
+      - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: checks-${{ matrix.os }}-${{ matrix.arch }}-project-host
+          path: checks/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  full-checks:
+    needs: [plan, assemble]
+    if: ${{ !cancelled() && needs.assemble.result == 'success' && needs.plan.outputs.full-checks-count != '0' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.full-checks) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - id: go-cache-paths
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          paths = json.loads(subprocess.check_output(['go','env','-json','GOCACHE','GOMODCACHE'],text=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('paths<<GO_CACHE_PATHS\n'+paths['GOCACHE']+'\n'+paths['GOMODCACHE']+'\nGO_CACHE_PATHS\n')
+          PY
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        continue-on-error: true
+        with:
+          path: ${{ steps.go-cache-paths.outputs.paths }}
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-metadata
+          path: publication
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
+          path: publication/native
+      - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full
+      - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full
+      - name: Prepare disposable Docker acceptance runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends skopeo
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('/etc/docker/daemon.json')
+          config = json.loads(path.read_text()) if path.exists() else {}
+          config.setdefault('features', {})['containerd-snapshotter'] = True
+          path.write_text(json.dumps(config)+'\n')
+          PY
+          sudo systemctl restart docker
+      - name: Accept confined workspace service, revocation and every exact registry digest
+        run: |
+          go test ./internal/config ./internal/tools ./internal/management ./modules/workspace
+          python3 scripts/maintainer/tools/accept_full_workspace_candidate.py --candidate acceptance-candidate
+      - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: checks-${{ matrix.os }}-${{ matrix.arch }}-full
+          path: checks/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  gate:
+    needs: [plan, manager-build, browser-build, full-build, assemble, source-checks, manager-checks, browser-checks, full-checks]
+    if: ${{ !cancelled() && needs.assemble.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plan
+          path: plan
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication
+          path: publication
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: checks-*
+          path: checks
+      - name: Require the exact selected cohort and seal publication checksums
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results.json').write_text(json.dumps({k:v['result'] for k,v in json.loads(os.environ['JOB_RESULTS']).items()}))
+          PY
+          python3 scripts/maintainer/tools/release_gate.py gate --plan plan/plan.json --output publication --checks checks --results results.json
+          mkdir -p accepted/assets
+          cp publication/assets/loki-release-lock.json publication/assets/SHA256SUMS accepted/assets/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: accepted-publication-metadata
+          path: accepted/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: publication/pages
 
-      - name: Upload accepted WSL preparation helper
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+  publish:
+    needs: [plan, gate]
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: wsl-ci-preparation-${{ github.sha }}
-          path: scripts/verify/update-wsl.ps1
-          overwrite: true
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication
+          path: publication
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: accepted-publication-metadata
+          path: publication
+      - name: Verify accepted bytes and source, then create or verify the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ needs.plan.outputs.version }}
+        run: |
+          (cd publication/assets && sha256sum --check --strict SHA256SUMS)
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
+          sh scripts/maintainer/publish-tag.sh "v$RELEASE" "$GITHUB_SHA"
+      - id: release
+        uses: releaseway/actions@22219bebc51a4127c6dffd9e79706f08cdd678dc # v0.2.1
+        with:
+          tag: v${{ needs.plan.outputs.version }}
+          commit: ${{ github.sha }}
+          assets: publication/assets/*
+          title: Loki ${{ needs.plan.outputs.version }}
+          notes: file
+          notes-file: publication/assets/loki-release-notes.md
+          notes-existing: verify
+          prerelease: 'false'
+          latest: 'true'
+      - name: Retain publication diagnostics
+        if: always() && steps.release.outputs.notes-report != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: releaseway-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.release.outputs.notes-report }}
           if-no-files-found: error
-          retention-days: 7
 
   pages:
-    name: Deploy installer
-    needs:
-      - preflight
-      - publish
+    needs: publish
     runs-on: ubuntu-24.04
     permissions:
       pages: write
@@ -1253,402 +647,40 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-    outputs:
-      page_url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Configure Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-
-      - name: Deploy Pages
-        id: deploy
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
 
   verify-public:
-    name: Verify public install
-    needs:
-      - preflight
-      - pages
+    needs: [plan, pages]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     steps:
-      - name: Verify published installer bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.preflight.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/release"
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern loki-install.sh \
-            --pattern loki-install.ps1 \
-            --dir "$RUNNER_TEMP/release"
-          for attempt in $(seq 1 20); do
-            if curl --fail --location --silent --show-error \
-              https://jinyongp.dev/loki/install.sh \
-              --output "$RUNNER_TEMP/install.sh" &&
-              curl --fail --location --silent --show-error \
-              https://jinyongp.dev/loki/install.ps1 \
-              --output "$RUNNER_TEMP/install.ps1" &&
-              cmp -s "$RUNNER_TEMP/release/loki-install.sh" "$RUNNER_TEMP/install.sh" &&
-              cmp -s "$RUNNER_TEMP/release/loki-install.ps1" "$RUNNER_TEMP/install.ps1"; then
-              break
-            fi
-            test "$attempt" -lt 20
-            sleep 15
-          done
-          cmp "$RUNNER_TEMP/release/loki-install.sh" "$RUNNER_TEMP/install.sh"
-          cmp "$RUNNER_TEMP/release/loki-install.ps1" "$RUNNER_TEMP/install.ps1"
-          sh -n "$RUNNER_TEMP/install.sh"
-          ! grep -q '@@LOKI_' "$RUNNER_TEMP/install.ps1"
-
-      - name: Run public source-free installation
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="$RUNNER_TEMP/loki-workspace"
-          curl -fsSL https://jinyongp.dev/loki/install.sh | sh -s -- \
-            --workspace "$workspace" \
-            --create-workspace \
-            --prepare-workspace \
-            --install-prerequisites \
-            --allow-sudo-workspace \
-            --allow-sudo-docker \
-            --json
-          "$HOME/.local/bin/loki" host status
-          "$HOME/.local/bin/loki" host doctor
-
-
-  verify-public-windows:
-    name: Verify public Windows install
-    needs:
-      - preflight
-      - pages
-    runs-on: windows-2025
-    permissions:
-      contents: read
-    steps:
-      - name: Download accepted WSL preparation helper
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: wsl-ci-preparation-${{ github.sha }}
-          path: ${{ runner.temp }}\wsl-ci-preparation
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication
+          path: publication
+      - env:
+          LOKI_RELEASE: ${{ needs.plan.outputs.version }}
+        run: python3 scripts/maintainer/tools/verify_public_release.py --expected-directory publication/pages
 
-      - name: Prepare WSL acceptance environment
-        shell: pwsh
-        run: '& "$env:RUNNER_TEMP\wsl-ci-preparation\update-wsl.ps1"'
-
-      - name: Require current WSL2 for public acceptance
-        shell: pwsh
+  summary:
+    needs: [plan, gate, publish, pages, verify-public]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
-          $ErrorActionPreference = "Stop"
-          wsl.exe --version
-          if ($LASTEXITCODE -ne 0) { throw "WSL version probe failed" }
-          $help = (wsl.exe --help 2>&1 | Out-String) -replace "`0", ""
-          foreach ($option in @("--from-file", "--name", "--no-launch")) {
-            if (-not $help.Contains($option)) { throw "WSL lacks required option $option" }
-          }
-          $global:LASTEXITCODE = 0
-
-      - name: Verify published PowerShell installer bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.preflight.outputs.tag }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $releaseDir = Join-Path $env:RUNNER_TEMP "release"
-          $releaseInstaller = Join-Path $releaseDir "loki-install.ps1"
-          $publicInstaller = Join-Path $env:RUNNER_TEMP "install.ps1"
-          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern loki-install.ps1 --dir $releaseDir
-          if ($LASTEXITCODE -ne 0) { throw "failed to download immutable release installer" }
-
-          $matched = $false
-          for ($attempt = 1; $attempt -le 20; $attempt++) {
-              try {
-                  Invoke-WebRequest -UseBasicParsing -Uri https://jinyongp.dev/loki/install.ps1 -OutFile $publicInstaller -ErrorAction Stop
-                  $releaseInfo = Get-Item -LiteralPath $releaseInstaller -ErrorAction Stop
-                  $publicInfo = Get-Item -LiteralPath $publicInstaller -ErrorAction Stop
-                  $releaseHash = (Get-FileHash -LiteralPath $releaseInstaller -Algorithm SHA256).Hash
-                  $publicHash = (Get-FileHash -LiteralPath $publicInstaller -Algorithm SHA256).Hash
-                  if ($releaseInfo.Length -eq $publicInfo.Length -and $releaseHash -eq $publicHash) {
-                      $matched = $true
-                      break
-                  }
-              }
-              catch {
-                  if ($attempt -eq 20) { throw }
-              }
-              Start-Sleep -Seconds 15
-          }
-          if (-not $matched) { throw "public PowerShell installer does not match immutable release bytes" }
-          if ((Get-Content -LiteralPath $publicInstaller -Raw).Contains("@@LOKI_")) {
-              throw "public PowerShell installer contains unresolved release placeholders"
-          }
-
-
-      - name: Run public Windows self-update from previous release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.preflight.outputs.tag }}
-          PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          if (-not $env:PREVIOUS_TAG) { throw "previous release tag is required for self-update acceptance" }
-
-          $suffix = "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          $distribution = "loki-self-update-$suffix"
-          $installRoot = Join-Path $env:RUNNER_TEMP "loki-self-update"
-          $installLocation = Join-Path $installRoot $distribution
-          $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distribution)
-          $taskName = "Loki WSL ($distribution)"
-          $loki = Join-Path $env:LOCALAPPDATA "Programs\Loki\bin\loki.exe"
-          $previousDir = Join-Path $env:RUNNER_TEMP "previous-release"
-          $previousInstaller = Join-Path $previousDir "loki-install.ps1"
-
-          $portSelector = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-          $portSelector.Start()
-          $mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port
-          $portSelector.Stop()
-
-          New-Item -ItemType Directory -Path $previousDir -Force | Out-Null
-          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
-          gh release download $env:PREVIOUS_TAG --repo $env:GITHUB_REPOSITORY --pattern loki-install.ps1 --dir $previousDir
-          if ($LASTEXITCODE -ne 0) { throw "failed to download previous immutable Windows installer" }
-
-          $env:LOKI_WSL_NAME = $distribution
-          $env:LOKI_WSL_LOCATION = $installLocation
-          $env:LOKI_WSL_AUTOSTART = "1"
-          $env:LOKI_MCP_PORT = [string]$mcpPort
-
-          try {
-              $global:LASTEXITCODE = 0
-              & $previousInstaller
-              if ($LASTEXITCODE -ne 0) { throw "previous Windows installer failed with code $LASTEXITCODE" }
-
-              $beforeRaw = (& $loki version --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "previous Windows frontend version failed" }
-              $before = $beforeRaw | ConvertFrom-Json
-              if ([string]$before.release_binding.release_tag -ne $env:PREVIOUS_TAG) {
-                  throw "self-update fixture did not install previous frontend $env:PREVIOUS_TAG"
-              }
-
-              $beforeStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "previous appliance status failed" }
-              $beforeStatus = $beforeStatusRaw | ConvertFrom-Json
-              $beforeApplianceRelease = [string]$beforeStatus.status.release
-              if (-not $beforeApplianceRelease) {
-                  throw "self-update fixture did not report an installed appliance release"
-              }
-
-              & $loki update
-              if ($LASTEXITCODE -ne 0) { throw "public Windows self-update failed with code $LASTEXITCODE" }
-
-              $afterRaw = (& $loki version --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "updated Windows frontend version failed" }
-              $after = $afterRaw | ConvertFrom-Json
-              if ([string]$after.release_binding.release_tag -ne $env:TAG) {
-                  throw "self-update frontend did not update to $env:TAG"
-              }
-
-              $afterBareStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "post-frontend appliance status failed" }
-              $afterBareStatus = $afterBareStatusRaw | ConvertFrom-Json
-              $afterBareApplianceRelease = [string]$afterBareStatus.status.release
-              if ($afterBareApplianceRelease -ne $beforeApplianceRelease) {
-                  throw "bare self-update mutated appliance release $beforeApplianceRelease -> $afterBareApplianceRelease"
-              }
-
-              & $loki update --all --distribution $distribution
-              if ($LASTEXITCODE -ne 0) { throw "combined frontend and appliance update failed with code $LASTEXITCODE" }
-
-              $afterApplyStatusRaw = (& $loki status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "post-apply appliance status failed" }
-              $afterApplyStatus = $afterApplyStatusRaw | ConvertFrom-Json
-              $afterApplyRelease = [string]$afterApplyStatus.status.release
-              $expectedApplianceRelease = $env:TAG -replace '^v', ''
-              if ($afterApplyRelease -ne $expectedApplianceRelease) {
-                  throw "combined update produced $afterApplyRelease; expected $expectedApplianceRelease"
-              }
-
-              $beforeRepeatRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "combined update status failed" }
-              $beforeRepeat = $beforeRepeatRaw | ConvertFrom-Json
-              & $loki update --all --distribution $distribution
-              if ($LASTEXITCODE -ne 0) { throw "repeated combined update failed with code $LASTEXITCODE" }
-              $afterRepeatRaw = (& $loki update status --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "repeated combined update status failed" }
-              $afterRepeat = $afterRepeatRaw | ConvertFrom-Json -AsHashtable
-              if ([string]$afterRepeat.installed.id -ne [string]$beforeRepeat.installed.id -or $null -ne $afterRepeat['prepared']) {
-                  throw "repeated combined update changed the current appliance generation or prepared another update"
-              }
-
-              # Check the upgraded OS prerequisites after a real cold start.
-              Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
-              & wsl.exe --terminate $distribution
-              if ($LASTEXITCODE -ne 0) { throw "updated appliance termination failed" }
-              Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-              & wsl.exe -d $distribution --exec /usr/bin/systemctl --user is-active default.target
-              if ($LASTEXITCODE -ne 0) { throw "updated appliance user session failed after cold start" }
-              & wsl.exe -d $distribution --user root --exec /usr/local/bin/loki host appliance check
-              if ($LASTEXITCODE -ne 0) { throw "updated appliance OS prerequisites failed after cold start" }
-              for ($attempt = 0; $attempt -lt 60; $attempt++) {
-                  & $loki doctor --distribution $distribution *> $null
-                  if ($LASTEXITCODE -eq 0) { break }
-                  Start-Sleep -Seconds 2
-              }
-              if ($LASTEXITCODE -ne 0) { throw "updated appliance runtime did not recover after cold start" }
-
-              & $loki doctor --distribution $distribution
-              if ($LASTEXITCODE -ne 0) { throw "self-update doctor failed" }
-              & $loki connection show --distribution $distribution --json local
-              if ($LASTEXITCODE -ne 0) { throw "self-update connection refresh failed" }
-              $catalogRaw = (& $loki connection list --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "Windows connection catalog failed" }
-              $catalog = $catalogRaw | ConvertFrom-Json
-              $localConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "local" })
-              $openAIConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "openai" })
-              if ($localConnection.Count -ne 1 -or [string]$localConnection[0].kind -ne "local") {
-                  throw "Windows connection catalog is missing the local connection"
-              }
-              if ($openAIConnection.Count -ne 1 -or [string]$openAIConnection[0].kind -ne "managed" -or
-                  [string]$openAIConnection[0].state -ne "not-configured" -or
-                  @($openAIConnection[0].actions) -notcontains "setup") {
-                  throw "Windows connection catalog does not describe the OpenAI provider"
-              }
-
-              & $loki uninstall --distribution $distribution --approve
-              if ($LASTEXITCODE -ne 0) { throw "self-update uninstall failed" }
-          }
-          finally {
-              Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
-
-              if (Test-Path -LiteralPath $loki -PathType Leaf) {
-                  & $loki uninstall --distribution $distribution --approve *> $null
-              }
-              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-                  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-                  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-              }
-              $registered = @(& wsl.exe --list --quiet 2>$null) |
-                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
-                  Where-Object { $_ }
-              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
-                  & wsl.exe --terminate $distribution 2>$null | Out-Null
-                  & wsl.exe --unregister $distribution 2>$null | Out-Null
-              }
-              Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
-              Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
-          }
-
-      - name: Run public Windows source-free installation
-        env:
-          TAG: ${{ needs.preflight.outputs.tag }}
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $suffix = "$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          $distribution = "loki-public-$suffix"
-          $installRoot = Join-Path $env:RUNNER_TEMP "loki-public-install"
-          $installLocation = Join-Path $installRoot $distribution
-          $stateDir = Join-Path $env:LOCALAPPDATA (Join-Path "Loki" $distribution)
-          $taskName = "Loki WSL ($distribution)"
-          $loki = Join-Path $env:LOCALAPPDATA "Programs\Loki\bin\loki.exe"
-
-          $portSelector = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-          $portSelector.Start()
-          $mcpPort = ([System.Net.IPEndPoint]$portSelector.LocalEndpoint).Port
-          $portSelector.Stop()
-
-          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
-          $env:LOKI_WSL_NAME = $distribution
-          $env:LOKI_WSL_LOCATION = $installLocation
-          $env:LOKI_WSL_AUTOSTART = "1"
-          $env:LOKI_MCP_PORT = [string]$mcpPort
-
-          try {
-              $global:LASTEXITCODE = 0
-              irm https://jinyongp.dev/loki/install.ps1 | iex
-              if ($LASTEXITCODE -ne 0) { throw "public Windows installer failed with code $LASTEXITCODE" }
-              if (-not (Test-Path -LiteralPath $loki -PathType Leaf)) {
-                  throw "public Windows installer did not install the canonical frontend"
-              }
-
-              $versionRaw = (& $loki version --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "public Windows frontend version failed" }
-              $version = $versionRaw | ConvertFrom-Json
-              if ([string]$version.release_binding.release_tag -ne $env:TAG) {
-                  throw "public Windows frontend release binding does not match $env:TAG"
-              }
-
-              & $loki status --distribution $distribution --json
-              if ($LASTEXITCODE -ne 0) { throw "public Windows status failed" }
-              & $loki doctor --distribution $distribution
-              if ($LASTEXITCODE -ne 0) { throw "public Windows doctor failed" }
-              & wsl.exe -d $distribution --exec /usr/bin/systemctl --user is-active default.target
-              if ($LASTEXITCODE -ne 0) { throw "public Windows default user session failed" }
-              & wsl.exe -d $distribution --user root --exec /usr/local/bin/loki host appliance check
-              if ($LASTEXITCODE -ne 0) { throw "public Windows OS prerequisites failed" }
-              & $loki connection show --distribution $distribution --json local
-              if ($LASTEXITCODE -ne 0) { throw "public Windows connection refresh failed" }
-              $catalogRaw = (& $loki connection list --distribution $distribution --json 2>&1 | Out-String).Trim()
-              if ($LASTEXITCODE -ne 0) { throw "Windows connection catalog failed" }
-              $catalog = $catalogRaw | ConvertFrom-Json
-              $localConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "local" })
-              $openAIConnection = @($catalog.connections | Where-Object { [string]$_.id -eq "openai" })
-              if ($localConnection.Count -ne 1 -or [string]$localConnection[0].kind -ne "local") {
-                  throw "Windows connection catalog is missing the local connection"
-              }
-              if ($openAIConnection.Count -ne 1 -or [string]$openAIConnection[0].kind -ne "managed" -or
-                  [string]$openAIConnection[0].state -ne "not-configured" -or
-                  @($openAIConnection[0].actions) -notcontains "setup") {
-                  throw "Windows connection catalog does not describe the OpenAI provider"
-              }
-
-              & $loki uninstall --distribution $distribution --approve
-              if ($LASTEXITCODE -ne 0) { throw "public Windows uninstall failed" }
-              $registered = @(& wsl.exe --list --quiet 2>$null) |
-                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
-                  Where-Object { $_ }
-              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
-                  throw "public Windows uninstall left the distribution registered"
-              }
-              if (Test-Path -LiteralPath $stateDir) {
-                  throw "public Windows uninstall left per-distribution state"
-              }
-              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-                  throw "public Windows uninstall left the keepalive task"
-              }
-          }
-          finally {
-              Remove-Item Env:LOKI_WSL_NAME -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_WSL_LOCATION -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_WSL_AUTOSTART -ErrorAction SilentlyContinue
-              Remove-Item Env:LOKI_MCP_PORT -ErrorAction SilentlyContinue
-
-              if (Test-Path -LiteralPath $loki -PathType Leaf) {
-                  & $loki uninstall --distribution $distribution --approve *> $null
-              }
-              if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-                  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-                  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-              }
-              $registered = @(& wsl.exe --list --quiet 2>$null) |
-                  ForEach-Object { (("$_" -replace "`0", "")).Trim() } |
-                  Where-Object { $_ }
-              if ($registered | Where-Object { $_.Equals($distribution, [StringComparison]::OrdinalIgnoreCase) }) {
-                  & wsl.exe --terminate $distribution 2>$null | Out-Null
-                  & wsl.exe --unregister $distribution 2>$null | Out-Null
-              }
-              Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
-              Remove-Item -LiteralPath $installLocation -Recurse -Force -ErrorAction SilentlyContinue
-          }
+          python3 - <<'PY'
+          import json, os
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Release pipeline\n\n')
+              out.write('Publish requested: '+os.environ['PUBLISH']+'\n\n')
+              for job, value in json.loads(os.environ['JOB_RESULTS']).items():
+                  out.write('- '+job+': '+value['result']+'\n')
+          PY

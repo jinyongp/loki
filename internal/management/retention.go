@@ -24,7 +24,7 @@ func (r generationRecord) validate() error {
 	if r.Schema != 1 || r.PreparedAt.IsZero() {
 		return fmt.Errorf("invalid generation record")
 	}
-	return (Snapshot{Schema: 1, Config: tools.Config{Schema: 1, Release: r.Installation.Artifact.Release, Host: tools.Host{Kind: "local"}, Mode: r.Installation.Artifact.Target.Mode}, Installed: map[tools.ID]Installation{r.Installation.Artifact.Module: r.Installation}}).Validate()
+	return (Snapshot{Schema: 1, Config: tools.Config{Schema: 1, Contract: r.Installation.Manifest.Contract, Release: r.Installation.Artifact.Release, Host: tools.Host{Kind: "local"}, Mode: r.Installation.Artifact.Target.Mode}, Installed: map[tools.ID]Installation{r.Installation.Artifact.Module: r.Installation}}).Validate()
 }
 
 func readOwnedJSON(path string, limit int, value any) error {

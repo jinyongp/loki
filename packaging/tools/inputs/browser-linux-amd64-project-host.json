@@ -39,11 +39,11 @@
   ],
   "assets": {
     "node": {
-      "version": "22.22.2",
-      "url": "https://nodejs.org/dist/v22.22.2/node-v22.22.2-linux-x64.tar.xz",
-      "bytes": 31065656,
-      "sha256": "88fd1ce767091fd8d4a99fdb2356e98c819f93f3b1f8663853a2dee9b438068a",
-      "root": "node-v22.22.2-linux-x64",
+      "version": "26.10.0",
+      "url": "https://nodejs.org/dist/v26.10.0/node-v26.10.0-linux-x64.tar.xz",
+      "bytes": 33934532,
+      "sha256": "ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022",
+      "root": "node-v26.10.0-linux-x64",
       "notices": [
         "LICENSE"
       ],

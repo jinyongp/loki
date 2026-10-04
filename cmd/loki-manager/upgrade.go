@@ -87,7 +87,7 @@ func upgradeDownload(ctx context.Context, client *http.Client, url string, limit
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "loki/"+management.Release)
+	req.Header.Set("User-Agent", "loki/"+management.ManagerRelease)
 	response, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	}
 	requested := strings.TrimPrefix(*version, "v")
 	if requested != "" {
-		if _, err := compareReleaseVersions(requested, management.Release); err != nil {
+		if _, err := compareReleaseVersions(requested, management.ManagerRelease); err != nil {
 			return err
 		}
 	}
@@ -203,7 +203,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if release.Draft || release.Prerelease || release.Tag != "v"+target || (requested != "" && target != requested) {
 		return fmt.Errorf("requested release is not a published stable release")
 	}
-	comparison, err := compareReleaseVersions(target, management.Release)
+	comparison, err := compareReleaseVersions(target, management.ManagerRelease)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if err != nil || minimum < 0 {
 		return fmt.Errorf("upgrade requires a native 0.2 or newer release")
 	}
-	fmt.Fprintln(out, "Current:", management.Release)
+	fmt.Fprintln(out, "Current:", management.ManagerRelease)
 	fmt.Fprintln(out, "Target: ", target)
 	if *check {
 		return nil

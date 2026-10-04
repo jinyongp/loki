@@ -7,6 +7,7 @@ the downloaded bytes never supply their own trust metadata.
 """
 
 import argparse
+from input_cache import restore, save, size_digest
 import hashlib
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ import time
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-VERSIONS = {"node": "22.22.2", "chrome": "154.0.8037.92", "ffmpeg": "1011"}
+VERSIONS = {"node": "26.10.0", "chrome": "154.0.8037.92", "ffmpeg": "1011"}
 PLATFORMS = {
     ("linux", "amd64"): ("linux-x64", "tar.xz", "linux64", "linux"),
     ("linux", "arm64"): ("linux-arm64", "tar.xz", "linux-arm64", "linux-arm64"),
@@ -37,7 +38,7 @@ def native_target(mode):
 def urls(target):
     node_platform, node_format, chrome_platform, ffmpeg_platform = PLATFORMS[(target["os"], target["arch"])]
     return {
-        "node": f"https://nodejs.org/dist/v22.22.2/node-v22.22.2-{node_platform}.{node_format}",
+        "node": f"https://nodejs.org/dist/v26.10.0/node-v26.10.0-{node_platform}.{node_format}",
         "chrome": f"https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/{chrome_platform}/chrome-{chrome_platform}.zip",
         "ffmpeg": f"https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-{ffmpeg_platform}.zip",
     }
@@ -75,24 +76,27 @@ def acquire(recipe_path, output, mode, selected_target=None):
         started = reported = time.monotonic()
         print(f"Acquiring pinned {name} {asset['version']}...", flush=True)
         try:
-            with urlopen(asset["url"], timeout=30) as response, temporary.open("xb") as sink:
-                if urlsplit(response.url).scheme != "https":
-                    raise ValueError("vendor redirect weakened HTTPS transport")
-                if response.headers.get("Content-Length") is not None and int(response.headers["Content-Length"]) != asset["bytes"]:
-                    raise ValueError(f"{name} response length differs from trusted metadata")
-                while chunk := response.read(1024 * 1024):
-                    size += len(chunk)
-                    if size > asset["bytes"]:
-                        raise ValueError(f"{name} download exceeded trusted length")
-                    sink.write(chunk)
-                    digest.update(chunk)
-                    now = time.monotonic()
-                    if now - reported >= 10:
-                        print(f"Still acquiring {name}: {size}/{asset['bytes']} bytes ({int(now-started)}s elapsed)...", flush=True)
-                        reported = now
+            if not restore(temporary, asset):
+                with urlopen(asset["url"], timeout=30) as response, temporary.open("xb") as sink:
+                    if urlsplit(response.url).scheme != "https":
+                        raise ValueError("vendor redirect weakened HTTPS transport")
+                    if response.headers.get("Content-Length") is not None and int(response.headers["Content-Length"]) != asset["bytes"]:
+                        raise ValueError(f"{name} response length differs from trusted metadata")
+                    while chunk := response.read(1024 * 1024):
+                        size += len(chunk)
+                        if size > asset["bytes"]:
+                            raise ValueError(f"{name} download exceeded trusted length")
+                        sink.write(chunk)
+                        digest.update(chunk)
+                        now = time.monotonic()
+                        if now - reported >= 10:
+                            print(f"Still acquiring {name}: {size}/{asset['bytes']} bytes ({int(now-started)}s elapsed)...", flush=True)
+                            reported = now
+            size, digest = size_digest(temporary)
             if size != asset["bytes"] or digest.hexdigest() != asset["sha256"]:
                 raise ValueError(f"{name} archive differs from trusted length/checksum")
             temporary.rename(destination)
+            save(destination, asset)
             asset["archive"] = filename
         finally:
             temporary.unlink(missing_ok=True)

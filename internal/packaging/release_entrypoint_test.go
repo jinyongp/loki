@@ -23,7 +23,7 @@ func TestReleaseEntrypointRequiresUnchangedValidatedSource(t *testing.T) {
 		validated, dispatched   bool
 	}{
 		{name: "publish", validated: true, dispatched: true},
-		{name: "candidate-options", args: []string{"minor", "--validate-only", "--check-updates", "--oci"}, validated: true, dispatched: true},
+		{name: "candidate-options", args: []string{"--validate-only", "--force-rebuild", "--oci"}, validated: true, dispatched: true},
 		{name: "validation-failed", validation: "exit 1", validated: true},
 		{name: "dirty", setup: "dirty"},
 		{name: "untracked", setup: "untracked"},
@@ -103,51 +103,14 @@ func TestReleaseEntrypointRequiresUnchangedValidatedSource(t *testing.T) {
 				t.Fatalf("unexpected validation/dispatch calls:\n%s\n%s", log, output)
 			}
 			if tc.dispatched {
-				want := "preflight \ndispatch\nworkflow\nrun\nrelease.yml\n--ref\nmain\n-f\nbump=patch\n-f\npublish=true\n-f\ncheck_updates=false\n-f\nexpected_sha=" + sha + "\n"
+				want := "preflight \ndispatch\nworkflow\nrun\nrelease.yml\n--ref\nmain\n-f\nversion=\n-f\npublish=true\n-f\nforce_rebuild=false\n-f\nexpected_sha=" + sha + "\n"
 				if tc.name == "candidate-options" {
-					want = strings.NewReplacer("preflight \n", "preflight --oci\n", "bump=patch", "bump=minor", "publish=true", "publish=false", "check_updates=false", "check_updates=true").Replace(want)
+					want = strings.NewReplacer("preflight \n", "preflight --oci\n", "publish=true", "publish=false", "force_rebuild=false", "force_rebuild=true").Replace(want)
 				}
 				if log != want {
 					t.Fatalf("dispatch calls:\n%s\nwant:\n%s", log, want)
 				}
 			}
 		})
-	}
-}
-
-func TestReleaseWorkflowRejectsDifferentLocallyValidatedCommit(t *testing.T) {
-	var gate string
-	for _, step := range releaseWorkflowJobs(t)["preflight"].Steps {
-		if step.Env["EXPECTED_SHA"] == "${{ inputs.expected_sha }}" {
-			gate = step.Run
-		}
-	}
-	if gate == "" {
-		t.Fatal("release preflight must bind the locally validated commit")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("CI identity gate executes on Linux")
-	}
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "git"), []byte("#!/bin/sh\nif test \"$1\" = rev-parse; then printf '%s\\n' actual; fi\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		expected, publish string
-		pass              bool
-	}{
-		{"actual", "true", true},
-		{"", "true", false},
-		{"other", "true", false},
-		{"", "false", true},
-		{"actual", "false", true},
-		{"other", "false", false},
-	} {
-		cmd := exec.Command("bash", "-c", gate)
-		cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"), "GITHUB_REF=refs/heads/main", "GITHUB_SHA=actual", "EXPECTED_SHA="+tc.expected, "PUBLISH_RELEASE="+tc.publish)
-		output, err := cmd.CombinedOutput()
-		if (err == nil) != tc.pass {
-			t.Fatalf("expected=%q publish=%s: %v\n%s", tc.expected, tc.publish, err, output)
-		}
 	}
 }

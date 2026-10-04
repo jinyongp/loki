@@ -21,7 +21,7 @@ import (
 
 const PlaywrightVersion = "0.0.83"
 const DevToolsVersion = "1.10.1"
-const NodeVersion = "22.22.2"
+const NodeVersion = "26.10.0"
 const ChromeVersion = "154.0.8037.92"
 const PlaywrightCoreVersion = "1.64.0-alpha-1790635538000"
 

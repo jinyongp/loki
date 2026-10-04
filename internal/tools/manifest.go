@@ -49,13 +49,14 @@ func (t Target) Validate() error {
 	return nil
 }
 
-// Manifest describes one tool implementation in the shared release train.
+// Manifest describes one versioned tool artifact and its composition contract.
 // Requires installs private prerequisites; Tools exposes public bindings only
 // when this module is explicitly selected and enabled by host composition.
 type Manifest struct {
 	Schema       int      `json:"schema"`
 	ID           ID       `json:"id"`
 	Release      string   `json:"release"`
+	Contract     string   `json:"contract,omitempty"`
 	Targets      []Target `json:"targets"`
 	Requires     []ID     `json:"requires,omitempty"`
 	Tools        []string `json:"tools"`
@@ -69,6 +70,9 @@ func validID(id ID) bool {
 func (m Manifest) Validate() error {
 	if m.Schema != ManifestSchema {
 		return fmt.Errorf("unsupported tool manifest schema %d", m.Schema)
+	}
+	if m.Contract != "" && m.Contract != CompositionContract {
+		return fmt.Errorf("unsupported module composition contract %q", m.Contract)
 	}
 	if !validID(m.ID) || !releasePattern.MatchString(m.Release) {
 		return errors.New("tool manifest requires a valid ID and exact 0.2.x release")

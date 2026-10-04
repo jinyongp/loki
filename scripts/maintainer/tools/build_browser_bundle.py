@@ -7,6 +7,7 @@ archive files. Acquisition and platform acceptance are separate release steps.
 """
 
 import argparse
+from release_config import RELEASE, CONTRACT, artifact_release
 import hashlib
 import json
 import os
@@ -22,7 +23,7 @@ import tempfile
 from urllib.parse import urlsplit
 import zipfile
 
-VERSIONS = {"node": "22.22.2", "chrome": "154.0.8037.92", "ffmpeg": "1011"}
+VERSIONS = {"node": "26.10.0", "chrome": "154.0.8037.92", "ffmpeg": "1011"}
 CAPABILITIES = ["unsafe-code", "vision", "pdf", "devtools", "network", "storage", "testing", "tracing", "config", "extensions", "pwa", "webmcp", "third-party", "memory"]
 
 
@@ -197,6 +198,7 @@ def verify_chrome_signature_kind(binary, arch):
 
 
 def assemble(recipe_path, output, release_url):
+    release = artifact_release("browser")
     recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
     if recipe.get("schema") != 1 or set(recipe.get("assets", {})) != set(VERSIONS):
         raise ValueError("recipe requires schema 1 and exact Node, Chrome and FFmpeg assets")
@@ -285,16 +287,18 @@ def assemble(recipe_path, output, release_url):
         browsers = bundle / "browsers"
         browsers.mkdir()
         (bundle / "ffmpeg").rename(browsers / "ffmpeg-1011")
-        module = {"schema": 1, "id": "browser", "release": "0.2.3", "targets": [target], "tools": ["loki_browser_files"], "capabilities": CAPABILITIES}
+        module = {"schema": 1, "contract": CONTRACT, "id": "browser", "release": release, "targets": [target], "tools": ["loki_browser_files"], "capabilities": CAPABILITIES}
         if mode == "full":
             module = json.loads((repo / "modules" / "browser" / "module.full.json").read_text(encoding="utf-8"))
             if target not in module["targets"] or module["capabilities"] != CAPABILITIES:
                 raise ValueError("full browser manifest differs from its native bundle contract")
             module["targets"] = [target]
+            module["release"] = release
+            module["contract"] = CONTRACT
             image = recipe.get("full_image", {})
             if image.get("target") != target or not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}", image.get("reference", "")) or not image.get("notices"):
                 raise ValueError("full browser requires its exact-target digest-pinned service image and notice receipt")
-            json_file(bundle / "full-runtime.json", {"schema": 1, "module": "browser", "release": "0.2.3", "target": target, "images": {"browser": image["reference"]}, "programs": {}, "assets": {"runtime": "runtime.json"}})
+            json_file(bundle / "full-runtime.json", {"schema": 1, "module": "browser", "release": release, "target": target, "images": {"browser": image["reference"]}, "programs": {}, "assets": {"runtime": "runtime.json"}})
             json_file(bundle / "image-receipt.json", image)
         json_file(bundle / "module.json", module)
         json_file(bundle / "runtime.json", {"schema": 1, "node": "node/" + node_recipe["executable"], "chrome": "chrome/" + str(chrome_relative).replace(os.sep, "/"), "browsers": "browsers"})
@@ -302,7 +306,7 @@ def assemble(recipe_path, output, release_url):
         # Normalized timestamps, modes and ordering give a stable archive for
         # identical native inputs. Only signed native macOS Chrome app links
         # remain; the installer scopes that exception to the same app tree.
-        artifact_name = f"loki-browser-0.2.3-{native_os}-{native_arch}-{mode}.zip"
+        artifact_name = f"loki-browser-{release}-{native_os}-{native_arch}-{mode}.zip"
         published_artifact = output / artifact_name
         if published_artifact.exists() or (output / "browser-catalog.json").exists():
             raise ValueError("candidate artifact already exists; use a fresh output directory")
@@ -324,7 +328,7 @@ def assemble(recipe_path, output, release_url):
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 with path.open("rb") as source, packed.open(entry, "w", force_zip64=True) as sink:
                     shutil.copyfileobj(source, sink)
-        catalog = {"schema": 1, "release": "0.2.3", "modules": [module], "artifacts": [{"module": "browser", "release": "0.2.3", "target": target, "url": release_url, "sha256": digest(artifact), "bytes": artifact.stat().st_size, "format": "zip"}]}
+        catalog = {"schema": 1, "contract": CONTRACT, "release": RELEASE, "modules": [module], "artifacts": [{"module": "browser", "release": release, "target": target, "url": release_url, "sha256": digest(artifact), "bytes": artifact.stat().st_size, "format": "zip"}]}
         with artifact.open("rb") as source, published_artifact.open("xb") as target_stream:
             shutil.copyfileobj(source, target_stream)
         json_file(output / "browser-catalog.json", catalog)

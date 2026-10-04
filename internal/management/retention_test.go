@@ -79,6 +79,31 @@ func TestPrunePreservesCurrentLeasedAndUserData(t *testing.T) {
 	}
 }
 
+func TestExplicitCompositionGenerationCanBeReacquiredAndPruned(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, _ := s.Load()
+	current := ownedFixture(t, s, "browser")
+	current.Manifest.Contract = tools.CompositionContract
+	state.Config.Contract = tools.CompositionContract
+	state.Config.Release = "0.2.4"
+	state.Installed["browser"] = current
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	previous := olderFixture(t, s, current, "e", time.Hour)
+	directory, err := s.Generation(previous.Artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := generationMetadata(directory); err != nil {
+		t.Fatal("v2 generation cannot be reused:", err)
+	}
+	report, err := s.Prune(t.Context(), "browser", 0, io.Discard)
+	if err != nil || len(report.Removed) != 1 || len(report.Unowned) != 0 {
+		t.Fatalf("v2 prune: %+v %v", report, err)
+	}
+}
+
 func TestInterruptedDeletionResumesAfterMarkersWereRemoved(t *testing.T) {
 	s := Store{Root: t.TempDir()}
 	state, _ := s.Load()

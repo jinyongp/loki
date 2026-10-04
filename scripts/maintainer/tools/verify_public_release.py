@@ -9,8 +9,9 @@ import time
 import urllib.request
 
 from prepare_bootstrap import prepare
+from release_config import RELEASE
 
-BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.3/'
+BASE = 'https://github.com/jinyongp/loki/releases/download/v'+RELEASE+'/'
 
 
 def download(url):
@@ -33,15 +34,18 @@ def verify(expected_directory=None):
             # Their manager/catalog pins still bind immutable release bytes.
             expected = (expected_directory / ('install.'+extension)).read_bytes()
             for attempt in range(12):
-                current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.3&attempt='+str(attempt))
+                current = download('https://jinyongp.dev/loki/install.'+extension+'?release='+RELEASE+'&attempt='+str(attempt))
                 if current == expected:
                     break
                 time.sleep(5)
             else:
                 raise ValueError('public installer endpoint differs from accepted bootstrap')
             (root / ('install.'+extension)).write_bytes(current)
-        evidence = json.loads(download(BASE+'loki-release-evidence.json'))
-        for image in evidence['publication_images']:
+        evidence = json.loads(download(BASE+'loki-release-lock.json'))
+        for unit in evidence['units'].values():
+            if unit['kind'] != 'image':
+                continue
+            image = unit['image']
             repository, digest = image['reference'].removeprefix('ghcr.io/').split('@',1)
             token = json.loads(download('https://ghcr.io/token?service=ghcr.io&scope=repository:'+repository+':pull'))['token']
             request = urllib.request.Request('https://ghcr.io/v2/'+repository+'/manifests/'+digest,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.oci.image.manifest.v1+json'})
@@ -60,10 +64,10 @@ def verify(expected_directory=None):
         binary = str(root/'bin/loki')
         management = str(root/'management')
         checked = subprocess.check_output([binary, '--root', management, 'upgrade', '--check'], text=True)
-        if 'Current: 0.2.3' not in checked or 'Target:  0.2.3' not in checked:
+        if 'Current: '+RELEASE not in checked or 'Target:  '+RELEASE not in checked:
             raise ValueError('public CLI upgrade release lookup failed')
         before = (root/'management/control/state.json').read_bytes()
-        subprocess.run([binary, '--root', management, 'upgrade', '--version', '0.2.3', '--force', '--yes'], check=True)
+        subprocess.run([binary, '--root', management, 'upgrade', '--version', RELEASE, '--force', '--yes'], check=True)
         if (root/'management/control/state.json').read_bytes() != before:
             raise ValueError('public CLI reinstall changed management configuration')
         print('Anonymous installer endpoints, 10 OCI manifests, native installation and CLI self-upgrade passed.')

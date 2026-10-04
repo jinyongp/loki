@@ -3,26 +3,24 @@ set -eu
 
 usage() {
   cat <<'EOF'
-usage: sh ./scripts/maintainer/release.sh [patch|minor|major] [--validate-only] [--check-updates] [--oci]
+usage: sh ./scripts/maintainer/release.sh [--version 0.2.x] [--validate-only] [--force-rebuild] [--oci]
 
 Runs the complete local source + race preflight before starting release CI.
 --validate-only  Run candidate CI without publishing a release.
---check-updates  Also check live upstream dependency updates in CI.
+--force-rebuild Build every supported target in CI.
 --oci            Also run the local real OCI acceptance fixture.
 EOF
 }
 
-bump=patch
+version=''
 publish=true
-check_updates=false
+force_rebuild=false
 oci=0
-case "${1:-}" in
-  patch|minor|major) bump=$1; shift ;;
-esac
 while test "$#" -gt 0; do
   case "$1" in
     --validate-only) publish=false ;;
-    --check-updates) check_updates=true ;;
+    --force-rebuild) force_rebuild=true ;;
+    --version) shift; test "$#" -gt 0 || { usage >&2; exit 2; }; version=$1 ;;
     --oci) oci=1 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
@@ -60,8 +58,7 @@ require_source
 test "$(git rev-parse HEAD)" = "$source_sha" || {
   echo 'release source changed during validation; rerun the release command' >&2; exit 1;
 }
-printf 'loki release: source=%s state=dispatching bump=%s publish=%s\n' "$source_sha" "$bump" "$publish"
+printf 'loki release: source=%s state=dispatching publish=%s\n' "$source_sha" "$publish"
 gh workflow run release.yml --ref main \
-  -f "bump=$bump" -f "publish=$publish" -f "check_updates=$check_updates" \
-  -f "expected_sha=$source_sha"
+  -f "version=$version" -f "publish=$publish" -f "force_rebuild=$force_rebuild" -f "expected_sha=$source_sha"
 printf 'loki release: source=%s state=dispatched remaining=CI-acceptance,publication\n' "$source_sha"

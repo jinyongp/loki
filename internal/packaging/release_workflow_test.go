@@ -1,415 +1,66 @@
 package packaging
 
 import (
+	"go.yaml.in/yaml/v3"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
-
-	"go.yaml.in/yaml/v3"
 )
 
-func TestReleaseDependencyUpdatesAreOptionalAndContractGateIsRequired(t *testing.T) {
+func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var workflow struct {
-		On struct {
-			Dispatch struct {
-				Inputs map[string]struct {
-					Default any
-					Type    string
-				}
-			} `yaml:"workflow_dispatch"`
-		}
 		Jobs map[string]struct {
-			Steps []struct {
-				ID, If, Run string
-			}
+			Needs yaml.Node
+			If    string
+			Steps []struct{ Uses, Run string }
 		}
 	}
 	if err := yaml.Unmarshal(raw, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	input, ok := workflow.On.Dispatch.Inputs["check_updates"]
-	if !ok || input.Default != false || input.Type != "boolean" {
-		t.Fatal("dependency update checks must be an explicit opt-in")
-	}
-	checks := map[string]bool{"action_pins": false, "metadata_pins": false, "container_pins": false}
-	var gate string
-	for _, step := range workflow.Jobs["release-contracts"].Steps {
-		if _, ok := checks[step.ID]; ok {
-			checks[step.ID] = step.If == "${{ inputs.check_updates }}"
-		}
-		if strings.Contains(step.Run, "steps.contract_tests.outcome") {
-			if step.If != "${{ always() }}" {
-				t.Fatal("contract result gate must run even after a failed step")
-			}
-			gate = step.Run
-		}
-	}
-	for id, optional := range checks {
-		if !optional {
-			t.Errorf("%s must follow the dependency update opt-in", id)
-		}
-	}
-	if gate == "" {
-		t.Fatal("release contract result gate is missing")
-	}
-	for _, test := range []struct {
-		name, updates, contracts, pins string
-		pass                           bool
-	}{
-		{"updates-skipped", "false", "success", "skipped", true},
-		{"contracts-failed", "false", "failure", "skipped", false},
-		{"updates-passed", "true", "success", "success", true},
-		{"updates-failed", "true", "success", "failure", false},
-		{"updates-skipped-when-required", "true", "success", "skipped", false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			script := strings.NewReplacer(
-				"${{ inputs.check_updates }}", test.updates,
-				"${{ steps.contract_tests.outcome }}", test.contracts,
-				"${{ steps.action_pins.outcome }}", test.pins,
-				"${{ steps.metadata_pins.outcome }}", test.pins,
-				"${{ steps.container_pins.outcome }}", test.pins,
-			).Replace(gate)
-			output, err := exec.Command("bash", "-c", script).CombinedOutput()
-			if (err == nil) != test.pass {
-				t.Fatalf("gate pass=%v, want %v: %v\n%s", err == nil, test.pass, err, output)
-			}
-		})
-	}
-}
-
-type releaseWorkflowJob struct {
-	Needs    yaml.Node
-	Strategy struct {
-		FailFast *bool `yaml:"fail-fast"`
-		Matrix   struct {
-			Scenario []string
-		}
-	}
-	If    string
-	Steps []struct {
-		ID, Name, Uses, Run, If string
-		Env                     map[string]string
-		With                    map[string]string
-	}
-}
-
-func TestReleaseWSLScenariosRemainRequiredForPublication(t *testing.T) {
-	jobs := releaseWorkflowJobs(t)
-	job := jobs["wsl-accept"]
-	if job.Strategy.FailFast == nil || *job.Strategy.FailFast {
-		t.Fatal("WSL failures must not cancel independent scenario results")
-	}
-	if strings.Join(job.Strategy.Matrix.Scenario, ",") != "integrations,migration,recovery" {
-		t.Fatal("WSL release acceptance must exercise all three scenario chains")
-	}
-	var invocation, routingCheck bool
-	for _, step := range job.Steps {
-		if strings.Contains(step.Run, "accept-wsl.ps1") {
-			invocation = strings.Contains(step.Run, `-Scenario "${{ matrix.scenario }}"`) && step.If == ""
-		}
-	}
-	for _, step := range jobs["windows-native"].Steps {
-		routingCheck = routingCheck || strings.Contains(step.Run, "test-wsl-scenarios.ps1")
-	}
-	if !invocation || !routingCheck {
-		t.Fatal("WSL matrix must pass its selected scenario and validate check routing")
-	}
-	for _, dependency := range releaseJobNeeds(t, jobs["publish"]) {
-		if dependency == "wsl-accept" {
-			return
-		}
-	}
-	t.Fatal("publication must wait for every WSL scenario")
-}
-
-func TestReleaseDraftUsesVerifiedTagAndPreservesPublisherChecks(t *testing.T) {
-	var script string
-	var tagVerified bool
-	for _, step := range releaseWorkflowJobs(t)["publish"].Steps {
-		if strings.Contains(step.Run, `sh ./scripts/maintainer/publish-tag.sh "$TAG" "$GITHUB_SHA"`) {
-			tagVerified = true
-		}
-		if step.ID == "release_draft" {
-			if !tagVerified {
-				t.Fatal("draft creation must follow accepted-commit tag verification")
-			}
-			script = step.Run
-		}
-		if step.ID == "release" && (script == "" || !strings.HasPrefix(step.Uses, "releaseway/actions@")) {
-			t.Fatal("verified draft must still pass immutable publisher checks")
-		}
-	}
-	if script == "" || !strings.Contains(script, `--draft --verify-tag --target "$GITHUB_REF_NAME"`) {
-		t.Fatal("draft creation must use the verified tag and source branch reference")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("release draft creation executes on the Linux publication runner")
-	}
-	for _, state := range []string{"existing", "missing", "denied"} {
-		t.Run(state, func(t *testing.T) {
-			root := t.TempDir()
-			fake := `#!/usr/bin/env bash
-set -eu
-if test "$2" = view; then test "$DRAFT_STATE" = existing; exit; fi
-printf '%s\n' "$@" > "$DRAFT_CALL"
-test "$DRAFT_STATE" != denied
-`
-			if err := os.WriteFile(filepath.Join(root, "gh"), []byte(fake), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			call := filepath.Join(root, "call")
-			cmd := exec.Command("bash", "-c", script)
-			cmd.Env = append(os.Environ(), "PATH="+root+string(os.PathListSeparator)+os.Getenv("PATH"),
-				"DRAFT_STATE="+state, "DRAFT_CALL="+call, "TAG=v0.0.1", "GITHUB_REF_NAME=main", "GITHUB_REPOSITORY=fixture/repo")
-			output, err := cmd.CombinedOutput()
-			if (err == nil) != (state != "denied") {
-				t.Fatalf("state=%s: %v\n%s", state, err, output)
-			}
-			args, readErr := os.ReadFile(call)
-			if state == "existing" {
-				if !os.IsNotExist(readErr) {
-					t.Fatalf("existing release was changed: %q, error=%v", args, readErr)
-				}
-			} else if readErr != nil || string(args) != "release\ncreate\nv0.0.1\n--repo\nfixture/repo\n--draft\n--verify-tag\n--target\nmain\n--title\nv0.0.1\n--notes-file\npublication/assets/loki-release-notes.md\n" {
-				t.Fatalf("draft creation arguments=%q, error=%v", args, readErr)
-			}
-		})
-	}
-}
-
-func releaseWorkflowJobs(t *testing.T) map[string]releaseWorkflowJob {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var workflow struct {
-		On   map[string]yaml.Node
-		Jobs map[string]releaseWorkflowJob
-	}
-	if err := yaml.Unmarshal(raw, &workflow); err != nil {
-		t.Fatal(err)
-	}
-	if _, manual := workflow.On["workflow_dispatch"]; !manual || len(workflow.On) != 1 {
-		t.Fatal("release workflow must have one manual trigger")
-	}
-	return workflow.Jobs
-}
-
-func releaseJobNeeds(t *testing.T, job releaseWorkflowJob) []string {
-	t.Helper()
-	switch job.Needs.Kind {
-	case 0:
-		return nil
-	case yaml.ScalarNode:
-		return []string{job.Needs.Value}
-	case yaml.SequenceNode:
-		var needs []string
-		if err := job.Needs.Decode(&needs); err != nil {
-			t.Fatal(err)
-		}
-		return needs
-	default:
-		t.Fatal("workflow needs must be a job name or list")
-		return nil
-	}
-}
-
-func TestReleaseWorkflowAutomatesBuildAcceptanceAndPublication(t *testing.T) {
-	jobs := releaseWorkflowJobs(t)
-	fullPin := regexp.MustCompile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
-	for name, job := range jobs {
-		if len(job.Steps) == 0 {
-			t.Errorf("release job %s has no steps", name)
-		}
-		for _, dependency := range releaseJobNeeds(t, job) {
-			if _, ok := jobs[dependency]; !ok {
-				t.Errorf("%s needs unknown job %s", name, dependency)
-			}
-		}
-		for _, step := range job.Steps {
-			if step.Uses != "" && !fullPin.MatchString(step.Uses) {
-				t.Errorf("%s action is not pinned to a source commit: %s", name, step.Uses)
-			}
-			if strings.Contains(step.Run, "--clobber") {
-				t.Errorf("%s can overwrite release artifacts", name)
-			}
-		}
-	}
-	for name, command := range map[string]string{
-		"source-gates":     "scripts/verify/verify-source.sh",
-		"source-race":      "scripts/verify/verify-race.sh",
-		"oci-gates":        "scripts/verify/accept-oci-jobs.sh",
-		"accept-oci":       "scripts/verify/accept-oci-jobs.sh",
-		"accept-authority": "scripts/verify/accept-authority-matrix.sh",
-		"accept-runtime":   "scripts/verify/accept-project-execution.sh",
-		"accept-compose":   "scripts/verify/accept-compose.sh",
-		"accept-bootstrap": "scripts/verify/accept-bootstrap.sh",
-		"build":            "tools/release/releasebuild",
-		"publish":          "tools/release/publishprep",
-	} {
-		found := false
-		for _, step := range jobs[name].Steps {
-			found = found || strings.Contains(step.Run, command)
-		}
-		if !found {
-			t.Errorf("%s lacks its validation or build command %s", name, command)
-		}
-	}
-	if jobs["publish"].If != "${{ inputs.publish }}" {
-		t.Fatal("publication must follow the operator's publish choice")
-	}
-	found := false
-	for _, step := range jobs["accept-oci"].Steps {
-		found = found || step.Env["LOKI_OCI_ACCEPTANCE_IMAGE"] == "${{ needs.build.outputs.core_image }}"
-	}
-	if !found {
-		t.Fatal("OCI acceptance must exercise the exact candidate core image")
-	}
-}
-
-func TestReleaseAcceptanceDomainsAreIndependent(t *testing.T) {
-	jobs := releaseWorkflowJobs(t)
-	contains := func(values []string, wanted string) bool {
-		for _, value := range values {
-			if value == wanted {
-				return true
-			}
-		}
-		return false
-	}
-	checks := []string{
-		"release-contracts", "source-gates", "source-runtime-contracts", "source-race",
-		"oci-gates", "windows-native", "wsl-accept", "windows-provider-acceptance",
-		"accept-runtime", "accept-recovery", "accept-oci", "accept-authority",
-		"accept-compose", "accept-bootstrap",
-	}
-	for _, name := range append(append([]string{}, checks...), "build") {
-		job, ok := jobs[name]
-		if !ok {
-			t.Fatalf("release job %s is missing", name)
-		}
-		for _, dependency := range releaseJobNeeds(t, job) {
-			if contains(checks, dependency) {
-				t.Errorf("%s is blocked by independent validation %s", name, dependency)
-			}
-		}
-	}
-	publishNeeds := releaseJobNeeds(t, jobs["publish"])
-	for _, required := range append([]string{"preflight", "build"}, checks...) {
-		if !contains(publishNeeds, required) {
-			t.Errorf("publication barrier lacks %s", required)
-		}
-	}
-	for _, name := range []string{"source-gates", "source-race", "source-runtime-contracts"} {
-		if !contains(releaseJobNeeds(t, jobs[name]), "release-inputs") {
-			t.Errorf("%s lacks its pinned tool fixture", name)
-		}
-	}
-	for _, name := range []string{
-		"accept-runtime", "accept-recovery", "accept-oci", "accept-authority",
-		"accept-compose", "accept-bootstrap", "wsl-accept", "windows-provider-acceptance",
-	} {
-		if !contains(releaseJobNeeds(t, jobs[name]), "build") {
-			t.Errorf("%s lacks the immutable candidate prerequisite", name)
-		}
-	}
-	for _, name := range []string{"pages", "verify-public", "verify-public-windows"} {
+	jobs := workflow.Jobs
+	for _, name := range []string{"plan", "manager-build", "browser-build", "full-build", "assemble", "source-checks", "manager-checks", "browser-checks", "full-checks", "gate", "publish", "pages", "verify-public"} {
 		if _, ok := jobs[name]; !ok {
-			t.Errorf("release completion job %s is missing", name)
+			t.Fatal("missing required release job:", name)
 		}
 	}
-}
-
-func TestPublicWindowsInstallIsSourceFree(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
+	var needs []string
+	publish := jobs["publish"]
+	if err := publish.Needs.Decode(&needs); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
-	if err != nil {
+	if strings.Join(needs, ",") != "plan,gate" || jobs["publish"].If != "inputs.publish" {
+		t.Fatal("publication bypasses final gate or explicit request")
+	}
+	needs = nil
+	gate := jobs["gate"]
+	if err := gate.Needs.Decode(&needs); err != nil {
 		t.Fatal(err)
 	}
-	text := string(raw)
-	start := strings.Index(text, "\n  verify-public-windows:\n")
-	if start < 0 {
-		t.Fatal("release workflow lacks public Windows install job")
-	}
-	job := text[start:]
-	for _, required := range []string{
-		"runs-on: windows-2025",
-		"needs:\n      - preflight\n      - pages",
-		"gh release download $env:TAG",
-		"https://jinyongp.dev/loki/install.ps1",
-		"irm https://jinyongp.dev/loki/install.ps1 | iex",
-		"loki.exe",
-		"version --json",
-		"status --distribution",
-		"doctor --distribution",
-		"connection show --distribution",
-		"connection list --distribution",
-		"Run public Windows self-update from previous release",
-		"$beforeApplianceRelease",
-		"bare self-update mutated appliance release",
-		"update --all --distribution $distribution",
-		"combined frontend and appliance update failed",
-		"combined update produced",
-		"$afterRepeat = $afterRepeatRaw | ConvertFrom-Json -AsHashtable",
-		"$null -ne $afterRepeat['prepared']",
-		"repeated combined update changed the current appliance generation or prepared another update",
-		`id -eq "openai"`,
-		`state -ne "not-configured"`,
-		"uninstall --distribution",
-	} {
-		if !strings.Contains(job, required) {
-			t.Errorf("public Windows install job lacks %q", required)
+	for _, name := range []string{"source-checks", "manager-checks", "browser-checks", "full-checks"} {
+		if !strings.Contains(","+strings.Join(needs, ",")+",", ","+name+",") {
+			t.Fatal("gate omits required checks:", name)
 		}
 	}
-	if strings.Contains(job, "actions/checkout@") {
-		t.Fatal("public Windows source-free install job checks out repository source")
+	var lifecycle bool
+	for _, step := range jobs["publish"].Steps {
+		lifecycle = lifecycle || strings.HasPrefix(step.Uses, "releaseway/actions@22219bebc51a4127c6dffd9e79706f08cdd678dc")
+		if strings.Contains(step.Run, "gh release create") || strings.Contains(step.Run, "skopeo copy") {
+			t.Fatal("publisher bypasses Releaseway or duplicates OCI transfer")
+		}
 	}
-}
-
-func TestRetiredWindowsPrecutoverAcceptanceIsRemoved(t *testing.T) {
-	root := filepath.Join("..", "..")
-	path := filepath.Join(root, "scripts", "verify", "accept-windows-frontend-precutover.ps1")
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("retired pre-cutover PowerShell lifecycle acceptance must be removed, stat err=%v", err)
+	if !lifecycle {
+		t.Fatal("release lifecycle must use pinned Releaseway")
 	}
-}
-
-func TestProjectExecutionReleaseAcceptanceUsesExactCandidateToolchains(t *testing.T) {
-	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "accept-project-execution.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	for _, required := range []string{
-		"CORE_IMAGE must be pinned by a sha256 digest",
-		"sha256sum -c SHA256SUMS",
-		`.artifacts[] | select(.name == "node")`,
-		`.artifacts[] | select(.name == "pnpm")`,
-		`.artifacts[] | select(.name == "chromium")`,
-		`$docker" cp "$container:/opt/loki/bin/devtools" "$devtools"`,
-		"io.loki.devtools.$arch.sha256",
-		"LOKI_E2E_DEVTOOLS",
-		"LOKI_E2E_PNPM",
-		"LOKI_E2E_NODE",
-		"LOKI_E2E_CHROMIUM",
-		"go test ./internal/e2e -run '^TestProjectExecutionContract$' -v -count=1",
-	} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("project execution acceptance lacks %q", required)
+	for _, name := range []string{"native-manager.yml", "native-tools.yml", "reviewed-browser-inputs.yml", "reviewed-full-inputs.yml", "publish.yml", "publish-bootstrap.yml"} {
+		if _, err := os.Stat(filepath.Join("..", "..", ".github", "workflows", name)); !os.IsNotExist(err) {
+			t.Fatal("separate release entry still exists:", name)
 		}
 	}
 }
@@ -510,62 +161,6 @@ func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
 		if !strings.Contains(text, required) {
 			t.Fatalf("release pin verifier lacks %q", required)
 		}
-	}
-}
-
-func TestWSLUpdateUsesBoundedRetry(t *testing.T) {
-	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "update-wsl.ps1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	for _, required := range []string{
-		"& wsl.exe --update --web-download",
-		"for ($attempt = 1; $attempt -le $Attempts; $attempt++)",
-		"Start-Sleep -Seconds $delay",
-		"Test-WSLReady",
-		"Test-TransientWSLDownloadError $output",
-		"external download unavailable after $Attempts attempts",
-	} {
-		if !strings.Contains(text, required) {
-			t.Errorf("WSL update helper lacks %q", required)
-		}
-	}
-	jobs := releaseWorkflowJobs(t)
-	for job, invocation := range map[string]string{
-		"wsl-accept":            `.\scripts\verify\update-wsl.ps1`,
-		"verify-public-windows": `& "$env:RUNNER_TEMP\wsl-ci-preparation\update-wsl.ps1"`,
-	} {
-		prepared := false
-		for _, step := range jobs[job].Steps {
-			prepared = prepared || step.Run == invocation
-			if strings.Contains(step.Run, "wsl.exe --update") {
-				t.Fatalf("%s bypasses the shared WSL preparation helper", job)
-			}
-		}
-		if !prepared {
-			t.Fatalf("%s does not prepare the WSL environment", job)
-		}
-	}
-	var uploaded, downloaded bool
-	for _, step := range jobs["publish"].Steps {
-		uploaded = uploaded || (strings.HasPrefix(step.Uses, "actions/upload-artifact@") &&
-			step.With["name"] == "wsl-ci-preparation-${{ github.sha }}" && step.With["path"] == "scripts/verify/update-wsl.ps1" && step.With["overwrite"] == "true")
-	}
-	for _, step := range jobs["verify-public-windows"].Steps {
-		downloaded = downloaded || (strings.HasPrefix(step.Uses, "actions/download-artifact@") &&
-			step.With["name"] == "wsl-ci-preparation-${{ github.sha }}" && step.With["path"] == `${{ runner.temp }}\wsl-ci-preparation`)
-	}
-	if !uploaded || !downloaded {
-		t.Fatal("public Windows gate does not receive the accepted helper artifact")
-	}
-	checked := false
-	for _, step := range jobs["windows-native"].Steps {
-		checked = checked || strings.Contains(step.Run, "test-update-wsl.ps1")
-	}
-	if !checked {
-		t.Fatal("native Windows gate does not run WSL preparation regression tests")
 	}
 }
 

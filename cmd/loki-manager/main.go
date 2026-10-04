@@ -91,7 +91,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return runGitHubSetupRelay(ctx, store, os.Stdin, out, diagnostics)
 	}
 	if len(args) == 1 && args[0] == "version" {
-		fmt.Fprintln(out, "loki", management.Release)
+		fmt.Fprintln(out, "loki", management.ManagerRelease)
 		return nil
 	}
 	if len(args) > 0 && args[0] == "install" {

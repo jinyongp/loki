@@ -54,7 +54,7 @@ func (s Store) install(ctx context.Context, artifact tools.Artifact, expected *t
 	if err != nil {
 		return err
 	}
-	if artifact.Release != state.Config.Release || artifact.Target != LocalTarget(state.Config.Mode) {
+	if (state.Config.Contract == "" && artifact.Release != state.Config.Release) || artifact.Target != LocalTarget(state.Config.Mode) {
 		return fmt.Errorf("artifact differs from configured release or execution host")
 	}
 	if err := s.mutable(); err != nil {

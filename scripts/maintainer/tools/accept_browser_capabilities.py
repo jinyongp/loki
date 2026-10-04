@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Final optional browser capability acceptance using isolated synthetic pages."""
 import argparse
+from release_config import RELEASE
 import base64
 import json
 from pathlib import Path

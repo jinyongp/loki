@@ -7,6 +7,7 @@ Git, OpenSSH, gh, devtools or browser runtime installation.
 """
 
 import argparse
+from release_config import RELEASE, CONTRACT, CONFIG, artifact_release
 import hashlib
 import json
 import os
@@ -86,13 +87,16 @@ def assemble(recipe_path, output, release_url, payload_only=False):
     target = {"os": "linux", "arch": arch, "mode": "full"}
     recipe = validate_recipe(json.loads(recipe_path.read_text(encoding="utf-8")), target, payload_only)
     module = recipe["module"]
+    release = artifact_release(module)
     url = urlsplit(release_url)
     if url.scheme != "https" or not url.hostname or url.username or url.fragment:
         raise ValueError("candidate acquisition URL must be reviewed HTTPS")
     repo = Path(__file__).resolve().parents[3]
     manifest_path = repo / ("packaging/tools/module.full.json" if module == "runtime-core" else f"modules/{module}/module.full.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest["release"] != "0.2.3" or manifest["id"] != module or target not in manifest["targets"]:
+    manifest["release"] = release
+    manifest["contract"] = CONTRACT
+    if manifest["id"] != module or target not in manifest["targets"]:
         raise ValueError("module source manifest differs from the preparation contract")
     manifest["targets"] = [target]
     output.mkdir(parents=True, exist_ok=False)
@@ -119,14 +123,14 @@ def assemble(recipe_path, output, release_url, payload_only=False):
         packages = GO_PROGRAMS.get(module, {})
         if packages:
             version = subprocess.check_output(["go", "version"], text=True).split()
-            if len(version) < 3 or version[2] != "go1.27.1":
+            if len(version) < 3 or version[2] != "go"+CONFIG["go"]:
                 raise ValueError("core module preparation requires pinned Go 1.27.1")
             env = dict(os.environ, CGO_ENABLED="0", GOOS="linux", GOARCH=arch, GOTOOLCHAIN="local")
             env.pop("GOFLAGS", None)
             (bundle / "bin").mkdir()
             for name, package in packages.items():
                 path = f"bin/{name}"
-                subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/buildinfo.Version=0.2.3", "-o", str(bundle / path), package], cwd=repo, env=env, check=True)
+                subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/buildinfo.Version="+release, "-o", str(bundle / path), package], cwd=repo, env=env, check=True)
                 programs[name] = path
             go_dependencies = go_notices(repo, bundle, env, tuple(packages.values()))
         assets = dict(recipe.get("assets", {}))
@@ -161,7 +165,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
                 raise ValueError("module executable is absent or not executable")
         for path in assets.values():
             contained(bundle, bundle / relative(path))
-        payload = {"schema": 1, "module": module, "release": "0.2.3", "target": target, "images": {role: image["reference"] for role, image in recipe.get("images", {}).items()}, "programs": programs, "assets": assets}
+        payload = {"schema": 1, "module": module, "release": release, "target": target, "images": {role: image["reference"] for role, image in recipe.get("images", {}).items()}, "programs": programs, "assets": assets}
         metadata = {"module.json": manifest, "full-runtime.json": payload, "upstream-receipts.json": {"schema": 1, "inputs": receipts, "images": recipe.get("images", {}), "go_dependencies": go_dependencies}}
         for name, value in metadata.items():
             (bundle / name).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -169,10 +173,10 @@ def assemble(recipe_path, output, release_url, payload_only=False):
         if payload_only:
             files = {path.relative_to(bundle).as_posix(): {"bytes": path.stat().st_size, "sha256": digest(path), "executable": bool(path.stat().st_mode & 0o111)} for path in sorted(bundle.rglob("*")) if path.is_file()}
             shutil.copytree(bundle, output / "payload")
-            (output / "payload-receipt.json").write_text(json.dumps({"schema": 1, "release": "0.2.3", "module": module, "target": target, "files": files}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            (output / "payload-receipt.json").write_text(json.dumps({"schema": 1, "release": release, "module": module, "target": target, "files": files}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             print(output / "payload-receipt.json", flush=True)
             return
-        archive_name = f"loki-{module}-0.2.3-linux-{arch}-full.zip"
+        archive_name = f"loki-{module}-{release}-linux-{arch}-full.zip"
         archive = stage / archive_name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:
             for path in sorted(bundle.rglob("*")):
@@ -186,9 +190,9 @@ def assemble(recipe_path, output, release_url, payload_only=False):
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 with path.open("rb") as source, packed.open(entry, "w", force_zip64=True) as sink:
                     shutil.copyfileobj(source, sink)
-        artifact = {"module": module, "release": "0.2.3", "target": target, "url": release_url, "sha256": digest(archive), "bytes": archive.stat().st_size, "format": "zip"}
+        artifact = {"module": module, "release": release, "target": target, "url": release_url, "sha256": digest(archive), "bytes": archive.stat().st_size, "format": "zip"}
         shutil.copyfile(archive, output / archive_name)
-        (output / "catalog.json").write_text(json.dumps({"schema": 1, "release": "0.2.3", "modules": [manifest], "artifacts": [artifact]}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (output / "catalog.json").write_text(json.dumps({"schema": 1, "contract": CONTRACT, "release": RELEASE, "modules": [manifest], "artifacts": [artifact]}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(output / archive_name, flush=True)
 
 

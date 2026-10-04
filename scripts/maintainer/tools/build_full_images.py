@@ -6,6 +6,9 @@ base images and browser system libraries are independently reviewed inputs.
 Image manifests are content digests, never Docker configuration/image IDs.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+import time
+from release_config import RELEASE, artifact_release
 import hashlib
 import json
 import os
@@ -33,7 +36,7 @@ ROLE_IMAGE = {"service":"runtime-core-service", "gateway":"runtime-core-gateway"
 
 def verify_payload(directory, target):
     receipt = json.loads((directory / "payload-receipt.json").read_text(encoding="utf-8"))
-    if receipt.get("schema") != 1 or receipt.get("release") != "0.2.3" or receipt.get("target") != target or receipt.get("module") not in REQUIRED_PROGRAMS:
+    if receipt.get("schema") != 1 or receipt.get("release") != artifact_release(receipt.get("module")) or receipt.get("target") != target or receipt.get("module") not in REQUIRED_PROGRAMS:
         raise ValueError("image input must be an exact-release native payload receipt")
     root = directory / "payload"
     if root.is_symlink() or not root.is_dir():
@@ -49,7 +52,7 @@ def verify_payload(directory, target):
             raise ValueError("prepared module changed after its receipt")
     payload = json.loads((root / "full-runtime.json").read_text(encoding="utf-8"))
     manifest = json.loads((root / "module.json").read_text(encoding="utf-8"))
-    if payload.get("schema") != 1 or payload.get("module") != receipt["module"] or payload.get("release") != "0.2.3" or payload.get("target") != target or payload.get("images") != {} or set(payload.get("programs", {})) != REQUIRED_PROGRAMS[receipt["module"]] or manifest.get("id") != receipt["module"] or manifest.get("release") != "0.2.3" or manifest.get("targets") != [target]:
+    if payload.get("schema") != 1 or payload.get("module") != receipt["module"] or payload.get("release") != receipt["release"] or payload.get("target") != target or payload.get("images") != {} or set(payload.get("programs", {})) != REQUIRED_PROGRAMS[receipt["module"]] or manifest.get("id") != receipt["module"] or manifest.get("release") != receipt["release"] or manifest.get("targets") != [target]:
         raise ValueError("prepared payload differs from its exact module program contract")
     for path in payload["programs"].values():
         executable = root / relative(path)
@@ -162,26 +165,32 @@ def assemble(recipe_path, output):
         configuration = scratch / "docker-configuration"
         configuration.mkdir(mode=0o700)
         environment["DOCKER_CONFIG"] = str(configuration)
+        token = os.environ.get("LOKI_REGISTRY_TOKEN")
+        if token:
+            subprocess.run(["docker", "--config", str(configuration), "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"], "--password-stdin"], input=token, text=True, env=environment, check=True, timeout=60)
         builder = "loki-tools-candidate-"+uuid.uuid4().hex
         docker = ["docker", "--host", "unix:///var/run/docker.sock"]
         try:
             subprocess.run([*docker, "buildx", "create", "--name", builder, "--driver", "docker-container", "--driver-opt", "image="+recipe["buildkit"], "unix:///var/run/docker.sock"], env=environment, check=True, timeout=60)
-            for role in roles:
+            def build_role(role):
+                release = artifact_release(ROLE_OWNER[role])
                 context = scratch / role
                 context.mkdir()
-                lines = ["# syntax="+recipe["frontend"], "FROM "+recipe["base"], "LABEL org.opencontainers.image.source=https://github.com/jinyongp/loki io.loki.release=0.2.3 io.loki.image.owner="+ROLE_OWNER[role]+" io.loki.image.role="+role]
+                label = "LABEL org.opencontainers.image.source=https://github.com/jinyongp/loki io.loki.release="+release+" io.loki.image.owner="+ROLE_OWNER[role]+" io.loki.image.role="+role
+                lines = ["# syntax="+recipe["frontend"], "FROM "+recipe["base"]]
                 (context / "public-trust").mkdir()
                 shutil.copyfile(certificate_file, context / "public-trust" / "ca-certificates.crt")
                 for index, notice in enumerate(trust["notices"]):
                     shutil.copyfile(contained(trust_source, trust_source / relative(notice)), context / "public-trust" / f"NOTICE-{index}")
                 lines.extend(["COPY public-trust/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt", "COPY public-trust/ /usr/share/doc/loki-public-trust/"])
-                inputs = {"trust_store":trust}
+                inputs = {"trust_store":dict(trust, archive=Path(trust["archive"]).name)}
+                module_layers = []
                 for module in ROLE_MODULES[role]:
                     if module not in payloads:
                         raise ValueError("image prerequisite payload was not prepared")
                     receipt, root = payloads[module]
                     materialize(root, context / module)
-                    lines.append("COPY "+module+" /opt/loki/modules/"+module+"/")
+                    module_layers.append("COPY "+module+" /opt/loki/modules/"+module+"/")
                     inputs[module] = receipt
                 if role == "browser":
                     libraries = recipe.get("browser_libraries", {})
@@ -219,7 +228,8 @@ def assemble(recipe_path, output):
                     for directory, destination in (("usr", "/usr/"), ("etc", "/etc/"), ("lib", "/usr/lib/"), ("lib64", "/usr/lib64/")):
                         if (root / directory).is_dir():
                             lines.append("COPY browser-libraries/"+directory+"/ "+destination)
-                    inputs["browser_libraries"] = libraries
+                    inputs["browser_libraries"] = dict(libraries, archive=Path(libraries["archive"]).name)
+                lines.extend(module_layers)
                 if role == "git-workload":
                     git_payload = json.loads((payloads["git"][1] / "full-runtime.json").read_text(encoding="utf-8"))
                     for program, path in git_payload["programs"].items():
@@ -237,16 +247,39 @@ def assemble(recipe_path, output):
                         lines.append("RUN --network=none ln -s "+shlex.quote(worker)+" /opt/loki/bin/"+program)
                 identities = "runner:x:10000:10000::/home/runner:/bin/sh\\nloki:x:10001:10001::/nonexistent:/usr/sbin/nologin\\negress:x:10002:10002::/nonexistent:/usr/sbin/nologin\\nbrowser:x:10003:10003::/nonexistent:/usr/sbin/nologin\\nexecutor:x:10004:10004::/nonexistent:/usr/sbin/nologin\\nbrowser-proxy:x:10005:10005::/nonexistent:/usr/sbin/nologin\\n"
                 lines.extend(["RUN --network=none mkdir -p /workspace /var/tmp/loki /home/runner && chmod 1777 /tmp /var/tmp && chown 10000:10000 /home/runner && printf '"+identities+"' >> /etc/passwd && printf 'runner:x:10000:\\nloki:x:10001:\\n' >> /etc/group", "ENV PATH=/opt/loki/bin:/usr/bin:/bin", "WORKDIR /workspace", "USER 10000:10000"])
+                lines.append(label)
                 (context / "Dockerfile").write_text("\n".join(lines)+"\n", encoding="utf-8")
-                name = f"loki-{ROLE_IMAGE[role]}-0.2.3-linux-{arch}.oci.tar"
+                name = f"loki-{ROLE_IMAGE[role]}-{release}-linux-{arch}.oci.tar"
                 archive = output / name
                 if any(c in str(archive) for c in ",\r\n\x00"):
                     raise ValueError("OCI output path cannot contain exporter separators")
                 print("Preparing owned native "+role+" image...", flush=True)
-                image_name = repository+"/"+ROLE_IMAGE[role]+":0.2.3-linux-"+arch
-                subprocess.run([*docker, "buildx", "build", "--builder", builder, "--platform", "linux/"+arch, "--network", "none", "--provenance=false", "--sbom=false", "--output", "type=oci,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
+                image_name = repository+"/"+ROLE_IMAGE[role]+":"+release+"-linux-"+arch
+                command = [*docker, "buildx", "build", "--builder", builder, "--platform", "linux/"+arch, "--network", "none", "--provenance=false", "--sbom=false", "--build-arg", "SOURCE_DATE_EPOCH=0"]
+                cache = os.environ.get("LOKI_BUILD_CACHE", "")
+                if cache and cache != "registry":
+                    raise ValueError("unsupported build cache backend")
+                cache_ref = repository+"/build-cache-"+ROLE_IMAGE[role]+":"+arch+"-v1"
+                cache_from = ["--cache-from", "type=registry,ref="+cache_ref] if cache else []
+                started = time.monotonic()
+                if cache_from:
+                    try:
+                        subprocess.run([*command, *cache_from, "--output", "type=cacheonly", str(context)], env=environment, check=True, timeout=60)
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                        print("Cache import warning for "+role+": "+type(error).__name__+"; building from verified local inputs", flush=True)
+                # The required export consumes local verified inputs/cache only.
+                # Registry cache I/O never consumes its build time budget.
+                subprocess.run([*command, "--output", "type=oci,rewrite-timestamp=true,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
+                if cache and os.environ.get("LOKI_CACHE_WRITE") == "1":
+                    try:
+                        subprocess.run([*command, "--output", "type=cacheonly", "--cache-to", "type=registry,ref="+cache_ref+",mode=max,ignore-error=true", str(context)], env=environment, check=True, timeout=60)
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                        print("Cache export warning for "+role+": "+type(error).__name__, flush=True)
+                print("Image "+role+" build and cache: "+str(round(time.monotonic()-started, 2))+"s", flush=True)
                 manifest = oci_manifest(archive, target)
                 receipts[role] = {"owner":ROLE_OWNER[role], "target":target, "reference":repository+"/"+ROLE_IMAGE[role]+"@"+manifest, "archive":name, "bytes":archive.stat().st_size, "sha256":digest(archive), "notices":recipe["base_notices"], "base":recipe["base"], "buildkit":recipe["buildkit"], "frontend":recipe["frontend"], "inputs":inputs, "published":False, "accepted":False}
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                list(executor.map(build_role, roles))
         finally:
             # Preserve the preparation failure if creation/building failed.
             # A successful preparation still requires successful cleanup.
@@ -255,7 +288,7 @@ def assemble(recipe_path, output):
             cleanup = subprocess.run([*docker, "buildx", "rm", "--force", builder], env=environment, check=False, timeout=60)
             if cleanup.returncode and not failing:
                 raise RuntimeError("owned candidate builder cleanup failed")
-    (output / "images.json").write_text(json.dumps({"schema":1, "release":"0.2.3", "target":target, "images":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+    (output / "images.json").write_text(json.dumps({"schema":1, "release":RELEASE, "target":target, "images":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
     print(output / "images.json", flush=True)
 
 

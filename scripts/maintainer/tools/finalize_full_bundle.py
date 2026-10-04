@@ -5,6 +5,7 @@ The same prepared files are embedded in images and module archives. Finalizing
 does not rebuild programs, publish images or establish runtime acceptance.
 """
 import argparse
+from release_config import RELEASE, CONTRACT, artifact_release
 import json
 from pathlib import Path
 import shutil
@@ -25,6 +26,7 @@ def finalize(prepared, image_path, output, release_url):
         raise ValueError("full candidate must have an exact Linux/full target")
     receipt, root = verify_payload(prepared, target)
     owner = receipt["module"]
+    release = artifact_release(owner)
     roles = OWNED_IMAGES.get(owner, set())
     images = {}
     image_receipts = {}
@@ -32,14 +34,20 @@ def finalize(prepared, image_path, output, release_url):
         if image_path is None:
             raise ValueError("this module requires its owned native image receipt")
         document = json.loads(image_path.read_text(encoding="utf-8"))
-        if document.get("schema") != 1 or document.get("release") != "0.2.3" or document.get("target") != target:
+        if document.get("schema") != 1 or document.get("release") != RELEASE or document.get("target") != target:
             raise ValueError("image receipt differs from the prepared native release")
         for role in sorted(roles):
             image = document.get("images", {}).get(role, {})
             if image.get("owner") != owner or ROLE_OWNER.get(role) != owner or image.get("target") != target or not IMAGE.fullmatch(image.get("reference", "")) or not image.get("notices") or image.get("inputs", {}).get(owner) != receipt:
                 raise ValueError("owned image contains different module files or provenance")
             archive_name = image.get("archive", "")
-            if Path(archive_name).name != archive_name or not archive_name:
+            if not archive_name:
+                from registry_images import verify
+                verify(image["reference"])
+                images[role] = image["reference"]
+                image_receipts[role] = image
+                continue
+            if Path(archive_name).name != archive_name:
                 raise ValueError("OCI archive must be beside its local receipt")
             archive = image_path.parent / archive_name
             if archive.is_symlink() or not archive.is_file() or archive.stat().st_size != image.get("bytes") or digest(archive) != image.get("sha256") or image["reference"].split("@", 1)[1] != oci_manifest(archive, target):
@@ -59,7 +67,7 @@ def finalize(prepared, image_path, output, release_url):
         (bundle / "full-runtime.json").write_text(json.dumps(payload, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         (bundle / "prepared-payload-receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         (bundle / "image-receipts.json").write_text(json.dumps({"schema":1, "images":image_receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
-        name = f"loki-{owner}-0.2.3-linux-{target['arch']}-full.zip"
+        name = f"loki-{owner}-{release}-linux-{target['arch']}-full.zip"
         archive = output / name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:
             for path in sorted(bundle.rglob("*")):
@@ -72,8 +80,8 @@ def finalize(prepared, image_path, output, release_url):
                 with path.open("rb") as source, packed.open(entry, "w", force_zip64=True) as sink:
                     shutil.copyfileobj(source, sink)
         manifest = json.loads((bundle / "module.json").read_text(encoding="utf-8"))
-        artifact = {"module":owner, "release":"0.2.3", "target":target, "url":release_url, "sha256":digest(archive), "bytes":archive.stat().st_size, "format":"zip"}
-        (output / "catalog.json").write_text(json.dumps({"schema":1, "release":"0.2.3", "modules":[manifest], "artifacts":[artifact]}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+        artifact = {"module":owner, "release":release, "target":target, "url":release_url, "sha256":digest(archive), "bytes":archive.stat().st_size, "format":"zip"}
+        (output / "catalog.json").write_text(json.dumps({"schema":1, "contract":CONTRACT, "release":RELEASE, "modules":[manifest], "artifacts":[artifact]}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         print(archive, flush=True)
 
 

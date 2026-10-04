@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Produce a management-only native candidate; product acceptance runs later."""
 import argparse
+from release_config import RELEASE, CONFIG
 import hashlib
 import json
 import os
@@ -68,9 +69,9 @@ def produce(output):
         raise ValueError("native manager target is not supported")
     repo = Path(__file__).resolve().parents[3]
     version = subprocess.check_output(["go", "version"], text=True).split()
-    if len(version) < 3 or version[2] != "go1.27.1":
+    if len(version) < 3 or version[2] != "go"+CONFIG["go"]:
         raise ValueError("candidate preparation requires pinned Go 1.27.1")
-    name = f"loki-manager-0.2.3-{target_os}-{target_arch}.zip"
+    name = f"loki-manager-{RELEASE}-{target_os}-{target_arch}.zip"
     output.mkdir(parents=True, exist_ok=True)
     if (output / name).exists() or (output / "manager-receipt.json").exists():
         raise ValueError("use a fresh native candidate output directory")
@@ -81,12 +82,12 @@ def produce(output):
         binary_name = "loki.exe" if target_os == "windows" else "loki"
         env = dict(os.environ, CGO_ENABLED="0", GOOS=target_os, GOARCH=target_arch, GOTOOLCHAIN="local")
         env.pop("GOFLAGS", None)
-        subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", str(bundle / binary_name), "./cmd/loki-manager"], cwd=repo, env=env, check=True)
+        subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/management.ManagerRelease="+RELEASE, "-o", str(bundle / binary_name), "./cmd/loki-manager"], cwd=repo, env=env, check=True)
         installer = "install.ps1" if target_os == "windows" else "install.sh"
         shutil.copyfile(Path(__file__).with_name(installer), bundle / installer)
         shutil.copyfile(repo / "LICENSE", bundle / "LICENSE")
         dependencies = go_notices(repo, bundle, env)
-        receipt = {"schema": 1, "release": "0.2.3", "os": target_os, "arch": target_arch, "go": "1.27.1", "binary": binary_name, "binary_sha256": hashlib.sha256((bundle / binary_name).read_bytes()).hexdigest(), "binary_bytes": (bundle / binary_name).stat().st_size, "included_tools": [], "go_dependencies": dependencies}
+        receipt = {"schema": 1, "release": RELEASE, "os": target_os, "arch": target_arch, "go": "1.27.1", "binary": binary_name, "binary_sha256": hashlib.sha256((bundle / binary_name).read_bytes()).hexdigest(), "binary_bytes": (bundle / binary_name).stat().st_size, "included_tools": [], "go_dependencies": dependencies}
         (bundle / "manager.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         archive = stage / name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:

@@ -174,7 +174,7 @@ func (s Store) readManagerPublication() (*managerPublication, error) {
 }
 
 func (s Store) InstallManager(ctx context.Context, source, binDirectory string) (ManagerRecord, error) {
-	return s.InstallManagerVersion(ctx, source, binDirectory, Release)
+	return s.InstallManagerVersion(ctx, source, binDirectory, ManagerRelease)
 }
 
 // InstallManagerVersion publishes a release whose bytes and version the caller
@@ -194,6 +194,13 @@ func (s Store) InstallManagerVersion(ctx context.Context, source, binDirectory, 
 	defer unlock()
 	if err := s.mutable(); err != nil {
 		return ManagerRecord{}, err
+	}
+	snapshot, err := s.Load()
+	if err != nil {
+		return ManagerRecord{}, err
+	}
+	if snapshot.Config.Contract == tools.CompositionContract && (release == "0.2.0" || release == "0.2.1" || release == "0.2.2" || release == "0.2.3") {
+		return ManagerRecord{}, fmt.Errorf("this tool composition requires Loki 0.2.4 or newer; older CLIs cannot read its contract")
 	}
 	unlockBin, err := managerBinLock(binDirectory)
 	if err != nil {

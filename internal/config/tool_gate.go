@@ -50,7 +50,7 @@ func (g ToolGate) load() (tools.Config, []byte, error) {
 	if err != nil {
 		return tools.Config{}, nil, err
 	}
-	if configuration.Release != g.Release || configuration.Mode != g.Mode {
+	if (configuration.Contract == "" && configuration.Release != g.Release) || configuration.Mode != g.Mode {
 		return tools.Config{}, nil, fmt.Errorf("tool release or runtime mode changed; reconnect the worker")
 	}
 	return configuration, data, nil
@@ -79,7 +79,7 @@ func activationSnapshot(data []byte) (tools.Config, error) {
 	}
 	var manifests []tools.Manifest
 	for id, installation := range document.Installed {
-		if installation.Artifact.Module != id || installation.Manifest.ID != id || installation.Artifact.Release != document.Config.Release || installation.Manifest.Release != document.Config.Release || installation.Artifact.Target.Mode != document.Config.Mode || !slices.Contains(installation.Manifest.Targets, installation.Artifact.Target) {
+		if installation.Artifact.Module != id || installation.Manifest.ID != id || installation.Artifact.Release != installation.Manifest.Release || !tools.CompatibleComposition(document.Config.Contract, document.Config.Release, installation.Manifest) || installation.Artifact.Target.Mode != document.Config.Mode || !slices.Contains(installation.Manifest.Targets, installation.Artifact.Target) {
 			return tools.Config{}, fmt.Errorf("installed resource differs from its host snapshot")
 		}
 		if err := installation.Artifact.Validate(); err != nil {
@@ -92,7 +92,7 @@ func activationSnapshot(data []byte) (tools.Config, error) {
 	}
 	for _, choice := range document.Config.Tools {
 		installation, exists := document.Installed[choice.ID]
-		if !exists || installation.Artifact.Module != choice.ID || installation.Manifest.ID != choice.ID || installation.Artifact.Release != document.Config.Release || installation.Manifest.Release != document.Config.Release || installation.Artifact.Target.Mode != document.Config.Mode {
+		if !exists || installation.Artifact.Module != choice.ID || installation.Manifest.ID != choice.ID || installation.Artifact.Release != installation.Manifest.Release || !tools.CompatibleComposition(document.Config.Contract, document.Config.Release, installation.Manifest) || installation.Artifact.Target.Mode != document.Config.Mode {
 			return tools.Config{}, fmt.Errorf("selected tool does not match its installed activation snapshot")
 		}
 		if err := installation.Artifact.Validate(); err != nil {

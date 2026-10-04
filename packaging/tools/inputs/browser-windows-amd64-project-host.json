@@ -10,12 +10,12 @@
   ],
   "assets": {
     "node": {
-      "version": "22.22.2",
-      "url": "https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip",
-      "bytes": 35656052,
-      "sha256": "7c93e9d92bf68c07182b471aa187e35ee6cd08ef0f24ab060dfff605fcc1c57c",
+      "version": "26.10.0",
+      "url": "https://nodejs.org/dist/v26.10.0/node-v26.10.0-win-x64.zip",
+      "bytes": 41688989,
+      "sha256": "9fef7eca6743a6b910989cd8e78712376b394fcb9b6e1e9c44a0799a287f90c5",
       "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
-      "root": "node-v22.22.2-win-x64",
+      "root": "node-v26.10.0-win-x64",
       "notices": [
         "LICENSE"
       ],

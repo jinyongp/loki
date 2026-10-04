@@ -11,6 +11,7 @@ import (
 type Catalog struct {
 	Schema    int        `json:"schema"`
 	Release   string     `json:"release"`
+	Contract  string     `json:"contract,omitempty"`
 	Modules   []Manifest `json:"modules"`
 	Artifacts []Artifact `json:"artifacts"`
 }
@@ -36,13 +37,16 @@ func (c Catalog) Validate() error {
 	if c.Schema != 1 || !releasePattern.MatchString(c.Release) {
 		return fmt.Errorf("invalid release catalog schema or release")
 	}
+	if c.Contract != "" && c.Contract != CompositionContract {
+		return fmt.Errorf("unsupported catalog composition contract %q", c.Contract)
+	}
 	if _, err := NewRegistry(c.Modules); err != nil {
 		return err
 	}
 	manifests := map[ID]Manifest{}
 	for _, m := range c.Modules {
-		if m.Release != c.Release {
-			return fmt.Errorf("catalog mixes releases")
+		if !CompatibleComposition(c.Contract, c.Release, m) {
+			return fmt.Errorf("catalog has an incompatible module %s", m.ID)
 		}
 		manifests[m.ID] = m
 	}
@@ -52,7 +56,7 @@ func (c Catalog) Validate() error {
 			return err
 		}
 		m, exists := manifests[a.Module]
-		if !exists || a.Release != c.Release || !slices.Contains(m.Targets, a.Target) {
+		if !exists || a.Release != m.Release || !slices.Contains(m.Targets, a.Target) {
 			return fmt.Errorf("catalog artifact has no matching module support")
 		}
 		key := fmt.Sprintf("%s/%s/%s/%s", a.Module, a.Target.OS, a.Target.Arch, a.Target.Mode)

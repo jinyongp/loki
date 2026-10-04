@@ -123,12 +123,10 @@ func TestReleaseWorkflowUsesCanonicalSourceAndRaceProfiles(t *testing.T) {
 	}
 	text := string(raw)
 	for _, required := range []string{
-		"Run deterministic source profile",
-		"sh ./scripts/verify/verify-source.sh",
-		"Run Go race profile",
-		"sh ./scripts/verify/verify-race.sh",
-		"Run real OCI job acceptance",
-		"./scripts/verify/accept-oci-jobs.sh",
+		"go test ./...",
+		"go test -race ./internal/tools ./internal/management ./internal/config ./cmd/loki-manager",
+		"accept_full_workspace_candidate.py",
+		"release_gate.py gate",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("release workflow lacks validation profile wiring %q", required)

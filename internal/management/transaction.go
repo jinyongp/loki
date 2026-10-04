@@ -41,9 +41,10 @@ func (t transaction) validate() error {
 	}
 	before, after := t.Previous.Config, t.Candidate.Config
 	before.Release = after.Release
+	before.Contract = after.Contract
 	a, _ := json.Marshal(before)
 	b, _ := json.Marshal(after)
-	if !bytes.Equal(a, b) || (t.Action == "install" && t.Previous.Config.Release != after.Release) {
+	if !bytes.Equal(a, b) {
 		return fmt.Errorf("tool transaction cannot change host, mode or activation")
 	}
 	for id := range t.Previous.Installed {
@@ -186,7 +187,7 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	if err != nil {
 		return err
 	}
-	if !update && catalog.Release != state.Config.Release {
+	if !update && catalog.Contract == "" && catalog.Release != state.Config.Release {
 		return fmt.Errorf("installation catalog differs from configured release; use loki tools update to change the whole release")
 	}
 	if update {
@@ -211,6 +212,7 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	}
 	candidate := state
 	candidate.Config.Release = catalog.Release
+	candidate.Config.Contract = catalog.Contract
 	candidate.Installed = make(map[tools.ID]Installation, len(state.Installed)+len(artifacts))
 	for id, current := range state.Installed {
 		candidate.Installed[id] = current

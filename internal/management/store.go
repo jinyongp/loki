@@ -16,6 +16,10 @@ import (
 
 const Release = tools.Release
 
+// ManagerRelease is stamped only into the native CLI, leaving worker and module
+// package inputs unchanged when the CLI release advances.
+var ManagerRelease = Release
+
 type Installation struct {
 	Artifact tools.Artifact `json:"artifact"`
 	Manifest tools.Manifest `json:"manifest"`
@@ -108,7 +112,7 @@ func (s Snapshot) Validate() error {
 		if err := installation.Manifest.Validate(); err != nil {
 			return err
 		}
-		if id != installation.Artifact.Module || id != installation.Manifest.ID || installation.Artifact.Release != installation.Manifest.Release || installation.Artifact.Release != s.Config.Release || !slices.Contains(installation.Manifest.Targets, installation.Artifact.Target) {
+		if id != installation.Artifact.Module || id != installation.Manifest.ID || installation.Artifact.Release != installation.Manifest.Release || !tools.CompatibleComposition(s.Config.Contract, s.Config.Release, installation.Manifest) || !slices.Contains(installation.Manifest.Targets, installation.Artifact.Target) {
 			return fmt.Errorf("installation identity mismatch for %s", id)
 		}
 	}

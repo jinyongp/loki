@@ -6,6 +6,7 @@ Runs an isolated owned deployment and preserves its state if acceptance fails.
 This does not certify execution, Git, browser, sharing or endpoint workflows.
 """
 import argparse
+from release_config import RELEASE
 import asyncio
 import json
 import os
@@ -48,22 +49,30 @@ def accept(candidate):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
     target = document.get("target", {})
     native_arch = {"x86_64":"amd64", "aarch64":"arm64", "amd64":"amd64", "arm64":"arm64"}.get(platform.machine().lower())
-    if platform.system() != "Linux" or document.get("schema") != 1 or document.get("release") != "0.2.3" or target != {"os":"linux", "arch":native_arch, "mode":"full"} or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json" or document.get("images") != "images/images.json":
+    if platform.system() != "Linux" or document.get("schema") != 1 or document.get("release") != RELEASE or target != {"os":"linux", "arch":native_arch, "mode":"full"} or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json" or document.get("images") != "images/images.json":
         raise ValueError("acceptance requires an exact native Linux full candidate")
     manager = candidate / "manager"
     accept_manager(manager)
     receipt = json.loads((manager / "manager-receipt.json").read_text(encoding="utf-8"))
     images = json.loads((candidate / "images" / "images.json").read_text(encoding="utf-8"))
     image = images["images"]["service"]
-    archive = candidate / "images" / relative(image["archive"])
-    if images.get("schema") != 1 or images.get("release") != "0.2.3" or images.get("target") != target or image.get("owner") != "runtime-core" or image.get("target") != target or archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
+    if images.get("schema") != 1 or images.get("release") != RELEASE or images.get("target") != target or image.get("owner") != "runtime-core" or image.get("target") != target:
         raise ValueError("core service image differs from its native receipt")
     docker = shutil.which("docker")
     if docker is None:
         raise ValueError("full native acceptance requires local Docker")
     environment = {key:value for key, value in os.environ.items() if key not in {"DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_API_VERSION"}}
     environment["DOCKER_API_VERSION"] = "1.47"
-    subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "image", "load", "--input", str(archive)], env=environment, check=True, timeout=180)
+    if "archive" in image:
+        archive = candidate / "images" / relative(image["archive"])
+        if archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
+            raise ValueError("core service image archive differs")
+        subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "image", "load", "--input", str(archive)], env=environment, check=True, timeout=180)
+    else:
+        from registry_images import verify
+        for entry in images["images"].values():
+            verify(entry["reference"])
+        subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "pull", image["reference"]], env=environment, check=True, timeout=180)
     scratch = Path(tempfile.mkdtemp(prefix="loki-full-workspace-accept-"))
     passed, started = False, False
     binary = scratch / "loki"

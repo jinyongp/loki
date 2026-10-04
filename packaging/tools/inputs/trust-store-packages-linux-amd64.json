@@ -1,15 +1,118 @@
 {
-  "schema": 1,
-  "owner": "trust-store",
-  "target": {
-    "os": "linux",
-    "arch": "amd64",
-    "mode": "full"
-  },
   "distribution": "ubuntu-24.04",
-  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/trust-store-ubuntu-24.04-amd64.tar.gz",
+  "owner": "trust-store",
   "packages": [
+    {
+      "archive": "gcc-14-base_14.2.0-4ubuntu2~24.04.1_amd64.deb",
+      "bytes": 51014,
+      "name": "gcc-14-base",
+      "sha256": "b95c172411a7fdae70307cf33a9f5320ba5e056b556454543dd5b679d5ce1c4f",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/gcc-14-base_14.2.0-4ubuntu2%7e24.04.1_amd64.deb",
+      "version": "14.2.0-4ubuntu2~24.04.1"
+    },
+    {
+      "archive": "libc6_2.39-0ubuntu8.9_amd64.deb",
+      "bytes": 3264314,
+      "name": "libc6",
+      "sha256": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.9_amd64.deb",
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "archive": "libgcc-s1_14.2.0-4ubuntu2~24.04.1_amd64.deb",
+      "bytes": 78392,
+      "name": "libgcc-s1",
+      "sha256": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/libgcc-s1_14.2.0-4ubuntu2%7e24.04.1_amd64.deb",
+      "version": "14.2.0-4ubuntu2~24.04.1"
+    },
+    {
+      "archive": "mawk_1.3.4.20240123-1build1_amd64.deb",
+      "bytes": 127222,
+      "name": "mawk",
+      "sha256": "dc7f7f4dad4b48f6012ea65de3198d8376604afef39f06d65ec6167740e203c9",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/m/mawk/mawk_1.3.4.20240123-1build1_amd64.deb",
+      "version": "1.3.4.20240123-1build1"
+    },
+    {
+      "archive": "libcrypt1_1%3a4.4.36-4build1_amd64.deb",
+      "bytes": 82302,
+      "name": "libcrypt1",
+      "sha256": "9474785cd6f398512bf8c305c3901dbb111569dccb6f5832002373c0a8ac5832",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxcrypt/libcrypt1_4.4.36-4build1_amd64.deb",
+      "version": "1:4.4.36-4build1"
+    },
+    {
+      "archive": "base-files_13ubuntu10.5_amd64.deb",
+      "bytes": 73220,
+      "name": "base-files",
+      "sha256": "87e8c41e62f61625fb78a982d0bc0a70f40ef8375bc313b154914d1b3759c823",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/b/base-files/base-files_13ubuntu10.5_amd64.deb",
+      "version": "13ubuntu10.5"
+    },
+    {
+      "archive": "debconf_1.5.86ubuntu1_all.deb",
+      "bytes": 124096,
+      "name": "debconf",
+      "sha256": "bb390da466a7461bfc87aa3e6b7cd145dae84af3e26bf437f2c0c218ba226294",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/d/debconf/debconf_1.5.86ubuntu1_all.deb",
+      "version": "1.5.86ubuntu1"
+    },
+    {
+      "archive": "libssl3t64_3.0.13-0ubuntu3.16_amd64.deb",
+      "bytes": 1945300,
+      "name": "libssl3t64",
+      "sha256": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl3t64_3.0.13-0ubuntu3.16_amd64.deb",
+      "version": "3.0.13-0ubuntu3.16"
+    },
+    {
+      "archive": "openssl_3.0.13-0ubuntu3.16_amd64.deb",
+      "bytes": 1003702,
+      "name": "openssl",
+      "sha256": "675b84971ffd4467707008c25ef7520f90ea7c23ef27b7a76b0dccf1d7c4dc3f",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/openssl_3.0.13-0ubuntu3.16_amd64.deb",
+      "version": "3.0.13-0ubuntu3.16"
+    },
+    {
+      "archive": "ca-certificates_20260601~24.04.1_all.deb",
+      "bytes": 139430,
+      "name": "ca-certificates",
+      "sha256": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/c/ca-certificates/ca-certificates_20260601%7e24.04.1_all.deb",
+      "version": "20260601~24.04.1"
+    }
+  ],
+  "requested_packages": [
     "ca-certificates",
     "base-files"
-  ]
+  ],
+  "schema": 1,
+  "signed_index": {
+    "indices": [
+      {
+        "bytes": 126127,
+        "name": "archive.ubuntu.com_ubuntu_dists_noble-security_InRelease",
+        "sha256": "f3bbb0f9316ad9d93082d032a97057a1b4a3161c3df462f464772c297b6be425"
+      },
+      {
+        "bytes": 126125,
+        "name": "archive.ubuntu.com_ubuntu_dists_noble-updates_InRelease",
+        "sha256": "21bcb1b5331f49cd85ee4f37a59fac1fb4c1961776a7e03fc5bb388fd3584f26"
+      },
+      {
+        "bytes": 255850,
+        "name": "archive.ubuntu.com_ubuntu_dists_noble_InRelease",
+        "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"
+      }
+    ],
+    "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "verification": "APT authenticated InRelease and package index"
+  },
+  "target": {
+    "arch": "amd64",
+    "mode": "full",
+    "os": "linux"
+  },
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/trust-store-ubuntu-24.04-amd64.tar.gz"
 }

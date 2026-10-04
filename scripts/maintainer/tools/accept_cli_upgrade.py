@@ -1,5 +1,6 @@
 """Exercise verified self-upgrade from an owned native CLI to official 0.2.2."""
 import argparse
+from release_config import RELEASE
 import hashlib
 import json
 from pathlib import Path
@@ -28,7 +29,7 @@ def accept(candidate):
         before = state.read_bytes()
         command = [str(installed), '--root', str(root), 'upgrade', '--version', '0.2.2', '--force']
         cancelled = subprocess.run(command, input='n\n', capture_output=True, text=True, check=True)
-        if 'Current: 0.2.3' not in cancelled.stdout or 'Target:  0.2.2' not in cancelled.stdout or 'Upgrade cancelled.' not in cancelled.stdout:
+        if 'Current: '+RELEASE not in cancelled.stdout or 'Target:  0.2.2' not in cancelled.stdout or 'Upgrade cancelled.' not in cancelled.stdout:
             raise ValueError('native release selection/confirmation failed')
         if state.read_bytes() != before:
             raise ValueError('cancelled upgrade changed state')
@@ -44,12 +45,12 @@ def accept(candidate):
         if owner['release'] != '0.2.2' or owner['sha256'] != hashlib.sha256(installed.read_bytes()).hexdigest():
             raise ValueError('native CLI owner record differs from target')
         subprocess.run([str(binary), '--root', str(root), 'install', '--bin-dir', str(bin_directory)], check=True)
-        if subprocess.check_output([str(installed), 'version'], text=True).strip() != 'loki 0.2.3':
+        if subprocess.check_output([str(installed), 'version'], text=True).strip() != 'loki '+RELEASE:
             raise ValueError('native CLI return to candidate failed')
         if sentinel.read_bytes() != b'retained user data' or list(bin_directory.glob('*.previous')):
             raise ValueError('native CLI did not retain user data or clean journal-owned backups')
         print(json.dumps({'native_cli_upgrade': 'pass', 'os': receipt['os'], 'arch': receipt['arch'],
-                          'previous_release': '0.2.2', 'candidate_release': '0.2.3'}))
+                          'previous_release': '0.2.2', 'candidate_release': RELEASE}))
 
 
 if __name__ == '__main__':

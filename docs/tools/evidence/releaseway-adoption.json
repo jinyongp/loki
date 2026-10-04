@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "inspected_on": "2026-10-04",
+  "scope": "Releaseway adoption in existing publisher paths; single-workflow refactor remains pending",
+  "organization": "https://github.com/releaseway",
+  "tools": [
+    {
+      "repository": "releaseway/actions",
+      "stable_tag": "v0.2.1",
+      "commit": "22219bebc51a4127c6dffd9e79706f08cdd678dc",
+      "action_yml_sha256": "9569721f87806a38f90cac09f2e32a745278bc9c7c04af2fc37cc0784e6e28a0",
+      "release_url": "https://github.com/releaseway/actions/releases/tag/v0.2.1",
+      "applied_to": [".github/workflows/publish.yml", ".github/workflows/release.yml"],
+      "capabilities": ["immutable-release-lifecycle", "exact-tag-commit", "exact-assets-sha256", "resume-draft", "verify-existing", "file-notes", "notes-report"]
+    },
+    {
+      "repository": "releaseway/homebrew-actions",
+      "stable_tag": "v0.2.0",
+      "commit": "4bbfa6aafc92a6cb8e823a51d54a6573237e0a76",
+      "release_url": "https://github.com/releaseway/homebrew-actions/releases/tag/v0.2.0",
+      "applicable": false,
+      "reason": "Loki currently has no Formula/tap distribution configuration; this tool owns that additional distribution channel."
+    },
+    {
+      "repository": "releaseway/npm-actions",
+      "stable_tag": "v0.4.0",
+      "commit": "269fbdeac83fed2df2880915726ed91edbe1bbdd",
+      "release_url": "https://github.com/releaseway/npm-actions/releases/tag/v0.4.0",
+      "applicable": false,
+      "reason": "modules/browser/package.json is private; Loki currently has no publishable native npm launcher or Trusted Publisher configuration."
+    }
+  ],
+  "validation": {
+    "workflow_syntax": {
+      "tool": "actionlint v1.7.12",
+      "tool_archive_sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+      "command": "actionlint -shellcheck= .github/workflows/publish.yml .github/workflows/release.yml",
+      "result": "pass"
+    },
+    "released_contract_inputs_and_pin": "pass",
+    "manual_release_mutations_removed": "pass",
+    "public_lifecycle_acceptance": "pending-final-integrated-validation"
+  },
+  "published": false,
+  "remaining": [
+    "Complete the single release workflow and selective-build/cache refactor",
+    "Run final native and publication-recovery acceptance with the adopted Action"
+  ]
+}

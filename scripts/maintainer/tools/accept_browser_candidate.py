@@ -6,6 +6,7 @@ and a separate management root, with both official engines and owned results.
 It does not replace real desktop SSH acceptance or full-runtime authority tests.
 """
 import argparse
+from release_config import RELEASE
 import asyncio
 import base64
 import json
@@ -74,7 +75,7 @@ async def protocol(binary, root, workspace, invoke):
 
 def accept(candidate, protocol_check=protocol):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
-    if document.get("schema") != 1 or document.get("release") != "0.2.3" or document.get("target", {}).get("mode") != "project-host" or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json":
+    if document.get("schema") != 1 or document.get("release") != RELEASE or document.get("target", {}).get("mode") != "project-host" or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json":
         raise ValueError("browser acceptance requires a complete project-host candidate")
     manager = candidate / "manager"
     accept_manager(manager)

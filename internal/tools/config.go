@@ -50,16 +50,20 @@ type Selection struct {
 }
 
 type Config struct {
-	Schema  int         `json:"schema"`
-	Release string      `json:"release"`
-	Host    Host        `json:"host"`
-	Mode    Mode        `json:"mode"`
-	Tools   []Selection `json:"tools"`
+	Schema   int         `json:"schema"`
+	Release  string      `json:"release"`
+	Contract string      `json:"contract,omitempty"`
+	Host     Host        `json:"host"`
+	Mode     Mode        `json:"mode"`
+	Tools    []Selection `json:"tools"`
 }
 
 func (c Config) Validate() error {
 	if c.Schema != ConfigSchema || !releasePattern.MatchString(c.Release) {
 		return fmt.Errorf("configuration requires schema 1 and an exact 0.2.x release")
+	}
+	if c.Contract != "" && c.Contract != CompositionContract {
+		return fmt.Errorf("unsupported configuration composition contract %q", c.Contract)
 	}
 	if err := c.Host.Validate(); err != nil {
 		return err
@@ -121,8 +125,8 @@ func (r *Registry) ResolveConfig(target Target, c Config) (Resolution, error) {
 		return Resolution{}, err
 	}
 	for _, manifest := range resolved.Ordered {
-		if manifest.Release != c.Release {
-			return Resolution{}, fmt.Errorf("configured release differs from catalog")
+		if !CompatibleComposition(c.Contract, c.Release, manifest) {
+			return Resolution{}, fmt.Errorf("configured composition contract differs from module %s", manifest.ID)
 		}
 	}
 	for _, selection := range c.Tools {

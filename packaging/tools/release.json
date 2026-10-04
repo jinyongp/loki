@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "version": "0.2.3",
+  "composition_contract": "loki-tools-v2",
+  "go": "1.27.1",
+  "repository": "jinyongp/loki",
+  "modules": ["runtime-core", "browser", "workspace", "git", "github", "secrets", "execution", "sharing", "coordination"]
+}
