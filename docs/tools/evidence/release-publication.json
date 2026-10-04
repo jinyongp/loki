@@ -1,0 +1,17 @@
+{
+  "release": "0.2.0",
+  "channel": "stable",
+  "publisher_run": 37179130070,
+  "source_commit": "a2f362d655142f434f68d034f2bb56a0997f8312",
+  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.0",
+  "original_artifact_evidence_url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/loki-release-evidence.json",
+  "published_asset_checksums": "pass",
+  "native_published_manager": "pass",
+  "native_published_browser": "pass",
+  "anonymous_oci_manifest_verification": {
+    "manifest_count": 10,
+    "result": "pass",
+    "basis": "Original immutable release evidence, before versionless source cleanup"
+  },
+  "current_source_native_publication": "pending immutable release replacement decision"
+}

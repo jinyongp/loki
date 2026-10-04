@@ -40,7 +40,7 @@ type FullTopology struct {
 }
 
 func (s Store) FullOwner() string {
-	return fmt.Sprintf("loki-v02-%x", sha256.Sum256([]byte(filepath.Clean(s.Root))))[:25]
+	return fmt.Sprintf("loki-tools-%x", sha256.Sum256([]byte(filepath.Clean(s.Root))))[:27]
 }
 
 var fullDataTargets = map[string]string{

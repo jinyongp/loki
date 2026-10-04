@@ -1,0 +1,21 @@
+name: Loki 0.2 reviewed full input recipes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inputs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Retain exact native full source recipes
+        run: python3 scripts/maintainer/tools/prepare_reviewed_full_inputs.py --output reviewed-native-inputs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: loki-tools-reviewed-full-input-recipes
+          path: reviewed-native-inputs/
+          if-no-files-found: error
+          retention-days: 7

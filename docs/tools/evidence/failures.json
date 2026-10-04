@@ -1,0 +1,181 @@
+{
+  "coordination": {
+    "command": "LOKI_DEVTOOLS_BINARY=$(command -v devtools) go test ./internal/devtools -run ^TestRealProcessInheritsBrokerSecrets$ -count=1",
+    "installed_cli": "0.23.0",
+    "installed_protocol": 6,
+    "required_protocol": 5,
+    "result": "fail",
+    "error": "unsupported devtools protocol version 6"
+  },
+  "first_browser_launch": {
+    "playwright": {
+      "initialize": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "Playwright",
+          "version": "1.64.0-alpha-1790635538000"
+        }
+      },
+      "checks": [
+        {
+          "name": "browser_navigate",
+          "arguments": {
+            "url": "data:text/html,<h1>Loki%20preflight</h1>"
+          },
+          "response": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "### Error\nError: async initializeServer: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /tmp/loki-tools-preflight/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-blink-features=AutomationControlled --user-data-dir=/tmp/playwright_chromiumdev_profile-DOFEIP --remote-debugging-pipe --no-startup-window\n<launched> pid=3362897\n[pid=3362897][err] /tmp/loki-tools-preflight/chrome-linux64/chrome: error while loading shared libraries: libnspr4.so: cannot open shared object file: No such file or directory\nCall log:\n  - <launching> /tmp/loki-tools-preflight/chrome-linux64/chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-blink-features=AutomationControlled --user-data-dir=/tmp/playwright_chromiumdev_profile-DOFEIP --remote-debugging-pipe --no-startup-window\n  - <launched> pid=3362897\n  - [pid=3362897][err] /tmp/loki-tools-preflight/chrome-linux64/chrome: error while loading shared libraries: libnspr4.so: cannot open shared object file: No such file or directory\n  - [pid=3362897] <gracefully close start>\n  - [pid=3362897] <kill>\n  - [pid=3362897] <will force kill>\n  - [pid=3362897] exception while trying to kill process: Error: kill ESRCH\n  - [pid=3362897] <process did exit: exitCode=127, signal=null>\n  - [pid=3362897] starting temporary directories cleanup\n  - [pid=3362897] finished temporary directories cleanup\n  - [pid=3362897] <gracefully close end>\n"
+                }
+              ],
+              "isError": true
+            },
+            "jsonrpc": "2.0",
+            "id": 3
+          }
+        }
+      ],
+      "stderr": [],
+      "error": null
+    },
+    "devtools": {
+      "initialize": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "logging": {},
+          "tools": {
+            "listChanged": true
+          }
+        },
+        "serverInfo": {
+          "name": "chrome_devtools",
+          "title": "Chrome DevTools MCP server",
+          "version": "1.10.1"
+        }
+      },
+      "checks": [
+        {
+          "name": "new_page",
+          "arguments": {
+            "url": "data:text/html,<h1>Loki%20preflight</h1>"
+          },
+          "response": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Protocol error (Target.setDiscoverTargets): Target closed\nCause: "
+                }
+              ],
+              "isError": true
+            },
+            "jsonrpc": "2.0",
+            "id": 3
+          }
+        }
+      ],
+      "stderr": [
+        "turning off usage statistics. process.env['CI'] || process.env['CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS'] is set.",
+        "chrome-devtools-mcp exposes content of the browser instance to the MCP clients allowing them to inspect,",
+        "debug, and modify any data in the browser or DevTools.",
+        "Avoid sharing sensitive or personal information that you do not want to share with MCP clients."
+      ],
+      "error": null
+    }
+  },
+  "initial_video": {
+    "command": [
+      "node",
+      "/tmp/loki-tools-preflight/node_modules/@playwright/mcp/cli.js",
+      "--headless",
+      "--isolated",
+      "--executable-path",
+      "/tmp/loki-tools-preflight/chrome-linux64/chrome",
+      "--output-dir",
+      "/tmp/loki-tools-preflight/playwright-full-sandbox/output",
+      "--image-responses",
+      "allow",
+      "--caps=vision,pdf,devtools,network,storage,testing",
+      "--sandbox"
+    ],
+    "error": null,
+    "failed_checks": [
+      {
+        "name": "browser_start_video",
+        "arguments": {
+          "filename": "fixture.webm"
+        },
+        "expected_error": false,
+        "passed": false,
+        "response": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "### Error\nError: browserBackend.callTool: Executable doesn't exist at /tmp/loki-tools-preflight/playwright-full-sandbox/cache/ms-playwright/ffmpeg-1011/ffmpeg-linux\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551 Video rendering requires ffmpeg binary.                         \u2551\n\u2551 Downloading it will not affect any of the system-wide settings. \u2551\n\u2551 Please run the following command:                               \u2551\n\u2551                                                                 \u2551\n\u2551     npx playwright install ffmpeg                               \u2551\n\u2551                                                                 \u2551\n\u2551 <3 Playwright Team                                              \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d"
+              }
+            ],
+            "isError": true
+          },
+          "jsonrpc": "2.0",
+          "id": 28
+        }
+      }
+    ],
+    "last_completed_check": "browser_close",
+    "notes": "Resolved by the isolated FFmpeg installation; subsequent video call and nonempty file verified."
+  },
+  "experimental_devtools_ui": {
+    "command": [
+      "node",
+      "/tmp/loki-tools-preflight/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+      "--headless",
+      "--isolated",
+      "--executablePath",
+      "/tmp/loki-tools-preflight/chrome-linux64/chrome",
+      "--no-usage-statistics",
+      "--no-performance-crux",
+      "--categoryExtensions",
+      "--categoryPwa",
+      "--categoryExperimentalWebmcp",
+      "--categoryExperimentalThirdParty",
+      "--memoryDebugging",
+      "--experimentalDevtools"
+    ],
+    "error": "",
+    "failed_checks": [],
+    "last_completed_check": "take_screenshot",
+    "notes": "Historical reporter emitted an empty timeout string; this is not a passing result. Standard current profile passes."
+  },
+  "old_oci_image": {
+    "image": "loki@sha256:f4379c91c587a357192795c6be89f11f5094f7a383757a23c8e8748a862905db",
+    "image_revision": "e71e70698441ae47e5585ba54a7ca5a75d384b7c",
+    "scope": "Existing 0.1 sandbox primitives with installed 0.1 image, not 0.2 candidate acceptance",
+    "passed": [
+      "TestRealOCIJobScriptAuthorityBoundary",
+      "TestRealOCIJobLifecycle",
+      "TestRealOCIJobDetachedDescendantCleanup",
+      "TestRealOCIJobRecoveryAndBoundedOutput",
+      "TestRealOCIJobWritableEnvironmentAndGitPersistence"
+    ],
+    "failed": [
+      {
+        "Package": "loki/internal/platform/sandbox",
+        "Test": "TestRealOCIJobNetworkEndpointPreview"
+      },
+      {
+        "Package": "loki/internal/platform/sandbox"
+      }
+    ],
+    "failure_output": [
+      "    oci_integration_test.go:543: sandbox gateway stopped before readiness: exit=2 output=flag provided but not defined: -execution-contract\n"
+    ]
+  }
+}

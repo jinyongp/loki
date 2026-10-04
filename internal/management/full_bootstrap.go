@@ -27,7 +27,7 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 	if err := realDirectories(layoutDirectory, authDirectory); err != nil {
 		return result, err
 	}
-	if !strings.HasPrefix(t.Owner, "loki-v02-") || len(t.Owner) != 25 {
+	if !strings.HasPrefix(t.Owner, "loki-tools-") || len(t.Owner) != 27 {
 		return result, fmt.Errorf("invalid full deployment owner")
 	}
 	unique := map[string]FullMount{}

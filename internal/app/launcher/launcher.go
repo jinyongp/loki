@@ -844,13 +844,13 @@ func terminalCleanup(value sandbox.CleanupStatus, err error) jobs.CleanupStatus 
 
 func backendReference(plan sandbox.Plan) string {
 	if owner, id := plan.Resource().Deployment(); owner != "" {
-		return "oci-v02:" + owner + ":" + id + ":" + plan.PolicySHA256() + ":" + plan.SandboxSHA256()
+		return "oci-deployment:" + owner + ":" + id + ":" + plan.PolicySHA256() + ":" + plan.SandboxSHA256()
 	}
 	return "oci:" + plan.PolicySHA256() + ":" + plan.SandboxSHA256()
 }
 
 func resourceFromRecord(record jobs.Record) (sandbox.Resource, error) {
-	if data, ok := strings.CutPrefix(record.BackendRef, "oci-v02:"); ok {
+	if data, ok := strings.CutPrefix(record.BackendRef, "oci-deployment:"); ok {
 		parts := strings.Split(data, ":")
 		if len(parts) != 4 {
 			return sandbox.Resource{}, errors.New("invalid deployed job reference")

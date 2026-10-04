@@ -1,0 +1,83 @@
+{
+  "contract_compilation": [
+    {
+      "target": "windows/amd64",
+      "command": [
+        "go",
+        "test",
+        "-c",
+        "-o",
+        "/tmp/loki-tools-preflight/tools-windows-amd64",
+        "./internal/tools"
+      ],
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "target": "windows/arm64",
+      "command": [
+        "go",
+        "test",
+        "-c",
+        "-o",
+        "/tmp/loki-tools-preflight/tools-windows-arm64",
+        "./internal/tools"
+      ],
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "target": "darwin/amd64",
+      "command": [
+        "go",
+        "test",
+        "-c",
+        "-o",
+        "/tmp/loki-tools-preflight/tools-darwin-amd64",
+        "./internal/tools"
+      ],
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "target": "darwin/arm64",
+      "command": [
+        "go",
+        "test",
+        "-c",
+        "-o",
+        "/tmp/loki-tools-preflight/tools-darwin-arm64",
+        "./internal/tools"
+      ],
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ],
+  "existing_host_builds": [
+    {
+      "target": "darwin/amd64",
+      "command": [
+        "go",
+        "build",
+        "-o",
+        "/tmp/loki-tools-preflight/legacy-darwin",
+        "./cmd/loki"
+      ],
+      "exit_code": 1,
+      "stderr": "# loki/internal/state\ninternal/state/store.go:450:16: undefined: unix.Renameat2\ninternal/state/store.go:450:81: undefined: unix.RENAME_NOREPLACE\ninternal/state/store.go:612:17: undefined: unix.Renameat2\ninternal/state/store.go:615:9: undefined: unix.RENAME_NOREPLACE\ninternal/state/store.go:698:16: undefined: unix.Renameat2\ninternal/state/store.go:698:81: undefined: unix.RENAME_NOREPLACE\n# loki/internal/daemon\ninternal/daemon/json.go:21:18: undefined: unix.Openat2\ninternal/daemon/json.go:21:53: undefined: unix.OpenHow\ninternal/daemon/json.go:21:132: undefined: unix.RESOLVE_NO_SYMLINKS\ninternal/daemon/json.go:21:159: undefined: unix.RESOLVE_NO_MAGICLINKS\ninternal/daemon/secureopen.go:18:33: undefined: unix.O_PATH\ninternal/daemon/secureopen.go:24:26: undefined: unix.O_PATH\ninternal/daemon/socket.go:36:18: undefined: unix.Openat2\ninternal/daemon/socket.go:36:53: undefined: unix.OpenHow\ninternal/daemon/socket.go:37:17: undefined: unix.O_PATH\ninternal/daemon/socket.go:38:17: undefined: unix.RESOLVE_NO_SYMLINKS\ninternal/daemon/socket.go:38:17: too many errors\n# loki/internal/rpc\ninternal/rpc/rpc.go:95:58: undefined: unix.GetsockoptUcred\ninternal/rpc/rpc.go:95:105: undefined: unix.SO_PEERCRED\ninternal/rpc/rpc.go:102:19: cred.Pid undefined (type *\"golang.org/x/sys/unix\".Ucred has no field or method Pid)\ninternal/rpc/rpc.go:102:39: cred.Gid undefined (type *\"golang.org/x/sys/unix\".Ucred has no field or method Gid)\n# loki/internal/policy\ninternal/policy/workspace.go:86:16: undefined: unix.O_PATH\ninternal/policy/workspace.go:89:15: undefined: unix.OpenHow\ninternal/policy/workspace.go:89:63: undefined: unix.RESOLVE_BENEATH\ninternal/policy/workspace.go:89:86: undefined: unix.RESOLVE_NO_SYMLINKS\ninternal/policy/workspace.go:89:113: undefined: unix.RESOLVE_NO_MAGICLINKS\ninternal/policy/workspace.go:93:18: undefined: unix.Openat2\ninternal/policy/workspace.go:123:34: undefined: unix.O_PATH\ninternal/policy/write.go:33:21: undefined: unix.Openat2\ninternal/policy/write.go:33:60: undefined: unix.OpenHow\ninternal/policy/write.go:33:140: undefined: unix.RESOLVE_BENEATH\ninternal/policy/write.go:33:140: too many errors\n"
+    },
+    {
+      "target": "windows/amd64",
+      "command": [
+        "go",
+        "build",
+        "-o",
+        "/tmp/loki-tools-preflight/legacy-windows",
+        "./cmd/loki-windows"
+      ],
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ],
+  "scope": "Cross-compilation only; binaries were not executed on Windows or macOS"
+}

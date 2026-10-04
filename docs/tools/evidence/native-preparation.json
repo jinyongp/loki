@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "release": "0.2.0",
+  "phase": "candidate preparation",
+  "accepted": false,
+  "published": false,
+  "product_checks_executed": false,
+  "manager": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37146490204",
+    "source": "90252cf",
+    "status": "prepared on all six native targets",
+    "receipts": [
+      {
+        "os": "darwin",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-darwin-arm64.zip",
+        "archive_sha256": "f598900df71d3e100c48925d3afc789d03d35ebd72d72d5d0152d932ddf198de",
+        "archive_bytes": 4935560,
+        "included_tools": []
+      },
+      {
+        "os": "darwin",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-darwin-amd64.zip",
+        "archive_sha256": "3c844f42901e412c3d0fff7fae0da5af35cd68b252126ebf4d49f57e9b01789a",
+        "archive_bytes": 5388000,
+        "included_tools": []
+      },
+      {
+        "os": "linux",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-linux-amd64.zip",
+        "archive_sha256": "83a64108294345f6e1e5053705df88506d031409749faa375d0e0c06c7852f9d",
+        "archive_bytes": 5374956,
+        "included_tools": []
+      },
+      {
+        "os": "linux",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-linux-arm64.zip",
+        "archive_sha256": "5e858bced7d5e183c4e837958c385dbe017d1467cab55237d2a0ba04e1b50344",
+        "archive_bytes": 4824391,
+        "included_tools": []
+      },
+      {
+        "os": "windows",
+        "arch": "arm64",
+        "archive": "loki-manager-0.2.0-windows-arm64.zip",
+        "archive_sha256": "bdb877d9d3f6b836db54c6f7ad11145fca4d8afe91c486d574f84cd019fb5cab",
+        "archive_bytes": 4808074,
+        "included_tools": []
+      },
+      {
+        "os": "windows",
+        "arch": "amd64",
+        "archive": "loki-manager-0.2.0-windows-amd64.zip",
+        "archive_sha256": "2ba4f244dd15be2e324a6e3324f176a49863c917151327615736913a9547ed88",
+        "archive_bytes": 5416567,
+        "included_tools": []
+      }
+    ]
+  },
+  "project_browser": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37146598113",
+    "source": "f3b805e",
+    "prepared_targets": [
+      "linux/amd64",
+      "linux/arm64",
+      "windows/amd64",
+      "darwin/amd64",
+      "darwin/arm64"
+    ],
+    "blocked_targets": [],
+    "artifacts": [
+      {
+        "name": "loki-tools-tools-macos-15-intel-project-host",
+        "bytes": 501619250,
+        "digest": "sha256:eb9b818b8785bf16ed906590b9262e69c8347782840567f2bc4cd09d2fb90fd5"
+      },
+      {
+        "name": "loki-tools-tools-macos-15-project-host",
+        "bytes": 480211525,
+        "digest": "sha256:ae5c73da537f931552800042f821e59278ca99b74314900a5cf16c7d7886e799"
+      },
+      {
+        "name": "loki-tools-tools-ubuntu-24.04-arm-project-host",
+        "bytes": 503569196,
+        "digest": "sha256:20e13f99ab395ed83e7db14b876e4de560c512f9b913747502124c534a8742be"
+      },
+      {
+        "name": "loki-tools-tools-ubuntu-24.04-project-host",
+        "bytes": 501375576,
+        "digest": "sha256:cfb533fbfa532643fdc7e355a7a28b0bebadb3f275146926a7713ff59856a83d"
+      },
+      {
+        "name": "loki-tools-tools-windows-2025-project-host",
+        "bytes": 506313440,
+        "digest": "sha256:ccfaa8a956ea4769bc660b12818140df07c4282e490bed88a671fca015feac0e"
+      }
+    ]
+  },
+  "full": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37146492138",
+    "source": "90252cf",
+    "status": "prepared on both native Linux targets",
+    "artifacts": [
+      {
+        "name": "loki-tools-tools-ubuntu-24.04-arm-full",
+        "bytes": 3309256845,
+        "digest": "sha256:0b820e94682c124b340abcb843abd30fdae4a6a723352d913820d7bd6292f95f"
+      },
+      {
+        "name": "loki-tools-tools-ubuntu-24.04-full",
+        "bytes": 3344357459,
+        "digest": "sha256:1da1245ce3339a9e245bccc02d574d10b098ab9ae8f581fb180ff48e5ce8fd09"
+      }
+    ]
+  },
+  "final_acceptance": "pending; native candidate preparation complete",
+  "macos_input_inspection": {
+    "run": "https://github.com/jinyongp/loki/actions/runs/37145900978",
+    "source": "f7155f8",
+    "browser_executed": false,
+    "amd64": "unsigned Mach-O; no LC_CODE_SIGNATURE",
+    "arm64": "linker ad-hoc Mach-O code signature; flags 0x20002; zero special slots; native strict code verification succeeds",
+    "correction": "Whole-app vendor resource seal was an incorrect Loki producer assumption. Preserve pinned original forms and verify arm64 code hashes; source receipts and generation integrity bind resources."
+  }
+}

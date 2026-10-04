@@ -7,7 +7,7 @@ import (
 
 func TestDeployedResourcesRequireExactParentForEveryComponent(t *testing.T) {
 	job, policy, digest := strings.Repeat("a", 32), strings.Repeat("b", 64), strings.Repeat("c", 64)
-	owner, id := "loki-v02-"+strings.Repeat("d", 16), "deployment-"+strings.Repeat("e", 32)
+	owner, id := "loki-tools-"+strings.Repeat("d", 16), "deployment-"+strings.Repeat("e", 32)
 	resource, err := NewDeployedResource(job, policy, digest, owner, id)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestDeployedResourcesRequireExactParentForEveryComponent(t *testing.T) {
 
 func TestDeploymentIdentityChangesSandboxFingerprint(t *testing.T) {
 	options := validPolicyOptions()
-	options.DeploymentOwner = "loki-v02-" + strings.Repeat("a", 16)
+	options.DeploymentOwner = "loki-tools-" + strings.Repeat("a", 16)
 	options.DeploymentID = "deployment-" + strings.Repeat("b", 32)
 	first, err := NewPolicy(options)
 	if err != nil {

@@ -71,7 +71,7 @@ func TestFullMountArgumentsPreserveCommasAsOneCSVField(t *testing.T) {
 }
 
 func TestFullVolumesPreserveBootstrapOwnership(t *testing.T) {
-	argument, err := dockerMountArgument(FullMount{Kind: "volume", Source: "loki-v02-fixture-data-workspace", Target: "/workspace"})
+	argument, err := dockerMountArgument(FullMount{Kind: "volume", Source: "loki-tools-fixture-data-workspace", Target: "/workspace"})
 	if err != nil {
 		t.Fatal(err)
 	}

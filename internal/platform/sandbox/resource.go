@@ -21,7 +21,7 @@ const (
 )
 
 var resourceNamePattern = regexp.MustCompile(`^loki-job-[0-9a-f]{32}$`)
-var deploymentOwnerPattern = regexp.MustCompile(`^loki-v02-[0-9a-f]{16}$`)
+var deploymentOwnerPattern = regexp.MustCompile(`^loki-tools-[0-9a-f]{16}$`)
 var deploymentIDPattern = regexp.MustCompile(`^deployment-[0-9a-f]{32}$`)
 
 var ErrInstanceMismatch = errors.New("sandbox resource instance does not match")

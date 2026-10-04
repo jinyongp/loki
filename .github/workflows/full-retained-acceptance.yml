@@ -1,0 +1,42 @@
+name: Loki 0.2 retained full workspace acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Native full preparation run from this repository
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  accept:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: loki-tools-tools-${{ matrix.runner }}-full
+          run-id: ${{ inputs.candidate_run }}
+          github-token: ${{ github.token }}
+          path: native-tool-candidate
+      - name: Enable OCI image storage on the disposable runner
+        shell: bash
+        run: |
+          sudo python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('/etc/docker/daemon.json')
+          config = json.loads(path.read_text()) if path.exists() else {}
+          config.setdefault('features', {})['containerd-snapshotter'] = True
+          path.write_text(json.dumps(config) + '\n')
+          PY
+          sudo systemctl restart docker
+          docker info --format '{{json .DriverStatus}}'
+      - name: Verify native receipts and actual full workspace authority
+        run: python3 scripts/maintainer/tools/accept_full_workspace_candidate.py --candidate native-tool-candidate

@@ -339,7 +339,7 @@ func status(ctx context.Context, store management.Store, out, diagnostics io.Wri
 		probes := map[tools.ID]management.Probe{}
 		if state.Config.Mode == tools.ProjectHost {
 			probes["browser"] = func(ctx context.Context, generation string) error {
-				fmt.Fprintln(diagnostics, "Checking managed Chrome startup, sandbox and version (up to 25 seconds)...")
+				fmt.Fprintln(diagnostics, "Checking managed Chrome startup, sandbox and version (up to 45 seconds)...")
 				return browser.CheckRuntime(ctx, generation)
 			}
 		} else {

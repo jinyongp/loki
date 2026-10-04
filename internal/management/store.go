@@ -39,7 +39,7 @@ func DefaultRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "loki", "v02"), nil
+	return filepath.Join(base, "loki"), nil
 }
 
 func LocalTarget(mode tools.Mode) tools.Target {

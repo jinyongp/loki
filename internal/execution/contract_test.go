@@ -49,7 +49,7 @@ func TestRepositoryContractIsValid(t *testing.T) {
 }
 
 func TestModularFullExecutionContractIsValid(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "v02", "config", "full-execution-contract.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "tools", "config", "full-execution-contract.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
