@@ -257,7 +257,18 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 			}
 		}
 		return owners.replace(o.Owner, names, func() {
-			server.RemoveTools(previous...)
+			// Keep retained names callable while their handlers are replaced. A
+			// remove-all/add-all refresh exposes a transient unknown-tool window.
+			retained := make(map[string]bool, len(names))
+			for _, name := range names {
+				retained[name] = true
+			}
+			var retired []string
+			for _, name := range previous {
+				if !retained[name] {
+					retired = append(retired, name)
+				}
+			}
 			previous = nil
 			for _, definition := range authorized {
 				definition := *definition
@@ -286,6 +297,7 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 				})
 				previous = append(previous, name)
 			}
+			server.RemoveTools(retired...)
 		})
 	}
 	fmt.Fprintf(o.Stderr, "Starting %s MCP connection...\n", o.Name)
