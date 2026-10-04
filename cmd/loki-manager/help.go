@@ -29,6 +29,9 @@ var commandHelpEntries = []helpEntry{
 		options: []string{"--bin-dir PATH    Publish the manager into this command directory"}, examples: []string{"loki install --bin-dir /home/user/.local/bin"},
 		notes: []string{"Tool installation and client configuration are separate steps."}},
 	{path: "version", description: "Show the installed CLI version.", usage: "loki version", examples: []string{"loki version"}},
+	{path: "upgrade", description: "Check releases and upgrade the CLI after confirmation.", usage: "loki upgrade [OPTIONS]",
+		options:  []string{"--version VERSION    Choose a stable release (default: latest)", "--yes, -y            Accept without prompting", "--check              Show versions without installing", "--force              Allow reinstalling or downgrading", "--timeout DURATION   Overall download/install timeout (default: 5m)"},
+		examples: []string{"loki upgrade", "loki upgrade --check", "loki upgrade --version 0.2.2 --yes"}, notes: []string{"Shows current and target versions before confirmation. Enter or EOF cancels.", "Updates only the CLI in its current command directory. Installed tools and their settings are retained.", "Downloads official GitHub release assets and verifies SHA-256 before running the new installer."}},
 	{path: "status", description: "Show management state and installed tool status.", usage: "loki status", examples: []string{"loki status"}},
 	{path: "doctor", description: "Check installation health and selected tool resources.", usage: "loki doctor", examples: []string{"loki doctor"}},
 	{path: "tools", description: "Configure, install and run individual tool groups.", usage: "loki tools COMMAND", group: true,
@@ -190,7 +193,7 @@ func contextualHelp(args []string, out io.Writer) (bool, error) {
 func helpValueOption(option string) bool {
 	option = "--" + strings.TrimLeft(option, "-")
 	switch option {
-	case "--mode", "--bin-dir", "--catalog", "--archives", "--capabilities", "--keep", "--workspace", "--engine", "--config", "--config-file", "--private-key-file", "--identity-name", "--identity-email", "--key-file":
+	case "--version", "--timeout", "--mode", "--bin-dir", "--catalog", "--archives", "--capabilities", "--keep", "--workspace", "--engine", "--config", "--config-file", "--private-key-file", "--identity-name", "--identity-email", "--key-file":
 		return true
 	}
 	return false

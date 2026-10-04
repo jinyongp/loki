@@ -42,6 +42,30 @@ from the trusted catalog. The manager verifies their complete length/digest in
 owned staging before extraction; local files do not supply their own authority.
 Candidate preparation emits this directory as `release/archives`.
 
+## CLI upgrades (next release)
+
+The next CLI release adds `loki upgrade`. The published 0.2.2 command must first
+be updated with the installer above to obtain this command.
+
+```sh
+loki upgrade
+loki upgrade --check
+loki upgrade --version 0.2.2 --force --yes
+```
+
+The command shows current and target versions, then asks for confirmation.
+Enter or EOF cancels; `--yes` / `-y` skips confirmation. `--check` only reports
+versions. `--version MAJOR.MINOR.PATCH` chooses a published stable release;
+without it, the latest stable release is selected. Reinstalling or downgrading
+requires `--force`. `--timeout 5m` bounds release lookup, downloads and installation.
+
+The official native manager archive is verified against its release SHA-256
+checksum before its version is checked and its bundled manager publishes the
+CLI into the current command directory. Existing ownership checks apply.
+Installed tools and their configuration remain separate from CLI upgrades.
+Use global `--host wsl` or `--host ssh` options before `upgrade` to target that
+execution host rather than the local command.
+
 ## Project-host browser
 
 Install the native management-only bundle using its included `install.sh` or

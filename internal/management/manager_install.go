@@ -160,6 +160,9 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 		return ManagerRecord{}, err
 	}
 	defer unlockBin()
+	if err := s.cleanupManagerBackup(); err != nil {
+		return ManagerRecord{}, err
+	}
 	name := "loki"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -248,7 +251,7 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 	if err := ctx.Err(); err != nil {
 		return ManagerRecord{}, err
 	}
-	if err := os.Rename(stage, executable); err != nil {
+	if err := publishManagerFile(stage, executable); err != nil {
 		return ManagerRecord{}, fmt.Errorf("manager binary could not be published; close processes using the installed command and run bundled loki tools recover: %w", err)
 	}
 	if err := atomicJSON(executable+".loki-owner.json", candidate); err != nil {
@@ -258,7 +261,28 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 	if err := atomicJSON(journal, p); err != nil {
 		return ManagerRecord{}, err
 	}
+	// Windows may retain the old executable until the upgrade caller exits.
+	_ = s.cleanupManagerBackup()
 	return candidate, nil
+}
+
+func (s Store) cleanupManagerBackup() error {
+	p, err := s.readManagerPublication()
+	if err != nil || p == nil || p.Phase != tools.Committed || p.Previous == nil {
+		return err
+	}
+	backup := filepath.Join(filepath.Dir(p.Candidate.Executable), ".loki-manager-"+p.ID+".tmp.previous")
+	digest, size, err := managerDigest(backup)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if digest != p.Previous.SHA256 || size != p.Previous.Bytes {
+		return fmt.Errorf("manager backup ownership differs")
+	}
+	return os.Remove(backup)
 }
 
 func (s Store) recoverManagerPublication() error {
@@ -267,7 +291,7 @@ func (s Store) recoverManagerPublication() error {
 		return err
 	}
 	if p == nil || p.Phase == tools.Committed || p.Phase == tools.Aborted {
-		return nil
+		return s.cleanupManagerBackup()
 	}
 	directory := filepath.Dir(p.Candidate.Executable)
 	unlock, err := managerBinLock(directory)
@@ -276,6 +300,16 @@ func (s Store) recoverManagerPublication() error {
 	}
 	defer unlock()
 	digest, size, err := managerDigest(p.Candidate.Executable)
+	if errors.Is(err, os.ErrNotExist) && p.Previous != nil {
+		backup := filepath.Join(directory, ".loki-manager-"+p.ID+".tmp.previous")
+		oldDigest, oldSize, backupErr := managerDigest(backup)
+		if backupErr == nil && oldDigest == p.Previous.SHA256 && oldSize == p.Previous.Bytes {
+			if err := os.Rename(backup, p.Candidate.Executable); err != nil {
+				return err
+			}
+			digest, size, err = managerDigest(p.Candidate.Executable)
+		}
+	}
 	if err == nil && digest == p.Candidate.SHA256 && size == p.Candidate.Bytes {
 		if err := atomicJSON(p.Candidate.Executable+".loki-owner.json", p.Candidate); err != nil {
 			return err

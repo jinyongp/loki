@@ -84,6 +84,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	store := management.Store{Root: *root}
+	if len(args) > 0 && args[0] == "upgrade" {
+		return runUpgrade(ctx, store, args[1:], os.Stdin, out, diagnostics, defaultUpgradeDependencies())
+	}
 	if len(args) == 1 && args[0] == "_github-setup-relay" {
 		return runGitHubSetupRelay(ctx, store, os.Stdin, out, diagnostics)
 	}
