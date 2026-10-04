@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "coordination",
-  "release": "0.2.0",
+  "release": "0.2.1",
   "targets": [
     {
       "os": "linux",

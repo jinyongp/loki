@@ -14,11 +14,12 @@ from urllib.parse import urlsplit
 
 from build_browser_bundle import digest, relative
 from build_full_images import oci_manifest
+from render_public_installers import render
 
 MANAGERS = {("linux", "amd64"), ("linux", "arm64"), ("darwin", "amd64"), ("darwin", "arm64"), ("windows", "amd64"), ("windows", "arm64")}
 BROWSERS = MANAGERS - {("windows", "arm64")}
 FULL = {("linux", "amd64"), ("linux", "arm64")}
-BASE = "https://github.com/jinyongp/loki/releases/download/v0.2.0/"
+BASE = "https://github.com/jinyongp/loki/releases/download/v0.2.1/"
 
 
 def read(path):
@@ -52,8 +53,8 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
     for directory in sorted(managers.iterdir()):
         receipt = read(directory / "manager-receipt.json")
         target = (receipt.get("os"), receipt.get("arch"))
-        name = "loki-manager-0.2.0-" + "-".join(target) + ".zip"
-        if receipt.get("schema") != 1 or receipt.get("release") != "0.2.0" or receipt.get("included_tools") != [] or receipt.get("archive") != name or target not in MANAGERS or target in seen:
+        name = "loki-manager-0.2.1-" + "-".join(target) + ".zip"
+        if receipt.get("schema") != 1 or receipt.get("release") != "0.2.1" or receipt.get("included_tools") != [] or receipt.get("archive") != name or target not in MANAGERS or target in seen:
             raise ValueError("manager candidate target/identity differs")
         seen.add(target)
         archive = directory / name
@@ -68,16 +69,16 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
             candidate = read(directory / "candidate.json")
             target = candidate.get("target", {})
             native = (target.get("os"), target.get("arch"))
-            if candidate.get("schema") != 1 or candidate.get("release") != "0.2.0" or target.get("mode") != mode or native not in targets or native in seen or candidate.get("catalog") != "release/catalog.json":
+            if candidate.get("schema") != 1 or candidate.get("release") != "0.2.1" or target.get("mode") != mode or native not in targets or native in seen or candidate.get("catalog") != "release/catalog.json":
                 raise ValueError("tool candidate native target/identity differs")
             seen.add(native)
             catalog = read(directory / "release" / "catalog.json")
-            if catalog.get("schema") != 1 or catalog.get("release") != "0.2.0" or not catalog.get("artifacts"):
+            if catalog.get("schema") != 1 or catalog.get("release") != "0.2.1" or not catalog.get("artifacts"):
                 raise ValueError("release requires a nonempty exact catalog")
             # Modes keep separate manifests and prerequisite contracts.
             # Publish each trusted native catalog unchanged.
             for artifact in catalog["artifacts"]:
-                if artifact.get("target") != target or artifact.get("release") != "0.2.0" or artifact.get("format") != "zip" or not artifact.get("url", "").startswith(BASE):
+                if artifact.get("target") != target or artifact.get("release") != "0.2.1" or artifact.get("format") != "zip" or not artifact.get("url", "").startswith(BASE):
                     raise ValueError("artifact does not belong to this release and target")
                 name = Path(urlsplit(artifact["url"]).path).name
                 if artifact["url"] != BASE + name:
@@ -89,7 +90,7 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
             accepted.append({"target":target, "catalog_sha256":digest(directory / "release" / "catalog.json")})
             if mode == "full":
                 receipt = read(directory / "images" / "images.json")
-                if receipt.get("schema") != 1 or receipt.get("release") != "0.2.0" or receipt.get("target") != target:
+                if receipt.get("schema") != 1 or receipt.get("release") != "0.2.1" or receipt.get("target") != target:
                     raise ValueError("full image receipt identity differs")
                 for role, image in sorted(receipt["images"].items()):
                     archive = directory / "images" / relative(image["archive"])
@@ -97,13 +98,22 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
                     reference = image["reference"]
                     if image.get("target") != target or not re.fullmatch(r"ghcr\.io/jinyongp/loki/[a-z0-9-]+@sha256:[a-f0-9]{64}", reference) or oci_manifest(archive, target) != reference.split("@", 1)[1]:
                         raise ValueError("full OCI manifest differs from its pinned destination")
-                    images.append({"archive":str(archive.resolve()), "reference":reference, "tag":reference.split("@", 1)[0] + ":0.2.0-" + target["os"] + "-" + target["arch"]})
+                    images.append({"archive":str(archive.resolve()), "reference":reference, "tag":reference.split("@", 1)[0] + ":0.2.1-" + target["os"] + "-" + target["arch"]})
         if seen != targets:
             raise ValueError("release lacks accepted native tool candidates")
-    notes = """Fresh native management command with optional tool groups. Install a native
-manager ZIP, run its included installer, then select and enable tools using the
-catalog for the execution host and mode. Each catalog binds archive lengths and
-SHA-256; module ZIPs retain upstream notices and licenses.
+    notes = """Install and connect optional Loki tools with one command:
+
+Windows PowerShell: `irm https://jinyongp.dev/loki/install.ps1 | iex`
+
+Linux/macOS: `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`
+
+Choose browser, full tools, or management only. Windows can install browser tools
+in an existing WSL Ubuntu distribution or natively. The installer downloads
+release-bound archives, installs selected tools, checks them, and preserves
+existing Codex settings while adding its own MCP connection. Reopen your project
+after setup. Full tools require an accessible Docker Engine on Linux/WSL.
+Each catalog binds archive lengths and SHA-256; module ZIPs retain upstream
+notices and licenses.
 
 Management: Linux, macOS and Windows amd64/arm64. Independent browser:
 Linux/macOS amd64/arm64 and Windows amd64. Full mode: Linux amd64/arm64.
@@ -122,7 +132,7 @@ Actual Windows desktop SSH image rendering remains a separate user-side check.
 Install the native management command and select the tools needed for your host.
 """
     (assets / "loki-release-notes.md").write_text(notes, encoding="utf-8")
-    evidence = {"schema":1, "release":"0.2.0", "channel":"stable", "source_commit":source, "tool_candidates":accepted, "publication_images":images}
+    evidence = {"schema":1, "release":"0.2.1", "channel":"stable", "source_commit":source, "tool_candidates":accepted, "publication_images":images}
     (output / "publication-images.json").write_text(json.dumps(images, indent=2) + "\n", encoding="utf-8")
     # Public evidence includes immutable refs, never local preparation paths.
     evidence["publication_images"] = [{"reference":image["reference"]} for image in images]
@@ -132,6 +142,7 @@ Install the native management command and select the tools needed for your host.
         if record.get("head_sha") != source or record.get("conclusion") != "success":
             raise ValueError("public acceptance evidence differs from the release source")
         copy(path, path.name)
+    render(assets, output / "pages")
     sums = "".join(digest(path) + "  " + path.name + "\n" for path in sorted(assets.iterdir()))
     (assets / "SHA256SUMS").write_text(sums, encoding="utf-8")
 

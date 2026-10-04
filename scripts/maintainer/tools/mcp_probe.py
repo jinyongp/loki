@@ -55,7 +55,7 @@ class Client:
             self.pending.pop(number, None)
 
     async def initialize(self):
-        result = await self.request("initialize", {"protocolVersion":"2025-11-25", "capabilities":{"roots":{"listChanged":True}}, "clientInfo":{"name":"loki-native-candidate-acceptance", "version":"0.2.0"}})
+        result = await self.request("initialize", {"protocolVersion":"2025-11-25", "capabilities":{"roots":{"listChanged":True}}, "clientInfo":{"name":"loki-native-candidate-acceptance", "version":"0.2.1"}})
         if "error" in result:
             raise ValueError("native candidate rejected MCP initialization")
         await self.send({"jsonrpc":"2.0", "method":"notifications/initialized"})

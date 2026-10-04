@@ -1,0 +1,148 @@
+#!/bin/sh
+set -eu
+
+release='@@RELEASE@@'
+release_url='https://github.com/jinyongp/loki/releases/download/v@@RELEASE@@'
+bin_dir="$HOME/.local/bin"
+management_root=''
+workspace="$PWD"
+selection=''
+mode=''
+source_dir=''
+codex_config=''
+connect=1
+remote=0
+native_deps=1
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --bin-dir) bin_dir=$2; shift 2 ;;
+        --root) management_root=$2; shift 2 ;;
+        --workspace) workspace=$2; shift 2 ;;
+        --tools) selection=$2; shift 2 ;;
+        --mode) mode=$2; shift 2 ;;
+        --source-dir) source_dir=$2; shift 2 ;;
+        --codex-config) codex_config=$2; shift 2 ;;
+        --no-connect) connect=0; shift ;;
+        --remote) remote=1; shift ;;
+        --skip-native-deps) native_deps=0; shift ;;
+        *) echo "Unknown installer option: $1" >&2; exit 2 ;;
+    esac
+done
+case "$(uname -s)" in Linux) target_os=linux ;; Darwin) target_os=darwin ;; *) echo 'Use install.ps1 on Windows.' >&2; exit 1 ;; esac
+case "$(uname -m)" in x86_64|amd64) target_arch=amd64 ;; arm64|aarch64) target_arch=arm64 ;; *) echo 'Unsupported native architecture.' >&2; exit 1 ;; esac
+if [ -z "$management_root" ]; then
+    if [ "$target_os" = darwin ]; then management_root="$HOME/Library/Application Support/loki"; else management_root="${XDG_CONFIG_HOME:-$HOME/.config}/loki"; fi
+fi
+if [ -z "$selection" ]; then
+    selection=browser
+    if ( : < /dev/tty > /dev/tty ) 2>/dev/null; then
+        printf 'Tools to install [browser / comma-separated full tools / none] (browser): ' > /dev/tty
+        answer=''
+        if read -r answer < /dev/tty && [ -n "$answer" ]; then selection=$answer; fi
+    fi
+fi
+case "$selection" in none|browser) default_mode=project-host ;; *) default_mode=full ;; esac
+mode=${mode:-$default_mode}
+case "$mode" in project-host|full) ;; *) echo 'Mode must be project-host or full.' >&2; exit 2 ;; esac
+if [ "$mode" = project-host ] && [ "$selection" != browser ] && [ "$selection" != none ]; then
+    echo 'Project-host mode supports browser; choose full for other tools.' >&2; exit 2
+fi
+if [ "$mode" = full ] && [ "$target_os" != linux ]; then echo 'Full tools require a Linux execution host.' >&2; exit 1; fi
+case "$bin_dir:$management_root:$workspace" in *'
+'*) echo 'Installation paths cannot contain line breaks.' >&2; exit 2 ;; esac
+case "$bin_dir" in /*) ;; *) echo 'Bin directory must be absolute.' >&2; exit 2 ;; esac
+case "$management_root" in /*) ;; *) echo 'Management root must be absolute.' >&2; exit 2 ;; esac
+case "$workspace" in /*) ;; *) echo 'Workspace must be absolute.' >&2; exit 2 ;; esac
+[ -d "$workspace" ] || { echo 'Workspace must be an existing directory.' >&2; exit 2; }
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+pins="$scratch/pins"
+cat > "$pins" <<'PINS'
+@@PINS@@
+PINS
+fetch() {
+    filename=$1
+    expected=$(awk -v name="$filename" '$1 == name {print $2}' "$pins")
+    [ -n "$expected" ] || { echo "Unsupported release target: $filename" >&2; exit 1; }
+    echo "[loki] Downloading $filename..." >&2
+    if [ -n "$source_dir" ]; then cp "$source_dir/$filename" "$scratch/$filename"; else curl -fL --retry 3 --connect-timeout 20 --max-time 1200 --progress-bar "$release_url/$filename" -o "$scratch/$filename"; fi
+    if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$scratch/$filename" | awk '{print $1}'); else actual=$(shasum -a 256 "$scratch/$filename" | awk '{print $1}'); fi
+    [ "$actual" = "$expected" ] || { echo "Release SHA-256 mismatch: $filename" >&2; exit 1; }
+}
+archive="loki-manager-$release-$target_os-$target_arch.zip"
+fetch "$archive"
+echo '[loki] Installing native management command...' >&2
+if command -v unzip >/dev/null 2>&1; then unzip -q "$scratch/$archive" -d "$scratch/manager"; else python3 -m zipfile -e "$scratch/$archive" "$scratch/manager"; fi
+chmod 0755 "$scratch/manager/loki"
+sh "$scratch/manager/install.sh" "$bin_dir" "$management_root"
+loki="$bin_dir/loki"
+if [ "$bin_dir" = "$HOME/.local/bin" ]; then
+    for profile in "$HOME/.profile" "$HOME/.zprofile"; do
+        if ! grep -q '^# Loki native command PATH$' "$profile" 2>/dev/null; then
+            printf '\n# Loki native command PATH\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$profile"
+        fi
+    done
+fi
+"$loki" --root "$management_root" version
+if [ "$selection" = none ]; then "$loki" --root "$management_root" doctor; echo "Loki installed. Command: $loki"; exit 0; fi
+if [ "$mode" = project-host ] && [ "$(id -u)" = 0 ]; then echo 'Run the browser installer as your normal user so Chrome can use its sandbox.' >&2; exit 1; fi
+if [ "$mode" = full ]; then
+    command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo 'Full tools require an accessible Docker Engine; start Docker and rerun this installer.' >&2; exit 1; }
+fi
+if [ "$native_deps" = 1 ] && [ "$target_os" = linux ] && [ "$mode" = project-host ]; then
+    if [ -f /etc/os-release ]; then . /etc/os-release; fi
+    if [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 24.04 ]; then
+        echo '[loki] Preparing Ubuntu browser libraries (sudo may prompt)...' >&2
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ca-certificates fonts-liberation libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libcurl4t64 libdbus-1-3 libexpat1 libgbm1 libglib2.0-0t64 libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 libudev1 libvulkan1 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
+    else
+        echo '[loki] Checking existing native browser dependencies; doctor will identify missing libraries.' >&2
+    fi
+fi
+catalog="loki-catalog-$target_os-$target_arch-$mode.json"
+fetch "$catalog"
+mkdir -p "$management_root/catalogs"
+cp "$scratch/$catalog" "$management_root/catalogs/$mode.json"
+"$loki" --root "$management_root" tools configure --mode "$mode"
+set --
+saved_ifs=$IFS
+IFS=,
+for tool in $selection; do
+    case "$tool" in browser|workspace|git|github|execution|secrets|sharing|coordination) set -- "$@" "$tool" ;; *) echo "Unknown tool: $tool" >&2; exit 2 ;; esac
+done
+IFS=$saved_ifs
+echo '[loki] Installing selected tools and their private prerequisites...' >&2
+if [ -n "$source_dir" ] && [ -d "$source_dir/archives" ]; then
+    "$loki" --root "$management_root" tools install --catalog "$management_root/catalogs/$mode.json" --archives "$source_dir/archives" "$@"
+else
+    "$loki" --root "$management_root" tools install --catalog "$management_root/catalogs/$mode.json" "$@"
+fi
+for tool; do "$loki" --root "$management_root" tools enable "$tool"; done
+if [ "$native_deps" = 1 ] && [ "$target_os" = linux ] && [ "$mode" = project-host ] && [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] && [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1 ]; then
+    echo '[loki] Preparing a sandbox exception for the exact installed Chrome path...' >&2
+    python3 - "$management_root" "$scratch/profile" <<'PY'
+import hashlib,json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+catalog=json.loads((root/'catalogs/project-host.json').read_text())
+artifact=next(a for a in catalog['artifacts'] if a['module']=='browser')
+chrome=root/'tools/browser/generations'/artifact['sha256']/'chrome/chrome'
+name='loki-browser-'+hashlib.sha256(str(chrome).encode()).hexdigest()[:16]
+assert chrome.is_file()
+if any(c in str(chrome) for c in '*?[]{}\n\r'): raise ValueError('Chrome sandbox path contains profile metacharacters')
+pathlib.Path(sys.argv[2]).write_text('# Loki owned browser sandbox\nabi <abi/4.0>,\ninclude <tunables/global>\nprofile '+name+' '+json.dumps(str(chrome))+' flags=(unconfined) {\n  userns,\n}\n')
+print(name)
+PY
+    profile_name=$(sed -n 's/^profile \([^ ]*\).*/\1/p' "$scratch/profile")
+    sudo sh -c 'set -eu; if [ -e "$2" ]; then cmp -s "$1" "$2" || { echo "Existing sandbox profile differs; inspect it before setup." >&2; exit 1; }; else install -m 0644 "$1" "$2"; fi; apparmor_parser --replace "$2"' sh "$scratch/profile" "/etc/apparmor.d/$profile_name"
+fi
+if [ "$mode" = full ]; then "$loki" --root "$management_root" tools start; fi
+echo '[loki] Checking installed tools...' >&2
+"$loki" --root "$management_root" doctor
+if [ "$connect" = 1 ]; then
+    set -- --workspace "$workspace"
+    if [ -n "$codex_config" ]; then set -- "$@" --config "$codex_config"; fi
+    if [ "$remote" = 1 ] || [ -n "${WSL_DISTRO_NAME:-}" ]; then set -- "$@" --remote; fi
+    "$loki" --root "$management_root" tools connect "$@" codex
+fi
+echo "Loki $release ready. Command: $loki"
+echo 'Reopen your Codex project to use the configured tools.'

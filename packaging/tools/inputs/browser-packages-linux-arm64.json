@@ -7,7 +7,7 @@
     "mode": "full"
   },
   "distribution": "ubuntu-24.04",
-  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/browser-ubuntu-24.04-arm64.tar.gz",
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/browser-ubuntu-24.04-arm64.tar.gz",
   "packages": [
     "libasound2t64",
     "libatk-bridge2.0-0t64",

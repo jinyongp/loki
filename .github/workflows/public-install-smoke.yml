@@ -1,95 +1,11 @@
-name: public-install-smoke
-
+name: Public native install smoke
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   verify:
-    name: Verify public source-free install
     runs-on: ubuntu-24.04
     steps:
-      - name: Run public source-free installation
-        shell: bash
-        run: |
-          set -uo pipefail
-          printf 'runner docker: '
-          docker version --format '{{.Server.Version}}' || true
-          printf 'runner compose: '
-          docker compose version --short || true
-
-          workspace="$RUNNER_TEMP/loki-workspace"
-          installer="$RUNNER_TEMP/loki-install.sh"
-          install_log="$RUNNER_TEMP/loki-install.log"
-          curl -fsSL https://jinyongp.dev/loki/install.sh -o "$installer"
-          chmod 0755 "$installer"
-
-          set +e
-          "$installer" \
-            --workspace "$workspace" \
-            --create-workspace \
-            --prepare-workspace \
-            --install-prerequisites \
-            --allow-sudo-workspace \
-            --allow-sudo-docker \
-            --json >"$install_log" 2>&1
-          status=$?
-          set -e
-          cat "$install_log"
-          if test "$status" -ne 0; then
-            runtime_log="$RUNNER_TEMP/loki-runtime-state.log"
-            {
-              echo '--- Docker after installer failure ---'
-              docker version --format 'server={{.Server.Version}}' || true
-              docker compose version --short || true
-              echo '--- Loki container states ---'
-              ids=$(docker ps -aq --filter label=com.docker.compose.project=loki)
-              for id in $ids; do
-                docker inspect --format 'name={{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" || true
-              done
-              echo '--- terminal Loki container logs ---'
-              for id in $ids; do
-                state=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || true)
-                case "$state" in
-                  *exited*|*dead*|*unhealthy*)
-                    name=$(docker inspect --format '{{.Name}}' "$id" 2>/dev/null || echo "$id")
-                    echo "--- $name ---"
-                    docker logs --tail 80 "$id" || true
-                    ;;
-                esac
-              done
-            } >"$runtime_log" 2>&1
-            cat "$runtime_log"
-            runtime_detail=$(tr '\r\n' '  ' <"$runtime_log" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
-            printf '::error title=Loki runtime failure::%s\n' "$runtime_detail"
-
-            filtered="$RUNNER_TEMP/loki-install.filtered.log"
-            tr '\r' '\n' <"$install_log" | sed -E \
-              -e '/(Pulling|Downloading|Waiting|Extracting|Pull complete|Download complete|Already exists| Pulled$| Creating$| Created$)/d' \
-              -e '/^[[:space:]]*[0-9a-f]{12}[[:space:]]/d' \
-              -e '/^[[:space:]]*$/d' \
-              >"$filtered"
-            printf '%s\n' '--- filtered installer diagnostics ---'
-            tail -n 120 "$filtered"
-            detail=$(tail -n 120 "$filtered" | tr '\r\n' '  ' | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
-            printf '::error title=Public source-free install failed::exit=%s %s\n' "$status" "$detail"
-            exit "$status"
-          fi
-
-          post_install_failed=0
-          for check in status doctor; do
-            output="$RUNNER_TEMP/loki-host-$check.log"
-            set +e
-            "$HOME/.local/bin/loki" host "$check" >"$output" 2>&1
-            check_status=$?
-            set -e
-            cat "$output"
-            if test "$check_status" -ne 0; then
-              detail=$(tr '\r\n' '  ' <"$output" | sed 's/%/%25/g; s/::/%3A%3A/g' | tail -c 7000)
-              printf '::error title=Loki host %s failed::exit=%s %s\n' "$check" "$check_status" "$detail"
-              post_install_failed=1
-            fi
-          done
-          test "$post_install_failed" -eq 0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: python3 scripts/maintainer/tools/verify_public_release.py

@@ -18,6 +18,15 @@ on:
         description: Exact main commit accepted by all three native runs
         required: true
         type: string
+      obsolete_release:
+        description: Optional obsolete release tag to remove after public verification
+        required: false
+        type: string
+      obsolete_packages:
+        description: Optional JSON array of repository-owned obsolete container package names
+        required: false
+        default: '[]'
+        type: string
 permissions:
   contents: read
   actions: read
@@ -61,8 +70,8 @@ jobs:
               Path(variable.lower() + '-acceptance.json').write_text(json.dumps({key:run[key] for key in ['id','head_sha','path','html_url','conclusion']}) + '\n')
           PY
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            echo 'v0.2.0 already exists; inspect its draft/publication state before continuing.' >&2
+          if gh release view v0.2.1 >/dev/null 2>&1; then
+            echo 'v0.2.1 already exists; inspect its draft/publication state before continuing.' >&2
             exit 1
           fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -73,13 +82,13 @@ jobs:
           path: accepted-managers
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: loki-tools-tools-*-project-host
+          pattern: loki-tools-*-project-host
           run-id: ${{ inputs.browser_run }}
           github-token: ${{ github.token }}
           path: accepted-browsers
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: loki-tools-tools-*-full
+          pattern: loki-tools-*-full
           run-id: ${{ inputs.full_run }}
           github-token: ${{ github.token }}
           path: accepted-full
@@ -117,7 +126,47 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
-          gh release create v0.2.0 --target "$GITHUB_SHA" --draft --title 'Loki 0.2.0' --notes-file publication/assets/loki-release-notes.md
-          gh release upload v0.2.0 publication/assets/*
-          gh release edit v0.2.0 --draft=false --prerelease=false --latest
-          gh release view v0.2.0 --json url,isDraft,isPrerelease,assets
+          gh release create v0.2.1 --target "$GITHUB_SHA" --draft --title 'Loki 0.2.1' --notes-file publication/assets/loki-release-notes.md
+          gh release upload v0.2.1 publication/assets/*
+          gh release edit v0.2.1 --draft=false --prerelease=false --latest
+          gh release view v0.2.1 --json url,isDraft,isPrerelease,assets
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: publication/pages
+
+  pages:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+
+  verify-public:
+    needs: [publish, pages]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: python3 scripts/maintainer/tools/verify_public_release.py
+
+  cleanup:
+    needs: verify-public
+    if: inputs.obsolete_release != '' || inputs.obsolete_packages != '[]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Remove explicitly selected obsolete publication only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OBSOLETE_RELEASE: ${{ inputs.obsolete_release }}
+          OBSOLETE_PACKAGES: ${{ inputs.obsolete_packages }}
+        run: python3 scripts/maintainer/tools/cleanup_publication.py

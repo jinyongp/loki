@@ -32,7 +32,7 @@ def finalize(prepared, image_path, output, release_url):
         if image_path is None:
             raise ValueError("this module requires its owned native image receipt")
         document = json.loads(image_path.read_text(encoding="utf-8"))
-        if document.get("schema") != 1 or document.get("release") != "0.2.0" or document.get("target") != target:
+        if document.get("schema") != 1 or document.get("release") != "0.2.1" or document.get("target") != target:
             raise ValueError("image receipt differs from the prepared native release")
         for role in sorted(roles):
             image = document.get("images", {}).get(role, {})
@@ -59,7 +59,7 @@ def finalize(prepared, image_path, output, release_url):
         (bundle / "full-runtime.json").write_text(json.dumps(payload, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         (bundle / "prepared-payload-receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         (bundle / "image-receipts.json").write_text(json.dumps({"schema":1, "images":image_receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
-        name = f"loki-{owner}-0.2.0-linux-{target['arch']}-full.zip"
+        name = f"loki-{owner}-0.2.1-linux-{target['arch']}-full.zip"
         archive = output / name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:
             for path in sorted(bundle.rglob("*")):
@@ -72,8 +72,8 @@ def finalize(prepared, image_path, output, release_url):
                 with path.open("rb") as source, packed.open(entry, "w", force_zip64=True) as sink:
                     shutil.copyfileobj(source, sink)
         manifest = json.loads((bundle / "module.json").read_text(encoding="utf-8"))
-        artifact = {"module":owner, "release":"0.2.0", "target":target, "url":release_url, "sha256":digest(archive), "bytes":archive.stat().st_size, "format":"zip"}
-        (output / "catalog.json").write_text(json.dumps({"schema":1, "release":"0.2.0", "modules":[manifest], "artifacts":[artifact]}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+        artifact = {"module":owner, "release":"0.2.1", "target":target, "url":release_url, "sha256":digest(archive), "bytes":archive.stat().st_size, "format":"zip"}
+        (output / "catalog.json").write_text(json.dumps({"schema":1, "release":"0.2.1", "modules":[manifest], "artifacts":[artifact]}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         print(archive, flush=True)
 
 

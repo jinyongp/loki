@@ -121,24 +121,10 @@ func TestPublicOneLineInstallerRemainsCanonical(t *testing.T) {
 	for _, required := range []string{
 		"irm https://jinyongp.dev/loki/install.ps1 | iex",
 		"curl -fsSL https://jinyongp.dev/loki/install.sh | sh",
-		"loki-wsl-amd64.wsl",
-		"LOKI_WSL_NAME",
-		"LOKI_WSL_LOCATION",
-		"LOKI_WSL_AUTOSTART",
-		"does **not** run",
-		"wsl --update",
-		"There is no Ubuntu first-run account prompt",
-		"/home/ubuntu/workspace",
-		"does not grant the default `ubuntu` user passwordless sudo",
-		"%LOCALAPPDATA%\\Loki\\<distribution-name>\\",
-		"loki-bootstrap-linux-amd64",
-		"loki --version",
-		"loki host status",
-		"loki host doctor",
-		"loki host connection",
-		"sh -s --",
-		"--install-prerequisites",
-		"stable public entry points",
+		"SHA-256",
+		"Codex MCP connection",
+		"Docker Engine",
+		"absolute Linux project path",
 	} {
 		if !strings.Contains(string(firstInstall), required) {
 			t.Fatalf("first-install documentation lacks %q", required)

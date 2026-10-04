@@ -5,10 +5,31 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
-Download the management ZIP for your execution host from
-[the 0.2.0 release](https://github.com/jinyongp/loki/releases/tag/v0.2.0).
-Use the included installer and the release's catalog matching your OS,
-architecture and execution mode. `SHA256SUMS` covers the published files.
+Install the stable [0.2.1 release](https://github.com/jinyongp/loki/releases/tag/v0.2.1)
+using one command:
+
+```powershell
+irm https://jinyongp.dev/loki/install.ps1 | iex
+```
+
+```sh
+curl -fsSL https://jinyongp.dev/loki/install.sh | sh
+```
+
+Select tools and an execution host when prompted. The installer downloads and
+verifies the manager and native catalog, installs and enables your selection,
+checks it, and connects Codex. Existing WSL distributions can be selected with
+`-Distribution NAME` when running a downloaded PowerShell installer. Linux/macOS
+accept `--tools browser|none|CSV`, `--workspace ABSOLUTE-PATH`, `--no-connect`,
+and explicit `--bin-dir`, `--root` and `--codex-config` paths. Full selection
+requires Docker Engine. Reopen the Codex project to load the added MCP server.
+
+For manual/offline installation, download the native management ZIP and matching
+mode catalog. `SHA256SUMS` covers the published files. Reconnect an installed
+selection using `loki tools connect --workspace ABSOLUTE-PROJECT codex`; use
+`--remote` on a Codex SSH execution host. The default config honors `CODEX_HOME`
+and otherwise uses `~/.codex/config.toml`. User-owned conflicting server entries
+are left intact and produce an actionable error.
 
 Receipt-bound 0.2 release candidates passed native acceptance before publication.
 See [the final acceptance report](final-acceptance.md) for current results and

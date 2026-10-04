@@ -21,13 +21,13 @@ def accept(candidate):
     archive = candidate / receipt["archive"]
     if archive.stat().st_size != receipt["archive_bytes"] or hashlib.sha256(archive.read_bytes()).hexdigest() != receipt["archive_sha256"]:
         raise ValueError("candidate archive differs from its receipt")
-    if receipt["schema"] != 1 or receipt["release"] != "0.2.0" or receipt["included_tools"] != []:
-        raise ValueError("candidate is not a management-only 0.2.0 artifact")
+    if receipt["schema"] != 1 or receipt["release"] != "0.2.1" or receipt["included_tools"] != []:
+        raise ValueError("candidate is not a management-only 0.2.1 artifact")
     native_os = {"Windows": "windows", "Darwin": "darwin", "Linux": "linux"}.get(platform.system())
     native_arch = {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine().lower())
     if receipt["os"] != native_os or receipt["arch"] != native_arch:
         raise ValueError("candidate acceptance requires its actual native execution host")
-    if receipt["binary"] != ("loki.exe" if native_os == "windows" else "loki") or receipt["archive"] != f"loki-manager-0.2.0-{native_os}-{native_arch}.zip":
+    if receipt["binary"] != ("loki.exe" if native_os == "windows" else "loki") or receipt["archive"] != f"loki-manager-0.2.1-{native_os}-{native_arch}.zip":
         raise ValueError("candidate receipt declares an unexpected native command or archive path")
     with tempfile.TemporaryDirectory(prefix="loki-manager-accept-") as temporary:
         scratch = Path(temporary)
@@ -58,7 +58,7 @@ def accept(candidate):
         else:
             subprocess.run(["sh", str(bundle / "install.sh"), str(bin_directory), str(root)], check=True)
         installed = bin_directory / receipt["binary"]
-        if run(installed, root, "version").strip() != "loki 0.2.0":
+        if run(installed, root, "version").strip() != "loki 0.2.1":
             raise ValueError("installed manager reports an unexpected version")
         status = json.loads(run(installed, root, "status"))
         if not status["installed"] or status["tools"] != {}:

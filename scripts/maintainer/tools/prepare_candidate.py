@@ -22,8 +22,8 @@ def prepare(recipe_path, output):
     arch = {"amd64":"amd64", "x86_64":"amd64", "aarch64":"arm64", "arm64":"arm64"}.get(platform.machine().lower())
     host = {"Linux":"linux", "Windows":"windows", "Darwin":"darwin"}.get(platform.system())
     target = recipe.get("target", {})
-    if recipe.get("schema") != 1 or recipe.get("release") != "0.2.0" or target.get("os") != host or target.get("arch") != arch or target.get("mode") not in ("project-host", "full") or target["mode"] == "full" and host != "linux":
-        raise ValueError("candidate preparation requires its exact native 0.2.0 execution target")
+    if recipe.get("schema") != 1 or recipe.get("release") != "0.2.1" or target.get("os") != host or target.get("arch") != arch or target.get("mode") not in ("project-host", "full") or target["mode"] == "full" and host != "linux":
+        raise ValueError("candidate preparation requires its exact native 0.2.1 execution target")
     output.mkdir(parents=True, exist_ok=False)
     scripts = Path(__file__).resolve().parent
     catalogs = []
@@ -152,7 +152,7 @@ def prepare(recipe_path, output):
         for catalog in catalogs:
             arguments += ["--catalog", catalog]
         run("merge_catalogs.py", *arguments, "--output", output / "release")
-    (output / "candidate.json").write_text(json.dumps({"schema":1, "release":"0.2.0", "target":target, "manager":"manager", "catalog":"release/catalog.json" if catalogs else None, "images":"images/images.json" if images_path else None, "accepted":False, "published":False}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+    (output / "candidate.json").write_text(json.dumps({"schema":1, "release":"0.2.1", "target":target, "manager":"manager", "catalog":"release/catalog.json" if catalogs else None, "images":"images/images.json" if images_path else None, "accepted":False, "published":False}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
     print(output / "candidate.json", flush=True)
 
 

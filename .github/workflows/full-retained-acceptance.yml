@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: loki-tools-tools-${{ matrix.runner }}-full
+          name: loki-tools-${{ matrix.runner }}-full
           run-id: ${{ inputs.candidate_run }}
           github-token: ${{ github.token }}
           path: native-tool-candidate

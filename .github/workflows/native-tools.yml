@@ -60,7 +60,7 @@ jobs:
         run: python3 scripts/maintainer/tools/prepare_native_ci.py --inputs reviewed-native-inputs --output native-tool-candidate
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: loki-tools-tools-${{ matrix.runner }}-${{ inputs.mode }}
+          name: loki-tools-${{ matrix.runner }}-${{ inputs.mode }}
           path: native-tool-candidate/
           if-no-files-found: error
 
@@ -81,7 +81,7 @@ jobs:
           cache: true
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: loki-tools-tools-${{ matrix.runner }}-${{ inputs.mode }}
+          name: loki-tools-${{ matrix.runner }}-${{ inputs.mode }}
           path: native-tool-candidate/
       - name: Check native management and transport fixtures
         run: go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
@@ -114,6 +114,9 @@ jobs:
           profile loki-native-browser-acceptance /tmp/loki-browser-accept-*/management/tools/browser/generations/*/chrome/chrome flags=(unconfined) {
             userns,
           }
+          profile loki-native-installer-acceptance /tmp/loki-installer-accept-*/management/tools/browser/generations/*/chrome/chrome flags=(unconfined) {
+            userns,
+          }
           PROFILE
           sudo apparmor_parser --replace "$RUNNER_TEMP/loki-native-browser-acceptance"
       - name: Accept packaged independent browser engines and lifecycle
@@ -122,6 +125,9 @@ jobs:
       - name: Accept optional capabilities and owned output bytes
         if: inputs.mode == 'project-host'
         run: python3 scripts/maintainer/tools/accept_browser_capabilities.py --candidate native-tool-candidate
+      - name: Accept one-command browser installation and Codex connection
+        if: inputs.mode == 'project-host'
+        run: python3 scripts/maintainer/tools/accept_public_installer.py --candidate native-tool-candidate --browser
       - name: Remove the owned disposable runner sandbox profile
         if: always() && inputs.mode == 'project-host' && runner.os == 'Linux'
         shell: bash

@@ -39,7 +39,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	flags.Usage = func() {
 		fmt.Fprintln(diagnostics, "Usage: loki [HOST OPTIONS] COMMAND")
 		fmt.Fprintln(diagnostics, "  install | version | status | doctor")
-		fmt.Fprintln(diagnostics, "  tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve")
+		fmt.Fprintln(diagnostics, "  tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve|connect")
 		fmt.Fprintln(diagnostics, "  integrations setup|status|doctor git")
 		fmt.Fprintln(diagnostics, "  integrations setup|status|doctor|refresh github")
 		flags.PrintDefaults()
@@ -141,9 +141,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return runIntegrations(ctx, store, args[1:], os.Stdin, out, diagnostics)
 	}
 	if len(args) < 2 || args[0] != "tools" {
-		return fmt.Errorf("usage: loki [--root PATH] install|version|status|doctor|tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve")
+		return fmt.Errorf("usage: loki [--root PATH] install|version|status|doctor|tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve|connect")
 	}
 	switch args[1] {
+	case "connect":
+		return connectCodex(store, args[2:], out, diagnostics)
 	case "start", "stop":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools %s", args[1])
