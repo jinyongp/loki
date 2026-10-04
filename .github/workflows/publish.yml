@@ -70,8 +70,8 @@ jobs:
               Path(variable.lower() + '-acceptance.json').write_text(json.dumps({key:run[key] for key in ['id','head_sha','path','html_url','conclusion']}) + '\n')
           PY
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
-          if gh release view v0.2.1 >/dev/null 2>&1; then
-            echo 'v0.2.1 already exists; inspect its draft/publication state before continuing.' >&2
+          if gh release view v0.2.2 >/dev/null 2>&1; then
+            echo 'v0.2.2 already exists; inspect its draft/publication state before continuing.' >&2
             exit 1
           fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -126,10 +126,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
-          gh release create v0.2.1 --target "$GITHUB_SHA" --draft --title 'Loki 0.2.1' --notes-file publication/assets/loki-release-notes.md
-          gh release upload v0.2.1 publication/assets/*
-          gh release edit v0.2.1 --draft=false --prerelease=false --latest
-          gh release view v0.2.1 --json url,isDraft,isPrerelease,assets
+          gh release create v0.2.2 --target "$GITHUB_SHA" --draft --title 'Loki 0.2.2' --notes-file publication/assets/loki-release-notes.md
+          gh release upload v0.2.2 publication/assets/*
+          gh release edit v0.2.2 --draft=false --prerelease=false --latest
+          gh release view v0.2.2 --json url,isDraft,isPrerelease,assets
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: publication/pages

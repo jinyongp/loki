@@ -10,7 +10,7 @@ import urllib.request
 
 from prepare_bootstrap import prepare
 
-BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.1/'
+BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.2/'
 
 
 def download(url):
@@ -33,7 +33,7 @@ def verify(expected_directory=None):
             # Their manager/catalog pins still bind immutable release bytes.
             expected = (expected_directory / ('install.'+extension)).read_bytes()
             for attempt in range(12):
-                current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.1&attempt='+str(attempt))
+                current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.2&attempt='+str(attempt))
                 if current == expected:
                     break
                 time.sleep(5)
@@ -53,6 +53,10 @@ def verify(expected_directory=None):
         state = json.loads((root/'management/control/state.json').read_text())
         if state['installed'] or state['config']['tools']:
             raise ValueError('public bootstrap installed or enabled tools')
+        for args in [[], ['tools'], ['integrations'], ['tools', 'install', '--help']]:
+            result = subprocess.run([str(root/'bin/loki'), '--root', str(root/'management'), *args], capture_output=True, text=True)
+            if result.returncode or result.stderr.strip() or 'Usage:' not in result.stdout or 'Examples:' not in result.stdout:
+                raise ValueError('published CLI readable help failed')
         print('Anonymous installer endpoints, 10 OCI manifests and public native management installation passed.')
 
 

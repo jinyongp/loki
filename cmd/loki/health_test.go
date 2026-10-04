@@ -26,7 +26,7 @@ func TestHealthRequiresLiveUnixAndLoopbackTCP(t *testing.T) {
 	if code := runHealth([]string{"--unix", unixPath}, &bytes.Buffer{}); code != 1 {
 		t.Fatalf("stale socket health code = %d", code)
 	}
-	if code := runHealth([]string{"--tcp", "192.0.2.1:443"}, &bytes.Buffer{}); code != 2 {
+	if code := runHealth([]string{"--tcp", "192.0.2.2:443"}, &bytes.Buffer{}); code != 2 {
 		t.Fatalf("external probe health code = %d", code)
 	}
 }

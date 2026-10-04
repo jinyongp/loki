@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "release": "0.2.1",
+  "release": "0.2.2",
   "target": {
     "os": "linux",
     "arch": "arm64",
@@ -26,40 +26,40 @@
   "modules": {
     "runtime-core": {
       "inputs": "runtime-core-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-runtime-core-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-runtime-core-0.2.2-linux-arm64-full.zip"
     },
     "execution": {
       "inputs": "execution-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-execution-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-execution-0.2.2-linux-arm64-full.zip"
     },
     "git": {
       "inputs": "git-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-git-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-git-0.2.2-linux-arm64-full.zip"
     },
     "github": {
       "inputs": "github-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-github-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-github-0.2.2-linux-arm64-full.zip"
     },
     "coordination": {
       "inputs": "coordination-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-coordination-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-coordination-0.2.2-linux-arm64-full.zip"
     },
     "workspace": {
       "inputs": "workspace-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-workspace-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-workspace-0.2.2-linux-arm64-full.zip"
     },
     "secrets": {
       "inputs": "secrets-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-secrets-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-secrets-0.2.2-linux-arm64-full.zip"
     },
     "sharing": {
       "inputs": "sharing-linux-arm64.json",
-      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-sharing-0.2.1-linux-arm64-full.zip"
+      "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-sharing-0.2.2-linux-arm64-full.zip"
     }
   },
   "images": "images-linux-arm64.json",
   "browser": {
     "inputs": "browser-linux-arm64-full.json",
-    "url": "https://github.com/jinyongp/loki/releases/download/v0.2.1/loki-browser-0.2.1-linux-arm64-full.zip"
+    "url": "https://github.com/jinyongp/loki/releases/download/v0.2.2/loki-browser-0.2.2-linux-arm64-full.zip"
   }
 }

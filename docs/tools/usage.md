@@ -5,7 +5,7 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
-Install the stable [0.2.1 release](https://github.com/jinyongp/loki/releases/tag/v0.2.1)
+Install the stable [0.2.2 release](https://github.com/jinyongp/loki/releases/tag/v0.2.2)
 using one command:
 
 ```powershell

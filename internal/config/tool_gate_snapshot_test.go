@@ -52,7 +52,7 @@ func TestAtomicActivationSnapshotDistinguishesPrivateResources(t *testing.T) {
 	}
 	snapshot.Config.Tools[0].Enabled = true
 	private := snapshot.Installed["execution"]
-	private.Artifact.Release = "0.2.1"
+	private.Artifact.Release = "0.2.2"
 	snapshot.Installed["execution"] = private
 	write()
 	if err := gate.Resource("execution"); err == nil {

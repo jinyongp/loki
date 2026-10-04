@@ -27,9 +27,9 @@ for package in packages:
     print('Removed obsolete package:',package)
 tag = os.environ.get('OBSOLETE_RELEASE','')
 if tag:
-    if not re.fullmatch(r'v0\.2\.\d+',tag) or tag == 'v0.2.1':
+    if not re.fullmatch(r'v0\.2\.\d+',tag) or tag == 'v0.2.2':
         raise ValueError('obsolete release must be an explicitly selected prior 0.2 release')
     current = json.loads(api('repos/'+repository+'/releases/latest'))
-    if current['tag_name'] != 'v0.2.1':
+    if current['tag_name'] != 'v0.2.2':
         raise ValueError('replacement stable release is not latest')
     subprocess.run(['gh','release','delete',tag,'--repo',repository,'--yes','--cleanup-tag'],check=True)

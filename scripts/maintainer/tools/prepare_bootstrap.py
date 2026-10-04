@@ -6,7 +6,7 @@ import urllib.request
 
 from render_public_installers import render
 
-BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.1/'
+BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.2/'
 
 
 def download(name):

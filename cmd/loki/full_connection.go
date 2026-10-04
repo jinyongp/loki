@@ -31,7 +31,7 @@ func runFullMCPConnection(args []string, stderr io.Writer) int {
 	}
 	defer cleanup()
 	err = toolproxy.Run(context.Background(), toolproxy.Options{
-		Name: "loki-full-service-connection", Owner: "full", Version: "0.2.1",
+		Name: "loki-full-service-connection", Owner: "full", Version: "0.2.2",
 		Transport: transport, RootURI: "file:///workspace", ForwardOwnedResources: true, Stderr: stderr,
 		// The service's freshly checked public bindings and resource handlers
 		// enforce selection; this adapter adds no filesystem or provider access.

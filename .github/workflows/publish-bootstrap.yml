@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Bind correction to verified immutable 0.2.1 assets
+      - name: Bind correction to verified immutable 0.2.2 assets
         run: |
           test "$GITHUB_REF" = refs/heads/main
           python3 scripts/maintainer/tools/prepare_bootstrap.py --output publication

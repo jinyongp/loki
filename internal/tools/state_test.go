@@ -25,9 +25,9 @@ func TestDiscoveryRequiresSelectedEnabledReadyResources(t *testing.T) {
 		{name: "unknown readiness", git: State{Installed: true, Release: "0.2.0", Enabled: true, Readiness: Unknown}, dependency: &private},
 		{name: "degraded", git: State{Installed: true, Release: "0.2.0", Enabled: true, Readiness: Degraded}, dependency: &private},
 		{name: "missing dependency", git: ready},
-		{name: "dependency wrong release", git: ready, dependency: &State{Installed: true, Release: "0.2.1", Readiness: Ready}},
+		{name: "dependency wrong release", git: ready, dependency: &State{Installed: true, Release: "0.2.2", Readiness: Ready}},
 		{name: "dependency degraded", git: ready, dependency: &State{Installed: true, Release: "0.2.0", Readiness: Degraded}},
-		{name: "selected wrong release", git: State{Installed: true, Release: "0.2.1", Enabled: true, Readiness: Ready}, dependency: &private},
+		{name: "selected wrong release", git: State{Installed: true, Release: "0.2.2", Enabled: true, Readiness: Ready}, dependency: &private},
 		{name: "absent", git: State{Readiness: Unknown}, dependency: &private},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

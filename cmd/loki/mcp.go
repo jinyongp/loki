@@ -119,7 +119,7 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 		// without restarting the MCP process.
 		if l.BrowserProtocol == "official" {
 			options.BrowserEngines = []toolproxy.Options{{
-				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.1",
+				Name: "loki-protected-browser", Owner: "browser/protected", Version: "0.2.2",
 				Transport: toolproxy.ProtectedBrowserTransport{Socket: l.BrowserSocket, ExpectedUID: *l.BrowserUID},
 				RootURI:   "file:///var/lib/loki/browser/work",
 				Authorize: func(name string) error {

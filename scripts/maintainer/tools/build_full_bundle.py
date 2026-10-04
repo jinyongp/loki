@@ -92,7 +92,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
     repo = Path(__file__).resolve().parents[3]
     manifest_path = repo / ("packaging/tools/module.full.json" if module == "runtime-core" else f"modules/{module}/module.full.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest["release"] != "0.2.1" or manifest["id"] != module or target not in manifest["targets"]:
+    if manifest["release"] != "0.2.2" or manifest["id"] != module or target not in manifest["targets"]:
         raise ValueError("module source manifest differs from the preparation contract")
     manifest["targets"] = [target]
     output.mkdir(parents=True, exist_ok=False)
@@ -126,7 +126,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
             (bundle / "bin").mkdir()
             for name, package in packages.items():
                 path = f"bin/{name}"
-                subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/buildinfo.Version=0.2.1", "-o", str(bundle / path), package], cwd=repo, env=env, check=True)
+                subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/buildinfo.Version=0.2.2", "-o", str(bundle / path), package], cwd=repo, env=env, check=True)
                 programs[name] = path
             go_dependencies = go_notices(repo, bundle, env, tuple(packages.values()))
         assets = dict(recipe.get("assets", {}))
@@ -161,7 +161,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
                 raise ValueError("module executable is absent or not executable")
         for path in assets.values():
             contained(bundle, bundle / relative(path))
-        payload = {"schema": 1, "module": module, "release": "0.2.1", "target": target, "images": {role: image["reference"] for role, image in recipe.get("images", {}).items()}, "programs": programs, "assets": assets}
+        payload = {"schema": 1, "module": module, "release": "0.2.2", "target": target, "images": {role: image["reference"] for role, image in recipe.get("images", {}).items()}, "programs": programs, "assets": assets}
         metadata = {"module.json": manifest, "full-runtime.json": payload, "upstream-receipts.json": {"schema": 1, "inputs": receipts, "images": recipe.get("images", {}), "go_dependencies": go_dependencies}}
         for name, value in metadata.items():
             (bundle / name).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -169,10 +169,10 @@ def assemble(recipe_path, output, release_url, payload_only=False):
         if payload_only:
             files = {path.relative_to(bundle).as_posix(): {"bytes": path.stat().st_size, "sha256": digest(path), "executable": bool(path.stat().st_mode & 0o111)} for path in sorted(bundle.rglob("*")) if path.is_file()}
             shutil.copytree(bundle, output / "payload")
-            (output / "payload-receipt.json").write_text(json.dumps({"schema": 1, "release": "0.2.1", "module": module, "target": target, "files": files}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            (output / "payload-receipt.json").write_text(json.dumps({"schema": 1, "release": "0.2.2", "module": module, "target": target, "files": files}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             print(output / "payload-receipt.json", flush=True)
             return
-        archive_name = f"loki-{module}-0.2.1-linux-{arch}-full.zip"
+        archive_name = f"loki-{module}-0.2.2-linux-{arch}-full.zip"
         archive = stage / archive_name
         with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as packed:
             for path in sorted(bundle.rglob("*")):
@@ -186,9 +186,9 @@ def assemble(recipe_path, output, release_url, payload_only=False):
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 with path.open("rb") as source, packed.open(entry, "w", force_zip64=True) as sink:
                     shutil.copyfileobj(source, sink)
-        artifact = {"module": module, "release": "0.2.1", "target": target, "url": release_url, "sha256": digest(archive), "bytes": archive.stat().st_size, "format": "zip"}
+        artifact = {"module": module, "release": "0.2.2", "target": target, "url": release_url, "sha256": digest(archive), "bytes": archive.stat().st_size, "format": "zip"}
         shutil.copyfile(archive, output / archive_name)
-        (output / "catalog.json").write_text(json.dumps({"schema": 1, "release": "0.2.1", "modules": [manifest], "artifacts": [artifact]}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (output / "catalog.json").write_text(json.dumps({"schema": 1, "release": "0.2.2", "modules": [manifest], "artifacts": [artifact]}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(output / archive_name, flush=True)
 
 

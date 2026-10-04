@@ -57,7 +57,7 @@ jobs:
           name: loki-tools-manager-${{ matrix.runner }}
           path: native-manager-candidate/
       - name: Check portable contracts and lifecycle fixtures
-        run: go test ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
+        run: go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command ./internal/transport/toolproxy ./modules/browser
       - name: Accept the exact native manager artifact in temporary directories
         run: python3 scripts/maintainer/tools/accept_manager_bundle.py --candidate native-manager-candidate
       - name: Accept the one-command management installer

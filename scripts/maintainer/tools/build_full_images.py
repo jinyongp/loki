@@ -33,7 +33,7 @@ ROLE_IMAGE = {"service":"runtime-core-service", "gateway":"runtime-core-gateway"
 
 def verify_payload(directory, target):
     receipt = json.loads((directory / "payload-receipt.json").read_text(encoding="utf-8"))
-    if receipt.get("schema") != 1 or receipt.get("release") != "0.2.1" or receipt.get("target") != target or receipt.get("module") not in REQUIRED_PROGRAMS:
+    if receipt.get("schema") != 1 or receipt.get("release") != "0.2.2" or receipt.get("target") != target or receipt.get("module") not in REQUIRED_PROGRAMS:
         raise ValueError("image input must be an exact-release native payload receipt")
     root = directory / "payload"
     if root.is_symlink() or not root.is_dir():
@@ -49,7 +49,7 @@ def verify_payload(directory, target):
             raise ValueError("prepared module changed after its receipt")
     payload = json.loads((root / "full-runtime.json").read_text(encoding="utf-8"))
     manifest = json.loads((root / "module.json").read_text(encoding="utf-8"))
-    if payload.get("schema") != 1 or payload.get("module") != receipt["module"] or payload.get("release") != "0.2.1" or payload.get("target") != target or payload.get("images") != {} or set(payload.get("programs", {})) != REQUIRED_PROGRAMS[receipt["module"]] or manifest.get("id") != receipt["module"] or manifest.get("release") != "0.2.1" or manifest.get("targets") != [target]:
+    if payload.get("schema") != 1 or payload.get("module") != receipt["module"] or payload.get("release") != "0.2.2" or payload.get("target") != target or payload.get("images") != {} or set(payload.get("programs", {})) != REQUIRED_PROGRAMS[receipt["module"]] or manifest.get("id") != receipt["module"] or manifest.get("release") != "0.2.2" or manifest.get("targets") != [target]:
         raise ValueError("prepared payload differs from its exact module program contract")
     for path in payload["programs"].values():
         executable = root / relative(path)
@@ -169,7 +169,7 @@ def assemble(recipe_path, output):
             for role in roles:
                 context = scratch / role
                 context.mkdir()
-                lines = ["# syntax="+recipe["frontend"], "FROM "+recipe["base"], "LABEL org.opencontainers.image.source=https://github.com/jinyongp/loki io.loki.release=0.2.1 io.loki.image.owner="+ROLE_OWNER[role]+" io.loki.image.role="+role]
+                lines = ["# syntax="+recipe["frontend"], "FROM "+recipe["base"], "LABEL org.opencontainers.image.source=https://github.com/jinyongp/loki io.loki.release=0.2.2 io.loki.image.owner="+ROLE_OWNER[role]+" io.loki.image.role="+role]
                 (context / "public-trust").mkdir()
                 shutil.copyfile(certificate_file, context / "public-trust" / "ca-certificates.crt")
                 for index, notice in enumerate(trust["notices"]):
@@ -238,12 +238,12 @@ def assemble(recipe_path, output):
                 identities = "runner:x:10000:10000::/home/runner:/bin/sh\\nloki:x:10001:10001::/nonexistent:/usr/sbin/nologin\\negress:x:10002:10002::/nonexistent:/usr/sbin/nologin\\nbrowser:x:10003:10003::/nonexistent:/usr/sbin/nologin\\nexecutor:x:10004:10004::/nonexistent:/usr/sbin/nologin\\nbrowser-proxy:x:10005:10005::/nonexistent:/usr/sbin/nologin\\n"
                 lines.extend(["RUN --network=none mkdir -p /workspace /var/tmp/loki /home/runner && chmod 1777 /tmp /var/tmp && chown 10000:10000 /home/runner && printf '"+identities+"' >> /etc/passwd && printf 'runner:x:10000:\\nloki:x:10001:\\n' >> /etc/group", "ENV PATH=/opt/loki/bin:/usr/bin:/bin", "WORKDIR /workspace", "USER 10000:10000"])
                 (context / "Dockerfile").write_text("\n".join(lines)+"\n", encoding="utf-8")
-                name = f"loki-{ROLE_IMAGE[role]}-0.2.1-linux-{arch}.oci.tar"
+                name = f"loki-{ROLE_IMAGE[role]}-0.2.2-linux-{arch}.oci.tar"
                 archive = output / name
                 if any(c in str(archive) for c in ",\r\n\x00"):
                     raise ValueError("OCI output path cannot contain exporter separators")
                 print("Preparing owned native "+role+" image...", flush=True)
-                image_name = repository+"/"+ROLE_IMAGE[role]+":0.2.1-linux-"+arch
+                image_name = repository+"/"+ROLE_IMAGE[role]+":0.2.2-linux-"+arch
                 subprocess.run([*docker, "buildx", "build", "--builder", builder, "--platform", "linux/"+arch, "--network", "none", "--provenance=false", "--sbom=false", "--output", "type=oci,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
                 manifest = oci_manifest(archive, target)
                 receipts[role] = {"owner":ROLE_OWNER[role], "target":target, "reference":repository+"/"+ROLE_IMAGE[role]+"@"+manifest, "archive":name, "bytes":archive.stat().st_size, "sha256":digest(archive), "notices":recipe["base_notices"], "base":recipe["base"], "buildkit":recipe["buildkit"], "frontend":recipe["frontend"], "inputs":inputs, "published":False, "accepted":False}
@@ -255,7 +255,7 @@ def assemble(recipe_path, output):
             cleanup = subprocess.run([*docker, "buildx", "rm", "--force", builder], env=environment, check=False, timeout=60)
             if cleanup.returncode and not failing:
                 raise RuntimeError("owned candidate builder cleanup failed")
-    (output / "images.json").write_text(json.dumps({"schema":1, "release":"0.2.1", "target":target, "images":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+    (output / "images.json").write_text(json.dumps({"schema":1, "release":"0.2.2", "target":target, "images":receipts}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
     print(output / "images.json", flush=True)
 
 

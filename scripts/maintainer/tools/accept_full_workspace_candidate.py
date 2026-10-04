@@ -48,7 +48,7 @@ def accept(candidate):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
     target = document.get("target", {})
     native_arch = {"x86_64":"amd64", "aarch64":"arm64", "amd64":"amd64", "arm64":"arm64"}.get(platform.machine().lower())
-    if platform.system() != "Linux" or document.get("schema") != 1 or document.get("release") != "0.2.1" or target != {"os":"linux", "arch":native_arch, "mode":"full"} or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json" or document.get("images") != "images/images.json":
+    if platform.system() != "Linux" or document.get("schema") != 1 or document.get("release") != "0.2.2" or target != {"os":"linux", "arch":native_arch, "mode":"full"} or document.get("manager") != "manager" or document.get("catalog") != "release/catalog.json" or document.get("images") != "images/images.json":
         raise ValueError("acceptance requires an exact native Linux full candidate")
     manager = candidate / "manager"
     accept_manager(manager)
@@ -56,7 +56,7 @@ def accept(candidate):
     images = json.loads((candidate / "images" / "images.json").read_text(encoding="utf-8"))
     image = images["images"]["service"]
     archive = candidate / "images" / relative(image["archive"])
-    if images.get("schema") != 1 or images.get("release") != "0.2.1" or images.get("target") != target or image.get("owner") != "runtime-core" or image.get("target") != target or archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
+    if images.get("schema") != 1 or images.get("release") != "0.2.2" or images.get("target") != target or image.get("owner") != "runtime-core" or image.get("target") != target or archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
         raise ValueError("core service image differs from its native receipt")
     docker = shutil.which("docker")
     if docker is None:

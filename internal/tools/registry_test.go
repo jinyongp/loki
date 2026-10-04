@@ -66,7 +66,7 @@ func TestRegistryRejectsInvalidGraph(t *testing.T) {
 		"unknown prerequisite": {testManifest("git", "execution")},
 		"cycle":                {testManifest("git", "execution"), testManifest("execution", "git")},
 		"unselected cycle":     {testManifest("browser"), testManifest("git", "execution"), testManifest("execution", "git")},
-		"mixed release":        {testManifest("browser"), {Schema: ManifestSchema, ID: "git", Release: "0.2.1", Targets: []Target{linuxProject}}},
+		"mixed release":        {testManifest("browser"), {Schema: ManifestSchema, ID: "git", Release: "0.2.2", Targets: []Target{linuxProject}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := NewRegistry(manifests); err == nil {
