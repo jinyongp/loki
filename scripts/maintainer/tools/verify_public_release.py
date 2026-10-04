@@ -1,4 +1,5 @@
 """Verify anonymous public installer, accepted manifests and actual management setup."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -6,6 +7,8 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+
+from prepare_bootstrap import prepare
 
 BASE = 'https://github.com/jinyongp/loki/releases/download/v0.2.1/'
 
@@ -15,21 +18,27 @@ def download(url):
         return response.read()
 
 
-def verify():
+def verify(expected_directory=None):
     sums = dict((name, digest) for digest, name in (line.split() for line in download(BASE+'SHA256SUMS').decode().splitlines()))
     with tempfile.TemporaryDirectory(prefix='loki-public-install-') as temporary:
         root = Path(temporary)
+        if expected_directory is None:
+            prepare(root / 'bootstrap')
+            expected_directory = root / 'bootstrap/pages'
         for extension in ('sh', 'ps1'):
             accepted = download(BASE+'loki-install.'+extension)
             if hashlib.sha256(accepted).hexdigest() != sums['loki-install.'+extension]:
                 raise ValueError('release installer checksum differs')
+            # Public bootstraps can receive independently accepted corrections.
+            # Their manager/catalog pins still bind immutable release bytes.
+            expected = (expected_directory / ('install.'+extension)).read_bytes()
             for attempt in range(12):
                 current = download('https://jinyongp.dev/loki/install.'+extension+'?release=0.2.1&attempt='+str(attempt))
-                if current == accepted:
+                if current == expected:
                     break
                 time.sleep(5)
             else:
-                raise ValueError('public installer endpoint differs from accepted release')
+                raise ValueError('public installer endpoint differs from accepted bootstrap')
             (root / ('install.'+extension)).write_bytes(current)
         evidence = json.loads(download(BASE+'loki-release-evidence.json'))
         for image in evidence['publication_images']:
@@ -46,4 +55,6 @@ def verify():
 
 
 if __name__ == '__main__':
-    verify()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--expected-directory', type=Path)
+    verify(parser.parse_args().expected_directory)

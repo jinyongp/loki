@@ -1,6 +1,6 @@
 param(
-    [ValidateSet('none', 'browser', 'full')][string]$Tools,
-    [ValidateSet('wsl', 'native')][string]$HostKind,
+    [string]$Tools,
+    [string]$HostKind,
     [string]$Distribution = 'Ubuntu',
     [string]$Workspace,
     [string]$BinDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\Loki\bin'),
@@ -11,6 +11,10 @@ param(
     [switch]$SkipNativeDependencies
 )
 $ErrorActionPreference = 'Stop'
+# Invoke-Expression declares these optional parameters in the caller's scope.
+# ValidateSet rejects their empty initial values before Read-Host can run.
+if ($Tools -and $Tools -notin @('browser', 'full', 'none')) { throw 'Choose browser, full or none.' }
+if ($HostKind -and $HostKind -notin @('wsl', 'native')) { throw 'Choose wsl or native.' }
 $release = '@@RELEASE@@'
 $releaseUrl = "https://github.com/jinyongp/loki/releases/download/v$release"
 $pins = @'
