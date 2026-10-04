@@ -1,17 +1,48 @@
 {
-  "release": "0.2.0",
+  "schema": 1,
+  "release": "0.2.1",
   "channel": "stable",
-  "publisher_run": 37179130070,
-  "source_commit": "a2f362d655142f434f68d034f2bb56a0997f8312",
-  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.0",
-  "original_artifact_evidence_url": "https://github.com/jinyongp/loki/releases/download/v0.2.0/loki-release-evidence.json",
-  "published_asset_checksums": "pass",
-  "native_published_manager": "pass",
-  "native_published_browser": "pass",
+  "publisher_run": 37187375897,
+  "source_commit": "e97dfb7c9168ccf09d147cff6bc9aad8c66f672d",
+  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.1",
+  "native_acceptance": {
+    "manager": {
+      "run": 37186402932,
+      "targets": 6,
+      "result": "pass"
+    },
+    "browser": {
+      "run": 37186404363,
+      "targets": 5,
+      "result": "pass"
+    },
+    "full_workspace": {
+      "run": 37186405480,
+      "targets": 2,
+      "result": "pass"
+    }
+  },
+  "public_installers": {
+    "powershell": "https://jinyongp.dev/loki/install.ps1",
+    "shell": "https://jinyongp.dev/loki/install.sh",
+    "exact_release_bytes": "pass",
+    "anonymous_native_management_installation": "pass",
+    "codex_configuration_preservation_and_idempotence": "pass in five native browser targets"
+  },
   "anonymous_oci_manifest_verification": {
     "manifest_count": 10,
     "result": "pass",
-    "basis": "Original immutable release evidence, before versionless source cleanup"
+    "namespace": "ghcr.io/jinyongp/loki"
   },
-  "current_source_native_publication": "pending immutable release replacement decision"
+  "obsolete_publication_cleanup": {
+    "release": "0.2.0",
+    "release_and_tag": "deleted; subsequent API requests return 404",
+    "obsolete_versioned_package_count": 5,
+    "result": "pass"
+  },
+  "remaining_gates": [
+    "Actual Windows desktop SSH image rendering",
+    "Other full execution/network/signing/endpoints/sharing combinations",
+    "Experimental browser workflows"
+  ]
 }

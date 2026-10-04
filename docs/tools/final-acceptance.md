@@ -3,42 +3,47 @@
 This report records executed checks and the published release. Pending checks
 retain their actual validation status.
 
-## Published 0.2.0
+## Published 0.2.1
 
-[Loki 0.2.0](https://github.com/jinyongp/loki/releases/tag/v0.2.0)
-was published by [run 37179130070](https://github.com/jinyongp/loki/actions/runs/37179130070)
-from exact source `a2f362d655142f434f68d034f2bb56a0997f8312`.
-The publisher verified original candidate archives, receipts, native catalogs and
-OCI manifest digests before uploading 48 assets. The user subsequently selected
-stable publication; the release is now latest and has no prerelease marker.
-GitHub's immutable release protects its original assets and source tag.
+[Loki 0.2.1](https://github.com/jinyongp/loki/releases/tag/v0.2.1)
+is the stable latest release, published by
+[run 37187375897](https://github.com/jinyongp/loki/actions/runs/37187375897)
+from exact source `e97dfb7c9168ccf09d147cff6bc9aad8c66f672d`.
 
-The current source uses versionless packaging, scripts, workflows, management
-state and registry destinations. Focused management, sandbox, launcher,
-execution and CLI Go checks passed after this cleanup; Python input/release
-checks and workflow syntax passed. These source changes require new native
-candidates and have not replaced the immutable release's existing files.
+All same-source native acceptance runs passed:
 
-All final native runs passed from that same source:
+- [Manager 37186402932](https://github.com/jinyongp/loki/actions/runs/37186402932):
+  Linux, macOS and Windows amd64/arm64, including the one-command installer.
+- [Browser 37186404363](https://github.com/jinyongp/loki/actions/runs/37186404363):
+  Linux/macOS amd64/arm64 and Windows amd64, both official engines, optional
+  capabilities, actual installer setup, Codex preservation/idempotence and owned
+  image return/transfer/revocation.
+- [Full workspace 37186405480](https://github.com/jinyongp/loki/actions/runs/37186405480):
+  Linux amd64/arm64, private stdio, selected discovery, create/read, cached
+  selection revocation and owned stop.
 
-- [Manager 37177982348](https://github.com/jinyongp/loki/actions/runs/37177982348):
-  Linux, macOS and Windows, each on amd64 and arm64.
-- [Browser 37177983658](https://github.com/jinyongp/loki/actions/runs/37177983658):
-  Linux and macOS amd64/arm64 plus Windows amd64, baseline and optional capabilities.
-- [Full 37177984990](https://github.com/jinyongp/loki/actions/runs/37177984990):
-  Linux amd64/arm64 preparation and actual private workspace stdio acceptance.
+The publisher verified original accepted bytes before staging the release.
+Public `install.sh` and `install.ps1` match their immutable release attachments.
+Anonymous access verified all ten exact OCI manifests. An actual public native
+management installation passed, both in CI and independently in an owned local
+namespace. The previous 0.2.0 release/tag and five obsolete versioned packages
+were removed after replacement verification.
 
-The final browser readiness probe foregrounds its owned headless page and allows
-ten seconds for painted frames. Disposable full CI runners enable Docker's
-containerd image store to import the exact OCI archives.
-Anonymous GitHub downloads of the Linux amd64 manager, receipt, project-host
-catalog, browser archive and release evidence matched published SHA256SUMS.
-All five full OCI package namespaces accepted anonymous manifest requests.
-The downloaded Linux amd64 manager passed isolated installation and doctor;
-its project-host browser passed both official MCP engines, fixture navigation,
-inline and owned PNG readback, transfer, disable revocation and removal.
-The release uses native manager ZIP installation; its notes describe the
-remaining full, experimental and Windows desktop SSH acceptance scope.
+The public installer selects tools, verifies release-bound archives, checks
+installed tools and connects Codex while preserving unrelated settings. Windows
+supports existing WSL distributions or native browser installation. Ubuntu
+browser setup prepares declared libraries and an exact-path AppArmor profile
+when required. Full tools require an accessible Docker Engine on Linux/WSL.
+
+A discovery refresh race was reproduced in the previous implementation and
+fixed so retained tool names remain callable. Full workers now share the
+manager's release identity rather than retaining a stale activation version.
+The Go suite and architecture guard pass. Actual Windows desktop SSH image
+rendering, other full job/network/signing/endpoints/sharing combinations and
+experimental browser workflows retain their separate final acceptance gates.
+
+The checks below retain their historical prerequisite scope; they do not replace
+these exact-source release acceptance results.
 
 ## Completed native browser checks
 
