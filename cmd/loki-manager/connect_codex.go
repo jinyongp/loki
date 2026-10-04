@@ -5,14 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"loki/internal/config"
 	"loki/internal/management"
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
 const codexBegin = "# BEGIN Loki browser\n"
@@ -113,7 +112,7 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 		block.WriteString("experimental_environment = \"remote\"\n")
 	}
 	block.WriteString(end)
-	next, err := mergeCodex(old, []byte(block.String()), server, begin, end)
+	next, err := config.MergeClientConnection(old, []byte(block.String()), server, begin, end)
 	if err != nil {
 		return err
 	}
@@ -150,36 +149,4 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 	fmt.Fprintln(out, "Codex tool connection configured:", *config)
 	fmt.Fprintln(out, "Reopen the Codex project to load", server)
 	return nil
-}
-
-func mergeCodex(old, block []byte, server, beginMarker, endMarker string) ([]byte, error) {
-	var document map[string]any
-	if err := toml.Unmarshal(old, &document); err != nil {
-		return nil, fmt.Errorf("existing Codex configuration is invalid: %w", err)
-	}
-	begin, end := bytes.Index(old, []byte(beginMarker)), bytes.Index(old, []byte(endMarker))
-	if begin >= 0 || end >= 0 {
-		if begin < 0 || end < begin || bytes.Count(old, []byte(beginMarker)) != 1 || bytes.Count(old, []byte(endMarker)) != 1 {
-			return nil, fmt.Errorf("Loki Codex configuration markers are incomplete or duplicated")
-		}
-		end += len(endMarker)
-		next := append(append(append([]byte{}, old[:begin]...), block...), old[end:]...)
-		if err := toml.Unmarshal(next, &document); err != nil {
-			return nil, fmt.Errorf("updated Codex configuration is invalid: %w", err)
-		}
-		return next, nil
-	}
-	if servers, ok := document["mcp_servers"].(map[string]any); ok && servers[server] != nil {
-		return nil, fmt.Errorf("existing %s configuration belongs to the user; keep it or rename it before setup", server)
-	}
-	next := append([]byte{}, old...)
-	if len(next) != 0 && next[len(next)-1] != '\n' {
-		next = append(next, '\n')
-	}
-	next = append(next, '\n')
-	next = append(next, block...)
-	if err := toml.Unmarshal(next, &document); err != nil {
-		return nil, fmt.Errorf("new Codex configuration is invalid: %w", err)
-	}
-	return next, nil
 }
