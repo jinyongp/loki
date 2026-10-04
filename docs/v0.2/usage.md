@@ -5,8 +5,15 @@ afterward and remain disabled until explicitly enabled. The execution host
 determines tool support and workspace paths. A Windows desktop can connect to
 an existing Linux execution host through WSL or SSH.
 
-The commands below describe the new source interface. Receipt-bound 0.2
-candidates have been prepared and baseline native browser acceptance has passed.
+Download the management ZIP for your execution host from
+[the 0.2.0 prerelease](https://github.com/jinyongp/loki/releases/tag/v0.2.0).
+Use the included installer and the release's catalog matching your OS,
+architecture and execution mode. `SHA256SUMS` covers the published files.
+When keeping 0.1 alongside the preview, install the new command in a separate
+bin directory and use a separate management root. The stable update channel
+continues to serve 0.1.
+
+Receipt-bound 0.2 release candidates passed native acceptance before publication.
 See [the final acceptance report](final-acceptance.md) for current results and
 remaining gates. Existing 0.1 installation data has a separate owner.
 

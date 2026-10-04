@@ -1,0 +1,50 @@
+{
+  "release": "0.2.0",
+  "publisher_run": 37179130070,
+  "source_commit": "a2f362d655142f434f68d034f2bb56a0997f8312",
+  "public_asset_checksums": "pass",
+  "native_published_manager": "pass",
+  "native_published_browser": "pass",
+  "oci": [
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/browser-browser@sha256:42d261dadcd01146a685607f2e89e4286660cf0b189e84fdee2738879615876f",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/runtime-core-gateway@sha256:d5dcbb046ac1c769d3eb9d04b8d153bea4fd34071ca4d29a403168324a2586d1",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/git-git-workload@sha256:908a0c2d05387e550bbcadbfeb9f7e7b6d53ade5c78b92ec3b548733fe874860",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/runtime-core-service@sha256:9ec0a6d427159b1341ca09f35a4920bc2e4f58069074e6ad9631f4ea160e2782",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/execution-workload@sha256:c4c516fbf40660c03c4e8cb2383ba9883a18ed6ef53fd3cbb7c270152851649a",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/browser-browser@sha256:cbba37a09f76403a530cc603b33c5ec891a7cb6ed47214a40dc7a5668b106b4e",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/runtime-core-gateway@sha256:e64fe6028b564e90c69ef60d4be4eb401fa98b5f9176ad9d97a050c2e585fb38",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/git-git-workload@sha256:6743c7e1fbb36f5789d834839e958b6a6cb3bdad4bfc47c1fee396ef6dd85bc6",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/runtime-core-service@sha256:e2f740bc5cd830b343da7ff0e77d9498fc27e3314d95ca33411ba477ccb0419b",
+      "anonymous_manifest_digest": "pass"
+    },
+    {
+      "reference": "ghcr.io/jinyongp/loki/v02/execution-workload@sha256:912e1110591d81990dde5b9eae3557595c2e1225c507cfbe98f1e7c0a5d221f5",
+      "anonymous_manifest_digest": "pass"
+    }
+  ]
+}

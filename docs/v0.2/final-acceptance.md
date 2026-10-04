@@ -1,7 +1,36 @@
 # Final acceptance progress
 
-This report records executed checks. It does not publish a release, switch an
-existing installation, or establish acceptance for checks still pending.
+This report records executed checks and the published preview. Existing user
+installations retain their current version. Pending checks remain stable-release gates.
+
+## Published 0.2.0 preview
+
+[Loki 0.2.0 prerelease](https://github.com/jinyongp/loki/releases/tag/v0.2.0)
+was published by [run 37179130070](https://github.com/jinyongp/loki/actions/runs/37179130070)
+from exact source `a2f362d655142f434f68d034f2bb56a0997f8312`.
+The publisher verified original candidate archives, receipts, native catalogs and
+OCI manifest digests before uploading 48 assets. Stable latest remains `v0.1.52`.
+
+All final native runs passed from that same source:
+
+- [Manager 37177982348](https://github.com/jinyongp/loki/actions/runs/37177982348):
+  Linux, macOS and Windows, each on amd64 and arm64.
+- [Browser 37177983658](https://github.com/jinyongp/loki/actions/runs/37177983658):
+  Linux and macOS amd64/arm64 plus Windows amd64, baseline and optional capabilities.
+- [Full 37177984990](https://github.com/jinyongp/loki/actions/runs/37177984990):
+  Linux amd64/arm64 preparation and actual private workspace stdio acceptance.
+
+The final browser readiness probe foregrounds its owned headless page and allows
+ten seconds for painted frames. Disposable full CI runners enable Docker's
+containerd image store to import the exact OCI archives.
+Anonymous GitHub downloads of the Linux amd64 manager, receipt, project-host
+catalog, browser archive and release evidence matched published SHA256SUMS.
+All five full OCI package namespaces accepted anonymous manifest requests.
+The downloaded Linux amd64 manager passed isolated installation and doctor;
+its project-host browser passed both official MCP engines, fixture navigation,
+inline and owned PNG readback, transfer, disable revocation and removal.
+The preview uses fresh native manager ZIP installation; its notes describe the
+remaining full, experimental and Windows desktop SSH acceptance scope.
 
 ## Completed native browser checks
 
@@ -105,11 +134,10 @@ passed native Linux amd64/arm64 preparation and focused Go/manager checks from
 `2f08a0d`. That workflow did not execute the actual full frontend connection and
 therefore did not catch the publication failure. Run 37151479175 also passed
 native Linux amd64/arm64 preparation and focused checks after the contract fix.
-Current-source [full run 37153576451](https://github.com/jinyongp/loki/actions/runs/37153576451)
-includes actual workspace transport acceptance from `cdb9c7c`.
-The matching [browser run 37153578467](https://github.com/jinyongp/loki/actions/runs/37153578467)
-and [manager run 37153581256](https://github.com/jinyongp/loki/actions/runs/37153581256)
-are also under final native validation. The common transport correction passed
+The subsequent full run 37153576451 encountered a classic Docker image-store
+OCI import failure, and browser run 37153578467 encountered the short Windows
+painted-frame deadline. The published-source runs above passed after those fixes.
+The common transport correction passed
 a local independent Playwright/DevTools navigation, transfer, owned/inline PNG
 and immediate browser-disable regression check.
 
