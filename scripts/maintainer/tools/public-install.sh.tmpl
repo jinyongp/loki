@@ -34,17 +34,22 @@ fetch() {
     filename=$1
     expected=$(awk -v name="$filename" '$1 == name {print $2}' "$pins")
     [ -n "$expected" ] || { echo "Unsupported release target: $filename" >&2; exit 1; }
-    echo "[loki] Downloading $filename..." >&2
-    if [ -n "$source_dir" ]; then cp "$source_dir/$filename" "$scratch/$filename"; else curl -fL --retry 3 --connect-timeout 20 --max-time 1200 --progress-bar "$release_url/$filename" -o "$scratch/$filename"; fi
+    if [ -n "$source_dir" ]; then cp "$source_dir/$filename" "$scratch/$filename"; else curl -fsSL --retry 3 --connect-timeout 20 --max-time 1200 "$release_url/$filename" -o "$scratch/$filename"; fi
     if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$scratch/$filename" | awk '{print $1}'); else actual=$(shasum -a 256 "$scratch/$filename" | awk '{print $1}'); fi
     [ "$actual" = "$expected" ] || { echo "Release SHA-256 mismatch: $filename" >&2; exit 1; }
 }
 archive="loki-manager-$release-$target_os-$target_arch.zip"
+echo 'Installing Loki...'
 fetch "$archive"
-echo '[loki] Installing native management command...' >&2
 if command -v unzip >/dev/null 2>&1; then unzip -q "$scratch/$archive" -d "$scratch/manager"; else python3 -m zipfile -e "$scratch/$archive" "$scratch/manager"; fi
 chmod 0755 "$scratch/manager/loki"
-sh "$scratch/manager/install.sh" "$bin_dir" "$management_root"
+if sh "$scratch/manager/install.sh" "$bin_dir" "$management_root" > "$scratch/installation.log" 2>&1; then
+    :
+else
+    status=$?
+    cat "$scratch/installation.log" >&2
+    exit "$status"
+fi
 loki="$bin_dir/loki"
 if [ "$bin_dir" = "$HOME/.local/bin" ]; then
     for profile in "$HOME/.profile" "$HOME/.zprofile"; do
@@ -53,7 +58,6 @@ if [ "$bin_dir" = "$HOME/.local/bin" ]; then
         fi
     done
 fi
-"$loki" --root "$management_root" version
-"$loki" --root "$management_root" doctor
-echo "Loki CLI installed. Command: $loki"
-echo 'Configure and add tools afterward with loki tools. Run loki --help to get started.'
+"$loki" --root "$management_root" version > /dev/null
+echo "Loki $release installed."
+case ":$PATH:" in *":$bin_dir:"*) echo 'Next: loki --help' ;; *) echo "Next: $loki --help" ;; esac

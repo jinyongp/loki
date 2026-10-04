@@ -13,9 +13,14 @@ function Fetch-ReleaseFile([string]$Name, [string]$Directory) {
     $expected = $pins.$Name
     if (-not $expected) { throw "Unsupported release target: $Name" }
     $destination = Join-Path $Directory $Name
-    Write-Host "[loki] Downloading $Name..."
     if ($SourceDirectory) { Copy-Item -LiteralPath (Join-Path $SourceDirectory $Name) -Destination $destination }
-    else { Invoke-WebRequest -UseBasicParsing -Uri "$releaseUrl/$Name" -OutFile $destination }
+    else {
+        $previousProgress = $ProgressPreference
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -UseBasicParsing -Uri "$releaseUrl/$Name" -OutFile $destination
+        } finally { $ProgressPreference = $previousProgress }
+    }
     $stream = [IO.File]::OpenRead($destination)
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { $actual = [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
@@ -32,19 +37,24 @@ $arch = switch ($nativeArchitecture.ToUpperInvariant()) { 'AMD64' { 'amd64' } 'A
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('loki-install-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch | Out-Null
 try {
+    Write-Host 'Installing Loki...'
     $archive = Fetch-ReleaseFile "loki-manager-$release-windows-$arch.zip" $scratch
     $bundle = Join-Path $scratch 'manager'
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($archive, $bundle)
-    Write-Host '[loki] Installing native management command...'
-    & (Join-Path $bundle 'install.ps1') -BinDirectory $BinDirectory -ManagementRoot $ManagementRoot -AddToUserPath
-    if ($LASTEXITCODE -ne 0) { throw 'Native manager installation failed.' }
+    $installationLog = Join-Path $scratch 'installation.log'
+    try {
+        & (Join-Path $bundle 'install.ps1') -BinDirectory $BinDirectory -ManagementRoot $ManagementRoot -AddToUserPath *> $installationLog
+        if ($LASTEXITCODE -ne 0) { throw 'Native manager installation failed.' }
+    } catch {
+        if (Test-Path -LiteralPath $installationLog) { Get-Content -LiteralPath $installationLog | ForEach-Object { Write-Host $_ } }
+        throw
+    }
     $script:loki = Join-Path $BinDirectory 'loki.exe'
     $env:Path = "$BinDirectory;$env:Path"
-    Invoke-Loki @('version')
-    Invoke-Loki @('doctor')
-    Write-Host "Loki $release CLI installed."
-    Write-Host 'Configure and add tools afterward with loki tools. Run loki --help to get started.'
+    Invoke-Loki @('version') | Out-Null
+    Write-Host "Loki $release installed."
+    Write-Host 'Next: loki --help'
 } finally {
     Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
 }

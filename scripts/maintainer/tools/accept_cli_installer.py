@@ -54,8 +54,12 @@ def accept(publication):
             user_path = None
         try:
             for _ in range(2):
-                subprocess.run(args, check=True, stdin=subprocess.DEVNULL, env=environment,
-                               cwd=workspace, timeout=120)
+                result = subprocess.run(args, check=True, stdin=subprocess.DEVNULL, env=environment,
+                                        cwd=workspace, timeout=120, capture_output=True, text=True)
+                expected_next = 'loki' if windows or str(binary_dir) in environment.get('PATH', '').split(os.pathsep) else str(binary_dir / 'loki')
+                expected = ['Installing Loki...', 'Loki 0.2.1 installed.', 'Next: ' + expected_next + ' --help']
+                if result.stdout.splitlines() != expected or result.stderr.strip():
+                    raise ValueError('Installer success output is not concise: ' + result.stdout + result.stderr)
                 check_empty(root)
                 if config.read_text() != preserved or marker.read_text() != 'User project fixture':
                     raise ValueError('CLI bootstrap changed Codex or project files')
@@ -63,6 +67,16 @@ def accept(publication):
             version = subprocess.check_output([str(binary), '--root', str(root), 'version'], text=True)
             if version.strip() != 'loki 0.2.1':
                 raise ValueError('CLI bootstrap reports wrong version')
+            conflict = scratch / 'unowned-bin'
+            conflict.mkdir()
+            unowned = conflict / binary.name
+            unowned.write_bytes(b'user-owned file')
+            conflict_args = [str(conflict) if item == str(binary_dir) else item for item in args]
+            rejected = subprocess.run(conflict_args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                      env=environment, cwd=workspace, timeout=120)
+            failure = ' '.join((rejected.stdout + rejected.stderr).split())
+            if rejected.returncode == 0 or 'existing loki command' not in failure or 'choose another bin directory' not in failure or unowned.read_bytes() != b'user-owned file':
+                raise ValueError('Nested installer failure details were lost')
             (assets / archive).write_bytes(b'corrupt download')
             rejected = subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
                                       env=environment, cwd=workspace, timeout=120)
@@ -70,7 +84,8 @@ def accept(publication):
                 raise ValueError('CLI bootstrap accepted corrupt release bytes')
             print(json.dumps({'cli_installer_acceptance': 'pass', 'os': target_os, 'arch': target_arch,
                               'tools': 'empty', 'codex': 'unchanged', 'repeat_install': 'pass',
-                              'corrupt_download': 'rejected'}))
+                              'corrupt_download': 'rejected', 'success_output': 'three lines',
+                              'nested_failure': 'visible'}))
         finally:
             if user_path is not None:
                 restore = scratch / 'restore.ps1'
