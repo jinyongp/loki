@@ -77,6 +77,13 @@ func upgradeFixture(t *testing.T, target string, corrupt bool) (upgradeDependenc
 			}
 			return nil, nil
 		},
+		install: func(ctx context.Context, store management.Store, binary, directory, version string) error {
+			if version != target {
+				t.Errorf("wrong installation version: %q", version)
+			}
+			runs = append(runs, "--root "+store.Root+" install --bin-dir "+directory)
+			return nil
+		},
 	}
 	return deps, &downloads, &runs
 }

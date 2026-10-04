@@ -34,6 +34,62 @@ func TestManagerPublicationProtectsUnownedCommands(t *testing.T) {
 	}
 }
 
+func TestManagerPublicationRecordsVerifiedTargetRelease(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	source := filepath.Join(t.TempDir(), "candidate")
+	if err := os.WriteFile(source, []byte("target binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := store.InstallManagerVersion(t.Context(), source, t.TempDir(), "0.2.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Release != "0.2.1" || state.Config.Release != "0.2.1" {
+		t.Fatalf("target release not preserved: %+v %+v", record, state.Config)
+	}
+	publication, err := store.readManagerPublication()
+	if err != nil || publication.Candidate.Release != "0.2.1" {
+		t.Fatalf("journal release: %+v %v", publication, err)
+	}
+}
+
+func TestManagerRecoveryRestoresJournalOwnedBackup(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	directory := t.TempDir()
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(source, []byte("old binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	previous, err := store.InstallManager(t.Context(), source, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := previous
+	candidate.SHA256 = strings.Repeat("a", 64)
+	publication := managerPublication{Schema: 1, ID: "op-interrupted", Phase: tools.Staged, Previous: &previous, Candidate: candidate}
+	if err := atomicJSON(filepath.Join(store.Root, "manager-install.json"), publication); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(directory, ".loki-manager-op-interrupted.tmp.previous")
+	if err := os.Rename(previous.Executable, backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.recoverManagerPublication(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(previous.Executable); err != nil || string(data) != "old binary" {
+		t.Fatalf("old CLI recovery: %q %v", data, err)
+	}
+	actual, err := store.readManagerPublication()
+	if err != nil || actual.Phase != tools.Aborted {
+		t.Fatalf("recovery journal: %+v %v", actual, err)
+	}
+}
+
 func TestManagerPublicationAdvancesOnlyEmptyRelease(t *testing.T) {
 	for _, populated := range []bool{false, true} {
 		t.Run(fmt.Sprint(populated), func(t *testing.T) {

@@ -60,7 +60,7 @@ without it, the latest stable release is selected. Reinstalling or downgrading
 requires `--force`. `--timeout 5m` bounds release lookup, downloads and installation.
 
 The official native manager archive is verified against its release SHA-256
-checksum before its version is checked and its bundled manager publishes the
+checksum before its version is checked and the current manager publishes the
 CLI into the current command directory. Existing ownership checks apply.
 Installed tools and their configuration remain separate from CLI upgrades.
 Use global `--host wsl` or `--host ssh` options before `upgrade` to target that

@@ -143,6 +143,15 @@ func (s Store) readManagerPublication() (*managerPublication, error) {
 }
 
 func (s Store) InstallManager(ctx context.Context, source, binDirectory string) (ManagerRecord, error) {
+	return s.InstallManagerVersion(ctx, source, binDirectory, Release)
+}
+
+// InstallManagerVersion publishes a release whose bytes and version the caller
+// has verified. Self-upgrade uses the current publisher even for older targets.
+func (s Store) InstallManagerVersion(ctx context.Context, source, binDirectory, release string) (ManagerRecord, error) {
+	if err := (tools.Config{Schema: 1, Release: release, Host: tools.Host{Kind: "local"}, Mode: tools.ProjectHost}).Validate(); err != nil {
+		return ManagerRecord{}, err
+	}
 	if err := (tools.Layout{Root: binDirectory}).Validate(); err != nil {
 		return ManagerRecord{}, err
 	}
@@ -172,7 +181,7 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 	if err != nil {
 		return ManagerRecord{}, err
 	}
-	candidate := ManagerRecord{Schema: 1, Root: s.Root, Executable: executable, Release: Release, OS: runtime.GOOS, Arch: runtime.GOARCH, SHA256: digest, Bytes: size}
+	candidate := ManagerRecord{Schema: 1, Root: s.Root, Executable: executable, Release: release, OS: runtime.GOOS, Arch: runtime.GOARCH, SHA256: digest, Bytes: size}
 	var previous *ManagerRecord
 	if currentDigest, currentSize, err := managerDigest(executable); err == nil {
 		var owned ManagerRecord
@@ -189,7 +198,7 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 				return ManagerRecord{}, err
 			}
 			if len(state.Installed) == 0 {
-				state.Config.Release = Release
+				state.Config.Release = release
 			}
 			if err := s.Save(state); err != nil {
 				return ManagerRecord{}, err
@@ -206,7 +215,7 @@ func (s Store) InstallManager(ctx context.Context, source, binDirectory string) 
 	// An empty CLI installation follows the newly published manager version.
 	// Populated installations retain their release until a tool update commits.
 	if len(state.Installed) == 0 {
-		state.Config.Release = Release
+		state.Config.Release = release
 	}
 	if err := s.Save(state); err != nil {
 		return ManagerRecord{}, err

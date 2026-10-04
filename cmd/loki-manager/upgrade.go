@@ -38,6 +38,7 @@ type upgradeDependencies struct {
 	client     *http.Client
 	executable func() (string, error)
 	run        func(context.Context, string, ...string) ([]byte, error)
+	install    func(context.Context, management.Store, string, string, string) error
 }
 
 func defaultUpgradeDependencies() upgradeDependencies {
@@ -45,6 +46,10 @@ func defaultUpgradeDependencies() upgradeDependencies {
 		client: &http.Client{}, executable: os.Executable,
 		run: func(ctx context.Context, binary string, args ...string) ([]byte, error) {
 			return exec.CommandContext(ctx, binary, args...).CombinedOutput()
+		},
+		install: func(ctx context.Context, store management.Store, binary, directory, version string) error {
+			_, err := store.InstallManagerVersion(ctx, binary, directory, version)
+			return err
 		},
 	}
 }
@@ -268,9 +273,8 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		return fmt.Errorf("downloaded CLI version does not match target release")
 	}
 	fmt.Fprintln(diagnostics, "Installing Loki "+target+"...")
-	result, err = deps.run(ctx, candidate, "--root", store.Root, "install", "--bin-dir", filepath.Dir(executable))
-	if err != nil {
-		return fmt.Errorf("CLI upgrade failed: %w\n%s", err, strings.TrimSpace(string(result)))
+	if err := deps.install(ctx, store, candidate, filepath.Dir(executable), target); err != nil {
+		return fmt.Errorf("CLI upgrade failed: %w", err)
 	}
 	fmt.Fprintln(out, "Loki "+target+" installed.")
 	return nil
