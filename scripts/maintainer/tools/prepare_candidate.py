@@ -83,7 +83,7 @@ def prepare(recipe_path, output, selected=None, reused_payloads=None, image_role
         raise ValueError("full candidate has an unknown module owner")
     if (set(native_receipts) & {"git", "github", "coordination"}) - set(modules):
         raise ValueError("native source programs require their selected candidate module")
-    prepared = dict(reused_payloads or {})
+    prepared = {owner: Path(directory) for owner, directory in (reused_payloads or {}).items()}
     for owner, module in sorted(modules.items()):
         source = (recipe_path.parent / module["inputs"]).resolve()
         inputs = json.loads(source.read_text(encoding="utf-8"))

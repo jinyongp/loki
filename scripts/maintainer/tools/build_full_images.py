@@ -34,6 +34,29 @@ ROLE_OWNER = {"service":"runtime-core", "gateway":"runtime-core", "workload":"ex
 ROLE_IMAGE = {"service":"runtime-core-service", "gateway":"runtime-core-gateway", "workload":"execution-workload", "git-workload":"git-workload", "browser":"browser"}
 
 
+def build_with_cache(command, context, archive, image_name, repository, role, arch, environment):
+    cache = os.environ.get("LOKI_BUILD_CACHE", "")
+    if cache and cache != "registry":
+        raise ValueError("unsupported build cache backend")
+    cache_ref = repository+"/build-cache-"+ROLE_IMAGE[role]+":"+arch+"-v1"
+    cache_from = ["--cache-from", "type=registry,ref="+cache_ref] if cache else []
+    started = time.monotonic()
+    if cache_from:
+        try:
+            subprocess.run([*command, *cache_from, "--output", "type=cacheonly", str(context)], env=environment, check=True, timeout=60)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print("Cache import warning for "+role+": "+type(error).__name__+"; building from verified local inputs", flush=True)
+    # The required export consumes local verified inputs/cache only.
+    # Registry cache I/O never consumes its build time budget.
+    subprocess.run([*command, "--output", "type=oci,rewrite-timestamp=true,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
+    if cache and os.environ.get("LOKI_CACHE_WRITE") == "1":
+        try:
+            subprocess.run([*command, "--output", "type=cacheonly", "--cache-to", "type=registry,ref="+cache_ref+",mode=max,ignore-error=true", str(context)], env=environment, check=True, timeout=60)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print("Cache export warning for "+role+": "+type(error).__name__, flush=True)
+    print("Image "+role+" build and cache: "+str(round(time.monotonic()-started, 2))+"s", flush=True)
+
+
 def verify_payload(directory, target):
     receipt = json.loads((directory / "payload-receipt.json").read_text(encoding="utf-8"))
     if receipt.get("schema") != 1 or receipt.get("release") != artifact_release(receipt.get("module")) or receipt.get("target") != target or receipt.get("module") not in REQUIRED_PROGRAMS:
@@ -256,26 +279,7 @@ def assemble(recipe_path, output):
                 print("Preparing owned native "+role+" image...", flush=True)
                 image_name = repository+"/"+ROLE_IMAGE[role]+":"+release+"-linux-"+arch
                 command = [*docker, "buildx", "build", "--builder", builder, "--platform", "linux/"+arch, "--network", "none", "--provenance=false", "--sbom=false", "--build-arg", "SOURCE_DATE_EPOCH=0"]
-                cache = os.environ.get("LOKI_BUILD_CACHE", "")
-                if cache and cache != "registry":
-                    raise ValueError("unsupported build cache backend")
-                cache_ref = repository+"/build-cache-"+ROLE_IMAGE[role]+":"+arch+"-v1"
-                cache_from = ["--cache-from", "type=registry,ref="+cache_ref] if cache else []
-                started = time.monotonic()
-                if cache_from:
-                    try:
-                        subprocess.run([*command, *cache_from, "--output", "type=cacheonly", str(context)], env=environment, check=True, timeout=60)
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                        print("Cache import warning for "+role+": "+type(error).__name__+"; building from verified local inputs", flush=True)
-                # The required export consumes local verified inputs/cache only.
-                # Registry cache I/O never consumes its build time budget.
-                subprocess.run([*command, "--output", "type=oci,rewrite-timestamp=true,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
-                if cache and os.environ.get("LOKI_CACHE_WRITE") == "1":
-                    try:
-                        subprocess.run([*command, "--output", "type=cacheonly", "--cache-to", "type=registry,ref="+cache_ref+",mode=max,ignore-error=true", str(context)], env=environment, check=True, timeout=60)
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                        print("Cache export warning for "+role+": "+type(error).__name__, flush=True)
-                print("Image "+role+" build and cache: "+str(round(time.monotonic()-started, 2))+"s", flush=True)
+                build_with_cache(command, context, archive, image_name, repository, role, arch, environment)
                 manifest = oci_manifest(archive, target)
                 receipts[role] = {"owner":ROLE_OWNER[role], "target":target, "reference":repository+"/"+ROLE_IMAGE[role]+"@"+manifest, "archive":name, "bytes":archive.stat().st_size, "sha256":digest(archive), "notices":recipe["base_notices"], "base":recipe["base"], "buildkit":recipe["buildkit"], "frontend":recipe["frontend"], "inputs":inputs, "published":False, "accepted":False}
             with ThreadPoolExecutor(max_workers=2) as executor:

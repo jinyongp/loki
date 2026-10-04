@@ -34,6 +34,22 @@ def fixture():
 
 
 class SelectionTests(unittest.TestCase):
+    def test_selected_image_accepts_payload_paths_from_json_request(self):
+        import prepare_candidate
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            target={"os":"linux","arch":"amd64","mode":"full"}
+            write(root/"recipe.json",{"schema":1,"target":target,"images":"images.json"})
+            write(root/"images.json",{"target":target})
+            payload=root/"reused-core";payload.mkdir()
+            def build(command, **kwargs):
+                self.assertEqual(Path(command[1]).name,"build_full_images.py")
+                bound=json.loads(Path(command[command.index("--inputs")+1]).read_text())
+                self.assertEqual(bound["payloads"],{"runtime-core":str(payload.resolve())})
+                write(Path(command[command.index("--output")+1])/"images.json",{"images":{}})
+            with patch.object(prepare_candidate.platform,"system",return_value="Linux"),patch.object(prepare_candidate.platform,"machine",return_value="x86_64"),patch.object(prepare_candidate.subprocess,"run",side_effect=build):
+                prepare_candidate.prepare(root/"recipe.json",root/"output",selected=[],reused_payloads={"runtime-core":str(payload)},image_roles=["service"],include_manager=False)
+
     def test_windows_native_architecture_case_is_normalized(self):
         with patch("release_pipeline.platform.system",return_value="Windows"),patch("release_pipeline.platform.machine",return_value="ARM64"):
             self.assertEqual(native(),("windows","arm64"))
@@ -106,6 +122,26 @@ class SelectionTests(unittest.TestCase):
 
 
 class CacheTests(unittest.TestCase):
+    def test_registry_cache_failures_preserve_required_build(self):
+        import build_full_images
+        import subprocess
+        def execute(command, **kwargs):
+            if "type=cacheonly" in command:
+                raise subprocess.TimeoutExpired(command,kwargs["timeout"])
+        with patch.dict(os.environ,{"LOKI_BUILD_CACHE":"registry","LOKI_CACHE_WRITE":"1"}),patch.object(build_full_images.subprocess,"run",side_effect=execute) as run:
+            build_full_images.build_with_cache(["docker","buildx","build"],Path("context"),Path("output.oci.tar"),"candidate","ghcr.io/jinyongp/loki","service","amd64",{})
+            self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list],[60,600,60])
+            required=run.call_args_list[1].args[0]
+            self.assertNotIn("--cache-from",required)
+            self.assertNotIn("--cache-to",required)
+        def required_failure(command, **kwargs):
+            if any(item.startswith("type=oci,") for item in command):
+                raise subprocess.CalledProcessError(1,command)
+        with patch.dict(os.environ,{"LOKI_BUILD_CACHE":"registry","LOKI_CACHE_WRITE":"1"}),patch.object(build_full_images.subprocess,"run",side_effect=required_failure) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                build_full_images.build_with_cache(["docker","buildx","build"],Path("context"),Path("output.oci.tar"),"candidate","ghcr.io/jinyongp/loki","service","amd64",{})
+            self.assertEqual(run.call_count,2)
+
     def test_corrupt_restore_cold_fallback_and_verified_hit(self):
         with tempfile.TemporaryDirectory() as temp,patch.dict(os.environ,{"LOKI_INPUT_CACHE":temp}):
             root=Path(temp);source=root/"source";source.write_bytes(b"trusted")
