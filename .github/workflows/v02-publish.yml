@@ -1,0 +1,123 @@
+name: Publish accepted Loki 0.2 preview
+on:
+  workflow_dispatch:
+    inputs:
+      manager_run:
+        description: Successful same-source six-target native manager validation run
+        required: true
+        type: string
+      browser_run:
+        description: Successful same-source five-target native browser validation run
+        required: true
+        type: string
+      full_run:
+        description: Successful same-source two-target full native validation run
+        required: true
+        type: string
+      expected_sha:
+        description: Exact main commit accepted by all three native runs
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: loki-v02-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Require accepted native runs from this exact main source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANAGER_RUN: ${{ inputs.manager_run }}
+          BROWSER_RUN: ${{ inputs.browser_run }}
+          FULL_RUN: ${{ inputs.full_run }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        shell: bash
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          expected = os.environ['EXPECTED_SHA']
+          if not re.fullmatch(r'[a-f0-9]{40}', expected):
+              raise ValueError('publication requires an exact commit')
+          for variable, workflow in [('MANAGER_RUN', 'v02-native-manager.yml'), ('BROWSER_RUN', 'v02-native-tools.yml'), ('FULL_RUN', 'v02-native-tools.yml')]:
+              run_id = os.environ[variable]
+              if not run_id.isdigit():
+                  raise ValueError('native run ID must be numeric')
+              run = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + run_id]))
+              if run['head_sha'] != expected or run['head_branch'] != 'main' or run['event'] != 'workflow_dispatch' or run['status'] != 'completed' or run['conclusion'] != 'success' or run['path'] != '.github/workflows/' + workflow:
+                  raise ValueError('publication requires successful exact-source native acceptance: ' + variable)
+              Path(variable.lower() + '-acceptance.json').write_text(json.dumps({key:run[key] for key in ['id','head_sha','path','html_url','conclusion']}) + '\n')
+          PY
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            echo 'v0.2.0 already exists; inspect its draft/publication state before continuing.' >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: loki-v02-manager-*
+          run-id: ${{ inputs.manager_run }}
+          github-token: ${{ github.token }}
+          path: accepted-managers
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: loki-v02-tools-*-project-host
+          run-id: ${{ inputs.browser_run }}
+          github-token: ${{ github.token }}
+          path: accepted-browsers
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: loki-v02-tools-*-full
+          run-id: ${{ inputs.full_run }}
+          github-token: ${{ github.token }}
+          path: accepted-full
+      - name: Assemble original accepted bytes and public checksums
+        shell: bash
+        run: |
+          python3 scripts/maintainer/v02/test_prepare_release.py
+          python3 scripts/maintainer/v02/prepare_release.py --managers accepted-managers --browsers accepted-browsers --full accepted-full --output preview-release --source "$GITHUB_SHA" --acceptance manager_run-acceptance.json --acceptance browser_run-acceptance.json --acceptance full_run-acceptance.json
+          (cd preview-release/assets && sha256sum --check --strict SHA256SUMS)
+      - name: Install registry copy tool on the disposable publisher
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends skopeo
+      - name: Publish exact OCI manifests to the owned registry namespace
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          authfile="$RUNNER_TEMP/loki-v02-registry-auth.json"
+          trap 'rm -f "$authfile"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | skopeo login --authfile "$authfile" --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+          export LOKI_PUBLICATION_AUTHFILE="$authfile"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          auth = os.environ['LOKI_PUBLICATION_AUTHFILE']
+          for image in json.load(open('preview-release/publication-images.json')):
+              subprocess.run(['skopeo','copy','--preserve-digests','--authfile',auth,'oci-archive:' + image['archive'],'docker://' + image['tag']], check=True)
+              raw = subprocess.check_output(['skopeo','inspect','--raw','--authfile',auth,'docker://' + image['reference']])
+              if hashlib.sha256(raw).hexdigest() != image['reference'].split('@sha256:', 1)[1]:
+                  raise ValueError('published native OCI bytes differ from their accepted manifest')
+          PY
+      - name: Stage then publish the 0.2.0 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
+          gh release create v0.2.0 --target "$GITHUB_SHA" --draft --prerelease --title 'Loki 0.2.0 preview' --notes-file preview-release/assets/loki-release-notes.md
+          gh release upload v0.2.0 preview-release/assets/*
+          gh release edit v0.2.0 --draft=false --prerelease --latest=false
+          gh release view v0.2.0 --json url,isDraft,isPrerelease,assets

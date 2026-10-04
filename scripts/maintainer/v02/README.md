@@ -291,3 +291,12 @@ owned shutdown. Failure preserves the private root for recovery. It certifies
 workspace transport only; execution, Git, browser, sharing and endpoint flows
 have separate acceptance requirements. The full native validation workflow runs
 this check after preparation without publishing images or a release.
+
+`v02-publish.yml` publishes the first 0.2.0 preview using three successful
+same-source native validation runs. `prepare_release.py` verifies original
+candidate lengths/digests and complete six-manager, five-project-browser and
+two-Linux-full coverage. Native catalogs stay separate by mode and target.
+The publisher preserves and verifies OCI manifest digests in GHCR, uploads
+original ZIPs, native catalogs, acceptance records and `SHA256SUMS`, then
+publishes a prerelease. Other full-module and desktop SSH gates stay documented;
+this preview does not complete the workstream's stable acceptance requirements.

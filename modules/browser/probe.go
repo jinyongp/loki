@@ -35,10 +35,11 @@ process.stdin.once('data', async () => {
     const context = await browser.newContext({viewport: {width: 320, height: 240}, recordVideo: {dir: videoDirectory, size: {width: 320, height: 240}}});
     const page = await context.newPage();
     await page.setContent('<html><body>Browser readiness</body></html>');
+    await page.bringToFront();
     // setContent observes DOM readiness; capture requires a painted frame too.
     await page.evaluate(() => Promise.race([
       new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Browser frame readiness timed out')), 3000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Browser frame readiness timed out')), 10000))
     ]));
     await page.screenshot();
     await page.waitForTimeout(300);
@@ -84,7 +85,7 @@ func CheckRuntime(ctx context.Context, bundle string) error {
 	if err != nil {
 		return fmt.Errorf("bundled browser launch adapter unavailable: %w", err)
 	}
-	checkCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	checkCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	if runtime.GOOS == "darwin" {
 		if _, err := chromeApp(bundle, chrome); err != nil {
