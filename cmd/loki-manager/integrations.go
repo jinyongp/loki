@@ -95,7 +95,7 @@ func readGitHubSetup(store management.Store, configPath, keyPath string, stdin b
 
 func runIntegrations(ctx context.Context, store management.Store, args []string, input io.Reader, output, diagnostics io.Writer) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: loki integrations setup|status|doctor|refresh github [OPTIONS]")
+		return fmt.Errorf("choose an action and integration; see 'loki integrations --help'")
 	}
 	if args[1] == "git" {
 		return runGitIntegration(ctx, store, args, input, output, diagnostics)
@@ -112,10 +112,10 @@ func runIntegrations(ctx context.Context, store management.Store, args []string,
 		return err
 	}
 	if f.NArg() != 1 || f.Arg(0) != "github" {
-		return fmt.Errorf("this integration action requires github")
+		return fmt.Errorf("this integration action requires github; see 'loki integrations %s --help'", action)
 	}
 	if !slices.Contains([]string{"setup", "status", "doctor", "refresh"}, action) {
-		return fmt.Errorf("unknown integrations action %q", action)
+		return fmt.Errorf("unknown integrations action %q; see 'loki integrations --help'", action)
 	}
 	if action != "setup" && (*configPath != "" || *keyPath != "" || *stdin || *personal || *noBrowser) {
 		return fmt.Errorf("setup options require integrations setup github")

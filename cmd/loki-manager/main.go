@@ -37,12 +37,8 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	flags := flag.NewFlagSet("loki", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	flags.Usage = func() {
-		fmt.Fprintln(diagnostics, "Usage: loki [HOST OPTIONS] COMMAND")
-		fmt.Fprintln(diagnostics, "  install | version | status | doctor")
-		fmt.Fprintln(diagnostics, "  tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve|connect")
-		fmt.Fprintln(diagnostics, "  integrations setup|status|doctor git")
-		fmt.Fprintln(diagnostics, "  integrations setup|status|doctor|refresh github")
-		flags.PrintDefaults()
+		entry, _ := helpFor("")
+		printHelp(out, entry)
 	}
 	root := flags.String("root", "", "0.2 management directory on this execution host")
 	hostKind := flags.String("host", "local", "execution host: local, wsl or ssh")
@@ -50,9 +46,15 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	address := flags.String("address", "", "SSH destination")
 	remoteCommand := flags.String("remote-command", "loki", "manager executable on the execution host")
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	args = flags.Args()
+	if handled, err := contextualHelp(args, out); handled {
+		return err
+	}
 	host := tools.Host{Kind: *hostKind, Distribution: *distribution, Address: *address}
 	if err := host.Validate(); err != nil {
 		return err
@@ -141,7 +143,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return runIntegrations(ctx, store, args[1:], os.Stdin, out, diagnostics)
 	}
 	if len(args) < 2 || args[0] != "tools" {
-		return fmt.Errorf("usage: loki [--root PATH] install|version|status|doctor|tools configure|plan|resources|topology|layouts|list|install|update|enable|disable|remove|prune|recover|start|stop|serve|connect")
+		return fmt.Errorf("unknown command %q; run 'loki --help' to list commands", args[0])
 	}
 	switch args[1] {
 	case "connect":
@@ -223,7 +225,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		if f.NArg() != 0 || *mode == "" {
-			return fmt.Errorf("usage: loki tools configure --mode project-host|full")
+			return fmt.Errorf("choose an execution mode with --mode project-host or --mode full; see 'loki tools configure --help'")
 		}
 		if err := store.ConfigureMode(tools.Mode(*mode)); err != nil {
 			return err
@@ -249,7 +251,10 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		if *catalog == "" || (args[1] == "install" && f.NArg() == 0) || (args[1] == "update" && f.NArg() != 0) {
-			return fmt.Errorf("usage: loki tools install --catalog TRUSTED-FILE TOOL...; loki tools update --catalog TRUSTED-FILE")
+			if args[1] == "install" {
+				return fmt.Errorf("provide --catalog FILE and at least one tool; see 'loki tools install --help'")
+			}
+			return fmt.Errorf("provide --catalog FILE without tool names; see 'loki tools update --help'")
 		}
 		if *archives != "" && !filepath.IsAbs(*archives) {
 			return fmt.Errorf("--archives requires an absolute execution-host directory")
@@ -290,7 +295,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		if f.NArg() != 1 {
-			return fmt.Errorf("select exactly one installed tool")
+			return fmt.Errorf("select exactly one installed tool; see 'loki tools %s --help'", args[1])
 		}
 		var caps []string
 		f.Visit(func(option *flag.Flag) {
@@ -304,7 +309,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return store.SetEnabled(tools.ID(f.Arg(0)), args[1] == "enable", caps)
 	case "remove":
 		if len(args) != 3 {
-			return fmt.Errorf("select exactly one tool to remove")
+			return fmt.Errorf("select exactly one tool to remove; see 'loki tools remove --help'")
 		}
 		return store.Remove(tools.ID(args[2]))
 	case "prune":
@@ -325,7 +330,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	case "serve":
 		return serve(ctx, store, args[2:], diagnostics)
 	default:
-		return fmt.Errorf("unknown tools command %q", args[1])
+		return fmt.Errorf("unknown tools command %q; run 'loki tools --help' to list commands", args[1])
 	}
 }
 
@@ -387,7 +392,7 @@ func serve(ctx context.Context, store management.Store, args []string, diagnosti
 		return serveFull(ctx, store, diagnostics)
 	}
 	if f.NArg() != 1 || f.Arg(0) != "browser" || *workspace == "" {
-		return fmt.Errorf("usage: loki tools serve (full), or loki tools serve browser --engine playwright|devtools|both --workspace PATH (project-host)")
+		return fmt.Errorf("provide browser and --workspace PATH in project-host mode, or omit both in full mode; see 'loki tools serve --help'")
 	}
 	state, err := store.Load()
 	if err != nil {

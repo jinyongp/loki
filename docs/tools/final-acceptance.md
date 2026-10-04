@@ -43,6 +43,20 @@ The Go suite and architecture guard pass. Actual Windows desktop SSH image
 rendering, other full job/network/signing/endpoints/sharing combinations and
 experimental browser workflows retain their separate final acceptance gates.
 
+## CLI help source acceptance
+
+The management CLI now shows descriptive help for bare `loki`, `tools` and
+`integrations`. Public commands accept contextual `--help`, `-h` and
+`help COMMAND`, with descriptions, options and examples. Help is resolved before
+management state, credentials or remote hosts are accessed. Unknown commands and
+missing required inputs point to relevant help.
+
+Focused Go tests passed for the manager, management and tools packages. Windows
+amd64 and macOS arm64 test compilation passed; native execution of this new
+binary is not claimed. These are source implementation results; the immutable
+published 0.2.1 manager remains unchanged. See
+[cli-help.json](evidence/cli-help.json).
+
 ## Concise installer output
 
 [Run 37190369288](https://github.com/jinyongp/loki/actions/runs/37190369288)

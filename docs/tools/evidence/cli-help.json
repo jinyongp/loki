@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "scope": "CLI help implementation and source validation; not a published manager release",
+  "source_basis": "6d790fe1b354d52d573516d91d1f857839e08a93 plus declared help patch",
+  "behavior": {
+    "bare_loki": "descriptive help on stdout and successful exit",
+    "bare_command_groups": "descriptions and contextual usage",
+    "public_command_help": "options, descriptions and examples",
+    "aliases": "--help, -h, help COMMAND",
+    "execution_isolation": "no state, credential or remote access for help",
+    "flag_values_and_double_dash": "not interpreted as help requests",
+    "invalid_commands_and_required_arguments": "actionable errors with help command"
+  },
+  "validation": {
+    "command": "go test ./cmd/loki-manager ./internal/management ./internal/tools",
+    "result": "pass",
+    "windows_amd64_test_compilation": "pass",
+    "darwin_arm64_test_compilation": "pass",
+    "actual_linux_cli_review": "root, tools, integrations, install and GitHub setup help reviewed"
+  },
+  "publication": "Installed immutable 0.2.1 manager unchanged; updated binary requires a subsequent release."
+}

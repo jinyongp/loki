@@ -29,6 +29,11 @@ If your shell does not yet include the command directory in PATH, `Next` uses
 the installed command's full path. Installation failures show their cause.
 
 After installation, use `loki --help` and `loki tools list` to inspect the CLI.
+Running `loki` also shows the command overview. Use `loki tools` or
+`loki integrations` for a group's commands, and `loki tools install --help`
+for a command's description, options and examples. `loki help tools install`
+is an equivalent form. Help works before tool configuration and without
+connecting to a remote execution host.
 Configure the execution host, install and enable individual tool groups, then
 connect your MCP client using the commands in the tool installation guide.
 For WSL or SSH projects, install the native CLI on that execution host as well.

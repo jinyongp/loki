@@ -26,7 +26,7 @@ func runGitIntegration(ctx context.Context, store management.Store, args []strin
 		return err
 	}
 	if f.NArg() != 1 || f.Arg(0) != "git" || !slices.Contains([]string{"setup", "status", "doctor"}, action) {
-		return fmt.Errorf("usage: loki integrations setup|status|doctor git [OPTIONS]")
+		return fmt.Errorf("choose setup, status or doctor for git; see 'loki integrations --help'")
 	}
 	if *keyFile != "" && *keyStdin {
 		return fmt.Errorf("use --key-file or --key-stdin")
