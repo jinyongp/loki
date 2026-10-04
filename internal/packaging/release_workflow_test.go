@@ -38,8 +38,32 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	if err := publish.Needs.Decode(&needs); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(needs, ",") != "plan,gate" || jobs["publish"].If != "inputs.publish" {
+	if strings.Join(needs, ",") != "plan,gate" {
 		t.Fatal("publication bypasses final gate or explicit request")
+	}
+	// A successful gate can have intentionally skipped ancestors in a selective
+	// build. Explicit status functions avoid the implicit success() skip cascade;
+	// direct dependency checks still prevent publishing failed or absent gates.
+	for job, required := range map[string][]string{
+		"publish":       {"always()", "inputs.publish", "needs.plan.result == 'success'", "needs.gate.result == 'success'"},
+		"pages":         {"always()", "needs.publish.result == 'success'"},
+		"verify-public": {"always()", "needs.plan.result == 'success'", "needs.pages.result == 'success'"},
+	} {
+		for _, guard := range required {
+			if !strings.Contains(jobs[job].If, guard) {
+				t.Fatalf("%s omits selective publication guard %q", job, guard)
+			}
+		}
+	}
+	var assertsPublicDelivery bool
+	for _, step := range jobs["summary"].Steps {
+		if strings.Contains(step.Run, "os.environ['PUBLISH'] == 'true'") &&
+			strings.Contains(step.Run, "value['result'] != 'success'") && strings.Contains(step.Run, "raise SystemExit") {
+			assertsPublicDelivery = true
+		}
+	}
+	if !assertsPublicDelivery {
+		t.Fatal("requested publication must fail when public delivery is skipped or fails")
 	}
 	needs = nil
 	gate := jobs["gate"]

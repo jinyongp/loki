@@ -631,7 +631,7 @@ jobs:
 
   publish:
     needs: [plan, gate]
-    if: inputs.publish
+    if: always() && inputs.publish && needs.plan.result == 'success' && needs.gate.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -681,6 +681,7 @@ jobs:
 
   pages:
     needs: publish
+    if: always() && needs.publish.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       pages: write
@@ -694,6 +695,7 @@ jobs:
 
   verify-public:
     needs: [plan, pages]
+    if: always() && needs.plan.result == 'success' && needs.pages.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -720,9 +722,12 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os
+          results = json.loads(os.environ['JOB_RESULTS'])
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
               out.write('## Release pipeline\n\n')
               out.write('Publish requested: '+os.environ['PUBLISH']+'\n\n')
-              for job, value in json.loads(os.environ['JOB_RESULTS']).items():
+              for job, value in results.items():
                   out.write('- '+job+': '+value['result']+'\n')
+          if os.environ['PUBLISH'] == 'true' and any(value['result'] != 'success' for value in results.values()):
+              raise SystemExit('Requested publication did not complete all release and public delivery gates')
           PY
