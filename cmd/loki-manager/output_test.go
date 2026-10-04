@@ -69,6 +69,24 @@ func TestPublicStatusAndMutationOutputFormats(t *testing.T) {
 		{[]string{"--json", "tools", "status"}, true, "tools"},
 		{[]string{"doctor", "--json"}, true, "healthy"},
 		{[]string{"version", "--json"}, true, "version"},
+		{[]string{"tools", "configure", "--mode", "project-host", "--json"}, true, "mode"},
+		{[]string{"tools", "recover", "--json"}, true, "success"},
+	} {
+		assertCommandOutput(t, root, test.args, test.structured, test.field)
+	}
+}
+
+func TestFullPlanOutputFormats(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("full plans require a Linux execution host")
+	}
+	root := t.TempDir()
+	for _, test := range []struct {
+		args       []string
+		structured bool
+		field      string
+	}{
+		{[]string{"install"}, false, "Loki management installed"},
 		{[]string{"tools", "configure", "--mode", "full", "--json"}, true, "mode"},
 		{[]string{"tools", "plan", "--json"}, true, "services"},
 		{[]string{"tools", "plan"}, false, "Full tool plan"},
@@ -78,20 +96,24 @@ func TestPublicStatusAndMutationOutputFormats(t *testing.T) {
 		{[]string{"tools", "layouts"}, false, "Full tool layouts"},
 		{[]string{"tools", "topology", "--json"}, true, "schema"},
 		{[]string{"tools", "topology"}, false, "Full tool topology"},
-		{[]string{"tools", "recover", "--json"}, true, "success"},
 	} {
-		var out, diagnostics bytes.Buffer
-		args := append([]string{"--root", root}, test.args...)
-		if err := run(t.Context(), args, &out, &diagnostics); err != nil {
-			t.Fatalf("%q: %v\n%s", test.args, err, out.String())
+		assertCommandOutput(t, root, test.args, test.structured, test.field)
+	}
+}
+
+func assertCommandOutput(t *testing.T, root string, command []string, structured bool, field string) {
+	t.Helper()
+	var out, diagnostics bytes.Buffer
+	args := append([]string{"--root", root}, command...)
+	if err := run(t.Context(), args, &out, &diagnostics); err != nil {
+		t.Fatalf("%q: %v\n%s", command, err, out.String())
+	}
+	if structured {
+		if _, ok := singleJSON(t, out.Bytes())[field]; !ok {
+			t.Fatalf("%q: missing %s: %s", command, field, out.String())
 		}
-		if test.structured {
-			if _, ok := singleJSON(t, out.Bytes())[test.field]; !ok {
-				t.Fatalf("%q: missing %s: %s", test.args, test.field, out.String())
-			}
-		} else if json.Valid(out.Bytes()) || !strings.Contains(out.String(), test.field) {
-			t.Fatalf("unreadable %q: %s", test.args, out.String())
-		}
+	} else if json.Valid(out.Bytes()) || !strings.Contains(out.String(), field) {
+		t.Fatalf("unreadable %q: %s", command, out.String())
 	}
 }
 
