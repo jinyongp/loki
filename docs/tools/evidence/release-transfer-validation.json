@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "completed_date_kst": "2026-10-05",
+  "status": "passed",
+  "source_commit": "f5b265c715adfe6f72cafd7cffc74c439c896e5b",
+  "candidate_run": "https://github.com/jinyongp/loki/actions/runs/37215415960",
+  "candidate_release": "0.2.5",
+  "publish": false,
+  "public_release_unchanged": "0.2.4",
+  "implemented": {
+    "publication_assets": "Separate artifact containing only release assets; final gate still reads and seals their exact bytes. Publisher overlays accepted lock and SHA256SUMS and checks every asset before publication.",
+    "publication_pages": "Separate artifact containing installer pages, index and .nojekyll. Public comparison downloads this artifact without release binaries or tool archives.",
+    "transfer_inventory": "Artifact file counts and bytes recorded in publication-metadata and the assemble job summary. Named transfer steps retain Actions duration measurements."
+  },
+  "candidate_transfer_bytes": {
+    "release_assets": 34233926,
+    "release_asset_files": 17,
+    "installer_pages": 7457,
+    "installer_page_files": 4,
+    "avoided_public_verifier_asset_download": 34233926
+  },
+  "previous_full_public_release": {
+    "release": "0.2.4",
+    "release_asset_bytes": 3692419839,
+    "release_asset_files": 51,
+    "public_installer_bytes": 7372,
+    "public_verifier_artifact_download_seconds": 84,
+    "scope": "Historical full-release measurement. New public-verifier elapsed time has not been measured because this candidate did not publish."
+  },
+  "validation": {
+    "go_packaging": "passed, including transfer scopes, .nojekyll preservation and final seal overlay requirements",
+    "actionlint": "passed: 1.7.12",
+    "python_release_fixtures": "23 tests passed",
+    "source_ci": "passed: https://github.com/jinyongp/loki/actions/runs/37215384592",
+    "private_native_ci": "All six manager targets, source checks, assembly and final gate passed; browser/full builds and checks skipped; publish/Pages/public verification skipped."
+  },
+  "external_upload_investigation": {
+    "repository": "releaseway/actions",
+    "current_loki_dependency": "Unchanged: v0.2.1, 22219bebc51a4127c6dffd9e79706f08cdd678dc",
+    "prepared_pr": "https://github.com/releaseway/actions/pull/3",
+    "status": "Open, unmerged; no new Action release published. Integration stopped after scope clarification.",
+    "candidate_checks": "Linux/macOS CI passed; 77 Node tests, lifecycle overlap/failure/resume/digest fixtures and ten release evidence tests passed.",
+    "loki_parallel_uploads": "Not enabled; the pinned Action retains its existing upload behavior."
+  }
+}
