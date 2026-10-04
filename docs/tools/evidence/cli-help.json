@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "scope": "CLI help implementation and source validation; not a published manager release",
-  "source_basis": "6d790fe1b354d52d573516d91d1f857839e08a93 plus declared help patch",
+  "scope": "CLI help implemented and published in stable 0.2.2",
+  "source_basis": "220d394d41d32eb7a2b0a6aba2c08285b9d23a50",
   "behavior": {
     "bare_loki": "descriptive help on stdout and successful exit",
     "bare_command_groups": "descriptions and contextual usage",
@@ -16,7 +16,16 @@
     "result": "pass",
     "windows_amd64_test_compilation": "pass",
     "darwin_arm64_test_compilation": "pass",
-    "actual_linux_cli_review": "root, tools, integrations, install and GitHub setup help reviewed"
+    "actual_linux_cli_review": "root, tools, integrations, install and GitHub setup help reviewed",
+    "native_execution": {
+      "run": 37192839658,
+      "targets": "Linux/macOS/Windows amd64 and arm64",
+      "result": "pass"
+    }
   },
-  "publication": "Installed immutable 0.2.1 manager unchanged; updated binary requires a subsequent release."
+  "publication": {
+    "release": "0.2.2",
+    "publisher_run": 37193691237,
+    "verification": "docs/tools/evidence/release-publication.json"
+  }
 }

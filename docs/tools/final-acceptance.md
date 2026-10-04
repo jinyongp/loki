@@ -3,59 +3,61 @@
 This report records executed checks and the published release. Pending checks
 retain their actual validation status.
 
-## Published 0.2.1
+## Published 0.2.2
 
-[Loki 0.2.1](https://github.com/jinyongp/loki/releases/tag/v0.2.1)
+[Loki 0.2.2](https://github.com/jinyongp/loki/releases/tag/v0.2.2)
 is the stable latest release, published by
-[run 37187375897](https://github.com/jinyongp/loki/actions/runs/37187375897)
-from exact source `e97dfb7c9168ccf09d147cff6bc9aad8c66f672d`.
+[run 37193691237](https://github.com/jinyongp/loki/actions/runs/37193691237)
+from exact source `220d394d41d32eb7a2b0a6aba2c08285b9d23a50`.
 
 All same-source native acceptance runs passed:
 
-- [Manager 37186402932](https://github.com/jinyongp/loki/actions/runs/37186402932):
-  Linux, macOS and Windows amd64/arm64, including the one-command installer.
-- [Browser 37186404363](https://github.com/jinyongp/loki/actions/runs/37186404363):
+- [Manager 37192839658](https://github.com/jinyongp/loki/actions/runs/37192839658):
+  Linux, macOS and Windows amd64/arm64, CLI-only installation, concise success,
+  Windows PowerShell IEX, descriptive help and empty 0.2.1 state upgrade.
+- [Browser 37192841027](https://github.com/jinyongp/loki/actions/runs/37192841027):
   Linux/macOS amd64/arm64 and Windows amd64, both official engines, optional
-  capabilities, actual installer setup, Codex preservation/idempotence and owned
-  image return/transfer/revocation.
-- [Full workspace 37186405480](https://github.com/jinyongp/loki/actions/runs/37186405480):
+  capabilities, Codex preservation/idempotence and owned image
+  return/transfer/revocation.
+- [Full workspace 37192842345](https://github.com/jinyongp/loki/actions/runs/37192842345):
   Linux amd64/arm64, private stdio, selected discovery, create/read, cached
   selection revocation and owned stop.
 
-The publisher verified original accepted bytes before staging the release.
-At initial publication, both public installers matched their immutable release
-attachments. Both public bootstraps subsequently received independently accepted
-corrections described below. Release-bound manager/catalog bytes remain unchanged.
-Anonymous access verified all ten exact OCI manifests. An actual public native
-management installation passed, both in CI and independently in an owned local
-namespace. The previous 0.2.0 release/tag and five obsolete versioned packages
-were removed after replacement verification.
+The publisher verified original accepted bytes before publishing. Both public
+installers match their immutable release attachments. Anonymous access verified
+all ten exact OCI manifests. An actual public native management installation and
+its descriptive help passed. The 0.2.1 upstream receipt attachments remain
+available for unchanged pinned input acquisition.
 
-The current public installer verifies and installs the native CLI. Configure
-the execution host, add and enable tool groups, and connect the MCP client
-after installation using `loki tools`. Full tools require an accessible Docker
-Engine on Linux/WSL.
+The public installer installs the native CLI. Configure the execution host,
+add and enable tool groups, and connect the MCP client afterward using
+`loki tools`. Full tools require an accessible Docker Engine on Linux/WSL.
+Updating a CLI-only installation also advances its empty tool state to 0.2.2;
+installations with tools keep their existing selection and release state.
 
-A discovery refresh race was reproduced in the previous implementation and
-fixed so retained tool names remain callable. Full workers now share the
-manager's release identity rather than retaining a stale activation version.
-The Go suite and architecture guard pass. Actual Windows desktop SSH image
-rendering, other full job/network/signing/endpoints/sharing combinations and
-experimental browser workflows retain their separate final acceptance gates.
+Native Windows tests verify that a held reader preserves old state until file
+replacement succeeds. State replacement retries brief sharing/access conflicts
+for at most two seconds. Browser disable/revocation passed with this change.
 
-## CLI help source acceptance
+The Go suite passes. Actual Windows desktop SSH image rendering, other full
+job/network/signing/endpoints/sharing combinations and experimental browser
+workflows retain their separate final acceptance gates.
 
-The management CLI now shows descriptive help for bare `loki`, `tools` and
-`integrations`. Public commands accept contextual `--help`, `-h` and
-`help COMMAND`, with descriptions, options and examples. Help is resolved before
-management state, credentials or remote hosts are accessed. Unknown commands and
-missing required inputs point to relevant help.
+## Published CLI help
 
-Focused Go tests passed for the manager, management and tools packages. Windows
-amd64 and macOS arm64 test compilation passed; native execution of this new
-binary is not claimed. These are source implementation results; the immutable
-published 0.2.1 manager remains unchanged. See
+Bare `loki`, `tools` and `integrations` show descriptive help. Public commands
+accept contextual `--help`, `-h` and `help COMMAND`, with descriptions, options
+and examples. Help is resolved before management state, credentials or remote
+hosts are accessed. Unknown commands and missing required inputs point to
+relevant help. Focused tests and all six native manager targets passed; public
+Linux installation checks also verify the installed help. See
 [cli-help.json](evidence/cli-help.json).
+
+## Historical 0.2.1 bootstrap acceptance
+
+The following records describe independently accepted corrections published
+before 0.2.2. Their original source bases and recorded hashes remain historical
+evidence; current publication is recorded above.
 
 ## Concise installer output
 

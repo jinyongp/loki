@@ -1,23 +1,23 @@
 {
   "schema": 1,
-  "release": "0.2.1",
+  "release": "0.2.2",
   "channel": "stable",
-  "publisher_run": 37187375897,
-  "source_commit": "e97dfb7c9168ccf09d147cff6bc9aad8c66f672d",
-  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.1",
+  "publisher_run": 37193691237,
+  "source_commit": "220d394d41d32eb7a2b0a6aba2c08285b9d23a50",
+  "release_url": "https://github.com/jinyongp/loki/releases/tag/v0.2.2",
   "native_acceptance": {
     "manager": {
-      "run": 37186402932,
+      "run": 37192839658,
       "targets": 6,
       "result": "pass"
     },
     "browser": {
-      "run": 37186404363,
+      "run": 37192841027,
       "targets": 5,
       "result": "pass"
     },
     "full_workspace": {
-      "run": 37186405480,
+      "run": 37192842345,
       "targets": 2,
       "result": "pass"
     }
@@ -25,12 +25,18 @@
   "public_installers": {
     "powershell": "https://jinyongp.dev/loki/install.ps1",
     "shell": "https://jinyongp.dev/loki/install.sh",
-    "initial_publication_exact_release_bytes": "pass",
-    "powershell_bootstrap_correction": "docs/tools/evidence/bootstrap-correction.json; independently accepted after initial publication",
-    "current_cli_only_bootstrap": "docs/tools/evidence/cli-installation.json; tools configured after initial CLI installation",
-    "current_installer_output": "docs/tools/evidence/installer-output.json; concise success and visible failure details",
+    "exact_release_bytes": "pass",
+    "cli_only_concise_success": "pass in six native manager targets",
+    "windows_powershell_iex": "pass on amd64 and arm64",
     "anonymous_native_management_installation": "pass",
-    "codex_configuration_preservation_and_idempotence": "pass in five native browser targets"
+    "descriptive_help": "pass: native root/groups/command help and public Linux help",
+    "empty_0_2_1_state_upgrade": "pass in six native manager targets",
+    "codex_configuration_preservation_and_idempotence": "pass in five native browser targets",
+    "historical_0_2_1_bootstrap_corrections": [
+      "docs/tools/evidence/bootstrap-correction.json",
+      "docs/tools/evidence/cli-installation.json",
+      "docs/tools/evidence/installer-output.json"
+    ]
   },
   "anonymous_oci_manifest_verification": {
     "manifest_count": 10,
@@ -47,5 +53,10 @@
     "Actual Windows desktop SSH image rendering",
     "Other full execution/network/signing/endpoints/sharing combinations",
     "Experimental browser workflows"
-  ]
+  ],
+  "windows_state_replacement": {
+    "reader_lock_regression": "pass in native Windows manager tests",
+    "browser_selection_revocation": "pass in native Windows browser acceptance",
+    "behavior": "bounded replacement retries retain the previous state while a reader holds a Windows handle"
+  }
 }
