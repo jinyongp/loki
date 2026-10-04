@@ -28,6 +28,7 @@ IMAGE = re.compile(r"[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}")
 REPOSITORY = re.compile(r"[a-z0-9][a-z0-9._:/-]*")
 ROLE_MODULES = {"service": ("runtime-core",), "gateway": ("runtime-core",), "workload": ("runtime-core", "execution"), "git-workload": ("runtime-core", "execution", "git"), "browser": ("runtime-core",)}
 ROLE_OWNER = {"service":"runtime-core", "gateway":"runtime-core", "workload":"execution", "git-workload":"git", "browser":"browser"}
+ROLE_IMAGE = {"service":"runtime-core-service", "gateway":"runtime-core-gateway", "workload":"execution-workload", "git-workload":"git-workload", "browser":"browser"}
 
 
 def verify_payload(directory, target):
@@ -237,15 +238,15 @@ def assemble(recipe_path, output):
                 identities = "runner:x:10000:10000::/home/runner:/bin/sh\\nloki:x:10001:10001::/nonexistent:/usr/sbin/nologin\\negress:x:10002:10002::/nonexistent:/usr/sbin/nologin\\nbrowser:x:10003:10003::/nonexistent:/usr/sbin/nologin\\nexecutor:x:10004:10004::/nonexistent:/usr/sbin/nologin\\nbrowser-proxy:x:10005:10005::/nonexistent:/usr/sbin/nologin\\n"
                 lines.extend(["RUN --network=none mkdir -p /workspace /var/tmp/loki /home/runner && chmod 1777 /tmp /var/tmp && chown 10000:10000 /home/runner && printf '"+identities+"' >> /etc/passwd && printf 'runner:x:10000:\\nloki:x:10001:\\n' >> /etc/group", "ENV PATH=/opt/loki/bin:/usr/bin:/bin", "WORKDIR /workspace", "USER 10000:10000"])
                 (context / "Dockerfile").write_text("\n".join(lines)+"\n", encoding="utf-8")
-                name = f"loki-{ROLE_OWNER[role]}-{role}-0.2.0-linux-{arch}.oci.tar"
+                name = f"loki-{ROLE_IMAGE[role]}-0.2.0-linux-{arch}.oci.tar"
                 archive = output / name
                 if any(c in str(archive) for c in ",\r\n\x00"):
                     raise ValueError("OCI output path cannot contain exporter separators")
                 print("Preparing owned native "+role+" image...", flush=True)
-                image_name = repository+"/"+ROLE_OWNER[role]+"-"+role+":0.2.0-linux-"+arch
+                image_name = repository+"/"+ROLE_IMAGE[role]+":0.2.0-linux-"+arch
                 subprocess.run([*docker, "buildx", "build", "--builder", builder, "--platform", "linux/"+arch, "--network", "none", "--provenance=false", "--sbom=false", "--output", "type=oci,name="+image_name+",dest="+str(archive), str(context)], env=environment, check=True, timeout=600)
                 manifest = oci_manifest(archive, target)
-                receipts[role] = {"owner":ROLE_OWNER[role], "target":target, "reference":repository+"/"+ROLE_OWNER[role]+"-"+role+"@"+manifest, "archive":name, "bytes":archive.stat().st_size, "sha256":digest(archive), "notices":recipe["base_notices"], "base":recipe["base"], "buildkit":recipe["buildkit"], "frontend":recipe["frontend"], "inputs":inputs, "published":False, "accepted":False}
+                receipts[role] = {"owner":ROLE_OWNER[role], "target":target, "reference":repository+"/"+ROLE_IMAGE[role]+"@"+manifest, "archive":name, "bytes":archive.stat().st_size, "sha256":digest(archive), "notices":recipe["base_notices"], "base":recipe["base"], "buildkit":recipe["buildkit"], "frontend":recipe["frontend"], "inputs":inputs, "published":False, "accepted":False}
         finally:
             # Preserve the preparation failure if creation/building failed.
             # A successful preparation still requires successful cleanup.

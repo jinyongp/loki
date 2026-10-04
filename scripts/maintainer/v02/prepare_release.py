@@ -100,9 +100,7 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
                     images.append({"archive":str(archive.resolve()), "reference":reference, "tag":reference.split("@", 1)[0] + ":0.2.0-" + target["os"] + "-" + target["arch"]})
         if seen != targets:
             raise ValueError("release lacks accepted native tool candidates")
-    notes = """# Loki 0.2.0 preview
-
-Fresh native management command with optional tool groups. Install a native
+    notes = """Fresh native management command with optional tool groups. Install a native
 manager ZIP, run its included installer, then select and enable tools using the
 catalog for the execution host and mode. Each catalog binds archive lengths and
 SHA-256; module ZIPs retain upstream notices and licenses.
