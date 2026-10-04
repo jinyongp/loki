@@ -65,6 +65,66 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	}
 }
 
+func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses, Run string
+				With      map[string]any
+			}
+		}
+	}
+	if err := yaml.Unmarshal(raw, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	writers := map[string]string{}
+	for _, step := range workflow.Jobs["assemble"].Steps {
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") {
+			name, _ := step.With["name"].(string)
+			path, _ := step.With["path"].(string)
+			writers[name] = path
+			if name == "publication-pages" && step.With["include-hidden-files"] != true {
+				t.Fatal("Pages artifact must preserve .nojekyll")
+			}
+		}
+	}
+	if writers["publication-assets"] != "publication/assets/" || writers["publication-pages"] != "publication/pages/" {
+		t.Fatal("release assets and installer pages must have separate transfer payloads")
+	}
+	for _, name := range []string{"gate", "publish", "verify-public"} {
+		var assets, pages, sealedMetadata bool
+		for _, step := range workflow.Jobs[name].Steps {
+			if !strings.HasPrefix(step.Uses, "actions/download-artifact@") {
+				continue
+			}
+			artifact, _ := step.With["name"].(string)
+			switch artifact {
+			case "publication-assets":
+				assets = step.With["path"] == "publication/assets"
+			case "publication-pages":
+				pages = step.With["path"] == "publication/pages"
+			case "accepted-publication-metadata":
+				sealedMetadata = step.With["path"] == "publication"
+			case "publication":
+				t.Fatal("job still downloads combined publication payload:", name)
+			}
+		}
+		if name == "verify-public" && (assets || !pages) {
+			t.Fatal("public installer comparison must receive only pages")
+		}
+		if name == "gate" && (!assets || !pages) {
+			t.Fatal("final gate must retain exact assets and installer pages")
+		}
+		if name == "publish" && (!assets || pages || !sealedMetadata) {
+			t.Fatal("publisher must receive assets and final sealed metadata")
+		}
+	}
+}
+
 func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	root := filepath.Join("..", "..")
 	scriptRaw, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-release-inputs.sh"))

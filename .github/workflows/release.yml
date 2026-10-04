@@ -287,8 +287,17 @@ jobs:
       - run: python3 scripts/maintainer/tools/release_pipeline.py assemble --plan plan/plan.json --built built --output publication
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: publication
-          path: publication/
+          name: publication-assets
+          path: publication/assets/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain installer pages for deployment and public verification
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: publication-pages
+          path: publication/pages/
+          include-hidden-files: true
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
@@ -296,6 +305,25 @@ jobs:
         run: |
           mkdir -p metadata/assets
           cp publication/assets/*.json publication/assets/*.md publication/assets/loki-install.* metadata/assets/
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          groups = {}
+          for name in ('assets', 'pages'):
+              paths = list((Path('publication') / name).rglob('*'))
+              if any(path.is_symlink() for path in paths):
+                  raise ValueError('release transfer payload must contain regular files')
+              files = [path for path in paths if path.is_file()]
+              groups[name] = {'files': len(files), 'bytes': sum(path.stat().st_size for path in files)}
+          result = {'schema': 1, 'groups': groups, 'public_verifier_avoided_bytes': groups['assets']['bytes']}
+          Path('metadata/transfer-inventory.json').write_text(json.dumps(result, indent=2)+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Release transfer payloads\n\n| Payload | Files | Bytes |\n| --- | ---: | ---: |\n')
+              for name, group in groups.items():
+                  out.write(f"| {name} | {group['files']} | {group['bytes']} |\n")
+              out.write('\nPublic verification downloads only installer pages. Actions records per-step transfer durations.\n')
+          print(json.dumps(result))
+          PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: publication-metadata
@@ -564,10 +592,16 @@ jobs:
         with:
           name: release-plan
           path: plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - name: Download exact release assets for final sealing
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: publication
-          path: publication
+          name: publication-assets
+          path: publication/assets
+      - name: Download installer pages for Pages deployment
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-pages
+          path: publication/pages
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: checks-*
@@ -607,10 +641,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - name: Download only release assets for publication
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: publication
-          path: publication
+          name: publication-assets
+          path: publication/assets
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: accepted-publication-metadata
@@ -664,10 +699,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - name: Download only accepted installer pages for public comparison
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: publication
-          path: publication
+          name: publication-pages
+          path: publication/pages
       - env:
           LOKI_RELEASE: ${{ needs.plan.outputs.version }}
         run: python3 scripts/maintainer/tools/verify_public_release.py --expected-directory publication/pages
