@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "scope": "CLI self-upgrade implementation and native validation for the next release",
+  "source_commit": "5b94a3ded115b56be1a058c47436a950f53406fd",
+  "command": "loki upgrade",
+  "behavior": {
+    "default": "Show current and latest stable versions, then confirm with y/yes; Enter or EOF cancels",
+    "options": ["--version VERSION", "--yes / -y", "--check", "--force", "--timeout DURATION"],
+    "downloads": "Official GitHub stable release manager ZIP and SHA256SUMS; bounded downloads, SHA-256 and executable version verification before publication",
+    "publication": "Current manager publishes the verified target version using existing ownership and journal recovery checks",
+    "configuration": "Tool selections are retained; empty installation release follows target CLI",
+    "windows": "Rename running CLI to journal-owned backup, publish candidate, restore old CLI on publication failure; clean retained backup on subsequent installation or recovery"
+  },
+  "validation": {
+    "go_suite": "pass: go test ./...",
+    "native_run": 37198987249,
+    "native_source": "5b94a3ded115b56be1a058c47436a950f53406fd",
+    "native_targets": "Linux/macOS/Windows amd64 and arm64",
+    "native_result": "pass",
+    "covered": ["confirmation and cancellation", "check-only and explicit version", "force reinstall and downgrade", "checksum refusal", "invalid arguments without network access", "HTTP failure and candidate version mismatch", "verified target release ownership/journal", "interrupted backup recovery", "running Windows executable replacement and rollback"],
+    "public_linux_exercise": "pass: isolated installed CLI downloaded official 0.2.2, verified and replaced itself with preserved user sentinel; binary digest changed to published release",
+    "actual_latest_release_query": "pass: current and target 0.2.2 displayed without installation"
+  },
+  "availability": "Next release; current immutable published 0.2.2 remains as recorded in release-publication.json"
+}
