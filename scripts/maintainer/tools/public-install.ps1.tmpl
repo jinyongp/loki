@@ -23,7 +23,11 @@ function Fetch-ReleaseFile([string]$Name, [string]$Directory) {
     Write-Host "[loki] Downloading $Name..."
     if ($SourceDirectory) { Copy-Item -LiteralPath (Join-Path $SourceDirectory $Name) -Destination $destination }
     else { Invoke-WebRequest -UseBasicParsing -Uri "$releaseUrl/$Name" -OutFile $destination }
-    if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Release SHA-256 mismatch: $Name" }
+    $stream = [IO.File]::OpenRead($destination)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { $actual = [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $hasher.Dispose() }
+    if ($actual -ne $expected) { throw "Release SHA-256 mismatch: $Name" }
     return $destination
 }
 function Invoke-Loki([string[]]$Arguments) {
@@ -37,7 +41,8 @@ New-Item -ItemType Directory -Path $scratch | Out-Null
 try {
     $archive = Fetch-ReleaseFile "loki-manager-$release-windows-$arch.zip" $scratch
     $bundle = Join-Path $scratch 'manager'
-    Expand-Archive -LiteralPath $archive -DestinationPath $bundle
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($archive, $bundle)
     Write-Host '[loki] Installing native management command...'
     & (Join-Path $bundle 'install.ps1') -BinDirectory $BinDirectory -ManagementRoot $ManagementRoot -AddToUserPath
     if ($LASTEXITCODE -ne 0) { throw 'Native manager installation failed.' }
