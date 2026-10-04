@@ -92,5 +92,5 @@ func atomicPublicBytes(path string, data []byte) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, path)
+	return replaceStateFile(name, path)
 }

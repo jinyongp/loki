@@ -235,7 +235,7 @@ func atomicJSONMode(path string, value any, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), path)
+	return replaceStateFile(f.Name(), path)
 }
 
 func (s Store) Generation(a tools.Artifact) (string, error) {
