@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "release": "0.2.1",
+  "source_commit": "a4b9581415b1d5e18c3d72bea53bce7ccd1ef39f",
+  "publisher_run": 37189109648,
+  "run_url": "https://github.com/jinyongp/loki/actions/runs/37189109648",
+  "result": "pass",
+  "reason": "Optional ValidateSet declarations reject empty initial variables under Invoke-Expression before interactive selection.",
+  "windows_power_shell_5_1": {
+    "original_iex_failure": "ValidateSetFailure reproduced",
+    "management_only_iex": "pass",
+    "native_browser_and_codex_iex": "pass",
+    "existing_codex_settings": "preserved",
+    "invalid_interactive_selection": "rejected",
+    "corrupt_manager_download": "rejected",
+    "download_fixture": "Literal public irm/iex command; fixture redirects verified release assets and supplies interactive answers. Public endpoint bytes verified separately."
+  },
+  "public_verification": {
+    "power_shell_sha256": "d6858484a67f69090a07accedecd60e2b65c1e870189bcd86afe88e06a46e974",
+    "shell_sha256": "b59e9f2c8c7524b04934776a37e14b1a8b1023dce60c9bd31c4f13a18335db4f",
+    "bare_public_urls": "independent exact-byte match",
+    "anonymous_oci_manifests": "10 exact digests passed",
+    "linux_management_installation": "pass"
+  },
+  "publication_contract": "Public PowerShell bootstrap corrected independently. Immutable 0.2.1 release attachments, manager/catalog bytes and delegated shell installer unchanged."
+}

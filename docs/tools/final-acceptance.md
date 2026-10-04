@@ -23,7 +23,10 @@ All same-source native acceptance runs passed:
   selection revocation and owned stop.
 
 The publisher verified original accepted bytes before staging the release.
-Public `install.sh` and `install.ps1` match their immutable release attachments.
+At initial publication, both public installers matched their immutable release
+attachments. The public PowerShell bootstrap subsequently received the
+independently accepted correction described below; the shell installer and
+release-bound manager/catalog bytes remain unchanged.
 Anonymous access verified all ten exact OCI manifests. An actual public native
 management installation passed, both in CI and independently in an owned local
 namespace. The previous 0.2.0 release/tag and five obsolete versioned packages
@@ -41,6 +44,27 @@ manager's release identity rather than retaining a stale activation version.
 The Go suite and architecture guard pass. Actual Windows desktop SSH image
 rendering, other full job/network/signing/endpoints/sharing combinations and
 experimental browser workflows retain their separate final acceptance gates.
+
+## PowerShell bootstrap correction
+
+[Run 37189109648](https://github.com/jinyongp/loki/actions/runs/37189109648)
+accepted and deployed source `a4b9581415b1d5e18c3d72bea53bce7ccd1ef39f`.
+Windows PowerShell 5.1 reproduced `ValidateSetFailure` in the original
+zero-argument `irm https://jinyongp.dev/loki/install.ps1 | iex` entry. Optional
+`Tools` and `HostKind` declaration validators rejected their initial empty
+values before interactive selection; explicit body validation now handles them.
+The earlier native installer checks used `-File` with explicit parameters and
+did not cover this interactive entry.
+
+The corrected literal pipeline passed management-only and native browser/Codex
+setup with fixture-controlled downloads of verified release assets. Existing
+Codex configuration was preserved; invalid selections and corrupt manager bytes
+were rejected. Publication required this Windows acceptance before Pages
+deployment. Public verification checked the deployed bootstrap, all ten OCI
+manifests and an actual Linux management install. An independent fetch of the
+bare public URLs matched the accepted bytes. Immutable 0.2.1 release attachments
+were retained. Details and hashes are in
+[bootstrap-correction.json](evidence/bootstrap-correction.json).
 
 The checks below retain their historical prerequisite scope; they do not replace
 these exact-source release acceptance results.
