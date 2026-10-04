@@ -43,6 +43,19 @@ The Go suite and architecture guard pass. Actual Windows desktop SSH image
 rendering, other full job/network/signing/endpoints/sharing combinations and
 experimental browser workflows retain their separate final acceptance gates.
 
+## Concise installer output
+
+[Run 37190369288](https://github.com/jinyongp/loki/actions/runs/37190369288)
+accepted the output correction from source
+`f575792581e1caecc6ec4b8f9cf396d4d59a9c56`. All six native OS/CPU targets
+passed exact three-line success output, CLI-only state, repeated installation,
+and unchanged Codex/project files. Windows PowerShell IEX passed on both CPU
+architectures. Corrupt downloads were rejected, and nested installation errors
+retained the underlying ownership conflict while leaving user files intact.
+Successful nested setup logs are captured; installation no longer prints an
+automatic diagnostic report. Public bootstrap hashes and publication are
+recorded in [installer-output.json](evidence/installer-output.json).
+
 ## CLI-only initial installation
 
 [Run 37189867621](https://github.com/jinyongp/loki/actions/runs/37189867621)

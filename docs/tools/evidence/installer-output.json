@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "release": "0.2.1",
+  "source_commit": "f575792581e1caecc6ec4b8f9cf396d4d59a9c56",
+  "publisher_run": 37190369288,
+  "run_url": "https://github.com/jinyongp/loki/actions/runs/37190369288",
+  "success_output": ["Installing Loki...", "Loki 0.2.1 installed.", "Next: loki --help"],
+  "shell_path_handling": "Next uses the installed command's full path when its directory is absent from PATH.",
+  "native_acceptance": {
+    "targets": ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64"],
+    "result": "pass",
+    "success_stdout": "exact three lines",
+    "success_stderr": "empty",
+    "windows_power_shell_iex": "both architectures pass",
+    "repeat_install": "pass",
+    "installed_selected_tools": "empty",
+    "codex_and_project_files": "unchanged",
+    "corrupt_download": "rejected",
+    "nested_ownership_failure": "underlying cause visible; existing user-owned command unchanged"
+  },
+  "public_verification": {
+    "powershell_sha256": "5d7416006862b6a658d1615ec3b0c14f83bc377d8518ae822b5357737524ede9",
+    "shell_sha256": "6599769f705857d8fa9a668b6e6e78cee6cc18e6b463bad6bcf4dae7a1a9550e",
+    "bare_public_urls": "independent exact-byte match",
+    "public_linux_cli_installation": "pass",
+    "anonymous_oci_manifests": "10 exact digests passed"
+  }
+}
