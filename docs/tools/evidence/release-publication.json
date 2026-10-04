@@ -27,6 +27,7 @@
     "shell": "https://jinyongp.dev/loki/install.sh",
     "initial_publication_exact_release_bytes": "pass",
     "powershell_bootstrap_correction": "docs/tools/evidence/bootstrap-correction.json; independently accepted after initial publication",
+    "current_cli_only_bootstrap": "docs/tools/evidence/cli-installation.json; tools configured after initial CLI installation",
     "anonymous_native_management_installation": "pass",
     "codex_configuration_preservation_and_idempotence": "pass in five native browser targets"
   },

@@ -101,17 +101,16 @@ def prepare(managers, browsers, full, output, source, acceptance=()):
                     images.append({"archive":str(archive.resolve()), "reference":reference, "tag":reference.split("@", 1)[0] + ":0.2.1-" + target["os"] + "-" + target["arch"]})
         if seen != targets:
             raise ValueError("release lacks accepted native tool candidates")
-    notes = """Install and connect optional Loki tools with one command:
+    notes = """Install the native Loki CLI with one command:
 
 Windows PowerShell: `irm https://jinyongp.dev/loki/install.ps1 | iex`
 
 Linux/macOS: `curl -fsSL https://jinyongp.dev/loki/install.sh | sh`
 
-Choose browser, full tools, or management only. Windows can install browser tools
-in an existing WSL Ubuntu distribution or natively. The installer downloads
-release-bound archives, installs selected tools, checks them, and preserves
-existing Codex settings while adding its own MCP connection. Reopen your project
-after setup. Full tools require an accessible Docker Engine on Linux/WSL.
+The installer verifies the release-bound native manager archive and installs
+only the CLI. Configure the execution host, install and enable individual tool
+groups, and connect your MCP client afterward using `loki tools`.
+Full tools require an accessible Docker Engine on Linux/WSL.
 Each catalog binds archive lengths and SHA-256; module ZIPs retain upstream
 notices and licenses.
 

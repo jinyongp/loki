@@ -24,19 +24,17 @@ All same-source native acceptance runs passed:
 
 The publisher verified original accepted bytes before staging the release.
 At initial publication, both public installers matched their immutable release
-attachments. The public PowerShell bootstrap subsequently received the
-independently accepted correction described below; the shell installer and
-release-bound manager/catalog bytes remain unchanged.
+attachments. Both public bootstraps subsequently received independently accepted
+corrections described below. Release-bound manager/catalog bytes remain unchanged.
 Anonymous access verified all ten exact OCI manifests. An actual public native
 management installation passed, both in CI and independently in an owned local
 namespace. The previous 0.2.0 release/tag and five obsolete versioned packages
 were removed after replacement verification.
 
-The public installer selects tools, verifies release-bound archives, checks
-installed tools and connects Codex while preserving unrelated settings. Windows
-supports existing WSL distributions or native browser installation. Ubuntu
-browser setup prepares declared libraries and an exact-path AppArmor profile
-when required. Full tools require an accessible Docker Engine on Linux/WSL.
+The current public installer verifies and installs the native CLI. Configure
+the execution host, add and enable tool groups, and connect the MCP client
+after installation using `loki tools`. Full tools require an accessible Docker
+Engine on Linux/WSL.
 
 A discovery refresh race was reproduced in the previous implementation and
 fixed so retained tool names remain callable. Full workers now share the
@@ -45,7 +43,26 @@ The Go suite and architecture guard pass. Actual Windows desktop SSH image
 rendering, other full job/network/signing/endpoints/sharing combinations and
 experimental browser workflows retain their separate final acceptance gates.
 
-## PowerShell bootstrap correction
+## CLI-only initial installation
+
+[Run 37189867621](https://github.com/jinyongp/loki/actions/runs/37189867621)
+accepted and deployed source `790df6cff38ccaf45523fbe508ad4526db37d01b`.
+Native CLI bootstraps passed on Linux, macOS and Windows amd64/arm64. Installation
+and repeated installation completed with an empty installed/selected tool set,
+unchanged Codex settings and project files, and corrupt manager downloads
+rejected. Windows PowerShell 5.1 also accepted the literal zero-argument
+`irm https://jinyongp.dev/loki/install.ps1 | iex` entry without prompts or WSL
+configuration, even with unrelated tool/host variables in the caller's scope.
+
+Both public installers install only the CLI. The manager/catalog release bytes
+and module acceptance results retain their original source basis. Tool setup
+and MCP configuration are explicit post-install operations; native browser
+installer acceptance fixtures now exercise those later CLI steps separately.
+Deployment follows six-target acceptance and is checked against accepted
+bootstrap bytes. Details are recorded in
+[cli-installation.json](evidence/cli-installation.json).
+
+## Earlier PowerShell bootstrap correction
 
 [Run 37189109648](https://github.com/jinyongp/loki/actions/runs/37189109648)
 accepted and deployed source `a4b9581415b1d5e18c3d72bea53bce7ccd1ef39f`.
