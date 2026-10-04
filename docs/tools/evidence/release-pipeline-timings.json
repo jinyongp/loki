@@ -1,0 +1,2597 @@
+{
+  "schema": 1,
+  "run": "https://github.com/jinyongp/loki/actions/runs/37210391612",
+  "source_commit": "d2a0ee0af7807087098e9bab16e407b220b946af",
+  "conclusion": "success",
+  "created_at": "2026-10-04T14:44:43Z",
+  "started_at": "2026-10-04T14:44:43Z",
+  "updated_at": "2026-10-04T15:01:40Z",
+  "queue_seconds": 107.0,
+  "queue_basis": "Run creation to the first job start; GitHub run.startedAt includes the concurrency wait.",
+  "elapsed_without_initial_queue_seconds": 910.0,
+  "jobs": [
+    {
+      "name": "plan",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:30Z",
+      "completed_at": "2026-10-04T14:46:52Z",
+      "seconds": 22.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run test \"$GITHUB_REF\" = refs/heads/main",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "full-build (linux, arm64, ubuntu-24.04-arm, runtime-core, browser, workspace, git, github, secret...",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:56Z",
+      "completed_at": "2026-10-04T14:53:06Z",
+      "seconds": 370.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+          "result": "success",
+          "seconds": 12.0
+        },
+        {
+          "name": "Install registry client and authenticated native package tooling",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Build selected native full units",
+          "result": "success",
+          "seconds": 316.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Post Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-build (windows, amd64, windows-2025)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:54Z",
+      "completed_at": "2026-10-04T14:48:13Z",
+      "seconds": 79.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 13.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Build selected native browser units",
+          "result": "success",
+          "seconds": 45.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "full-build (linux, amd64, ubuntu-24.04, runtime-core, browser, workspace, git, github, secrets, e...",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:55Z",
+      "completed_at": "2026-10-04T14:55:20Z",
+      "seconds": 505.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Install registry client and authenticated native package tooling",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Build selected native full units",
+          "result": "success",
+          "seconds": 438.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Post Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-build (linux, arm64, ubuntu-24.04-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:57Z",
+      "completed_at": "2026-10-04T14:47:50Z",
+      "seconds": 53.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Build selected native browser units",
+          "result": "success",
+          "seconds": 29.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (linux, arm64, ubuntu-24.04-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:56Z",
+      "completed_at": "2026-10-04T14:47:16Z",
+      "seconds": 20.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (darwin, amd64, macos-15-intel)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:55Z",
+      "completed_at": "2026-10-04T14:48:28Z",
+      "seconds": 93.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 46.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 7.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 2.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (windows, amd64, windows-2025)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:55Z",
+      "completed_at": "2026-10-04T14:47:49Z",
+      "seconds": 54.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 7.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 17.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-build (linux, amd64, ubuntu-24.04)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:54Z",
+      "completed_at": "2026-10-04T14:47:52Z",
+      "seconds": 58.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Build selected native browser units",
+          "result": "success",
+          "seconds": 36.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-build (darwin, arm64, macos-15)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:59Z",
+      "completed_at": "2026-10-04T14:48:10Z",
+      "seconds": 71.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 16.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Build selected native browser units",
+          "result": "success",
+          "seconds": 37.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 1.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (darwin, arm64, macos-15)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:59Z",
+      "completed_at": "2026-10-04T14:47:39Z",
+      "seconds": 40.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 18.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (windows, arm64, windows-11-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:54Z",
+      "completed_at": "2026-10-04T14:48:33Z",
+      "seconds": 99.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 52.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-build (darwin, amd64, macos-15-intel)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:56Z",
+      "completed_at": "2026-10-04T14:50:11Z",
+      "seconds": 195.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 24.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 51.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Build selected native browser units",
+          "result": "success",
+          "seconds": 84.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 1.0
+        }
+      ]
+    },
+    {
+      "name": "manager-build (linux, amd64, ubuntu-24.04)",
+      "result": "success",
+      "started_at": "2026-10-04T14:46:54Z",
+      "completed_at": "2026-10-04T14:47:21Z",
+      "seconds": 27.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 15.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Build selected native manager units",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "assemble",
+      "result": "success",
+      "started_at": "2026-10-04T14:55:22Z",
+      "completed_at": "2026-10-04T14:56:17Z",
+      "seconds": 55.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 16.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py assemble --plan plan/plan.json --built built --output publication",
+          "result": "success",
+          "seconds": 17.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 16.0
+        },
+        {
+          "name": "Retain small acceptance metadata",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "full-checks (linux, amd64, ubuntu-24.04)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:20Z",
+      "completed_at": "2026-10-04T14:57:58Z",
+      "seconds": 98.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 49.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Prepare disposable Docker acceptance runtime",
+          "result": "success",
+          "seconds": 7.0
+        },
+        {
+          "name": "Accept confined workspace service, revocation and every exact registry digest",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run full source and product acceptance",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "source-checks",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:19Z",
+      "completed_at": "2026-10-04T14:57:08Z",
+      "seconds": 49.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Prepare the pinned native search test prerequisite",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Final source contracts and release selection fixtures",
+          "result": "success",
+          "seconds": 27.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:22Z",
+      "completed_at": "2026-10-04T14:57:14Z",
+      "seconds": 52.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 16.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Prepare disposable Docker acceptance runtime",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Accept confined workspace service, revocation and every exact registry digest",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run full source and product acceptance",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:19Z",
+      "completed_at": "2026-10-04T14:57:32Z",
+      "seconds": 73.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 7.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 20.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept both packaged engines, capabilities, installation and connection",
+          "result": "success",
+          "seconds": 29.0
+        },
+        {
+          "name": "Remove owned sandbox profile",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:22Z",
+      "completed_at": "2026-10-04T14:57:38Z",
+      "seconds": 76.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 25.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Accept both packaged engines, capabilities, installation and connection",
+          "result": "success",
+          "seconds": 32.0
+        },
+        {
+          "name": "Remove owned sandbox profile",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-checks (darwin, amd64, macos-15-intel)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:20Z",
+      "completed_at": "2026-10-04T14:59:30Z",
+      "seconds": 190.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 37.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 18.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept both packaged engines, capabilities, installation and connection",
+          "result": "success",
+          "seconds": 98.0
+        },
+        {
+          "name": "Remove owned sandbox profile",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 1.0
+        }
+      ]
+    },
+    {
+      "name": "browser-checks (windows, amd64, windows-2025)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:20Z",
+      "completed_at": "2026-10-04T14:58:46Z",
+      "seconds": 146.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 22.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 13.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept both packaged engines, capabilities, installation and connection",
+          "result": "success",
+          "seconds": 86.0
+        },
+        {
+          "name": "Remove owned sandbox profile",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "browser-checks (darwin, arm64, macos-15)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:25Z",
+      "completed_at": "2026-10-04T14:58:20Z",
+      "seconds": 115.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 20.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept both packaged engines, capabilities, installation and connection",
+          "result": "success",
+          "seconds": 72.0
+        },
+        {
+          "name": "Remove owned sandbox profile",
+          "result": "skipped",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 2.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (darwin, amd64, macos-15-intel)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:22Z",
+      "completed_at": "2026-10-04T14:58:07Z",
+      "seconds": 105.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 14.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 37.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 19.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 1.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (linux, amd64, ubuntu-24.04)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:19Z",
+      "completed_at": "2026-10-04T14:56:53Z",
+      "seconds": 34.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (darwin, arm64, macos-15)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:23Z",
+      "completed_at": "2026-10-04T14:57:22Z",
+      "seconds": 59.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 12.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 19.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 1.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (linux, arm64, ubuntu-24.04-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:22Z",
+      "completed_at": "2026-10-04T14:57:20Z",
+      "seconds": 58.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 8.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 31.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (windows, amd64, windows-2025)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:21Z",
+      "completed_at": "2026-10-04T14:57:44Z",
+      "seconds": 83.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 22.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 11.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 13.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 6.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "manager-checks (windows, arm64, windows-11-arm)",
+      "result": "success",
+      "started_at": "2026-10-04T14:56:20Z",
+      "completed_at": "2026-10-04T15:00:17Z",
+      "seconds": 237.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 3.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 10.0
+        },
+        {
+          "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 51.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 9.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Accept native CLI, upgrade selection, installer and retained user data",
+          "result": "success",
+          "seconds": 136.0
+        },
+        {
+          "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "result": "success",
+          "seconds": 5.0
+        },
+        {
+          "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 4.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "gate",
+      "result": "success",
+      "started_at": "2026-10-04T15:00:19Z",
+      "completed_at": "2026-10-04T15:01:34Z",
+      "seconds": 75.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 64.0
+        },
+        {
+          "name": "Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Require the exact selected cohort and seal publication checksums",
+          "result": "success",
+          "seconds": 2.0
+        },
+        {
+          "name": "Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Run actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "result": "success",
+          "seconds": 1.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "result": "success",
+      "started_at": "2026-10-04T15:01:37Z",
+      "completed_at": "2026-10-04T15:01:39Z",
+      "seconds": 2.0,
+      "steps": [
+        {
+          "name": "Set up job",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Run python3 - <<'PY'",
+          "result": "success",
+          "seconds": 0.0
+        },
+        {
+          "name": "Complete job",
+          "result": "success",
+          "seconds": 0.0
+        }
+      ]
+    },
+    {
+      "name": "publish",
+      "result": "skipped",
+      "started_at": "2026-10-04T15:01:35Z",
+      "completed_at": "2026-10-04T15:01:35Z",
+      "seconds": 0.0,
+      "steps": []
+    },
+    {
+      "name": "pages",
+      "result": "skipped",
+      "started_at": "2026-10-04T15:01:35Z",
+      "completed_at": "2026-10-04T15:01:35Z",
+      "seconds": 0.0,
+      "steps": []
+    },
+    {
+      "name": "verify-public",
+      "result": "skipped",
+      "started_at": "2026-10-04T15:01:35Z",
+      "completed_at": "2026-10-04T15:01:35Z",
+      "seconds": 0.0,
+      "steps": []
+    }
+  ]
+}

@@ -1,7 +1,9 @@
 # 단일 릴리스 워크플로와 선택적 빌드 계획
 
-작성일: 2026-10-04. 상태: source 구현 및 review cycle 1 수정, 네이티브 CI·최종 검증 진행 중.
-사용자는 계획의 구현과 외부 도구 최신 버전 사용을 승인했다. 단일 job graph, 호환 계약, 선택 계획과 캐시 경로를 구현했다. 통합 실행 검증과 review-loop가 완료 조건이다. 릴리스 게시와 기존 설치 전환은 별도 단계다.
+작성일: 2026-10-04. 완료: 2026-10-05 KST. 상태: 구현·최종 네이티브 CI·review-loop 완료.
+단일 job graph, 호환 계약, 선택 계획과 캐시 경로를 구현했다. CLI 6개·독립 browser 5개·Linux full 2개와 gate가 실제 `publish=false` 실행에서 통과했다. [검증 기록](evidence/release-pipeline-validation.json)과 [job별 시간](evidence/release-pipeline-timings.json)에 근거를 남겼다. 릴리스 게시와 기존 설치 전환은 별도 단계다.
+
+최종 승인 lock으로 다음 CLI 버전의 실제 계획을 계산했을 때 browser/full build·check matrix와 OCI 전송 선택이 모두 0개였다. isolated Linux CLI 교체에서도 기존 browser 패키지·활성화 선택·Codex 설정·사용자 데이터가 유지됐다. 첫/warm 실행의 full 모듈 18개와 이미지 10개의 제품 바이트·digest·신뢰 근거가 일치했고 ARM64 full job은 634초에서 347초로 줄었다. 공개 baseline을 사용하는 선택적 dispatch의 실제 게시 시간과 아래 공개 전환 검사는 최초 승인된 배포 단계에서 측정한다. 현재 제품 release와 Pages는 전환하지 않았다.
 
 ## 목표와 범위
 

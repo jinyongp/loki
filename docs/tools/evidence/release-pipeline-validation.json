@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "date": "2026-10-04",
+  "status": "passed",
+  "completed_date_kst": "2026-10-05",
+  "tested_commit": "d2a0ee0af7807087098e9bab16e407b220b946af",
+  "candidate_release": "0.2.4",
+  "production_publication": false,
+  "source_ci": "https://github.com/jinyongp/loki/actions/runs/37210391517",
+  "native_ci": "https://github.com/jinyongp/loki/actions/runs/37210391612",
+  "native_acceptance": "All six managers, five standalone browsers, two Linux full targets and the final gate passed. Publish, Pages and public verification jobs were skipped.",
+  "native_job_timings": "release-pipeline-timings.json",
+  "local_validation": {
+    "go_all": "passed",
+    "affected_go_race": "passed: internal/tools, internal/management, internal/config, cmd/loki-manager",
+    "python": "31 tests passed, including five actual target-specific dependency selection fixtures",
+    "actionlint": "passed: v1.7.12",
+    "python_compile": "passed",
+    "official_stable_tool_and_action_pins": "passed"
+  },
+  "selection": {
+    "cli_help": "six managers; zero browser/full builds and checks",
+    "windows_installer": "two Windows managers; zero browser/full builds",
+    "one_browser_input": "one target browser; zero managers/full builds",
+    "one_git_closure": "one Git module and its git-workload image; zero managers/standalone browsers",
+    "worker": "two Linux full targets and all five dependent image roles",
+    "version_only": "Actual sealed native acceptance lock selected six managers for 0.2.5; all 33 tool/image identities reused; zero browser/full build/check matrices and zero selected OCI transfer jobs",
+    "actual_cli_replacement": "Isolated native Linux CLI 0.2.4 to 0.2.5 retained browser 0.2.4 without repackaging, enabled selection, Codex settings and user data. Local Chrome execution lacked libnspr4.so and is not counted as runtime evidence; both engines passed all supported native CI targets.",
+    "scope": "Actual Go dependency and recipe fingerprints with isolated changed-input fixtures. Public-baseline selective dispatch and its publishing latency remain measurements for the first authorized release with a public lock."
+  },
+  "cache_evidence": {
+    "first_run": "https://github.com/jinyongp/loki/actions/runs/37207966958",
+    "warm_run": "https://github.com/jinyongp/loki/actions/runs/37208659468",
+    "arm64_full_job_seconds": {"first": 634, "warm": 347},
+    "arm64_warm_verified_input_hits": 273,
+    "arm64_warm_layer_hits": 170,
+    "registry_manifest_imports": "First run tolerated absent registry cache manifests; warm run imported all five role cache manifests successfully.",
+    "actions_cache_observation": {"entries_in_first_page": 61, "bytes_in_first_page": 6553281575, "most_recent_access_utc": "2026-10-04T14:55:17.617066Z"},
+    "compared_modules": 18,
+    "compared_images": 10,
+    "product_byte_and_digest_comparison": "28 of 28 identical; candidate run tags differ as expected",
+    "cache_failure": "Input cache corruption, denied cache access and interrupted restoration fall back to verified downloads. Registry import/export timeouts preserve the required local build; genuine required build failure propagates."
+  },
+  "publication_recovery": {
+    "dry_run": "Partial draft transfer failure followed by retry and Pages reconstruction preserves exact sealed lock, checksums and installer bytes.",
+    "gate": "Failed/cancelled selected jobs and missing/substituted proofs rejected. Same-run earlier attempts require the exact lock digest and source.",
+    "releaseway": "releaseway/actions v0.2.1 owns GitHub release lifecycle, asset set/digests, immutable publication and resume. Homebrew/npm publishers have no current Loki distribution channel.",
+    "public_service_test": "Production release/Pages transition and anonymous public installation are a separately authorized publication stage."
+  },
+  "review": {
+    "mode": "review-and-fix",
+    "axes": ["dependency selection and caching", "workflow, provenance and publication", "CLI/module compatibility and retained state"],
+    "findings": "Fixed retention contract propagation, frozen native inputs, image/helper ownership fingerprints, atomic input restoration, bounded registry cache fallback, exact-source dispatch, same-run retry proofs, Windows UTF-8/ARM64 detection, pinned test prerequisite, JSON payload path reuse, dynamic Windows installer acceptance and authenticated owned GitHub upgrade metadata checks with redirect-safe credentials.",
+    "affected_axis_rechecks": "All three read-only reviewers reported no actionable findings; scoped final source/native validation passed. No remaining user decisions."
+  }
+}
