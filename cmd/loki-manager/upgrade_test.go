@@ -22,6 +22,41 @@ type upgradeTransport func(*http.Request) (*http.Response, error)
 
 func (f upgradeTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+func TestReleaseAPITokenStaysOnOwnedMetadataRequests(t *testing.T) {
+	for _, target := range []string{
+		"https://api.github.com/repos/jinyongp/loki/releases/tags/v0.2.2",
+		"https://github.com/jinyongp/loki/releases/download/v0.2.2/SHA256SUMS",
+		"https://api.github.com/repos/other/repo/releases/latest",
+		"https://other.api.github.com/repos/jinyongp/loki/releases/latest",
+		"http://api.github.com/repos/jinyongp/loki/releases/latest",
+	} {
+		t.Run(target, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, target, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			transport := releaseAPITransport{token: "fixture-secret", base: upgradeTransport(func(sent *http.Request) (*http.Response, error) {
+				want := ""
+				if target == "https://api.github.com/repos/jinyongp/loki/releases/tags/v0.2.2" {
+					want = "Bearer fixture-secret"
+				}
+				if sent.Header.Get("Authorization") != want {
+					t.Fatal("credential crossed metadata boundary")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+			})}
+			response, err := transport.RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if req.Header.Get("Authorization") != "" {
+				t.Fatal("transport mutated redirect source request")
+			}
+		})
+	}
+}
+
 func upgradeFixture(t *testing.T, target string, corrupt bool) (upgradeDependencies, *[]string, *[]string) {
 	t.Helper()
 	var archive bytes.Buffer

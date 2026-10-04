@@ -42,9 +42,23 @@ type upgradeDependencies struct {
 	install    func(context.Context, management.Store, string, string, string) error
 }
 
+type releaseAPITransport struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (t releaseAPITransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.token != "" && req.URL.Scheme == "https" && req.URL.Host == "api.github.com" && strings.HasPrefix(req.URL.Path, "/repos/jinyongp/loki/releases/") {
+		// Clone per request so redirect requests cannot inherit this credential.
+		req = req.Clone(req.Context())
+		req.Header.Set("Authorization", "Bearer "+t.token)
+	}
+	return t.base.RoundTrip(req)
+}
+
 func defaultUpgradeDependencies() upgradeDependencies {
 	return upgradeDependencies{
-		client: &http.Client{}, executable: os.Executable,
+		client: &http.Client{Transport: releaseAPITransport{base: http.DefaultTransport, token: os.Getenv("GH_TOKEN")}}, executable: os.Executable,
 		location: func(store management.Store, executable string) (string, error) {
 			return store.ManagerExecutable(executable)
 		},

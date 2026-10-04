@@ -392,7 +392,7 @@ jobs:
         run: |
           python3 scripts/maintainer/tools/accept_manager_bundle.py --candidate acceptance-candidate/manager
           go test ./cmd/loki-manager ./internal/tools ./internal/management ./internal/platform/command
-          python3 scripts/maintainer/tools/accept_cli_upgrade.py --candidate acceptance-candidate/manager
+          GH_TOKEN=${{ github.token }} python3 scripts/maintainer/tools/accept_cli_upgrade.py --candidate acceptance-candidate/manager
           python3 scripts/maintainer/tools/accept_public_installer.py --candidate acceptance-candidate/manager
       - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
