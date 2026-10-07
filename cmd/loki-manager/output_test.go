@@ -63,7 +63,7 @@ func TestPublicStatusAndMutationOutputFormats(t *testing.T) {
 	}{
 		{[]string{"install"}, false, "Loki management installed"},
 		{[]string{"status"}, false, "Tools: none installed"},
-		{[]string{"tools", "list"}, false, "Add tools with"},
+		{[]string{"tools", "list"}, false, "Run 'loki setup'"},
 		{[]string{"doctor"}, false, "Loki doctor: healthy"},
 		{[]string{"status", "--json"}, true, "installed"},
 		{[]string{"--json", "tools", "status"}, true, "tools"},

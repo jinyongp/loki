@@ -27,8 +27,13 @@ func integrationFile(path string, private bool) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("integration input file cannot be opened")
 	}
-	if !info.Mode().IsRegular() || info.Size() > tools.MaxManifestBytes || private && info.Mode().Perm()&0077 != 0 {
+	if !info.Mode().IsRegular() || info.Size() > tools.MaxManifestBytes {
 		return nil, fmt.Errorf("integration input must be a bounded regular file; private keys require owner-only permissions")
+	}
+	if private {
+		if err := privateIntegrationFile(path, info); err != nil {
+			return nil, err
+		}
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -97,6 +102,11 @@ func runIntegrations(ctx context.Context, store management.Store, args []string,
 	if len(args) < 2 {
 		return fmt.Errorf("choose an action and integration; see 'loki integrations --help'")
 	}
+	leaf := toolArguments(args[1:])
+	if len(leaf) == 0 {
+		return fmt.Errorf("choose an integration")
+	}
+	args = append([]string{args[0], leaf[len(leaf)-1]}, leaf[:len(leaf)-1]...)
 	if args[1] == "git" {
 		return runGitIntegration(ctx, store, args, input, output, diagnostics)
 	}

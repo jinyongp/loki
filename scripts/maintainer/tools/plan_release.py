@@ -89,12 +89,15 @@ def fingerprints(release):
     common = [SCRIPTS+name for name in ("release_config.py", "input_cache.py", "plan_release.py", "release_pipeline.py")]+["LICENSE"]
     contracts = {"schema": 2, "composition": CONTRACT}
     for system, arch, runner in TARGETS:
-        closure = go_closure(["./cmd/loki-manager"], system, arch)
+        programs = ["./cmd/loki-manager"]
+        if system == "windows":
+            programs.append("./cmd/loki-keepalive")
+        closure = go_closure(programs, system, arch)
         key = f"manager:{system}:{arch}"
         paths = common+closure["files"]+[SCRIPTS+"build_manager_bundle.py", SCRIPTS+("install.ps1" if system=="windows" else "install.sh")]
         bridge = [p for p in closure["files"] if p not in {"cmd/loki-manager/help.go", "cmd/loki-manager/upgrade.go"}]
         units[key] = {"fingerprint": inputs.digest(paths, {"closure": closure, "contract": contracts}),
-                      "validation": inputs.digest(go_tests(closure)+[SCRIPTS+n for n in ("accept_manager_bundle.py", "accept_cli_upgrade.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py", "render_public_installers.py", "public-install.sh.tmpl", "public-install.ps1.tmpl", "release_gate.py")]),
+                      "validation": inputs.digest(go_tests(closure)+[SCRIPTS+n for n in ("accept_manager_bundle.py", "accept_system_host.py", "accept_cli_upgrade.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py", "render_public_installers.py", "public-install.sh.tmpl", "public-install.ps1.tmpl", "release_gate.py")]),
                       "bridge": inputs.digest(bridge), "closure": closure, "kind": "manager", "target": {"os": system, "arch": arch, "mode": "project-host"}, "runner": runner}
         if (system, arch) != ("windows", "arm64"):
             key = f"module:browser:{system}:{arch}:project-host"

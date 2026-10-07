@@ -17,12 +17,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals()...)
 	defer cancel()
 	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -51,6 +52,8 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	distribution := flags.String("distribution", "", "existing WSL distribution")
 	address := flags.String("address", "", "SSH destination")
 	remoteCommand := flags.String("remote-command", "loki", "manager executable on the execution host")
+	remoteUser := flags.String("remote-user", "", "execution user on a WSL host")
+	systemSocket := flags.String("system-socket", "", "owned Linux management socket")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -58,6 +61,13 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return err
 	}
 	args = flags.Args()
+	systemArgs := args
+	if structured && len(args) > 0 && args[0] == "_system-relay" {
+		systemArgs = append(slices.Clone(args), "--json")
+	}
+	if handled, err := systemCommand(ctx, *root, systemArgs, os.Stdin, out, diagnostics); handled {
+		return err
+	}
 	if handled, err := contextualHelp(args, out); handled {
 		return err
 	}
@@ -65,26 +75,155 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if structured && len(args) >= 2 && args[0] == "tools" && args[1] == "serve" {
 		return fmt.Errorf("tools serve uses MCP protocol output; --json applies to management commands")
 	}
+	frontendRoot := *root
+	if *hostKind != "local" || *systemSocket != "" {
+		frontendRoot = ""
+	}
+	if frontendRoot == "" {
+		frontendRoot, err = management.DefaultRoot()
+		if err != nil {
+			return err
+		}
+	}
+	frontend := management.Store{Root: frontendRoot}
+	if len(args) > 0 && args[0] == "hosts" {
+		return runHosts(ctx, frontend, args[1:], out, diagnostics)
+	}
+	if len(args) > 0 && args[0] == "connections" {
+		return runConnections(ctx, frontend, args[1:], os.Stdin, out, diagnostics)
+	}
+	if len(args) == 1 && args[0] == "_connection-bridge" {
+		return runConnectionBridge(ctx, frontend, diagnostics)
+	}
+	explicitHost := false
+	flags.Visit(func(option *flag.Flag) {
+		if option.Name == "host" || option.Name == "distribution" || option.Name == "address" || option.Name == "remote-user" || option.Name == "remote-command" || option.Name == "system-socket" {
+			explicitHost = true
+		}
+	})
+	var selected *management.ExecutionSelection
+	frontendCommand := len(args) > 0 && (args[0] == "version" || args[0] == "upgrade" || args[0] == "install")
+	if !explicitHost && !frontendCommand {
+		selected, err = frontend.ExecutionSelection()
+		if err != nil {
+			return err
+		}
+		if selected != nil {
+			*hostKind, *distribution, *address = selected.Host.Kind, selected.Host.Distribution, selected.Host.Address
+			*remoteCommand = selected.Command
+			if selected.Remote() && *root == "" {
+				*root = selected.Root
+			}
+		}
+	}
 	host := tools.Host{Kind: *hostKind, Distribution: *distribution, Address: *address}
 	if err := host.Validate(); err != nil {
 		return err
 	}
-	if host.Kind != "local" {
+	if explicitHost {
+		selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand, User: *remoteUser}
+		if *systemSocket != "" {
+			selected.System, selected.Owned, selected.Socket = true, true, *systemSocket
+		}
+		if host.Kind == "local" && !selected.System {
+			selected.Root = ""
+		}
+		if err := selected.Validate(); err != nil {
+			return err
+		}
+	}
+	if len(args) > 0 && args[0] == "setup" {
+		options, err := parseSetup(args[1:], os.Stdin, diagnostics)
+		if err != nil {
+			return err
+		}
+		if len(options.selected) == 0 {
+			return runSetup(ctx, frontend, options, os.Stdin, out, diagnostics)
+		}
+		if host.Kind == "local" && (selected == nil || !selected.System) && options.mode == tools.Full {
+			if runtime.GOOS == "linux" {
+				selected, err = prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
+			} else {
+				selected, err = prepareManagedHost(ctx, frontend, diagnostics)
+			}
+			if err != nil {
+				return err
+			}
+			if selected != nil {
+				host = selected.Host
+				*root, *remoteCommand = selected.Root, selected.Command
+			}
+		}
+		if host.Kind != "local" || selected != nil && selected.Remote() {
+			if selected == nil {
+				selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand}
+			}
+			return runRemoteSetup(ctx, frontend, *selected, options, os.Stdin, out, diagnostics)
+		}
+		return runSetup(ctx, frontend, options, os.Stdin, out, diagnostics)
+	}
+	if len(args) >= 2 && args[0] == "tools" && args[1] == "connect" && (host.Kind != "local" || selected != nil && selected.Remote()) {
+		if selected == nil {
+			selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand}
+		}
+		return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
+	}
+	if !explicitHost && host.Kind == "local" && (selected == nil || !selected.System) && len(args) >= 2 && args[0] == "tools" && args[1] == "install" {
+		full, err := fullInstallationRequest(args[2:])
+		if err != nil {
+			return err
+		}
+		if full {
+			if runtime.GOOS == "linux" {
+				selected, err = prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
+			} else {
+				selected, err = prepareManagedHost(ctx, frontend, diagnostics)
+			}
+			if err != nil {
+				return err
+			}
+			if selected != nil {
+				host = selected.Host
+				*root, *remoteCommand = selected.Root, selected.Command
+			}
+		}
+	}
+	if host.Kind != "local" || selected != nil && selected.Remote() {
+		if selected == nil {
+			selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand}
+		}
 		if remoteGitHubWizard(args) {
-			return runRemoteGitHubWizard(ctx, host, *remoteCommand, *root, args, os.Stdin, out, diagnostics)
+			return runSelectedGitHubWizard(ctx, *selected, args, os.Stdin, out, diagnostics)
 		}
 		remoteArgs := args
+		if len(args) >= 2 && args[0] == "tools" && (args[1] == "install" || args[1] == "update") {
+			explicitRelease := false
+			for _, arg := range args[2:] {
+				name, _, _ := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+				if name == "version" || name == "catalog" {
+					explicitRelease = true
+				}
+			}
+			if !explicitRelease {
+				remoteArgs = append(append(slices.Clone(args[:2]), "--version", management.ManagerRelease), args[2:]...)
+			}
+		}
+		remoteArgs, relayInput, cleanup, err := remoteIntegrationInput(remoteArgs, os.Stdin)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
 		if *root != "" {
-			remoteArgs = append([]string{"--root", *root}, args...)
+			remoteArgs = append([]string{"--root", *root}, remoteArgs...)
 		}
 		if structured {
 			remoteArgs = append([]string{"--json"}, remoteArgs...)
 		}
-		relay, err := management.Relay(ctx, host, *remoteCommand, remoteArgs)
+		relay, err := management.RelaySelection(ctx, *selected, remoteArgs)
 		if err != nil {
 			return err
 		}
-		relay.Stdin = os.Stdin
+		relay.Stdin = relayInput
 		relay.Stdout = out
 		relay.Stderr = diagnostics
 		return relay.Run()
@@ -97,6 +236,33 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	store := management.Store{Root: *root}
+	if len(args) > 0 && slices.Contains([]string{"backup", "backups", "restore", "rollback", "uninstall"}, args[0]) {
+		return runMaintenance(ctx, store, args, os.Stdin, out, diagnostics)
+	}
+	if len(args) > 0 && args[0] == "_connection-state" {
+		f := flag.NewFlagSet("_connection-state", flag.ContinueOnError)
+		workspace := f.String("workspace", "", "execution-host project")
+		if err := f.Parse(args[1:]); err != nil {
+			return err
+		}
+		if f.NArg() != 0 {
+			return fmt.Errorf("invalid connection probe")
+		}
+		report, err := store.Status()
+		if err != nil {
+			return err
+		}
+		if report.Target.Mode == tools.ProjectHost {
+			info, err := os.Stat(*workspace)
+			if !filepath.IsAbs(*workspace) || err != nil || !info.IsDir() {
+				return fmt.Errorf("browser connection needs an existing absolute workspace on the execution host")
+			}
+		}
+		return json.NewEncoder(out).Encode(report)
+	}
+	if len(args) == 1 && args[0] == "_prepare-environment" {
+		return management.PrepareEnvironment(ctx, os.Stdin, diagnostics)
+	}
 	if len(args) > 0 && args[0] == "upgrade" {
 		return runUpgrade(ctx, store, args[1:], os.Stdin, out, diagnostics, defaultUpgradeDependencies())
 	}
@@ -164,7 +330,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	switch args[1] {
 	case "connect":
 		return connectCodex(store, args[2:], out, diagnostics)
-	case "start", "stop":
+	case "start", "stop", "restart":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: loki tools %s", args[1])
 		}
@@ -174,6 +340,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 		if state.Config.Mode != tools.Full {
 			return fmt.Errorf("persistent services use full mode; project-host browser uses loki tools serve browser")
+		}
+		if args[1] != "stop" {
+			if err := management.PrepareEnvironment(ctx, os.Stdin, diagnostics); err != nil {
+				return err
+			}
 		}
 		backend, err := management.NewFullBackend(store, diagnostics)
 		if err != nil {
@@ -185,6 +356,12 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 				return err
 			}
 			return success(out, "Full services stopped. Owned tool data is retained.", map[string]any{"state": "stopped"})
+		}
+		if args[1] == "restart" {
+			fmt.Fprintln(diagnostics, "Restarting selected full services...")
+			if err := store.StopFull(ctx, backend); err != nil {
+				return err
+			}
 		}
 		fmt.Fprintln(diagnostics, "Preparing selected full services...")
 		report, err := store.ReconcileFull(ctx, backend)
@@ -263,28 +440,37 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		f := flag.NewFlagSet("tools "+args[1], flag.ContinueOnError)
 		f.SetOutput(diagnostics)
 		catalog := f.String("catalog", "", "trusted release artifact catalog file")
+		version := f.String("version", "", "stable tool release (default: this CLI release)")
 		archives := f.String("archives", "", "optional absolute directory of trusted receipt-bound local archives")
 		if err := f.Parse(toolArguments(args[2:])); err != nil {
 			return err
 		}
-		if *catalog == "" || (args[1] == "install" && f.NArg() == 0) || (args[1] == "update" && f.NArg() != 0) {
+		if (args[1] == "install" && f.NArg() == 0) || (args[1] == "update" && f.NArg() != 0) {
 			if args[1] == "install" {
-				return fmt.Errorf("provide --catalog FILE and at least one tool; see 'loki tools install --help'")
+				return fmt.Errorf("select at least one tool; see 'loki tools install --help'")
 			}
-			return fmt.Errorf("provide --catalog FILE without tool names; see 'loki tools update --help'")
+			return fmt.Errorf("tools update updates installed tools without tool names; see 'loki tools update --help'")
 		}
 		if *archives != "" && !filepath.IsAbs(*archives) {
 			return fmt.Errorf("--archives requires an absolute execution-host directory")
 		}
 		store.ArchiveDirectory = *archives
-		data, err := os.ReadFile(*catalog)
+		state, err := store.Load()
 		if err != nil {
 			return err
 		}
-		if len(data) > tools.MaxManifestBytes {
-			return fmt.Errorf("catalog exceeds size limit")
+		mode := state.Config.Mode
+		if *catalog == "" && args[1] == "install" {
+			for _, name := range f.Args() {
+				if !slices.Contains(publicToolNames, name) {
+					return fmt.Errorf("unknown tool %q; run loki tools --help", name)
+				}
+			}
+			if slices.ContainsFunc(f.Args(), func(name string) bool { return name != "browser" }) {
+				mode = tools.Full
+			}
 		}
-		release, err := tools.ParseCatalog(data)
+		release, err := acquireCatalogForMode(ctx, mode, *catalog, *version, diagnostics, defaultUpgradeDependencies().client)
 		if err != nil {
 			return err
 		}
@@ -298,7 +484,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		for _, id := range f.Args() {
 			selected = append(selected, tools.ID(id))
 		}
-		if err := store.InstallTools(ctx, release, selected, diagnostics); err != nil {
+		if err := store.InstallToolsForMode(ctx, release, selected, mode, diagnostics); err != nil {
 			return err
 		}
 		return success(out, "Installed "+strings.Join(f.Args(), ", ")+" with private prerequisites (activation is separate).", map[string]any{"tools": selected, "release": release.Release})
@@ -514,7 +700,7 @@ func toolArguments(args []string) []string {
 		}
 		options = append(options, arg)
 		name := strings.TrimLeft(arg, "-")
-		if !strings.Contains(name, "=") && slices.Contains([]string{"catalog", "archives", "capabilities", "engine", "workspace", "keep", "identity-name", "identity-email", "key-file", "config-file", "private-key-file"}, name) && i+1 < len(args) {
+		if !strings.Contains(name, "=") && slices.Contains([]string{"tools", "mode", "version", "connect", "distribution", "address", "root", "command", "user", "config", "tunnel-id", "catalog", "archives", "capabilities", "engine", "workspace", "keep", "identity-name", "identity-email", "key-file", "config-file", "private-key-file"}, name) && i+1 < len(args) {
 			i++
 			options = append(options, args[i])
 		}

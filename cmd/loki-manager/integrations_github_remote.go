@@ -25,10 +25,17 @@ type githubRelayRequest struct {
 }
 
 func remoteGitHubWizard(args []string) bool {
-	if len(args) < 3 || args[0] != "integrations" || args[1] != "setup" || args[2] != "github" {
+	if len(args) < 3 || args[0] != "integrations" || args[1] != "setup" {
 		return false
 	}
-	for _, arg := range args[3:] {
+	leaf := toolArguments(args[2:])
+	if len(leaf) == 0 || leaf[len(leaf)-1] != "github" {
+		return false
+	}
+	for _, arg := range leaf[:len(leaf)-1] {
+		if arg == "--" {
+			continue
+		}
 		name, value, explicit := strings.Cut(arg, "=")
 		if name != "--personal-projects" && name != "--no-browser" {
 			return false
@@ -58,12 +65,19 @@ func (b *githubRelayOutput) Write(data []byte) (int, error) {
 }
 
 func runRemoteGitHubWizard(ctx context.Context, host tools.Host, command, root string, args []string, input io.Reader, output, diagnostics io.Writer) error {
+	return runSelectedGitHubWizard(ctx, management.ExecutionSelection{Schema: 1, Host: host, Command: command, Root: root}, args, input, output, diagnostics)
+}
+
+func runSelectedGitHubWizard(ctx context.Context, selected management.ExecutionSelection, args []string, input io.Reader, output, diagnostics io.Writer) error {
 	f := flag.NewFlagSet("integrations setup github", flag.ContinueOnError)
 	f.SetOutput(diagnostics)
 	personal := f.Bool("personal-projects", false, "optional account-owned Projects")
 	noBrowser := f.Bool("no-browser", false, "print the setup URL")
-	if err := f.Parse(args[3:]); err != nil {
+	if err := f.Parse(toolArguments(args[2:])); err != nil {
 		return err
+	}
+	if f.NArg() != 1 || f.Arg(0) != "github" {
+		return fmt.Errorf("GitHub setup requires exactly one integration name")
 	}
 	call := func(ctx context.Context, request githubRelayRequest, view any) error {
 		ctx, cancel := context.WithTimeout(ctx, 12*time.Minute)
@@ -74,10 +88,10 @@ func runRemoteGitHubWizard(ctx context.Context, host tools.Host, command, root s
 		}
 		defer clear(encoded)
 		argv := []string{"_github-setup-relay"}
-		if root != "" {
-			argv = append([]string{"--root", root}, argv...)
+		if selected.Root != "" {
+			argv = append([]string{"--root", selected.Root}, argv...)
 		}
-		relay, err := management.Relay(ctx, host, command, argv)
+		relay, err := management.RelaySelection(ctx, selected, argv)
 		if err != nil {
 			return err
 		}

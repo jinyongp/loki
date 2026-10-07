@@ -6,9 +6,63 @@ import (
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestPromotionAndRollbackRetainSelectionAndData(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("full target requires Linux")
+	}
+	s := Store{Root: t.TempDir()}
+	before, _ := s.Load()
+	before.Installed["browser"] = ownedFixture(t, s, "browser")
+	before.Config.Tools = []tools.Selection{{ID: "browser", Enabled: true}}
+	if err := s.Save(before); err != nil {
+		t.Fatal(err)
+	}
+	data := filepath.Join(s.Root, "data", "profile")
+	if err := os.MkdirAll(filepath.Dir(data), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(data, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	browser := olderFixture(t, s, ownedFixtureTarget(t, s, LocalTarget(tools.Full), "browser"), "b", 0)
+	_ = ownedFixture(t, s, "browser") // Distinct archive digests retain the original native generation.
+	git := ownedFixtureTarget(t, s, LocalTarget(tools.Full), "git")
+	for _, installation := range []Installation{browser, git} {
+		generation, _ := s.Generation(installation.Artifact)
+		payload := FullPayload{Schema: 1, Module: installation.Artifact.Module, Release: installation.Artifact.Release, Target: installation.Artifact.Target, Images: map[string]string{}, Programs: map[string]string{}, Assets: map[string]string{}}
+		if err := atomicJSON(filepath.Join(generation, "full-runtime.json"), payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.InstallToolsForMode(t.Context(), fixtureCatalog(browser, git), []tools.ID{"git"}, tools.Full, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	promoted, err := s.Load()
+	if err != nil || promoted.Config.Mode != tools.Full || len(promoted.Installed) != 2 || !promoted.Config.Tools[0].Enabled {
+		t.Fatalf("promotion lost selection: %+v %v", promoted, err)
+	}
+	for _, i := range promoted.Installed {
+		if i.Artifact.Target.Mode != tools.Full {
+			t.Fatal("retained browser was not retargeted")
+		}
+	}
+	if err := s.RollbackTools(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.Load()
+	if err != nil || snapshotDigest(after) != snapshotDigest(before) {
+		t.Fatalf("rollback did not restore original snapshot: %v", err)
+	}
+	raw, _ := os.ReadFile(data)
+	if string(raw) != "retained" {
+		t.Fatal("promotion or rollback changed user data")
+	}
+}
 
 func fixtureCatalog(items ...Installation) tools.Catalog {
 	c := tools.Catalog{Schema: 1, Release: Release}

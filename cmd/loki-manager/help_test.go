@@ -73,7 +73,7 @@ func TestUnknownHelpAndCommandsHaveActionableErrors(t *testing.T) {
 }
 
 func TestMissingRequiredArgumentsPointToCommandHelp(t *testing.T) {
-	for _, command := range []string{"configure", "install", "update", "enable", "disable", "remove"} {
+	for _, command := range []string{"configure", "install", "enable", "disable", "remove"} {
 		var output, diagnostics bytes.Buffer
 		err := run(t.Context(), []string{"--root", filepath.Join(t.TempDir(), "missing"), "tools", command}, &output, &diagnostics)
 		if err == nil || !strings.Contains(err.Error(), "loki tools "+command+" --help") {

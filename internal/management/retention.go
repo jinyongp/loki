@@ -217,6 +217,10 @@ type PruneReport struct {
 // additional inactive generations. User profiles, results and credentials live
 // outside program generations and are not examined or deleted here.
 func (s Store) Prune(ctx context.Context, id tools.ID, keep int, progress io.Writer) (PruneReport, error) {
+	return s.prune(ctx, id, keep, progress, false)
+}
+
+func (s Store) prune(ctx context.Context, id tools.ID, keep int, progress io.Writer, allModes bool) (PruneReport, error) {
 	report := PruneReport{Removed: []string{}, Kept: []string{}, Busy: []string{}, Unowned: []string{}}
 	if keep < 0 {
 		return report, fmt.Errorf("retention count must be nonnegative")
@@ -259,7 +263,9 @@ func (s Store) Prune(ctx context.Context, id tools.ID, keep int, progress io.Wri
 			report.Unowned = append(report.Unowned, entry.Name())
 			continue
 		}
-		if record.Installation.Artifact.Target != LocalTarget(state.Config.Mode) {
+		target := record.Installation.Artifact.Target
+		local := LocalTarget(state.Config.Mode)
+		if target != local && (!allModes || target.OS != local.OS || target.Arch != local.Arch) {
 			report.Unowned = append(report.Unowned, entry.Name())
 			continue
 		}

@@ -52,7 +52,7 @@ func (b *DockerFullBackend) Connection(ctx context.Context) (FullConnection, err
 					environment = append(environment, value)
 				}
 			}
-			return FullConnection{Command: []string{b.Binary, "--host", "unix://" + b.Socket, "exec", "--interactive", "--user", spec.User, inspection.ID, spec.Command[0], "full-mcp-connect"}, Environment: append(environment, "DOCKER_API_VERSION=1.47")}, nil
+			return FullConnection{Command: b.dockerCommand("exec", "--interactive", "--user", spec.User, inspection.ID, spec.Command[0], "full-mcp-connect"), Environment: append(environment, "DOCKER_API_VERSION=1.47")}, nil
 		}
 	}
 	return FullConnection{}, fmt.Errorf("selected MCP service has not started; run loki tools start")

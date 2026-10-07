@@ -11,6 +11,8 @@ import (
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"time"
 )
 
@@ -26,7 +28,7 @@ type transaction struct {
 }
 
 func (t transaction) validate() error {
-	if t.Schema != 1 || (t.Action != "install" && t.Action != "update") {
+	if t.Schema != 1 || (t.Action != "install" && t.Action != "update" && t.Action != "promote" && t.Action != "rollback") {
 		return fmt.Errorf("invalid tool transaction schema or action")
 	}
 	check := tools.Operation{Schema: 1, ID: t.ID, Module: "transaction", Action: "install", Phase: t.Phase, Candidate: snapshotDigest(t.Candidate)}
@@ -42,13 +44,22 @@ func (t transaction) validate() error {
 	before, after := t.Previous.Config, t.Candidate.Config
 	before.Release = after.Release
 	before.Contract = after.Contract
+	if t.Action == "rollback" {
+		before.Mode, before.Tools = after.Mode, after.Tools
+	}
+	if t.Action == "promote" {
+		if before.Mode != tools.ProjectHost || after.Mode != tools.Full {
+			return fmt.Errorf("invalid tool mode promotion")
+		}
+		before.Mode = after.Mode
+	}
 	a, _ := json.Marshal(before)
 	b, _ := json.Marshal(after)
 	if !bytes.Equal(a, b) {
 		return fmt.Errorf("tool transaction cannot change host, mode or activation")
 	}
 	for id := range t.Previous.Installed {
-		if _, exists := t.Candidate.Installed[id]; !exists {
+		if _, exists := t.Candidate.Installed[id]; !exists && t.Action != "rollback" {
 			return fmt.Errorf("tool transaction cannot remove installed resources")
 		}
 	}
@@ -113,6 +124,16 @@ func (s Store) readTransaction() (*transaction, error) {
 // mutable is called under the kernel lock by every public mutation. Activation
 // and removal cannot change the recovery basis of an interrupted acquisition.
 func (s Store) mutable() error {
+	if err := s.requireSystemMutable(); err != nil {
+		return err
+	}
+	restoring, err := s.readRestoreJournal()
+	if err != nil {
+		return fmt.Errorf("invalid backup restore journal: %w", err)
+	}
+	if restoring != nil && restoring.Phase != "committed" {
+		return fmt.Errorf("restore %s is interrupted; run loki restore %s to resume", restoring.ID, restoring.ID)
+	}
 	publishing, err := s.readManagerPublication()
 	if err != nil {
 		return fmt.Errorf("invalid manager publication; inspect doctor: %w", err)
@@ -161,14 +182,30 @@ func (s Store) InstallTools(ctx context.Context, catalog tools.Catalog, selected
 	if len(selected) == 0 {
 		return fmt.Errorf("select at least one tool to install")
 	}
-	return s.applyCatalog(ctx, catalog, selected, false, progress)
+	return s.applyCatalog(ctx, catalog, selected, false, "", progress)
+}
+
+// InstallToolsForMode retargets the retained selection and its prerequisites
+// atomically when adding full tools to a standalone browser host. Acquiring a
+// candidate never removes the previous generations or changes user data.
+func (s Store) InstallToolsForMode(ctx context.Context, catalog tools.Catalog, selected []tools.ID, mode tools.Mode, progress io.Writer) error {
+	if len(selected) == 0 {
+		return fmt.Errorf("select at least one tool to install")
+	}
+	if mode != tools.ProjectHost && mode != tools.Full {
+		return fmt.Errorf("unsupported execution mode")
+	}
+	if mode == tools.Full && runtime.GOOS != "linux" {
+		return fmt.Errorf("full tools require a Linux execution host")
+	}
+	return s.applyCatalog(ctx, catalog, selected, false, mode, progress)
 }
 
 func (s Store) UpdateTools(ctx context.Context, catalog tools.Catalog, progress io.Writer) error {
-	return s.applyCatalog(ctx, catalog, nil, true, progress)
+	return s.applyCatalog(ctx, catalog, nil, true, "", progress)
 }
 
-func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected []tools.ID, update bool, progress io.Writer) error {
+func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected []tools.ID, update bool, mode tools.Mode, progress io.Writer) error {
 	if err := catalog.Validate(); err != nil {
 		return err
 	}
@@ -187,12 +224,18 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	if err != nil {
 		return err
 	}
+	promote := mode != "" && mode != state.Config.Mode
+	if promote && (state.Config.Mode != tools.ProjectHost || mode != tools.Full) {
+		return fmt.Errorf("a full host retains its mode; use a separate management root for standalone browser execution")
+	}
 	if !update && catalog.Contract == "" && catalog.Release != state.Config.Release {
 		return fmt.Errorf("installation catalog differs from configured release; use loki tools update to change the whole release")
 	}
-	if update {
+	if update || promote {
 		for id := range state.Installed {
-			selected = append(selected, id)
+			if !slices.Contains(selected, id) {
+				selected = append(selected, id)
+			}
 		}
 		if len(selected) == 0 {
 			return fmt.Errorf("no tools are installed; use loki tools install")
@@ -202,7 +245,11 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	if err != nil {
 		return err
 	}
-	resolution, err := registry.ResolveInstallation(LocalTarget(state.Config.Mode), selected)
+	targetMode := state.Config.Mode
+	if mode != "" {
+		targetMode = mode
+	}
+	resolution, err := registry.ResolveInstallation(LocalTarget(targetMode), selected)
 	if err != nil {
 		return err
 	}
@@ -213,6 +260,7 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	candidate := state
 	candidate.Config.Release = catalog.Release
 	candidate.Config.Contract = catalog.Contract
+	candidate.Config.Mode = targetMode
 	candidate.Installed = make(map[tools.ID]Installation, len(state.Installed)+len(artifacts))
 	for id, current := range state.Installed {
 		candidate.Installed[id] = current
@@ -229,6 +277,9 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	t := transaction{Schema: 1, ID: fmt.Sprintf("op-%d", time.Now().UnixNano()), Action: "install", Phase: tools.Prepared, Previous: state, Candidate: candidate}
 	if update {
 		t.Action = "update"
+	}
+	if promote {
+		t.Action = "promote"
 	}
 	if err := t.validate(); err != nil {
 		return err

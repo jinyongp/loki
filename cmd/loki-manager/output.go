@@ -183,13 +183,13 @@ func printStatus(out io.Writer, report management.Report) error {
 	var text bytes.Buffer
 	writer := tabwriter.NewWriter(&text, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(writer, title)
-	fmt.Fprintf(writer, "  Installed: %s\n  Version: %s\n  Host: %s/%s\n  Mode: %s\n", displayValue(report.Installed), report.Release, report.Target.OS, report.Target.Arch, report.Target.Mode)
+	fmt.Fprintf(writer, "  Configured: %s\n  Version: %s\n  Host: %s/%s\n  Mode: %s\n", displayValue(report.Installed), report.Release, report.Target.OS, report.Target.Arch, report.Target.Mode)
 	if report.Ready != nil {
 		fmt.Fprintln(writer, "  Ready:", displayValue(*report.Ready))
 	}
 	if len(report.Tools) == 0 {
 		fmt.Fprintln(writer, "\nTools: none installed")
-		fmt.Fprintln(writer, "  Add tools with 'loki tools install'.")
+		fmt.Fprintln(writer, "  Run 'loki setup' to choose and configure tools.")
 	} else {
 		fmt.Fprintln(writer, "\nTools:")
 		fmt.Fprintln(writer, "  Tool\tVersion\tInstalled\tEnabled\tReadiness")

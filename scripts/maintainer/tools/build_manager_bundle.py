@@ -82,11 +82,25 @@ def produce(output):
         binary_name = "loki.exe" if target_os == "windows" else "loki"
         env = dict(os.environ, CGO_ENABLED="0", GOOS=target_os, GOARCH=target_arch, GOTOOLCHAIN="local")
         env.pop("GOFLAGS", None)
-        subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/management.ManagerRelease="+RELEASE, "-o", str(bundle / binary_name), "./cmd/loki-manager"], cwd=repo, env=env, check=True)
+        overlay = []
+        packages = ["./cmd/loki-manager"]
+        if target_os == "windows":
+            # Embed the small GUI-subsystem companion. Large base64 payloads
+            # cannot be passed through Windows' command-line length limit.
+            import base64
+            helper = stage / "loki-keepalive.exe"
+            subprocess.run(["go", "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -H=windowsgui", "-o", str(helper), "./cmd/loki-keepalive"], cwd=repo, env=env, check=True)
+            payload = stage / "keepalive_payload.go"
+            payload.write_text('package windows\n\nconst keepaliveExecutableBase64 = "'+base64.b64encode(helper.read_bytes()).decode('ascii')+'"\n', encoding="utf-8")
+            mapping = stage / "overlay.json"
+            mapping.write_text(json.dumps({"Replace": {str(repo / "internal/host/windows/keepalive_payload.go"): str(payload)}}), encoding="utf-8")
+            overlay = ["-overlay", str(mapping)]
+            packages.append("./cmd/loki-keepalive")
+        subprocess.run(["go", "build", *overlay, "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X loki/internal/management.ManagerRelease="+RELEASE, "-o", str(bundle / binary_name), "./cmd/loki-manager"], cwd=repo, env=env, check=True)
         installer = "install.ps1" if target_os == "windows" else "install.sh"
         shutil.copyfile(Path(__file__).with_name(installer), bundle / installer)
         shutil.copyfile(repo / "LICENSE", bundle / "LICENSE")
-        dependencies = go_notices(repo, bundle, env)
+        dependencies = go_notices(repo, bundle, env, packages=packages)
         receipt = {"schema": 1, "release": RELEASE, "os": target_os, "arch": target_arch, "go": "1.27.1", "binary": binary_name, "binary_sha256": hashlib.sha256((bundle / binary_name).read_bytes()).hexdigest(), "binary_bytes": (bundle / binary_name).stat().st_size, "included_tools": [], "go_dependencies": dependencies}
         (bundle / "manager.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         archive = stage / name

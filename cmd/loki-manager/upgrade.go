@@ -124,6 +124,14 @@ func upgradeDownload(ctx context.Context, client *http.Client, url string, limit
 }
 
 func verifiedUpgradeBinary(archive, checksums []byte, asset string) ([]byte, error) {
+	name := "loki"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return verifiedManagerBinary(archive, checksums, asset, name)
+}
+
+func verifiedManagerBinary(archive, checksums []byte, asset, name string) ([]byte, error) {
 	var expected string
 	for _, line := range strings.Split(string(checksums), "\n") {
 		parts := strings.Fields(line)
@@ -145,10 +153,6 @@ func verifiedUpgradeBinary(archive, checksums []byte, asset string) ([]byte, err
 	packed, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	if err != nil {
 		return nil, err
-	}
-	name := "loki"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
 	}
 	var binary []byte
 	for _, entry := range packed.File {

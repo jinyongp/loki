@@ -75,6 +75,23 @@ def accept(candidate):
         doctor = json.loads(run(installed, root, "doctor", "--json"))
         if not doctor["healthy"] or doctor["issues"]:
             raise ValueError("native installed manager is not healthy")
+        cancelled = subprocess.run([str(installed), "--root", str(root), "setup", "--json"], input="", capture_output=True, text=True, timeout=20)
+        if cancelled.returncode or json.loads(cancelled.stdout).get("state") != "cancelled" or json.loads(run(installed, root, "status", "--json"))["tools"] != {}:
+            raise ValueError("empty setup did not cancel without installing tools")
+        unknown = subprocess.run([str(installed), "--root", str(root), "setup", "unknown"], capture_output=True, text=True, timeout=20)
+        if unknown.returncode == 0 or "unknown tool" not in unknown.stderr:
+            raise ValueError("unknown setup selection reached acquisition")
+        data = root / "data"
+        data.mkdir()
+        (data / "example").write_text("before", encoding="utf-8")
+        backup = json.loads(run(installed, root, "backup", "--json"))
+        (data / "example").write_text("after", encoding="utf-8")
+        run(installed, root, "restore", backup["id"])
+        if (data / "example").read_text(encoding="utf-8") != "before":
+            raise ValueError("native backup/restore did not restore owned user data")
+        run(installed, root, "uninstall", "--purge-data")
+        if data.exists() or not (root / "backups" / backup["id"]).is_dir():
+            raise ValueError("native purge did not remove data while retaining backups")
         run(binary, root, "install", "--bin-dir", str(bin_directory))
         state_path = root / 'control/state.json'
         state = json.loads(state_path.read_text())

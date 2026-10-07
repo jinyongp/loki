@@ -1,5 +1,11 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/host/connect"},
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/host/windows"},
+    {"from":"loki/cmd/loki-manager","to":"loki/internal/progress"},
+    {"from":"loki/cmd/loki-manager","to":"loki/packaging/tools"},
+    {"from":"loki/internal/management","to":"loki/internal/progress"},
+    {"from":"loki/internal/management","to":"loki/internal/host/windows"},
     {"from":"loki/cmd/loki-manager","to":"loki/internal/platform/command"},
     {"from":"loki/cmd/loki","to":"loki/internal/process"},
     {"from":"loki/internal/transport/toolproxy","to":"loki/internal/rpc"},
@@ -1551,6 +1557,12 @@
       "owner": "management",
       "tags": [],
       "target": "internal/management"
+    },
+    "loki/packaging/tools": {
+      "kind": "host",
+      "owner": "releases",
+      "tags": ["release-trust"],
+      "target": "packaging/tools"
     },
     "loki/internal/platform/command": {
       "kind": "platform",

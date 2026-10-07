@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -18,22 +20,60 @@ const codexBegin = "# BEGIN Loki browser\n"
 const codexEnd = "# END Loki browser\n"
 
 func connectCodex(store management.Store, arguments []string, out, diagnostics io.Writer) error {
+	return connectCodexOnHost(context.Background(), store, nil, arguments, out, diagnostics)
+}
+
+func connectRemoteCodex(ctx context.Context, selected management.ExecutionSelection, arguments []string, out, diagnostics io.Writer) error {
+	return connectCodexOnHost(ctx, management.Store{}, &selected, arguments, out, diagnostics)
+}
+
+func connectCodexOnHost(ctx context.Context, store management.Store, selected *management.ExecutionSelection, arguments []string, out, diagnostics io.Writer) error {
 	f := flag.NewFlagSet("tools connect", flag.ContinueOnError)
 	f.SetOutput(diagnostics)
 	workspace := f.String("workspace", "", "absolute project directory on this execution host")
 	config := f.String("config", "", "Codex config.toml; defaults to ~/.codex/config.toml")
 	remote := f.Bool("remote", false, "launch through the Codex remote executor")
-	if err := f.Parse(arguments); err != nil {
+	if err := f.Parse(toolArguments(arguments)); err != nil {
 		return err
 	}
 	if f.NArg() != 1 || f.Arg(0) != "codex" {
 		return fmt.Errorf("usage: loki tools connect --workspace ABSOLUTE-PROJECT [--config ABSOLUTE-FILE] [--remote] codex")
 	}
-	state, err := store.Load()
+	var state management.Snapshot
+	var err error
+	if selected == nil {
+		state, err = store.Load()
+	} else {
+		argv := []string{"_connection-state", "--workspace", *workspace}
+		if selected.Root != "" {
+			argv = append([]string{"--root", selected.Root}, argv...)
+		}
+		relay, relayErr := management.RelaySelection(ctx, *selected, argv)
+		if relayErr != nil {
+			return relayErr
+		}
+		var response githubRelayOutput
+		relay.Stdout, relay.Stderr = &response, diagnostics
+		if relayErr := relay.Run(); relayErr != nil {
+			return fmt.Errorf("check selected tools before connecting Codex: %w", relayErr)
+		}
+		var report management.Report
+		if response.overflow || json.Unmarshal(response.Bytes(), &report) != nil {
+			return fmt.Errorf("invalid execution-host connection report")
+		}
+		state.Config.Mode = report.Target.Mode
+		state.Installed = map[tools.ID]management.Installation{}
+		for id, observed := range report.Tools {
+			if observed.Installed {
+				state.Installed[id] = management.Installation{}
+			}
+			state.Config.Tools = append(state.Config.Tools, tools.Selection{ID: id, Enabled: observed.Enabled})
+		}
+	}
 	if err != nil {
 		return err
 	}
-	if state.Config.Mode == tools.ProjectHost {
+	if selected == nil && state.Config.Mode == tools.ProjectHost {
 		info, err := os.Stat(*workspace)
 		if !filepath.IsAbs(*workspace) || err != nil || !info.IsDir() {
 			return fmt.Errorf("Codex browser workspace must be an existing absolute directory")
@@ -95,6 +135,25 @@ func connectCodex(store management.Store, arguments []string, out, diagnostics i
 	var block strings.Builder
 	server, begin, end := "loki_browser", codexBegin, codexEnd
 	launch := []string{"--root", store.Root, "tools", "serve"}
+	if selected != nil {
+		launch = []string{"--host", selected.Host.Kind, "--remote-command", selected.Command}
+		if selected.System {
+			launch = append(launch, "--system-socket", selected.Socket)
+		}
+		if selected.Root != "" {
+			launch = append(launch, "--root", selected.Root)
+		}
+		if selected.Host.Kind == "wsl" {
+			launch = append(launch, "--distribution", selected.Host.Distribution)
+		}
+		if selected.Host.Kind == "ssh" {
+			launch = append(launch, "--address", selected.Host.Address)
+		}
+		if selected.User != "" {
+			launch = append(launch, "--remote-user", selected.User)
+		}
+		launch = append(launch, "tools", "serve")
+	}
 	if state.Config.Mode == tools.Full {
 		server, begin, end = "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
 	} else {

@@ -137,3 +137,33 @@ func TestInterruptedDeletionResumesAfterMarkersWereRemoved(t *testing.T) {
 		t.Fatalf("cleanup journal: %+v %v", journal, err)
 	}
 }
+
+func TestUninstallRemovesInactiveProgramsAndPreservesUserData(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, _ := s.Load()
+	current := ownedFixture(t, s, "browser")
+	state.Installed["browser"] = current
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	previous := olderFixture(t, s, current, "e", time.Hour)
+	data := filepath.Join(s.Root, "data", "user-file")
+	if err := os.MkdirAll(filepath.Dir(data), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(data, []byte("retain"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UninstallTools(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, artifact := range []tools.Artifact{current.Artifact, previous.Artifact} {
+		path, _ := s.Generation(artifact)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("uninstalled program remains: %v", err)
+		}
+	}
+	if raw, err := os.ReadFile(data); err != nil || string(raw) != "retain" {
+		t.Fatalf("uninstall changed user data: %q %v", raw, err)
+	}
+}

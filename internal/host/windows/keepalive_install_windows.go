@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -29,9 +30,10 @@ func ensureKeepalivePayload(ctx context.Context, expected ExpectedInstallation, 
 		return errors.New("WSL keepalive payload is not a Windows executable")
 	}
 	header, ok := image.OptionalHeader.(*pe.OptionalHeader64)
-	if !ok || header.Subsystem != pe.IMAGE_SUBSYSTEM_WINDOWS_GUI || image.Machine != pe.IMAGE_FILE_MACHINE_AMD64 {
+	compatibleMachine := image.Machine == pe.IMAGE_FILE_MACHINE_AMD64 || (runtime.GOARCH == "arm64" && image.Machine == pe.IMAGE_FILE_MACHINE_ARM64)
+	if !ok || header.Subsystem != pe.IMAGE_SUBSYSTEM_WINDOWS_GUI || !compatibleMachine {
 		image.Close()
-		return errors.New("WSL keepalive payload is not a console-free Windows amd64 executable")
+		return errors.New("WSL keepalive payload is not a compatible console-free Windows executable")
 	}
 	image.Close()
 	if !WindowsPathEqual(expected.TaskExecutable, joinWindowsPath(expected.StateDir, "loki-keepalive.exe")) {

@@ -27,3 +27,15 @@ func keepalive(distribution string) int {
 	}
 	return 0
 }
+
+func restoreConnections(frontend, root, distribution string) int {
+	command := exec.Command(frontend, "--root", root, "--host", "local", "connections", "restore", "--distribution", distribution)
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+	if err := command.Run(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			return exit.ExitCode()
+		}
+		return 1
+	}
+	return 0
+}

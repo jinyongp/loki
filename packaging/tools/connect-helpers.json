@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "helpers": [
+    {
+      "id": "openai-tunnel-client",
+      "provider": "openai",
+      "version": "0.0.16",
+      "platform": "windows-amd64",
+      "executable": "tunnel-client.exe",
+      "archive_members": [
+        "LICENSE",
+        "NOTICE",
+        "cloudflared-manifest.json",
+        "cloudflared.exe",
+        "tunnel-client-v0.0.16-windows-amd64-licenses.txt",
+        "tunnel-client-v0.0.16-windows-amd64.spdx.json",
+        "tunnel-client.exe"
+      ],
+      "archive": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-amd64.zip",
+        "source_sha256": "edef7241b0c647fcb30f1a80ff376b6b25c51927960f257a3f01e21b17c2aba6",
+        "source_length": 28122468,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-amd64.zip"
+      },
+      "license_report": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-amd64-licenses.txt",
+        "source_sha256": "9399ced2b36f82fa18e5fe1e6df5712015680c48b8de51a4bd983e9a58de6b4c",
+        "source_length": 13452,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-amd64-licenses.txt"
+      },
+      "spdx": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-amd64.spdx.json",
+        "source_sha256": "4a4852a97ee25d7f72b6ffc54378e57b72b4047959c1d9eede6606efece10bd5",
+        "source_length": 234305,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-amd64.spdx.json"
+      },
+      "notice": {
+        "source_url": "https://raw.githubusercontent.com/openai/tunnel-client/v0.0.16/NOTICE",
+        "source_sha256": "1364c020d86ecf948b78b7c655175032068203d13aece70fb0bfe112d7802dc2",
+        "source_length": 551,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-amd64-NOTICE.txt"
+      }
+    },
+    {
+      "id": "openai-tunnel-client",
+      "provider": "openai",
+      "version": "0.0.16",
+      "platform": "windows-arm64",
+      "executable": "tunnel-client.exe",
+      "archive_members": [
+        "LICENSE",
+        "NOTICE",
+        "cloudflared-manifest.json",
+        "cloudflared.exe",
+        "tunnel-client-v0.0.16-windows-arm64-licenses.txt",
+        "tunnel-client-v0.0.16-windows-arm64.spdx.json",
+        "tunnel-client.exe"
+      ],
+      "archive": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-arm64.zip",
+        "source_sha256": "ecd748288b9bd9cc8f5a963855eb143f4788b831475156703d0bafdcd2dcb149",
+        "source_length": 25495576,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-arm64.zip"
+      },
+      "license_report": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-arm64-licenses.txt",
+        "source_sha256": "353a487b204cbadf8a6f07c6b948e5f6a0cfe68706587847cf6df9a13da4b19a",
+        "source_length": 13452,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-arm64-licenses.txt"
+      },
+      "spdx": {
+        "source_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-arm64.spdx.json",
+        "source_sha256": "82fd4aa16ae1d0646d113028778c5d9cfd90ea953c877915075c0572cb888fbc",
+        "source_length": 234305,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-arm64.spdx.json"
+      },
+      "notice": {
+        "source_url": "https://raw.githubusercontent.com/openai/tunnel-client/v0.0.16/NOTICE",
+        "source_sha256": "1364c020d86ecf948b78b7c655175032068203d13aece70fb0bfe112d7802dc2",
+        "source_length": 551,
+        "mirror_asset": "loki-helper-openai-tunnel-client-v0.0.16-windows-arm64-NOTICE.txt"
+      }
+    }
+  ]
+}

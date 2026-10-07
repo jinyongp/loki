@@ -36,6 +36,7 @@ type DockerFullBackend struct {
 	Store          Store
 	Binary, Socket string
 	Diagnostics    io.Writer
+	Sudo           string
 }
 
 type dockerCommandFailure struct {
@@ -70,7 +71,22 @@ func NewDockerFullBackend(store Store, socket string, diagnostics io.Writer) (*D
 	if diagnostics == nil {
 		diagnostics = io.Discard
 	}
-	return &DockerFullBackend{Store: store, Binary: binary, Socket: socket, Diagnostics: diagnostics}, nil
+	backend := &DockerFullBackend{Store: store, Binary: binary, Socket: socket, Diagnostics: diagnostics}
+	if os.Geteuid() != 0 && unix.Access(socket, unix.R_OK|unix.W_OK) != nil {
+		backend.Sudo, err = exec.LookPath("sudo")
+		if err != nil {
+			return nil, fmt.Errorf("Docker administration is not authorized; run loki setup to prepare this host")
+		}
+	}
+	return backend, nil
+}
+
+func (b *DockerFullBackend) dockerCommand(args ...string) []string {
+	command := append([]string{b.Binary, "--host", "unix://" + b.Socket}, args...)
+	if b.Sudo != "" {
+		command = append([]string{b.Sudo, "-n"}, command...)
+	}
+	return command
 }
 
 // Arguments remain separate data, and the daemon endpoint is always explicit.
@@ -82,7 +98,8 @@ func (b *DockerFullBackend) command(ctx context.Context, label string, input io.
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	command := managedcommand.New(ctx, b.Binary, append([]string{"--host", "unix://" + b.Socket}, args...)...)
+	argv := b.dockerCommand(args...)
+	command := managedcommand.New(ctx, argv[0], argv[1:]...)
 	environment := []string{}
 	for _, item := range os.Environ() {
 		key, _, _ := strings.Cut(item, "=")

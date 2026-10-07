@@ -70,6 +70,11 @@ func (s Store) Doctor(ctx context.Context, probes map[tools.ID]Probe) (Report, e
 	if !r.Installed {
 		issue("management is not installed; run loki install")
 	}
+	if journal, err := s.readRestoreJournal(); err != nil {
+		issue("backup restore journal is invalid: " + err.Error())
+	} else if journal != nil && journal.Phase != "committed" {
+		issue(fmt.Sprintf("backup restore %s is interrupted; run loki restore %s", journal.ID, journal.ID))
+	}
 	if publishing, err := s.readManagerPublication(); err != nil {
 		issue("manager publication is invalid: " + err.Error())
 	} else if publishing != nil && publishing.Phase != tools.Committed && publishing.Phase != tools.Aborted {

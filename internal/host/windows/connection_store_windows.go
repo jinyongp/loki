@@ -13,8 +13,9 @@ import (
 )
 
 type WindowsConnectionStateStore struct {
-	LocalAppData string
-	Platform     WindowsFrontendPlatform
+	LocalAppData    string
+	ConnectionsRoot string
+	Platform        WindowsFrontendPlatform
 }
 
 func NewWindowsConnectionStateStore(localAppData string) WindowsConnectionStateStore {
@@ -25,6 +26,12 @@ func NewWindowsConnectionStateStore(localAppData string) WindowsConnectionStateS
 }
 
 func (store WindowsConnectionStateStore) frontendPaths() (FrontendPaths, error) {
+	if store.ConnectionsRoot != "" {
+		if _, ok := normalizeWindowsPath(store.ConnectionsRoot); !ok {
+			return FrontendPaths{}, fmt.Errorf("connection storage requires an absolute local Windows path")
+		}
+		return FrontendPaths{ConnectionsRoot: store.ConnectionsRoot}, nil
+	}
 	root := strings.TrimSpace(store.LocalAppData)
 	if root == "" {
 		root = strings.TrimSpace(os.Getenv("LOCALAPPDATA"))
@@ -61,6 +68,13 @@ func (store WindowsConnectionStateStore) EnsureDistributionRoot(ctx context.Cont
 		return err
 	}
 	platform := WindowsHelperInstallPlatform{}
+	if store.ConnectionsRoot != "" {
+		// Modular frontend namespaces can have new intermediate directories.
+		// Establish their private root before the helper's strict leaf creation.
+		if err := (WindowsFrontendPlatform{}).EnsurePrivateDirectory(ctx, paths.ConnectionsRoot); err != nil {
+			return err
+		}
+	}
 	for _, directory := range []string{paths.ConnectionsRoot, distributionRoot} {
 		if err = platform.EnsurePrivateDirectory(ctx, directory); err != nil {
 			return fmt.Errorf("prepare managed connection directory %s: %w", directory, err)

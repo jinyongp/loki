@@ -1,9 +1,10 @@
 # Installing and selecting tools
 
-Loki 0.2 installs a native management command first. Product tools are selected
-afterward and remain disabled until explicitly enabled. The execution host
-determines tool support and workspace paths. A Windows desktop can connect to
-an existing Linux execution host through WSL or SSH.
+Loki 0.2 installs an empty native CLI first. Run `loki setup` afterward to choose
+individual tools and prepare them. Setup installs, enables and starts the chosen
+full services; `tools install` keeps activation separate for manual workflows.
+The setup restoration described here is unpublished source work. Published 0.2.5
+still uses the earlier manual selection path.
 
 Management commands print readable text by default. Add `--json` before or
 after the command for one structured result, for example `loki status --json`,
@@ -13,7 +14,7 @@ interactive prompts use stderr in JSON mode. Help stays readable; `tools serve`
 uses its MCP protocol stream and rejects `--json`. Internal host relay messages
 retain their protocol encoding.
 
-Install the stable [0.2.3 release](https://github.com/jinyongp/loki/releases/tag/v0.2.3)
+Install the stable [release](https://github.com/jinyongp/loki/releases/latest)
 using one command:
 
 ```powershell
@@ -25,8 +26,40 @@ curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
 The installer verifies and installs only the native CLI, then completes without
-selection prompts. A fresh installation has an empty tool set. Configure the
-execution host and add tool groups afterward with `loki tools` as shown below.
+selection prompts. A fresh installation has an empty tool set. Run:
+
+```sh
+loki setup
+```
+
+Select names such as `workspace git browser`. Enter or EOF cancels without
+changing the installation. Noninteractive setup accepts explicit names:
+
+```sh
+loki setup workspace git browser
+loki connections setup codex
+loki status
+loki doctor
+```
+
+Windows full setup prepares a dedicated, owned `loki-tools` WSL distribution,
+installs its Linux manager and enables a hidden keepalive task. Existing
+distributions are preserved. Linux full setup asks for administrator access once
+to install the required Docker engine and an owned systemd socket service.
+Subsequent commands use the remembered host; users do not join the Docker group.
+macOS can use its native browser or select a Linux SSH host for full tools:
+
+```sh
+loki hosts prepare ssh --address user@host
+loki setup workspace git
+```
+
+Linux automatic preparation supports Ubuntu/Debian with systemd. A fresh host
+uses [Docker's official stable package repository](https://docs.docker.com/engine/install/ubuntu/)
+with a pinned signing-key digest. Existing engines are checked for Loki's required
+API before use. SSH preparation requires existing SSH access; when needed, setup
+asks for the host administrator password with terminal echo disabled and uses
+it once over protected SSH stdin.
 Use the same CLI installer inside WSL or on an SSH execution host. Windows
 supports explicit `-BinDirectory` and `-ManagementRoot` paths; Linux/macOS
 support `--bin-dir` and `--root`. `-SourceDirectory` / `--source-dir` supply an
@@ -40,7 +73,7 @@ selection using `loki tools connect --workspace ABSOLUTE-PROJECT codex`; use
 and otherwise uses `~/.codex/config.toml`. User-owned conflicting server entries
 are left intact and produce an actionable error.
 
-Receipt-bound 0.2 release candidates passed native acceptance before publication.
+Earlier receipt-bound 0.2 release candidates passed native acceptance before publication.
 See [the final acceptance report](final-acceptance.md) for current results and
 remaining gates.
 
@@ -80,9 +113,7 @@ Install the native management-only bundle using its included `install.sh` or
 `install.ps1`. Then select project-host mode on the execution host:
 
 ```sh
-loki tools configure --mode project-host
-loki tools install --catalog /absolute/path/to/trusted-catalog.json browser
-loki tools enable browser
+loki setup browser --connect codex --workspace /absolute/path/to/project
 loki doctor
 loki tools serve browser --workspace /absolute/path/to/project --engine both
 ```
@@ -111,12 +142,8 @@ Full mode runs on a Linux execution host with its declared Docker prerequisites.
 Choose only the public groups needed for the project:
 
 ```sh
-loki tools configure --mode full
-loki tools install --catalog /absolute/path/to/trusted-full-catalog.json workspace git browser
-loki tools enable workspace
-loki tools enable git
-loki tools enable browser
-loki tools start
+loki setup workspace git browser
+loki connections setup codex
 loki doctor
 loki tools serve
 ```
@@ -159,7 +186,8 @@ Default setup registers or reuses an App, opens its installation settings and
 discovers approved installations. With WSL/SSH host selection, default setup opens the browser and
 serves the loopback callback on the command's frontend host. The one-time code
 is relayed through protected stdin; API calls and durable keys remain on the
-execution host. Imported file-based configuration is read on the execution host.
+execution host. Imported file-based configuration and keys are read on the
+command frontend, then sent through protected stdin to the selected host.
 Repository-linked Projects use installation
 authorization, including repositories under personal accounts. Personal Projects
 is an optional capability and requires explicit `--personal-projects` setup and
@@ -174,7 +202,7 @@ the normal tool flow reports the prerequisite instead of silently changing it.
 ## Updates and retained resources
 
 ```sh
-loki tools update --catalog /absolute/path/to/trusted-new-release-catalog.json
+loki tools update
 loki tools disable browser
 loki tools prune browser --keep 1
 loki tools remove browser
@@ -186,6 +214,48 @@ active pointers. Enablement and data persist. Disconnect sessions before removin
 their programs. Pruning retains current and leased generations, plus the requested
 number of inactive generations. Tool removal retains data owned by that tool.
 Recovery repairs owned interrupted operations and reports unresolved ownership.
+
+## Connections and maintenance
+
+`loki connections setup codex` writes the client configuration on the frontend
+and binds it to the selected execution host. Existing unrelated settings remain
+intact. In Windows, managed OpenAI tunnels also support setup, start, stop,
+status, doctor and removal:
+
+```powershell
+loki connections setup openai --tunnel-id YOUR-TUNNEL-ID
+loki connections status openai
+loki connections stop openai
+loki connections start openai
+```
+
+The runtime key uses hidden terminal input and Windows Credential Manager.
+An owned GUI logon companion restores enabled connections without a terminal
+window. Stop disables restoration and stops the owned loopback MCP bridge.
+
+```sh
+loki backup
+loki backups list
+loki restore BACKUP-ID
+loki rollback
+loki uninstall
+loki uninstall --purge-data
+loki hosts remove --purge
+```
+
+Backup pauses owned services and resumes them after copying selected programs,
+configuration, credentials and persistent tool data. Active jobs block maintenance.
+Restore first creates a safety backup; an interrupted restore resumes with the
+same ID. Backups belong to the same management root and execution host.
+Rollback selects the previous complete installation when its generations remain
+available; it retains current data. Uninstall removes tool programs and retains
+the CLI, credentials, backups and data. It does not remove the Docker engine,
+WSL distribution or unrelated resources. `--purge-data` also removes tool-owned
+data and credentials while keeping backups. `hosts remove` detaches a selection;
+`hosts remove --purge` destroys this installation's owned WSL distribution or
+per-user Linux system host, including its data and host-side backups. The shared
+Docker/WSL prerequisites and frontend CLI remain installed. External SSH and
+user-managed WSL hosts are preserved.
 
 ## Local plugin packages
 

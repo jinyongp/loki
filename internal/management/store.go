@@ -32,7 +32,8 @@ type Snapshot struct {
 }
 
 type Store struct {
-	Root string
+	Root        string
+	hostRemoval bool
 	// ArchiveDirectory is a transient acquisition source for receipt-bound
 	// offline installation. It is never persisted in desired host state.
 	ArchiveDirectory string
@@ -62,7 +63,7 @@ func (s Store) Load() (Snapshot, error) {
 	}
 	info, err := os.Lstat(s.ActivationPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return Snapshot{Schema: 1, Config: tools.Config{Schema: 1, Release: Release, Host: tools.Host{Kind: "local"}, Mode: tools.ProjectHost, Tools: []tools.Selection{}}, Installed: map[tools.ID]Installation{}}, nil
+		return Snapshot{Schema: 1, Config: tools.Config{Schema: 1, Release: ManagerRelease, Host: tools.Host{Kind: "local"}, Mode: tools.ProjectHost, Tools: []tools.Selection{}}, Installed: map[tools.ID]Installation{}}, nil
 	}
 	if err != nil {
 		return Snapshot{}, err
@@ -174,6 +175,9 @@ func (s Store) ensure() error {
 		return err
 	}
 	if err := os.MkdirAll(s.Root, 0700); err != nil {
+		return err
+	}
+	if err := protectManagementRoot(s.Root); err != nil {
 		return err
 	}
 	return s.realRoot()
