@@ -81,7 +81,10 @@ For a prepared offline candidate, append `--archives ABSOLUTE_DIRECTORY` to
 `tools install` or `tools update`. The directory contains `<sha256>.zip` files
 from the trusted catalog. The manager verifies their complete length/digest in
 owned staging before extraction; local files do not supply their own authority.
-Candidate preparation emits this directory as `release/archives`.
+Candidate preparation emits this directory as `release/archives`. Use the global
+`--host local` override for offline candidate installation directly on a prepared
+Linux host. The administrator socket accepts official release acquisition and
+refuses caller-supplied catalogs and archives.
 
 ## CLI upgrades
 

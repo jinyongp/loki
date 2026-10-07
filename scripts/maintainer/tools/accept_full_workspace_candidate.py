@@ -24,7 +24,7 @@ from mcp_probe import Client, result
 
 
 async def protocol(binary, root, workspace, invoke):
-    client = Client([str(binary), "--root", str(root), "tools", "serve"], workspace)
+    client = Client([str(binary), "--host", "local", "--root", str(root), "tools", "serve"], workspace)
     await client.start()
     try:
         await client.initialize()
@@ -87,7 +87,7 @@ def accept(candidate):
             raise ValueError("full acceptance command differs from its receipt")
         binary.chmod(0o755)
         def invoke(*arguments):
-            completed = subprocess.run([str(binary), "--root", str(root), *arguments], capture_output=True, text=True, timeout=180)
+            completed = subprocess.run([str(binary), "--host", "local", "--root", str(root), *arguments], capture_output=True, text=True, timeout=180)
             if completed.returncode:
                 raise ValueError("Full candidate command failed: " + " ".join(arguments) + "\n" + completed.stdout + completed.stderr)
             return completed.stdout
