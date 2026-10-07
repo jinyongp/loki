@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +12,27 @@ import (
 	"loki/internal/management"
 	"loki/internal/tools"
 )
+
+func TestSetupMenuPipedInput(t *testing.T) {
+	for _, input := range []string{"", "\n", "browser\n"} {
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = writer.WriteString(input)
+		_ = writer.Close()
+		var output bytes.Buffer
+		err = runSetupMenu(context.Background(), nil, reader, &commandOutput{Writer: &output, json: true}, &output)
+		_ = reader.Close()
+		if input == "browser\n" {
+			if err == nil || output.Len() != 0 {
+				t.Fatal("noninteractive menu unexpectedly performed an action", err)
+			}
+		} else if err != nil || !strings.Contains(output.String(), `"state":"cancelled"`) {
+			t.Fatal("empty piped setup did not cancel", output.String(), err)
+		}
+	}
+}
 
 func TestSetupMenuAvailableActions(t *testing.T) {
 	for _, test := range []struct {

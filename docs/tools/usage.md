@@ -32,7 +32,7 @@ selection prompts. A fresh installation has an empty tool set. Run:
 loki setup
 ```
 
-The next release replaces interactive setup with a tool management menu.
+Loki 0.2.7 replaces interactive setup with a tool management menu.
 Each tool shows installation and activation separately. Use ↑/↓ and Enter to
 choose a tool, then choose an action. Missing tools offer **Install and enable**
 or **Install only**; installed tools offer **Enable** or **Disable**, and

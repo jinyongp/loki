@@ -45,6 +45,16 @@ func setupStateLabel(state tools.State) string {
 // Use the command router so the menu reads and changes the selected execution
 // host, including protected Linux hosts and remembered Windows WSL hosts.
 func runSetupMenu(ctx context.Context, prefix []string, input *os.File, out, diagnostics io.Writer) error {
+	if !term.IsTerminal(int(input.Fd())) {
+		line, err := readSetupLine(input, 4096)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if strings.TrimSpace(line) == "" {
+			return success(out, "Setup cancelled.", map[string]any{"state": "cancelled", "changed": false})
+		}
+		return fmt.Errorf("interactive setup needs a terminal; use 'loki setup TOOL...' or 'loki tools install TOOL' for scripts")
+	}
 	terminal, ok := diagnostics.(*os.File)
 	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
 		return fmt.Errorf("interactive setup needs a terminal; use 'loki setup TOOL...' or 'loki tools install TOOL' for scripts")
