@@ -95,3 +95,10 @@ The production Mach-O checker accepted both new macOS main executable structures
 without executing them. Full native browser acceptance remains required.
 Action consumers were refreshed to official stable immutable SHAs, including
 Releaseway v0.3.1; no changes were made to the Releaseway repository.
+
+The next source check exposed a rapid browser disconnect race: polling could miss
+a session that had already closed and retain its engines until initialization
+expired. The HTTP pool now captures the session at initialization completion and
+waits on that exact session. The two ownership/cleanup checks passed 30 consecutive
+race-enabled repetitions. The publication contract test now names the reviewed
+Releaseway SHA. These fixes require a new candidate basis.

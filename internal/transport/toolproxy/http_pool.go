@@ -11,8 +11,9 @@ import (
 
 type httpRequestKey struct{}
 type httpRequest struct {
-	once   sync.Once
-	server *mcp.Server
+	once    sync.Once
+	server  *mcp.Server
+	session chan *mcp.ServerSession
 }
 
 // HTTPPool owns one upstream connection per stateful HTTP session. The SDK
@@ -67,21 +68,12 @@ func (p *HTTPPool) Server(request *http.Request) *mcp.Server {
 			defer cancel()
 			deadline := time.NewTimer(30 * time.Second)
 			defer deadline.Stop()
-			ticker := time.NewTicker(10 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				for session := range server.Sessions() {
-					context.AfterFunc(ctx, func() { _ = session.Close() })
-					_ = session.Wait()
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-deadline.C:
-					return
-				case <-ticker.C:
-				}
+			select {
+			case session := <-entry.session:
+				context.AfterFunc(ctx, func() { _ = session.Close() })
+				_ = session.Wait()
+			case <-ctx.Done():
+			case <-deadline.C:
 			}
 		}()
 	})
@@ -92,12 +84,15 @@ func (p *HTTPPool) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var entry *httpRequest
 		if r.Method == http.MethodPost && r.Header.Get("Mcp-Session-Id") == "" {
-			entry = &httpRequest{}
+			entry = &httpRequest{session: make(chan *mcp.ServerSession, 1)}
 			r = r.WithContext(context.WithValue(r.Context(), httpRequestKey{}, entry))
 		}
 		next.ServeHTTP(w, r)
 		if entry != nil && entry.server != nil {
-			for range entry.server.Sessions() {
+			for session := range entry.server.Sessions() {
+				// Capture the initialized session before it can disappear from
+				// the registry. A fast disconnect must still release its engines.
+				entry.session <- session
 				return
 			}
 			p.mu.Lock()
