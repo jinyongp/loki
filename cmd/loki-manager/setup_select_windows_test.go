@@ -30,7 +30,12 @@ func TestSetupConsoleHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	options, err := parseSetup(t.Context(), nil, os.Stdin, os.Stderr)
+	var options setupOptions
+	if root := os.Getenv("LOKI_SETUP_MENU_ROOT"); root != "" {
+		err = runSetupMenu(t.Context(), []string{"--root", root}, os.Stdin, os.Stdout, os.Stderr)
+	} else {
+		options, err = parseSetup(t.Context(), nil, os.Stdin, os.Stderr)
+	}
 	after, restoreErr := term.GetState(int(os.Stdin.Fd()))
 	result := setupConsoleResult{Restored: restoreErr == nil && reflect.DeepEqual(before, after)}
 	if err != nil {
@@ -53,12 +58,14 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 		name string
 		keys string
 		mask int
+		menu bool
 	}{
-		{"multiple", "\x1b[B \x1b[B\x1b[B \r", 10},
-		{"select all", "\x01\r", 255},
-		{"empty", "\r", 0},
-		{"cancel checked choice", " \x03", 0},
-		{"escape", " \x1b", 0},
+		{"multiple", "\x1b[B \x1b[B\x1b[B \r", 10, false},
+		{"select all", "\x01\r", 255, false},
+		{"empty", "\r", 0, false},
+		{"cancel checked choice", " \x03", 0, false},
+		{"escape", " \x1b", 0, false},
+		{"management menu exit", "\x1b", 0, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			console, err := xpty.NewConPty(100, 30)
@@ -69,11 +76,15 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 			cmd := exec.Command(os.Args[0], "-test.run=^TestSetupConsoleHelper$")
 			for _, entry := range os.Environ() {
 				upper := strings.ToUpper(entry)
-				if !strings.HasPrefix(upper, "TERM=") && !strings.HasPrefix(upper, "LOKI_SETUP_CONSOLE_HELPER=") {
+				if !strings.HasPrefix(upper, "TERM=") && !strings.HasPrefix(upper, "LOKI_SETUP_CONSOLE_HELPER=") && !strings.HasPrefix(upper, "LOKI_SETUP_MENU_ROOT=") {
 					cmd.Env = append(cmd.Env, entry)
 				}
 			}
 			cmd.Env = append(cmd.Env, "LOKI_SETUP_CONSOLE_HELPER=1", "TERM=xterm-256color")
+			menuRoot := t.TempDir() + "\\untouched"
+			if test.menu {
+				cmd.Env = append(cmd.Env, "LOKI_SETUP_MENU_ROOT="+menuRoot)
+			}
 			if err := console.Start(cmd); err != nil {
 				t.Fatal(err)
 			}
@@ -124,6 +135,11 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 			}
 			if err := cmd.Wait(); err != nil {
 				t.Fatal(err)
+			}
+			if test.menu {
+				if _, err := os.Stat(menuRoot); !os.IsNotExist(err) {
+					t.Fatal("cancelled menu changed installation", err)
+				}
 			}
 		})
 	}

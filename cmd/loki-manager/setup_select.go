@@ -49,20 +49,11 @@ func selectSetupTools(ctx context.Context, input io.Reader, diagnostics io.Write
 			WithOutput(diagnostics).
 			WithKeyMap(keys).
 			WithShowHelp(true)
-		// Graceful quit waits for terminal input readers. Huh's default abort
-		// interrupts the program and can close its input before readers stop.
-		form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Quit
-		promptCtx, stop := context.WithCancel(ctx)
-		defer stop()
-		model := &setupSelectionModel{form: form, ctx: promptCtx}
-		terminalOutput := setupTerminalOutput{File: out, fd: out.Fd()}
-		if _, err := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(terminalOutput)).Run(); err != nil {
+		aborted, err := runSetupForm(ctx, form, in, out)
+		if err != nil {
 			return nil, err
 		}
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if form.State == huh.StateAborted {
+		if aborted {
 			return nil, nil
 		}
 		return selected, nil
@@ -83,6 +74,29 @@ func selectSetupTools(ctx context.Context, input io.Reader, diagnostics io.Write
 		return nil, fmt.Errorf("tool selection exceeds input limit")
 	}
 	return strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\r' || r == '\n' }), nil
+}
+
+func runSetupForm(ctx context.Context, form *huh.Form, input, output *os.File) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	keys := huh.NewDefaultKeyMap()
+	keys.Quit.SetKeys("ctrl+c", "esc")
+	keys.MultiSelect.Toggle.SetHelp("space", "select")
+	form.WithKeyMap(keys).WithShowHelp(true)
+	// Graceful quit waits for terminal input readers before restoring state.
+	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Quit
+	promptCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	model := &setupSelectionModel{form: form, ctx: promptCtx}
+	terminalOutput := setupTerminalOutput{File: output, fd: output.Fd()}
+	if _, err := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(terminalOutput)).Run(); err != nil {
+		return false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return form.State == huh.StateAborted, nil
 }
 
 type setupSelectionCancelled struct{}

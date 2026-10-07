@@ -32,15 +32,23 @@ selection prompts. A fresh installation has an empty tool set. Run:
 loki setup
 ```
 
-The next release adds keyboard checkbox selection to interactive setup.
-In an interactive terminal, use ↑/↓ to move, Space to toggle checkboxes and Enter
-to confirm. Esc/Ctrl+C or confirming an empty selection cancels without changing
-the installation. Select multiple tools such as workspace, git and browser.
-Piped input and limited terminals retain line input; Enter or EOF cancels.
-Noninteractive setup accepts explicit names:
+The next release replaces interactive setup with a tool management menu.
+Each tool shows installation and activation separately. Use ↑/↓ and Enter to
+choose a tool, then choose an action. Missing tools offer **Install and enable**
+or **Install only**; installed tools offer **Enable** or **Disable**, and
+**Uninstall**. Installation alone leaves a new tool disabled. Uninstall asks for
+confirmation and retains user data. Full services are reconciled after activation
+changes; uninstall can restart full services. The list refreshes after each action.
+Esc goes back, or exits from the tool list. Completed actions are retained on exit.
+The menu uses the selected execution host, including remembered Windows WSL hosts.
+Scripts use explicit commands rather than the interactive menu:
 
 ```sh
 loki setup workspace git browser
+loki tools install github
+loki tools enable github
+loki tools disable github
+loki tools uninstall github
 loki connections setup codex
 loki status
 loki doctor

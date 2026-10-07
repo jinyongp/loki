@@ -3,8 +3,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -15,6 +19,90 @@ import (
 
 	"loki/internal/tools"
 )
+
+func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	master, terminal, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer master.Close()
+	defer terminal.Close()
+	if err := pty.Setsize(terminal, &pty.Winsize{Rows: 30, Cols: 120}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := term.GetState(int(terminal.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	chunks := make(chan string, 64)
+	go func() {
+		defer close(chunks)
+		buffer := make([]byte, 4096)
+		for {
+			n, err := master.Read(buffer)
+			select {
+			case chunks <- string(buffer[:n]):
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	waitFor := func(text string) {
+		t.Helper()
+		var screen strings.Builder
+		for !strings.Contains(screen.String(), text) {
+			select {
+			case chunk, ok := <-chunks:
+				if !ok {
+					t.Fatal("terminal closed before rendering", text)
+				}
+				screen.WriteString(chunk)
+			case <-ctx.Done():
+				t.Fatal("menu did not render", text)
+			}
+		}
+	}
+	root := filepath.Join(t.TempDir(), "untouched")
+	var output bytes.Buffer
+	finished := make(chan error, 1)
+	go func() {
+		finished <- runSetupMenu(ctx, []string{"--root", root}, terminal, &commandOutput{Writer: &output, json: true}, terminal)
+	}()
+	waitFor("coordination")
+	_, _ = io.WriteString(master, "\r")
+	waitFor("Install only")
+	_, _ = io.WriteString(master, "\x1b")
+	waitFor("coordination")
+	_, _ = io.WriteString(master, "\x1b")
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("menu did not exit")
+	}
+	after, err := term.GetState(int(terminal.Fd()))
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("terminal was not restored", err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatal("cancelled menu changed installation", err)
+	}
+	var result struct {
+		Changed bool `json:"changed"`
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.Success || result.Changed {
+		t.Fatalf("menu contaminated JSON output: %s (%v)", output.String(), err)
+	}
+}
 
 func TestSetupKeyboardSelection(t *testing.T) {
 	for _, test := range []struct {

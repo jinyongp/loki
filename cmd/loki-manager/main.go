@@ -60,6 +60,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 		return err
 	}
+	executionArgs := slices.Clone(args[:len(args)-len(flags.Args())])
 	args = flags.Args()
 	systemArgs := args
 	if structured && len(args) > 0 && args[0] == "_system-relay" {
@@ -133,6 +134,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	if len(args) > 0 && args[0] == "setup" {
+		if len(args) == 1 {
+			return runSetupMenu(ctx, executionArgs, os.Stdin, out, diagnostics)
+		}
 		options, err := parseSetup(ctx, args[1:], os.Stdin, diagnostics)
 		if err != nil {
 			return err
@@ -511,7 +515,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		return success(out, "Tool "+f.Arg(0)+" "+args[1]+"d.", map[string]any{"tool": f.Arg(0), "enabled": args[1] == "enable"})
-	case "remove":
+	case "remove", "uninstall":
 		if len(args) != 3 {
 			return fmt.Errorf("select exactly one tool to remove; see 'loki tools remove --help'")
 		}
