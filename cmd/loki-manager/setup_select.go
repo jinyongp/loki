@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"golang.org/x/term"
 )
@@ -49,11 +49,21 @@ func selectSetupTools(ctx context.Context, input io.Reader, diagnostics io.Write
 			WithOutput(diagnostics).
 			WithKeyMap(keys).
 			WithShowHelp(true)
-		if err := form.RunWithContext(ctx); err != nil {
-			if errors.Is(err, huh.ErrUserAborted) {
-				return nil, nil
-			}
+		// Graceful quit waits for terminal input readers. Huh's default abort
+		// interrupts the program and can close its input before readers stop.
+		form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Quit
+		promptCtx, stop := context.WithCancel(ctx)
+		defer stop()
+		model := &setupSelectionModel{form: form, ctx: promptCtx}
+		terminalOutput := setupTerminalOutput{File: out, fd: out.Fd()}
+		if _, err := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(terminalOutput)).Run(); err != nil {
 			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if form.State == huh.StateAborted {
+			return nil, nil
 		}
 		return selected, nil
 	}
@@ -73,4 +83,43 @@ func selectSetupTools(ctx context.Context, input io.Reader, diagnostics io.Write
 		return nil, fmt.Errorf("tool selection exceeds input limit")
 	}
 	return strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\r' || r == '\n' }), nil
+}
+
+type setupSelectionCancelled struct{}
+
+// Resize probes use a borrowed descriptor, without touching os.File's mutable
+// close state after the prompt returns to its owner.
+type setupTerminalOutput struct {
+	*os.File
+	fd uintptr
+}
+
+func (f setupTerminalOutput) Fd() uintptr { return f.fd }
+
+// Adapt the form to Bubble Tea's view model and turn context cancellation into
+// the same graceful exit as keyboard cancellation.
+type setupSelectionModel struct {
+	form *huh.Form
+	ctx  context.Context
+}
+
+func (m *setupSelectionModel) Init() tea.Cmd {
+	return tea.Batch(m.form.Init(), func() tea.Msg {
+		<-m.ctx.Done()
+		return setupSelectionCancelled{}
+	})
+}
+
+func (m *setupSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, cancelled := msg.(setupSelectionCancelled); cancelled {
+		return m, tea.Quit
+	}
+	_, cmd := m.form.Update(msg)
+	return m, cmd
+}
+
+func (m *setupSelectionModel) View() tea.View {
+	v := tea.NewView(m.form.View())
+	v.ReportFocus = true
+	return v
 }
