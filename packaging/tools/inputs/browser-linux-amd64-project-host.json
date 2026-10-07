@@ -52,10 +52,10 @@
       "digest_provenance": "Official Node SHASUMS256.txt obtained over primary HTTPS; detached signature verification remains a final provenance check."
     },
     "chrome": {
-      "version": "154.0.8037.92",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/linux64/chrome-linux64.zip",
-      "bytes": 196202491,
-      "sha256": "ff43322f335e436b2f4dcdfeeec5db032299e335a7e8c1c618b326e100ce8732",
+      "version": "155.0.8059.39",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/linux64/chrome-linux64.zip",
+      "bytes": 198195769,
+      "sha256": "55672d1f392fd3e7b7a08621b6e804e6bcb39d40cf155504abb74b3a021ea8ea",
       "root": "chrome-linux64",
       "notices": [
         "ABOUT"

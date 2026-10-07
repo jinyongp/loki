@@ -23,15 +23,15 @@
       "npm": "lib/node_modules/npm/bin/npm-cli.js"
     },
     "chrome": {
-      "version": "154.0.8037.92",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/mac-x64/chrome-mac-x64.zip",
-      "bytes": 202045791,
-      "sha256": "9ddd0959603a3cdb90926427b2942279d81414c9aad856c97d405bb406d50e8b",
+      "version": "155.0.8059.39",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/mac-x64/chrome-mac-x64.zip",
+      "bytes": 203101743,
+      "sha256": "9e4da7961d4a426078f02e89ecfa569a7926ada2dc88aa53c0bd9ed0d46c3bb7",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": "chrome-mac-x64",
       "notices": [
         "ABOUT",
-        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/154.0.8037.92/Libraries/WidevineCdm/LICENSE"
+        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/155.0.8059.39/Libraries/WidevineCdm/LICENSE"
       ],
       "executable": "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
     },

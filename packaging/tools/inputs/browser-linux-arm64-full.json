@@ -52,10 +52,10 @@
       "npm": "lib/node_modules/npm/bin/npm-cli.js"
     },
     "chrome": {
-      "version": "154.0.8037.92",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/linux-arm64/chrome-linux-arm64.zip",
-      "bytes": 196517840,
-      "sha256": "c0af361aab66b24c72e36a4326dce4d7edf4bc23f9aede8af988c2cb6ea3fec0",
+      "version": "155.0.8059.39",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/linux-arm64/chrome-linux-arm64.zip",
+      "bytes": 198202003,
+      "sha256": "b9d44e5d183260ca941a4c4d8d21c8a437d81ef778a489047ef98968b0475dc5",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": "chrome-linux-arm64",
       "notices": [

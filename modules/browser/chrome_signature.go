@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// Chrome for Testing 154.0.8037.92 ships unsigned on Intel and with a
+// Chrome for Testing 155.0.8059.39 ships unsigned on Intel and with a
 // linker-generated ad-hoc code signature on arm64. Archive receipts and owned
 // generation integrity bind the whole app; neither input has a resource seal.
 func chromeSignatureKind(path, arch string) error {

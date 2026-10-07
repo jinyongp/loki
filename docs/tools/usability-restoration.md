@@ -85,3 +85,13 @@ disposable Linux runners. Windows native checks include protected connection
 storage and credential-file import. The workflow is run with publication disabled;
 actual WSL creation, live OpenAI tunnel credentials and desktop SSH browser
 rendering still require evidence from the intended Windows machine.
+
+The first candidate found two CI gates: the Windows native source check omitted
+its newly embedded GUI companion from the dependency closure, and Chrome/Actions
+stable pins had advanced. The companion check now matches the plan. Official
+Chrome 155.0.8059.39 archives were measured independently for all five supported
+platforms; receipts, runtime probes and retained macOS notices were updated.
+The production Mach-O checker accepted both new macOS main executable structures
+without executing them. Full native browser acceptance remains required.
+Action consumers were refreshed to official stable immutable SHAs, including
+Releaseway v0.3.1; no changes were made to the Releaseway repository.

@@ -89,7 +89,7 @@ jobs:
           if test -n "$REQUEST_VERSION"; then args+=(--version "$REQUEST_VERSION"); fi
           if test "$FORCE_REBUILD" = true; then args+=(--force); fi
           python3 scripts/maintainer/tools/release_pipeline.py plan "${args[@]}" --output plan/plan.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-plan
           path: plan/
@@ -128,7 +128,7 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
@@ -136,7 +136,7 @@ jobs:
         env:
           LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
         run: python3 scripts/maintainer/tools/release_pipeline.py manager --plan plan/plan.json --output candidate
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: built-${{ matrix.os }}-${{ matrix.arch }}-manager
           path: candidate/
@@ -175,7 +175,7 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
@@ -189,7 +189,7 @@ jobs:
         env:
           LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
         run: python3 scripts/maintainer/tools/release_pipeline.py browser --plan plan/plan.json --output candidate
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: built-${{ matrix.os }}-${{ matrix.arch }}-browser
           path: candidate/
@@ -232,7 +232,7 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
@@ -259,7 +259,7 @@ jobs:
           LOKI_BUILD_CACHE: registry
           LOKI_CACHE_WRITE: '1'
         run: python3 scripts/maintainer/tools/release_pipeline.py full --plan plan/plan.json --output candidate
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: built-${{ matrix.os }}-${{ matrix.arch }}-full
           path: candidate/
@@ -276,16 +276,16 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: built-*
           path: built
       - run: python3 scripts/maintainer/tools/release_pipeline.py assemble --plan plan/plan.json --built built --output publication
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: publication-assets
           path: publication/assets/
@@ -293,7 +293,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Retain installer pages for deployment and public verification
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: publication-pages
           path: publication/pages/
@@ -324,7 +324,7 @@ jobs:
               out.write('\nPublic verification downloads only installer pages. Actions records per-step transfer durations.\n')
           print(json.dumps(result))
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: publication-metadata
           path: metadata/
@@ -402,15 +402,15 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-metadata
           path: publication
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
           path: publication/native
@@ -426,7 +426,7 @@ jobs:
         if: matrix.os == 'linux'
         run: python3 scripts/maintainer/tools/accept_system_host.py --candidate acceptance-candidate/manager
       - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checks-${{ matrix.os }}-${{ matrix.arch }}-manager
           path: checks/
@@ -465,15 +465,15 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-metadata
           path: publication
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
           path: publication/native
@@ -500,7 +500,7 @@ jobs:
         run: |
           if test -f "$RUNNER_TEMP/loki-browser-acceptance"; then sudo apparmor_parser --remove "$RUNNER_TEMP/loki-browser-acceptance"; fi
       - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checks-${{ matrix.os }}-${{ matrix.arch }}-project-host
           path: checks/
@@ -539,15 +539,15 @@ jobs:
           path: ${{ steps.go-cache-paths.outputs.paths }}
           key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
           restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-metadata
           path: publication
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
           path: publication/native
@@ -574,7 +574,7 @@ jobs:
           go test ./internal/config ./internal/tools ./internal/management ./modules/workspace
           python3 scripts/maintainer/tools/accept_full_workspace_candidate.py --candidate acceptance-candidate
       - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: checks-${{ matrix.os }}-${{ matrix.arch }}-full
           path: checks/
@@ -591,21 +591,21 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
           path: plan
       - name: Download exact release assets for final sealing
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-assets
           path: publication/assets
       - name: Download installer pages for Pages deployment
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-pages
           path: publication/pages
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: checks-*
           path: checks
@@ -621,7 +621,7 @@ jobs:
           python3 scripts/maintainer/tools/release_gate.py gate --plan plan/plan.json --output publication --checks checks --results results.json
           mkdir -p accepted/assets
           cp publication/assets/loki-release-lock.json publication/assets/SHA256SUMS accepted/assets/
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: accepted-publication-metadata
           path: accepted/
@@ -645,11 +645,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - name: Download only release assets for publication
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-assets
           path: publication/assets
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: accepted-publication-metadata
           path: publication
@@ -662,7 +662,7 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
           sh scripts/maintainer/publish-tag.sh "v$RELEASE" "$GITHUB_SHA"
       - id: release
-        uses: releaseway/actions@31c98fec4bbf03f4e179c2a9b3031a50d771a1d3 # v0.3.0
+        uses: releaseway/actions@c054f2de3448e79e5d854155e701e13ad31a520c # v0.3.1
         with:
           tag: v${{ needs.plan.outputs.version }}
           commit: ${{ github.sha }}
@@ -676,7 +676,7 @@ jobs:
           latest: 'true'
       - name: Retain publication diagnostics
         if: always() && steps.release.outputs.notes-report != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: releaseway-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.release.outputs.notes-report }}
@@ -706,7 +706,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - name: Download only accepted installer pages for public comparison
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-pages
           path: publication/pages

@@ -8,15 +8,15 @@ import (
 func TestProbeRequiresExactRunningBrowserVersion(t *testing.T) {
 	for _, output := range []string{
 		`{"version":"154.0.8037.9"}`,
-		`{"version":"154.0.8037.92","ready":true}`,
-		`{"version":"154.0.8037.92"} {}`,
-		`Google Chrome for Testing 154.0.8037.92`,
+		`{"version":"155.0.8059.39","ready":true}`,
+		`{"version":"155.0.8059.39"} {}`,
+		`Google Chrome for Testing 155.0.8059.39`,
 	} {
 		if err := checkProbeVersion([]byte(output)); err == nil {
 			t.Fatalf("accepted unusable startup response: %s", output)
 		}
 	}
-	if err := checkProbeVersion([]byte(`{"version":"154.0.8037.92"}`)); err != nil {
+	if err := checkProbeVersion([]byte(`{"version":"155.0.8059.39"}`)); err != nil {
 		t.Fatal(err)
 	}
 }

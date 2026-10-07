@@ -23,10 +23,10 @@
       "npm": "node_modules/npm/bin/npm-cli.js"
     },
     "chrome": {
-      "version": "154.0.8037.92",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/154.0.8037.92/win64/chrome-win64.zip",
-      "bytes": 205614867,
-      "sha256": "b897ef3601c947ac0620c784556dec719ac602b0159ce105927acf645ee0f598",
+      "version": "155.0.8059.39",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/win64/chrome-win64.zip",
+      "bytes": 207197429,
+      "sha256": "59ab2a6e99bde9c0bc180414988394f9f5355a0d3764c704151ee8ecea235c7e",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": "chrome-win64",
       "notices": [

@@ -23,7 +23,7 @@ import tempfile
 from urllib.parse import urlsplit
 import zipfile
 
-VERSIONS = {"node": "26.10.0", "chrome": "154.0.8037.92", "ffmpeg": "1011"}
+VERSIONS = {"node": "26.10.0", "chrome": "155.0.8059.39", "ffmpeg": "1011"}
 CAPABILITIES = ["unsafe-code", "vision", "pdf", "devtools", "network", "storage", "testing", "tracing", "config", "extensions", "pwa", "webmcp", "third-party", "memory"]
 
 

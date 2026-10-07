@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import input_cache
 from plan_release import select, CONTRACT
-from release_pipeline import combine, download, write, validate_source, native
+from release_pipeline import combine, download, write, validate_source, native, source_check
 from release_gate import gate, evidence
 
 
@@ -53,6 +53,16 @@ class SelectionTests(unittest.TestCase):
     def test_windows_native_architecture_case_is_normalized(self):
         with patch("release_pipeline.platform.system",return_value="Windows"),patch("release_pipeline.platform.machine",return_value="ARM64"):
             self.assertEqual(native(),("windows","arm64"))
+
+    def test_native_windows_manager_verifies_embedded_companion_closure(self):
+        closure = {"files": ["cmd/loki-manager/main.go", "cmd/loki-keepalive/main.go"]}
+        unit = {"kind": "manager", "target": {"os": "windows", "arch": "arm64"}, "closure": closure}
+        with patch("plan_release.go_closure", return_value=closure) as inspect:
+            source_check({}, unit)
+            inspect.assert_called_once_with(["./cmd/loki-manager", "./cmd/loki-keepalive"], "windows", "arm64")
+        with patch("plan_release.go_closure", return_value={"files": ["cmd/loki-manager/main.go"]}):
+            with self.assertRaises(ValueError):
+                source_check({}, unit)
 
     def test_go_dependency_json_has_explicit_utf8_on_windows(self):
         import plan_release
