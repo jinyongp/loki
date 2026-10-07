@@ -133,7 +133,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	if len(args) > 0 && args[0] == "setup" {
-		options, err := parseSetup(args[1:], os.Stdin, diagnostics)
+		options, err := parseSetup(ctx, args[1:], os.Stdin, diagnostics)
 		if err != nil {
 			return err
 		}

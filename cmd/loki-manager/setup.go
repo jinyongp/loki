@@ -45,7 +45,7 @@ type setupOptions struct {
 	noStart                             bool
 }
 
-func parseSetup(args []string, input io.Reader, diagnostics io.Writer) (setupOptions, error) {
+func parseSetup(ctx context.Context, args []string, input io.Reader, diagnostics io.Writer) (setupOptions, error) {
 	f := flag.NewFlagSet("setup", flag.ContinueOnError)
 	f.SetOutput(diagnostics)
 	selection := f.String("tools", "", "comma-separated tool names")
@@ -66,24 +66,11 @@ func parseSetup(args []string, input io.Reader, diagnostics io.Writer) (setupOpt
 		names = strings.FieldsFunc(*selection, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
 	}
 	if len(names) == 0 {
-		fmt.Fprintln(diagnostics, "Loki setup — choose the tools you need.")
-		fmt.Fprintln(diagnostics, "  browser       Web navigation and screenshots")
-		fmt.Fprintln(diagnostics, "  workspace     Managed files and workspaces")
-		fmt.Fprintln(diagnostics, "  execution     Confined jobs and commands")
-		fmt.Fprintln(diagnostics, "  git           Git operations and optional signing")
-		fmt.Fprintln(diagnostics, "  github        GitHub repositories, issues and Projects")
-		fmt.Fprintln(diagnostics, "  secrets       Protected application secrets")
-		fmt.Fprintln(diagnostics, "  sharing       Managed published endpoints")
-		fmt.Fprintln(diagnostics, "  coordination  External task coordination")
-		fmt.Fprint(diagnostics, "Tools (space or comma separated; Enter cancels): ")
-		line, err := readSetupLine(input, 4096)
-		if err != nil && err != io.EOF {
+		var err error
+		names, err = selectSetupTools(ctx, input, diagnostics)
+		if err != nil {
 			return setupOptions{}, err
 		}
-		if len(line) > 4096 {
-			return setupOptions{}, fmt.Errorf("tool selection exceeds input limit")
-		}
-		names = strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\r' || r == '\n' })
 	}
 	options := setupOptions{catalog: *catalog, version: *version, workspace: *workspace, client: *client, noStart: *noStart, mode: tools.Mode(*mode)}
 	for _, name := range names {

@@ -32,8 +32,12 @@ selection prompts. A fresh installation has an empty tool set. Run:
 loki setup
 ```
 
-Select names such as `workspace git browser`. Enter or EOF cancels without
-changing the installation. Noninteractive setup accepts explicit names:
+The next release adds keyboard checkbox selection to interactive setup.
+In an interactive terminal, use ↑/↓ to move, Space to toggle checkboxes and Enter
+to confirm. Esc/Ctrl+C or confirming an empty selection cancels without changing
+the installation. Select multiple tools such as workspace, git and browser.
+Piped input and limited terminals retain line input; Enter or EOF cancels.
+Noninteractive setup accepts explicit names:
 
 ```sh
 loki setup workspace git browser

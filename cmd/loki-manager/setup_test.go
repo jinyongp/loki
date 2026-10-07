@@ -20,7 +20,7 @@ import (
 
 func TestSetupSelectionPreservesNextWizardInput(t *testing.T) {
 	input := strings.NewReader("workspace,git\nNEXT\n")
-	options, err := parseSetup(nil, input, io.Discard)
+	options, err := parseSetup(t.Context(), nil, input, io.Discard)
 	if err != nil || options.mode != tools.Full || len(options.selected) != 2 {
 		t.Fatalf("selection: %+v %v", options, err)
 	}
@@ -29,7 +29,7 @@ func TestSetupSelectionPreservesNextWizardInput(t *testing.T) {
 		t.Fatalf("wizard input consumed: %q", next)
 	}
 	for _, args := range [][]string{{"unknown"}, {"git", "git"}, {"git", "--mode", "project-host"}, {"git", "--version", "bad"}, {"browser", "--catalog", "x", "--version", "0.2.5"}} {
-		if _, err := parseSetup(args, strings.NewReader(""), io.Discard); err == nil {
+		if _, err := parseSetup(t.Context(), args, strings.NewReader(""), io.Discard); err == nil {
 			t.Fatalf("invalid setup accepted: %v", args)
 		}
 	}
@@ -37,7 +37,7 @@ func TestSetupSelectionPreservesNextWizardInput(t *testing.T) {
 
 func TestEmptySetupDoesNotCreateState(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "not-created")
-	options, err := parseSetup(nil, strings.NewReader(""), io.Discard)
+	options, err := parseSetup(t.Context(), nil, strings.NewReader(""), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
