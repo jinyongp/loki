@@ -3,8 +3,8 @@
 Loki 0.2 installs an empty native CLI first. Run `loki setup` afterward to choose
 individual tools and prepare them. Setup installs, enables and starts the chosen
 full services; `tools install` keeps activation separate for manual workflows.
-The setup restoration described here is unpublished source work. Published 0.2.5
-still uses the earlier manual selection path.
+Guided setup and the restored operator commands require 0.2.6 or newer.
+Earlier 0.2 releases use the manual selection path; run `loki upgrade` first.
 
 Management commands print readable text by default. Add `--json` before or
 after the command for one structured result, for example `loki status --json`,

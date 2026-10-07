@@ -40,5 +40,6 @@ and an existing Linux host can also be prepared over SSH.
 Add the Codex MCP connection with `loki connections setup codex`; browser-only
 connections also take `--workspace /absolute/project/path`.
 
-The restored setup is currently source work. The published 0.2.5 CLI does not
-contain this journey yet; see [restoration tracking](docs/tools/usability-restoration.md).
+Guided setup and the restored operator commands are available from 0.2.6.
+See [restoration tracking](docs/tools/usability-restoration.md) for native evidence
+and remaining intended-machine checks.

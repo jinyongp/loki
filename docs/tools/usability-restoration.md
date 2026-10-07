@@ -51,7 +51,8 @@ restoration, Linux socket management, transaction promotion, backup/restore and
 rollback are implemented on `main`. The non-publishing candidate below passed
 all native manager, browser and full workspace checks and the final package
 gate. Actual Windows WSL creation, live tunnel and desktop evidence remain
-separate; the published installer still provides 0.2.5.
+separate. At candidate validation, the published installer provided 0.2.5;
+guided setup and the restored operator commands ship in 0.2.6.
 
 Windows needs a modern WSL installation before the dedicated distribution can
 be prepared. Full local macOS execution remains a Linux-host requirement. Ordinary
