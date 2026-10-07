@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -115,5 +116,22 @@ func TestRemoteGitHubFilesBecomeProtectedStdin(t *testing.T) {
 	material, _ := io.ReadAll(input)
 	if string(material) != "private-material" || !strings.Contains(strings.Join(args, " "), "--key-stdin") {
 		t.Fatal("protected import missing")
+	}
+}
+
+func TestInterruptedPreparationProofSurvivesFailedPurge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("WSL removal requires a disposable owned host")
+	}
+	store := management.Store{Root: t.TempDir()}
+	proof := management.HostPreparation{Schema: 1, Distribution: "loki-tools", Token: strings.Repeat("a", 64), Phase: "reserved"}
+	if err := store.SaveHostPreparation(proof); err != nil {
+		t.Fatal(err)
+	}
+	if err := runHosts(t.Context(), store, []string{"remove", "--purge"}, io.Discard, io.Discard); err == nil {
+		t.Fatal("unsupported owned-host removal unexpectedly succeeded")
+	}
+	if remaining, err := store.HostPreparation(); err != nil || remaining == nil || *remaining != proof {
+		t.Fatalf("failed removal discarded preparation proof: %+v %v", remaining, err)
 	}
 }

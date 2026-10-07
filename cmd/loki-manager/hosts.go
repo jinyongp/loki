@@ -33,6 +33,17 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 		if err != nil {
 			return err
 		}
+		if purge && selected == nil {
+			preparation, err := store.HostPreparation()
+			if err != nil {
+				return err
+			}
+			if preparation != nil {
+				// A preparation can be interrupted before selecting its host.
+				// Preserve its proof until owned removal has actually completed.
+				selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "wsl", Distribution: preparation.Distribution}, Root: "/var/lib/loki-tools", Command: "/usr/local/bin/loki", User: "root", Owned: true}
+			}
+		}
 		if !purge {
 			if err := requireHostConnectionsDetached(store); err != nil {
 				return err

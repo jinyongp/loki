@@ -45,7 +45,12 @@ func removeManagedHost(ctx context.Context, frontend management.Store, selected 
 		}
 	}
 	path := filepath.Join(frontend.Root, "control", "hosts", record.Distribution)
-	if err := (windowshost.WindowsHelperInstallPlatform{}).VerifyPrivatePath(path, true); err != nil && !os.IsNotExist(err) {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := (windowshost.WindowsHelperInstallPlatform{}).VerifyPrivatePath(path, true); err != nil {
 		return err
 	}
 	return os.RemoveAll(path)
