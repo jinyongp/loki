@@ -48,15 +48,18 @@ command spellings or importing previous configurations automatically.
 Guided selection, verified automatic catalogs, remembered WSL/SSH hosts,
 protected frontend integration imports, managed Windows OpenAI connection
 restoration, Linux socket management, transaction promotion, backup/restore and
-rollback are implemented in the working tree. This is not a publication or an
-acceptance result. Local checks have passed; native host and desktop evidence remain pending.
+rollback are implemented on `main`. The non-publishing candidate below passed
+all native manager, browser and full workspace checks and the final package
+gate. Actual Windows WSL creation, live tunnel and desktop evidence remain
+separate; the published installer still provides 0.2.5.
 
 Windows needs a modern WSL installation before the dedicated distribution can
 be prepared. Full local macOS execution remains a Linux-host requirement. Ordinary
 uninstall retains data and the host. Explicit `uninstall --purge-data` and
-`hosts remove --purge` provide owned data/host removal; their native acceptance
-still needs evidence. Shared Docker/WSL prerequisites and the frontend CLI are
-retained. External SSH hosts are detached without deleting their machine.
+`hosts remove --purge` provide owned data/host removal. Linux owned service/data
+removal passed native acceptance. Actual Windows WSL creation/removal still needs
+evidence. Shared Docker/WSL prerequisites and the frontend CLI are retained.
+External SSH hosts are detached without deleting their machine.
 
 Source delivery, native acceptance and public release are separate results.
 Publication is a separately authorized step. A feature is restored only when the
@@ -73,7 +76,7 @@ connection directories, refusing host changes while a managed connection is
 configured, fresh host-state publication, removal of inactive program generations
 and keeping restore recovery active until previous-data cleanup succeeds.
 
-Local Go tests, affected-package race checks, `go vet`, 31 Python maintainer tests,
+Local Go tests, affected-package race checks, `go vet`, 32 Python maintainer tests,
 four architecture variants and workflow lint passed. Windows amd64/arm64 and
 macOS arm64 cross-builds passed. A checksummed native Linux manager archive was
 installed in temporary directories and exercised setup cancellation, backup,
@@ -102,3 +105,30 @@ expired. The HTTP pool now captures the session at initialization completion and
 waits on that exact session. The two ownership/cleanup checks passed 30 consecutive
 race-enabled repetitions. The publication contract test now names the reviewed
 Releaseway SHA. These fixes require a new candidate basis.
+
+### Native restoration candidate — 7 October 2026
+
+Source: `a9c9f5b01cb849667770384b1b07fe838d025e29`. The
+[non-publishing candidate run](https://github.com/jinyongp/loki/actions/runs/37611399997)
+passed all thirteen native acceptance jobs, source checks and final package
+sealing. The run completed successfully; publication, Pages deployment and public
+verification jobs were skipped because publication was disabled.
+
+| Scope | Actual native evidence |
+| --- | --- |
+| CLI manager | Linux, macOS and Windows, amd64/arm64: installation, readable help/JSON, setup cancellation, upgrades, backup/restore and retained user data |
+| Independent browser | Linux/macOS amd64/arm64 and Windows amd64: both packaged engines, optional capabilities, installation and client connection |
+| Administrator host | Linux amd64/arm64: persistent socket preparation, remembered routing, caller catalog rejection, backup/restore and owned cleanup |
+| Full workspace | Linux amd64/arm64: receipt-bound deployment, private stdio, selected discovery, create/read, cached invocation revocation and owned stop |
+
+The full workspace fixture now explicitly selects its isolated local host for
+offline catalogs/archives. Ordinary administrator commands continue to reject
+caller-supplied catalog authority. Windows source checks include the embedded
+GUI companion's dependency closure. Interrupted WSL preparation keeps its
+ownership proof until removal succeeds.
+
+These results do not establish fresh Windows WSL provisioning, live OpenAI
+tunnel credentials, actual Codex desktop SSH image rendering, or all combined
+full job/network/signing/publication workflows. Those gates retain their own
+required evidence. No release, public installer or existing user installation
+was changed by this restoration candidate.
