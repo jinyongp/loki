@@ -21,6 +21,12 @@ def verify():
     if go != "go"+CONFIG["go"]:
         raise ValueError("Go stable pin requires a reviewed source update")
     node = document("https://nodejs.org/dist/index.json")[0]["version"].removeprefix("v")
+    lock = json.loads((ROOT/"package-lock.json").read_text())
+    engines = [json.loads((ROOT/"package.json").read_text()),
+               json.loads((ROOT/"modules/browser/package.json").read_text()),
+               lock["packages"][""], lock["packages"]["modules/browser"]]
+    if any(package.get("engines", {}).get("node") != node for package in engines):
+        raise ValueError("npm manifest/lock Node engines require a consistent reviewed update")
     chrome = document("https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json")["channels"]["Stable"]["version"]
     for path in (ROOT/"packaging/tools/inputs").glob("browser-*-*.json"):
         recipe=json.loads(path.read_text())

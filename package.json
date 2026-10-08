@@ -3,5 +3,5 @@
   "version": "0.2.0",
   "private": true,
   "workspaces": ["modules/browser"],
-  "engines": {"node": "26.10.0"}
+  "engines": {"node": "26.11.1"}
 }
