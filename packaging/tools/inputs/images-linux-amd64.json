@@ -6,7 +6,7 @@
     "mode": "full"
   },
   "base": "docker.io/library/ubuntu@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b",
-  "buildkit": "docker.io/moby/buildkit@sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
+  "buildkit": "docker.io/moby/buildkit@sha256:3eea2ed5d1766c44eb4740853abf56ba85ad40b2c8d4a22e047cbacf15f463c8",
   "frontend": "docker.io/docker/dockerfile@sha256:7b32114e84ca21aeb2d6f871a0b62b3a0762193f75d9afd048ee4cbe889f3148",
   "base_notices": [
     "/usr/share/doc/base-files/copyright",
@@ -30,10 +30,10 @@
       "provenance": "Primary Docker Hub registry index/native manifest over HTTPS; registry content digest, not detached signature acceptance."
     },
     "buildkit": {
-      "reference": "docker.io/moby/buildkit@sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
-      "version": "v0.33.1",
-      "index_sha256": "cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea",
-      "native_manifest_sha256": "sha256:98cc6a3fc46220d00f8224ae483f3274fc874e9be8d7dd1e2e2c5481209228b5",
+      "reference": "docker.io/moby/buildkit@sha256:3eea2ed5d1766c44eb4740853abf56ba85ad40b2c8d4a22e047cbacf15f463c8",
+      "version": "v0.34.0",
+      "index_sha256": "b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c",
+      "native_manifest_sha256": "sha256:3eea2ed5d1766c44eb4740853abf56ba85ad40b2c8d4a22e047cbacf15f463c8",
       "provenance": "Primary Docker Hub registry index/native manifest over HTTPS; registry content digest, not detached signature acceptance."
     },
     "frontend": {

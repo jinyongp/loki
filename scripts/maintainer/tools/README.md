@@ -231,7 +231,7 @@ absolute), `url`, `bytes`, `sha256`, `root` (inside the vendor archive), and
 `native_requirements` records the target's reviewed host library requirements;
 assembly does not install host libraries.
 
-Pinned inputs are Node 26.10.0, Chrome for Testing 155.0.8059.39, FFmpeg revision
+Pinned inputs are Node 26.11.1, Chrome for Testing 155.0.8059.39, FFmpeg revision
 1011, and the repository's npm lockfile. Platform acquisition recipes retain
 primary-source vendor receipts. Availability and successful
 assembly remain distinct from native product support.

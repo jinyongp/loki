@@ -17,7 +17,7 @@ import time
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-VERSIONS = {"node": "26.10.0", "chrome": "155.0.8059.39", "ffmpeg": "1011"}
+VERSIONS = {"node": "26.11.1", "chrome": "155.0.8059.39", "ffmpeg": "1011"}
 PLATFORMS = {
     ("linux", "amd64"): ("linux-x64", "tar.xz", "linux64", "linux"),
     ("linux", "arm64"): ("linux-arm64", "tar.xz", "linux-arm64", "linux-arm64"),
@@ -38,7 +38,7 @@ def native_target(mode):
 def urls(target):
     node_platform, node_format, chrome_platform, ffmpeg_platform = PLATFORMS[(target["os"], target["arch"])]
     return {
-        "node": f"https://nodejs.org/dist/v26.10.0/node-v26.10.0-{node_platform}.{node_format}",
+        "node": f"https://nodejs.org/dist/v26.11.1/node-v26.11.1-{node_platform}.{node_format}",
         "chrome": f"https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/{chrome_platform}/chrome-{chrome_platform}.zip",
         "ffmpeg": f"https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-{ffmpeg_platform}.zip",
     }

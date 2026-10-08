@@ -2,7 +2,7 @@
   "name": "@loki/browser",
   "version": "0.2.3",
   "private": true,
-  "engines": {"node": "26.10.0"},
+  "engines": {"node": "26.11.1"},
   "dependencies": {
     "@playwright/mcp": "0.0.83",
     "chrome-devtools-mcp": "1.10.1"

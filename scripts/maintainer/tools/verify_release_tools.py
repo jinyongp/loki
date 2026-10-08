@@ -45,7 +45,7 @@ def verify():
     for owner,repository in (("github","cli/cli"),("coordination","jinyongp/devtools")):
         if github(f"repos/{repository}/releases/latest")["tag_name"] != "v"+OWNERS[owner]["version"]:
             raise ValueError("native stable tool pin requires a reviewed update: "+repository)
-    for repository,selected in (("moby/buildkit","v0.33.1"),("docker/buildx","v0.37.2")):
+    for repository,selected in (("moby/buildkit","v0.34.0"),("docker/buildx","v0.38.0")):
         if github(f"repos/{repository}/releases/latest")["tag_name"] != selected:
             raise ValueError("image builder stable pin requires a reviewed update: "+repository)
     print("Official stable tool and action pins verified.",flush=True)
