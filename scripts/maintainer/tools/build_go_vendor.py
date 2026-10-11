@@ -41,8 +41,8 @@ def prepare(recipe_path, output):
     if publication.scheme != "https" or not publication.hostname or publication.username or publication.fragment:
         raise ValueError("prepared vendor archive requires a public provenance/publication URL")
     version = subprocess.check_output(["go", "version"], text=True).split()
-    if len(version) < 3 or version[2] != "go1.27.1":
-        raise ValueError("vendor preparation requires pinned Go 1.27.1")
+    if len(version) < 3 or version[2] != "go1.27.2":
+        raise ValueError("vendor preparation requires pinned Go 1.27.2")
     output.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory(prefix="loki-go-vendor-") as temporary:
         stage = Path(temporary)
@@ -69,7 +69,7 @@ def prepare(recipe_path, output):
         source_receipt = {key:source[key] for key in ("url", "version", "commit", "bytes", "sha256", "notices")}
         if source.get("digest_provenance"):
             source_receipt["digest_provenance"] = source["digest_provenance"]
-        (bundle / "source-receipt.json").write_text(json.dumps({"schema":1, "owner":owner, "target":target, "source":source_receipt, "go":"1.27.1", "dependencies":dependencies}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+        (bundle / "source-receipt.json").write_text(json.dumps({"schema":1, "owner":owner, "target":target, "source":source_receipt, "go":"1.27.2", "dependencies":dependencies}, indent=2, sort_keys=True)+"\n", encoding="utf-8")
         name = f"{expected['program']}-{expected['version']}-linux-{arch}.tar.gz"
         archive = output / name
         with archive.open("xb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, filename="") as compressed, tarfile.open(fileobj=compressed, mode="w|") as packed:

@@ -124,7 +124,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
         if packages:
             version = subprocess.check_output(["go", "version"], text=True).split()
             if len(version) < 3 or version[2] != "go"+CONFIG["go"]:
-                raise ValueError("core module preparation requires pinned Go 1.27.1")
+                raise ValueError("core module preparation requires pinned Go 1.27.2")
             env = dict(os.environ, CGO_ENABLED="0", GOOS="linux", GOARCH=arch, GOTOOLCHAIN="local")
             env.pop("GOFLAGS", None)
             (bundle / "bin").mkdir()

@@ -60,7 +60,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -74,8 +74,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -112,7 +112,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -126,8 +126,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -159,7 +159,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -173,8 +173,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -216,7 +216,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -230,8 +230,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -343,7 +343,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -357,8 +357,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - name: Prepare the pinned native search test prerequisite
         run: python3 scripts/maintainer/tools/prepare_test_tools.py --output test-tools
       - name: Final source contracts and release selection fixtures
@@ -385,7 +385,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: true
       - name: Check actual keyboard selection, cancellation and terminal restoration
         run: go test -timeout=90s ./cmd/loki-manager -run TestSetup -v
@@ -405,7 +405,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -419,8 +419,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -468,7 +468,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -482,8 +482,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -542,7 +542,7 @@ jobs:
           fetch-tags: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: '1.27.1'
+          go-version: '1.27.2'
           cache: false
       - id: go-cache-paths
         run: |
@@ -556,8 +556,8 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ steps.go-cache-paths.outputs.paths }}
-          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
-          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.1-${{ hashFiles('go.sum') }}-
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-${{ hashFiles('**/*.go', 'packaging/tools/inputs/*-source-*.json', 'scripts/maintainer/tools/build_go_vendor.py') }}
+          restore-keys: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-1.27.2-${{ hashFiles('go.sum') }}-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-plan
@@ -681,7 +681,7 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
           sh scripts/maintainer/publish-tag.sh "v$RELEASE" "$GITHUB_SHA"
       - id: release
-        uses: releaseway/actions@c054f2de3448e79e5d854155e701e13ad31a520c # v0.3.1
+        uses: releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d # v0.4.1
         with:
           tag: v${{ needs.plan.outputs.version }}
           commit: ${{ github.sha }}

@@ -77,7 +77,7 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	}
 	var lifecycle bool
 	for _, step := range jobs["publish"].Steps {
-		if strings.HasPrefix(step.Uses, "releaseway/actions@c054f2de3448e79e5d854155e701e13ad31a520c") {
+		if strings.HasPrefix(step.Uses, "releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d") {
 			lifecycle = true
 			if step.With["upload-concurrency"] != "4" {
 				t.Fatal("publisher must use four bounded simultaneous uploads")
