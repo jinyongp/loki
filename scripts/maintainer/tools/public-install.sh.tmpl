@@ -60,4 +60,4 @@ if [ "$bin_dir" = "$HOME/.local/bin" ]; then
 fi
 "$loki" --root "$management_root" version > /dev/null
 echo "Loki $release installed."
-case ":$PATH:" in *":$bin_dir:"*) echo 'Next: loki --help' ;; *) echo "Next: $loki --help" ;; esac
+case ":$PATH:" in *":$bin_dir:"*) echo 'Next: loki setup' ;; *) echo "Next: $loki setup" ;; esac

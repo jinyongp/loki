@@ -32,15 +32,28 @@ selection prompts. A fresh installation has an empty tool set. Run:
 loki setup
 ```
 
-Loki 0.2.7 replaces interactive setup with a tool management menu.
-Each tool shows installation and activation separately. Use ↑/↓ and Enter to
-choose a tool, then choose an action. Missing tools offer **Install and enable**
-or **Install only**; installed tools offer **Enable** or **Disable**, and
-**Uninstall**. Installation alone leaves a new tool disabled. Uninstall asks for
-confirmation and retains user data. Full services are reconciled after activation
-changes; uninstall can restart full services. The list refreshes after each action.
-Esc goes back, or exits from the tool list. Completed actions are retained on exit.
-The menu uses the selected execution host, including remembered Windows WSL hosts.
+Fresh setup starts with **Choose execution host**. After choosing a target, the
+setup home shows the host and offers **Manage tools**, **Client connections**,
+**Check readiness**, and **Change execution host**. Existing host selections are
+reused. An unreachable host can be changed from the home screen.
+
+Manage tools shows installation, activation and runtime verification separately.
+Use ↑/↓ and Enter to choose a tool and an action. **Install multiple tools** uses
+Space to select several tools. Missing tools offer **Install and enable** or
+**Install only**; installed tools offer **Enable** or **Disable**, and **Uninstall**.
+Installation alone leaves new tools disabled. Unsupported tools explain their
+Linux-host requirement. Full services are reconciled after activation changes;
+uninstall can restart remaining enabled services. Native browsers start on demand.
+Uninstall confirmation names the tool and target, and retains user data.
+Esc goes back or exits. Completed actions are retained on exit. `loki tools manage`
+opens the tool menu directly. The target is shown in every management screen.
+Choose **Change execution host** to select native execution, a managed Linux/WSL
+host, an existing WSL distribution from its actual list, or an SSH destination.
+Existing WSL distributions need the Loki CLI installed inside them first.
+Each host has its own tool state; switching hosts does not move programs or data.
+Installing a tool that needs Linux services asks for a host before preparing it.
+Creating the dedicated `loki-tools` WSL host requires confirmation. Scripts must
+select or prepare a suitable execution host explicitly before installing full tools.
 Scripts use explicit commands rather than the interactive menu:
 
 ```sh
@@ -170,8 +183,11 @@ needed. Installed disabled groups start no selected services. Browser-only full
 mode uses a private browser workspace; project-host mode uses the explicit local
 project path.
 
-Changes to the enabled full selection require `loki tools start` to reconcile
-service layouts. Reconnect MCP clients after changing installation or selection.
+Enable/disable applies the selected full service layouts automatically. Use
+`--no-start` to save activation separately, then `loki tools start` to apply it.
+Active jobs block service reconfiguration and tool removal; let them finish and
+retry. If activation was saved but services could not apply it, the error names
+the recovery command. Reconnect MCP clients after changing installation or selection.
 `loki tools stop` stops the owned deployment and retains its tool data.
 
 ## Git and GitHub setup
@@ -253,8 +269,9 @@ loki backup
 loki backups list
 loki restore BACKUP-ID
 loki rollback
-loki uninstall
-loki uninstall --purge-data
+loki tools uninstall browser
+loki tools uninstall --all
+loki tools uninstall --all --purge-data
 loki hosts remove --purge
 ```
 
@@ -263,7 +280,9 @@ configuration, credentials and persistent tool data. Active jobs block maintenan
 Restore first creates a safety backup; an interrupted restore resumes with the
 same ID. Backups belong to the same management root and execution host.
 Rollback selects the previous complete installation when its generations remain
-available; it retains current data. Uninstall removes tool programs and retains
+available; it retains current data. `tools uninstall TOOL` removes one tool, while
+`tools uninstall --all` removes all tool programs on the selected execution host.
+Bare `tools uninstall` refuses to make changes and asks for a target. These commands retain
 the CLI, credentials, backups and data. It does not remove the Docker engine,
 WSL distribution or unrelated resources. `--purge-data` also removes tool-owned
 data and credentials while keeping backups. `hosts remove` detaches a selection;
@@ -271,6 +290,20 @@ data and credentials while keeping backups. `hosts remove` detaches a selection;
 per-user Linux system host, including its data and host-side backups. The shared
 Docker/WSL prerequisites and frontend CLI remain installed. External SSH and
 user-managed WSL hosts are preserved.
+
+`loki status` reports the native CLI version and selected execution host, public
+tools and frontend client configuration. It is passive: **enabled** is desired
+activation, while **not checked** means runtime readiness has not been probed.
+`loki doctor` performs those checks. Both commands include useful next actions;
+`--json` keeps one structured stdout result with execution-host metadata.
+
+Client configuration is managed on the computer running the CLI. Use
+`loki connections list` to inspect Codex configuration and local tunnel metadata,
+or `loki connections status openai` to check a tunnel's runtime health. Setup's
+client menu guides Codex connection and disconnection, and Windows managed
+tunnels. `loki connections remove codex` removes only Loki-marked blocks;
+installed tools, data and other client entries remain. Changing execution hosts
+keeps existing client targets until you reconnect them.
 
 ## Local plugin packages
 

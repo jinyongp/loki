@@ -23,7 +23,12 @@ func TestHelpForEveryPublicCommandWithoutStateOrHostAccess(t *testing.T) {
 				if err := run(t.Context(), args, &output, &errors); err != nil {
 					t.Fatal(err)
 				}
-				if errors.Len() != 0 || !strings.Contains(output.String(), entry.description) || !strings.Contains(output.String(), "Usage:") {
+				description := entry.description
+				if entry.path == "help" && args[len(args)-1] == "--help" {
+					rootHelp, _ := helpFor("")
+					description = rootHelp.description
+				}
+				if errors.Len() != 0 || !strings.Contains(output.String(), description) || !strings.Contains(output.String(), "Usage:") {
 					t.Fatalf("help not readable/successful: stdout=%q stderr=%q", output.String(), errors.String())
 				}
 				for _, option := range entry.options {

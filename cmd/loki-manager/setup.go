@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -103,7 +104,7 @@ func parseSetup(ctx context.Context, args []string, input io.Reader, diagnostics
 	if options.client != "" && options.client != "codex" {
 		return options, fmt.Errorf("supported client: codex")
 	}
-	if options.client != "" && options.mode == tools.ProjectHost && !filepath.IsAbs(options.workspace) {
+	if options.client != "" && options.mode == tools.ProjectHost && !filepath.IsAbs(options.workspace) && !path.IsAbs(options.workspace) {
 		return options, fmt.Errorf("--connect requires --workspace with an absolute project path")
 	}
 	if options.catalog != "" && options.version != "" {

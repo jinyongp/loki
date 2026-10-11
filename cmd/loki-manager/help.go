@@ -31,13 +31,13 @@ var commandHelpEntries = []helpEntry{
 		options: []string{"--bin-dir PATH    Publish the manager into this command directory"}, examples: []string{"loki install --bin-dir /home/user/.local/bin"},
 		notes: []string{"Tool installation and client configuration are separate steps."}},
 	{path: "version", description: "Show the installed CLI version.", usage: "loki version", examples: []string{"loki version"}},
-	{path: "setup", description: "Manage tool installation and activation interactively.", usage: "loki setup [TOOL...] [OPTIONS]",
+	{path: "setup", description: "Choose an execution host, manage tools and connect clients.", usage: "loki setup [TOOL...] [OPTIONS]",
 		options:  []string{"--tools LIST         Space/comma-separated tool names", "--mode MODE          project-host or full (default: inferred)", "--version VERSION    Stable tool release (default: CLI release)", "--no-start           Install and enable without starting services", "--connect codex      Configure the Codex MCP connection", "--workspace PATH     Absolute project directory for connection", "--catalog FILE       Advanced: reviewed offline catalog"},
-		examples: []string{"loki setup", "loki setup workspace git browser", "loki setup browser --workspace /home/user/project --connect codex"}, notes: []string{"With no arguments, choose a tool and install, enable, disable or uninstall it from one management menu.", "Installation and activation are shown separately. Install only keeps the tool disabled; uninstall retains user data.", "Arrows move, Enter chooses, Esc goes back or exits. Completed actions are retained when you exit.", "Explicit tool names install and enable those tools. Official catalogs are acquired automatically."}},
+		examples: []string{"loki setup", "loki setup workspace git browser", "loki setup browser --workspace /home/user/project --connect codex"}, notes: []string{"A fresh setup starts with execution host selection. The home screen offers tool management, client connections and readiness checks.", "Each host has its own tools and data. Host changes preserve them; reconnect clients to use the new target.", "Tool management shows installation, activation and runtime verification separately. Install only leaves new tools disabled.", "Choose Install multiple tools to select with Space and confirm with Enter. Esc returns or exits; saved changes are retained.", "Native Windows/macOS supports the browser. Full tools require Linux services; managed WSL creation requires confirmation.", "Explicit tool names install and enable those tools. Scripts must select or prepare a suitable host first."}},
 	{path: "upgrade", description: "Check releases and upgrade the CLI after confirmation.", usage: "loki upgrade [OPTIONS]",
 		options:  []string{"--version VERSION    Choose a stable release (default: latest)", "--yes, -y            Accept without prompting", "--check              Show versions without installing", "--force              Allow reinstalling or downgrading", "--timeout DURATION   Overall download/install timeout (default: 5m)"},
 		examples: []string{"loki upgrade", "loki upgrade --check", "loki upgrade --version 0.2.3 --yes"}, notes: []string{"Shows current and target versions before confirmation. Enter or EOF cancels.", "Updates only the CLI in its current command directory. Installed tools and their settings are retained.", "Downloads official GitHub release assets and verifies SHA-256 before publication."}},
-	{path: "status", description: "Show management state and installed tool status.", usage: "loki status", examples: []string{"loki status"}},
+	{path: "status", description: "Show the CLI version, execution host, tools, client configuration and next actions.", usage: "loki status", examples: []string{"loki status", "loki status --json"}, notes: []string{"Status is passive. Enabled tools may still need startup, authentication or a readiness check.", "Run 'loki doctor' to probe runtime readiness. Client configuration is read on this computer."}},
 	{path: "doctor", description: "Check installation health and selected tool resources.", usage: "loki doctor", examples: []string{"loki doctor"}},
 	{path: "backup", description: "Create a consistent backup of selected programs, settings and owned data.", usage: "loki backup", examples: []string{"loki backup"}, notes: []string{"Services pause during copying and resume afterward. Active jobs block maintenance.", "Backups include credentials and stay in private storage on the execution host."}},
 	{path: "backups", description: "List or remove retained private backups.", usage: "loki backups COMMAND", group: true, examples: []string{"loki backups list", "loki backups remove BACKUP-ID"}},
@@ -45,17 +45,17 @@ var commandHelpEntries = []helpEntry{
 	{path: "backups remove", description: "Remove one retained private backup.", usage: "loki backups remove BACKUP-ID"},
 	{path: "restore", description: "Restore a backup, retaining current data in a safety backup first.", usage: "loki restore BACKUP-ID", examples: []string{"loki backups list", "loki restore BACKUP-ID"}, notes: []string{"Restores the same execution host and management root. Interrupted restores resume with the same ID."}},
 	{path: "rollback", description: "Restore the previous complete tool installation while keeping data.", usage: "loki rollback", examples: []string{"loki rollback"}, notes: []string{"Previous program generations must still exist. Use upgrade --version VERSION --force to change the CLI itself."}},
-	{path: "uninstall", description: "Remove selected tool programs while retaining the CLI and user data.", usage: "loki uninstall [--purge-data]", options: []string{"--purge-data  Also remove tool-owned data and integration credentials; retain backups"}, examples: []string{"loki uninstall", "loki uninstall --purge-data"}},
+	{path: "uninstall", description: "Remove one tool, or explicitly remove all tools on the selected host.", usage: "loki uninstall TOOL\n       loki uninstall --all [--purge-data]", options: []string{"--all         Remove all tool programs on the selected execution host", "--purge-data  With --all, also remove tool-owned data and credentials; retain backups"}, examples: []string{"loki uninstall browser", "loki uninstall --all", "loki uninstall --all --purge-data"}, notes: []string{"With no target, this command makes no changes and asks you to choose a scope.", "The CLI and execution host are retained. User data is retained unless --all --purge-data is specified.", "Run 'loki hosts show' to check the target host before removal."}},
 	{path: "connections", description: "Configure client connections and managed OpenAI tunnels.", usage: "loki connections COMMAND", group: true, examples: []string{"loki connections list", "loki connections setup codex", "loki connections setup openai"}},
-	{path: "connections list", description: "List available connection providers.", usage: "loki connections list"},
+	{path: "connections list", description: "Show client configuration on this computer without probing runtime readiness.", usage: "loki connections list"},
 	{path: "connections setup", description: "Configure a Codex client or OpenAI tunnel.", usage: "loki connections setup codex|openai [OPTIONS]", group: true},
 	{path: "connections setup codex", description: "Configure Codex on this frontend for the selected execution host.", usage: "loki connections setup codex [--workspace PATH] [--config FILE] [--remote]", options: []string{"--workspace PATH  Project directory on the execution host (browser only)", "--config FILE     Local Codex config.toml", "--remote          Use the Codex remote executor"}},
 	{path: "connections setup openai", description: "Configure an OpenAI Secure MCP Tunnel on Windows.", usage: "loki connections setup openai --tunnel-id ID [--runtime-key-stdin]", options: []string{"--tunnel-id ID          OpenAI tunnel ID", "--runtime-key-stdin    Read the runtime key from stdin instead of hidden terminal input"}, notes: []string{"Runtime credentials stay in Windows Credential Manager. Helpers are downloaded and verified only when this provider is used.", "The owned logon task restores enabled connections and WSL keepalive without opening a terminal window."}},
 	{path: "connections start", description: "Start a configured managed connection and restore its execution host.", usage: "loki connections start openai"},
 	{path: "connections stop", description: "Stop a managed connection and disable automatic restoration.", usage: "loki connections stop openai"},
-	{path: "connections remove", description: "Remove managed connection configuration and credentials.", usage: "loki connections remove openai"},
-	{path: "connections status", description: "Inspect managed connection state and health.", usage: "loki connections status openai"},
-	{path: "connections show", description: "Inspect managed connection state and health.", usage: "loki connections show openai"},
+	{path: "connections remove", description: "Remove Loki-managed client entries or tunnel settings; retain tool programs and data.", usage: "loki connections remove codex|openai", notes: []string{"Codex removes only Loki-marked configuration blocks on this computer. User-managed MCP entries are retained.", "OpenAI removal also deletes that connection's stored runtime credential."}},
+	{path: "connections status", description: "Inspect frontend client configuration or managed tunnel health.", usage: "loki connections status codex|openai"},
+	{path: "connections show", description: "Inspect frontend client configuration or managed tunnel health.", usage: "loki connections show codex|openai"},
 	{path: "connections doctor", description: "Check managed connection authorization and readiness.", usage: "loki connections doctor openai"},
 	{path: "connections restore", description: "Restore enabled managed connections after login.", usage: "loki connections restore"},
 	{path: "hosts", description: "Select and remember where tools execute.", usage: "loki hosts COMMAND", group: true, examples: []string{"loki hosts show", "loki hosts use wsl --distribution Ubuntu"}},
@@ -68,6 +68,7 @@ var commandHelpEntries = []helpEntry{
 	{path: "tools", description: "Configure, install and run individual tool groups.", usage: "loki tools COMMAND", group: true,
 		examples: []string{"loki setup workspace git browser", "loki tools install github", "loki tools enable github"},
 		notes:    []string{"Tool groups: browser, workspace, execution, git, github, secrets, sharing, coordination.", "Setup installs, enables and prepares selected tools. Install alone keeps activation separate.", "Official release catalogs are acquired and verified automatically."}},
+	{path: "tools manage", description: "Manage tools interactively on the displayed execution host.", usage: "loki tools manage", examples: []string{"loki tools manage"}, notes: []string{"Shows installed, enabled and runtime state independently. Supports multiple-tool installation and individual tool removal.", "Use 'loki setup' for host selection, tool management and client connections together."}},
 	{path: "tools configure", description: "Choose the execution mode for this host.", usage: "loki tools configure --mode MODE",
 		options: []string{"--mode project-host|full    Execution mode (required)"}, examples: []string{"loki tools configure --mode full"}, notes: []string{"Full mode requires Linux and Docker Engine. project-host supports the standalone browser."}},
 	{path: "tools list", description: "List installed tools and their selection state.", usage: "loki tools list", examples: []string{"loki tools list"}},
@@ -78,12 +79,12 @@ var commandHelpEntries = []helpEntry{
 		examples: []string{"loki tools install workspace git", "loki tools install browser"}, notes: []string{"Official catalogs and checksums are acquired automatically.", "Installing a tool leaves activation to 'loki tools enable TOOL'. Use 'loki setup' for guided installation and activation."}},
 	{path: "tools update", description: "Update installed tools from a trusted release.", usage: "loki tools update [OPTIONS]",
 		options: []string{"--version VERSION    Stable tool release (default: CLI release)", "--catalog FILE       Advanced: reviewed offline catalog", "--archives PATH      Directory of verified offline module archives"}, examples: []string{"loki tools update", "loki tools update --version 0.2.5"}},
-	{path: "tools enable", description: "Enable an installed tool and optional capabilities.", usage: "loki tools enable TOOL [--capabilities LIST]",
-		options: []string{"--capabilities LIST    Comma-separated capability names; an empty value clears them"}, examples: []string{"loki tools enable git"}},
-	{path: "tools disable", description: "Disable a tool while keeping its installed files.", usage: "loki tools disable TOOL [--capabilities LIST]",
-		options: []string{"--capabilities LIST    Replace optional capabilities with this comma-separated list"}, examples: []string{"loki tools disable git"}},
+	{path: "tools enable", description: "Enable an installed tool and apply its service configuration.", usage: "loki tools enable TOOL [OPTIONS]",
+		options: []string{"--capabilities LIST    Comma-separated capability names; an empty value clears them", "--no-start             Save activation without changing running services"}, examples: []string{"loki tools enable git"}, notes: []string{"Full tools reconcile running services. The native browser starts on demand when a client connects.", "GitHub authentication uses 'loki integrations setup github'."}},
+	{path: "tools disable", description: "Disable a tool and apply services while keeping its installed files and data.", usage: "loki tools disable TOOL [OPTIONS]",
+		options: []string{"--capabilities LIST    Replace optional capabilities with this comma-separated list", "--no-start             Save activation without changing running services"}, examples: []string{"loki tools disable git"}},
 	{path: "tools remove", description: "Remove an installed tool group.", usage: "loki tools remove TOOL", examples: []string{"loki tools remove browser"}},
-	{path: "tools uninstall", description: "Remove an installed tool group (alias of tools remove).", usage: "loki tools uninstall TOOL", examples: []string{"loki tools uninstall browser"}},
+	{path: "tools uninstall", description: "Remove tool programs on the selected host; retain data unless explicitly purged.", usage: "loki tools uninstall TOOL\n       loki tools uninstall --all [--purge-data]", options: []string{"--all         Remove all tool programs on this host", "--purge-data  With --all, also remove tool-owned data and credentials; retain backups"}, examples: []string{"loki tools uninstall browser", "loki tools uninstall --all"}, notes: []string{"The CLI, execution host and other hosts are retained. Removing one full tool restarts remaining enabled services.", "Bare uninstall makes no changes. Check the target with 'loki status'."}},
 	{path: "tools prune", description: "Remove unused generations of an installed tool.", usage: "loki tools prune TOOL [--keep COUNT]",
 		options: []string{"--keep COUNT    Extra inactive generations to retain (default: 1)"}, examples: []string{"loki tools prune browser --keep 1"}},
 	{path: "tools recover", description: "Recover interrupted tool management operations.", usage: "loki tools recover", examples: []string{"loki tools recover"}},
@@ -133,20 +134,31 @@ func printHelp(out io.Writer, entry helpEntry) {
 	fmt.Fprintln(out, entry.description)
 	fmt.Fprintf(out, "\nUsage: %s\n", entry.usage)
 	if entry.group {
-		fmt.Fprintln(out, "\nCommands:")
-		prefix := entry.path
-		if prefix != "" {
-			prefix += " "
-		}
-		for _, child := range commandHelpEntries {
-			if child.path == "" || !strings.HasPrefix(child.path, prefix) {
-				continue
+		if entry.path == "" {
+			printCommandGroup(out, "Get started", []string{"setup", "status", "doctor", "upgrade"})
+			printCommandGroup(out, "Manage resources", []string{"tools", "hosts", "connections", "integrations"})
+			printCommandGroup(out, "Data and recovery", []string{"backup", "backups", "restore", "rollback"})
+			printCommandGroup(out, "CLI information", []string{"version"})
+		} else if entry.path == "tools" {
+			printCommandGroup(out, "Manage tools", []string{"tools manage", "tools list", "tools install", "tools update", "tools enable", "tools disable", "tools uninstall"})
+			printCommandGroup(out, "Run tools", []string{"tools start", "tools stop", "tools restart", "tools serve"})
+			printCommandGroup(out, "Inspect and recover (advanced)", []string{"tools configure", "tools plan", "tools resources", "tools topology", "tools layouts", "tools prune", "tools recover"})
+		} else {
+			fmt.Fprintln(out, "\nCommands:")
+			prefix := entry.path
+			if prefix != "" {
+				prefix += " "
 			}
-			name := strings.TrimPrefix(child.path, prefix)
-			if name == "" || strings.Contains(name, " ") {
-				continue
+			for _, child := range commandHelpEntries {
+				if child.path == "" || !strings.HasPrefix(child.path, prefix) {
+					continue
+				}
+				name := strings.TrimPrefix(child.path, prefix)
+				if name == "" || strings.Contains(name, " ") {
+					continue
+				}
+				fmt.Fprintf(out, "  %-14s %s\n", name, child.description)
 			}
-			fmt.Fprintf(out, "  %-14s %s\n", name, child.description)
 		}
 	}
 	if len(entry.options) > 0 {
@@ -174,6 +186,21 @@ func printHelp(out io.Writer, entry helpEntry) {
 			fmt.Fprintln(out, "\nOutput: readable text by default; add --json for a structured result.")
 		}
 		fmt.Fprintln(out, "\nHost options: loki --help")
+	}
+}
+
+func printCommandGroup(out io.Writer, title string, paths []string) {
+	fmt.Fprintf(out, "\n%s:\n", title)
+	for _, path := range paths {
+		entry, ok := helpFor(path)
+		if !ok {
+			continue
+		}
+		name := path
+		if _, leaf, found := strings.Cut(path, " "); found {
+			name = leaf
+		}
+		fmt.Fprintf(out, "  %-14s %s\n", name, entry.description)
 	}
 }
 

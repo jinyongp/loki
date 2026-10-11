@@ -89,7 +89,7 @@ def accept(candidate):
         run(installed, root, "restore", backup["id"])
         if (data / "example").read_text(encoding="utf-8") != "before":
             raise ValueError("native backup/restore did not restore owned user data")
-        run(installed, root, "uninstall", "--purge-data")
+        run(installed, root, "tools", "uninstall", "--all", "--purge-data")
         if data.exists() or not (root / "backups" / backup["id"]).is_dir():
             raise ValueError("native purge did not remove data while retaining backups")
         run(binary, root, "install", "--bin-dir", str(bin_directory))

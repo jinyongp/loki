@@ -33,6 +33,19 @@ func TestSystemProtocolRejectsCallerAuthority(t *testing.T) {
 	}
 }
 
+func TestSystemProtocolRequiresExplicitRemovalScope(t *testing.T) {
+	for _, args := range [][]string{{"uninstall"}, {"uninstall", "--purge-data"}} {
+		if _, _, err := ValidateSystemArguments(args); err == nil {
+			t.Fatalf("unscoped system removal accepted: %v", args)
+		}
+	}
+	for _, args := range [][]string{{"uninstall", "--all"}, {"uninstall", "--all", "--purge-data"}, {"tools", "uninstall", "browser"}} {
+		if _, _, err := ValidateSystemArguments(args); err != nil {
+			t.Fatalf("explicit system removal rejected: %v: %v", args, err)
+		}
+	}
+}
+
 func TestSystemProtocolDuplexKeepsChannelsSeparate(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "child")

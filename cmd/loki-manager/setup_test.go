@@ -53,6 +53,16 @@ func TestEmptySetupDoesNotCreateState(t *testing.T) {
 	}
 }
 
+func TestSetupAcceptsLinuxWorkspaceForRemoteClientOnEveryFrontend(t *testing.T) {
+	options, err := parseSetup(t.Context(), []string{"browser", "--mode", "project-host", "--connect", "codex", "--workspace", "/home/example/project"}, strings.NewReader(""), io.Discard)
+	if err != nil || options.workspace != "/home/example/project" {
+		t.Fatalf("remote Linux workspace rejected by frontend: %+v, %v", options, err)
+	}
+	if _, err := parseSetup(t.Context(), []string{"browser", "--mode", "project-host", "--connect", "codex", "--workspace", "relative"}, strings.NewReader(""), io.Discard); err == nil {
+		t.Fatal("relative workspace accepted")
+	}
+}
+
 type catalogRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f catalogRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

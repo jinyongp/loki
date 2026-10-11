@@ -26,19 +26,23 @@ curl -fsSL https://jinyongp.dev/loki/install.sh | sh
 ```
 
 The installer installs only the native Loki CLI. Run `loki setup` afterward to
-select and prepare tools. Existing 0.1 installations use
+choose an execution host, manage tools and connect your client. Existing 0.1 installations use
 their own lifecycle and must be removed before using the same command directory.
 
 See [installation and tool selection](docs/tools/usage.md) for supported hosts,
 manual selection, remote execution and remaining acceptance gates.
 
 Browser-only tools can run on Linux/macOS and native Windows where supported.
-Other tool groups use a Linux execution host. Windows setup prepares a dedicated
-`loki-tools` WSL distribution automatically; Linux setup prepares its managed
-Docker Engine service. An existing WSL Ubuntu distribution can be selected,
+Other tool groups use a Linux execution host. Windows setup offers a dedicated
+`loki-tools` WSL distribution with creation confirmation; Linux setup can prepare
+its managed Docker Engine service. An existing WSL Ubuntu or other distribution with Loki installed can be selected,
 and an existing Linux host can also be prepared over SSH.
 Add the Codex MCP connection with `loki connections setup codex`; browser-only
 connections also take `--workspace /absolute/project/path`.
+
+Run `loki status` for the current target, tool states, client configuration and
+next actions. `loki doctor` verifies runtime readiness. `loki tools manage` opens
+the tool menu directly; installation and activation are independent.
 
 Guided setup and the restored operator commands are available from 0.2.6.
 See [restoration tracking](docs/tools/usability-restoration.md) for native evidence

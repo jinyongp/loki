@@ -50,6 +50,8 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 			}
 		}
 		if purge && selected != nil {
+			fmt.Fprintln(diagnostics, "Host removal target:", setupHostLabel(selected))
+			fmt.Fprintln(diagnostics, "Owned host programs, data and host-side backups will be removed. The frontend CLI and shared prerequisites are retained.")
 			if err := removeManagedHost(ctx, store, *selected, diagnostics); err != nil {
 				return err
 			}
@@ -122,6 +124,9 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 		var version githubRelayOutput
 		relay.Stdout = &version
 		if err := relay.Run(); err != nil {
+			if selected.Host.Kind == "wsl" {
+				return fmt.Errorf("WSL distribution %q is not ready; install the Loki CLI inside that distribution, then retry 'loki hosts use wsl --distribution %s': %w", selected.Host.Distribution, selected.Host.Distribution, err)
+			}
 			return fmt.Errorf("execution host is not ready; run loki hosts prepare ssh --address USER@HOST to install its CLI: %w", err)
 		}
 		if version.overflow {
@@ -138,5 +143,5 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 	if err := store.SelectExecutionHost(selected); err != nil {
 		return err
 	}
-	return success(out, "Execution host selected. Subsequent tools, status and integration commands use this host.", map[string]any{"host": selected.Host})
+	return success(out, "Execution host selected: "+setupHostLabel(&selected)+".\nTools and data stay on their original hosts. Reconnect clients with 'loki setup' to use this target.", map[string]any{"host": selected.Host})
 }

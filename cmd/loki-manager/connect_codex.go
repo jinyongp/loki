@@ -91,14 +91,9 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 		return fmt.Errorf("install and enable selected tools before connecting Codex")
 	}
 	if *config == "" {
-		if directory := os.Getenv("CODEX_HOME"); directory != "" {
-			*config = filepath.Join(directory, "config.toml")
-		} else {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return err
-			}
-			*config = filepath.Join(home, ".codex", "config.toml")
+		*config, err = defaultCodexConfig()
+		if err != nil {
+			return err
 		}
 	}
 	if !filepath.IsAbs(*config) {
@@ -171,14 +166,32 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 		block.WriteString("experimental_environment = \"remote\"\n")
 	}
 	block.WriteString(end)
-	next, err := hostconfig.MergeClientConnection(old, []byte(block.String()), server, begin, end)
+	base := old
+	otherServer, otherBegin, otherEnd := "loki_browser", codexBegin, codexEnd
+	if server == "loki_browser" {
+		otherServer, otherBegin, otherEnd = "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
+	}
+	if bytes.Contains(base, []byte(otherBegin)) || bytes.Contains(base, []byte(otherEnd)) {
+		base, err = hostconfig.MergeClientConnection(base, nil, otherServer, otherBegin, otherEnd)
+		if err != nil {
+			return err
+		}
+	}
+	next, err := hostconfig.MergeClientConnection(base, []byte(block.String()), server, begin, end)
 	if err != nil {
 		return err
 	}
 	if bytes.Equal(old, next) {
 		return success(out, "Codex tool connection is already configured.", map[string]any{"config": *config, "server": server, "changed": false})
 	}
-	file, err := os.CreateTemp(filepath.Dir(*config), ".loki-codex-*")
+	if err := writeCodexConfiguration(*config, old, next); err != nil {
+		return err
+	}
+	return success(out, "Codex tool connection configured: "+*config+"\nReopen the Codex project to load "+server, map[string]any{"config": *config, "server": server, "changed": true})
+}
+
+func writeCodexConfiguration(config string, old, next []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(config), ".loki-codex-*")
 	if err != nil {
 		return err
 	}
@@ -194,15 +207,15 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	if err := file.Close(); err != nil {
 		return err
 	}
-	current, err := os.ReadFile(*config)
+	current, err := os.ReadFile(config)
 	if os.IsNotExist(err) && len(old) == 0 {
 		err = nil
 	}
 	if err != nil || !bytes.Equal(old, current) {
 		return fmt.Errorf("Codex configuration changed during setup; retry")
 	}
-	if err := os.Rename(file.Name(), *config); err != nil {
+	if err := os.Rename(file.Name(), config); err != nil {
 		return err
 	}
-	return success(out, "Codex tool connection configured: "+*config+"\nReopen the Codex project to load "+server, map[string]any{"config": *config, "server": server, "changed": true})
+	return nil
 }

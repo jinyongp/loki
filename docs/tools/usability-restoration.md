@@ -56,7 +56,7 @@ guided setup and the restored operator commands ship in 0.2.6.
 
 Windows needs a modern WSL installation before the dedicated distribution can
 be prepared. Full local macOS execution remains a Linux-host requirement. Ordinary
-uninstall retains data and the host. Explicit `uninstall --purge-data` and
+uninstall retains data and the host. Explicit `uninstall --all --purge-data` and
 `hosts remove --purge` provide owned data/host removal. Linux owned service/data
 removal passed native acceptance. Actual Windows WSL creation/removal still needs
 evidence. Shared Docker/WSL prerequisites and the frontend CLI are retained.

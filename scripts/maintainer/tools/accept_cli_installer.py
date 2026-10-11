@@ -58,7 +58,7 @@ def accept(publication):
                 result = subprocess.run(args, check=True, stdin=subprocess.DEVNULL, env=environment,
                                         cwd=workspace, timeout=120, capture_output=True, text=True)
                 expected_next = 'loki' if windows or str(binary_dir) in environment.get('PATH', '').split(os.pathsep) else str(binary_dir / 'loki')
-                expected = ['Installing Loki...', 'Loki '+RELEASE+' installed.', 'Next: ' + expected_next + ' --help']
+                expected = ['Installing Loki...', 'Loki '+RELEASE+' installed.', 'Next: ' + expected_next + ' setup']
                 if result.stdout.splitlines() != expected or result.stderr.strip():
                     raise ValueError('Installer success output is not concise: ' + result.stdout + result.stderr)
                 check_empty(root)

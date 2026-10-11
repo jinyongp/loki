@@ -171,7 +171,7 @@ func TestStatusReportsUnknownReadinessAndIssues(t *testing.T) {
 	if err := result(&out, "Loki", report); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"browser", "unknown", "run doctor to verify", "test issue"} {
+	for _, want := range []string{"browser", "not checked", "run doctor to verify", "test issue"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatal(out.String())
 		}
@@ -196,7 +196,7 @@ func TestSSHRelayForwardsJSONWithoutLocalResultOrState(t *testing.T) {
 	recorded := filepath.Join(directory, "arguments")
 	root := filepath.Join(directory, "absent root")
 	ssh := filepath.Join(directory, "ssh")
-	if err := os.WriteFile(ssh, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$LOKI_TEST_RELAY_ARGS\"\nprintf '{\"installed\":true}\\n'\n"), 0700); err != nil {
+	if err := os.WriteFile(ssh, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$LOKI_TEST_RELAY_ARGS\"\nprintf '{\"installed\":true,\"tools\":{}}\\n'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))

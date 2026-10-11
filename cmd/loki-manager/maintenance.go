@@ -17,8 +17,11 @@ func runMaintenance(ctx context.Context, store management.Store, args []string, 
 		return fmt.Errorf("choose backup, backups, restore, rollback or uninstall")
 	}
 	action := args[0]
-	purge := action == "uninstall" && len(args) == 2 && args[1] == "--purge-data"
-	if (action == "backup" || action == "rollback" || action == "uninstall") && len(args) != 1 && !purge {
+	purge := action == "uninstall" && len(args) == 3 && args[1] == "--all" && args[2] == "--purge-data"
+	if action == "uninstall" && !(len(args) == 2 && args[1] == "--all" || purge) {
+		return fmt.Errorf("usage: loki uninstall TOOL | loki uninstall --all [--purge-data]")
+	}
+	if (action == "backup" || action == "rollback") && len(args) != 1 {
 		return fmt.Errorf("usage: loki %s", action)
 	}
 	if action == "restore" && len(args) != 2 {
@@ -37,6 +40,20 @@ func runMaintenance(ctx context.Context, store management.Store, args []string, 
 		}
 		if _, err := store.RestorePending(args[1]); err != nil {
 			return err
+		}
+	}
+	if action == "uninstall" && !purge && state.Config.Mode == tools.Full {
+		deployments, err := store.Deployments()
+		if err != nil {
+			return err
+		}
+		if len(deployments) == 0 {
+			// Install-only programs can be removed without provisioning Docker.
+			// Generation removal still checks persistent deployment reservations.
+			if err := store.UninstallTools(ctx); err != nil {
+				return err
+			}
+			return success(out, "All tool programs on this host removed. User data, credentials, the host and the CLI are retained.", map[string]any{"tools_removed": true, "data_retained": true})
 		}
 	}
 	if state.Config.Mode == tools.Full {
@@ -178,7 +195,7 @@ func runMaintenance(ctx context.Context, store management.Store, args []string, 
 			}
 			return success(out, "Tool programs, data and integration credentials removed. The CLI, host and backups are retained.", map[string]any{"tools_removed": true, "data_retained": false, "backups_retained": true})
 		}
-		return success(out, "Tool programs removed. User data, credentials and the CLI are retained.", map[string]any{"tools_removed": true, "data_retained": true})
+		return success(out, "All tool programs on this host removed. User data, credentials, the host and the CLI are retained.", map[string]any{"tools_removed": true, "data_retained": true})
 	default:
 		return fmt.Errorf("unknown maintenance action")
 	}

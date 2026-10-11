@@ -54,7 +54,7 @@ try {
     $env:Path = "$BinDirectory;$env:Path"
     Invoke-Loki @('version') | Out-Null
     Write-Host "Loki $release installed."
-    Write-Host 'Next: loki --help'
+    Write-Host 'Next: loki setup'
 } finally {
     Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
 }

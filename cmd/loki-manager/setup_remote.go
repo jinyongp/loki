@@ -15,6 +15,17 @@ func runRemoteSetup(ctx context.Context, frontend management.Store, selected man
 	if options.catalog != "" {
 		return fmt.Errorf("offline setup catalogs must be installed directly on the execution host; use loki tools install --catalog there")
 	}
+	// Browser-only requests retain an existing full composition, just as local
+	// setup does. The frontend must use the same mode for startup and reporting.
+	if options.mode == tools.ProjectHost {
+		report, err := inspectOperatorHost(ctx, frontend, &selected, diagnostics, false)
+		if err != nil {
+			return fmt.Errorf("check execution-host mode before setup: %w", err)
+		}
+		if report.Target.Mode == tools.Full {
+			options.mode = tools.Full
+		}
+	}
 	if selected.Host.Kind == "ssh" && options.mode == tools.Full {
 		if err := prepareSSHAuthorization(ctx, selected, input, diagnostics); err != nil {
 			return err
@@ -30,6 +41,13 @@ func runRemoteSetup(ctx context.Context, frontend management.Store, selected man
 		}
 		relay.Stdin, relay.Stdout, relay.Stderr = input, diagnostics, diagnostics
 		return relay.Run()
+	}
+	if selected.Host.Kind == "ssh" && options.mode == tools.Full {
+		// Administrator authorization can already be cached. Prepare the host
+		// explicitly so the remote setup does not need another host-selection UI.
+		if err := call("hosts", "prepare", "local"); err != nil {
+			return err
+		}
 	}
 	names := make([]string, len(options.selected))
 	for i, id := range options.selected {

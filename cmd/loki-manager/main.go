@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 )
@@ -73,6 +72,15 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return err
 	}
 	out = &commandOutput{Writer: out, json: structured}
+	if len(args) >= 3 && args[0] == "tools" && args[1] == "uninstall" && (args[2] == "--all" || args[2] == "--purge-data") {
+		args = append([]string{"uninstall"}, args[2:]...)
+	}
+	if len(args) > 0 && args[0] == "uninstall" {
+		args, err = uninstallArguments(args)
+		if err != nil {
+			return err
+		}
+	}
 	if structured && len(args) >= 2 && args[0] == "tools" && args[1] == "serve" {
 		return fmt.Errorf("tools serve uses MCP protocol output; --json applies to management commands")
 	}
@@ -89,9 +97,6 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	frontend := management.Store{Root: frontendRoot}
 	if len(args) > 0 && args[0] == "hosts" {
 		return runHosts(ctx, frontend, args[1:], out, diagnostics)
-	}
-	if len(args) > 0 && args[0] == "connections" {
-		return runConnections(ctx, frontend, args[1:], os.Stdin, out, diagnostics)
 	}
 	if len(args) == 1 && args[0] == "_connection-bridge" {
 		return runConnectionBridge(ctx, frontend, diagnostics)
@@ -115,6 +120,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			if selected.Remote() && *root == "" {
 				*root = selected.Root
 			}
+			if selected.Remote() {
+				selected.Root = *root
+			}
 		}
 	}
 	host := tools.Host{Kind: *hostKind, Distribution: *distribution, Address: *address}
@@ -133,9 +141,41 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 	}
+	if len(args) > 0 && args[0] == "connections" {
+		if len(args) >= 3 && args[1] == "setup" && args[2] == "codex" {
+			if selected != nil && selected.Remote() {
+				return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
+			}
+			return connectCodex(frontend, args[2:], out, diagnostics)
+		}
+		return runConnections(ctx, frontend, args[1:], os.Stdin, out, diagnostics)
+	}
+	if len(args) == 1 && (args[0] == "status" || args[0] == "doctor") || len(args) == 2 && args[0] == "tools" && slices.Contains([]string{"status", "doctor", "list"}, args[1]) {
+		localRoot := *root
+		if localRoot == "" || selected != nil && selected.Remote() {
+			localRoot = frontend.Root
+		}
+		return operatorStatus(ctx, management.Store{Root: localRoot}, selected, out, diagnostics, args[len(args)-1] == "doctor")
+	}
+	if len(args) == 2 && args[0] == "tools" && args[1] == "manage" {
+		return runToolsMenu(ctx, executionArgs, setupMenuHost{frontend, selected, explicitHost}, os.Stdin, out, diagnostics)
+	}
+	if len(args) >= 2 && args[0] == "tools" && args[1] == "connect" {
+		if selected != nil && selected.Remote() {
+			return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
+		}
+		localRoot := *root
+		if localRoot == "" {
+			localRoot = frontend.Root
+		}
+		return connectCodex(management.Store{Root: localRoot}, args[2:], out, diagnostics)
+	}
+	if len(args) > 0 && (args[0] == "uninstall" || len(args) >= 2 && args[0] == "tools" && (args[1] == "uninstall" || args[1] == "remove")) {
+		fmt.Fprintln(diagnostics, "Uninstall target:", setupHostLabel(selected))
+	}
 	if len(args) > 0 && args[0] == "setup" {
 		if len(args) == 1 {
-			return runSetupMenu(ctx, executionArgs, os.Stdin, out, diagnostics)
+			return runSetupMenu(ctx, executionArgs, setupMenuHost{frontend, selected, explicitHost}, os.Stdin, out, diagnostics)
 		}
 		options, err := parseSetup(ctx, args[1:], os.Stdin, diagnostics)
 		if err != nil {
@@ -144,12 +184,8 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if len(options.selected) == 0 {
 			return runSetup(ctx, frontend, options, os.Stdin, out, diagnostics)
 		}
-		if host.Kind == "local" && (selected == nil || !selected.System) && options.mode == tools.Full {
-			if runtime.GOOS == "linux" {
-				selected, err = prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
-			} else {
-				selected, err = prepareManagedHost(ctx, frontend, diagnostics)
-			}
+		if !explicitHost && !localAdministrator() && host.Kind == "local" && (selected == nil || !selected.System) && options.mode == tools.Full {
+			selected, err = selectFullSetupHost(ctx, frontend, os.Stdin, diagnostics)
 			if err != nil {
 				return err
 			}
@@ -166,23 +202,13 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 		return runSetup(ctx, frontend, options, os.Stdin, out, diagnostics)
 	}
-	if len(args) >= 2 && args[0] == "tools" && args[1] == "connect" && (host.Kind != "local" || selected != nil && selected.Remote()) {
-		if selected == nil {
-			selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand}
-		}
-		return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
-	}
-	if !explicitHost && host.Kind == "local" && (selected == nil || !selected.System) && len(args) >= 2 && args[0] == "tools" && args[1] == "install" {
+	if !explicitHost && !localAdministrator() && host.Kind == "local" && (selected == nil || !selected.System) && len(args) >= 2 && args[0] == "tools" && args[1] == "install" {
 		full, err := fullInstallationRequest(args[2:])
 		if err != nil {
 			return err
 		}
 		if full {
-			if runtime.GOOS == "linux" {
-				selected, err = prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
-			} else {
-				selected, err = prepareManagedHost(ctx, frontend, diagnostics)
-			}
+			selected, err = selectFullSetupHost(ctx, frontend, os.Stdin, diagnostics)
 			if err != nil {
 				return err
 			}
@@ -303,7 +329,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			if err != nil {
 				return err
 			}
-			return success(out, "Loki management installed: "+record.Executable+"\nAdd its directory to PATH, then select tools with 'loki tools install'.", map[string]any{"manager": record})
+			return success(out, "Loki management installed: "+record.Executable+"\nAdd its directory to PATH, then run 'loki setup' to choose a host and tools.", map[string]any{"manager": record})
 		}
 		unlock, err := store.Lock()
 		if err != nil {
@@ -320,7 +346,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := store.Save(state); err != nil {
 			return err
 		}
-		return success(out, "Loki management installed. Select tools with 'loki tools install'.", nil)
+		return success(out, "Loki management installed. Run 'loki setup' to choose a host, tools and client connection.", nil)
 	}
 	if len(args) == 1 && (args[0] == "status" || args[0] == "doctor") {
 		return status(ctx, store, out, diagnostics, args[0] == "doctor")
@@ -496,6 +522,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		f := flag.NewFlagSet("tools enable", flag.ContinueOnError)
 		f.SetOutput(diagnostics)
 		capabilities := f.String("capabilities", "", "explicit optional capability names, comma-separated")
+		noStart := f.Bool("no-start", false, "save activation without changing running services")
 		if err := f.Parse(toolArguments(args[2:])); err != nil {
 			return err
 		}
@@ -514,15 +541,29 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := store.SetEnabled(tools.ID(f.Arg(0)), args[1] == "enable", caps); err != nil {
 			return err
 		}
-		return success(out, "Tool "+f.Arg(0)+" "+args[1]+"d.", map[string]any{"tool": f.Arg(0), "enabled": args[1] == "enable"})
+		if !*noStart {
+			if err := reconcileToolActivation(ctx, store, diagnostics); err != nil {
+				if jsonOutput(out) {
+					if encodeErr := result(out, "Tool activation", map[string]any{"success": false, "tool": f.Arg(0), "enabled": args[1] == "enable", "activation_saved": true, "services_applied": false}); encodeErr != nil {
+						return encodeErr
+					}
+				}
+				return fmt.Errorf("%s activation was saved, but services could not apply it; run 'loki doctor', then 'loki tools start' (GitHub authentication: 'loki integrations setup github'): %w", f.Arg(0), err)
+			}
+		}
+		message := "Tool " + f.Arg(0) + " " + args[1] + "d."
+		if *noStart {
+			message += " Activation saved; running services are unchanged."
+		}
+		return success(out, message, map[string]any{"tool": f.Arg(0), "enabled": args[1] == "enable", "activation_saved": true, "services_applied": !*noStart})
 	case "remove", "uninstall":
 		if len(args) != 3 {
 			return fmt.Errorf("select exactly one tool to remove; see 'loki tools remove --help'")
 		}
-		if err := store.Remove(tools.ID(args[2])); err != nil {
+		if err := uninstallTool(ctx, store, tools.ID(args[2]), diagnostics); err != nil {
 			return err
 		}
-		return success(out, "Tool "+args[2]+" removed.", map[string]any{"tool": args[2]})
+		return success(out, "Tool "+args[2]+" programs removed. User data, credentials and the CLI are retained.", map[string]any{"tool": args[2], "data_retained": true})
 	case "prune":
 		f := flag.NewFlagSet("tools prune", flag.ContinueOnError)
 		f.SetOutput(diagnostics)

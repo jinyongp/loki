@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,20 @@ import (
 	"loki/internal/management"
 	"loki/internal/tools"
 )
+
+func TestFullInstallationNeedsHostSelectionBeforeMutation(t *testing.T) {
+	for _, command := range [][]string{{"setup", "workspace"}, {"tools", "install", "workspace"}} {
+		root := filepath.Join(t.TempDir(), "untouched")
+		var out, diagnostics bytes.Buffer
+		err := run(t.Context(), append([]string{"--root", root}, command...), &out, &diagnostics)
+		if err == nil || !strings.Contains(err.Error(), "choose an execution host first") || out.Len() != 0 {
+			t.Fatalf("installation did not require a host: %v, error %v", command, err)
+		}
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Fatal("unselected host was mutated", err)
+		}
+	}
+}
 
 func TestSetupMenuPipedInput(t *testing.T) {
 	for _, input := range []string{"", "\n", "browser\n"} {
@@ -22,7 +37,7 @@ func TestSetupMenuPipedInput(t *testing.T) {
 		_, _ = writer.WriteString(input)
 		_ = writer.Close()
 		var output bytes.Buffer
-		err = runSetupMenu(context.Background(), nil, reader, &commandOutput{Writer: &output, json: true}, &output)
+		err = runSetupMenu(context.Background(), nil, setupMenuHost{}, reader, &commandOutput{Writer: &output, json: true}, &output)
 		_ = reader.Close()
 		if input == "browser\n" {
 			if err == nil || output.Len() != 0 {
@@ -63,13 +78,11 @@ func TestSetupMenuActionsRespectInstallationActivationAndServices(t *testing.T) 
 		want             []string
 	}{
 		{"install remains disabled", "browser", "install", tools.ProjectHost, false, "", []string{"tools install browser"}},
-		{"install and enable", "workspace", "install-enable", tools.Full, true, "", []string{"tools install workspace", "tools enable workspace", "tools start"}},
-		{"failed install never enables", "workspace", "install-enable", tools.Full, false, "tools install workspace", []string{"tools install workspace"}},
-		{"disable last stops services", "workspace", "disable", tools.Full, false, "", []string{"tools disable workspace", "tools stop"}},
-		{"disable preserves other active services", "workspace", "disable", tools.Full, true, "", []string{"tools disable workspace", "tools start"}},
-		{"remove stops before deleting", "workspace", "uninstall", tools.Full, true, "", []string{"tools stop", "tools uninstall workspace", "tools start"}},
-		{"failed stop never deletes", "workspace", "uninstall", tools.Full, false, "tools stop", []string{"tools stop"}},
-		{"github enable runs wizard", "github", "enable", tools.Full, true, "", []string{"tools enable github", "integrations setup github"}},
+		{"install and enable uses guided setup", "workspace", "install-enable", tools.Full, true, "", []string{"setup workspace"}},
+		{"failed setup stops action", "workspace", "install-enable", tools.Full, false, "setup workspace", []string{"setup workspace"}},
+		{"disable uses shared lifecycle", "workspace", "disable", tools.Full, false, "", []string{"tools disable workspace"}},
+		{"remove uses shared lifecycle", "workspace", "uninstall", tools.Full, true, "", []string{"tools uninstall workspace"}},
+		{"github enable runs wizard", "github", "enable", tools.Full, true, "", []string{"tools enable github --no-start", "integrations setup github"}},
 		{"native browser enable needs no full services", "browser", "enable", tools.ProjectHost, true, "", []string{"tools enable browser"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -83,7 +96,7 @@ func TestSetupMenuActionsRespectInstallationActivationAndServices(t *testing.T) 
 				}
 				return nil
 			}
-			err := applySetupAction(test.id, test.action, report, invoke, func() (management.Report, error) { return report, nil })
+			err := applySetupAction(test.id, test.action, report, invoke)
 			if (err != nil) != (test.fail != "") || !reflect.DeepEqual(calls, test.want) {
 				t.Fatalf("calls %v, error %v", calls, err)
 			}

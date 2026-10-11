@@ -173,6 +173,10 @@ func displayValue(value any) string {
 }
 
 func printStatus(out io.Writer, report management.Report) error {
+	return printStatusForHost(out, report, report.Release, nil, "")
+}
+
+func printStatusForHost(out io.Writer, report management.Report, cliVersion string, host *management.ExecutionSelection, root string) error {
 	title := "Loki"
 	if report.Healthy != nil {
 		title = "Loki doctor: healthy"
@@ -183,24 +187,33 @@ func printStatus(out io.Writer, report management.Report) error {
 	var text bytes.Buffer
 	writer := tabwriter.NewWriter(&text, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(writer, title)
-	fmt.Fprintf(writer, "  Configured: %s\n  Version: %s\n  Host: %s/%s\n  Mode: %s\n", displayValue(report.Installed), report.Release, report.Target.OS, report.Target.Arch, report.Target.Mode)
+	fmt.Fprintf(writer, "  Version: %s\n  Target: %s\n", cliVersion, setupHostLabel(host))
+	if report.Target.OS != "" && report.Target.Arch != "" {
+		fmt.Fprintf(writer, "  Platform: %s/%s\n", report.Target.OS, report.Target.Arch)
+	}
+	if root != "" {
+		fmt.Fprintln(writer, "  State directory:", root)
+	}
 	if report.Ready != nil {
 		fmt.Fprintln(writer, "  Ready:", displayValue(*report.Ready))
 	}
-	if len(report.Tools) == 0 {
+	ids := []tools.ID{}
+	for _, name := range publicToolNames {
+		if _, exists := report.Tools[tools.ID(name)]; exists {
+			ids = append(ids, tools.ID(name))
+		}
+	}
+	if report.Tools == nil {
+		fmt.Fprintln(writer, "\nTools: unavailable — execution host could not be inspected")
+	} else if len(ids) == 0 {
 		fmt.Fprintln(writer, "\nTools: none installed")
 		fmt.Fprintln(writer, "  Run 'loki setup' to choose and configure tools.")
 	} else {
 		fmt.Fprintln(writer, "\nTools:")
-		fmt.Fprintln(writer, "  Tool\tVersion\tInstalled\tEnabled\tReadiness")
-		ids := make([]tools.ID, 0, len(report.Tools))
-		for id := range report.Tools {
-			ids = append(ids, id)
-		}
-		slices.Sort(ids)
+		fmt.Fprintln(writer, "  Tool\tVersion\tInstalled\tEnabled\tRuntime")
 		for _, id := range ids {
 			state := report.Tools[id]
-			fmt.Fprintf(writer, "  %s\t%s\t%s\t%s\t%s\n", id, state.Release, displayValue(state.Installed), displayValue(state.Enabled), state.Readiness)
+			fmt.Fprintf(writer, "  %s\t%s\t%s\t%s\t%s\n", id, state.Release, displayValue(state.Installed), displayValue(state.Enabled), toolRuntimeLabel(state, report.Target.Mode))
 			if state.Reason != "" {
 				fmt.Fprintln(writer, "    "+state.Reason)
 			}

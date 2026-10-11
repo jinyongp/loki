@@ -17,10 +17,17 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/term"
 
+	"loki/internal/management"
 	"loki/internal/tools"
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
+	for _, kind := range []string{"tools", "home", "fresh", "unreachable"} {
+		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
+	}
+}
+
+func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	t.Setenv("TERM", "xterm-256color")
 	master, terminal, err := pty.Open()
 	if err != nil {
@@ -69,17 +76,58 @@ func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
 		}
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
+	if kind == "unreachable" {
+		installSetupSSHFixture(t, `{}`)
+		t.Setenv("CODEX_HOME", t.TempDir())
+	}
 	var output bytes.Buffer
 	finished := make(chan error, 1)
 	go func() {
-		finished <- runSetupMenu(ctx, []string{"--root", root}, terminal, &commandOutput{Writer: &output, json: true}, terminal)
+		host := setupMenuHost{frontend: management.Store{Root: root}}
+		if kind == "tools" {
+			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
+		} else {
+			host.explicit = kind == "home"
+			if kind == "unreachable" {
+				host.explicit = true
+				host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
+			}
+			finished <- runSetupMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
+		}
 	}()
-	waitFor("coordination")
-	_, _ = io.WriteString(master, "\r")
-	waitFor("Install only")
-	_, _ = io.WriteString(master, "\x1b")
-	waitFor("coordination")
-	_, _ = io.WriteString(master, "\x1b")
+	if kind == "fresh" {
+		waitFor("Choose execution host")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "unreachable" {
+		waitFor("Host unavailable")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Inspect client connections")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("codex: not configured")
+		waitFor("Host unavailable")
+		_, _ = io.WriteString(master, "\x1b")
+	} else {
+		if kind == "home" {
+			waitFor("Manage tools")
+			_, _ = io.WriteString(master, "\r")
+		}
+		waitFor("coordination")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Install only")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("coordination")
+		if kind == "tools" {
+			_, _ = io.WriteString(master, strings.Repeat("\x1b[B", len(publicToolNames)+1)+"\r")
+			waitFor("Choose execution host")
+			_, _ = io.WriteString(master, "\x1b")
+			waitFor("coordination")
+		}
+		_, _ = io.WriteString(master, "\x1b")
+		if kind == "home" {
+			waitFor("Manage tools")
+			_, _ = io.WriteString(master, "\x1b")
+		}
+	}
 	select {
 	case err := <-finished:
 		if err != nil {

@@ -202,7 +202,17 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 		return connectCodex(store, args[1:], out, diagnostics)
 	}
 	if len(args) == 0 || len(args) == 1 && args[0] == "list" {
-		return result(out, "Loki connections", map[string]any{"providers": []string{"codex", "openai"}})
+		return showClientConnections(store, out)
+	}
+	if len(args) == 2 && args[1] == "codex" && (args[0] == "status" || args[0] == "show" || args[0] == "remove") {
+		if args[0] != "remove" {
+			return showClientConnections(store, out)
+		}
+		config, err := defaultCodexConfig()
+		if err != nil {
+			return err
+		}
+		return disconnectCodex(config, out)
 	}
 	f := flag.NewFlagSet("connections", flag.ContinueOnError)
 	f.SetOutput(diagnostics)
@@ -335,6 +345,21 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 		}
 	}
 	return success(out, "Managed OpenAI connection "+action+" completed.", map[string]any{"provider": "openai", "action": action})
+}
+
+func inspectManagedConnections(store management.Store) ([]clientConnection, error) {
+	view := clientConnection{Provider: "openai"}
+	selected, err := store.ExecutionSelection()
+	if err != nil || selected == nil || !selected.Remote() {
+		return []clientConnection{view}, err
+	}
+	states := windowshost.WindowsConnectionStateStore{ConnectionsRoot: filepath.Join(store.Root, "control", "connections", "providers")}
+	state, present, err := states.Read(connectionHostAlias(*selected), "openai")
+	view.Configured = present
+	if present {
+		view.Enabled = &state.Enabled
+	}
+	return []clientConnection{view}, err
 }
 
 func stopConnectionBridge(ctx context.Context, store management.Store) error {

@@ -68,7 +68,7 @@ irm https://jinyongp.dev/loki/install.ps1 | iex
             result, case, config, preserved = run('cli-only')
             if result.returncode:
                 raise ValueError('zero-argument CLI IEX failed')
-            expected = ['Installing Loki...', 'Loki '+RELEASE+' installed.', 'Next: loki --help'] * 2
+            expected = ['Installing Loki...', 'Loki '+RELEASE+' installed.', 'Next: loki setup'] * 2
             if result.stdout.splitlines() != expected or result.stderr.strip():
                 raise ValueError('IEX success output is not concise: ' + result.stdout + result.stderr)
             binary = case / 'local/Programs/Loki/bin/loki.exe'

@@ -64,7 +64,7 @@ func ValidateSystemArguments(args []string) ([]string, bool, error) {
 			return nil, false, fmt.Errorf("invalid system operator command")
 		}
 	case "uninstall":
-		if len(clean) != 1 && !(len(clean) == 2 && clean[1] == "--purge-data") {
+		if !(len(clean) == 2 && clean[1] == "--all" || len(clean) == 3 && clean[1] == "--all" && clean[2] == "--purge-data") {
 			return nil, false, fmt.Errorf("invalid system removal request")
 		}
 	case "restore":
@@ -113,7 +113,7 @@ func ValidateSystemArguments(args []string) ([]string, bool, error) {
 			if len(clean) != 2 {
 				return nil, false, fmt.Errorf("invalid system tool operation")
 			}
-		case "install", "update", "enable", "disable", "remove", "prune": // Each leaf parser validates tool names, releases and capabilities.
+		case "install", "update", "enable", "disable", "remove", "uninstall", "prune": // Each leaf parser validates tool names, releases and capabilities.
 		default:
 			return nil, false, fmt.Errorf("unsupported system tool operation")
 		}

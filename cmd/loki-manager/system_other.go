@@ -19,3 +19,5 @@ func systemCommand(_ context.Context, _ string, args []string, _ io.Reader, _, _
 func prepareLocalSystemHost(context.Context, management.Store, io.Reader, io.Writer) (*management.ExecutionSelection, error) {
 	return nil, fmt.Errorf("select a Linux execution host")
 }
+
+func localAdministrator() bool { return false }

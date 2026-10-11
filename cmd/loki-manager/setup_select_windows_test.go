@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/xpty"
 	"golang.org/x/term"
+
+	"loki/internal/management"
 )
 
 type setupConsoleResult struct {
@@ -32,7 +34,13 @@ func TestSetupConsoleHelper(t *testing.T) {
 	}
 	var options setupOptions
 	if root := os.Getenv("LOKI_SETUP_MENU_ROOT"); root != "" {
-		err = runSetupMenu(t.Context(), []string{"--root", root}, os.Stdin, os.Stdout, os.Stderr)
+		host := setupMenuHost{frontend: management.Store{Root: root}}
+		if kind := os.Getenv("LOKI_SETUP_MENU_KIND"); kind == "home" || kind == "fresh" {
+			host.explicit = kind == "home"
+			err = runSetupMenu(t.Context(), []string{"--root", root}, host, os.Stdin, os.Stdout, os.Stderr)
+		} else {
+			err = runToolsMenu(t.Context(), []string{"--root", root}, host, os.Stdin, os.Stdout, os.Stderr)
+		}
 	} else {
 		options, err = parseSetup(t.Context(), nil, os.Stdin, os.Stderr)
 	}
@@ -66,6 +74,8 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 		{"cancel checked choice", " \x03", 0, false},
 		{"escape", " \x1b", 0, false},
 		{"management menu exit", "\x1b", 0, true},
+		{"home", "\x1b", 0, true},
+		{"fresh", "\x1b", 0, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			console, err := xpty.NewConPty(100, 30)
@@ -76,14 +86,14 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 			cmd := exec.Command(os.Args[0], "-test.run=^TestSetupConsoleHelper$")
 			for _, entry := range os.Environ() {
 				upper := strings.ToUpper(entry)
-				if !strings.HasPrefix(upper, "TERM=") && !strings.HasPrefix(upper, "LOKI_SETUP_CONSOLE_HELPER=") && !strings.HasPrefix(upper, "LOKI_SETUP_MENU_ROOT=") {
+				if !strings.HasPrefix(upper, "TERM=") && !strings.HasPrefix(upper, "LOKI_SETUP_CONSOLE_HELPER=") && !strings.HasPrefix(upper, "LOKI_SETUP_MENU_ROOT=") && !strings.HasPrefix(upper, "LOKI_SETUP_MENU_KIND=") {
 					cmd.Env = append(cmd.Env, entry)
 				}
 			}
 			cmd.Env = append(cmd.Env, "LOKI_SETUP_CONSOLE_HELPER=1", "TERM=xterm-256color")
 			menuRoot := t.TempDir() + "\\untouched"
 			if test.menu {
-				cmd.Env = append(cmd.Env, "LOKI_SETUP_MENU_ROOT="+menuRoot)
+				cmd.Env = append(cmd.Env, "LOKI_SETUP_MENU_ROOT="+menuRoot, "LOKI_SETUP_MENU_KIND="+test.name)
 			}
 			if err := console.Start(cmd); err != nil {
 				t.Fatal(err)
@@ -100,7 +110,13 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 					n, err := console.Read(buffer)
 					screen.Write(buffer[:n])
 					text := ansi.Strip(screen.String())
-					if !signaled && strings.Contains(text, "coordination") {
+					readyText := "coordination"
+					if test.name == "home" {
+						readyText = "Manage tools"
+					} else if test.name == "fresh" {
+						readyText = "Choose execution host"
+					}
+					if !signaled && strings.Contains(text, readyText) {
 						signaled = true
 						ready <- struct{}{}
 					}

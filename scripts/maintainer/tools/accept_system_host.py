@@ -63,7 +63,7 @@ def accept(candidate):
             forbidden = subprocess.run([str(binary), "_system-relay", "--socket", str(socket), "--", "tools", "install", "git", "-catalog=/tmp/untrusted.json"], capture_output=True, text=True, timeout=20)
             if forbidden.returncode == 0 or "outside system-host authority" not in forbidden.stderr:
                 raise ValueError("administrator socket admitted a caller-controlled catalog")
-            run("uninstall", "--purge-data", "--json")
+            run("tools", "uninstall", "--all", "--purge-data", "--json")
             run("hosts", "remove", "--purge", "--json")
             owned = False
             for path in [root, command, socket, *units]:

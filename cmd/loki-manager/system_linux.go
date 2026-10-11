@@ -113,3 +113,5 @@ func systemCommand(ctx context.Context, root string, args []string, input io.Rea
 func prepareLocalSystemHost(ctx context.Context, store management.Store, input io.Reader, diagnostics io.Writer) (*management.ExecutionSelection, error) {
 	return management.PrepareSystemHost(ctx, store, input, diagnostics)
 }
+
+func localAdministrator() bool { return os.Geteuid() == 0 }
