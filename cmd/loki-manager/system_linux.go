@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -11,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 
 	"loki/internal/management"
 )
@@ -37,11 +40,19 @@ func systemCommand(ctx context.Context, root string, args []string, input io.Rea
 			return true, err
 		}
 		if args[0] == "_host-authorization" {
-			required := os.Geteuid() != 0 && (selected == nil || !selected.System)
+			prepared := os.Geteuid() == 0
+			if selected != nil && selected.System && !prepared {
+				probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				var version bytes.Buffer
+				err := management.SystemRelay(probeCtx, selected.Socket, []string{"version"}, nil, &version, io.Discard)
+				cancel()
+				prepared = err == nil && strings.TrimSpace(version.String()) == "loki "+management.ManagerRelease
+			}
+			required := !prepared
 			if required {
 				required = exec.CommandContext(ctx, "sudo", "-n", "true").Run() != nil
 			}
-			return true, json.NewEncoder(out).Encode(map[string]bool{"administrator_required": required})
+			return true, json.NewEncoder(out).Encode(map[string]bool{"administrator_required": required, "prepared": prepared})
 		}
 		password, err := io.ReadAll(io.LimitReader(input, 4097))
 		defer clear(password)

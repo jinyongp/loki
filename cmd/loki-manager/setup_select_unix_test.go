@@ -22,7 +22,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "unreachable"} {
+	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -76,9 +76,12 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
-	if kind == "unreachable" {
+	if kind == "unreachable" || kind == "preparation-failed" {
 		installSetupSSHFixture(t, `{}`)
 		t.Setenv("CODEX_HOME", t.TempDir())
+		if kind == "preparation-failed" {
+			t.Setenv("LOKI_REVIEW_SSH_UNREACHABLE", "1")
+		}
 	}
 	var output bytes.Buffer
 	finished := make(chan error, 1)
@@ -88,7 +91,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
-			if kind == "unreachable" {
+			if kind == "unreachable" || kind == "preparation-failed" {
 				host.explicit = true
 				host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
 			}
@@ -98,7 +101,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if kind == "fresh" {
 		waitFor("Choose execution host")
 		_, _ = io.WriteString(master, "\x1b")
-	} else if kind == "unreachable" {
+	} else if kind == "unreachable" || kind == "preparation-failed" {
 		waitFor("Host unavailable")
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("Inspect client connections")

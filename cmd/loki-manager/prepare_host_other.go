@@ -27,7 +27,7 @@ func prepareManagedHost(ctx context.Context, frontend management.Store, diagnost
 	if err := selected.Validate(); err != nil {
 		return nil, err
 	}
-	if err := prepareSSHHost(ctx, frontend, selected, diagnostics, diagnostics); err != nil {
+	if err := prepareUserManagedHost(ctx, frontend, selected, diagnostics, diagnostics); err != nil {
 		return nil, err
 	}
 	return frontend.ExecutionSelection()

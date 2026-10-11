@@ -21,6 +21,26 @@ type setupMenuHost struct {
 	explicit bool
 }
 
+func setupExecutionArguments(selected management.ExecutionSelection) []string {
+	args := []string{"--host", selected.Host.Kind, "--remote-command", selected.Command}
+	if selected.Root != "" {
+		args = append(args, "--root", selected.Root)
+	}
+	if selected.Host.Kind == "wsl" {
+		args = append(args, "--distribution", selected.Host.Distribution)
+	}
+	if selected.Host.Kind == "ssh" {
+		args = append(args, "--address", selected.Host.Address)
+	}
+	if selected.User != "" {
+		args = append(args, "--remote-user", selected.User)
+	}
+	if selected.System {
+		args = append(args, "--system-socket", selected.Socket)
+	}
+	return args
+}
+
 func setupHostLabel(selected *management.ExecutionSelection) string {
 	if selected == nil || selected.Host.Kind == "local" && !selected.System {
 		return "Local " + runtime.GOOS + " (native)"
@@ -56,7 +76,7 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		choices = append(choices, huh.NewOption("Local "+runtime.GOOS+" — native browser", "local"))
 	}
 	if runtime.GOOS == "windows" {
-		choices = append(choices, huh.NewOption("Managed WSL: loki-tools — create or reuse Loki's dedicated Linux host", "managed-wsl"), huh.NewOption("Existing WSL distribution — choose by name (Loki CLI required)", "wsl"))
+		choices = append(choices, huh.NewOption("Managed WSL: loki-tools — create or reuse Loki's dedicated Linux host", "managed-wsl"), huh.NewOption("Existing WSL distribution — choose by name (prepare CLI automatically)", "wsl"))
 	}
 	if runtime.GOOS == "linux" {
 		choices = append(choices, huh.NewOption("Local Linux — prepare managed services (administrator access)", "system"))
@@ -95,12 +115,12 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		}
 		options = append(options, huh.NewOption("Back", ""))
 		name := ""
-		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose WSL distribution").Description("Uses this distribution's default user and Loki CLI. Install Loki inside it first; other distributions are not changed.").Options(options...).Value(&name)))
+		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose WSL distribution").Description("Uses this distribution's default user. Installs the Loki CLI in that user's private directory if needed, then continues setup.").Options(options...).Value(&name)))
 		aborted, err = runSetupForm(ctx, form, input, terminal)
 		if err != nil || aborted || name == "" {
 			return nil, false, err
 		}
-		command = []string{"hosts", "use", "wsl", "--distribution", name}
+		command = []string{"hosts", "prepare", "wsl", "--distribution", name}
 	case "system":
 		command = []string{"hosts", "prepare", "local"}
 	case "ssh":

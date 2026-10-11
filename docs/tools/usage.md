@@ -49,7 +49,20 @@ Esc goes back or exits. Completed actions are retained on exit. `loki tools mana
 opens the tool menu directly. The target is shown in every management screen.
 Choose **Change execution host** to select native execution, a managed Linux/WSL
 host, an existing WSL distribution from its actual list, or an SSH destination.
-Existing WSL distributions need the Loki CLI installed inside them first.
+For an existing WSL distribution or SSH host, setup checks access and reuses a
+CLI matching the frontend release, or downloads and verifies the Linux manager
+and installs it into the selected user's `~/.local/lib/loki/bin`. Setup then continues in the same session;
+no separate installation command or PATH change is needed. The distribution
+remains user-managed. An inaccessible distribution is reported separately from
+a missing CLI. Scripts can use `loki hosts prepare wsl --distribution Ubuntu`.
+Remembered hosts are checked again when entering setup or installing tools, so
+upgrading the frontend does not leave setup using an older execution-host CLI.
+Before installing full tools, both WSL and SSH prepare the protected Linux
+service in the same session. Administrator passwords are read locally with
+echo disabled and sent through the selected transport's stdin. A ready service
+is reused; its CLI version is checked before skipping administrator preparation.
+OpenAI tunnel management is offered for the dedicated `loki-tools` WSL host and
+SSH hosts. Existing user-managed WSL distributions use a direct Codex connection.
 Each host has its own tool state; switching hosts does not move programs or data.
 Installing a tool that needs Linux services asks for a host before preparing it.
 Creating the dedicated `loki-tools` WSL host requires confirmation. Scripts must

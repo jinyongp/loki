@@ -100,7 +100,7 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 				return fmt.Errorf("managed WSL preparation is available on Windows; choose local Linux or SSH")
 			}
 			if selected.Host.Distribution != "loki-tools" {
-				return fmt.Errorf("managed WSL preparation uses loki-tools; attach existing distributions with hosts use")
+				return prepareUserManagedHost(ctx, store, selected, out, diagnostics)
 			}
 			if _, err := prepareManagedHost(ctx, store, diagnostics); err != nil {
 				return err
@@ -110,7 +110,7 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 		if selected.Host.Kind != "ssh" {
 			return fmt.Errorf("hosts prepare supports wsl or ssh")
 		}
-		return prepareSSHHost(ctx, store, selected, out, diagnostics)
+		return prepareUserManagedHost(ctx, store, selected, out, diagnostics)
 	}
 	if selected.Host.Kind != "local" {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -125,7 +125,7 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 		relay.Stdout = &version
 		if err := relay.Run(); err != nil {
 			if selected.Host.Kind == "wsl" {
-				return fmt.Errorf("WSL distribution %q is not ready; install the Loki CLI inside that distribution, then retry 'loki hosts use wsl --distribution %s': %w", selected.Host.Distribution, selected.Host.Distribution, err)
+				return fmt.Errorf("WSL distribution %q is not ready; run 'loki setup' to prepare it automatically: %w", selected.Host.Distribution, err)
 			}
 			return fmt.Errorf("execution host is not ready; run loki hosts prepare ssh --address USER@HOST to install its CLI: %w", err)
 		}

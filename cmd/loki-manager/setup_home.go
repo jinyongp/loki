@@ -45,6 +45,20 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return success(out, "Setup cancelled. No changes made.", map[string]any{"state": "cancelled", "changed": false})
 		}
 		host.selected, changed = selected, true
+	} else if host.selected != nil && host.selected.Remote() {
+		prepared, err := ensureSetupExecutionHost(ctx, host.frontend, *host.selected, !host.explicit, diagnostics)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			fmt.Fprintf(diagnostics, "Host preparation could not finish: %v\nClient connections and Change execution host remain available.\n", err)
+		} else {
+			changed = changed || prepared != *host.selected
+			host.selected = &prepared
+			if host.explicit {
+				prefix = setupExecutionArguments(prepared)
+			}
+		}
 	}
 	for {
 		if err := ctx.Err(); err != nil {

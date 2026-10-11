@@ -53,3 +53,27 @@ Native Windows WSL provisioning/removal, Windows console execution, live OpenAI
 tunnel behavior, actual Codex desktop SSH connections and full Docker jobs/service
 changes retain their environment-specific acceptance gates. Cross-compilation
 and static inspection do not satisfy those gates. No commit or release was made.
+
+## Host preparation follow-up (2026-10-11)
+
+The user-reported existing-WSL failure exposed gaps between CLI acquisition,
+administrator preparation and client connection support. WSL and SSH now share
+the verified manager publisher and protected administrator preparation path.
+Setup and tool installation match the execution CLI to the frontend release;
+missing or older user CLIs receive a private replacement. Failed preparation
+retains the previously selected host, and existing distributions remain user-owned.
+Full installation prepares its Linux service before issuing tool commands, while
+a ready service with the expected CLI version skips repeated administrator work.
+
+The OpenAI tunnel menu and command boundary share the same supported-host rule:
+owned WSL or SSH. A user-managed WSL host offers direct Codex connections.
+
+Coverage includes initial preparation, remembered-host reuse, outdated CLI
+replacement, interrupted installation, administrator-required and already-ready
+states, invalid input before host changes, and client support eligibility.
+Tests exercise both transport policies, real SSH process argument construction
+with local fixtures, and actual POSIX terminal password input without echo.
+Terminal navigation also checks that failed host preparation leaves client
+inspection and host recovery accessible. Invalid installation requests are
+rejected before contacting an execution host.
+These checks do not establish native Windows WSL provisioning or live tunnels.

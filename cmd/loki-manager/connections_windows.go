@@ -242,6 +242,9 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 	if selected == nil || !selected.Remote() {
 		return fmt.Errorf("select and configure a full execution host with loki setup before connecting OpenAI")
 	}
+	if (action == "setup" || action == "start" || action == "restore") && !supportsManagedTunnel(selected) {
+		return fmt.Errorf("OpenAI tunnel startup requires Loki's dedicated WSL host or an SSH host; use a direct Codex connection on this WSL host, or choose another execution host in loki setup")
+	}
 	alias := connectionHostAlias(*selected)
 	if *distribution != "" && *distribution != alias {
 		return fmt.Errorf("startup host differs from the selected execution host")

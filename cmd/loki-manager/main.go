@@ -141,6 +141,35 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 	}
+	prepareSelectedHost := func() error {
+		if selected == nil || !selected.Remote() {
+			return nil
+		}
+		prepared, err := ensureSetupExecutionHost(ctx, frontend, *selected, !explicitHost, diagnostics)
+		if err != nil {
+			return err
+		}
+		selected = &prepared
+		host = prepared.Host
+		*root, *remoteCommand = prepared.Root, prepared.Command
+		if explicitHost {
+			executionArgs = setupExecutionArguments(prepared)
+		}
+		return nil
+	}
+	if len(args) == 2 && args[0] == "tools" && args[1] == "manage" {
+		if err := prepareSelectedHost(); err != nil {
+			return err
+		}
+	}
+	if len(args) >= 2 && args[0] == "tools" && args[1] == "install" {
+		if _, err := fullInstallationRequest(args[2:]); err != nil {
+			return err
+		}
+		if err := prepareSelectedHost(); err != nil {
+			return err
+		}
+	}
 	if len(args) > 0 && args[0] == "connections" {
 		if len(args) >= 3 && args[1] == "setup" && args[2] == "codex" {
 			if selected != nil && selected.Remote() {
@@ -184,6 +213,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if len(options.selected) == 0 {
 			return runSetup(ctx, frontend, options, os.Stdin, out, diagnostics)
 		}
+		if err := prepareSelectedHost(); err != nil {
+			return err
+		}
 		if !explicitHost && !localAdministrator() && host.Kind == "local" && (selected == nil || !selected.System) && options.mode == tools.Full {
 			selected, err = selectFullSetupHost(ctx, frontend, os.Stdin, diagnostics)
 			if err != nil {
@@ -221,6 +253,17 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if host.Kind != "local" || selected != nil && selected.Remote() {
 		if selected == nil {
 			selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand}
+		}
+		if len(args) >= 2 && args[0] == "tools" && args[1] == "install" {
+			full, err := fullInstallationRequest(args[2:])
+			if err != nil {
+				return err
+			}
+			if full {
+				if err := prepareRemoteFullHost(ctx, *selected, os.Stdin, diagnostics); err != nil {
+					return err
+				}
+			}
 		}
 		if remoteGitHubWizard(args) {
 			return runSelectedGitHubWizard(ctx, *selected, args, os.Stdin, out, diagnostics)

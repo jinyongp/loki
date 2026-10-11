@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,9 +24,13 @@ func installSetupSSHFixture(t *testing.T, report string) string {
 	log := filepath.Join(directory, "calls")
 	t.Setenv("LOKI_REVIEW_SSH_LOG", log)
 	t.Setenv("LOKI_REVIEW_SSH_REPORT", report)
+	t.Setenv("LOKI_REVIEW_CLI_VERSION", management.ManagerRelease)
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$LOKI_REVIEW_SSH_LOG"
+if [ "$LOKI_REVIEW_SSH_UNREACHABLE" = 1 ]; then exit 1; fi
 case "$*" in
+  *"'uname -s;"*) printf 'Linux\nx86_64\n/home/fixture\n' ;;
+  *"'version'"*) printf 'loki %s\n' "$LOKI_REVIEW_CLI_VERSION" ;;
   *"'tools' 'status'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
   *"'_host-authorization'"*) printf '%s\n' '{"administrator_required":false}' ;;
 esac
@@ -35,6 +40,63 @@ esac
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return log
+}
+
+func TestRememberedRemoteFullInstallationPreparesHostBeforeInstalling(t *testing.T) {
+	for _, command := range [][]string{{"setup", "workspace"}, {"tools", "install", "workspace"}} {
+		t.Run(strings.Join(command, " "), func(t *testing.T) {
+			log := installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"full"},"tools":{}}`)
+			root := t.TempDir()
+			store := management.Store{Root: root}
+			selected := management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Root: "/fixture-state", Command: "loki"}
+			if err := store.SelectExecutionHost(selected); err != nil {
+				t.Fatal(err)
+			}
+			var out, diagnostics bytes.Buffer
+			if err := run(t.Context(), append([]string{"--root", root}, command...), &out, &diagnostics); err != nil {
+				t.Fatalf("full setup stalled: %v\n%s", err, diagnostics.String())
+			}
+			raw, err := os.ReadFile(log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := string(raw)
+			authorization := strings.Index(calls, "'_host-authorization'")
+			prepare := strings.Index(calls, "'hosts' 'prepare' 'local'")
+			operation := "'setup' '--tools' 'workspace'"
+			if command[0] == "tools" {
+				operation = "'tools' 'install'"
+			}
+			install := strings.Index(calls, operation)
+			if authorization < 0 || prepare <= authorization || install <= prepare {
+				t.Fatalf("wrong preparation order: %s", calls)
+			}
+			if strings.Contains(diagnostics.String(), "choose an execution host first") {
+				t.Fatal("asked remote process to select another host")
+			}
+			actual, err := store.ExecutionSelection()
+			if err != nil || actual == nil || actual.Host != selected.Host || actual.Command != selected.Command {
+				t.Fatal("remembered host changed", actual, err)
+			}
+		})
+	}
+}
+
+func TestInvalidRemoteInstallationDoesNotPrepareHost(t *testing.T) {
+	log := installSetupSSHFixture(t, `{}`)
+	root := t.TempDir()
+	selected := management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
+	if err := (management.Store{Root: root}).SelectExecutionHost(selected); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range [][]string{{"setup", "unknown-tool"}, {"tools", "install", "unknown-tool"}} {
+		if err := run(t.Context(), append([]string{"--root", root}, command...), io.Discard, io.Discard); err == nil {
+			t.Fatal("invalid request accepted", command)
+		}
+	}
+	if _, err := os.Stat(log); !os.IsNotExist(err) {
+		t.Fatal(fmt.Sprintf("invalid input contacted remote host: %v", err))
+	}
 }
 
 func TestRemoteBrowserSetupRetainsFullHostAndStartsServices(t *testing.T) {

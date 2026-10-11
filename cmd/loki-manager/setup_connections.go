@@ -21,7 +21,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		return false, err
 	}
 	options := []huh.Option[string]{huh.NewOption("Connect Codex", "codex"), huh.NewOption("Inspect client connections", "status"), huh.NewOption("Disconnect Codex (keep tools and data)", "disconnect")}
-	if runtime.GOOS == "windows" && host.selected != nil && host.selected.Remote() && report.Target.Mode == tools.Full && !host.explicit {
+	if runtime.GOOS == "windows" && supportsManagedTunnel(host.selected) && report.Target.Mode == tools.Full && !host.explicit {
 		options = append(options, huh.NewOption("Manage OpenAI tunnel", "openai"))
 	}
 	options = append(options, huh.NewOption("Back", ""))
@@ -98,4 +98,10 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		return true, connectRemoteCodex(ctx, *host.selected, arguments, terminal, terminal)
 	}
 	return true, connectCodex(host.frontend, arguments, terminal, terminal)
+}
+
+// Persistent WSL tunnel startup is owned only for Loki's dedicated distribution.
+// User-managed WSL remains available through a direct Codex connection.
+func supportsManagedTunnel(selected *management.ExecutionSelection) bool {
+	return selected != nil && (selected.Host.Kind == "ssh" || selected.Host.Kind == "wsl" && selected.Owned)
 }

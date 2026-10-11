@@ -26,8 +26,8 @@ func runRemoteSetup(ctx context.Context, frontend management.Store, selected man
 			options.mode = tools.Full
 		}
 	}
-	if selected.Host.Kind == "ssh" && options.mode == tools.Full {
-		if err := prepareSSHAuthorization(ctx, selected, input, diagnostics); err != nil {
+	if options.mode == tools.Full {
+		if err := prepareRemoteFullHost(ctx, selected, input, diagnostics); err != nil {
 			return err
 		}
 	}
@@ -41,13 +41,6 @@ func runRemoteSetup(ctx context.Context, frontend management.Store, selected man
 		}
 		relay.Stdin, relay.Stdout, relay.Stderr = input, diagnostics, diagnostics
 		return relay.Run()
-	}
-	if selected.Host.Kind == "ssh" && options.mode == tools.Full {
-		// Administrator authorization can already be cached. Prepare the host
-		// explicitly so the remote setup does not need another host-selection UI.
-		if err := call("hosts", "prepare", "local"); err != nil {
-			return err
-		}
 	}
 	names := make([]string, len(options.selected))
 	for i, id := range options.selected {
