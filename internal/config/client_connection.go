@@ -7,6 +7,23 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// ConfiguredClientServers returns names only; configuration values stay private.
+func ConfiguredClientServers(raw []byte, names []string) ([]string, error) {
+	var document struct {
+		Servers map[string]any `toml:"mcp_servers"`
+	}
+	if err := toml.Unmarshal(raw, &document); err != nil {
+		return nil, fmt.Errorf("invalid client configuration")
+	}
+	configured := []string{}
+	for _, name := range names {
+		if document.Servers[name] != nil {
+			configured = append(configured, name)
+		}
+	}
+	return configured, nil
+}
+
 // MergeClientConnection replaces only an explicitly owned MCP client block.
 func MergeClientConnection(old, block []byte, server, beginMarker, endMarker string) ([]byte, error) {
 	var document map[string]any

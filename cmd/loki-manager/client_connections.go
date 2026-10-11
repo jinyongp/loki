@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pelletier/go-toml/v2"
-
 	hostconfig "loki/internal/config"
 	"loki/internal/management"
 )
@@ -57,17 +55,10 @@ func inspectCodexConnection() clientConnection {
 		view.Issue = "Cannot read Codex configuration; inspect its path and permissions"
 		return view
 	}
-	var document struct {
-		Servers map[string]any `toml:"mcp_servers"`
-	}
-	if toml.Unmarshal(raw, &document) != nil {
+	view.Servers, err = hostconfig.ConfiguredClientServers(raw, []string{"loki", "loki_browser"})
+	if err != nil {
 		view.Issue = "Codex configuration is invalid; repair it before connecting"
 		return view
-	}
-	for _, name := range []string{"loki", "loki_browser"} {
-		if document.Servers[name] != nil {
-			view.Servers = append(view.Servers, name)
-		}
 	}
 	view.Configured = len(view.Servers) > 0
 	return view
