@@ -325,7 +325,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if report.Target.Mode == tools.ProjectHost {
+		if report.Target.Mode == tools.ProjectHost && *workspace != "" {
 			info, err := os.Stat(*workspace)
 			if !filepath.IsAbs(*workspace) || err != nil || !info.IsDir() {
 				return fmt.Errorf("browser connection needs an existing absolute workspace on the execution host")
@@ -412,7 +412,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		if state.Config.Mode != tools.Full {
-			return fmt.Errorf("persistent services use full mode; project-host browser uses loki tools serve browser")
+			return fmt.Errorf("persistent services use full mode; project-host browser uses loki tools serve")
 		}
 		if args[1] != "stop" {
 			if err := management.PrepareEnvironment(ctx, os.Stdin, diagnostics); err != nil {
@@ -683,15 +683,18 @@ func serve(ctx context.Context, store management.Store, args []string, diagnosti
 	if err := f.Parse(toolArguments(args)); err != nil {
 		return err
 	}
-	if f.NArg() == 0 && *workspace == "" {
-		return serveFull(ctx, store, diagnostics)
-	}
-	if f.NArg() != 1 || f.Arg(0) != "browser" || *workspace == "" {
-		return fmt.Errorf("provide browser and --workspace PATH in project-host mode, or omit both in full mode; see 'loki tools serve --help'")
+	if f.NArg() > 1 || f.NArg() == 1 && f.Arg(0) != "browser" {
+		return fmt.Errorf("use 'loki tools serve' for enabled tools; see 'loki tools serve --help'")
 	}
 	state, err := store.Load()
 	if err != nil {
 		return err
+	}
+	if f.NArg() == 0 && state.Config.Mode == tools.Full {
+		if *workspace != "" {
+			return fmt.Errorf("--workspace applies to the project-host browser; full tools use managed workspaces")
+		}
+		return serveFull(ctx, store, diagnostics)
 	}
 	if state.Config.Host.Kind != "local" || state.Config.Mode != tools.ProjectHost {
 		return fmt.Errorf("this launcher requires project-host configuration on the local execution host")
@@ -710,6 +713,16 @@ func serve(ctx context.Context, store management.Store, args []string, diagnosti
 	}
 	if !enabled {
 		return fmt.Errorf("browser is disabled; run loki tools enable browser")
+	}
+	if *workspace == "" {
+		// An unscoped client connection must not inherit the launcher's working
+		// directory as a project-file grant.
+		directory, err := os.MkdirTemp("", "loki-browser-workspace-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(directory)
+		*workspace = directory
 	}
 	generation, err := store.Generation(installation.Artifact)
 	if err != nil {

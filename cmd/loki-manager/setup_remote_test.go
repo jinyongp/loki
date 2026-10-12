@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -32,6 +33,7 @@ case "$*" in
   *"'uname -s;"*) printf 'Linux\nx86_64\n/home/fixture\n' ;;
   *"'version'"*) printf 'loki %s\n' "$LOKI_REVIEW_CLI_VERSION" ;;
   *"'tools' 'status'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
+  *"'_connection-state'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
   *"'_host-authorization'"*) printf '%s\n' '{"administrator_required":false}' ;;
 esac
 `
@@ -40,6 +42,69 @@ esac
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return log
+}
+
+func TestLocalCodexConnectionStaysLocalAfterDefaultHostChanges(t *testing.T) {
+	log := installSetupSSHFixture(t, `{}`)
+	store := management.Store{Root: t.TempDir()}
+	state, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Config.Mode = tools.ProjectHost
+	state.Config.Tools = []tools.Selection{{ID: "browser", Enabled: true}}
+	artifact := tools.Artifact{Module: "browser", Release: management.Release, Target: management.LocalTarget(tools.ProjectHost), URL: "https://example.com/browser.zip", SHA256: strings.Repeat("a", 64), Bytes: 1, Format: "zip"}
+	state.Installed["browser"] = management.Installation{Artifact: artifact, Manifest: tools.Manifest{Schema: 1, ID: "browser", Release: management.Release, Targets: []tools.Target{artifact.Target}}}
+	if err := store.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(t.TempDir(), "config.toml")
+	if err := connectCodex(store, []string{"codex", "--config", config}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var args []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "args = ") {
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "args = ")), &args); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(args) == 0 {
+		t.Fatal("connection has no launch arguments")
+	}
+	selected := management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki", Root: "/home/fixture/.config/loki"}
+	if err := store.SelectExecutionHost(selected); err != nil {
+		t.Fatal(err)
+	}
+	// The deliberately missing local generation proves routing reached this
+	// host's browser launcher. The SSH fixture must receive no request.
+	if err := run(t.Context(), args, io.Discard, io.Discard); !os.IsNotExist(err) {
+		t.Fatal("existing connection did not use its original local browser", err)
+	}
+	if calls, err := os.ReadFile(log); !os.IsNotExist(err) {
+		t.Fatalf("local connection contacted the new default host: %s (%v)", calls, err)
+	}
+	if remembered, err := store.ExecutionSelection(); err != nil || remembered == nil || *remembered != selected {
+		t.Fatal("pinned local launch changed the default host", remembered, err)
+	}
+}
+
+func TestRemoteCodexConnectionDoesNotRequireProjectDirectory(t *testing.T) {
+	installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"tools":{"browser":{"installed":true,"enabled":true}}}`)
+	config := filepath.Join(t.TempDir(), "config.toml")
+	selected := management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "/home/fixture/loki", Root: "/home/fixture/.config/loki"}
+	if err := connectRemoteCodex(t.Context(), selected, []string{"codex", "--config", config}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(config)
+	if err != nil || !strings.Contains(string(raw), "[mcp_servers.loki]") || !strings.Contains(string(raw), `"tools", "serve"`) || strings.Contains(string(raw), `"--workspace"`) || !strings.Contains(string(raw), `"/home/fixture/loki"`) {
+		t.Fatalf("incorrect remote connection: %s, %v", raw, err)
+	}
 }
 
 func TestRememberedRemoteFullInstallationPreparesHostBeforeInstalling(t *testing.T) {

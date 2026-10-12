@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -64,40 +62,32 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 	if installed == 0 || enabled == 0 {
 		return false, fmt.Errorf("install and enable a tool with Manage tools before connecting a client")
 	}
-	workspace := ""
-	if report.Target.Mode == tools.ProjectHost {
-		if host.selected == nil || !host.selected.Remote() {
-			workspace, _ = os.Getwd()
-		}
-		form = huh.NewForm(huh.NewGroup(huh.NewInput().Title("Project directory on " + setupHostLabel(host.selected)).Description("Use an absolute existing directory. The browser uses this project's files.").Value(&workspace).Validate(func(value string) error {
-			absolute := filepath.IsAbs(value)
-			if host.selected != nil && host.selected.Remote() {
-				absolute = path.IsAbs(value)
-			}
-			if !absolute || strings.TrimSpace(value) == "" {
-				return fmt.Errorf("enter an absolute directory on the execution host")
-			}
-			return nil
-		})))
-		aborted, err = runSetupForm(ctx, form, input, terminal)
-		if err != nil || aborted {
-			return false, err
-		}
-	}
 	confirmed := false
-	form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Connect Codex to " + setupHostLabel(host.selected) + "?").Description("Update Loki's MCP entries in " + config + ". Other client settings are retained. Reopen the Codex project afterward.").Affirmative("Connect").Negative("Back").Value(&confirmed)))
+	form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Connect Codex to " + setupHostLabel(host.selected) + "?").Description(setupConnectionDescription(report, config)).Affirmative("Connect").Negative("Back").Value(&confirmed)))
 	aborted, err = runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted || !confirmed {
 		return false, err
 	}
 	arguments := []string{"codex", "--config", config}
-	if workspace != "" {
-		arguments = append(arguments, "--workspace", workspace)
-	}
 	if host.selected != nil && host.selected.Remote() {
 		return true, connectRemoteCodex(ctx, *host.selected, arguments, terminal, terminal)
 	}
 	return true, connectCodex(host.frontend, arguments, terminal, terminal)
+}
+
+func setupConnectionDescription(report management.Report, config string) string {
+	var active []string
+	for _, name := range publicToolNames {
+		observed := report.Tools[tools.ID(name)]
+		if observed.Installed && observed.Enabled {
+			active = append(active, name)
+		}
+	}
+	description := "Loki tools: " + strings.Join(active, ", ") + "\nRegister one Loki MCP connection in " + config + ". This connection keeps this host even if Loki's default changes. Reopen the Codex project afterward."
+	if report.Target.Mode == tools.ProjectHost {
+		description += "\nBrowser files use a private temporary directory. To grant project file access, connect with --workspace PATH."
+	}
+	return description
 }
 
 // Persistent WSL tunnel startup is owned only for Loki's dedicated distribution.

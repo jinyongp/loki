@@ -22,7 +22,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed"} {
+	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -76,6 +76,9 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
+	if kind == "connections" {
+		t.Setenv("CODEX_HOME", t.TempDir())
+	}
 	if kind == "unreachable" || kind == "preparation-failed" {
 		installSetupSSHFixture(t, `{}`)
 		t.Setenv("CODEX_HOME", t.TempDir())
@@ -87,7 +90,14 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	finished := make(chan error, 1)
 	go func() {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
-		if kind == "tools" {
+		if kind == "connections" {
+			report := management.Report{Target: management.LocalTarget(tools.ProjectHost), Tools: map[tools.ID]tools.State{"browser": {Installed: true, Enabled: true}}}
+			changed, err := setupConnections(ctx, host, report, terminal, terminal)
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
+			}
+			finished <- err
+		} else if kind == "tools" {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
@@ -98,7 +108,12 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runSetupMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		}
 	}()
-	if kind == "fresh" {
+	if kind == "connections" {
+		waitFor("Connect Codex")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Loki tools: browser")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "fresh" {
 		waitFor("Choose execution host")
 		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "unreachable" || kind == "preparation-failed" {

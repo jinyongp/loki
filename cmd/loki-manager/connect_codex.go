@@ -37,7 +37,7 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 		return err
 	}
 	if f.NArg() != 1 || f.Arg(0) != "codex" {
-		return fmt.Errorf("usage: loki tools connect --workspace ABSOLUTE-PROJECT [--config ABSOLUTE-FILE] [--remote] codex")
+		return fmt.Errorf("usage: loki tools connect [--workspace ABSOLUTE-PROJECT] [--config ABSOLUTE-FILE] [--remote] codex")
 	}
 	var state management.Snapshot
 	var err error
@@ -73,7 +73,10 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	if err != nil {
 		return err
 	}
-	if selected == nil && state.Config.Mode == tools.ProjectHost {
+	if state.Config.Mode == tools.Full && *workspace != "" {
+		return fmt.Errorf("--workspace applies to the project-host browser; full tools use managed workspaces")
+	}
+	if selected == nil && state.Config.Mode == tools.ProjectHost && *workspace != "" {
 		info, err := os.Stat(*workspace)
 		if !filepath.IsAbs(*workspace) || err != nil || !info.IsDir() {
 			return fmt.Errorf("Codex browser workspace must be an existing absolute directory")
@@ -81,7 +84,7 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	}
 	installed := false
 	for _, selection := range state.Config.Tools {
-		if selection.Enabled && (state.Config.Mode == tools.Full || selection.ID == "browser") {
+		if selection.Enabled {
 			if _, ok := state.Installed[selection.ID]; ok {
 				installed = true
 			}
@@ -128,8 +131,8 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 		return err
 	}
 	var block strings.Builder
-	server, begin, end := "loki_browser", codexBegin, codexEnd
-	launch := []string{"--root", store.Root, "tools", "serve"}
+	server, begin, end := "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
+	launch := []string{"--host", "local", "--root", store.Root, "tools", "serve"}
 	if selected != nil {
 		launch = []string{"--host", selected.Host.Kind, "--remote-command", selected.Command}
 		if selected.System {
@@ -149,10 +152,11 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 		}
 		launch = append(launch, "tools", "serve")
 	}
-	if state.Config.Mode == tools.Full {
-		server, begin, end = "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
-	} else {
-		launch = append(launch, "browser", "--workspace", filepath.Clean(*workspace), "--engine", "both")
+	if state.Config.Mode == tools.ProjectHost {
+		launch = append(launch, "--engine", "both")
+		if *workspace != "" {
+			launch = append(launch, "--workspace", *workspace)
+		}
 	}
 	block.WriteString(begin + "[mcp_servers." + server + "]\ncommand = " + strconv.Quote(binary) + "\nargs = [")
 	for index, argument := range launch {
@@ -168,9 +172,6 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	block.WriteString(end)
 	base := old
 	otherServer, otherBegin, otherEnd := "loki_browser", codexBegin, codexEnd
-	if server == "loki_browser" {
-		otherServer, otherBegin, otherEnd = "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
-	}
 	if bytes.Contains(base, []byte(otherBegin)) || bytes.Contains(base, []byte(otherEnd)) {
 		base, err = hostconfig.MergeClientConnection(base, nil, otherServer, otherBegin, otherEnd)
 		if err != nil {

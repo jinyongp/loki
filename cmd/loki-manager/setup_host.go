@@ -87,6 +87,7 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 	if full {
 		description = "This tool needs Linux services. Choose where to install them. Existing tools and data stay on their current host."
 	}
+	description += "\nThis becomes the default for Loki commands. Existing Codex connections keep their host; use Connect Codex to switch them."
 	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose execution host").Description(description).Options(choices...).Value(&choice)))
 	aborted, err := runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted || choice == "" {

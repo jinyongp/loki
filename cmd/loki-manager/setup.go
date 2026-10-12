@@ -104,8 +104,8 @@ func parseSetup(ctx context.Context, args []string, input io.Reader, diagnostics
 	if options.client != "" && options.client != "codex" {
 		return options, fmt.Errorf("supported client: codex")
 	}
-	if options.client != "" && options.mode == tools.ProjectHost && !filepath.IsAbs(options.workspace) && !path.IsAbs(options.workspace) {
-		return options, fmt.Errorf("--connect requires --workspace with an absolute project path")
+	if options.workspace != "" && !filepath.IsAbs(options.workspace) && !path.IsAbs(options.workspace) {
+		return options, fmt.Errorf("--workspace requires an absolute project path")
 	}
 	if options.catalog != "" && options.version != "" {
 		return options, fmt.Errorf("use --catalog or --version, not both")
@@ -170,7 +170,7 @@ func runSetup(ctx context.Context, store management.Store, options setupOptions,
 		fmt.Fprintln(diagnostics, "GitHub selected. Configure or reuse your App with 'loki integrations setup github'.")
 	}
 	if options.mode == tools.ProjectHost && options.client == "" {
-		fmt.Fprintln(diagnostics, "Connect your project with 'loki tools connect --workspace PATH codex'.")
+		fmt.Fprintln(diagnostics, "Connect enabled tools with 'loki connections setup codex'.")
 	}
 	return success(out, "Loki setup completed.", map[string]any{"tools": options.selected, "mode": options.mode, "release": catalog.Release, "started": options.mode == tools.Full && !options.noStart})
 }

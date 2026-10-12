@@ -106,7 +106,7 @@ the later configuration steps.
 
 For manual/offline installation, download the native management ZIP and matching
 mode catalog. `SHA256SUMS` covers the published files. Reconnect an installed
-selection using `loki tools connect --workspace ABSOLUTE-PROJECT codex`; use
+selection using `loki tools connect codex`; use
 `--remote` on a Codex SSH execution host. The default config honors `CODEX_HOME`
 and otherwise uses `~/.codex/config.toml`. User-owned conflicting server entries
 are left intact and produce an actionable error.
@@ -154,15 +154,34 @@ Install the native management-only bundle using its included `install.sh` or
 `install.ps1`. Then select project-host mode on the execution host:
 
 ```sh
-loki setup browser --connect codex --workspace /absolute/path/to/project
+loki setup browser --connect codex
 loki doctor
-loki tools serve browser --workspace /absolute/path/to/project --engine both
+loki tools serve --engine both
 ```
 
 Use `playwright`, `devtools`, or `both` for the engine. The two engines have
 separate profiles and tabs. `tools serve` reserves stdout for MCP protocol;
 startup progress and public errors go to stderr. The catalog's archive URLs,
 sizes and checksums are independently trusted release inputs.
+
+Client setup registers one `loki` MCP entry for the execution host's installed,
+enabled tools. The confirmation lists those groups; it does not request a project
+directory. Project-host currently supports browser; full mode supports all groups.
+The launcher selects the backend from the host's current configuration.
+
+The saved execution host is the default for Loki management commands. Change it
+through setup's **Change execution host**, or override one command with `--host`.
+Every Codex connection pins its execution host, including local connections.
+Changing the default keeps existing client connections on their original host;
+choose **Connect Codex** again to replace the connection with the new host.
+Tools and user data stay on each host. Existing local entries created by an older
+CLI acquire explicit host pinning when **Connect Codex** is run again.
+
+Without `--workspace`, project-host browser files use a private empty temporary
+directory, removed when the connection ends. Screenshots and downloads use the
+browser's owned results directories. To grant access to a project's files, use
+`loki connections setup codex --workspace /absolute/path/to/project`. The path
+must exist on the execution host. Reconnect the client after changing it.
 
 On a Windows management host, target an existing WSL distribution or SSH host:
 
@@ -193,8 +212,8 @@ Installation resolves private prerequisites from the exact release catalog.
 For example, Git's private executor does not expose the execution job tools.
 Add and enable `execution`, `github`, `secrets`, `sharing` or `coordination` as
 needed. Installed disabled groups start no selected services. Browser-only full
-mode uses a private browser workspace; project-host mode uses the explicit local
-project path.
+mode uses a private browser workspace; project-host mode uses a temporary empty
+directory or an explicitly granted local project path.
 
 Enable/disable applies the selected full service layouts automatically. Use
 `--no-start` to save activation separately, then `loki tools start` to apply it.

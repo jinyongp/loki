@@ -77,3 +77,27 @@ Terminal navigation also checks that failed host preparation leaves client
 inspection and host recovery accessible. Invalid installation requests are
 rejected before contacting an execution host.
 These checks do not establish native Windows WSL provisioning or live tunnels.
+
+## Client connection follow-up — 12 October 2026
+
+Codex connection setup now previews installed, enabled groups and writes one
+`loki` MCP entry. The execution host chooses its backend when that connection
+starts. Owned older browser entries are replaced; unrelated client entries are
+preserved. Project-host browser connections use a private temporary empty
+directory by default. Optional `--workspace` explicitly grants a project path
+on the execution host, with existence checked there.
+
+Regression coverage includes actual POSIX terminal confirmation without a path
+prompt, local/SSH client entry generation, idempotent browser-entry replacement,
+non-browser full connections, optional path validation and temporary-directory
+cleanup after failed browser startup. Source and race preflight checks passed;
+Windows amd64/arm64 and macOS arm64 test binaries cross-compiled. Actual Windows
+WSL startup and desktop MCP execution remain separate acceptance checks.
+
+Host-switch review also confirmed that older local client entries inherited the
+saved default host. Local entries now include `--host local`, matching explicit
+WSL/SSH bindings. A regression executes the generated local launch arguments
+after changing the saved default to SSH: the local generation check is reached,
+the SSH fixture receives no request, and the default selection remains unchanged.
+Host selection and connection confirmation explain this distinction. Reconnecting
+an existing older local entry publishes the explicit local binding.

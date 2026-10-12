@@ -54,6 +54,9 @@ func TestEmptySetupDoesNotCreateState(t *testing.T) {
 }
 
 func TestSetupAcceptsLinuxWorkspaceForRemoteClientOnEveryFrontend(t *testing.T) {
+	if _, err := parseSetup(t.Context(), []string{"browser", "--connect", "codex"}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatal("connection without project grant rejected", err)
+	}
 	options, err := parseSetup(t.Context(), []string{"browser", "--mode", "project-host", "--connect", "codex", "--workspace", "/home/example/project"}, strings.NewReader(""), io.Discard)
 	if err != nil || options.workspace != "/home/example/project" {
 		t.Fatalf("remote Linux workspace rejected by frontend: %+v, %v", options, err)
