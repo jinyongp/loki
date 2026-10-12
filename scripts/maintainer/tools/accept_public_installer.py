@@ -9,6 +9,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import tomllib
 
 from accept_browser_candidate import protocol
 from accept_iex_installer import accept as accept_iex
@@ -64,12 +65,19 @@ def accept(candidate, browser=False):
                 invoke('tools', 'enable', 'browser')
                 invoke('tools', 'connect', '--workspace', str(workspace), '--config', str(config), 'codex')
                 configured = config.read_text()
-                if not configured.startswith(original) or '[mcp_servers.loki_browser]' not in configured:
+                servers = tomllib.loads(configured)['mcp_servers']
+                if not configured.startswith(original) or 'loki' not in servers or 'loki_browser' in servers:
                     raise ValueError('public installer did not preserve/connect Codex configuration')
                 invoke('tools','connect','--workspace',str(workspace),'--config',str(config),'codex')
                 if config.read_text() != configured:
                     raise ValueError('repeated Codex setup changed the user configuration')
-                asyncio.run(protocol(binary,root,workspace,invoke))
+                # Connect without a project grant and execute the exact entry
+                # that Codex will launch, rather than a separate canned command.
+                invoke('tools','connect','--config',str(config),'codex')
+                connection = tomllib.loads(config.read_text())['mcp_servers']['loki']
+                if Path(connection['command']).resolve() != binary.resolve() or connection['args'][:2] != ['--host','local'] or '--workspace' in connection['args']:
+                    raise ValueError('default Codex connection did not pin its host without granting project files')
+                asyncio.run(protocol(binary,root,workspace,invoke,launch=[connection['command'],*connection['args']]))
                 invoke('tools','remove','browser')
             elif config.read_text() != original:
                 raise ValueError('management-only install modified Codex configuration')

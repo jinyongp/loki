@@ -21,8 +21,8 @@ from build_browser_bundle import digest
 from mcp_probe import Client, result
 
 
-async def protocol(binary, root, workspace, invoke):
-    client = Client([str(binary), "--root", str(root), "tools", "serve", "browser", "--workspace", str(workspace), "--engine", "both"], workspace)
+async def protocol(binary, root, workspace, invoke, launch=None):
+    client = Client(launch if launch is not None else [str(binary), "--root", str(root), "tools", "serve", "browser", "--workspace", str(workspace), "--engine", "both"], workspace)
     await client.start()
     try:
         await client.initialize()

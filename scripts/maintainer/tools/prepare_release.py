@@ -130,10 +130,11 @@ notices and licenses.
 
 Management: Linux, macOS and Windows amd64/arm64. Independent browser:
 Linux/macOS amd64/arm64 and Windows amd64. Full mode: Linux amd64/arm64.
-Example: `loki tools configure --mode project-host`,
-`loki tools install browser --catalog /absolute/path/to/loki-catalog-linux-amd64-project-host.json`,
-`loki tools enable browser`, then
-`loki tools serve browser --workspace /absolute/path/to/project --engine both`.
+Run `loki setup` to choose an execution host, install and enable tools, and
+connect Codex. The client connection lists active groups and registers one
+`loki` MCP entry pinned to that host. Project-host browser connections work
+without a project path; use `--workspace` when explicit project file access is
+needed.
 
 Independent Playwright/Chrome DevTools navigation, owned image transfer and
 explicit optional capabilities have native acceptance evidence. Full workspace
