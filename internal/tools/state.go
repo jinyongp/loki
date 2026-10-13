@@ -13,11 +13,12 @@ const (
 // State describes observed resources and desired public exposure independently.
 // Dependencies may be ready as private services while their public group is off.
 type State struct {
-	Installed bool      `json:"installed"`
-	Release   string    `json:"release,omitempty"`
-	Enabled   bool      `json:"enabled"`
-	Readiness Readiness `json:"readiness"`
-	Reason    string    `json:"reason,omitempty"`
+	Installed    bool      `json:"installed"`
+	Release      string    `json:"release,omitempty"`
+	Enabled      bool      `json:"enabled"`
+	Capabilities []string  `json:"capabilities,omitempty"`
+	Readiness    Readiness `json:"readiness"`
+	Reason       string    `json:"reason,omitempty"`
 }
 
 func (s State) Validate() error {

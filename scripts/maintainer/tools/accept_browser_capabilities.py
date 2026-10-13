@@ -9,6 +9,7 @@ import re
 
 from accept_browser_candidate import accept, protocol
 from mcp_probe import Client, result
+from accept_browser_interactions import interactions
 
 CAPABILITIES = ['unsafe-code', 'vision', 'pdf', 'devtools', 'network', 'storage',
                 'testing', 'tracing', 'config', 'extensions', 'pwa', 'webmcp',
@@ -87,6 +88,8 @@ async def optional_protocol(binary, root, workspace, invoke):
         await call('list_webmcp_tools', {'pageId':page_id})
         await call('list_3p_developer_tools', {'pageId':page_id})
 
+        await interactions(client, root, workspace)
+
         # A changed selection must revoke the cached privileged tool immediately.
         invoke('tools', 'enable', 'browser', '--capabilities', '')
         denied = await client.request('tools/call', {'name':'browser_run_code_unsafe', 'arguments':{'code':'async page => await page.title()'}})
@@ -96,8 +99,8 @@ async def optional_protocol(binary, root, workspace, invoke):
         print(json.dumps({'optional_browser_acceptance':'pass', 'capability_discovery':CAPABILITIES,
                           'executed':['vision pointer', 'pdf bytes', 'storage', 'testing', 'network interception',
                                       'tracing', 'video bytes', 'config', 'unsafe-code and revocation',
-                                      'extensions listing', 'webmcp listing', 'third-party listing'],
-                          'remaining':['interactive annotation UI', 'extension installation', 'PWA installation',
+                                      'extensions install/action/reload/uninstall', 'headless annotation UI and PNG', 'annotation cancellation and invalid-request rejection', 'webmcp listing', 'third-party listing'],
+                          'remaining':['PWA installation',
                                        'WebMCP invocation', 'third-party invocation', 'memory snapshot analysis']}))
     finally:
         await client.close()

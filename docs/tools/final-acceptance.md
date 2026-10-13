@@ -30,6 +30,60 @@ and remaining experimental browser workflows are still separate checks.
 Update with `loki upgrade`, then `loki tools update`. Run `loki setup` afterward
 to prepare missing browser libraries and inspect runtime readiness.
 
+## Installed 0.2.11 extended browser checks
+
+The actual Windows Codex-configured MCP connection to WSL Ubuntu passed video
+recording start/stop and WebM resource readback. The observed user selection was
+`devtools` only. Further checks reused the installed browser bundle with all
+fourteen capabilities in a disposable WSL activation, profile and output root;
+the user's activation was retained.
+
+PWA installation, OS state, browser-mode launch, removal and subsequent state
+rejection passed. WebMCP registration through `document.modelContext`, discovery
+and parameterized execution returned the expected synthetic value. Third-party
+provider discovery and execution also returned the expected value. Memory
+snapshot capture, known retained fixture objects, summary/aggregate analysis and
+closing the loaded snapshot passed.
+
+Extension installation, enabled listing, reload, content-script DOM changes,
+removal and subsequent absence passed. The action command returned success, but
+its expected DOM change did not appear, including with `devtools` excluded. The
+underlying cause is unresolved, so extension action behavior is not accepted.
+Annotation failed: its dashboard searches for a system Chromium channel rather
+than the bundled Chrome executable and reports no browser found. An isolated
+server-only dashboard start succeeded, but no annotated image was returned.
+
+These checks cover Linux amd64 in WSL, not every native platform, individual
+tool or option combination. They resolve several previously unexecuted feature
+checks without establishing that all browser functions work. Owned processes
+exited and the disposable root was removed. See
+[browser-extended-0.2.11.json](evidence/browser-extended-0.2.11.json).
+
+## Unreleased extension and annotation corrections
+
+Working-tree corrections resolve both failures above. Extension startup resumes
+the new worker's initial debugger wait, reload waits for its replacement rather
+than the old target, and actions activate the selected MCP page before invoking
+Chrome. Actual DOM effects passed immediately after installation and after reload.
+
+Annotations now use a one-time loopback screen with the existing headless browser
+session. Drawing a labelled rectangle, submitting feedback, retrieving the result
+and reading its owned PNG passed without a system browser or graphical display
+on WSL. Cancellation, malformed PNG rejection and cross-origin rejection also
+passed. The screen expires after five minutes; SSH/container deployments need
+forwarding to its runtime loopback port.
+
+The final WSL run also passed PWA installation/launch/removal, WebMCP and
+third-party execution, memory analysis and the existing optional-capability
+acceptance suite. The actual installed Windows frontend relaying to the candidate
+WSL CLI passed extension actions, annotations and PNG return. Full Go tests, vet,
+architecture checks and Windows compilation passed. Native macOS/Windows browser
+execution and every option/site combination are outside these WSL checks.
+User activation was retained and disposable processes/profiles were removed.
+These changes are not published; see
+[browser-adapter-fixes.json](evidence/browser-adapter-fixes.json) for source and
+candidate fingerprints.
+
 ## Local candidate validation — 2026-10-13
 
 These checks ran against working-tree fixes based on 0.2.10 before 0.2.11

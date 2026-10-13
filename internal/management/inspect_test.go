@@ -16,6 +16,37 @@ func ownedFixture(t *testing.T, s Store, id tools.ID, requires ...tools.ID) Inst
 	return ownedFixtureTarget(t, s, LocalTarget(tools.ProjectHost), id, requires...)
 }
 
+func TestStatusReportsSelectedFeaturesWithoutRuntimeProbe(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation := ownedFixture(t, s, "browser")
+	installation.Manifest.Capabilities = []string{"devtools", "pdf"}
+	state.Installed["browser"] = installation
+	state.Config.Tools = []tools.Selection{{ID: "browser", Enabled: false, Capabilities: []string{"devtools", "pdf"}}}
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	report, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed := report.Tools["browser"]
+	if observed.Enabled || observed.Readiness != tools.Unknown || strings.Join(observed.Capabilities, ",") != "devtools,pdf" {
+		t.Fatal("status lost feature selection or claimed readiness", observed)
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Report
+	if err := json.Unmarshal(raw, &decoded); err != nil || strings.Join(decoded.Tools["browser"].Capabilities, ",") != "devtools,pdf" {
+		t.Fatal("JSON report lost feature selection", err)
+	}
+}
+
 func ownedFixtureTarget(t *testing.T, s Store, target tools.Target, id tools.ID, requires ...tools.ID) Installation {
 	t.Helper()
 	a := tools.Artifact{Module: id, Release: Release, Target: target, URL: "https://example.com/tool.zip", SHA256: strings.Repeat("a", 64), Bytes: 1, Format: "zip"}

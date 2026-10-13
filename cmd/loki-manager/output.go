@@ -224,6 +224,16 @@ func printStatusForHost(out io.Writer, report management.Report, cliVersion stri
 			}
 		}
 	}
+	if state := report.Tools["browser"]; state.Installed {
+		fmt.Fprintln(writer, "\nBrowser features:")
+		for _, line := range strings.Split(browserFeatureSummary(state), "\n") {
+			fmt.Fprintln(writer, "  "+line)
+		}
+		fmt.Fprintln(writer, "  Configure: loki setup > Manage tools > browser > Optional features")
+		if !state.Enabled {
+			fmt.Fprintln(writer, "  Browser is disabled; selected features are not available to clients.")
+		}
+	}
 	if len(report.Issues) > 0 {
 		first := true
 		for _, issue := range report.Issues {

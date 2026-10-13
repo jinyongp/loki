@@ -172,6 +172,9 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			continue
 		}
 		actions := setupActions(state)
+		if state.Installed && selected == "browser" {
+			actions = append([]setupAction{{"Optional features — video recording, PDF and more", "features"}}, actions...)
+		}
 		if state.Installed && report.Target.Mode == tools.Full && (selected == "github" || selected == "git") {
 			actions = append(actions, setupAction{"Configure authentication", "configure"})
 		}
@@ -181,12 +184,29 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		}
 		actionChoices = append(actionChoices, huh.NewOption("Back", ""))
 		action := actions[0].name
-		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(selected).Description("Host: " + hostLabel + "\n" + setupStateLabel(state)).Options(actionChoices...).Value(&action)))
+		description := "Host: " + hostLabel + "\n" + setupStateLabel(state)
+		if selected == "browser" && state.Installed {
+			description += "\n" + browserFeatureMenuSummary(state)
+		}
+		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(selected).Description(description).Options(actionChoices...).Value(&action)))
 		aborted, err = runSetupForm(ctx, form, input, terminal)
 		if err != nil {
 			return err
 		}
 		if aborted || action == "" {
+			continue
+		}
+		if action == "features" {
+			updated, featureErr := setupBrowserFeatures(ctx, state, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
+			changed = changed || updated
+			if featureErr != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if err := showSetupResult(ctx, "Browser features — needs attention", shortDiagnostic(featureErr.Error()), featureErr.Error(), input, terminal); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		if action == "uninstall" {

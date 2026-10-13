@@ -54,8 +54,38 @@ visible until Continue or Esc. Enter chooses an action or confirms the current
 selection. Connection setup confirms saved settings separately from tool runtime
 readiness. Readiness results show concise causes and keep full diagnostics under
 **Details**, with next/previous pages for long logs. Narrow screens shorten the
-summary while keeping the complete output in Details. Closing setup restores the
-original terminal screen.
+summary while keeping the complete output in Details. Leaving a result screen
+restores the original terminal and prints its full summary there, including on
+Esc, so completed actions and readiness failures remain readable after setup
+closes. Readiness checks tools on the selected host; it does not test the client
+app connection. `loki status` shows configuration without starting tools or
+testing connections; `loki doctor` runs a fresh tool readiness check.
+
+For browser features, choose **Manage tools > browser > Optional features** in
+`loki setup`. Navigation and screenshots are included. The multiselect shows
+existing selections and describes each feature: **Video recording and diagnostics
+[devtools]** provides WebM recording, and **PDF export [pdf]** saves PDFs. Space
+toggles, Enter saves, and Esc cancels. Saving preserves browser activation, so
+configuring a disabled browser does not enable it. `loki status` shows selected
+features; reconnect the client's Loki MCP server after changing the selection.
+The upstream name `devtools` here is unrelated to the separate devtools CLI.
+Advanced scripts can use `loki tools enable browser --capabilities devtools,pdf`.
+The option replaces the whole selection; an empty value clears it, and omitting
+the option preserves it. See `loki tools enable --help` for all names and meanings.
+
+With `devtools` selected, `browser_annotate` captures the current page and returns
+a one-time annotation URL on the browser's execution host. Open it, draw labelled
+boxes or enter feedback, then submit. Call `browser_annotate` again to retrieve
+the annotated PNG and page snapshot; `loki_browser_files` can read the PNG inline.
+The screen also supports cancellation and expires after five minutes. It uses
+the existing browser session, so a system Chrome installation or graphical WSL
+display is unnecessary. The URL binds only to runtime loopback: remote SSH or
+isolated container deployments need forwarding to that runtime's displayed port.
+The screen serves the captured image, not a live interactive view of the page.
+
+Extension installation/reload waits for the new service worker to start before
+returning. An extension action activates the selected MCP page first, ensuring
+the callback receives the intended page even when DevTools has focus.
 
 Readable `loki doctor` output summarizes multiline failures and avoids repeating
 the same tool failure under Issues. `loki doctor --json` retains original reasons

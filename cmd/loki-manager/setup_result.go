@@ -75,10 +75,21 @@ func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os
 		}
 	}
 	details.WriteString(diagnostics.String())
+	summary += "\nThis checks tools on the execution host; it does not test the Codex app connection."
 	return showSetupResult(ctx, title, summary, details.String(), input, terminal)
 }
 
 func showSetupResult(ctx context.Context, title, summary, details string, input, terminal *os.File) error {
+	// Result screens use the alternate buffer. Preserve the untruncated summary
+	// after that buffer is restored, including when the user exits with Escape.
+	persistentSummary := ansi.Strip(summary)
+	defer func() {
+		fmt.Fprintf(terminal, "\n[RESULT] %s\n", ansi.Strip(title))
+		for _, line := range strings.Split(persistentSummary, "\n") {
+			fmt.Fprintf(terminal, "  %s\n", line)
+		}
+		fmt.Fprintln(terminal)
+	}()
 	width, height, err := term.GetSize(int(terminal.Fd()))
 	if err != nil {
 		width, height = 80, 24

@@ -103,7 +103,7 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return err
 		}
 		if aborted || choice == "" {
-			return success(out, "Setup closed. Saved changes are retained. Run 'loki status' to inspect them.", map[string]any{"changed": changed})
+			return success(out, "Setup closed. Saved changes are retained. Action results are shown above.\n'loki status' shows configuration; 'loki doctor' runs a fresh readiness check.", map[string]any{"changed": changed})
 		}
 		switch choice {
 		case "host":

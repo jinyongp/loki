@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "release": "0.2.11",
+  "release_source": "5fe3159f0b8646539b70aad699d959b94de72813",
+  "browser_archive_sha256": "56a663e7ffab9cfd0638a429348884606769b10742148cb4c16531a1b95fde40",
+  "environment": "Linux amd64, WSL Ubuntu",
+  "scope": "Actual Windows Codex-configured MCP route for video; same installed browser runtime in an isolated native WSL activation/profile for all fourteen optional capabilities. No runtime source fixes were applied.",
+  "user_capabilities_observed": [
+    "devtools"
+  ],
+  "checks": {
+    "video": {
+      "status": "pass",
+      "verified": [
+        "Windows frontend to WSL MCP recording start/stop",
+        "WebM bytes returned via resources/read"
+      ],
+      "bytes": 94304
+    },
+    "pwa": {
+      "status": "pass",
+      "evidence": [
+        "install",
+        "OS state",
+        "launch",
+        "uninstall and state rejection"
+      ]
+    },
+    "webmcp": {
+      "status": "pass",
+      "evidence": [
+        "native document.modelContext registration",
+        "discovery",
+        "parameterized tool execution with expected output"
+      ]
+    },
+    "third_party": {
+      "status": "pass",
+      "evidence": [
+        "page provider discovery",
+        "schema-validated parameterized execution with expected output"
+      ]
+    },
+    "memory": {
+      "status": "pass",
+      "evidence": {
+        "checks": [
+          "snapshot valid JSON with known retained fixture class",
+          "summary analysis",
+          "aggregated class analysis",
+          "close snapshot"
+        ],
+        "bytes": 3405205,
+        "nodes": 36378
+      }
+    },
+    "extensions": {
+      "status": "partial",
+      "evidence": {
+        "status": "partial",
+        "verified": [
+          "install",
+          "enabled extension listing",
+          "reload",
+          "action command accepted",
+          "uninstall and absence",
+          "content script changes fixture DOM"
+        ],
+        "failed": [
+          {
+            "check": "action page effect",
+            "observed": "Script ran on page and returned:\n```json\nundefined\n```"
+          }
+        ]
+      }
+    },
+    "annotation": {
+      "status": "fail",
+      "observed": "native candidate rejected an expected successful MCP operation: [\"### Error\\nAnnotation client exited with code 1\"]",
+      "diagnosis": "The default Playwright dashboard searches for a system Chromium channel rather than the Loki bundled executable and exits with No chromium-based browser found on the system. A separately isolated dashboard server-only start succeeds."
+    }
+  },
+  "extension_diagnostic": {
+    "without_devtools": {
+      "status": "partial",
+      "evidence": {
+        "status": "partial",
+        "verified": [
+          "install",
+          "enabled extension listing",
+          "reload",
+          "action command accepted",
+          "uninstall and absence",
+          "content script changes fixture DOM"
+        ],
+        "failed": [
+          {
+            "check": "action page effect",
+            "observed": "Script ran on page and returned:\n```json\nundefined\n```"
+          }
+        ]
+      }
+    },
+    "conclusion": "The missing action DOM effect also reproduces without the optional devtools diagnostics feature. Underlying cause is not established; success response alone is insufficient."
+  },
+  "limitations": [
+    "Extension action side effect and annotated-image return did not pass.",
+    "New extended checks are for WSL Linux amd64, not native Windows/macOS or every tool/option combination.",
+    "PWA launch used browser display mode, not a native standalone window."
+  ],
+  "test_helpers": {
+    "browser_extended_common.py": "c632f9a747e086798f8d5ba74f650ca61de27edb5b994a18aa57ae2fbba6c406",
+    "verify-browser-extended.py": "27dab2b7f61b3a595c4f06650dfe8cab30bd50be304445c7565d2c05b58b4f0d",
+    "diagnose-annotation.py": "03461041e0b4f33aaf0872308265744f31a1aa9ac3fd8201e0acf58b78d84164"
+  },
+  "raw_evidence_directory": "/tmp/loki-operations-check/browser-extended",
+  "cleanup": {
+    "isolated_root_removed": true,
+    "owned_processes_remaining": [],
+    "user_activation_modified": false
+  }
+}

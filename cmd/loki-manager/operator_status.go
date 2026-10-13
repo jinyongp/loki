@@ -61,6 +61,9 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 			}
 			fmt.Fprintf(out, "  %s: %s\n", client.Provider, state)
 		}
+		if !doctor {
+			fmt.Fprintln(out, "\nStatus shows configuration without starting tools or testing client connections.\nRun 'loki doctor' to check tools; browser sessions start when requested by a client.")
+		}
 		if len(view.NextActions) > 0 {
 			fmt.Fprintln(out, "\nNext:")
 			for _, action := range view.NextActions {

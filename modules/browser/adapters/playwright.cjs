@@ -1,0 +1,110 @@
+// Adapt user annotations to a headless/remote execution host. The page and
+// screenshots remain owned by this MCP session; no system browser is launched.
+const crypto = require('node:crypto');
+const http = require('node:http');
+const entry = process.argv[2];
+const core = require(process.argv[3]);
+process.argv.splice(1, 3, entry);
+const sessions = new WeakMap();
+const tool = core.tools.browserTools.find(tool => tool.schema.name === 'browser_annotate');
+if (!tool) throw new Error('Pinned Playwright annotation tool is unavailable');
+
+const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Loki page annotations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+body{font:16px system-ui;margin:24px;background:#101827;color:#eef2ff}main{max-width:1280px;margin:auto}
+canvas{max-width:100%;height:auto;display:block;touch-action:none;cursor:crosshair;background:white}
+button,input,textarea{font:inherit;padding:8px;margin:6px 6px 12px 0}textarea{display:block;width:95%;max-width:700px}
+#message{min-height:1.5em;color:#c4b5fd}#marks{padding-left:24px}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #c4b5fd}
+</style><main><h1>Annotate the captured page</h1>
+<p>Drag a box over the screenshot. Add a label before drawing, or use the feedback field. Submit when done, then call browser_annotate again in your MCP client to retrieve the result.</p>
+<label>Box label <input id="label" maxlength="2000"></label><button id="undo">Undo last box</button>
+<canvas id="canvas" aria-label="Captured page; drag to mark a rectangular area"></canvas><ol id="marks" aria-label="Annotations"></ol>
+<label for="feedback">Feedback</label><textarea id="feedback" maxlength="4000" rows="3"></textarea>
+<button id="submit">Submit annotations</button><button id="cancel">Cancel</button><p id="message" role="status"></p></main>
+<script>
+const canvas=document.querySelector('#canvas'),ctx=canvas.getContext('2d'),image=new Image();let annotations=[],start,preview,finished=false;
+const message=text=>document.querySelector('#message').textContent=text;
+function render(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);for(const a of [...annotations,...(preview?[preview]:[])]){ctx.strokeStyle='#ec4899';ctx.lineWidth=3;ctx.strokeRect(a.x,a.y,a.width,a.height);if(a.label){ctx.font='16px sans-serif';ctx.fillStyle='#ec4899';ctx.fillRect(a.x,Math.max(0,a.y-24),Math.min(ctx.measureText(a.label).width+12,canvas.width-a.x),24);ctx.fillStyle='white';ctx.fillText(a.label,a.x+6,Math.max(18,a.y-6));}}}
+function point(e){const r=canvas.getBoundingClientRect();return {x:Math.max(0,Math.min(canvas.width,(e.clientX-r.left)*canvas.width/r.width)),y:Math.max(0,Math.min(canvas.height,(e.clientY-r.top)*canvas.height/r.height))};}
+function box(p){return {x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),width:Math.abs(p.x-start.x),height:Math.abs(p.y-start.y),label:document.querySelector('#label').value};}
+function list(){const marks=document.querySelector('#marks');marks.replaceChildren();for(const a of annotations){const item=document.createElement('li');item.textContent=(a.label||'Unlabelled box')+' ('+Math.round(a.x)+', '+Math.round(a.y)+')';marks.append(item);}}
+image.onload=()=>{canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;render();};image.onerror=()=>message('Could not load the captured screenshot. Start a new annotation session.');image.src='image';
+canvas.onpointerdown=e=>{if(finished||!image.complete)return;start=point(e);canvas.setPointerCapture(e.pointerId);};
+canvas.onpointermove=e=>{if(!start)return;preview=box(point(e));render();};
+canvas.onpointerup=e=>{if(!start)return;const a=box(point(e));start=null;preview=null;if(a.width>=2&&a.height>=2&&annotations.length<100)annotations.push(a);render();list();};
+canvas.onpointercancel=()=>{start=null;preview=null;render();};
+document.querySelector('#undo').onclick=()=>{if(!finished){annotations.pop();render();list();}};
+async function send(body){try{const response=await fetch('submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok)throw Error(await response.text());finished=true;document.querySelector('#submit').disabled=true;message(body.cancel?'Cancelled. Return to your MCP client.':'Submitted. Return to your MCP client and call browser_annotate again.');}catch(e){message(e.message);}}
+document.querySelector('#submit').onclick=()=>{if(finished)return;const feedback=document.querySelector('#feedback').value;if(!annotations.length&&!feedback.trim()){message('Draw a box or add feedback before submitting.');return;}preview=null;render();send({annotations,feedback,image:canvas.toDataURL('image/png').split(',')[1]});};
+document.querySelector('#cancel').onclick=()=>{if(!finished)send({cancel:true});};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!finished)send({cancel:true});});
+</script></html>`;
+
+function validateSubmission(value, width, height) {
+  if (value.cancel === true) return {cancel: true};
+  if (!Array.isArray(value.annotations) || value.annotations.length > 100 || typeof value.feedback !== 'string' || value.feedback.length > 4000 || typeof value.image !== 'string' || value.image.length > 12 << 20) throw new Error('Invalid annotation submission');
+  for (const a of value.annotations) {
+    if (!a || !['x', 'y', 'width', 'height'].every(key => Number.isFinite(a[key])) || a.x < 0 || a.y < 0 || a.width < 2 || a.height < 2 || a.x + a.width > width + 1 || a.y + a.height > height + 1 || typeof a.label !== 'string' || a.label.length > 2000) throw new Error('Invalid annotation box');
+  }
+  if (!value.annotations.length && !value.feedback.trim()) throw new Error('Add an annotation or feedback');
+  const image = Buffer.from(value.image, 'base64');
+  if (image.length < 24 || !image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) || image.readUInt32BE(16) !== width || image.readUInt32BE(20) !== height) throw new Error('Invalid annotated PNG');
+  return {annotations: value.annotations, feedback: value.feedback, image};
+}
+
+tool.schema.description = 'Start a user annotation screen for the current page. Returns a one-time loopback URL on the execution host. Draw boxes or enter feedback there, submit, then call browser_annotate again to receive the annotated PNG and page snapshot. On SSH hosts, forward the displayed port to open it locally. The screen expires after five minutes.';
+tool.handle = async (context, params, response) => {
+  let session = sessions.get(context);
+  if (session?.expired) {
+    sessions.delete(context);
+    response.addError('Annotation screen expired. Call browser_annotate again to start a new one.');
+    return;
+  }
+  if (session?.result) {
+    session.close();sessions.delete(context);
+    if (session.result.cancel) {response.addTextResult('Annotation cancelled.');return;}
+    await response.addResult('Annotated screenshot', session.result.image, {prefix:'annotations',ext:'png'});
+    await response.addResult('Annotation snapshot', session.snapshot, {prefix:'annotations',ext:'yaml'});
+    response.addTextResult(JSON.stringify({annotations:session.result.annotations,feedback:session.result.feedback}));
+    return;
+  }
+  if (!session) {
+    const tab = await context.ensureTab();
+    if (tab.modalStates().length) {
+      response.addError('Handle the page dialog before starting an annotation screen.');
+      return;
+    }
+    const image = await tab.page.screenshot({type:'png'});
+    const snapshot = await tab.page.locator('body').ariaSnapshot();
+    const width = image.readUInt32BE(16), height = image.readUInt32BE(20);
+    const token = crypto.randomBytes(24).toString('hex');
+    session = {snapshot, image, expired:false};
+    const server = http.createServer(async (request, reply) => {
+      reply.setHeader('Cache-Control', 'no-store');
+      reply.setHeader('X-Content-Type-Options', 'nosniff');
+      reply.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+      const origin = `http://127.0.0.1:${server.address()?.port}`;
+      const prefix = `/${token}/`;
+      if (request.headers.host !== `127.0.0.1:${server.address()?.port}` || request.headers.origin && request.headers.origin !== origin) {reply.writeHead(403).end();return;}
+      if (session.expired || session.result) {reply.writeHead(410).end('Annotation screen is closed');return;}
+      if (request.method === 'GET' && request.url === prefix) {reply.setHeader('Content-Type','text/html; charset=utf-8');reply.end(html);return;}
+      if (request.method === 'GET' && request.url === prefix+'image') {reply.setHeader('Content-Type','image/png');reply.end(image);return;}
+      if (request.method !== 'POST' || request.url !== prefix+'submit') {reply.writeHead(404).end();return;}
+      let size=0;const chunks=[];
+      try {
+        for await (const chunk of request) {size+=chunk.length;if(size>16<<20)throw new Error('Annotation submission is too large');chunks.push(chunk);}
+        session.result=validateSubmission(JSON.parse(Buffer.concat(chunks).toString('utf8')),width,height);
+        reply.end('ok');
+      } catch (error) {reply.writeHead(400).end(error.message);}
+    });
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+    server.unref();
+    session.url=`http://127.0.0.1:${server.address().port}/${token}/`;
+    const timer=setTimeout(()=>{session.expired=true;session.close();},5*60*1000);timer.unref();
+    session.close=()=>{clearTimeout(timer);server.close();server.closeAllConnections();server.removeAllListeners('request');session.image=undefined;};
+    sessions.set(context,session);
+  }
+  response.addTextResult(`Open this one-time annotation screen on the execution host: ${session.url}\nDraw annotations or add feedback, submit, then call browser_annotate again. The screen expires after five minutes.`);
+};
+
+require(entry);

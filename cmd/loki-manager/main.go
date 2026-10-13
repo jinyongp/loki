@@ -648,6 +648,12 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			}
 		}
 		message := "Tool " + f.Arg(0) + " " + args[1] + "d."
+		if f.Arg(0) == "browser" {
+			if caps != nil {
+				message += " Optional feature list replaced. Reconnect the client's Loki MCP server to load changes."
+			}
+			message += "\nChoose recording, PDF and other features with 'loki setup' > Manage tools > browser > Optional features."
+		}
 		if *noStart {
 			message += " Activation saved; running services are unchanged."
 		}

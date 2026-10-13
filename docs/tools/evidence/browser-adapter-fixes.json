@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "publication": "unreleased worktree",
+  "base_commit": "8a391d570fc4e024ff39cfa443ea961e8406aa27",
+  "source_sha256": {
+    "modules/browser/browser.go": "1d60bf2440c3682839394880eeb4d5e510d2079c47a2dec3f67f394541f99685",
+    "modules/browser/adapters.go": "7373c5c4fa5707f46dfa77b15b23ab2b9afd8b3c36a9cac4c5950c90039f3626",
+    "modules/browser/adapters/devtools.mjs": "e0f2c31e23e4eb8fea080107b7b72884cd8b26887a9458d13724b4f39736c0af",
+    "modules/browser/adapters/playwright.cjs": "f35018e522423ea5fdfb7fc1b563d71bb716a79a4eccd4ce774354ab3d7fed6b",
+    "scripts/maintainer/tools/accept_browser_capabilities.py": "a6106a48f068d5fc4f5485c4ed24edca46dd3878d6e71197a7ce85e6cbff4ef2",
+    "scripts/maintainer/tools/accept_browser_interactions.py": "4555b57dcf3954524f628eff00c83ad1e059031765c15ad0715cc724f87a66dd"
+  },
+  "candidate_cli_sha256": "adb4b91643a99ee37f2762b54caba8c5783aa4f28329476a0637a264f58b1572",
+  "runtime_browser_archive_sha256": "56a663e7ffab9cfd0638a429348884606769b10742148cb4c16531a1b95fde40",
+  "environment": "Linux amd64, WSL Ubuntu; actual installed Windows frontend relay to candidate WSL CLI",
+  "fixes": {
+    "extensions": [
+      "resume extension worker initial debugger wait",
+      "wait for replacement worker on reload",
+      "activate selected MCP page before action"
+    ],
+    "annotations": [
+      "headless one-time loopback screen instead of system-browser dashboard",
+      "submit rectangles/feedback and retrieve owned PNG/snapshot on next call",
+      "reject cross-origin/malformed submissions; cancel and five-minute expiry"
+    ]
+  },
+  "checks": {
+    "extensions": {
+      "status": "pass",
+      "evidence": {
+        "status": "pass",
+        "verified": [
+          "install",
+          "enabled extension listing",
+          "reload",
+          "action command accepted",
+          "uninstall and absence",
+          "content script changes fixture DOM",
+          "action changes fixture DOM"
+        ],
+        "failed": []
+      }
+    },
+    "pwa": {
+      "status": "pass",
+      "evidence": [
+        "install",
+        "OS state",
+        "launch",
+        "uninstall and state rejection"
+      ]
+    },
+    "webmcp": {
+      "status": "pass",
+      "evidence": [
+        "native document.modelContext registration",
+        "discovery",
+        "parameterized tool execution with expected output"
+      ]
+    },
+    "third-party": {
+      "status": "pass",
+      "evidence": [
+        "page provider discovery",
+        "schema-validated parameterized execution with expected output"
+      ]
+    },
+    "memory": {
+      "status": "pass",
+      "evidence": {
+        "checks": [
+          "snapshot valid JSON with known retained fixture class",
+          "summary analysis",
+          "aggregated class analysis",
+          "close snapshot"
+        ],
+        "bytes": 3410532,
+        "nodes": 36428
+      }
+    },
+    "annotation": {
+      "status": "pass",
+      "evidence": [
+        "one-time headless annotation screen",
+        "actual canvas pointer drag",
+        "label and feedback submission",
+        "MCP annotation result and owned PNG readback"
+      ]
+    }
+  },
+  "optional_regression": {
+    "optional_browser_acceptance": "pass",
+    "capability_discovery": [
+      "unsafe-code",
+      "vision",
+      "pdf",
+      "devtools",
+      "network",
+      "storage",
+      "testing",
+      "tracing",
+      "config",
+      "extensions",
+      "pwa",
+      "webmcp",
+      "third-party",
+      "memory"
+    ],
+    "executed": [
+      "vision pointer",
+      "pdf bytes",
+      "storage",
+      "testing",
+      "network interception",
+      "tracing",
+      "video bytes",
+      "config",
+      "unsafe-code and revocation",
+      "extensions install/action/reload/uninstall",
+      "headless annotation UI and PNG",
+      "annotation cancellation and invalid-request rejection",
+      "webmcp listing",
+      "third-party listing"
+    ],
+    "remaining": [
+      "PWA installation",
+      "WebMCP invocation",
+      "third-party invocation",
+      "memory snapshot analysis"
+    ]
+  },
+  "windows_frontend_relay": {
+    "interactions": "pass",
+    "checks": [
+      "extension action after install and reload",
+      "real canvas annotation and PNG",
+      "cross-origin/malformed request rejection",
+      "annotation cancellation"
+    ]
+  },
+  "go_tests": "go test ./...: pass",
+  "go_vet": "go vet ./...: pass",
+  "architecture": "go run ./tools/archcheck: pass",
+  "windows_compile": "GOOS=windows GOARCH=amd64 go test -c ./cmd/loki-manager: pass",
+  "limits": [
+    "No release or installed user CLI replacement performed.",
+    "Native macOS/Windows browser execution is not recertified by WSL tests; Windows relay invokes Linux browser.",
+    "Annotation screen is loopback on the runtime; SSH and isolated containers require forwarding.",
+    "This verifies representative workflows, not every tool/option/site combination."
+  ],
+  "raw_evidence_directory": "/tmp/loki-operations-check/browser-extended",
+  "cleanup": {
+    "isolated_root_removed": true,
+    "owned_processes_remaining": [],
+    "user_activation_modified": false
+  }
+}

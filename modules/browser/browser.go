@@ -220,8 +220,29 @@ func Prepare(ctx context.Context, o Options) (Launch, error) {
 		if o.Proxy != "" {
 			args = append(args, "--proxy-server", o.Proxy)
 		}
+		if slices.Contains(o.Capabilities, "devtools") {
+			adapter, err := writeEngineAdapter(profile, "loki-playwright.cjs", playwrightAdapter)
+			if err != nil {
+				cleanup()
+				return Launch{}, err
+			}
+			core, err := asset(o.Bundle, "node_modules/playwright-core/lib/coreBundle.js")
+			if err != nil {
+				cleanup()
+				return Launch{}, err
+			}
+			args = append([]string{adapter, args[0], core}, args[1:]...)
+		}
 	} else {
 		args = []string{filepath.Join(o.Bundle, "node_modules", "chrome-devtools-mcp", "build", "src", "bin", "chrome-devtools-mcp.js"), "--headless", "--executablePath", chrome, "--userDataDir", profile, "--filesystemRoot", output, "--no-usage-statistics", "--no-performance-crux"}
+		if slices.Contains(o.Capabilities, "extensions") {
+			adapter, err := writeEngineAdapter(profile, "loki-devtools.mjs", devtoolsAdapter)
+			if err != nil {
+				cleanup()
+				return Launch{}, err
+			}
+			args = append([]string{adapter}, args...)
+		}
 		if o.Proxy != "" {
 			args = append(args, "--chromeArg=--proxy-server="+o.Proxy)
 		}

@@ -24,6 +24,15 @@ func TestOperatorStatusPreservesTargetAndUnknownRuntime(t *testing.T) {
 	if value["ready"] != nil {
 		t.Fatal("passive status claimed readiness")
 	}
+	out.Reset()
+	if err := run(t.Context(), []string{"--root", root, "status"}, &out, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"without starting tools or testing client connections", "'loki doctor'", "browser sessions start when requested by a client"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatal("status omitted readiness guidance", out.String())
+		}
+	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("status created management state", err)
 	}

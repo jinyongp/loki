@@ -50,6 +50,7 @@ func (s Store) status(state Snapshot) (Report, error) {
 	for _, selection := range state.Config.Tools {
 		observed := r.Tools[selection.ID]
 		observed.Enabled = selection.Enabled
+		observed.Capabilities = slices.Clone(selection.Capabilities)
 		r.Tools[selection.ID] = observed
 	}
 	return r, nil

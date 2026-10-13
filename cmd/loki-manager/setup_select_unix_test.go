@@ -10,19 +10,22 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"golang.org/x/term"
 
 	"loki/internal/management"
 	"loki/internal/tools"
+	"loki/modules/browser"
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections", "result", "result-narrow", "readiness"} {
+	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -38,7 +41,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if err := pty.Setsize(terminal, &pty.Winsize{Rows: 30, Cols: 120}); err != nil {
 		t.Fatal(err)
 	}
-	if kind == "result-narrow" {
+	if kind == "result-narrow" || kind == "features-narrow" || kind == "browser-menu-narrow" {
 		if err := pty.Setsize(terminal, &pty.Winsize{Rows: 20, Cols: 50}); err != nil {
 			t.Fatal(err)
 		}
@@ -65,10 +68,10 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			}
 		}
 	}()
-	waitFor := func(text string) {
+	waitFor := func(text string) string {
 		t.Helper()
 		var screen strings.Builder
-		for !strings.Contains(screen.String(), text) {
+		for !strings.Contains(screen.String(), text) && !strings.Contains(strings.Join(strings.Fields(ansi.Strip(screen.String())), " "), text) {
 			select {
 			case chunk, ok := <-chunks:
 				if !ok {
@@ -79,8 +82,23 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 				t.Fatal("menu did not render", text)
 			}
 		}
+		return screen.String()
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
+	var initialState management.Snapshot
+	if kind == "browser-menu-narrow" {
+		store := management.Store{Root: root}
+		initialState, err = store.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifact := tools.Artifact{Module: "browser", Release: management.Release, Target: management.LocalTarget(tools.ProjectHost), URL: "https://example.com/browser.zip", SHA256: strings.Repeat("a", 64), Bytes: 1, Format: "zip"}
+		initialState.Installed["browser"] = management.Installation{Artifact: artifact, Manifest: tools.Manifest{Schema: 1, ID: "browser", Release: management.Release, Targets: []tools.Target{artifact.Target}, Capabilities: slices.Clone(browser.Capabilities)}}
+		initialState.Config.Tools = []tools.Selection{{ID: "browser", Enabled: false, Capabilities: slices.Clone(browser.Capabilities)}}
+		if err := store.Save(initialState); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if kind == "connections" || kind == "readiness" {
 		t.Setenv("CODEX_HOME", t.TempDir())
 	}
@@ -95,10 +113,18 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	}
 	var output bytes.Buffer
+	var featureCommand []string
 	finished := make(chan error, 1)
 	go func() {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
-		if kind == "readiness" {
+		if strings.HasPrefix(kind, "features-") {
+			state := tools.State{Installed: true, Enabled: false, Capabilities: []string{"pdf"}}
+			changed, err := setupBrowserFeatures(ctx, state, "WSL: Ubuntu", terminal, terminal, func(args []string) error { featureCommand = args; return nil })
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
+			}
+			finished <- err
+		} else if kind == "readiness" {
 			host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
 			err := setupReadiness(ctx, host, terminal, terminal)
 			if err == nil {
@@ -106,7 +132,11 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			}
 			finished <- err
 		} else if strings.HasPrefix(kind, "result") {
-			err := showSetupResult(ctx, "Readiness — needs attention", "Missing Linux library: libnspr4.so", strings.Repeat("Chrome fixture diagnostic line\n", 40), terminal, terminal)
+			summary := "Missing Linux library: libnspr4.so"
+			if kind == "result-narrow" {
+				summary += strings.Repeat("\nAdditional diagnostic summary", 10) + "\nFinal recovery instruction"
+			}
+			err := showSetupResult(ctx, "Readiness — needs attention", summary, strings.Repeat("Chrome fixture diagnostic line\n", 40), terminal, terminal)
 			if err == nil {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": false})
 			}
@@ -118,7 +148,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
 			}
 			finished <- err
-		} else if kind == "tools" {
+		} else if kind == "tools" || kind == "browser-menu-narrow" {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
@@ -129,22 +159,64 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runSetupMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		}
 	}()
-	if kind == "readiness" {
+	if kind == "browser-menu-narrow" {
+		waitFor("Loki tools")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Optional features — video recording")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Record WebM video")
+		_, _ = io.WriteString(master, strings.Repeat("\x1b[B", len(browserFeatures)-1))
+		waitFor("Allow code execution")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Loki tools")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if strings.HasPrefix(kind, "features-") {
+		transcript := waitFor("Record WebM video")
+		if !strings.Contains(transcript, "Video recording") {
+			t.Fatal("feature selector does not show the focused feature and its purpose", transcript)
+		}
+		if kind == "features-cancel" {
+			_, _ = io.WriteString(master, "\x1b")
+		} else {
+			_, _ = io.WriteString(master, " \r")
+			waitFor("Browser features — saved")
+			_, _ = io.WriteString(master, "\r")
+			waitFor("Reconnect the client's Loki MCP server")
+		}
+	} else if kind == "readiness" {
 		waitFor("Missing Linux library")
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("<launching>")
 		_, _ = io.WriteString(master, "\x1b")
 		waitFor("Missing Linux library")
 		_, _ = io.WriteString(master, "\r")
+		transcript := waitFor("does not test the Codex app connection")
+		if !strings.Contains(transcript, "[RESULT] Readiness — needs attention") {
+			t.Fatal("readiness result missing from restored terminal", transcript)
+		}
 	} else if strings.HasPrefix(kind, "result") {
 		waitFor("Missing Linux library")
-		_, _ = io.WriteString(master, "\x1b[B\r")
-		waitFor("Page 1/")
-		_, _ = io.WriteString(master, "\x1b[B\r")
-		waitFor("Page 2/")
-		_, _ = io.WriteString(master, "\x1b")
-		waitFor("Missing Linux library")
-		_, _ = io.WriteString(master, "\r")
+		if kind == "result-escape" {
+			_, _ = io.WriteString(master, "\x1b")
+		} else {
+			_, _ = io.WriteString(master, "\x1b[B\r")
+			waitFor("Page 1/")
+			_, _ = io.WriteString(master, "\x1b[B\r")
+			waitFor("Page 2/")
+			_, _ = io.WriteString(master, "\x1b")
+			waitFor("Missing Linux library")
+			_, _ = io.WriteString(master, "\r")
+		}
+		lastLine := "  Missing Linux library: libnspr4.so"
+		if kind == "result-narrow" {
+			lastLine = "  Final recovery instruction"
+		}
+		transcript := waitFor(lastLine)
+		restored := strings.Index(transcript, "\x1b[?1049l")
+		result := strings.Index(transcript, "[RESULT] Readiness — needs attention")
+		if restored < 0 || result < restored {
+			t.Fatal("result not preserved after leaving alternate screen", transcript)
+		}
 	} else if kind == "connections" {
 		waitFor("Connect Codex")
 		_, _ = io.WriteString(master, "\r")
@@ -200,15 +272,28 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("terminal was not restored", err)
 	}
-	if _, err := os.Stat(root); !os.IsNotExist(err) {
+	if kind == "browser-menu-narrow" {
+		after, err := (management.Store{Root: root}).Load()
+		if err != nil || !reflect.DeepEqual(after, initialState) {
+			t.Fatal("cancelled feature menu changed installation", err)
+		}
+	} else if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("cancelled menu changed installation", err)
 	}
 	var result struct {
 		Changed bool `json:"changed"`
 		Success bool `json:"success"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.Success || result.Changed {
+	wantChanged := kind == "features-save" || kind == "features-narrow"
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.Success || result.Changed != wantChanged {
 		t.Fatalf("menu contaminated JSON output: %s (%v)", output.String(), err)
+	}
+	if wantChanged {
+		if len(featureCommand) != 5 || featureCommand[1] != "disable" || !strings.Contains(featureCommand[4], "devtools") || !strings.Contains(featureCommand[4], "pdf") {
+			t.Fatal("feature save lost checked choices or enabled browser", featureCommand)
+		}
+	} else if kind == "features-cancel" && featureCommand != nil {
+		t.Fatal("cancel saved features", featureCommand)
 	}
 }
 
