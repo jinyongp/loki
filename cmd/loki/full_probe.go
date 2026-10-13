@@ -15,6 +15,7 @@ import (
 
 	appnetwork "loki/internal/app/network"
 	"loki/internal/auth"
+	"loki/internal/config"
 	"loki/internal/daemon"
 	"loki/internal/rpc"
 	"loki/internal/transport/toolproxy"
@@ -23,6 +24,17 @@ import (
 type probeAuthorization struct {
 	token string
 	base  http.RoundTripper
+}
+
+func sharingConfigReady(path string) error {
+	settings, err := config.Load(path)
+	if err != nil {
+		return fmt.Errorf("sharing configuration cannot be inspected: %w", err)
+	}
+	if settings.ArtifactBaseURL == "" && settings.PreviewBaseDomain == "" {
+		return errors.New("public sharing is not configured on this full host; no artifact or preview origin is available")
+	}
+	return nil
 }
 
 func (p probeAuthorization) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -55,7 +67,7 @@ func runFullProbe(args []string, stderr io.Writer) int {
 	err := func() error {
 		switch *role {
 		case "module":
-			if *module != "git" && *module != "workspace" {
+			if *module != "git" && *module != "workspace" && *module != "sharing" {
 				return errors.New("unsupported native module readiness probe")
 			}
 			var layout mcpLayout
@@ -66,7 +78,13 @@ func runFullProbe(args []string, stderr io.Writer) int {
 			if err != nil || options.AuthorizeTool == nil {
 				return errors.New("native module probe requires current activation")
 			}
-			return options.AuthorizeTool(ctx, *module, "")
+			if err := options.AuthorizeTool(ctx, *module, ""); err != nil {
+				return err
+			}
+			if *module == "sharing" {
+				return sharingConfigReady("/etc/loki/layout/loki.toml")
+			}
+			return nil
 		case "endpoints":
 			if *uid < 0 || *uid > 4294967295 {
 				return errors.New("endpoint probe requires expected peer identity")
