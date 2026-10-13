@@ -46,18 +46,29 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		}
 		host.selected, changed = selected, true
 	} else if host.selected != nil && host.selected.Remote() {
+		setupWorking(terminal, "Preparing execution host", setupHostLabel(host.selected))
 		prepared, err := ensureSetupExecutionHost(ctx, host.frontend, *host.selected, !host.explicit, diagnostics)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			fmt.Fprintf(diagnostics, "Host preparation could not finish: %v\nClient connections and Change execution host remain available.\n", err)
+			if viewErr := showSetupResult(ctx, "Host preparation — needs attention", shortDiagnostic(err.Error())+"\nClient connections and Change execution host remain available.", err.Error(), input, terminal); viewErr != nil {
+				return viewErr
+			}
 		} else {
 			changed = changed || prepared != *host.selected
 			host.selected = &prepared
 			if host.explicit {
 				prefix = setupExecutionArguments(prepared)
 			}
+		}
+	}
+	if err := prepareInstalledBrowserHost(ctx, host, input, diagnostics); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if viewErr := showSetupResult(ctx, "Browser preparation — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+			return viewErr
 		}
 	}
 	for {
@@ -75,7 +86,7 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		description := "Host: " + setupHostLabel(host.selected)
 		if inspectErr != nil {
 			description += "\nHost unavailable. Check access or choose Change execution host."
-			fmt.Fprintf(diagnostics, "Host inspection failed: %v\n", inspectErr)
+			description += "\n" + shortDiagnostic(inspectErr.Error())
 		} else {
 			installed, enabled := setupToolCounts(*report)
 			description += fmt.Sprintf("\nTools: %d installed · %d enabled. Runtime readiness: run Check readiness.", installed, enabled)
@@ -114,10 +125,12 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			changed = changed || updated
 			err = connectErr
 		case "doctor":
-			err = operatorStatus(ctx, host.frontend, host.selected, diagnostics, diagnostics, true)
+			err = setupReadiness(ctx, host, input, terminal)
 		}
 		if err != nil {
-			fmt.Fprintf(diagnostics, "Could not finish: %v\nSaved changes are retained. Inspect the current state and retry.\n", err)
+			if viewErr := showSetupResult(ctx, "Action — could not finish", shortDiagnostic(err.Error())+"\nSaved changes are retained. Retry or choose another action.", err.Error(), input, terminal); viewErr != nil {
+				return viewErr
+			}
 		}
 	}
 }
@@ -147,8 +160,7 @@ func installSetupTools(ctx context.Context, report management.Report, hostLabel 
 		}
 	}
 	if len(options) == 0 {
-		fmt.Fprintln(terminal, "All supported tools are installed on this host.")
-		return false, nil
+		return false, showSetupResult(ctx, "Installation — nothing to add", "All supported tools are installed on "+hostLabel+".", "", input, terminal)
 	}
 	var selected []string
 	form := huh.NewForm(huh.NewGroup(huh.NewMultiSelect[string]().Title("Install tools").Description("Host: " + hostLabel + "\nSpace select · Enter continue · Esc back").Options(options...).Value(&selected)))
@@ -166,5 +178,6 @@ func installSetupTools(ctx context.Context, report management.Report, hostLabel 
 	if action == "install-enable" {
 		command = []string{"setup"}
 	}
+	setupWorking(terminal, "Installing selected tools", hostLabel)
 	return true, invoke(append(command, selected...))
 }

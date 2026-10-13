@@ -51,6 +51,14 @@
 	],
 	"syscalls": [
 		{
+			"comment": "Allow Chromium to restrict its filesystem inside its user namespace, without granting a container capability",
+			"names": ["chroot"],
+			"action": "SCMP_ACT_ALLOW",
+			"args": [],
+			"includes": {},
+			"excludes": {}
+		},
+		{
 			"comment": "Allow create user namespaces",
 			"names": [
 				"clone",

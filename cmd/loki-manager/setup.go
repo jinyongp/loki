@@ -131,8 +131,18 @@ func runSetup(ctx context.Context, store management.Store, options setupOptions,
 	if err != nil {
 		return err
 	}
+	if options.mode == tools.ProjectHost && slices.Contains(options.selected, tools.ID("browser")) {
+		if err := prepareLocalBrowserHost(ctx, input, diagnostics); err != nil {
+			return err
+		}
+	}
 	if err := store.InstallToolsForMode(ctx, catalog, options.selected, options.mode, diagnostics); err != nil {
 		return err
+	}
+	if slices.Contains(options.selected, tools.ID("browser")) {
+		if err := verifyInstalledBrowser(ctx, store, diagnostics); err != nil {
+			return err
+		}
 	}
 	for _, id := range options.selected {
 		if err := store.SetEnabled(id, true, nil); err != nil {

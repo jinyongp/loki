@@ -62,7 +62,7 @@ func (r deploymentRegistry) validate() error {
 		}
 		services := map[string]bool{}
 		for _, service := range deployment.Services {
-			if service != "mcp" && service != "runtime" && service != "executor" && service != "launcher" && service != "egress" && service != "browser" && service != "browser-proxy" && service != "git-signing" {
+			if service != "mcp" && service != "runtime" && service != "executor" && service != "launcher" && service != "endpoints" && service != "egress" && service != "browser" && service != "browser-proxy" && service != "git-signing" {
 				return fmt.Errorf("invalid reserved service")
 			}
 			if services[service] {

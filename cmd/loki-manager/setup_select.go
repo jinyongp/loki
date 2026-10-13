@@ -77,18 +77,31 @@ func selectSetupTools(ctx context.Context, input io.Reader, diagnostics io.Write
 }
 
 func runSetupForm(ctx context.Context, form *huh.Form, input, output *os.File) (bool, error) {
+	return runSetupScreen(ctx, form, input, output, "CHOOSE · Your input is needed")
+}
+
+func runSetupScreen(ctx context.Context, form *huh.Form, input, output *os.File, phase string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
 	keys := huh.NewDefaultKeyMap()
 	keys.Quit.SetKeys("ctrl+c", "esc")
+	keys.Quit.SetHelp("esc", "back")
+	keys.Select.Submit.SetHelp("enter", "choose")
+	keys.Confirm.Submit.SetHelp("enter", "confirm")
+	keys.Input.Submit.SetHelp("enter", "continue")
+	keys.Select.Filter.SetEnabled(false)
+	keys.MultiSelect.Filter.SetEnabled(false)
 	keys.MultiSelect.Toggle.SetHelp("space", "select")
 	form.WithKeyMap(keys).WithShowHelp(true)
+	if width, height, err := term.GetSize(int(output.Fd())); err == nil {
+		form.WithWidth(max(20, width-4)).WithHeight(max(10, height-4))
+	}
 	// Graceful quit waits for terminal input readers before restoring state.
 	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Quit
 	promptCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	model := &setupSelectionModel{form: form, ctx: promptCtx}
+	model := &setupSelectionModel{form: form, ctx: promptCtx, phase: phase}
 	terminalOutput := setupTerminalOutput{File: output, fd: output.Fd()}
 	if _, err := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(terminalOutput)).Run(); err != nil {
 		return false, err
@@ -113,8 +126,9 @@ func (f setupTerminalOutput) Fd() uintptr { return f.fd }
 // Adapt the form to Bubble Tea's view model and turn context cancellation into
 // the same graceful exit as keyboard cancellation.
 type setupSelectionModel struct {
-	form *huh.Form
-	ctx  context.Context
+	form  *huh.Form
+	ctx   context.Context
+	phase string
 }
 
 func (m *setupSelectionModel) Init() tea.Cmd {
@@ -133,7 +147,8 @@ func (m *setupSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *setupSelectionModel) View() tea.View {
-	v := tea.NewView(m.form.View())
+	v := tea.NewView("Loki setup · " + m.phase + "\n\n" + m.form.View())
 	v.ReportFocus = true
+	v.AltScreen = true
 	return v
 }

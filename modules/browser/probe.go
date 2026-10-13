@@ -105,6 +105,7 @@ func CheckRuntime(ctx context.Context, bundle string) error {
 		}
 	}
 	versionCmd := managedcommand.New(checkCtx, node, "--version")
+	versionCmd.Dir = bundle
 	versionCmd.Env = runtimeEnvironment(os.Environ(), browsers)
 	version, err := versionCmd.CombinedOutput()
 	if err != nil {
@@ -114,6 +115,10 @@ func CheckRuntime(ctx context.Context, bundle string) error {
 		return fmt.Errorf("browser requires managed Node %s", NodeVersion)
 	}
 	command := managedcommand.New(checkCtx, node, "-e", runtimeProbe, core, chrome)
+	// Node evaluates package scope from cwd even with an absolute require path.
+	// Client project configuration and Windows UNC parent shares must not affect
+	// a probe of our owned runtime or cause unrelated project files to be read.
+	command.Dir = bundle
 	command.Env = runtimeEnvironment(os.Environ(), browsers)
 	command.WaitDelay = 2 * time.Second
 	var stdout, stderr probeOutput

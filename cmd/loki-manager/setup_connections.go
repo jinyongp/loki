@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -30,7 +31,11 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		return false, err
 	}
 	if choice == "status" {
-		return false, showClientConnections(host.frontend, terminal)
+		var result bytes.Buffer
+		if err := showClientConnections(host.frontend, &result); err != nil {
+			return false, err
+		}
+		return false, showSetupResult(ctx, "Client connections", result.String(), "", input, terminal)
 	}
 	if choice == "disconnect" {
 		confirmed := false
@@ -39,7 +44,11 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		if err != nil || aborted || !confirmed {
 			return false, err
 		}
-		return true, disconnectCodex(config, terminal)
+		var result bytes.Buffer
+		if err := disconnectCodex(config, &result); err != nil {
+			return false, err
+		}
+		return true, showSetupResult(ctx, "Codex — disconnected", result.String(), "", input, terminal)
 	}
 	if choice == "openai" {
 		action := "setup"
@@ -56,7 +65,11 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 				return false, err
 			}
 		}
-		return action != "status", runConnections(ctx, host.frontend, []string{action, "openai"}, input, terminal, terminal)
+		var result bytes.Buffer
+		if err := runConnections(ctx, host.frontend, []string{action, "openai"}, input, &result, terminal); err != nil {
+			return false, err
+		}
+		return action != "status", showSetupResult(ctx, "OpenAI tunnel — "+action+" completed", shortDiagnostic(result.String()), result.String(), input, terminal)
 	}
 	installed, enabled := setupToolCounts(report)
 	if installed == 0 || enabled == 0 {
@@ -69,10 +82,17 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		return false, err
 	}
 	arguments := []string{"codex", "--config", config}
+	setupWorking(terminal, "Connecting Codex", setupHostLabel(host.selected))
+	var result, diagnostics bytes.Buffer
 	if host.selected != nil && host.selected.Remote() {
-		return true, connectRemoteCodex(ctx, *host.selected, arguments, terminal, terminal)
+		err = connectRemoteCodex(ctx, *host.selected, arguments, &result, &diagnostics)
+	} else {
+		err = connectCodex(host.frontend, arguments, &result, &diagnostics)
 	}
-	return true, connectCodex(host.frontend, arguments, terminal, terminal)
+	if err != nil {
+		return false, fmt.Errorf("%w\n%s", err, diagnostics.String())
+	}
+	return true, showSetupResult(ctx, "Codex — connected", "Host: "+setupHostLabel(host.selected)+"\nConnection settings saved. Reopen the Codex project to load Loki.\nTool readiness is checked separately with Check readiness.", result.String(), input, terminal)
 }
 
 func setupConnectionDescription(report management.Report, config string) string {

@@ -178,6 +178,27 @@ func TestStatusReportsUnknownReadinessAndIssues(t *testing.T) {
 	}
 }
 
+func TestStatusSummarizesLaunchFailureAndRetainsJSONDiagnostics(t *testing.T) {
+	reason := "managed Chrome sandbox startup failed\nBrowser logs:\n<launching> long Chrome command\n[err] chrome: error while loading shared libraries: libnspr4.so: cannot open shared object file\nCall log:\nrepeated Chrome command"
+	report := management.Report{Release: "0.2.10", Tools: map[tools.ID]tools.State{
+		"browser": {Installed: true, Enabled: true, Readiness: tools.Degraded, Reason: reason},
+	}, Issues: []string{"browser: " + reason}}
+	var text, raw bytes.Buffer
+	if err := result(&text, "Loki", report); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(text.String(), "libnspr4.so") != 1 || strings.Contains(text.String(), "<launching>") || strings.Contains(text.String(), "Call log:") || !strings.Contains(text.String(), "doctor --json") {
+		t.Fatal("human status did not isolate the useful failure", text.String())
+	}
+	if err := result(&commandOutput{Writer: &raw, json: true}, "Loki", report); err != nil {
+		t.Fatal(err)
+	}
+	var decoded management.Report
+	if err := json.Unmarshal(raw.Bytes(), &decoded); err != nil || decoded.Tools["browser"].Reason != reason || decoded.Issues[0] != "browser: "+reason {
+		t.Fatal("structured diagnostics were changed", raw.String(), err)
+	}
+}
+
 func TestProtocolAndHelpOutputKeepTheirOwnFormat(t *testing.T) {
 	var out, diagnostics bytes.Buffer
 	if err := run(t.Context(), []string{"tools", "serve", "--json"}, &out, &diagnostics); err == nil || out.Len() != 0 {

@@ -94,7 +94,13 @@ type SigningPolicyOptions struct {
 	AllowedSigners string
 }
 
+type VolumeBinding struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
 type PolicyOptions struct {
+	Volumes                       []VolumeBinding
 	DeploymentOwner, DeploymentID string
 	GenerationSHA256              string
 	Image                         string
@@ -132,6 +138,7 @@ func (s signingPolicy) valid() bool {
 }
 
 type Policy struct {
+	volumes                       []VolumeBinding
 	deploymentOwner, deploymentID string
 	generationSHA256              string
 	sandboxSHA256                 string
@@ -234,11 +241,17 @@ type dockerLogConfig struct {
 }
 
 type dockerMount struct {
-	Type        string             `json:"Type"`
-	Source      string             `json:"Source"`
-	Target      string             `json:"Target"`
-	ReadOnly    bool               `json:"ReadOnly"`
-	BindOptions *dockerBindOptions `json:"BindOptions,omitempty"`
+	Type          string               `json:"Type"`
+	Source        string               `json:"Source"`
+	Target        string               `json:"Target"`
+	ReadOnly      bool                 `json:"ReadOnly"`
+	BindOptions   *dockerBindOptions   `json:"BindOptions,omitempty"`
+	VolumeOptions *dockerVolumeOptions `json:"VolumeOptions,omitempty"`
+}
+
+type dockerVolumeOptions struct {
+	NoCopy  bool   `json:"NoCopy"`
+	Subpath string `json:"Subpath,omitempty"`
 }
 
 type dockerBindOptions struct {
@@ -320,21 +333,23 @@ func sandboxPolicyFingerprint(
 	gateway GatewayPolicy,
 	signing signingPolicy,
 	deploymentOwner, deploymentID string,
+	volumes []VolumeBinding,
 ) (string, error) {
 	payload := struct {
-		GenerationSHA256   string   `json:"generation_sha256"`
-		DeploymentOwner    string   `json:"deployment_owner,omitempty"`
-		DeploymentID       string   `json:"deployment_id,omitempty"`
-		Image              string   `json:"image"`
-		Workspace          string   `json:"workspace"`
-		InputDirectory     string   `json:"input_directory,omitempty"`
-		ToolchainDirectory string   `json:"toolchain_directory,omitempty"`
-		UID                uint32   `json:"uid"`
-		GID                uint32   `json:"gid"`
-		Environment        []string `json:"environment"`
-		MemoryBytes        int64    `json:"memory_bytes"`
-		PIDs               int64    `json:"pids"`
-		TmpfsBytes         int64    `json:"tmpfs_bytes"`
+		Volumes            []VolumeBinding `json:"volumes,omitempty"`
+		GenerationSHA256   string          `json:"generation_sha256"`
+		DeploymentOwner    string          `json:"deployment_owner,omitempty"`
+		DeploymentID       string          `json:"deployment_id,omitempty"`
+		Image              string          `json:"image"`
+		Workspace          string          `json:"workspace"`
+		InputDirectory     string          `json:"input_directory,omitempty"`
+		ToolchainDirectory string          `json:"toolchain_directory,omitempty"`
+		UID                uint32          `json:"uid"`
+		GID                uint32          `json:"gid"`
+		Environment        []string        `json:"environment"`
+		MemoryBytes        int64           `json:"memory_bytes"`
+		PIDs               int64           `json:"pids"`
+		TmpfsBytes         int64           `json:"tmpfs_bytes"`
 		Gateway            struct {
 			Image             string `json:"image"`
 			Binary            string `json:"binary"`
@@ -352,7 +367,7 @@ func sandboxPolicyFingerprint(
 			AllowedSigners string `json:"allowed_signers,omitempty"`
 		} `json:"signing,omitempty"`
 	}{
-		GenerationSHA256: generationSHA256, Image: image, Workspace: workspace, InputDirectory: inputDirectory,
+		Volumes: volumes, GenerationSHA256: generationSHA256, Image: image, Workspace: workspace, InputDirectory: inputDirectory,
 		DeploymentOwner: deploymentOwner, DeploymentID: deploymentID,
 		ToolchainDirectory: toolchainDirectory, UID: uid, GID: gid, Environment: append([]string(nil), environment...),
 		MemoryBytes: memoryBytes, PIDs: pids, TmpfsBytes: tmpfsBytes,
@@ -423,9 +438,13 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	if err != nil {
 		return Policy{}, err
 	}
+	volumes, err := normalizeVolumeBindings(options.Volumes, options.DeploymentOwner, options.Workspace, options.InputDirectory, options.ToolchainDirectory)
+	if err != nil {
+		return Policy{}, err
+	}
 	sandboxSHA256, err := sandboxPolicyFingerprint(
 		options.GenerationSHA256, options.Image, options.Workspace, options.InputDirectory, options.ToolchainDirectory,
-		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway, signing, options.DeploymentOwner, options.DeploymentID,
+		options.UID, options.GID, environment, options.MemoryBytes, options.PIDs, options.TmpfsBytes, gateway, signing, options.DeploymentOwner, options.DeploymentID, volumes,
 	)
 	if err != nil {
 		return Policy{}, err
@@ -433,7 +452,7 @@ func NewPolicy(options PolicyOptions) (Policy, error) {
 	return Policy{
 		deploymentOwner: options.DeploymentOwner, deploymentID: options.DeploymentID,
 		generationSHA256: options.GenerationSHA256, sandboxSHA256: sandboxSHA256,
-		image: options.Image, gateway: gateway, signing: signing, workspace: options.Workspace, inputDirectory: options.InputDirectory,
+		volumes: volumes, image: options.Image, gateway: gateway, signing: signing, workspace: options.Workspace, inputDirectory: options.InputDirectory,
 		toolchainDirectory: options.ToolchainDirectory, uid: options.UID, gid: options.GID, environment: environment,
 		memoryBytes: options.MemoryBytes, pids: options.PIDs, tmpfsBytes: options.TmpfsBytes,
 	}, nil
@@ -467,7 +486,7 @@ func (p Policy) Valid() bool {
 	}
 	fingerprint, err := sandboxPolicyFingerprint(
 		p.generationSHA256, p.image, p.workspace, p.inputDirectory, p.toolchainDirectory, p.uid, p.gid, p.environment,
-		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway, p.signing, p.deploymentOwner, p.deploymentID,
+		p.memoryBytes, p.pids, p.tmpfsBytes, p.gateway, p.signing, p.deploymentOwner, p.deploymentID, p.volumes,
 	)
 	return err == nil && fingerprint == p.sandboxSHA256
 }
@@ -713,6 +732,9 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 			Type: "bind", Source: spec.InputPath, Target: "/loki-run-input", ReadOnly: true,
 			BindOptions: &dockerBindOptions{Propagation: "rprivate"},
 		})
+	}
+	for index, mount := range create.HostConfig.Mounts {
+		create.HostConfig.Mounts[index] = p.volumeMount(mount)
 	}
 	return Plan{
 		valid: true, name: resource.Name(), policySHA256: p.generationSHA256,

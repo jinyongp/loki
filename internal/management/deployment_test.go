@@ -4,10 +4,54 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"slices"
 	"testing"
 
 	"loki/internal/tools"
 )
+
+func TestEndpointCompositionCanReserveAndReopenItsServices(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux full deployment")
+	}
+	store := Store{Root: t.TempDir()}
+	state, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Config.Mode = tools.Full
+	target := LocalTarget(tools.Full)
+	state.Installed["runtime-core"] = ownedFixtureTarget(t, store, target, "runtime-core")
+	state.Installed["execution"] = ownedFixtureTarget(t, store, target, "execution", "runtime-core")
+	state.Installed["browser"] = ownedFixtureTarget(t, store, target, "browser", "runtime-core")
+	state.Installed["sharing"] = ownedFixtureTarget(t, store, target, "sharing", "runtime-core", "execution")
+	state.Config.Tools = []tools.Selection{{ID: "execution", Enabled: true}, {ID: "browser", Enabled: true}, {ID: "sharing", Enabled: true}}
+	if err := store.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := store.PlanFull()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservation, err := store.ReserveDeployment(plan)
+	if err != nil {
+		t.Fatal("public endpoint composition cannot start", err)
+	}
+	if !slices.Contains(reservation.Services, "endpoints") {
+		t.Fatal("endpoint broker was not protected by the reservation", reservation)
+	}
+	reopened := Store{Root: store.Root}
+	if persisted, err := reopened.Deployments(); err != nil || len(persisted) != 1 {
+		t.Fatal(persisted, err)
+	}
+	if err := reopened.ReleaseDeployment(t.Context(), reservation.ID, deploymentObservation{}); err != nil {
+		t.Fatal(err)
+	}
+	reservation.Services = append(reservation.Services, "foreign-service")
+	if err := (deploymentRegistry{Schema: 1, Deployments: []DeploymentReservation{reservation}}).validate(); err == nil {
+		t.Fatal("unknown service admitted")
+	}
+}
 
 type deploymentObservation struct{ err error }
 

@@ -29,6 +29,7 @@ const (
 )
 
 type launcherLayout struct {
+	Volumes                       []sandbox.VolumeBinding
 	DeploymentOwner, DeploymentID string
 	Socket                        string
 	SocketGID                     int
@@ -101,6 +102,7 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	}
 	inputDirectory := filepath.Join(layout.StateDirectory, "run-inputs")
 	policy, err := sandbox.NewPolicy(sandbox.PolicyOptions{
+		Volumes:         layout.Volumes,
 		DeploymentOwner: layout.DeploymentOwner, DeploymentID: layout.DeploymentID,
 		GenerationSHA256: layout.PolicySHA256,
 		Image:            layout.Image,

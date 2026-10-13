@@ -170,6 +170,14 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 	}
+	if len(args) >= 2 && args[0] == "tools" && args[1] == "update" {
+		if err := validateToolUpdateRequest(args[2:]); err != nil {
+			return err
+		}
+		if err := prepareSelectedHost(); err != nil {
+			return err
+		}
+	}
 	if len(args) > 0 && args[0] == "connections" {
 		if len(args) >= 3 && args[1] == "setup" && args[2] == "codex" {
 			if selected != nil && selected.Remote() {
@@ -263,6 +271,13 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 				if err := prepareRemoteFullHost(ctx, *selected, os.Stdin, diagnostics); err != nil {
 					return err
 				}
+			} else if err := prepareRemoteBrowserHost(ctx, *selected, os.Stdin, diagnostics, defaultRemotePreparationDependencies().run); err != nil {
+				return err
+			}
+		}
+		if len(args) >= 2 && args[0] == "tools" && args[1] == "update" {
+			if err := prepareInstalledBrowserHost(ctx, setupMenuHost{frontend: frontend, selected: selected}, os.Stdin, diagnostics); err != nil {
+				return err
 			}
 		}
 		if remoteGitHubWizard(args) {
@@ -309,6 +324,28 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	store := management.Store{Root: *root}
+	if len(args) == 1 && (args[0] == "_browser-environment" || args[0] == "_prepare-browser-environment") {
+		state, err := store.Load()
+		if err != nil {
+			return err
+		}
+		if state.Config.Mode == tools.Full {
+			return json.NewEncoder(out).Encode(browserEnvironmentReport{Schema: 1, Missing: []string{}})
+		}
+		if args[0] == "_browser-environment" {
+			report, err := inspectBrowserEnvironment(ctx, defaultBrowserEnvironmentDependencies())
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(out).Encode(report)
+		}
+		password, err := io.ReadAll(io.LimitReader(os.Stdin, 4097))
+		defer clear(password)
+		if err != nil || len(password) > 4096 {
+			return fmt.Errorf("invalid bounded browser administrator input")
+		}
+		return prepareBrowserEnvironment(ctx, password, diagnostics, defaultBrowserEnvironmentDependencies())
+	}
 	if len(args) > 0 && slices.Contains([]string{"backup", "backups", "restore", "rollback", "uninstall"}, args[0]) {
 		return runMaintenance(ctx, store, args, os.Stdin, out, diagnostics)
 	}
@@ -547,9 +584,20 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err != nil {
 			return err
 		}
+		_, browserInstalled := state.Installed["browser"]
+		if mode == tools.ProjectHost && (slices.Contains(f.Args(), "browser") || args[1] == "update" && browserInstalled) {
+			if err := prepareLocalBrowserHost(ctx, os.Stdin, diagnostics); err != nil {
+				return err
+			}
+		}
 		if args[1] == "update" {
 			if err := store.UpdateTools(ctx, release, diagnostics); err != nil {
 				return err
+			}
+			if browserInstalled {
+				if err := verifyInstalledBrowser(ctx, store, diagnostics); err != nil {
+					return err
+				}
 			}
 			return success(out, "Updated all installed tools to "+release.Release+"; activation and data are preserved.", map[string]any{"release": release.Release})
 		}
@@ -559,6 +607,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 		if err := store.InstallToolsForMode(ctx, release, selected, mode, diagnostics); err != nil {
 			return err
+		}
+		if slices.Contains(selected, tools.ID("browser")) {
+			if err := verifyInstalledBrowser(ctx, store, diagnostics); err != nil {
+				return err
+			}
 		}
 		return success(out, "Installed "+strings.Join(f.Args(), ", ")+" with private prerequisites (activation is separate).", map[string]any{"tools": selected, "release": release.Release})
 	case "enable", "disable":

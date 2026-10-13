@@ -3,10 +3,47 @@
 This report records executed checks and the published release. Pending checks
 retain their actual validation status.
 
-## Published 0.2.3
+## Local candidate validation — 2026-10-13
+
+These are unpublished working-tree fixes based on 0.2.10. They do not establish
+that the public installer or published 0.2.10 already contains the corrections.
+
+Executed on Linux amd64, native Windows amd64, and Windows-to-WSL:
+
+- CLI-only Linux and PowerShell IEX installation, repeated installation,
+  configuration preservation and corrupt-download rejection.
+- CLI upgrade cancellation, verified downgrade/return, backup/restore integrity
+  and recovery. Upgrade with a nonempty older tool composition remains pending.
+- Disposable WSL import, automatic CLI preparation, selection/switch, restart,
+  missing/deleted host handling and retained selection on a failed switch.
+- Native Windows browser discovery, both engines, owned PNG return and cached
+  access revocation. Windows desktop app rendering remains unobserved.
+- Minimal Ubuntu 22/24 and Debian 12/13 browser installation, automatic native
+  dependencies, real sandboxed screenshot/video, damage detection and lifecycle.
+- Fresh Linux full composition: workspace, execution, Git with generated test
+  signing keys, secrets, coordination and both browser engines. Real jobs with
+  `none` and `dependency-install`, retry-safe admission, signed commits and
+  signature verification, partial staging through isolated stdin, screenshot
+  resource/PNG return and cached access revocation passed together.
+
+Failures reproduced and corrected include the missing full-browser `libatomic1`
+library, writable browser home, Chrome sandbox `chroot` permission with container
+capabilities dropped, the combined engines' PID/thread limit, Docker named-volume
+job mounts, readable public signing inputs and proxy resource protocol metadata.
+Sharing now reports the absence of a public artifact/preview origin rather than
+claiming readiness from private services alone.
+
+The full composition check is included in the release workflow for native Linux
+amd64/arm64. Its updated GitHub Actions execution is still pending; local Linux
+execution does not certify macOS, Windows arm64 or Linux arm64. Live GitHub App
+authorization, external endpoint/sharing routes, desktop SSH image rendering and
+the remaining experimental browser workflows retain separate acceptance gates.
+Local evidence is summarized in [local-acceptance-2026-10-13.json](evidence/local-acceptance-2026-10-13.json).
+
+## Historical published 0.2.3
 
 [Loki 0.2.3](https://github.com/jinyongp/loki/releases/tag/v0.2.3)
-is the stable latest release, published by
+was published by
 [run 37201234614](https://github.com/jinyongp/loki/actions/runs/37201234614)
 from exact source `eabf41d4791f10e9546c2decdcc50019d0f86314`.
 

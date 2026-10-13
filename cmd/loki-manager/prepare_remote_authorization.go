@@ -37,7 +37,7 @@ func prepareRemoteAuthorization(ctx context.Context, selected management.Executi
 	if !ok || !term.IsTerminal(int(file.Fd())) {
 		return false, fmt.Errorf("execution host needs administrator authentication; rerun loki setup in an interactive terminal")
 	}
-	fmt.Fprint(diagnostics, "Execution host administrator password (input hidden; used once for host preparation): ")
+	fmt.Fprint(diagnostics, "[INPUT REQUIRED] Execution host administrator password (input hidden; used once for host preparation): ")
 	password, err := term.ReadPassword(int(file.Fd()))
 	fmt.Fprintln(diagnostics)
 	if err != nil {

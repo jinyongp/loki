@@ -2,8 +2,21 @@
   "schema": 1,
   "url": "https://raw.githubusercontent.com/microsoft/playwright/ae935a43d9e376e4759548f6b3c6905c7b282333/utils/docker/seccomp_profile.json",
   "commit": "ae935a43d9e376e4759548f6b3c6905c7b282333",
-  "bytes": 12997,
-  "sha256": "cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849",
+  "bytes": 13239,
+  "sha256": "dbe81cd916078d5399ab53466119bc1ba0d01f1dbb37ef885f5c61817573ac8a",
   "documentation": "https://playwright.dev/docs/docker",
-  "acceptance": "pending-final-validation"
+  "acceptance": "native-linux-amd64-sandbox-screenshot; arm64 final acceptance pending",
+  "upstream": {
+    "url": "https://raw.githubusercontent.com/microsoft/playwright/ae935a43d9e376e4759548f6b3c6905c7b282333/utils/docker/seccomp_profile.json",
+    "commit": "ae935a43d9e376e4759548f6b3c6905c7b282333",
+    "bytes": 12997,
+    "sha256": "cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849"
+  },
+  "modifications": [
+    {
+      "syscall": "chroot",
+      "action": "SCMP_ACT_ALLOW",
+      "reason": "Chromium user-namespace filesystem isolation with all container capabilities dropped."
+    }
+  ]
 }

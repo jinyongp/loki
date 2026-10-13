@@ -125,10 +125,16 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				return err
 			}
 			if !aborted && confirmed {
+				setupWorking(terminal, "Uninstalling all tools", hostLabel)
 				if err := invoke([]string{"tools", "uninstall", "--all"}, diagnostics); err != nil {
-					fmt.Fprintf(diagnostics, "Could not finish removal: %v\n", err)
+					if viewErr := showSetupResult(ctx, "Uninstall — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+						return viewErr
+					}
 				} else {
 					changed = true
+					if err := showSetupResult(ctx, "Uninstall — completed", "All tool programs on "+hostLabel+" removed. User data and credentials are retained.", "", input, terminal); err != nil {
+						return err
+					}
 				}
 			}
 			cursor = publicToolNames[0]
@@ -137,7 +143,13 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		if selected == "install-many" {
 			updated, err := installSetupTools(ctx, report, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
 			if err != nil {
-				fmt.Fprintf(diagnostics, "Could not finish tool installation: %v\n", err)
+				if viewErr := showSetupResult(ctx, "Installation — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+					return viewErr
+				}
+			} else if updated {
+				if err := showSetupResult(ctx, "Installation — completed", "The selected tools were installed on "+hostLabel+".\nReview installation and activation below; use Check readiness to verify runtime support.", "", input, terminal); err != nil {
+					return err
+				}
 			}
 			changed = changed || updated
 			continue
@@ -145,14 +157,18 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		if selected == "host" {
 			_, updated, err := chooseSetupHost(ctx, host.frontend, input, diagnostics, false)
 			if err != nil {
-				fmt.Fprintf(diagnostics, "Could not select host: %v\n", err)
+				if viewErr := showSetupResult(ctx, "Host selection — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+					return viewErr
+				}
 			}
 			changed = changed || updated
 			continue
 		}
 		state := report.Tools[tools.ID(selected)]
 		if !toolSupportedOnHost(selected, report.Target) {
-			fmt.Fprintln(diagnostics, selected+" needs a Linux execution host. Choose Change execution host, then install it there.")
+			if err := showSetupResult(ctx, "Tool unavailable on this host", selected+" needs a Linux execution host. Choose Change execution host, then install it there.", "", input, terminal); err != nil {
+				return err
+			}
 			continue
 		}
 		actions := setupActions(state)
@@ -184,17 +200,22 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				continue
 			}
 		}
-		fmt.Fprintf(diagnostics, "%s: %s...\n", selected, action)
+		setupWorking(terminal, selected+": "+action, hostLabel)
 		apply := func(command []string) error { return invoke(command, diagnostics) }
 		if err := applySetupAction(selected, action, report, apply); err != nil {
 			// Re-read state on the next pass, including a partially completed
 			// installation or an activation whose service start failed.
-			fmt.Fprintf(diagnostics, "Could not finish %s: %v\nInspect the current state below and retry.\n", selected, err)
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			if viewErr := showSetupResult(ctx, selected+" — needs attention", shortDiagnostic(err.Error())+"\nSaved changes are retained. Review the tool state and retry.", err.Error(), input, terminal); viewErr != nil {
+				return viewErr
+			}
 		} else {
 			changed = true
+			if err := showSetupResult(ctx, selected+" — action completed", "Action: "+action+"\nHost: "+hostLabel+"\nReview the updated tool state in the menu.", "", input, terminal); err != nil {
+				return err
+			}
 		}
 	}
 }

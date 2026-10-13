@@ -47,6 +47,21 @@ uninstall can restart remaining enabled services. Native browsers start on deman
 Uninstall confirmation names the tool and target, and retains user data.
 Esc goes back or exits. Completed actions are retained on exit. `loki tools manage`
 opens the tool menu directly. The target is shown in every management screen.
+
+Interactive setup uses a dedicated terminal screen for each choice. **CHOOSE**
+means input is required; **WORKING** labels progress output; **RESULT** remains
+visible until Continue or Esc. Enter chooses an action or confirms the current
+selection. Connection setup confirms saved settings separately from tool runtime
+readiness. Readiness results show concise causes and keep full diagnostics under
+**Details**, with next/previous pages for long logs. Narrow screens shorten the
+summary while keeping the complete output in Details. Closing setup restores the
+original terminal screen.
+
+Readable `loki doctor` output summarizes multiline failures and avoids repeating
+the same tool failure under Issues. `loki doctor --json` retains original reasons
+and issues for diagnosis. A missing shared library is an execution-host runtime
+dependency failure; a saved Codex connection does not establish browser readiness.
+
 Choose **Change execution host** to select native execution, a managed Linux/WSL
 host, an existing WSL distribution from its actual list, or an SSH destination.
 For an existing WSL distribution or SSH host, setup checks access and reuses a
@@ -57,6 +72,26 @@ remains user-managed. An inaccessible distribution is reported separately from
 a missing CLI. Scripts can use `loki hosts prepare wsl --distribution Ubuntu`.
 Remembered hosts are checked again when entering setup or installing tools, so
 upgrading the frontend does not leave setup using an older execution-host CLI.
+
+Project-host browser installation and updates automatically prepare missing
+Chromium system packages on Ubuntu 22.04+ and Debian 12+, including WSL and SSH
+execution hosts. Packages come from the host's configured distribution
+repositories; prepared hosts require no additional administrator authentication.
+When required, setup reads the administrator password locally with echo disabled
+and sends it only through protected stdin. Browser-only setup prepares these
+libraries without provisioning Docker or a privileged Loki service. Installation
+and activation stay separate.
+
+Opening `loki setup` also repairs missing packages for an already-installed
+project-host browser. An interrupted package operation reports its failure and can
+be resumed by rerunning setup. Other Linux distributions retain their existing
+system libraries and require manual prerequisite preparation. Full-mode browser
+dependencies belong to its container image. Project-host installation and updates
+verify the installed Chrome with its sandbox enabled, render a local screenshot
+and record a short video before reporting success. A failed check retains files
+and data for repair and does not enable a fresh installation. **Check readiness**
+can repeat the runtime check later.
+
 Before installing full tools, both WSL and SSH prepare the protected Linux
 service in the same session. Administrator passwords are read locally with
 echo disabled and sent through the selected transport's stdin. A ready service
@@ -215,6 +250,11 @@ needed. Installed disabled groups start no selected services. Browser-only full
 mode uses a private browser workspace; project-host mode uses a temporary empty
 directory or an explicitly granted local project path.
 
+Public sharing still requires an artifact or preview origin. The current native
+full setup does not configure that public origin; enabling `sharing` alone does
+not make publishing available. Doctor reports this configuration gap instead of
+reporting the group ready merely because its private services are running.
+
 Enable/disable applies the selected full service layouts automatically. Use
 `--no-start` to save activation separately, then `loki tools start` to apply it.
 Active jobs block service reconfiguration and tool removal; let them finish and
@@ -363,3 +403,25 @@ and login state. It is used when selected by the user. Its instructions preserve
 the identity of requests for the desktop application's in-app browser. Native
 startup, harmless calls, file/image return and the actual desktop SSH connection
 are final acceptance checks.
+
+### Minimal Linux browser acceptance
+
+Maintainers can run the complete browser lifecycle on disposable minimal hosts:
+
+```sh
+python3 scripts/maintainer/tools/accept_browser_environment.py \
+  --candidate /absolute/path/to/project-host-candidate \
+  --image ubuntu:22.04 --image ubuntu:24.04 \
+  --image debian:12-slim --image debian:13-slim \
+  --output /absolute/path/to/new-evidence-directory
+```
+
+This requires a Docker daemon and a native Linux candidate. It installs only
+sudo as a host fixture, then exercises the public CLI with real administrator
+authentication and package installation. Checks cover runtime startup, damaged
+executables, both engines through the generated Codex connection, screenshots,
+file transfer, disable/re-enable, process cleanup, update, disconnect, removal
+and reinstallation with user data retained. Logs and exact image and binary
+digests remain in the evidence directory. The release workflow runs these checks
+on Linux amd64. Containers permit user namespaces without disabling Chrome’s
+sandbox. Windows-to-WSL transport and desktop rendering remain separate checks.

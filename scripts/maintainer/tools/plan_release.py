@@ -102,7 +102,10 @@ def fingerprints(release):
         if (system, arch) != ("windows", "arm64"):
             key = f"module:browser:{system}:{arch}:project-host"
             paths = common+[SCRIPTS+n for n in ("build_browser_bundle.py", "acquire_browser_inputs.py")]+["package.json", "package-lock.json", "modules/browser/package.json", f"packaging/tools/inputs/browser-{system}-{arch}-project-host.json"]
-            units[key] = {"fingerprint": inputs.digest(paths, contracts), "validation": inputs.digest([SCRIPTS+n for n in ("accept_browser_candidate.py", "accept_browser_capabilities.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py")]),
+            acceptance_paths = [SCRIPTS+n for n in ("accept_browser_candidate.py", "mcp_probe.py", "accept_browser_capabilities.py", "accept_public_installer.py", "accept_iex_installer.py", "accept_cli_installer.py")]
+            if (system, arch) == ("linux", "amd64"):
+                acceptance_paths.append(SCRIPTS+"accept_browser_environment.py")
+            units[key] = {"fingerprint": inputs.digest(paths, contracts), "validation": inputs.digest(acceptance_paths),
                           "kind": "module", "owner": "browser", "target": {"os": system, "arch": arch, "mode": "project-host"}, "runner": runner}
         if system != "linux":
             continue
@@ -146,7 +149,7 @@ def fingerprints(release):
                 paths += [SCRIPTS+"build_browser_bundle.py", SCRIPTS+"acquire_browser_inputs.py", "package.json", "package-lock.json", "modules/browser/package.json", f"packaging/tools/inputs/browser-linux-{arch}-full.json"]
             owned_images = {role:value for role,value in images.items() if OWNERS[role] == owner}
             value = inputs.digest(paths, {"payload":payload, "images":owned_images, "contract":contracts})
-            units[f"module:{owner}:linux:{arch}:full"] = {"fingerprint":value,"validation":inputs.digest([SCRIPTS+"accept_full_workspace_candidate.py"]), "payload":payload, "kind":"module","owner":owner,"target":target,"runner":runner}
+            units[f"module:{owner}:linux:{arch}:full"] = {"fingerprint":value,"validation":inputs.digest([SCRIPTS+name for name in ("accept_full_workspace_candidate.py", "accept_full_composition_candidate.py", "accept_browser_candidate.py", "mcp_probe.py")]), "payload":payload, "kind":"module","owner":owner,"target":target,"runner":runner}
     return units, inputs
 
 

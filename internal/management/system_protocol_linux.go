@@ -59,7 +59,7 @@ func ValidateSystemArguments(args []string) ([]string, bool, error) {
 	}
 	input := false
 	switch clean[0] {
-	case "status", "doctor", "version", "backup", "rollback", "_prepare-environment":
+	case "status", "doctor", "version", "backup", "rollback", "_prepare-environment", "_browser-environment":
 		if len(clean) != 1 {
 			return nil, false, fmt.Errorf("invalid system operator command")
 		}

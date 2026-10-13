@@ -153,7 +153,7 @@ def assemble(recipe_path, output, release_url, payload_only=False):
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             profile = bundle / assets["browser-seccomp"]
             if profile.stat().st_size != receipt["bytes"] or digest(profile) != receipt["sha256"]:
-                raise ValueError("sandbox profile differs from its immutable upstream receipt")
+                raise ValueError("sandbox profile differs from its reviewed derived-profile receipt")
             receipt["notice"] = "notices/Playwright.LICENSE"
             notices = bundle / "notices"
             notices.mkdir(exist_ok=True)

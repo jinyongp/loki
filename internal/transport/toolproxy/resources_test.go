@@ -5,9 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -15,17 +18,22 @@ func TestProtectedBrowserResourcesPreserveContentsAndRecheckAccess(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	upstream := mcp.NewServer(&mcp.Implementation{Name: "protected", Version: "0.2.0"}, nil)
+	upstream.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, request mcp.Request) (mcp.Result, error) {
+			if method == "server/discover" {
+				return nil, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found"}
+			}
+			return next(ctx, method, request)
+		}
+	})
 	closeFiles, err := registerFiles(ctx, upstream, &bindingOwners{}, []Options{{Owner: "browser/playwright", Results: t.TempDir(), AuthorizeResource: func() error { return nil }}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeFiles()
-	upClient, upServer := mcp.NewInMemoryTransports()
-	upSession, err := upstream.Connect(ctx, upServer, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer upSession.Close()
+	upServer := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return upstream }, nil))
+	defer upServer.Close()
+	upClient := &mcp.StreamableClientTransport{Endpoint: upServer.URL}
 	var enabled atomic.Bool
 	enabled.Store(true)
 	authorize := func() error {
@@ -60,6 +68,8 @@ func TestProtectedBrowserResourcesPreserveContentsAndRecheckAccess(t *testing.T)
 	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &entry); err != nil {
 		t.Fatal(err)
 	}
+	// The modern downstream must not overwrite the independently negotiated
+	// legacy HTTP upstream's version when returning owned resources.
 	resource, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: entry.URI})
 	if err != nil || len(resource.Contents) != 1 || string(resource.Contents[0].Blob) != "protected contents" {
 		t.Fatalf("resource: %+v %v", resource, err)

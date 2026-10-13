@@ -198,6 +198,8 @@ func printStatusForHost(out io.Writer, report management.Report, cliVersion stri
 		fmt.Fprintln(writer, "  Ready:", displayValue(*report.Ready))
 	}
 	ids := []tools.ID{}
+	reported := map[string]bool{}
+	detailed := false
 	for _, name := range publicToolNames {
 		if _, exists := report.Tools[tools.ID(name)]; exists {
 			ids = append(ids, tools.ID(name))
@@ -215,15 +217,30 @@ func printStatusForHost(out io.Writer, report management.Report, cliVersion stri
 			state := report.Tools[id]
 			fmt.Fprintf(writer, "  %s\t%s\t%s\t%s\t%s\n", id, state.Release, displayValue(state.Installed), displayValue(state.Enabled), toolRuntimeLabel(state, report.Target.Mode))
 			if state.Reason != "" {
-				fmt.Fprintln(writer, "    "+state.Reason)
+				summary := shortDiagnostic(state.Reason)
+				fmt.Fprintln(writer, "    "+summary)
+				detailed = detailed || summary != state.Reason
+				reported[string(id)+": "+state.Reason] = true
 			}
 		}
 	}
 	if len(report.Issues) > 0 {
-		fmt.Fprintln(writer, "\nIssues:")
+		first := true
 		for _, issue := range report.Issues {
-			fmt.Fprintln(writer, "  - "+issue)
+			if reported[issue] {
+				continue
+			}
+			if first {
+				fmt.Fprintln(writer, "\nIssues:")
+				first = false
+			}
+			summary := shortDiagnostic(issue)
+			fmt.Fprintln(writer, "  - "+summary)
+			detailed = detailed || summary != issue
 		}
+	}
+	if detailed {
+		fmt.Fprintln(writer, "\nFull diagnostics: loki doctor --json (or setup > Details).")
 	}
 	if len(report.Deployments) > 0 {
 		if err := result(writer, "\nDeployments:", report.Deployments); err != nil {

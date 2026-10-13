@@ -22,7 +22,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections"} {
+	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections", "result", "result-narrow", "readiness"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -37,6 +37,11 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	defer terminal.Close()
 	if err := pty.Setsize(terminal, &pty.Winsize{Rows: 30, Cols: 120}); err != nil {
 		t.Fatal(err)
+	}
+	if kind == "result-narrow" {
+		if err := pty.Setsize(terminal, &pty.Winsize{Rows: 20, Cols: 50}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	before, err := term.GetState(int(terminal.Fd()))
 	if err != nil {
@@ -76,8 +81,11 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
-	if kind == "connections" {
+	if kind == "connections" || kind == "readiness" {
 		t.Setenv("CODEX_HOME", t.TempDir())
+	}
+	if kind == "readiness" {
+		installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"ready":false,"healthy":false,"tools":{"browser":{"installed":true,"enabled":true,"readiness":"degraded","reason":"Chrome startup failed\n<launching> long Chrome command\nerror while loading shared libraries: libnspr4.so: cannot open shared object file"}}}`)
 	}
 	if kind == "unreachable" || kind == "preparation-failed" {
 		installSetupSSHFixture(t, `{}`)
@@ -90,7 +98,20 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	finished := make(chan error, 1)
 	go func() {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
-		if kind == "connections" {
+		if kind == "readiness" {
+			host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
+			err := setupReadiness(ctx, host, terminal, terminal)
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": false})
+			}
+			finished <- err
+		} else if strings.HasPrefix(kind, "result") {
+			err := showSetupResult(ctx, "Readiness — needs attention", "Missing Linux library: libnspr4.so", strings.Repeat("Chrome fixture diagnostic line\n", 40), terminal, terminal)
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": false})
+			}
+			finished <- err
+		} else if kind == "connections" {
 			report := management.Report{Target: management.LocalTarget(tools.ProjectHost), Tools: map[tools.ID]tools.State{"browser": {Installed: true, Enabled: true}}}
 			changed, err := setupConnections(ctx, host, report, terminal, terminal)
 			if err == nil {
@@ -108,7 +129,23 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runSetupMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		}
 	}()
-	if kind == "connections" {
+	if kind == "readiness" {
+		waitFor("Missing Linux library")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("<launching>")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Missing Linux library")
+		_, _ = io.WriteString(master, "\r")
+	} else if strings.HasPrefix(kind, "result") {
+		waitFor("Missing Linux library")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Page 1/")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Page 2/")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Missing Linux library")
+		_, _ = io.WriteString(master, "\r")
+	} else if kind == "connections" {
 		waitFor("Connect Codex")
 		_, _ = io.WriteString(master, "\r")
 		waitFor("Loki tools: browser")
@@ -117,11 +154,16 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		waitFor("Choose execution host")
 		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "unreachable" || kind == "preparation-failed" {
+		if kind == "preparation-failed" {
+			waitFor("Host preparation — needs attention")
+			_, _ = io.WriteString(master, "\r")
+		}
 		waitFor("Host unavailable")
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("Inspect client connections")
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("codex: not configured")
+		_, _ = io.WriteString(master, "\r")
 		waitFor("Host unavailable")
 		_, _ = io.WriteString(master, "\x1b")
 	} else {

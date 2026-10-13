@@ -72,7 +72,9 @@ func (r *ownedResourceProxy) refresh(ctx context.Context, engine *mcp.ClientSess
 				}
 				ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 				defer cancel()
-				return engine.ReadResource(ctx, request.Params)
+				params := *request.Params
+				params.Meta = upstreamMeta(request.Params.Meta)
+				return engine.ReadResource(ctx, &params)
 			})
 			r.previous = append(r.previous, definition.URITemplate)
 		}

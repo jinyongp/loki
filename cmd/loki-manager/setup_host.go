@@ -94,6 +94,7 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		return nil, false, err
 	}
 	command := []string{"hosts", "use", "local"}
+	preparationLabel := setupHostLabel(nil)
 	switch choice {
 	case "managed-wsl":
 		confirmed := false
@@ -103,6 +104,7 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 			return nil, false, err
 		}
 		command = []string{"hosts", "prepare", "wsl", "--distribution", "loki-tools"}
+		preparationLabel = "WSL: loki-tools"
 	case "wsl":
 		listCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		names, listErr := setupWSLDistributions(listCtx)
@@ -122,8 +124,10 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 			return nil, false, err
 		}
 		command = []string{"hosts", "prepare", "wsl", "--distribution", name}
+		preparationLabel = "WSL: " + name
 	case "system":
 		command = []string{"hosts", "prepare", "local"}
+		preparationLabel = "Local Linux (managed system host)"
 	case "ssh":
 		address := ""
 		form = huh.NewForm(huh.NewGroup(huh.NewInput().Title("SSH destination (user@host)").Description("Prepare Loki and Linux services on this host; administrator access may be required.").Value(&address).Validate(func(value string) error {
@@ -137,7 +141,9 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 			return nil, false, err
 		}
 		command = []string{"hosts", "prepare", "ssh", "--address", strings.TrimSpace(address)}
+		preparationLabel = "SSH: " + strings.TrimSpace(address)
 	}
+	setupWorking(terminal, "Selecting and preparing execution host", preparationLabel)
 	if err := runHosts(ctx, store, command[1:], diagnostics, diagnostics); err != nil {
 		return nil, false, err
 	}

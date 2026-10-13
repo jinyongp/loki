@@ -45,7 +45,7 @@ async def protocol(binary, root, workspace, invoke):
         await client.close()
 
 
-def accept(candidate):
+def accept(candidate, modules=("workspace",), protocol_check=protocol):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
     target = document.get("target", {})
     native_arch = {"x86_64":"amd64", "aarch64":"arm64", "amd64":"amd64", "arm64":"arm64"}.get(platform.machine().lower())
@@ -63,16 +63,23 @@ def accept(candidate):
         raise ValueError("full native acceptance requires local Docker")
     environment = {key:value for key, value in os.environ.items() if key not in {"DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_API_VERSION"}}
     environment["DOCKER_API_VERSION"] = "1.47"
-    if "archive" in image:
-        archive = candidate / "images" / relative(image["archive"])
-        if archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
-            raise ValueError("core service image archive differs")
-        subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "image", "load", "--input", str(archive)], env=environment, check=True, timeout=180)
-    else:
+    if len(modules) == 1 and "archive" not in image:
         from registry_images import verify
         for entry in images["images"].values():
             verify(entry["reference"])
-        subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "pull", image["reference"]], env=environment, check=True, timeout=180)
+    selected_images = images["images"].values() if len(modules) > 1 else [image]
+    for image in selected_images:
+        if image.get("target") != target:
+            raise ValueError("full image target differs from its native candidate")
+        if "archive" in image:
+            archive = candidate / "images" / relative(image["archive"])
+            if archive.is_symlink() or archive.stat().st_size != image["bytes"] or digest(archive) != image["sha256"] or oci_manifest(archive, target) != image["reference"].split("@", 1)[1]:
+                raise ValueError("full image archive differs from its owned receipt")
+            subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "image", "load", "--input", str(archive)], env=environment, check=True, timeout=240)
+        else:
+            from registry_images import verify
+            verify(image["reference"])
+            subprocess.run([docker, "--host", "unix:///var/run/docker.sock", "pull", image["reference"]], env=environment, check=True, timeout=180)
     scratch = Path(tempfile.mkdtemp(prefix="loki-full-workspace-accept-"))
     passed, started = False, False
     binary = scratch / "loki"
@@ -92,15 +99,21 @@ def accept(candidate):
                 raise ValueError("Full candidate command failed: " + " ".join(arguments) + "\n" + completed.stdout + completed.stderr)
             return completed.stdout
         invoke("tools", "configure", "--mode", "full")
-        invoke("tools", "install", "workspace", "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
-        invoke("tools", "enable", "workspace")
+        print("Full acceptance: installing " + ", ".join(modules), flush=True)
+        invoke("tools", "install", *modules, "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
+        for module in modules:
+            invoke("tools", "enable", module, "--no-start")
         started = True
+        print("Full acceptance: preparing selected services", flush=True)
+        if len(modules) > 1 and "git" in modules:
+            invoke("integrations", "setup", "git", "--identity-name", "Loki acceptance fixture", "--identity-email", "fixture@example.invalid")
         observation = json.loads(invoke("tools", "start", "--json"))["observation"]
         if not observation["ready"]:
             raise ValueError("full workspace did not become ready")
         if not json.loads(invoke("doctor", "--json"))["healthy"]:
             raise ValueError("full candidate doctor is unhealthy")
-        asyncio.run(protocol(binary, root, scratch, invoke))
+        print("Full acceptance: exercising native MCP operations and revocation", flush=True)
+        asyncio.run(protocol_check(binary, root, scratch, invoke))
         passed = True
     finally:
         # A stop failure must preserve the owned record needed for recovery.
@@ -110,7 +123,7 @@ def accept(candidate):
             shutil.rmtree(scratch)
         else:
             print(json.dumps({"retained_private_acceptance_root":str(scratch)}), flush=True)
-    print(json.dumps({"full_workspace_acceptance":"pass", "target":target, "checks":["native candidate receipts", "private stdio", "selected discovery", "create/read", "cached revocation", "owned stop"], "publication":False}))
+    print(json.dumps({"full_acceptance":"pass", "modules":modules, "target":target, "checks":["native candidate receipts", "private stdio", "selected discovery", "create/read", "cached revocation", "owned stop"], "publication":False}))
 
 
 if __name__ == "__main__":

@@ -121,7 +121,13 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 	fmt.Fprintf(&script, "test ! -L /loki-auth\ntest \"$(stat -c %%u /loki-auth)\" = %d\ntest -f /loki-auth/token\ntest ! -L /loki-auth/token\ntest \"$(stat -c %%u /loki-auth/token)\" = %d\nchgrp 10001 /loki-auth /loki-auth/token\nchmod 2750 /loki-auth\nchmod 0640 /loki-auth/token\n", hostUID, hostUID)
 	fmt.Fprintf(&script, "test ! -L /loki-layout\ntest \"$(stat -c %%u /loki-layout)\" = %d\nchgrp 10001 /loki-layout\nchmod 2750 /loki-layout\n", hostUID)
 	for _, name := range []string{"loki.toml", "mcp.json", "runtime.json", "launcher.json", "executor.json", "github.toml", "ingress.toml", "signing.gitconfig", "allowed-signers", "signing.pub"} {
-		fmt.Fprintf(&script, "if test -e '/loki-layout/%s'; then test -f '/loki-layout/%s'; test ! -L '/loki-layout/%s'; chown 0:10001 '/loki-layout/%s'; chmod 0640 '/loki-layout/%s'; fi\n", name, name, name, name, name)
+		mode := "0640"
+		if name == "signing.gitconfig" || name == "allowed-signers" || name == "signing.pub" {
+			// These public inputs are mounted individually into jobs whose
+			// GID is 10000; no private key enters the workload.
+			mode = "0644"
+		}
+		fmt.Fprintf(&script, "if test -e '/loki-layout/%s'; then test -f '/loki-layout/%s'; test ! -L '/loki-layout/%s'; chown 0:10001 '/loki-layout/%s'; chmod %s '/loki-layout/%s'; fi\n", name, name, name, name, mode, name)
 	}
 	result.Script = script.String()
 	return result, nil

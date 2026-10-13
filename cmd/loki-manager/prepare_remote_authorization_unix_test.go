@@ -20,6 +20,12 @@ import (
 )
 
 func TestWSLAdministratorPasswordUsesProtectedStdinAndContinues(t *testing.T) {
+	for _, kind := range []string{"full", "browser"} {
+		t.Run(kind, func(t *testing.T) { testWSLAdministratorPassword(t, kind) })
+	}
+}
+
+func testWSLAdministratorPassword(t *testing.T, kind string) {
 	master, terminal, err := pty.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -40,13 +46,19 @@ func TestWSLAdministratorPasswordUsesProtectedStdinAndContinues(t *testing.T) {
 		call := strings.Join(args, " ")
 		calls = append(calls, call)
 		switch call {
+		case "_browser-environment":
+			fmt.Fprintln(out, `{"schema":1,"applicable":true,"supported":true,"missing_packages":["libnspr4"],"administrator_required":true}`)
+			return nil
 		case "_host-authorization":
 			fmt.Fprintln(out, `{"administrator_required":true,"prepared":false}`)
 			return nil
-		case "_prepare-host-relay":
+		case "_prepare-host-relay", "_prepare-browser-environment":
 			material, err := io.ReadAll(input)
 			if err != nil || string(material) != password {
 				return fmt.Errorf("password was not delivered through protected stdin")
+			}
+			if call == "_prepare-browser-environment" {
+				return nil
 			}
 			return json.NewEncoder(out).Encode(management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "local"}, System: true, Owned: true, Root: "/var/lib/loki-tools/1000", Command: "/usr/local/lib/loki-tools/1000/bin/loki", Socket: "/run/loki-tools-manager-1000.sock"})
 		default:
@@ -54,7 +66,13 @@ func TestWSLAdministratorPasswordUsesProtectedStdinAndContinues(t *testing.T) {
 		}
 	}
 	finished := make(chan error, 1)
-	go func() { finished <- prepareRemoteFullHostWithRunner(ctx, selected, terminal, &diagnostics, run) }()
+	go func() {
+		if kind == "browser" {
+			finished <- prepareRemoteBrowserHost(ctx, selected, terminal, &diagnostics, run)
+		} else {
+			finished <- prepareRemoteFullHostWithRunner(ctx, selected, terminal, &diagnostics, run)
+		}
+	}()
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 	// Wait for ReadPassword to disable terminal echo before sending input.

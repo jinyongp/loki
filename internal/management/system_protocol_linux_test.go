@@ -19,10 +19,13 @@ func TestSystemProtocolRejectsCallerAuthority(t *testing.T) {
 			t.Fatalf("administrator option accepted: %s", flag)
 		}
 	}
-	for _, args := range [][]string{{"install"}, {"upgrade", "--yes"}, {"tools", "configure", "--mode", "full"}, {"_system-host"}, {"status", strings.Repeat("x", 4097)}} {
+	for _, args := range [][]string{{"install"}, {"upgrade", "--yes"}, {"tools", "configure", "--mode", "full"}, {"_system-host"}, {"_prepare-browser-environment"}, {"status", strings.Repeat("x", 4097)}} {
 		if _, _, err := ValidateSystemArguments(args); err == nil {
 			t.Fatalf("administrator command accepted: %v", args)
 		}
+	}
+	if _, input, err := ValidateSystemArguments([]string{"_browser-environment"}); err != nil || input {
+		t.Fatalf("read-only browser environment query: %v %v", input, err)
 	}
 	args, input, err := ValidateSystemArguments([]string{"--json", "--root", "/ignored", "tools", "serve"})
 	if err != nil || !input || strings.Join(args, " ") != "--json tools serve" {

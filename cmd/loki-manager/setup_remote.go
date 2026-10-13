@@ -31,6 +31,11 @@ func runRemoteSetup(ctx context.Context, frontend management.Store, selected man
 			return err
 		}
 	}
+	if options.mode == tools.ProjectHost && slices.Contains(options.selected, tools.ID("browser")) {
+		if err := prepareRemoteBrowserHost(ctx, selected, input, diagnostics, defaultRemotePreparationDependencies().run); err != nil {
+			return err
+		}
+	}
 	call := func(args ...string) error {
 		if selected.Root != "" {
 			args = append([]string{"--root", selected.Root}, args...)

@@ -3,9 +3,12 @@ package management
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"time"
+
+	"loki/internal/config"
 )
 
 func (b *DockerFullBackend) Start(ctx context.Context, r DeploymentReservation) error {
@@ -141,6 +144,18 @@ func (b *DockerFullBackend) Observe(ctx context.Context, r DeploymentReservation
 	}
 	if slices.Contains(r.Services, "mcp") {
 		for _, choice := range state.Config.Tools {
+			if choice.Enabled && choice.ID == "sharing" {
+				directory, err := b.deploymentDirectory(r)
+				if err == nil {
+					err = fullSharingReadiness(filepath.Join(directory, "layout", "loki.toml"))
+				}
+				if err != nil {
+					result.Services["sharing"] = err.Error()
+					result.Ready, result.State = false, "degraded"
+				} else {
+					result.Services["sharing"] = "ready"
+				}
+			}
 			if !choice.Enabled || !slices.Contains([]string{"github", "git", "workspace"}, string(choice.ID)) {
 				continue
 			}
@@ -162,6 +177,17 @@ func (b *DockerFullBackend) Observe(ctx context.Context, r DeploymentReservation
 		}
 	}
 	return result, nil
+}
+
+func fullSharingReadiness(path string) error {
+	settings, err := config.Load(path)
+	if err != nil {
+		return fmt.Errorf("sharing configuration cannot be inspected: %w", err)
+	}
+	if settings.ArtifactBaseURL == "" && settings.PreviewBaseDomain == "" {
+		return fmt.Errorf("public sharing is not configured on this full host; no artifact or preview origin is available")
+	}
+	return nil
 }
 
 var _ FullBackend = (*DockerFullBackend)(nil)

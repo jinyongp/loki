@@ -320,8 +320,10 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 					return err
 				}
 				l.Launcher[key] = hostPath
-				// Docker job bind sources are host paths. The launcher sees the
-				// exact same owned directory, never the surrounding Docker store.
+				bindings, _ := l.Launcher["Volumes"].([]map[string]string)
+				l.Launcher["Volumes"] = append(bindings, map[string]string{"path": hostPath, "name": mount.Source})
+				// The launcher validates files through the same owned directory;
+				// child containers mount the declared named volume directly.
 				service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: hostPath, Target: hostPath})
 			}
 		}
@@ -415,12 +417,17 @@ func (b *DockerFullBackend) serviceSpecification(r DeploymentReservation, t Full
 		result.Command = []string{worker, "owned-endpoints", "--socket", "/run/loki/endpoints/control.sock", "--tools-config", "/etc/loki/activation/state.json"}
 	case "browser":
 		result.Command = []string{worker, "browser", "--socket", "/run/loki/browser/control.sock", "--agent-uid", "10000", "--socket-gid", "10001", "--config", config, "--execution-contract", l.ExecutionContract, "--bundle", "/opt/loki/modules/browser", "--data", "/var/lib/loki/browser", "--workspace", "/var/lib/loki/browser/workspace", "--proxy", "http://browser-proxy:18767"}
+		// Chrome needs a writable home for Crashpad even with its own profile.
+		// Keep those files inside the browser's owned volume, away from /root.
+		result.Command = append([]string{"/usr/bin/env", "HOME=/var/lib/loki/browser", "XDG_CONFIG_HOME=/var/lib/loki/browser/config", "XDG_CACHE_HOME=/var/lib/loki/browser/cache"}, result.Command...)
 		for _, choice := range t.Resources.Plan.Enabled {
 			if choice.ID == "browser" && len(choice.Capabilities) != 0 {
 				result.Command = append(result.Command, "--capabilities", strings.Join(choice.Capabilities, ","))
 			}
 		}
-		result.Memory, result.PIDs = 1<<30, 256
+		// One client owns both upstream engines. Chrome counts renderer threads
+		// against this limit too; 256 rejects the second sandboxed engine.
+		result.Memory, result.PIDs = 1<<30, 512
 		// The reviewed profile lives in the trusted core generation; no
 		// unconfined seccomp or disabled Chromium sandbox fallback is used.
 		relative, ok := t.Resources.Payloads["runtime-core"].Assets["browser-seccomp"]

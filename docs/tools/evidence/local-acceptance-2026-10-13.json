@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "date": "2026-10-13",
+  "publication": false,
+  "source_base": "aae9183512d7dc4144d5d6b6b9783ef107ebdc05",
+  "state": "unpublished working tree",
+  "source_files_sha256": {
+    ".github/workflows/release.yml": "262d8384adf76629db5cbea446fab2c659efc96761f9fe6d9777a20920309a53",
+    "cmd/launcher/main.go": "32d2f7ecb0265888fd2210984b140d0cf5e73fffa0dd5abb37f02113a54f78f2",
+    "cmd/loki-manager/browser_environment.go": "b7b172037d98f77f59dab2b6a36c3329989b89ff2aab69341814447046c46f25",
+    "cmd/loki-manager/browser_environment_test.go": "6faeffd988812f66a54e2959ce255e69366b5f68b2ca33d443437ac188093eb3",
+    "cmd/loki-manager/install_options.go": "b08ad38599295976efbb2037de384ea745d6cec0506bf0d3ad0c367b4fe849fd",
+    "cmd/loki-manager/main.go": "ed059ffca9c1405c38418fa4f96c830a6327b5692a1d56043ba9c0dcfb27acb9",
+    "cmd/loki-manager/output.go": "c8818269eee5fbccf999bd2b429960a1b4aeda13b602c750c1eec19b4f4f69b2",
+    "cmd/loki-manager/output_test.go": "c9d8b495201301b4e82ec3e9db7666d19007bc739b3074dff45e56f4ce420701",
+    "cmd/loki-manager/prepare_remote_authorization.go": "9497318e81358eb9370bbbcd7d2655d6604d359a4c5e09614277caa11ca05302",
+    "cmd/loki-manager/prepare_remote_authorization_unix_test.go": "c6fcab10b6c512537677b674205ea4083d1dd2b1cecde34e5004a6334655d17f",
+    "cmd/loki-manager/setup.go": "9256b90273db0697d39f124072fe21dba8d4e89ee5ecee669a2e07082ff7dcd4",
+    "cmd/loki-manager/setup_connections.go": "587a9848019c1efaaf72923686946bd04ec9bb8f3461622a2cf2c954428ebcc2",
+    "cmd/loki-manager/setup_home.go": "75ea7a0272487a9c0dd968dad528c4e3493b65b9ed6818a68d8aa01e95045f62",
+    "cmd/loki-manager/setup_host.go": "f858d2bb60f87f644972cc9d6692a3a668f0bb7f81d6cd61a8d11444fdc0f447",
+    "cmd/loki-manager/setup_menu.go": "821ada479e8e92a56cde723d0e07d289a5ec54e53c4aeec22aba20c896153eca",
+    "cmd/loki-manager/setup_remote.go": "883edd0c4aa60e4a452dafb0a219cb5f66e049649be78d5841aaf3179eb668df",
+    "cmd/loki-manager/setup_remote_test.go": "3321fd049e1a2a1aa6ed46a4f69daafb5f02d03762b38a15d7fb33aec3a4a27b",
+    "cmd/loki-manager/setup_result.go": "461da12dd34856527d012a979043f5fe6cd106c16e4c6789d82825760dbcbb89",
+    "cmd/loki-manager/setup_select.go": "4ccff5ff4b667f938e3025219601aa632fba349087ac1a3da23af902a12836db",
+    "cmd/loki-manager/setup_select_unix_test.go": "3343265c2a24345420dda08664b96eb09effbbb1d58913d9b1edf47677a911ec",
+    "internal/management/deployment.go": "5d60fc58a96ec998862d095f0b6054a749055e8376a76008690496345c8afa26",
+    "internal/management/deployment_test.go": "abdb30c4326cc99ea8b9f0f0d30ca26963f8e686591aa876f66a07eeab8334f8",
+    "internal/management/full_bootstrap.go": "8ecdd53ba232a0dbc306afb48ffd1a6133306c0a83765eb87a7d08bbbb62b1fe",
+    "internal/management/full_docker_policy_linux_test.go": "fdc25a602432532dbb787b9a2581dae2d6140965eb31837b1a5977c26ed88685",
+    "internal/management/full_docker_prepare_linux.go": "ec9b4392ebb684e4dbac5d3a1728fcb4dfc769d7789b457aea1ddaa617641f8a",
+    "internal/management/full_docker_readiness_linux.go": "46798e4827e152e2c1938669722f9be7443f19b17d9f62b23b669fc1006cbd60",
+    "internal/management/full_inspect.go": "7119cc8a3678575f3ae4f19de462e0a411f5bbba7cc1567d7be8f867c6a82858",
+    "internal/management/system_protocol_linux.go": "fd9584fdfbe31a84e396100ad55cb04fb6d2ba2e0ce79764a4cd3025fd2e2e3e",
+    "internal/management/system_protocol_linux_test.go": "28c8e0868033a20c664e2470a04d763e31e090fd4e453257392e9890c56e64f7",
+    "internal/platform/sandbox/plan.go": "5fac52fdcaab759be950bbc3ffaca93f5ae0b1cc9ae1f50ea3cdaaa3a9ed3492",
+    "internal/platform/sandbox/volume_bindings.go": "061fc5749665d377400bfee1bc29d0fc0feeb2286b1c051138208e032a87a8de",
+    "internal/platform/sandbox/volume_bindings_test.go": "66ce4ceaaecec362d451f879a03ba743b9d0740c53229adfe6452440b25c6716",
+    "internal/transport/toolproxy/resources.go": "3ca6baf3f7a6a920d2d609fb01a83da25fd61524b26106533e08f4b02a4fcc52",
+    "internal/transport/toolproxy/resources_test.go": "617989e242a5192c968543d2a2f211b686d7ede22e3420df4a33eeef6547ad92",
+    "modules/browser/probe.go": "d6c4694f6a831d8bd317afa121a3179fc122e9ff52ba4ec324f7467a474dc83d",
+    "packaging/tools/config/browser-seccomp.json": "dbe81cd916078d5399ab53466119bc1ba0d01f1dbb37ef885f5c61817573ac8a",
+    "packaging/tools/config/browser-seccomp.receipt.json": "5c6ffef1189cdd172590357fca8f247400be886f8037fccd9b79d906f361d71f",
+    "packaging/tools/inputs/browser-packages-linux-amd64.json": "ac1325214f0d8b72f13b3bdca0fd38b8f22946d609cc496a5a055a1babb10484",
+    "packaging/tools/inputs/browser-packages-linux-arm64.json": "eb64e6a214cacb86350885ac8c7b5ffa75399beb642776804184f330f3e8bfba",
+    "scripts/maintainer/tools/accept_browser_environment.py": "02ab52d99673103de847ce9dc6f2df13379badbccc13134068887af4842f88b7",
+    "scripts/maintainer/tools/accept_full_composition_candidate.py": "220dc34c931f96d666563eb6f8767218b4a1309dfe13f930e07befe66faccf0b",
+    "scripts/maintainer/tools/accept_full_workspace_candidate.py": "89d079792d497c43190f898653bfb12783435b39d66a58b9834917ac00d510c6",
+    "scripts/maintainer/tools/build_full_bundle.py": "ed868b87609f3f902b6e6ff4ecbd13f228ce0fc48a2b0b05703f45ea6d6effff",
+    "scripts/maintainer/tools/plan_release.py": "0c7d793e83d138079ab1e2681f879ee887368f8cf05aa6c4f2caa0df42383e89",
+    "scripts/maintainer/tools/test_release_selection.py": "6a6215e76da433968e433a168bc5a1580aec882fb98d4c8d53255ac9db8a575e",
+    "scripts/maintainer/tools/build_debian_closure.py": "46a68ea2d7947aa1648691506c61fb3eb5e7781c45d1a1219d86c4b936d9d60a"
+  },
+  "final_linux_full_manager_sha256": "f455b9b7c643562ab45ea3e82e5bf3e20709545b51aea02b832a2f0d94b09134",
+  "passed": [
+    "Linux and Windows CLI-only candidate bootstrap lifecycle and corruption rejection",
+    "CLI forced downgrade/return and cancellation",
+    "backup/restore corruption rejection and recovery",
+    "disposable native WSL bootstrap, switching, restart and deleted target",
+    "native Windows amd64 browser MCP, both engines, PNG bytes and revocation",
+    "minimal Ubuntu 22/24 and Debian 12/13 browser dependency and lifecycle acceptance",
+    "native Linux amd64 full six-module composition with generated test signing keys, both network profiles, replay-safe jobs, signed commit verification, stdin partial staging, secrets, coordination, both browser engines, screenshot resources, PNG bytes and cached revocation",
+    "targeted Go race suites",
+    "34 maintainer Python tests",
+    "canonical package ordering rebuilt the tested browser native-library archive byte-for-byte"
+  ],
+  "pending": [
+    "same-source updated GitHub Actions native macOS, Linux arm64 and Windows arm64 acceptance",
+    "real desktop app SSH image rendering",
+    "live Loki GitHub App authorization and API mutations",
+    "public sharing origin configuration and external endpoint/routing acceptance",
+    "nonempty older-version tool composition upgrade",
+    "experimental browser extension installation, PWA installation, WebMCP/third-party invocation, memory analysis and annotation UI"
+  ],
+  "limits": [
+    "Windows bootstrap fixtures used local verified archives instead of changing the public installer",
+    "candidate versions are locally stamped 0.2.10; published immutable assets were not replaced",
+    "earlier native Windows and minimal-host browser results retain their own candidate basis; subsequent Linux full fixes were checked separately",
+    "public sharing is not currently configured by native full setup and is reported degraded"
+  ],
+  "raw_evidence": [
+    {
+      "local_path": "/tmp/loki-operations-check/linux-cli-installer.log",
+      "sha256": "6ce03d531b2cc27e65fc005166edf0b797e25113e28c45d100b6c34cb5d0282d"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/check-installer.log",
+      "sha256": "0c9dc8eddbf304300dcb9ee2c0f80e965206f538c014cec3f0fd11795afe86da"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/upgrade.log",
+      "sha256": "49b556d52ced8b5ab2e890f9dda4d1a976426de20309ed1cd7bb08640b4f1ed9"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/backup-result.json",
+      "sha256": "ebbeed308d75b7212043ce0ddb8cd384d514bc9b722c719bb5925cb6c889f841"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/wsl-result.json",
+      "sha256": "b0620ac5983e13f5e27c81d2ab7f04542420d06d2d78efa39e7b67349db22845"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/wsl-bootstrap-result.json",
+      "sha256": "b7178f81f157851d2038e4443148be6b1dbdfb3219aa08772f91b273127c2356"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/native-windows-browser-result.json",
+      "sha256": "854de6c38c0784371f494566fb60e228effcc12a28f730ce2fe0c2e4c84e788a"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/browser-capabilities.log",
+      "sha256": "bc480a0c68e681d37e8854309bb74d0a0392bc3fdccc3b65a3656dd45748c37c"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/full-workspace-actual.log",
+      "sha256": "67cbddae2492839d945f8f9454c0e9791b582231cc2db04327b92730b8b26071"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/full-operations-result.json",
+      "sha256": "ec04a8f812f3049699266285ed46417146325e7fbb702c117f6be009064e1d5e"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/signing-job-fixed.log",
+      "sha256": "b32c9e98cf6ec564f3e6b4cbf86bebadf227d10d344b39f6302b15c945697756"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/git-stdin-volume.log",
+      "sha256": "49a948b6dd495752e61272e41cd030066531d014cc6510a339bb2dccab46847e"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/resource-protocol-before.log",
+      "sha256": "eadc1753ef91fcc8ce1eab723b93fb7e2b496dee359c5a6a8657283ee862c456"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/resource-protocol.log",
+      "sha256": "f2b8d900ed9659ee154fc171c52843ad23eba69cb2f6f74c4b4ed3a457a5d2c9"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-full-composition-resource.log",
+      "sha256": "b511f83dbc8c9d2fe21bafb774b70026815a6298eb7a5b8a48a5d8464a8a2779"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-source-race-2.log",
+      "sha256": "0776121dea4a47a79c93e3697505388079fde93ef41d01e52a629a8d97a8a0ee"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-maintainer-tests-3.log",
+      "sha256": "a131accd032e8ad8b6f99867921a5dd339c6a4df48f2b4461c519858d1b04857"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-fixture-cleanup.log",
+      "sha256": "7fc3ea352c29cb9d10ef3cbecdfe10c68dd9180ae23384a680d7c5dc740e4d39"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-all-go-2.log",
+      "sha256": "3a180a64c1417729444c1c8a15ea8d36bbdd8828f7b5d027f057d7c1f145fedd"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/final-maintainer-tests-4.log",
+      "sha256": "b784b41dc3a8ca6ab164d35ef4a4edfc366e97d99650519cd65a568fbfc0080d"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/published-image-tags-restored.log",
+      "sha256": "e286f3a59579923634b548869e803c8aa915ba2d76145e338827e7dea4390247"
+    },
+    {
+      "local_path": "/tmp/loki-operations-check/canonical-browser-libraries-2.log",
+      "sha256": "d51120abfdca1b1d216484835848b903eba9ed051458394090c4f142db91873d"
+    }
+  ]
+}

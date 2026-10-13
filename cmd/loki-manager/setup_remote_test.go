@@ -33,7 +33,14 @@ case "$*" in
   *"'uname -s;"*) printf 'Linux\nx86_64\n/home/fixture\n' ;;
   *"'version'"*) printf 'loki %s\n' "$LOKI_REVIEW_CLI_VERSION" ;;
   *"'tools' 'status'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
+  *"'tools' 'doctor'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
   *"'_connection-state'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
+  *"'_browser-environment'"*)
+    if [ "$LOKI_REVIEW_BROWSER_MISSING" = 1 ]; then
+      printf '%s\n' '{"schema":1,"applicable":true,"supported":true,"missing_packages":["libnspr4"],"administrator_required":false}'
+    else
+      printf '%s\n' '{"schema":1,"applicable":true,"supported":true,"missing_packages":[],"administrator_required":false}'
+    fi ;;
   *"'_host-authorization'"*) printf '%s\n' '{"administrator_required":false}' ;;
 esac
 `
@@ -107,6 +114,24 @@ func TestRemoteCodexConnectionDoesNotRequireProjectDirectory(t *testing.T) {
 	}
 }
 
+func TestRemoteBrowserSetupPreparesLibrariesBeforeInstallingWithoutDocker(t *testing.T) {
+	log := installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"tools":{}}`)
+	t.Setenv("LOKI_REVIEW_BROWSER_MISSING", "1")
+	selected := management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
+	if err := runRemoteSetup(t.Context(), management.Store{Root: t.TempDir()}, selected, setupOptions{mode: tools.ProjectHost, selected: []tools.ID{"browser"}}, strings.NewReader(""), io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := string(raw)
+	prepared, installed := strings.Index(calls, "'_prepare-browser-environment'"), strings.Index(calls, "'setup' '--tools' 'browser'")
+	if prepared < 0 || installed <= prepared || strings.Contains(calls, "_host-authorization") || strings.Contains(calls, "_prepare-environment") {
+		t.Fatal("browser dependency preparation order or scope is wrong", calls)
+	}
+}
+
 func TestRememberedRemoteFullInstallationPreparesHostBeforeInstalling(t *testing.T) {
 	for _, command := range [][]string{{"setup", "workspace"}, {"tools", "install", "workspace"}} {
 		t.Run(strings.Join(command, " "), func(t *testing.T) {
@@ -154,7 +179,7 @@ func TestInvalidRemoteInstallationDoesNotPrepareHost(t *testing.T) {
 	if err := (management.Store{Root: root}).SelectExecutionHost(selected); err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range [][]string{{"setup", "unknown-tool"}, {"tools", "install", "unknown-tool"}} {
+	for _, command := range [][]string{{"setup", "unknown-tool"}, {"tools", "install", "unknown-tool"}, {"tools", "update", "browser"}, {"tools", "update", "--unknown-option"}} {
 		if err := run(t.Context(), append([]string{"--root", root}, command...), io.Discard, io.Discard); err == nil {
 			t.Fatal("invalid request accepted", command)
 		}

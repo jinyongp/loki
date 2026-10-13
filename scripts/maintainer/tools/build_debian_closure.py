@@ -143,7 +143,7 @@ def prepare(recipe_path, output):
             # Native browser images own libraries/fonts, not init services
             # dragged into APT's package-level dependency closure.
             prefixes = tuple(prefix for prefix in prefixes if prefix != "usr/lib/") + ("usr/lib/"+gnu+"/", "usr/share/fontconfig/", "usr/share/glib-2.0/")
-        for package in recipe["packages"]:
+        for package in sorted(recipe["packages"], key=lambda package: package["name"]):
             archive = (recipe_path.parent / package["archive"]).resolve()
             origin = urlsplit(package.get("url", ""))
             if archive.is_symlink() or not archive.is_file() or origin.scheme != "https" or not origin.hostname or origin.username or origin.fragment or archive.stat().st_size != package.get("bytes") or digest(archive) != package.get("sha256") or not package.get("signed_index"):

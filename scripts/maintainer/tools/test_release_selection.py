@@ -57,6 +57,13 @@ class RealClosureSelectionTests(unittest.TestCase):
         self.assertEqual(plan["matrices"]["full"][0]["modules"],["git"])
         self.assertEqual(plan["matrices"]["full"][0]["roles"],["git-workload"])
 
+    def test_minimal_browser_host_check_change_only_rechecks_linux_amd64(self):
+        plan=self.changed("scripts/maintainer/tools/accept_browser_environment.py")
+        for key in ("manager", "browser", "full", "full-checks"):
+            self.assertEqual(plan["matrices"][key], [], key)
+        checks=plan["matrices"]["browser-checks"]
+        self.assertEqual([(row["os"],row["arch"]) for row in checks],[("linux","amd64")])
+
     def test_worker_change_selects_all_dependent_image_roles(self):
         plan=self.changed("cmd/loki/main.go")
         self.assertEqual(plan["matrices"]["manager"],[])
@@ -64,6 +71,12 @@ class RealClosureSelectionTests(unittest.TestCase):
         self.assertEqual(len(plan["matrices"]["full"]),2)
         for row in plan["matrices"]["full"]:
             self.assertEqual(set(row["roles"]),set(plan_release.ROLES))
+
+    def test_full_composition_acceptance_change_rechecks_without_rebuilding(self):
+        plan=self.changed("scripts/maintainer/tools/accept_full_composition_candidate.py")
+        for key in ("manager", "browser", "full", "browser-checks"):
+            self.assertEqual(plan["matrices"][key], [], key)
+        self.assertEqual({row["arch"] for row in plan["matrices"]["full-checks"]}, {"amd64", "arm64"})
 
 
 if __name__=="__main__":
