@@ -1,0 +1,37 @@
+{
+  "release": "0.2.11",
+  "result": "pass",
+  "source_commit": "5fe3159f0b8646539b70aad699d959b94de72813",
+  "installers": {
+    "powershell": {
+      "bare_endpoint_matches_release": true,
+      "sha256": "8c663e903f1b17741a141cb20c8dd5c538d2b9c6e8dc40c9179809b657df480c"
+    },
+    "shell": {
+      "bare_endpoint_matches_release": true,
+      "sha256": "e83a000dff1d4537789fce6f47a0b281fccba3ea3131e71936656e0a185145c0"
+    }
+  },
+  "schema": 1,
+  "channel": "stable",
+  "workflow": "https://github.com/jinyongp/loki/actions/runs/38402517897",
+  "checks": {
+    "full-checks (linux, arm64, ubuntu-24.04-arm)": "success",
+    "full-checks (linux, amd64, ubuntu-24.04)": "success",
+    "source-checks": "success",
+    "manager-checks (linux, amd64, ubuntu-24.04)": "success",
+    "manager-checks (darwin, amd64, macos-15-intel)": "success",
+    "browser-checks (darwin, arm64, macos-15)": "success",
+    "manager-checks (linux, arm64, ubuntu-24.04-arm)": "success",
+    "manager-checks (windows, arm64, windows-11-arm)": "success",
+    "manager-checks (windows, amd64, windows-2025)": "success",
+    "browser-checks (linux, arm64, ubuntu-24.04-arm)": "success",
+    "browser-checks (darwin, amd64, macos-15-intel)": "success",
+    "browser-checks (windows, amd64, windows-2025)": "success",
+    "browser-checks (linux, amd64, ubuntu-24.04)": "success",
+    "manager-checks (darwin, arm64, macos-15)": "success",
+    "publish": "success",
+    "pages": "success",
+    "verify-public": "success"
+  }
+}

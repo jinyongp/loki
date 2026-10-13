@@ -3,10 +3,37 @@
 This report records executed checks and the published release. Pending checks
 retain their actual validation status.
 
+## Published 0.2.11
+
+[Loki 0.2.11](https://github.com/jinyongp/loki/releases/tag/v0.2.11) was
+published from `5fe3159f0b8646539b70aad699d959b94de72813` by
+[run 38402517897](https://github.com/jinyongp/loki/actions/runs/38402517897).
+All required native checks, release publication, Pages deployment and anonymous
+public verification passed.
+See [release-0.2.11.json](evidence/release-0.2.11.json) for the accepted source,
+native job conclusions and independently compared public installer checksums.
+
+The run accepted six native CLI targets, five independent browser targets,
+Linux amd64/arm64 full compositions with generated test signing keys, and
+minimal Ubuntu 22/24 and Debian 12/13 browser installation/recovery. The full
+composition exercised both browser engines, owned screenshot resources/PNG
+bytes, both job network profiles, retry-safe starts, signed commit verification,
+partial staging through isolated stdin, secrets, coordination and cached access
+revocation. Public verification also installed the released Linux CLI and
+verified its self-upgrade, installer bytes and anonymous OCI manifest access.
+
+These results resolve the new candidates' native OS/CPU gates listed below.
+Live GitHub App operations, public sharing configuration/external routing,
+desktop SSH image rendering, upgrade from an older nonempty tool composition,
+and remaining experimental browser workflows are still separate checks.
+
+Update with `loki upgrade`, then `loki tools update`. Run `loki setup` afterward
+to prepare missing browser libraries and inspect runtime readiness.
+
 ## Local candidate validation — 2026-10-13
 
-These are unpublished working-tree fixes based on 0.2.10. They do not establish
-that the public installer or published 0.2.10 already contains the corrections.
+These checks ran against working-tree fixes based on 0.2.10 before 0.2.11
+publication. They do not establish that published 0.2.10 contains the corrections.
 
 Executed on Linux amd64, native Windows amd64, and Windows-to-WSL:
 
