@@ -3,7 +3,9 @@
 const crypto = require('node:crypto');
 const http = require('node:http');
 const entry = process.argv[2];
-const core = require(process.argv[3]);
+// Match the CLI's module resolution exactly. Windows short and long paths can
+// produce separate CommonJS instances even when they refer to the same file.
+const core = require('node:module').createRequire(entry)('playwright-core/lib/coreBundle');
 process.argv.splice(1, 3, entry);
 const sessions = new WeakMap();
 const tool = core.tools.browserTools.find(tool => tool.schema.name === 'browser_annotate');

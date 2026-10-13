@@ -84,6 +84,17 @@ These changes are not published; see
 [browser-adapter-fixes.json](evidence/browser-adapter-fixes.json) for source and
 candidate fingerprints.
 
+## Windows short-path annotation correction
+
+The first 0.2.12 release candidate passed Linux and macOS acceptance but failed
+Windows annotation startup. Native Windows reproduction confirmed that short
+paths and canonical long paths loaded separate CommonJS coreBundle instances.
+Resolving the bundle through the upstream CLI entry now patches the same tool
+instance. Native Windows short-path discovery, annotation screen submission and
+PNG return passed. Packaged capability acceptance also checks that the headless
+annotation descriptor is loaded before invoking it. See
+[browser-windows-short-path.json](evidence/browser-windows-short-path.json).
+
 ## Local candidate validation — 2026-10-13
 
 These checks ran against working-tree fixes based on 0.2.10 before 0.2.11

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "publication": "0.2.12 candidate; not yet published",
+  "regression_source": "7164a47ecc4f70216155e1458dd89c9600722295",
+  "failed_ci": "https://github.com/jinyongp/loki/actions/runs/38431233562",
+  "cause": "Windows short and long paths load separate CommonJS coreBundle instances; the CLI did not use the patched annotation handler.",
+  "reproduction": {
+    "same_core_module": false,
+    "same_annotation_descriptor": false
+  },
+  "fix": "Resolve coreBundle through createRequire(entry), matching the upstream CLI import.",
+  "source_sha256": {
+    "modules/browser/adapters/playwright.cjs": "2d5dcfdda96d7e228b0dc34cbac36fc3858dd9b84b8dbb4cdc90456393b0a7d3",
+    "scripts/maintainer/tools/accept_browser_capabilities.py": "fea465dc1f5b53ffafc394f3cbd66464c5dade997867b93e5e881830c42cba36"
+  },
+  "native_windows_checks": [
+    "short-path adapter discovery",
+    "annotation URL and real UI submission",
+    "annotated PNG result",
+    "browser installation/startup/sandbox/screenshot/video"
+  ],
+  "result": "pass",
+  "raw_evidence": "/tmp/loki-node-cache-check/native-annotation.log",
+  "scope": "Isolated native Windows runtime and fresh temporary state; installed user configuration unchanged."
+}

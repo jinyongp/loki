@@ -25,6 +25,8 @@ async def optional_protocol(binary, root, workspace, invoke):
     try:
         await client.initialize()
         tools = {tool['name']:tool for tool in result(await client.request('tools/list'))['tools']}
+        if 'one-time loopback' not in tools.get('browser_annotate', {}).get('description', ''):
+            raise ValueError('Packaged Playwright did not load the headless annotation adapter')
         required = {'browser_run_code_unsafe', 'browser_mouse_move_xy', 'browser_pdf_save',
                     'browser_localstorage_set', 'browser_verify_text_visible',
                     'browser_route', 'browser_start_tracing', 'browser_get_config',
