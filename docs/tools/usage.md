@@ -605,7 +605,9 @@ the host and data. `hosts remove NAME --purge` deletes only verified Loki-owned
 infrastructure; external SSH/WSL hosts and shared infrastructure are retained.
 The native frontend host cannot be removed.
 
-`doctor` with no enabled tools reports that no tools are enabled for
+When using a custom management root during installation, the installer prints the
+next setup command with that same root. Keep its `--root` option for subsequent
+commands. `doctor` with no enabled tools reports that no tools are enabled for
 client use; a healthy installation alone does not grant tool access.
 `status --all-hosts` and `doctor --all-hosts` show each host's installed/enabled tools
 and runtime state. A reachable host with degraded tools is reported as needing

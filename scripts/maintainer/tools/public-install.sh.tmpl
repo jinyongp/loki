@@ -5,12 +5,13 @@ release='@@RELEASE@@'
 release_url='https://github.com/jinyongp/loki/releases/download/v@@RELEASE@@'
 bin_dir="$HOME/.local/bin"
 management_root=''
+custom_root=false
 source_dir=''
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --bin-dir|--root|--source-dir)
             [ "$#" -ge 2 ] || { echo "Missing value for $1" >&2; exit 2; }
-            case "$1" in --bin-dir) bin_dir=$2 ;; --root) management_root=$2 ;; --source-dir) source_dir=$2 ;; esac
+            case "$1" in --bin-dir) bin_dir=$2 ;; --root) management_root=$2; custom_root=true ;; --source-dir) source_dir=$2 ;; esac
             shift 2 ;;
         *) echo "Unknown installer option: $1" >&2; exit 2 ;;
     esac
@@ -60,4 +61,14 @@ if [ "$bin_dir" = "$HOME/.local/bin" ]; then
 fi
 "$loki" --root "$management_root" version > /dev/null
 echo "Loki $release installed."
-case ":$PATH:" in *":$bin_dir:"*) echo 'Next: loki setup' ;; *) echo "Next: $loki setup" ;; esac
+shell_quote() {
+    printf "'"
+    printf '%s' "$1" | sed "s/'/'\\\\''/g"
+    printf "'"
+}
+case ":$PATH:" in *":$bin_dir:"*) next_command=loki ;; *) next_command=$(shell_quote "$loki") ;; esac
+if [ "$custom_root" = true ]; then
+    printf 'Next: %s --root %s setup\n' "$next_command" "$(shell_quote "$management_root")"
+else
+    printf 'Next: %s setup\n' "$next_command"
+fi
