@@ -117,7 +117,7 @@ func TestProjectConnectionUsesSelectedToolsWithoutProjectGrant(t *testing.T) {
 		}
 	}
 	raw, err := os.ReadFile(config)
-	if err != nil || !strings.HasPrefix(string(raw), user) || strings.Contains(string(raw), "loki_browser") || strings.Contains(string(raw), "--workspace") || !strings.Contains(string(raw), `"tools", "serve"`) || strings.Contains(string(raw), `"serve", "browser"`) || !strings.Contains(string(raw), `"--host", "local"`) {
+	if err != nil || !strings.HasPrefix(string(raw), user) || strings.Contains(string(raw), "loki_browser") || strings.Contains(string(raw), "--workspace") || !strings.Contains(string(raw), `"tools", "serve"`) || strings.Contains(string(raw), `"serve", "browser"`) || !strings.Contains(string(raw), `"--host-id"`) {
 		t.Fatalf("connection is not a generic Loki entry: %s, %v", raw, err)
 	}
 	workspace := t.TempDir()

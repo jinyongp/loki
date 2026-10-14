@@ -72,6 +72,20 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		return nil, false, fmt.Errorf("choose an execution host first with 'loki hosts prepare' or 'loki hosts use'; run 'loki setup' in a terminal for guided host selection")
 	}
 	choices := []huh.Option[string]{}
+	registry, err := store.HostRegistry()
+	if err != nil {
+		return nil, false, err
+	}
+	for _, h := range registry.Hosts {
+		if full && !h.Target.Remote() {
+			continue
+		}
+		label := h.Name + " — " + setupHostLabel(&h.Target)
+		if h.ID == registry.Default {
+			label += " (default)"
+		}
+		choices = append(choices, huh.NewOption(label, "registered:"+h.ID))
+	}
 	if !full {
 		choices = append(choices, huh.NewOption("Local "+runtime.GOOS+" — native browser", "local"))
 	}
@@ -87,11 +101,18 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 	if full {
 		description = "This tool needs Linux services. Choose where to install them. Existing tools and data stay on their current host."
 	}
-	description += "\nThis becomes the default for Loki commands. Existing Codex connections keep their host; use Connect Codex to switch them."
+	description += "\nThis becomes the default for Loki commands. Existing Codex connections keep their host. Connect Codex adds a connection for this host."
 	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose execution host").Description(description).Options(choices...).Value(&choice)))
 	aborted, err := runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted || choice == "" {
 		return nil, false, err
+	}
+	if strings.HasPrefix(choice, "registered:") {
+		if err := store.UseHost(strings.TrimPrefix(choice, "registered:")); err != nil {
+			return nil, false, err
+		}
+		selected, err := store.ExecutionSelection()
+		return selected, err == nil, err
 	}
 	command := []string{"hosts", "use", "local"}
 	preparationLabel := setupHostLabel(nil)
@@ -149,4 +170,11 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 	}
 	selected, err := store.ExecutionSelection()
 	return selected, err == nil, err
+}
+
+func setupBoundArguments(frontend management.Store, selected management.ExecutionSelection) []string {
+	if record, err := frontend.HostForTarget(selected); err == nil {
+		return []string{"--root", frontend.Root, "--host-id", record.ID}
+	}
+	return setupExecutionArguments(selected)
 }

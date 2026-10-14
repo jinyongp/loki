@@ -207,7 +207,7 @@ func TestRemoteBrowserSetupRetainsFullHostAndStartsServices(t *testing.T) {
 	}
 }
 
-func TestRememberedHostStatusHonorsRootOverride(t *testing.T) {
+func TestRememberedHostStatusUsesRegisteredRoot(t *testing.T) {
 	log := installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"full"},"tools":{}}`)
 	root := t.TempDir()
 	store := management.Store{Root: root}
@@ -220,11 +220,11 @@ func TestRememberedHostStatusHonorsRootOverride(t *testing.T) {
 	if err := run(t.Context(), []string{"--root", root, "status", "--json"}, &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if singleJSON(t, out.Bytes())["state_root"] != root {
+	if singleJSON(t, out.Bytes())["state_root"] != selected.Root {
 		t.Fatal("status displayed stale root", out.String())
 	}
 	raw, err := os.ReadFile(log)
-	if err != nil || strings.Contains(string(raw), "/saved-state") || !strings.Contains(string(raw), root) {
+	if err != nil || !strings.Contains(string(raw), "/saved-state") || strings.Contains(string(raw), root) {
 		t.Fatalf("status probed stale root: %s, %v", raw, err)
 	}
 }

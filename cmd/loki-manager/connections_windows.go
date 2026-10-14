@@ -52,8 +52,9 @@ type toolsConnectionAppliance struct {
 
 func (p toolsConnectionAppliance) Prepare(ctx context.Context, distribution string) error {
 	if p.selected.Host.Kind == "wsl" {
-		record, err := p.frontend.HostPreparation()
-		if err != nil || record == nil || record.Distribution != distribution || !p.selected.Owned {
+		actualDistribution := p.selected.Host.Distribution
+		record, err := p.frontend.HostPreparationFor(actualDistribution)
+		if err != nil || record == nil || record.Distribution != actualDistribution || !p.selected.Owned {
 			return fmt.Errorf("managed WSL connection requires its verified Loki host; run loki setup")
 		}
 		probe := p.selected
@@ -66,7 +67,7 @@ func (p toolsConnectionAppliance) Prepare(ctx context.Context, distribution stri
 		if err != nil || strings.TrimSpace(string(out)) != record.Token {
 			return fmt.Errorf("managed WSL ownership changed; existing data were retained")
 		}
-		if err := windowshost.EnsureToolsStartup(ctx, p.frontend.Root, distribution); err != nil {
+		if err := windowshost.EnsureToolsStartup(ctx, p.frontend.Root, actualDistribution); err != nil {
 			return err
 		}
 	}
@@ -82,7 +83,11 @@ func (p toolsConnectionAppliance) Prepare(ctx context.Context, distribution stri
 	if err := relay.Run(); err != nil {
 		return fmt.Errorf("selected tool services are not ready: %w", err)
 	}
-	return ensureConnectionBridge(ctx, p.frontend, p.diagnostics)
+	h, err := p.frontend.HostForTarget(p.selected)
+	if err != nil {
+		return err
+	}
+	return ensureConnectionBridgeFor(ctx, p.frontend, h, p.diagnostics)
 }
 
 type toolsBridgeSource struct{ store management.Store }
@@ -97,6 +102,14 @@ func (s toolsBridgeSource) Read(context.Context, string) (windowshost.Connection
 }
 
 func ensureConnectionBridge(ctx context.Context, store management.Store, diagnostics io.Writer) error {
+	registry, err := store.HostRegistry()
+	if err != nil {
+		return err
+	}
+	return ensureConnectionBridgeFor(ctx, store, registry.Selected(), diagnostics)
+}
+func ensureConnectionBridgeFor(ctx context.Context, frontend management.Store, h management.HostRecord, diagnostics io.Writer) error {
+	store := connectionBridgeScope(frontend, h)
 	platform := windowshost.WindowsHelperInstallPlatform{}
 	directory := filepath.Join(store.Root, "control", "connections")
 	if err := platform.EnsurePrivateDirectory(ctx, directory); err != nil {
@@ -141,6 +154,27 @@ func ensureConnectionBridge(ctx context.Context, store management.Store, diagnos
 		}
 		return response.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&result) == nil && result.Owner == fmt.Sprintf("%x", owner)
 	}
+	bindingPath := filepath.Join(directory, "bridge-host.json")
+	var bound connectionBridgeBinding
+	binding, readErr := os.ReadFile(bindingPath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return readErr
+	}
+	if readErr == nil && (json.Unmarshal(binding, &bound) != nil || bound.ID != h.ID) {
+		return fmt.Errorf("bridge scope belongs to another host")
+	}
+	if readErr != nil || !bound.matches(h) {
+		if h.LegacyConnection || readErr == nil {
+			if err := stopConnectionBridge(ctx, store); err != nil {
+				return err
+			}
+		}
+		data, _ := json.Marshal(connectionBridgeBinding{ID: h.ID, Target: h.Target})
+		if err := platform.WritePrivateFile(ctx, bindingPath, data); err != nil {
+			return err
+		}
+	}
+
 	if probe() {
 		return nil
 	}
@@ -148,11 +182,11 @@ func ensureConnectionBridge(ctx context.Context, store management.Store, diagnos
 	if err != nil {
 		return err
 	}
-	binary, err = store.ManagerExecutable(binary)
+	binary, err = frontend.ManagerExecutable(binary)
 	if err != nil {
 		return err
 	}
-	command := newConnectionCommand(context.Background(), binary, "--root", store.Root, "--host", "local", "_connection-bridge")
+	command := newConnectionCommand(context.Background(), binary, "--root", frontend.Root, "--host", "local", "_connection-bridge", h.ID)
 	logPath := filepath.Join(directory, "bridge.log")
 	if err := platform.WritePrivateFile(ctx, logPath, nil); err != nil {
 		return err
@@ -197,7 +231,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 			return err
 		}
 		if selected != nil && selected.Remote() {
-			return connectRemoteCodex(ctx, *selected, args[1:], out, diagnostics)
+			return connectCodexOnHost(ctx, store, selected, args[1:], out, diagnostics)
 		}
 		return connectCodex(store, args[1:], out, diagnostics)
 	}
@@ -218,6 +252,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 	f.SetOutput(diagnostics)
 	tunnel := f.String("tunnel-id", "", "OpenAI tunnel ID")
 	keyStdin := f.Bool("runtime-key-stdin", false, "read the runtime key privately from stdin")
+	hostID := f.String("host-id", "", "registered host ID")
 	distribution := f.String("distribution", "", "startup restoration guard")
 	if err := f.Parse(toolArguments(args[1:])); err != nil {
 		return err
@@ -235,20 +270,38 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 	if !strings.Contains("|setup|start|stop|remove|status|show|doctor|restore|", "|"+action+"|") {
 		return fmt.Errorf("unknown connection action")
 	}
-	selected, err := store.ExecutionSelection()
+	registry, err := store.HostRegistry()
 	if err != nil {
 		return err
 	}
-	if selected == nil || !selected.Remote() {
-		return fmt.Errorf("select and configure a full execution host with loki setup before connecting OpenAI")
+	h := registry.Selected()
+	if *hostID != "" {
+		h, err = registry.Find(*hostID)
+		if err != nil {
+			return err
+		}
+	}
+	if *distribution != "" {
+		found := false
+		for _, entry := range registry.Hosts {
+			if entry.ConnectionNamespace() == *distribution {
+				h = entry
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("restoration host is no longer registered")
+		}
+	}
+	selected := &h.Target
+	if !selected.Remote() {
+		return fmt.Errorf("select a remote host before configuring a tunnel")
 	}
 	if (action == "setup" || action == "start" || action == "restore") && !supportsManagedTunnel(selected) {
-		return fmt.Errorf("OpenAI tunnel startup requires Loki's dedicated WSL host or an SSH host; use a direct Codex connection on this WSL host, or choose another execution host in loki setup")
+		return fmt.Errorf("OpenAI tunnel startup requires a Loki-owned WSL or SSH host")
 	}
-	alias := connectionHostAlias(*selected)
-	if *distribution != "" && *distribution != alias {
-		return fmt.Errorf("startup host differs from the selected execution host")
-	}
+	alias := h.ConnectionNamespace()
 	unlock, err := store.Lock()
 	if err != nil {
 		return err
@@ -304,7 +357,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 	digest := sha256.Sum256(windowspackage.Helpers)
 	helpers := windowshost.HelperManager{Platform: windowshost.WindowsHelperInstallPlatform{}, Downloader: embeddedHelperDownloader{catalog: catalog, progress: reporter}, HelpersRoot: filepath.Join(store.Root, "control", "connections", "helpers"), Binding: windowshost.ReleaseBinding{ReleaseTag: "v" + management.ManagerRelease, HelperCatalog: windowshost.FileBinding{SHA256: fmt.Sprintf("%x", digest), Length: int64(len(windowspackage.Helpers))}}}
 	adapter := windowshost.NewWindowsOpenAIAdapter(setup)
-	adapter.Local = toolsBridgeSource{store: store}
+	adapter.Local = toolsBridgeSource{store: connectionBridgeScope(store, h)}
 	adapter.Progress = reporter
 	binary, err := os.Executable()
 	if err != nil {
@@ -343,7 +396,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 		return err
 	}
 	if action == "stop" || action == "remove" {
-		if err := stopConnectionBridge(ctx, store); err != nil {
+		if err := stopConnectionBridge(ctx, connectionBridgeScope(store, h)); err != nil {
 			return fmt.Errorf("connection %s completed but its bridge could not stop: %w", action, err)
 		}
 	}
@@ -351,18 +404,28 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 }
 
 func inspectManagedConnections(store management.Store) ([]clientConnection, error) {
-	view := clientConnection{Provider: "openai"}
-	selected, err := store.ExecutionSelection()
-	if err != nil || selected == nil || !selected.Remote() {
-		return []clientConnection{view}, err
+	registry, err := store.HostRegistry()
+	if err != nil {
+		return nil, err
 	}
+	views := []clientConnection{}
 	states := windowshost.WindowsConnectionStateStore{ConnectionsRoot: filepath.Join(store.Root, "control", "connections", "providers")}
-	state, present, err := states.Read(connectionHostAlias(*selected), "openai")
-	view.Configured = present
-	if present {
-		view.Enabled = &state.Enabled
+	for _, h := range registry.Hosts {
+		if !h.Target.Remote() {
+			continue
+		}
+		state, present, err := states.Read(h.ConnectionNamespace(), "openai")
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			views = append(views, clientConnection{Provider: "openai", Configured: true, Enabled: &state.Enabled, HostID: h.ID, Host: h.Name})
+		}
 	}
-	return []clientConnection{view}, err
+	if len(views) == 0 {
+		views = append(views, clientConnection{Provider: "openai"})
+	}
+	return views, nil
 }
 
 func stopConnectionBridge(ctx context.Context, store management.Store) error {
@@ -393,7 +456,24 @@ func stopConnectionBridge(ctx context.Context, store management.Store) error {
 	if response.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("owned bridge refused shutdown")
 	}
-	return nil
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		probe, err := net.DialTimeout("tcp", strings.TrimPrefix(connectionBridgeOrigin(store.Root), "http://"), time.Second)
+		if err != nil {
+			return nil
+		}
+		probe.Close()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("owned bridge did not release its listener after shutdown")
+		case <-ticker.C:
+		}
+	}
 }
 
 type boundedBridgeLog struct {
@@ -402,15 +482,19 @@ type boundedBridgeLog struct {
 }
 
 func removeHostConnections(ctx context.Context, store management.Store, selected management.ExecutionSelection, diagnostics io.Writer) error {
+	h, err := store.HostForTarget(selected)
+	if err != nil {
+		return err
+	}
 	states := windowshost.WindowsConnectionStateStore{ConnectionsRoot: filepath.Join(store.Root, "control", "connections", "providers")}
-	_, present, err := states.Read(connectionHostAlias(selected), "openai")
+	_, present, err := states.Read(h.ConnectionNamespace(), "openai")
 	if err != nil {
 		return err
 	}
 	if present {
-		return runConnections(ctx, store, []string{"remove", "openai"}, strings.NewReader(""), diagnostics, diagnostics)
+		return runConnections(ctx, store, []string{"remove", "openai", "--host-id", h.ID}, strings.NewReader(""), diagnostics, diagnostics)
 	}
-	if err := stopConnectionBridge(ctx, store); err != nil {
+	if err := stopConnectionBridge(ctx, connectionBridgeScope(store, h)); err != nil {
 		return err
 	}
 	binary, err := os.Executable()
@@ -421,7 +505,19 @@ func removeHostConnections(ctx context.Context, store management.Store, selected
 	if err != nil {
 		return err
 	}
-	return (windowshost.ToolsConnectionTasks{Root: store.Root, Binary: binary}).Reconcile(ctx, connectionHostAlias(selected), false)
+	return (windowshost.ToolsConnectionTasks{Root: store.Root, Binary: binary}).Reconcile(ctx, h.ConnectionNamespace(), false)
+}
+
+func requireManagedHostDetached(store management.Store, h management.HostRecord) error {
+	states := windowshost.WindowsConnectionStateStore{ConnectionsRoot: filepath.Join(store.Root, "control", "connections", "providers")}
+	_, present, err := states.Read(h.ConnectionNamespace(), "openai")
+	if err != nil {
+		return err
+	}
+	if present {
+		return fmt.Errorf("remove host %q's OpenAI connection before detaching it", h.Name)
+	}
+	return nil
 }
 
 func (w *boundedBridgeLog) Write(data []byte) (int, error) {
@@ -448,17 +544,9 @@ func connectionHostAlias(selected management.ExecutionSelection) string {
 // A restore task is bound to the current host. Keep that binding until its
 // connection has been explicitly removed, rather than orphaning credentials/tasks.
 func requireHostConnectionsDetached(store management.Store) error {
-	selected, err := store.ExecutionSelection()
-	if err != nil || selected == nil || !selected.Remote() {
-		return err
-	}
-	states := windowshost.WindowsConnectionStateStore{ConnectionsRoot: filepath.Join(store.Root, "control", "connections", "providers")}
-	_, present, err := states.Read(connectionHostAlias(*selected), "openai")
+	registry, err := store.HostRegistry()
 	if err != nil {
 		return err
 	}
-	if present {
-		return fmt.Errorf("remove the current host's managed connection with loki connections remove openai before changing or detaching its host")
-	}
-	return nil
+	return requireManagedHostDetached(store, registry.Selected())
 }

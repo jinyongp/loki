@@ -87,6 +87,9 @@ func prepareRemoteManagerInto(ctx context.Context, target *management.ExecutionS
 	if arch == "" {
 		return fmt.Errorf("execution host preparation requires Linux amd64 or arm64")
 	}
+	if selected.Root == "" {
+		selected.Root = path.Join(lines[2], ".config", "loki")
+	}
 	checkVersion := func(candidate management.ExecutionSelection) bool {
 		versionCtx, versionCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer versionCancel()
@@ -99,9 +102,6 @@ func prepareRemoteManagerInto(ctx context.Context, target *management.ExecutionS
 	if !checkVersion(selected) {
 		if err := ctx.Err(); err != nil {
 			return err
-		}
-		if selected.Root == "" {
-			selected.Root = path.Join(lines[2], ".config", "loki")
 		}
 		bin := path.Join(lines[2], ".local", "lib", "loki", "bin")
 		selected.Command = path.Join(bin, "loki")
@@ -133,9 +133,6 @@ func prepareUserManagedHost(ctx context.Context, frontend management.Store, sele
 }
 
 func selectPreparedUserHost(ctx context.Context, frontend management.Store, selected management.ExecutionSelection, out, diagnostics io.Writer, deps remotePreparationDependencies) error {
-	if err := requireHostConnectionsDetached(frontend); err != nil {
-		return err
-	}
 	prepared, err := prepareRemoteManager(ctx, selected, diagnostics, deps)
 	if err != nil {
 		return err
@@ -154,15 +151,29 @@ func ensureSetupExecutionHost(ctx context.Context, frontend management.Store, se
 	}
 	deps := defaultRemotePreparationDependencies()
 	if selected.Owned {
+		reusable := true
+		if selected.Host.Kind == "wsl" {
+			var err error
+			reusable, err = verifiedOwnedWSLHost(ctx, frontend, selected, deps.run)
+			if err != nil {
+				return selected, err
+			}
+		}
 		probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		var version githubRelayOutput
 		err := deps.run(probeCtx, selected, []string{"version"}, nil, &version, io.Discard)
 		cancel()
-		if err == nil && !version.overflow && strings.TrimSpace(version.String()) == "loki "+management.ManagerRelease {
+		if reusable && err == nil && !version.overflow && strings.TrimSpace(version.String()) == "loki "+management.ManagerRelease {
 			return selected, nil
 		}
 		if selected.System {
-			prepared, err := prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
+			var prepared *management.ExecutionSelection
+			var err error
+			if remember {
+				prepared, err = prepareLocalSystemHost(ctx, frontend, os.Stdin, diagnostics)
+			} else {
+				prepared, err = management.PrepareSystemHostTarget(ctx, frontend, os.Stdin, diagnostics)
+			}
 			if err != nil {
 				return selected, err
 			}
@@ -173,10 +184,10 @@ func ensureSetupExecutionHost(ctx context.Context, frontend management.Store, se
 		}
 		// Owned distributions use their ownership-checked publisher, not the
 		// private manager path used for existing user distributions.
-		if selected.Host.Kind != "wsl" || !remember {
+		if selected.Host.Kind != "wsl" {
 			return selected, fmt.Errorf("prepare the owned execution host with loki setup before using it")
 		}
-		prepared, err := prepareManagedHost(ctx, frontend, diagnostics)
+		prepared, err := prepareManagedHostFor(ctx, frontend, selected.Host.Distribution, remember, diagnostics)
 		if err != nil {
 			return selected, err
 		}
@@ -192,4 +203,23 @@ func ensureSetupExecutionHost(ctx context.Context, frontend management.Store, se
 		}
 	}
 	return prepared, nil
+}
+
+func verifiedOwnedWSLHost(ctx context.Context, frontend management.Store, selected management.ExecutionSelection, run func(context.Context, management.ExecutionSelection, []string, io.Reader, io.Writer, io.Writer) error) (bool, error) {
+	record, err := frontend.HostPreparationFor(selected.Host.Distribution)
+	if err != nil {
+		return false, err
+	}
+	if record == nil {
+		return false, nil
+	}
+	probe := selected
+	probe.Command = "/usr/bin/cat"
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var out githubRelayOutput
+	if err := run(ctx, probe, []string{"/var/lib/loki-host-owner"}, nil, &out, io.Discard); err != nil || out.overflow || strings.TrimSpace(out.String()) != record.Token {
+		return false, fmt.Errorf("managed WSL ownership changed; existing distribution and data were retained")
+	}
+	return record.Phase == "ready", nil
 }

@@ -32,3 +32,7 @@ func prepareManagedHost(ctx context.Context, frontend management.Store, diagnost
 	}
 	return frontend.ExecutionSelection()
 }
+
+func prepareManagedHostFor(ctx context.Context, frontend management.Store, distribution string, remember bool, diagnostics io.Writer) (*management.ExecutionSelection, error) {
+	return nil, fmt.Errorf("managed WSL preparation requires the Windows frontend")
+}

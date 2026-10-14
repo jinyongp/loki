@@ -33,6 +33,7 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	workspace := f.String("workspace", "", "absolute project directory on this execution host")
 	config := f.String("config", "", "Codex config.toml; defaults to ~/.codex/config.toml")
 	remote := f.Bool("remote", false, "launch through the Codex remote executor")
+	name := f.String("name", "", "named Codex connection; defaults to the registered host")
 	if err := f.Parse(toolArguments(arguments)); err != nil {
 		return err
 	}
@@ -130,6 +131,26 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	var binding *management.HostRecord
+	if store.Root != "" {
+		if selected != nil {
+			h, e := store.EnsureRegisteredHost(*selected)
+			if e != nil {
+				return e
+			}
+			binding = &h
+		} else {
+			if r, e := store.HostRegistry(); e == nil {
+				for _, h := range r.Hosts {
+					if h.Target.Host.Kind == "local" && !h.Target.System {
+						copy := h
+						binding = &copy
+						break
+					}
+				}
+			}
+		}
+	}
 	var block strings.Builder
 	server, begin, end := "loki", "# BEGIN Loki tools\n", "# END Loki tools\n"
 	launch := []string{"--host", "local", "--root", store.Root, "tools", "serve"}
@@ -158,7 +179,48 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 			launch = append(launch, "--workspace", *workspace)
 		}
 	}
-	block.WriteString(begin + "[mcp_servers." + server + "]\ncommand = " + strconv.Quote(binary) + "\nargs = [")
+	useNamed := selected != nil
+	if binding != nil {
+		for _, entry := range ownedCodexEntries(old) {
+			if entry.Name == "loki" {
+				useNamed = !(entry.HostID == binding.ID || entry.HostID == "" && legacyCodexEntryMatches(old, entry, selected, store.Root))
+			}
+		}
+	}
+	if *name != "" || binding != nil && useNamed {
+		server = *name
+		if server == "" {
+			server = "loki_" + binding.Name
+		}
+		if !connectionNamePattern.MatchString(server) {
+			return fmt.Errorf("invalid Codex connection name")
+		}
+		begin, end = codexEntryMarkers(server)
+	}
+	if binding != nil && *name == "" {
+		for _, entry := range ownedCodexEntries(old) {
+			if entry.HostID == binding.ID {
+				server, begin, end = entry.Name, entry.Begin, entry.End
+				break
+			}
+		}
+	}
+	if binding != nil {
+		// Freeze this installation by ID. Default switches and host renames cannot
+		// retarget a running or future MCP session.
+		launch = []string{"--root", store.Root, "--host-id", binding.ID, "tools", "serve"}
+		if state.Config.Mode == tools.ProjectHost {
+			launch = append(launch, "--engine", "both")
+			if *workspace != "" {
+				launch = append(launch, "--workspace", *workspace)
+			}
+		}
+	}
+	metadata := ""
+	if binding != nil {
+		metadata = "# host-id=" + binding.ID + "\n"
+	}
+	block.WriteString(begin + metadata + "[mcp_servers." + server + "]\ncommand = " + strconv.Quote(binary) + "\nargs = [")
 	for index, argument := range launch {
 		if index > 0 {
 			block.WriteString(", ")
@@ -172,7 +234,13 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	block.WriteString(end)
 	base := old
 	otherServer, otherBegin, otherEnd := "loki_browser", codexBegin, codexEnd
-	if bytes.Contains(base, []byte(otherBegin)) || bytes.Contains(base, []byte(otherEnd)) {
+	removeOldBrowser := false
+	for _, entry := range ownedCodexEntries(base) {
+		if entry.Name == otherServer && (binding != nil && entry.HostID == binding.ID || entry.HostID == "" && legacyCodexEntryMatches(base, entry, selected, store.Root)) {
+			removeOldBrowser = true
+		}
+	}
+	if removeOldBrowser && (bytes.Contains(base, []byte(otherBegin)) || bytes.Contains(base, []byte(otherEnd))) {
 		base, err = hostconfig.MergeClientConnection(base, nil, otherServer, otherBegin, otherEnd)
 		if err != nil {
 			return err

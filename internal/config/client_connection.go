@@ -56,3 +56,17 @@ func MergeClientConnection(old, block []byte, server, beginMarker, endMarker str
 	}
 	return next, nil
 }
+
+// ClientServerArguments supports migration of a caller-owned MCP entry. Callers
+// must verify ownership before using its private arguments; never print them.
+func ClientServerArguments(raw []byte, name string) ([]string, error) {
+	var document struct {
+		Servers map[string]struct {
+			Args []string `toml:"args"`
+		} `toml:"mcp_servers"`
+	}
+	if err := toml.Unmarshal(raw, &document); err != nil {
+		return nil, fmt.Errorf("invalid client configuration")
+	}
+	return document.Servers[name].Args, nil
+}

@@ -20,7 +20,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 		return false, err
 	}
 	options := []huh.Option[string]{huh.NewOption("Connect Codex", "codex"), huh.NewOption("Inspect client connections", "status"), huh.NewOption("Disconnect Codex (keep tools and data)", "disconnect")}
-	if runtime.GOOS == "windows" && supportsManagedTunnel(host.selected) && report.Target.Mode == tools.Full && !host.explicit {
+	if runtime.GOOS == "windows" && supportsManagedTunnel(host.selected) && report.Target.Mode == tools.Full {
 		options = append(options, huh.NewOption("Manage OpenAI tunnel", "openai"))
 	}
 	options = append(options, huh.NewOption("Back", ""))
@@ -39,13 +39,13 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 	}
 	if choice == "disconnect" {
 		confirmed := false
-		form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Disconnect Loki from Codex?").Description("Remove Loki-managed entries from " + config + ". Other MCP entries, installed tools and user data are retained.").Affirmative("Disconnect").Negative("Back").Value(&confirmed)))
+		form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Disconnect Loki from Codex?").Description("Remove this host’s Loki-managed entries from " + config + ". Other MCP entries, installed tools and user data are retained.").Affirmative("Disconnect").Negative("Back").Value(&confirmed)))
 		aborted, err = runSetupForm(ctx, form, input, terminal)
 		if err != nil || aborted || !confirmed {
 			return false, err
 		}
 		var result bytes.Buffer
-		if err := disconnectCodex(config, &result); err != nil {
+		if err := disconnectCodexTarget(host.frontend, host.selected, "", false, &result); err != nil {
 			return false, err
 		}
 		return true, showSetupResult(ctx, "Codex — disconnected", result.String(), "", input, terminal)
@@ -66,7 +66,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 			}
 		}
 		var result bytes.Buffer
-		if err := runConnections(ctx, host.frontend, []string{action, "openai"}, input, &result, terminal); err != nil {
+		if err := runConnections(ctx, host.frontend, registeredConnectionArguments(host.frontend, host.selected, []string{action, "openai"}), input, &result, terminal); err != nil {
 			return false, err
 		}
 		return action != "status", showSetupResult(ctx, "OpenAI tunnel — "+action+" completed", shortDiagnostic(result.String()), result.String(), input, terminal)
@@ -85,7 +85,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 	setupWorking(terminal, "Connecting Codex", setupHostLabel(host.selected))
 	var result, diagnostics bytes.Buffer
 	if host.selected != nil && host.selected.Remote() {
-		err = connectRemoteCodex(ctx, *host.selected, arguments, &result, &diagnostics)
+		err = connectCodexOnHost(ctx, host.frontend, host.selected, arguments, &result, &diagnostics)
 	} else {
 		err = connectCodex(host.frontend, arguments, &result, &diagnostics)
 	}

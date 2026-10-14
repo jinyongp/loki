@@ -2,7 +2,6 @@ package management
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,52 +59,38 @@ func (s ExecutionSelection) Validate() error {
 func (s ExecutionSelection) Remote() bool { return s.System || s.Host.Kind != "local" }
 
 func (s Store) ExecutionSelection() (*ExecutionSelection, error) {
-	if err := s.realRoot(); err != nil {
+	r, err := s.HostRegistry()
+	if err != nil {
 		return nil, err
 	}
-	if err := s.realControl(); err != nil {
-		return nil, err
+	target := r.Selected().Target
+	if target.Host.Kind == "local" && !target.System {
+		// Preserve an explicit native choice for guided setup.
+		_, registryErr := os.Stat(filepath.Join(s.ControlDirectory(), "hosts.json"))
+		_, legacyErr := os.Stat(filepath.Join(s.ControlDirectory(), "execution-host.json"))
+		if os.IsNotExist(registryErr) && os.IsNotExist(legacyErr) {
+			return nil, nil
+		}
 	}
-	var selected ExecutionSelection
-	if err := readOwnedJSON(filepath.Join(s.ControlDirectory(), "execution-host.json"), tools.MaxManifestBytes, &selected); errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-	return &selected, selected.Validate()
+	return &target, nil
 }
 
 func (s Store) SelectExecutionHost(selected ExecutionSelection) error {
-	if err := selected.Validate(); err != nil {
-		return err
-	}
-	unlock, err := s.Lock()
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	if err := s.realControl(); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(s.ControlDirectory(), 0700); err != nil {
-		return err
-	}
-	return atomicJSON(filepath.Join(s.ControlDirectory(), "execution-host.json"), selected)
+	return s.selectRegisteredTarget(selected)
 }
 
 func (s Store) ForgetExecutionHost(preparation bool) error {
-	unlock, err := s.Lock()
+	r, err := s.HostRegistry()
 	if err != nil {
 		return err
 	}
-	defer unlock()
-	for _, name := range []string{"execution-host.json", "host-preparation.json"} {
-		if name == "host-preparation.json" && !preparation {
-			continue
-		}
-		if err := os.Remove(filepath.Join(s.ControlDirectory(), name)); err != nil && !os.IsNotExist(err) {
+	if r.Selected().Target.Host.Kind != "local" || r.Selected().Target.System {
+		if err := s.RemoveHost(r.Selected().ID); err != nil {
 			return err
 		}
+	}
+	if preparation {
+		return s.ForgetHostPreparation(r.Selected().Target.Host.Distribution)
 	}
 	return nil
 }

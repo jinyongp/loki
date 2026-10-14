@@ -7,20 +7,15 @@ and client configuration are separate resources with explicit names.
 
 ## Command contract
 
-| Command | Responsibility |
-| --- | --- |
-| `loki setup` | Host-first guided configuration and management |
-| `loki status` | CLI version, execution target, tool state and next actions |
-| `loki doctor` | Probe resources on the selected host and report remedies |
-| `loki upgrade` | Update the native CLI; retain tools and settings |
-| `loki tools manage` | Manage individual tools on the displayed host |
-| `loki tools install TOOL...` | Install programs, leaving activation unchanged |
-| `loki tools enable/disable TOOL` | Change desired activation; reconcile full services |
-| `loki tools uninstall TOOL` | Remove that tool's programs; retain data and credentials |
-| `loki tools uninstall --all [--purge-data]` | Explicitly remove all tool programs, optionally their data |
-| `loki hosts` | Inspect, prepare, select or detach an execution host |
-| `loki connections` | Configure frontend clients and managed tunnels |
-| `loki integrations` | Configure tool-specific authentication |
+- `loki setup`: guided host selection, tools and client connections.
+- `loki status` / `doctor`: inspect configuration / probe the selected host.
+  `--all-hosts` requests separate results for every registered host.
+- `loki upgrade`: update the frontend CLI and selected host's installed tools.
+  `--all-hosts` updates the frontend once and processes each host independently.
+- `loki tools manage`: install/uninstall and enable/disable individual tools.
+- `loki hosts`: register named hosts, prepare, select, rename or detach them.
+- `loki connections`: configure frontend clients and host-specific tunnels.
+- `loki integrations`: configure tool-specific authentication.
 
 Native manager publication (`install`) and explicit tool-removal shorthand
 (`uninstall`) remain advanced commands with contextual help. The primary help
@@ -47,7 +42,7 @@ is the documented client command.
    for an existing absolute workspace; full tools do not need a workspace path.
 6. Deletion previews name the host, tool scope and retained data. Full tool
    removal reconciles remaining services. CLI and host deletion are not implied
-   by removing tools. Owned host destruction remains explicit `hosts remove --purge`.
+   by removing tools. Owned host destruction remains explicit `hosts remove NAME --purge`.
 
 Status is passive: enabled does not imply running or ready. Unprobed runtime
 state is shown as **not checked**, with `loki doctor` as the next action.
@@ -83,3 +78,76 @@ three-line completion output. Windows amd64 and macOS arm64 manager test binarie
 cross-compiled. These builds do not establish native execution. Fresh Windows WSL
 provisioning, live full-service changes, tunnel operation and desktop connections
 still require their actual environments. No release was published.
+
+## Host identity and connection scope
+
+Host names are display labels; immutable IDs bind client connections. The CLI
+has one default among multiple registrations. Changing that default does not
+retarget Codex or OpenAI. Each frontend keeps its own registry; Windows and WSL
+registries are not automatically mirrored. Remote state stays on the execution
+host and is never copied as part of registration or selection.
+
+Multiple roots or WSL users in the same environment can be registered separately.
+Owned infrastructure removal is refused while another registration shares it.
+Status does not start tools. Offline hosts produce independent errors in an
+all-host report rather than hiding results from reachable hosts.
+
+## Multiple-host validation — 14 October 2026
+
+The full Go suite, manager/config/management race tests, Go vet, architecture
+checks, module-tidiness checks and 49 maintainer Python tests passed. New checks
+cover read-only legacy import, stable IDs, separate roots/users, ownership record
+isolation, concurrent client entries, scoped disconnect, offline partial reports,
+shared-infrastructure purge refusal, bridge authorization and grouped upgrades.
+Grouped upgrade tests verify one frontend CLI publication and independent host
+results after a failure.
+
+Native Windows tests passed for console keyboard flows and relevant connection
+regressions. An isolated Windows CLI registered two state roots on the existing
+Ubuntu distribution and passed default/explicit/all-host status, connection
+listing, rename and detach. It used temporary frontend/Codex configuration and
+removed it afterward; existing installations and client configuration were not
+changed. Windows amd64 and macOS arm64 test binaries cross-compiled.
+
+Live simultaneous OpenAI tunnels, fresh managed WSL provisioning/purge and
+native macOS execution remain separate acceptance checks. No release was
+published by this implementation.
+
+## Multiple-host review loop — 14 October 2026
+
+The review covered the host registry/import, CLI and guided setup routing,
+Codex/bridge bindings, upgrade planning/application, ownership/removal and
+human/JSON output against the multiple-host contract in the usage guide.
+
+Corrected defects:
+
+- Immutable IDs take precedence over names; ID-shaped names and assigning the
+  native transport name to a remote host are rejected. Imported SSH tunnel
+  namespaces stay fixed when preparation resolves the remote state directory.
+- Prepared setup and update commands retain the frontend registry and host ID,
+  including ownership. Preparation resolves the state directory even when the
+  existing manager already has the requested version.
+- Native legacy connections are distinguished from managed system connections
+  and other native state directories. Disconnect refuses a configuration that
+  changed after selecting the entries to remove.
+- Bridge reuse checks the complete bound target. Refresh waits for the old
+  listener to stop. Fast reuse of managed WSL verifies the recorded ownership
+  token, rather than trusting only the installed CLI version.
+- Multiple-host upgrades check candidate protocol support before publishing the
+  CLI. Small single-host requests retain the existing request protocol. Human
+  output includes per-host completion/failure and correct installed-tool counts.
+- Unknown top-level commands fail locally before contacting the default remote
+  host. Unsaved preparation metadata is not reported as a saved setup change.
+  Infrastructure purge requires an explicit host name.
+
+Five initial failure cases were reproduced before their fixes. Regression checks
+were extended for the other affected contracts. The final full Go suite, race
+checks, vet, architecture and module-tidiness checks passed; all 49 maintainer
+Python tests passed. The full native Windows manager suite and isolated actual
+Windows-to-Ubuntu multi-host status/default/override/rename/detach flow passed.
+Windows amd64 and macOS arm64 compilation passed. Reinspection found no further
+confirmed defects in the reviewed changes.
+
+The earlier external acceptance limits remain: live simultaneous OpenAI tunnels,
+fresh managed WSL provisioning/purge and native macOS execution were not exercised.
+Existing user installations/configuration were retained. No release was published.

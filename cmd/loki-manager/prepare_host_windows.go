@@ -20,6 +20,13 @@ import (
 )
 
 func prepareManagedHost(ctx context.Context, frontend management.Store, diagnostics io.Writer) (*management.ExecutionSelection, error) {
+	return prepareManagedHostFor(ctx, frontend, "loki-tools", true, diagnostics)
+}
+
+func prepareManagedHostFor(ctx context.Context, frontend management.Store, distribution string, remember bool, diagnostics io.Writer) (*management.ExecutionSelection, error) {
+	if err := windowshost.ValidateDistributionName(distribution); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 	reporter := progress.NewLineReporter(diagnostics)
@@ -29,8 +36,7 @@ func prepareManagedHost(ctx context.Context, frontend management.Store, diagnost
 	if err := client.RequireInstallCapabilities(ctx); err != nil {
 		return nil, fmt.Errorf("WSL needs installation or an update; run 'wsl --install --no-distribution' in an administrator terminal, restart Windows if requested, then retry loki setup: %w", err)
 	}
-	const distribution = "loki-tools"
-	record, err := frontend.HostPreparation()
+	record, err := frontend.HostPreparationFor(distribution)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +137,10 @@ func prepareManagedHost(ctx context.Context, frontend management.Store, diagnost
 	if err := frontend.SaveHostPreparation(*record); err != nil {
 		return nil, err
 	}
-	if err := frontend.SelectExecutionHost(*selected); err != nil {
-		return nil, err
+	if remember {
+		if err := frontend.SelectExecutionHost(*selected); err != nil {
+			return nil, err
+		}
 	}
 	return selected, nil
 }

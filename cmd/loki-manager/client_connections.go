@@ -12,12 +12,15 @@ import (
 )
 
 type clientConnection struct {
-	Provider   string   `json:"provider"`
-	Configured bool     `json:"configured"`
-	Config     string   `json:"config,omitempty"`
-	Servers    []string `json:"servers,omitempty"`
-	Enabled    *bool    `json:"enabled,omitempty"`
-	Issue      string   `json:"issue,omitempty"`
+	HostID     string          `json:"host_id,omitempty"`
+	Host       string          `json:"host,omitempty"`
+	Provider   string          `json:"provider"`
+	Configured bool            `json:"configured"`
+	Config     string          `json:"config,omitempty"`
+	Servers    []string        `json:"servers,omitempty"`
+	Enabled    *bool           `json:"enabled,omitempty"`
+	Issue      string          `json:"issue,omitempty"`
+	Bindings   []clientBinding `json:"bindings,omitempty"`
 }
 
 func defaultCodexConfig() (string, error) {
@@ -55,7 +58,13 @@ func inspectCodexConnection() clientConnection {
 		view.Issue = "Cannot read Codex configuration; inspect its path and permissions"
 		return view
 	}
-	view.Servers, err = hostconfig.ConfiguredClientServers(raw, []string{"loki", "loki_browser"})
+	names := []string{"loki", "loki_browser"}
+	for _, entry := range ownedCodexEntries(raw) {
+		if entry.Name != "loki" && entry.Name != "loki_browser" {
+			names = append(names, entry.Name)
+		}
+	}
+	view.Servers, err = hostconfig.ConfiguredClientServers(raw, names)
 	if err != nil {
 		view.Issue = "Codex configuration is invalid; repair it before connecting"
 		return view
@@ -65,7 +74,11 @@ func inspectCodexConnection() clientConnection {
 }
 
 func showClientConnections(store management.Store, out io.Writer) error {
-	clients := []clientConnection{inspectCodexConnection()}
+	codex := inspectCodexConnection()
+	if raw, err := readCodexConfiguration(codex.Config); err == nil {
+		codex.Bindings = codexBindings(raw, store)
+	}
+	clients := []clientConnection{codex}
 	managed, err := inspectManagedConnections(store)
 	if err != nil {
 		return err
@@ -83,7 +96,14 @@ func showClientConnections(store management.Store, out io.Writer) error {
 		if client.Issue != "" {
 			state = client.Issue
 		}
-		fmt.Fprintf(out, "  %s: %s\n", client.Provider, state)
+		label := client.Provider
+		if client.Host != "" {
+			label += " (" + client.Host + ")"
+		}
+		fmt.Fprintf(out, "  %s: %s\n", label, state)
+		for _, binding := range client.Bindings {
+			fmt.Fprintf(out, "    %s → %s\n", binding.Server, binding.Host)
+		}
 		if client.Config != "" {
 			fmt.Fprintln(out, "    Configuration:", client.Config)
 		}

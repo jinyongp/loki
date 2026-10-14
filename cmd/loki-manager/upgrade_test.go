@@ -111,7 +111,7 @@ func upgradeFixture(t *testing.T, target string, corrupt bool) (upgradeDependenc
 			if len(args) == 1 && args[0] == "version" {
 				return []byte("loki " + target + "\n"), nil
 			}
-			return nil, nil
+			return []byte("-request-file"), nil
 		},
 		install: func(ctx context.Context, store management.Store, binary, directory, version string) error {
 			if version != target {

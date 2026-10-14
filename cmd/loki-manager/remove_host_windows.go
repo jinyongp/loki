@@ -12,7 +12,7 @@ import (
 )
 
 func removeManagedHost(ctx context.Context, frontend management.Store, selected management.ExecutionSelection, diagnostics io.Writer) error {
-	record, err := frontend.HostPreparation()
+	record, err := frontend.HostPreparationFor(selected.Host.Distribution)
 	if err != nil {
 		return err
 	}

@@ -14,6 +14,9 @@ import (
 
 type operatorReport struct {
 	management.Report
+	HostName      string                        `json:"host_name,omitempty"`
+	DefaultHost   string                        `json:"default_host,omitempty"`
+	HostCount     int                           `json:"host_count"`
 	CLIVersion    string                        `json:"cli_version"`
 	ExecutionHost management.ExecutionSelection `json:"execution_host"`
 	StateRoot     string                        `json:"state_root"`
@@ -36,7 +39,20 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 		root = host.Root
 	}
 	view := operatorReport{Report: *report, CLIVersion: management.ManagerRelease, ExecutionHost: host, StateRoot: root, NextActions: statusNextActions(*report)}
-	view.Connections = []clientConnection{inspectCodexConnection()}
+	if registry, err := store.HostRegistry(); err == nil {
+		view.DefaultHost = registry.Selected().Name
+		view.HostCount = len(registry.Hosts)
+		if record, err := store.HostForTarget(host); err == nil {
+			view.HostName = record.Name
+		}
+	}
+	client := inspectCodexConnection()
+	if config, err := defaultCodexConfig(); err == nil {
+		if raw, err := readCodexConfiguration(config); err == nil {
+			client.Bindings = codexBindings(raw, store)
+		}
+	}
+	view.Connections = []clientConnection{client}
 	managed, connectionErr := inspectManagedConnections(store)
 	if connectionErr != nil {
 		managed = []clientConnection{{Provider: "openai", Issue: "Cannot inspect local tunnel metadata; run 'loki connections status openai'"}}
@@ -50,6 +66,8 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 		if err := printStatusForHost(out, *report, view.CLIVersion, &host, root); err != nil {
 			return err
 		}
+		fmt.Fprintf(out, "\nHost selection: %s; CLI default: %s (%d registered)\n", view.HostName, view.DefaultHost, view.HostCount)
+		fmt.Fprintln(out, "  loki hosts list — inspect hosts; loki --host NAME status — inspect one")
 		fmt.Fprintln(out, "\nClient connections (on this computer):")
 		for _, client := range view.Connections {
 			state := "not configured"
@@ -59,7 +77,14 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 			if client.Issue != "" {
 				state = client.Issue
 			}
-			fmt.Fprintf(out, "  %s: %s\n", client.Provider, state)
+			label := client.Provider
+			if client.Host != "" {
+				label += " (" + client.Host + ")"
+			}
+			fmt.Fprintf(out, "  %s: %s\n", label, state)
+			for _, binding := range client.Bindings {
+				fmt.Fprintf(out, "    %s → %s\n", binding.Server, binding.Host)
+			}
 		}
 		if !doctor {
 			fmt.Fprintln(out, "\nStatus shows configuration without starting tools or testing client connections.\nRun 'loki doctor' to check tools; browser sessions start when requested by a client.")

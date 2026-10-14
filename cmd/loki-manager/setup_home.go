@@ -47,7 +47,15 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		host.selected, changed = selected, true
 	} else if host.selected != nil && host.selected.Remote() {
 		setupWorking(terminal, "Preparing execution host", setupHostLabel(host.selected))
-		prepared, err := ensureSetupExecutionHost(ctx, host.frontend, *host.selected, !host.explicit, diagnostics)
+		metadataSaved := !host.explicit
+		previous := *host.selected
+		prepared, err := ensureSetupExecutionHost(ctx, host.frontend, previous, !host.explicit, diagnostics)
+		if err == nil && host.explicit && previous != prepared {
+			if record, lookupErr := host.frontend.HostForTarget(previous); lookupErr == nil {
+				err = host.frontend.UpdateHostTarget(record.ID, previous, prepared)
+				metadataSaved = err == nil
+			}
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -56,10 +64,10 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				return viewErr
 			}
 		} else {
-			changed = changed || prepared != *host.selected
+			changed = changed || prepared != *host.selected && (metadataSaved || prepared.Command != previous.Command)
 			host.selected = &prepared
 			if host.explicit {
-				prefix = setupExecutionArguments(prepared)
+				prefix = setupBoundArguments(host.frontend, prepared)
 			}
 		}
 	}

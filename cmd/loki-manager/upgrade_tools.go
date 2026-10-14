@@ -23,6 +23,10 @@ type upgradeToolChange struct {
 }
 
 type upgradeToolsPlan struct {
+	All            bool                           `json:"all_hosts,omitempty"`
+	Hosts          []*upgradeToolsPlan            `json:"hosts,omitempty"`
+	Failures       []hostUpgradeResult            `json:"failures,omitempty"`
+	HostID         string                         `json:"host_id,omitempty"`
 	Host           string                         `json:"host"`
 	ManagerCurrent string                         `json:"manager_current,omitempty"`
 	ManagerUpdate  bool                           `json:"manager_update"`
@@ -58,6 +62,12 @@ func planUpgradeTools(ctx context.Context, store management.Store, selected *man
 		return nil, err
 	}
 	plan := &upgradeToolsPlan{Host: setupHostLabel(selected), ManagerCurrent: manager, ReleaseCurrent: report.Release, Changes: []upgradeToolChange{}, RuntimeAction: "none", Selection: selected, Remember: remember}
+	if selected != nil {
+		if h, e := store.HostForTarget(*selected); e == nil {
+			plan.HostID = h.ID
+			plan.Remember = false
+		}
+	}
 	plan.ManagerUpdate = selected != nil && selected.Remote() && manager != target
 	plan.Basis, err = upgradeToolsBasis(*report)
 	if err != nil {
@@ -253,6 +263,16 @@ func upgradeToolsBasis(report management.Report) (string, error) {
 func printUpgradeToolsPlan(out io.Writer, plan *upgradeToolsPlan, target string) {
 	if plan == nil {
 		fmt.Fprintln(out, "Scope: CLI only")
+		return
+	}
+	if plan.All {
+		fmt.Fprintln(out, "Scope: all registered hosts (frontend CLI updated once)")
+		for _, child := range plan.Hosts {
+			printUpgradeToolsPlan(out, child, target)
+		}
+		for _, failure := range plan.Failures {
+			fmt.Fprintln(out, "  Unavailable:", failure.Error)
+		}
 		return
 	}
 	fmt.Fprintln(out, "Execution host:", plan.Host)

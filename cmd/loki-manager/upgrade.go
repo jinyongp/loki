@@ -260,6 +260,20 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		if jsonOutput(out) {
 			return result(out, "Loki upgrade", map[string]any{"current": management.ManagerRelease, "target": target, "update_available": updateAvailable, "state": state, "changed": cliChanged || applied.Changed, "cli_changed": cliChanged, "tools": plan, "applied": applied, "reconnect_required": applied.Reconnect || cliChanged && plan != nil && plan.Reconnect})
 		}
+		if len(applied.Hosts) > 0 {
+			fmt.Fprintln(out, "Host update results:")
+			for _, host := range applied.Hosts {
+				name := host.ID
+				if record, err := store.RegisteredHost(host.ID); err == nil {
+					name = record.Name
+				}
+				state := "completed"
+				if host.Error != "" {
+					state = "failed: " + shortDiagnostic(host.Error)
+				}
+				fmt.Fprintf(out, "  %s: %s\n", name, state)
+			}
+		}
 		if message != "" {
 			_, err := fmt.Fprintln(out, message)
 			return err
@@ -287,12 +301,18 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		return fmt.Errorf("target is older than the current CLI; use --force to allow a downgrade")
 	}
 	if toolWork && !*force {
-		for _, current := range []string{plan.ManagerCurrent, plan.ReleaseCurrent} {
-			if current != "" {
-				if c, err := compareReleaseVersions(target, current); err != nil {
-					return err
-				} else if c < 0 {
-					return fmt.Errorf("target is older than the selected host or tool release; use --force to allow a downgrade")
+		plans := []*upgradeToolsPlan{plan}
+		if plan.All {
+			plans = plan.Hosts
+		}
+		for _, child := range plans {
+			for _, current := range []string{child.ManagerCurrent, child.ReleaseCurrent} {
+				if current != "" {
+					if c, err := compareReleaseVersions(target, current); err != nil {
+						return err
+					} else if c < 0 {
+						return fmt.Errorf("target is older than the selected host or tool release; use --force to allow a downgrade")
+					}
 				}
 			}
 		}
@@ -363,8 +383,12 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		}
 	}
 	if toolWork {
-		if _, err := deps.run(ctx, runner, "_upgrade-apply", "--help"); err != nil {
+		protocol, err := deps.run(ctx, runner, "_upgrade-apply", "--help")
+		if err != nil {
 			return fmt.Errorf("target release cannot apply an integrated upgrade; use --cli-only for this release: %w", err)
+		}
+		if plan.All && !strings.Contains(string(protocol), "request-file") {
+			return fmt.Errorf("target release does not support multiple-host upgrades; no changes applied")
 		}
 	}
 	if cliWork {
@@ -375,10 +399,29 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		cliChanged = true
 	}
 	if toolWork {
-		request := upgradeApplyRequest{Version: target, Basis: plan.Basis, Selection: plan.Selection, Remember: plan.Remember, Force: *force}
+		request := upgradeApplyRequest{Version: target, Basis: plan.Basis, HostID: plan.HostID, Selection: plan.Selection, Remember: plan.Remember, Force: *force}
+		if plan.All {
+			request.All = true
+			request.Failures = plan.Failures
+			for _, child := range plan.Hosts {
+				if child.Update {
+					request.Targets = append(request.Targets, upgradeApplyRequest{Version: target, Basis: child.Basis, HostID: child.HostID, Selection: child.Selection, Force: *force})
+				}
+			}
+		}
 		applied, err = deps.apply(ctx, runner, store, request, input, diagnostics)
 		if err != nil {
 			message := "Upgrade incomplete. Retry 'loki upgrade --tools-only --version " + target + " --yes' to finish the selected host and tools."
+			if plan.All {
+				message = strings.Replace(message, "upgrade --tools-only", "upgrade --all-hosts --tools-only", 1)
+			}
+			if plan.HostID != "" {
+				message = strings.Replace(message, "loki upgrade", "loki --host "+plan.HostID+" upgrade", 1)
+				message += " Retain the same frontend --root option if one was supplied."
+			}
+			if *force {
+				message += " Retain --force for the approved downgrade."
+			}
 			if cliChanged {
 				message = "CLI updated to " + target + ". " + message
 			}

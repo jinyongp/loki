@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -15,6 +16,10 @@ import (
 )
 
 type upgradeApplyRequest struct {
+	All       bool                           `json:"all_hosts,omitempty"`
+	Targets   []upgradeApplyRequest          `json:"targets,omitempty"`
+	Failures  []hostUpgradeResult            `json:"failures,omitempty"`
+	HostID    string                         `json:"host_id,omitempty"`
 	Version   string                         `json:"version"`
 	Basis     string                         `json:"basis"`
 	Selection *management.ExecutionSelection `json:"selection,omitempty"`
@@ -23,10 +28,11 @@ type upgradeApplyRequest struct {
 }
 
 type upgradeApplyResult struct {
-	Changed            bool `json:"changed"`
-	HostManagerUpdated bool `json:"host_manager_updated"`
-	ServicesRestarted  bool `json:"services_restarted"`
-	Reconnect          bool `json:"reconnect_required"`
+	Hosts              []hostUpgradeResult `json:"hosts,omitempty"`
+	Changed            bool                `json:"changed"`
+	HostManagerUpdated bool                `json:"host_manager_updated"`
+	ServicesRestarted  bool                `json:"services_restarted"`
+	Reconnect          bool                `json:"reconnect_required"`
 }
 
 func executeUpgradeTools(ctx context.Context, binary string, frontend management.Store, request upgradeApplyRequest, input io.Reader, diagnostics io.Writer) (upgradeApplyResult, error) {
@@ -34,7 +40,25 @@ func executeUpgradeTools(ctx context.Context, binary string, frontend management
 	if err != nil {
 		return upgradeApplyResult{}, err
 	}
-	command := exec.CommandContext(ctx, binary, "--root", frontend.Root, "_upgrade-apply", "--request", string(data))
+	argv := []string{"--root", frontend.Root, "_upgrade-apply"}
+	if !request.All && len(data) <= 16<<10 {
+		argv = append(argv, "--request", string(data))
+	} else {
+		file, err := os.CreateTemp("", "loki-host-upgrade-*.json")
+		if err != nil {
+			return upgradeApplyResult{}, err
+		}
+		defer os.Remove(file.Name())
+		if _, err := file.Write(data); err != nil {
+			file.Close()
+			return upgradeApplyResult{}, err
+		}
+		if err := file.Close(); err != nil {
+			return upgradeApplyResult{}, err
+		}
+		argv = append(argv, "--request-file", file.Name())
+	}
+	command := exec.CommandContext(ctx, binary, argv...)
 	var output githubRelayOutput
 	command.Stdin, command.Stdout, command.Stderr = input, &output, diagnostics
 	err = command.Run()
@@ -55,10 +79,28 @@ func runUpgradeApply(ctx context.Context, frontend management.Store, args []stri
 	flags := flag.NewFlagSet("_upgrade-apply", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	raw := flags.String("request", "", "bounded upgrade request")
+	requestFile := flags.String("request-file", "", "private bounded upgrade request file")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || len(*raw) > 16<<10 {
+	if *requestFile != "" {
+		if *raw != "" {
+			return fmt.Errorf("choose one upgrade request source")
+		}
+		info, err := os.Lstat(*requestFile)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Size() > 256<<10 {
+			return fmt.Errorf("invalid upgrade request file")
+		}
+		data, err := os.ReadFile(*requestFile)
+		if err != nil {
+			return err
+		}
+		*raw = string(data)
+	}
+	if flags.NArg() != 0 || len(*raw) > 256<<10 {
 		return fmt.Errorf("invalid upgrade apply request")
 	}
 	var request upgradeApplyRequest
@@ -73,7 +115,28 @@ func runUpgradeApply(ctx context.Context, frontend management.Store, args []stri
 			return err
 		}
 	}
-	applied, err := applyUpgradeTools(ctx, frontend, request, diagnostics)
+	if request.All {
+		if request.Selection != nil || len(request.Targets) > 128 || len(request.Failures) > 128 {
+			return fmt.Errorf("invalid grouped upgrade request")
+		}
+		ids := map[string]bool{}
+		for _, child := range request.Targets {
+			if child.All || child.Version != request.Version || len(child.Basis) != 64 || child.HostID == "" || ids[child.HostID] || child.Selection == nil {
+				return fmt.Errorf("invalid grouped upgrade target")
+			}
+			if err := child.Selection.Validate(); err != nil {
+				return err
+			}
+			ids[child.HostID] = true
+		}
+	}
+	var applied upgradeApplyResult
+	var err error
+	if request.All {
+		applied, err = applyUpgradeGroup(ctx, frontend, request, diagnostics)
+	} else {
+		applied, err = applyUpgradeTools(ctx, frontend, request, diagnostics)
+	}
 	if encodeErr := json.NewEncoder(out).Encode(applied); encodeErr != nil {
 		return encodeErr
 	}
@@ -83,7 +146,16 @@ func runUpgradeApply(ctx context.Context, frontend management.Store, args []stri
 func applyUpgradeTools(ctx context.Context, frontend management.Store, request upgradeApplyRequest, diagnostics io.Writer) (upgradeApplyResult, error) {
 	applied := upgradeApplyResult{}
 	selected := request.Selection
-	if request.Remember {
+	if request.HostID != "" {
+		h, err := frontend.RegisteredHost(request.HostID)
+		if err != nil {
+			return applied, err
+		}
+		if selected == nil || h.Target != *selected {
+			return applied, fmt.Errorf("registered host changed after confirmation; run upgrade again")
+		}
+	}
+	if request.Remember && request.HostID == "" {
 		current, err := frontend.ExecutionSelection()
 		if err != nil {
 			return applied, err
@@ -111,6 +183,11 @@ func applyUpgradeTools(ctx context.Context, frontend management.Store, request u
 				if err != nil {
 					return applied, err
 				}
+				if request.HostID != "" && prepared != *selected {
+					if err := frontend.UpdateHostTarget(request.HostID, *selected, prepared); err != nil {
+						return applied, err
+					}
+				}
 				selected = &prepared
 			} else if err := upgradeUserHostManager(ctx, *selected, request.Version, request.Force, diagnostics, defaultRemotePreparationDependencies().run); err != nil {
 				return applied, err
@@ -131,7 +208,7 @@ func applyUpgradeTools(ctx context.Context, frontend management.Store, request u
 	}
 	prefix := []string{"--host", "local", "--root", frontend.Root}
 	if selected != nil && selected.Remote() {
-		prefix = setupExecutionArguments(*selected)
+		prefix = setupBoundArguments(frontend, *selected)
 	}
 	var output githubRelayOutput
 	err = run(ctx, append(prefix, "--json", "tools", "update", "--version", request.Version), &output, diagnostics)

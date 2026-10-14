@@ -144,7 +144,7 @@ func InstallSystemHost(ctx context.Context, uid uint32, source string, diagnosti
 }
 
 func PrepareSystemHost(ctx context.Context, frontend Store, input io.Reader, diagnostics io.Writer) (*ExecutionSelection, error) {
-	return prepareSystemHost(ctx, frontend, input, diagnostics, false)
+	return prepareSystemHost(ctx, frontend, input, diagnostics, false, true)
 }
 
 func PrepareSystemHostPassword(ctx context.Context, frontend Store, password []byte, diagnostics io.Writer) (*ExecutionSelection, error) {
@@ -153,10 +153,10 @@ func PrepareSystemHostPassword(ctx context.Context, frontend Store, password []b
 	}
 	material := append(bytes.Clone(password), '\n')
 	defer clear(material)
-	return prepareSystemHost(ctx, frontend, bytes.NewReader(material), diagnostics, true)
+	return prepareSystemHost(ctx, frontend, bytes.NewReader(material), diagnostics, true, true)
 }
 
-func prepareSystemHost(ctx context.Context, frontend Store, input io.Reader, diagnostics io.Writer, password bool) (*ExecutionSelection, error) {
+func prepareSystemHost(ctx context.Context, frontend Store, input io.Reader, diagnostics io.Writer, password, remember bool) (*ExecutionSelection, error) {
 	if os.Geteuid() == 0 {
 		return nil, nil
 	}
@@ -189,8 +189,10 @@ func prepareSystemHost(ctx context.Context, frontend Store, input io.Reader, dia
 	if selected != expected {
 		return nil, fmt.Errorf("system host identity differs from the login user")
 	}
-	if err := frontend.SelectExecutionHost(selected); err != nil {
-		return nil, err
+	if remember {
+		if err := frontend.SelectExecutionHost(selected); err != nil {
+			return nil, err
+		}
 	}
 	return &selected, nil
 }
@@ -341,4 +343,8 @@ func requireAdministratorPath(path string) error {
 			return nil
 		}
 	}
+}
+
+func PrepareSystemHostTarget(ctx context.Context, frontend Store, input io.Reader, diagnostics io.Writer) (*ExecutionSelection, error) {
+	return prepareSystemHost(ctx, frontend, input, diagnostics, false, false)
 }

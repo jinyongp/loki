@@ -13,7 +13,7 @@ import (
 	"loki/internal/tools"
 )
 
-func runHosts(ctx context.Context, store management.Store, args []string, out, diagnostics io.Writer) error {
+func runLegacyHosts(ctx context.Context, store management.Store, args []string, out, diagnostics io.Writer) error {
 	if len(args) == 0 || (len(args) == 1 && args[0] == "show") {
 		selected, err := store.ExecutionSelection()
 		if err != nil {
@@ -81,9 +81,7 @@ func runHosts(ctx context.Context, store management.Store, args []string, out, d
 	if err := selected.Validate(); err != nil {
 		return err
 	}
-	if err := requireHostConnectionsDetached(store); err != nil {
-		return err
-	}
+
 	if args[0] == "prepare" {
 		if selected.Host.Kind == "local" {
 			prepared, err := prepareLocalSystemHost(ctx, store, nil, diagnostics)

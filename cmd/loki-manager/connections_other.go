@@ -16,7 +16,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 			return err
 		}
 		if selected != nil && selected.Remote() {
-			return connectRemoteCodex(ctx, *selected, args[1:], out, diagnostics)
+			return connectCodexOnHost(ctx, store, selected, args[1:], out, diagnostics)
 		}
 		return connectCodex(store, args[1:], out, diagnostics)
 	}
@@ -39,3 +39,5 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 func inspectManagedConnections(management.Store) ([]clientConnection, error) { return nil, nil }
 
 func requireHostConnectionsDetached(management.Store) error { return nil }
+
+func requireManagedHostDetached(management.Store, management.HostRecord) error { return nil }

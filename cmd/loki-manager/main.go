@@ -47,7 +47,8 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		printHelp(out, entry)
 	}
 	root := flags.String("root", "", "0.2 management directory on this execution host")
-	hostKind := flags.String("host", "local", "execution host: local, wsl or ssh")
+	hostKind := flags.String("host", "local", "registered host name, or local/wsl/ssh transport")
+	hostID := flags.String("host-id", "", "fixed registered host ID")
 	distribution := flags.String("distribution", "", "existing WSL distribution")
 	address := flags.String("address", "", "SSH destination")
 	remoteCommand := flags.String("remote-command", "loki", "manager executable on the execution host")
@@ -73,6 +74,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 	}
+	if len(args) > 0 && !strings.HasPrefix(args[0], "_") {
+		if _, exists := helpFor(args[0]); !exists {
+			return fmt.Errorf("unknown command %q; run 'loki --help' to list commands", args[0])
+		}
+	}
 	out = &commandOutput{Writer: out, json: structured}
 	if len(args) >= 3 && args[0] == "tools" && args[1] == "uninstall" && (args[2] == "--all" || args[2] == "--purge-data") {
 		args = append([]string{"uninstall"}, args[2:]...)
@@ -87,7 +93,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return fmt.Errorf("tools serve uses MCP protocol output; --json applies to management commands")
 	}
 	frontendRoot := *root
-	if *hostKind != "local" || *systemSocket != "" {
+	if (*hostKind == "wsl" || *hostKind == "ssh") || *systemSocket != "" {
 		frontendRoot = ""
 	}
 	if frontendRoot == "" {
@@ -103,12 +109,18 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if len(args) > 0 && args[0] == "hosts" {
 		return runHosts(ctx, frontend, args[1:], out, diagnostics)
 	}
-	if len(args) == 1 && args[0] == "_connection-bridge" {
-		return runConnectionBridge(ctx, frontend, diagnostics)
+	if len(args) >= 1 && args[0] == "_connection-bridge" {
+		if len(args) == 2 {
+			return runConnectionBridgeFor(ctx, frontend, args[1], diagnostics)
+		}
+		if len(args) == 1 {
+			return runConnectionBridge(ctx, frontend, diagnostics)
+		}
+		return fmt.Errorf("invalid connection bridge target")
 	}
 	explicitHost := false
 	flags.Visit(func(option *flag.Flag) {
-		if option.Name == "host" || option.Name == "distribution" || option.Name == "address" || option.Name == "remote-user" || option.Name == "remote-command" || option.Name == "system-socket" {
+		if option.Name == "host-id" || option.Name == "host" || option.Name == "distribution" || option.Name == "address" || option.Name == "remote-user" || option.Name == "remote-command" || option.Name == "system-socket" {
 			explicitHost = true
 		}
 	})
@@ -122,19 +134,42 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if selected != nil {
 			*hostKind, *distribution, *address = selected.Host.Kind, selected.Host.Distribution, selected.Host.Address
 			*remoteCommand = selected.Command
-			if selected.Remote() && *root == "" {
+			if selected.Remote() {
 				*root = selected.Root
 			}
-			if selected.Remote() {
-				selected.Root = *root
+		}
+	}
+	registeredID := *hostID
+	if registeredID == "" && *hostKind != "local" && *hostKind != "wsl" && *hostKind != "ssh" {
+		registeredID = *hostKind
+	}
+	if registeredID != "" {
+		conflicting := false
+		flags.Visit(func(option *flag.Flag) {
+			if slices.Contains([]string{"distribution", "address", "remote-user", "remote-command", "system-socket"}, option.Name) {
+				conflicting = true
 			}
+		})
+		if conflicting {
+			return fmt.Errorf("a registered host cannot be combined with raw transport options")
+		}
+		record, lookupErr := frontend.RegisteredHost(registeredID)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		selected = &record.Target
+		registeredID = record.ID
+		*hostKind, *distribution, *address = selected.Host.Kind, selected.Host.Distribution, selected.Host.Address
+		*remoteCommand, *remoteUser = selected.Command, selected.User
+		if selected.Remote() {
+			*root = selected.Root
 		}
 	}
 	host := tools.Host{Kind: *hostKind, Distribution: *distribution, Address: *address}
 	if err := host.Validate(); err != nil {
 		return err
 	}
-	if explicitHost {
+	if explicitHost && registeredID == "" {
 		selected = &management.ExecutionSelection{Schema: 1, Host: host, Root: *root, Command: *remoteCommand, User: *remoteUser}
 		if *systemSocket != "" {
 			selected.System, selected.Owned, selected.Socket = true, true, *systemSocket
@@ -146,10 +181,32 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 	}
+	if registeredID != "" && len(args) > 0 && slices.Contains([]string{"hosts", "install"}, args[0]) {
+		return fmt.Errorf("this command operates on frontend configuration; do not select a target")
+	}
+	if len(args) > 0 && (args[0] == "status" || args[0] == "doctor") && slices.Contains(args[1:], "--all-hosts") {
+		if len(args) != 2 {
+			return fmt.Errorf("usage: loki %s --all-hosts", args[0])
+		}
+		if explicitHost {
+			return fmt.Errorf("choose --host or --all-hosts")
+		}
+		return statusAllHosts(ctx, frontend, out, diagnostics, args[0] == "doctor")
+	}
+	if len(args) > 0 && args[0] == "upgrade" && slices.Contains(args[1:], "--all-hosts") {
+		if explicitHost {
+			return fmt.Errorf("choose --host or --all-hosts")
+		}
+		return upgradeAllHosts(ctx, frontend, args[1:], os.Stdin, out, diagnostics)
+	}
 	if len(args) > 0 && args[0] == "upgrade" {
 		deps := defaultUpgradeDependencies()
 		deps.plan = func(ctx context.Context, store management.Store, target string, diagnostics io.Writer) (*upgradeToolsPlan, error) {
-			return planUpgradeTools(ctx, store, selected, !explicitHost, target, diagnostics, deps.client)
+			plan, err := planUpgradeTools(ctx, store, selected, false, target, diagnostics, deps.client)
+			if plan != nil && registeredID != "" {
+				plan.HostID = registeredID
+			}
+			return plan, err
 		}
 		return runUpgrade(ctx, frontend, args[1:], os.Stdin, out, diagnostics, deps)
 	}
@@ -157,15 +214,21 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if selected == nil || !selected.Remote() {
 			return nil
 		}
-		prepared, err := ensureSetupExecutionHost(ctx, frontend, *selected, !explicitHost, diagnostics)
+		before := *selected
+		prepared, err := ensureSetupExecutionHost(ctx, frontend, before, !explicitHost && registeredID == "", diagnostics)
 		if err != nil {
 			return err
+		}
+		if registeredID != "" && prepared != before {
+			if err := frontend.UpdateHostTarget(registeredID, before, prepared); err != nil {
+				return err
+			}
 		}
 		selected = &prepared
 		host = prepared.Host
 		*root, *remoteCommand = prepared.Root, prepared.Command
 		if explicitHost {
-			executionArgs = setupExecutionArguments(prepared)
+			executionArgs = setupBoundArguments(frontend, prepared)
 		}
 		return nil
 	}
@@ -191,13 +254,22 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	if len(args) > 0 && args[0] == "connections" {
+		if handled, err := codexConnectionCommand(frontend, selected, args[1:], out); handled {
+			return err
+		}
 		if len(args) >= 3 && args[1] == "setup" && args[2] == "codex" {
 			if selected != nil && selected.Remote() {
-				return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
+				return connectCodexOnHost(ctx, frontend, selected, args[2:], out, diagnostics)
 			}
 			return connectCodex(frontend, args[2:], out, diagnostics)
 		}
-		return runConnections(ctx, frontend, args[1:], os.Stdin, out, diagnostics)
+		connectionArgs := args[1:]
+		if selected != nil && selected.Remote() && (len(args) > 2 && args[2] == "openai" || len(args) > 1 && args[1] == "restore") {
+			if h, e := frontend.HostForTarget(*selected); e == nil {
+				connectionArgs = append(slices.Clone(connectionArgs), "--host-id", h.ID)
+			}
+		}
+		return runConnections(ctx, frontend, connectionArgs, os.Stdin, out, diagnostics)
 	}
 	if len(args) == 1 && (args[0] == "status" || args[0] == "doctor") || len(args) == 2 && args[0] == "tools" && slices.Contains([]string{"status", "doctor", "list"}, args[1]) {
 		localRoot := *root
@@ -211,7 +283,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	}
 	if len(args) >= 2 && args[0] == "tools" && args[1] == "connect" {
 		if selected != nil && selected.Remote() {
-			return connectRemoteCodex(ctx, *selected, args[2:], out, diagnostics)
+			return connectCodexOnHost(ctx, frontend, selected, args[2:], out, diagnostics)
 		}
 		localRoot := *root
 		if localRoot == "" {
@@ -883,7 +955,7 @@ func toolArguments(args []string) []string {
 		}
 		options = append(options, arg)
 		name := strings.TrimLeft(arg, "-")
-		if !strings.Contains(name, "=") && slices.Contains([]string{"tools", "mode", "version", "connect", "distribution", "address", "root", "command", "user", "config", "tunnel-id", "catalog", "archives", "capabilities", "engine", "workspace", "keep", "identity-name", "identity-email", "key-file", "config-file", "private-key-file"}, name) && i+1 < len(args) {
+		if !strings.Contains(name, "=") && helpValueOption(arg) && i+1 < len(args) {
 			i++
 			options = append(options, args[i])
 		}

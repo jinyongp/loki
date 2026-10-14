@@ -13,3 +13,7 @@ func PrepareSystemHost(context.Context, Store, io.Reader, io.Writer) (*Execution
 }
 
 func (s Store) requireSystemMutable() error { return nil }
+
+func PrepareSystemHostTarget(context.Context, Store, io.Reader, io.Writer) (*ExecutionSelection, error) {
+	return nil, fmt.Errorf("system host requires Linux")
+}

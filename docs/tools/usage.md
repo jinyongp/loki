@@ -200,7 +200,7 @@ refuses caller-supplied catalogs and archives.
 
 Run one command to update this computer's CLI, the selected execution-host CLI
 and installed tools. Tool selection, activation, capabilities and user data are
-retained. Other execution hosts are outside the update.
+retained. Other execution hosts are outside the update unless you choose `--all-hosts`.
 
 ```sh
 loki upgrade
@@ -270,7 +270,7 @@ separate profiles and tabs. `tools serve` reserves stdout for MCP protocol;
 startup progress and public errors go to stderr. The catalog's archive URLs,
 sizes and checksums are independently trusted release inputs.
 
-Client setup registers one `loki` MCP entry for the execution host's installed,
+Client setup registers a host-bound MCP entry for the execution host's installed,
 enabled tools. The confirmation lists those groups; it does not request a project
 directory. Project-host currently supports browser; full mode supports all groups.
 The launcher selects the backend from the host's current configuration.
@@ -279,7 +279,7 @@ The saved execution host is the default for Loki management commands. Change it
 through setup's **Change execution host**, or override one command with `--host`.
 Every Codex connection pins its execution host, including local connections.
 Changing the default keeps existing client connections on their original host;
-choose **Connect Codex** again to replace the connection with the new host.
+choose **Connect Codex** to add a connection for the newly selected host.
 Tools and user data stay on each host. Existing local entries created by an older
 CLI acquire explicit host pinning when **Connect Codex** is run again.
 
@@ -415,7 +415,7 @@ loki rollback
 loki tools uninstall browser
 loki tools uninstall --all
 loki tools uninstall --all --purge-data
-loki hosts remove --purge
+loki hosts remove NAME --purge
 ```
 
 Backup pauses owned services and resumes them after copying selected programs,
@@ -428,8 +428,8 @@ available; it retains current data. `tools uninstall TOOL` removes one tool, whi
 Bare `tools uninstall` refuses to make changes and asks for a target. These commands retain
 the CLI, credentials, backups and data. It does not remove the Docker engine,
 WSL distribution or unrelated resources. `--purge-data` also removes tool-owned
-data and credentials while keeping backups. `hosts remove` detaches a selection;
-`hosts remove --purge` destroys this installation's owned WSL distribution or
+data and credentials while keeping backups. `hosts remove NAME` detaches a registration;
+`hosts remove NAME --purge` destroys this installation's owned WSL distribution or
 per-user Linux system host, including its data and host-side backups. The shared
 Docker/WSL prerequisites and frontend CLI remain installed. External SSH and
 user-managed WSL hosts are preserved.
@@ -496,3 +496,62 @@ and reinstallation with user data retained. Logs and exact image and binary
 digests remain in the evidence directory. The release workflow runs these checks
 on Linux amd64. Containers permit user namespaces without disabling Chrome’s
 sandbox. Windows-to-WSL transport and desktop rendering remain separate checks.
+
+## Multiple execution hosts
+
+Each frontend has a registry of named hosts. Each host has its own tools, data
+and credentials; the CLI default only chooses where ordinary commands execute.
+
+```sh
+loki hosts add ubuntu --type wsl --distribution Ubuntu
+loki hosts add build --type ssh --address user@server
+loki hosts prepare ubuntu
+loki hosts use ubuntu
+loki hosts list
+loki --host build status
+loki status --all-hosts
+loki doctor --all-hosts
+```
+
+Registration alone makes no host changes. `hosts prepare NAME` prepares that
+host without changing the default. `hosts use NAME` selects a registered host
+without requiring network access. The guided host picker lists registered hosts
+alongside options for adding other execution environments.
+
+Connect each host independently:
+
+```sh
+loki --host ubuntu connections setup codex
+loki --host build connections setup codex
+loki connections list
+loki --host build connections remove codex
+```
+
+Codex connections bind to immutable host IDs. Renaming a host or switching the
+CLI default preserves existing targets. Reconnecting a host reuses its managed
+entry. `--name NAME` creates a separately named Codex connection. Removal selects
+this host's entries by default; `connections remove codex --all` explicitly removes
+all Loki-managed entries. User-managed MCP entries are retained.
+
+Existing single-host selections are imported without moving tool state. Existing
+Codex entries retain their transport arguments until explicitly reconnected.
+Windows OpenAI tunnels have separate host bindings, bridges, credentials and
+restoration tasks. Their restoration does not depend on the CLI default.
+
+```sh
+loki --host build upgrade --check
+loki upgrade --all-hosts --check
+loki upgrade --all-hosts --yes
+loki hosts rename build builder
+loki hosts remove builder
+```
+
+An all-host upgrade updates this frontend CLI once, then handles registered hosts
+individually. An unreachable or failed host is reported alongside completed hosts;
+retry the all-host operation or select the failed host explicitly. Status also
+returns partial results and a failure exit code when a host cannot be inspected.
+
+A host can be detached after its connections have been removed. Detachment keeps
+the host and data. `hosts remove NAME --purge` deletes only verified Loki-owned
+infrastructure; external SSH/WSL hosts and shared infrastructure are retained.
+The native frontend host cannot be removed.
