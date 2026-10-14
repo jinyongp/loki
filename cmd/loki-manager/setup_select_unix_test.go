@@ -68,18 +68,27 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			}
 		}
 	}()
-	waitFor := func(text string) string {
+	waitFor := func(texts ...string) string {
 		t.Helper()
 		var screen strings.Builder
-		for !strings.Contains(screen.String(), text) && !strings.Contains(strings.Join(strings.Fields(ansi.Strip(screen.String())), " "), text) {
+		containsAll := func() bool {
+			normalized := strings.Join(strings.Fields(ansi.Strip(screen.String())), " ")
+			for _, text := range texts {
+				if !strings.Contains(screen.String(), text) && !strings.Contains(normalized, text) {
+					return false
+				}
+			}
+			return true
+		}
+		for !containsAll() {
 			select {
 			case chunk, ok := <-chunks:
 				if !ok {
-					t.Fatal("terminal closed before rendering", text)
+					t.Fatal("terminal closed before rendering", texts)
 				}
 				screen.WriteString(chunk)
 			case <-ctx.Done():
-				t.Fatal("menu did not render", text)
+				t.Fatal("menu did not render", texts)
 			}
 		}
 		return screen.String()
@@ -190,7 +199,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\x1b")
 		waitFor("Missing Linux library")
 		_, _ = io.WriteString(master, "\r")
-		transcript := waitFor("does not test the Codex app connection")
+		transcript := waitFor("[RESULT] Readiness — needs attention", "does not test the Codex app connection")
 		if !strings.Contains(transcript, "[RESULT] Readiness — needs attention") {
 			t.Fatal("readiness result missing from restored terminal", transcript)
 		}
