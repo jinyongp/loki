@@ -14,14 +14,15 @@ import (
 // Status never runs a tool or claims observed readiness. Doctor performs owned
 // resource checks and invokes only explicitly supplied module probes.
 type Report struct {
-	Installed   bool                     `json:"installed"`
-	Release     string                   `json:"release"`
-	Target      tools.Target             `json:"target"`
-	Tools       map[tools.ID]tools.State `json:"tools"`
-	Issues      []string                 `json:"issues"`
-	Healthy     *bool                    `json:"healthy,omitempty"`
-	Ready       *bool                    `json:"ready,omitempty"`
-	Deployments []DeploymentReservation  `json:"deployments"`
+	Installed      bool                     `json:"installed"`
+	Release        string                   `json:"release"`
+	ManagerVersion string                   `json:"manager_version,omitempty"`
+	Target         tools.Target             `json:"target"`
+	Tools          map[tools.ID]tools.State `json:"tools"`
+	Issues         []string                 `json:"issues"`
+	Healthy        *bool                    `json:"healthy,omitempty"`
+	Ready          *bool                    `json:"ready,omitempty"`
+	Deployments    []DeploymentReservation  `json:"deployments"`
 }
 
 type Probe func(context.Context, string) error
@@ -39,13 +40,13 @@ func (s Store) status(state Snapshot) (Report, error) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Report{}, err
 	}
-	r := Report{Installed: err == nil, Release: state.Config.Release, Target: LocalTarget(state.Config.Mode), Tools: map[tools.ID]tools.State{}, Issues: []string{}}
+	r := Report{Installed: err == nil, Release: state.Config.Release, ManagerVersion: ManagerRelease, Target: LocalTarget(state.Config.Mode), Tools: map[tools.ID]tools.State{}, Issues: []string{}}
 	r.Deployments, err = s.Deployments()
 	if err != nil {
 		return r, fmt.Errorf("deployment reservations cannot be inspected: %w", err)
 	}
 	for id, installation := range state.Installed {
-		r.Tools[id] = tools.State{Installed: true, Release: installation.Artifact.Release, Readiness: tools.Unknown}
+		r.Tools[id] = tools.State{Installed: true, Release: installation.Artifact.Release, SHA256: installation.Artifact.SHA256, Readiness: tools.Unknown}
 	}
 	for _, selection := range state.Config.Tools {
 		observed := r.Tools[selection.ID]

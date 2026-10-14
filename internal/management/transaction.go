@@ -268,6 +268,27 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	for i, artifact := range artifacts {
 		candidate.Installed[artifact.Module] = Installation{Artifact: artifact, Manifest: resolution.Ordered[i]}
 	}
+	// The release label is part of the full deployment plan. Advancing it for
+	// disabled or reused packages would invalidate an otherwise unchanged live
+	// deployment. Keep its train until one of its actual programs changes.
+	if update && targetMode == tools.Full && state.Config.Contract == tools.CompositionContract && catalog.Contract == state.Config.Contract {
+		deployments, err := s.Deployments()
+		if err != nil {
+			return err
+		}
+		if len(deployments) > 0 {
+			if plan, err := s.PlanFull(); err == nil {
+				unchanged := true
+				for _, program := range plan.Programs {
+					installed, exists := candidate.Installed[program.Module]
+					unchanged = unchanged && exists && installed.Artifact.Identity() == program.Identity
+				}
+				if unchanged {
+					candidate.Config.Release = state.Config.Release
+				}
+			}
+		}
+	}
 	if err := candidate.Validate(); err != nil {
 		return err
 	}

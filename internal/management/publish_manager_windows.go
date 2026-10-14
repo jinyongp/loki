@@ -3,8 +3,13 @@ package management
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/sys/windows"
 	"os"
 )
+
+func managerBackupBusy(err error) bool {
+	return errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION)
+}
 
 // A running Windows executable can be renamed, but cannot be overwritten.
 // Its journal-owned backup remains recoverable until the old process exits.

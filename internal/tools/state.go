@@ -15,6 +15,7 @@ const (
 type State struct {
 	Installed    bool      `json:"installed"`
 	Release      string    `json:"release,omitempty"`
+	SHA256       string    `json:"sha256,omitempty"`
 	Enabled      bool      `json:"enabled"`
 	Capabilities []string  `json:"capabilities,omitempty"`
 	Readiness    Readiness `json:"readiness"`

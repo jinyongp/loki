@@ -27,7 +27,7 @@ def accept(candidate):
         sentinel.write_bytes(b'retained user data')
         state = root/'control/state.json'
         before = state.read_bytes()
-        command = [str(installed), '--root', str(root), 'upgrade', '--version', '0.2.2', '--force']
+        command = [str(installed), '--root', str(root), 'upgrade', '--cli-only', '--version', '0.2.2', '--force']
         cancelled = subprocess.run(command, input='n\n', capture_output=True, text=True)
         if cancelled.returncode:
             raise ValueError('Native upgrade confirmation failed:\n'+cancelled.stdout+cancelled.stderr)

@@ -57,6 +57,16 @@ type managerPublication struct {
 	Candidate ManagerRecord  `json:"candidate"`
 }
 
+type managerBackup struct {
+	ID       string        `json:"id"`
+	Previous ManagerRecord `json:"previous"`
+}
+
+type managerBackups struct {
+	Schema  int             `json:"schema"`
+	Backups []managerBackup `json:"backups"`
+}
+
 func (p managerPublication) validate(s Store) error {
 	if p.Schema != 1 || p.Candidate.Root != s.Root {
 		return fmt.Errorf("manager publication belongs to another management root")
@@ -315,21 +325,72 @@ func (s Store) InstallManagerVersion(ctx context.Context, source, binDirectory, 
 
 func (s Store) cleanupManagerBackup() error {
 	p, err := s.readManagerPublication()
-	if err != nil || p == nil || p.Phase != tools.Committed || p.Previous == nil {
-		return err
-	}
-	backup := filepath.Join(filepath.Dir(p.Candidate.Executable), ".loki-manager-"+p.ID+".tmp.previous")
-	digest, size, err := managerDigest(backup)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
 	if err != nil {
 		return err
 	}
-	if digest != p.Previous.SHA256 || size != p.Previous.Bytes {
-		return fmt.Errorf("manager backup ownership differs")
+	path := filepath.Join(s.Root, "manager-backups.json")
+	retained := managerBackups{Schema: 1}
+	if err := readOwnedJSON(path, tools.MaxManifestBytes, &retained); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
-	return os.Remove(backup)
+	if retained.Schema != 1 {
+		return fmt.Errorf("invalid manager backup cleanup record")
+	}
+	if p != nil && p.Phase == tools.Committed && p.Previous != nil {
+		found := false
+		for _, backup := range retained.Backups {
+			found = found || (backup.ID == p.ID && backup.Previous == *p.Previous)
+		}
+		if !found {
+			retained.Backups = append(retained.Backups, managerBackup{ID: p.ID, Previous: *p.Previous})
+		}
+	}
+	for _, backup := range retained.Backups {
+		if err := backup.Previous.validate(); err != nil {
+			return err
+		}
+		if backup.Previous.Root != s.Root {
+			return fmt.Errorf("manager backup belongs to another management root")
+		}
+		if err := (tools.Operation{Schema: 1, ID: backup.ID, Module: "manager", Action: "install", Phase: tools.Committed, Candidate: backup.Previous.SHA256}).Validate(); err != nil {
+			return err
+		}
+	}
+	// Keep ownership independently of the install journal: a subsequent upgrade
+	// can replace that journal while an older MCP process still locks its binary.
+	if len(retained.Backups) > 0 {
+		if err := atomicJSON(path, retained); err != nil {
+			return err
+		}
+	}
+	remaining := make([]managerBackup, 0, len(retained.Backups))
+	for _, backup := range retained.Backups {
+		binary := filepath.Join(filepath.Dir(backup.Previous.Executable), ".loki-manager-"+backup.ID+".tmp.previous")
+		digest, size, err := managerDigest(binary)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if digest != backup.Previous.SHA256 || size != backup.Previous.Bytes {
+			return fmt.Errorf("manager backup ownership differs")
+		}
+		if err := os.Remove(binary); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if !managerBackupBusy(err) {
+				return err
+			}
+			remaining = append(remaining, backup)
+		}
+	}
+	if len(remaining) > 0 {
+		retained.Backups = remaining
+		return atomicJSON(path, retained)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s Store) recoverManagerPublication() error {

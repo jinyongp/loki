@@ -48,7 +48,16 @@ func acquireCatalogForMode(ctx context.Context, mode tools.Mode, path, version s
 	if !stableVersionPattern.MatchString(version) {
 		return tools.Catalog{}, fmt.Errorf("tool release must be a stable MAJOR.MINOR.PATCH version")
 	}
-	target := management.LocalTarget(mode)
+	return acquireCatalogForTarget(ctx, management.LocalTarget(mode), version, diagnostics, client)
+}
+
+func acquireCatalogForTarget(ctx context.Context, target tools.Target, version string, diagnostics io.Writer, client *http.Client) (tools.Catalog, error) {
+	if err := target.Validate(); err != nil {
+		return tools.Catalog{}, err
+	}
+	if !stableVersionPattern.MatchString(version) {
+		return tools.Catalog{}, fmt.Errorf("tool release must be a stable MAJOR.MINOR.PATCH version")
+	}
 	asset := fmt.Sprintf("loki-catalog-%s-%s-%s.json", target.OS, target.Arch, target.Mode)
 	base := "https://github.com/jinyongp/loki/releases/download/v" + version + "/"
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)

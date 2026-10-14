@@ -68,8 +68,10 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if handled, err := systemCommand(ctx, *root, systemArgs, os.Stdin, out, diagnostics); handled {
 		return err
 	}
-	if handled, err := contextualHelp(args, out); handled {
-		return err
+	if len(args) == 0 || args[0] != "_upgrade-apply" {
+		if handled, err := contextualHelp(args, out); handled {
+			return err
+		}
 	}
 	out = &commandOutput{Writer: out, json: structured}
 	if len(args) >= 3 && args[0] == "tools" && args[1] == "uninstall" && (args[2] == "--all" || args[2] == "--purge-data") {
@@ -95,6 +97,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		}
 	}
 	frontend := management.Store{Root: frontendRoot}
+	if len(args) > 0 && args[0] == "_upgrade-apply" {
+		return runUpgradeApply(ctx, frontend, args[1:], out, diagnostics)
+	}
 	if len(args) > 0 && args[0] == "hosts" {
 		return runHosts(ctx, frontend, args[1:], out, diagnostics)
 	}
@@ -140,6 +145,13 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		if err := selected.Validate(); err != nil {
 			return err
 		}
+	}
+	if len(args) > 0 && args[0] == "upgrade" {
+		deps := defaultUpgradeDependencies()
+		deps.plan = func(ctx context.Context, store management.Store, target string, diagnostics io.Writer) (*upgradeToolsPlan, error) {
+			return planUpgradeTools(ctx, store, selected, !explicitHost, target, diagnostics, deps.client)
+		}
+		return runUpgrade(ctx, frontend, args[1:], os.Stdin, out, diagnostics, deps)
 	}
 	prepareSelectedHost := func() error {
 		if selected == nil || !selected.Remote() {
@@ -373,9 +385,6 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if len(args) == 1 && args[0] == "_prepare-environment" {
 		return management.PrepareEnvironment(ctx, os.Stdin, diagnostics)
 	}
-	if len(args) > 0 && args[0] == "upgrade" {
-		return runUpgrade(ctx, store, args[1:], os.Stdin, out, diagnostics, defaultUpgradeDependencies())
-	}
 	if len(args) == 1 && args[0] == "_github-setup-relay" {
 		return runGitHubSetupRelay(ctx, store, os.Stdin, out, diagnostics)
 	}
@@ -591,15 +600,29 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			}
 		}
 		if args[1] == "update" {
-			if err := store.UpdateTools(ctx, release, diagnostics); err != nil {
+			updated, updateErr := updateInstalledTools(ctx, store, release, diagnostics)
+			message := "Installed tools are up to date."
+			if updated.Changed {
+				message = "Updated all installed tools to " + release.Release + "; activation and data are preserved."
+			}
+			if updated.Reconnect {
+				message += "\nReconnect the client's Loki MCP server to load the new programs."
+			}
+			if updateErr != nil {
+				message = "Tool update incomplete; inspect the error and retry."
+				if jsonOutput(out) {
+					if err := json.NewEncoder(out).Encode(updated); err != nil {
+						return err
+					}
+				} else {
+					fmt.Fprintln(out, message)
+				}
+				return updateErr
+			}
+			if err := success(out, message, map[string]any{"release": updated.Release, "changed": updated.Changed, "services_restarted": updated.ServicesRestarted, "reconnect_required": updated.Reconnect}); err != nil {
 				return err
 			}
-			if browserInstalled {
-				if err := verifyInstalledBrowser(ctx, store, diagnostics); err != nil {
-					return err
-				}
-			}
-			return success(out, "Updated all installed tools to "+release.Release+"; activation and data are preserved.", map[string]any{"release": release.Release})
+			return updateErr
 		}
 		selected := make([]tools.ID, 0, f.NArg())
 		for _, id := range f.Args() {

@@ -61,6 +61,13 @@ closes. Readiness checks tools on the selected host; it does not test the client
 app connection. `loki status` shows configuration without starting tools or
 testing connections; `loki doctor` runs a fresh tool readiness check.
 
+On Windows, an older Loki MCP connection can keep its renamed CLI executable
+locked after an upgrade. Locked, verified backups retain their ownership records
+separately from the current install journal and do not block another upgrade or
+recovery. After those connections exit, the next manager installation or
+`loki tools recover` removes the retained files. Changed or unowned backup bytes
+are rejected rather than deleted.
+
 For browser features, choose **Manage tools > browser > Optional features** in
 `loki setup`. Navigation and screenshots are included. The multiselect shows
 existing selections and describes each feature: **Video recording and diagnostics
@@ -189,29 +196,63 @@ Candidate preparation emits this directory as `release/archives`. Use the global
 Linux host. The administrator socket accepts official release acquisition and
 refuses caller-supplied catalogs and archives.
 
-## CLI upgrades
+## Upgrades
 
-CLI installations from 0.2.2 or earlier need the installer above once to obtain
-`loki upgrade`. Subsequent CLI releases can be installed with this command.
+Run one command to update this computer's CLI, the selected execution-host CLI
+and installed tools. Tool selection, activation, capabilities and user data are
+retained. Other execution hosts are outside the update.
 
 ```sh
 loki upgrade
 loki upgrade --check
-loki upgrade --version 0.2.3 --force --yes
+loki upgrade --yes
+loki upgrade --cli-only
+loki upgrade --tools-only --yes
 ```
 
-The command shows current and target versions, then asks for confirmation.
-Enter or EOF cancels; `--yes` / `-y` skips confirmation. `--check` only reports
-versions. `--version MAJOR.MINOR.PATCH` chooses a published stable release;
-without it, the latest stable release is selected. Reinstalling or downgrading
-requires `--force`. `--timeout 5m` bounds release lookup, downloads and installation.
+The command checks the latest stable release and prints one plan: current and
+target CLI versions, selected host, changed package versions, runtime replacement
+and MCP reconnection needs. Package SHA-256 identities determine changes; a tool
+package may be reused across releases. Older host managers without digest metadata
+are shown as requiring verification. Their packages are compared after preparing
+the host manager, before acquiring replacements.
 
-The official native manager archive is verified against its release SHA-256
-checksum before its version is checked and the current manager publishes the
-CLI into the current command directory. Existing ownership checks apply.
-Installed tools and their configuration remain separate from CLI upgrades.
-Use global `--host wsl` or `--host ssh` options before `upgrade` to target that
-execution host rather than the local command.
+Enter or EOF cancels; `--yes` / `-y` accepts the displayed plan. `--check` reads
+installation metadata and trusted catalogs without installing a CLI, preparing a
+host, starting tools or changing configuration. `--cli-only` updates only the
+frontend command. `--tools-only` retains that CLI while updating the selected host
+and tools, using a verified target-release manager temporarily when needed.
+The two scope options are mutually exclusive. A CLI already at the target release
+does not prevent updating an older host, tool packages or a pending runtime switch.
+
+Global `--host` options before `upgrade` override the tool target; the frontend CLI
+still updates on this computer. Each native manager and release catalog is checked
+against the official release SHA-256 manifest. `--version MAJOR.MINOR.PATCH` selects
+a stable release, `--force` permits CLI reinstall or downgrade, and `--timeout`
+bounds the whole operation (default: 30 minutes). Host preparation can still require
+administrator authentication through the existing setup path.
+
+Stopped full services remain stopped. Updating a disabled tool does not restart
+unaffected services. Changed packages used by running full services are applied
+after active-job checks. An active job blocks replacement; if one starts after
+files are staged, the command reports a partial update and retains the running
+deployment. The next upgrade compares its package identities against the desired
+packages and resumes replacement. Existing client-owned MCP sessions may need
+reconnection to use a new CLI or browser engine; the Codex app can remain open.
+The command reports this separately from service replacement.
+
+If the frontend succeeds but host/tool work fails, output identifies the partial
+result and gives a resume command:
+
+```sh
+loki upgrade --tools-only --version VERSION --yes
+```
+
+`--json` emits one result, including the plan, completed changes, runtime and
+reconnection state. Progress and prompts stay on stderr. `loki tools update`
+remains a targeted management command; ordinary updates need only `loki upgrade`.
+Older releases that predate integrated upgrades need the public installer once
+to obtain this command flow.
 
 ## Project-host browser
 

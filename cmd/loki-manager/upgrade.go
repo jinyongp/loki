@@ -40,6 +40,8 @@ type upgradeDependencies struct {
 	location   func(management.Store, string) (string, error)
 	run        func(context.Context, string, ...string) ([]byte, error)
 	install    func(context.Context, management.Store, string, string, string) error
+	plan       func(context.Context, management.Store, string, io.Writer) (*upgradeToolsPlan, error)
+	apply      func(context.Context, string, management.Store, upgradeApplyRequest, io.Reader, io.Writer) (upgradeApplyResult, error)
 }
 
 type releaseAPITransport struct {
@@ -57,8 +59,13 @@ func (t releaseAPITransport) RoundTrip(req *http.Request) (*http.Response, error
 }
 
 func defaultUpgradeDependencies() upgradeDependencies {
+	client := &http.Client{Transport: releaseAPITransport{base: http.DefaultTransport, token: os.Getenv("GH_TOKEN")}}
 	return upgradeDependencies{
-		client: &http.Client{Transport: releaseAPITransport{base: http.DefaultTransport, token: os.Getenv("GH_TOKEN")}}, executable: os.Executable,
+		plan: func(ctx context.Context, store management.Store, target string, diagnostics io.Writer) (*upgradeToolsPlan, error) {
+			return planUpgradeTools(ctx, store, nil, true, target, diagnostics, client)
+		},
+		apply:  executeUpgradeTools,
+		client: client, executable: os.Executable,
 		location: func(store management.Store, executable string) (string, error) {
 			return store.ManagerExecutable(executable)
 		},
@@ -187,13 +194,15 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	version := flags.String("version", "", "stable target release")
 	yes := flags.Bool("yes", false, "accept without prompting")
 	flags.BoolVar(yes, "y", false, "accept without prompting")
-	check := flags.Bool("check", false, "only check versions")
-	force := flags.Bool("force", false, "allow reinstall or downgrade")
-	timeout := flags.Duration("timeout", 5*time.Minute, "overall timeout")
+	check := flags.Bool("check", false, "show the complete update plan without changes")
+	cliOnly := flags.Bool("cli-only", false, "update only this CLI")
+	toolsOnly := flags.Bool("tools-only", false, "update only the selected host and installed tools")
+	force := flags.Bool("force", false, "allow CLI reinstall or downgrade")
+	timeout := flags.Duration("timeout", 30*time.Minute, "overall upgrade timeout")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || *timeout <= 0 {
+	if flags.NArg() != 0 || *timeout <= 0 || *cliOnly && *toolsOnly {
 		return fmt.Errorf("invalid upgrade arguments; run 'loki upgrade --help'")
 	}
 	requested := strings.TrimPrefix(*version, "v")
@@ -229,9 +238,27 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if err != nil || minimum < 0 {
 		return fmt.Errorf("upgrade requires a native 0.2 or newer release")
 	}
-	finish := func(state string, changed bool, message string) error {
+	var plan *upgradeToolsPlan
+	if !*cliOnly && deps.plan != nil {
+		plan, err = deps.plan(ctx, store, target, diagnostics)
+		if err != nil {
+			return err
+		}
+	}
+	cliWork := !*toolsOnly && (comparison != 0 || *force)
+	if cliWork && plan != nil && plan.Clients {
+		plan.Reconnect = true
+		if !strings.Contains(plan.RuntimeAction, "reconnect") {
+			plan.RuntimeAction += "; reconnect client MCP after completion"
+		}
+	}
+	toolWork := plan != nil && plan.Update
+	cliChanged := false
+	applied := upgradeApplyResult{}
+	updateAvailable := !*toolsOnly && comparison > 0 || toolWork
+	finish := func(state, message string) error {
 		if jsonOutput(out) {
-			return result(out, "Loki upgrade", map[string]any{"current": management.ManagerRelease, "target": target, "update_available": comparison > 0, "state": state, "changed": changed})
+			return result(out, "Loki upgrade", map[string]any{"current": management.ManagerRelease, "target": target, "update_available": updateAvailable, "state": state, "changed": cliChanged || applied.Changed, "cli_changed": cliChanged, "tools": plan, "applied": applied, "reconnect_required": applied.Reconnect || cliChanged && plan != nil && plan.Reconnect})
 		}
 		if message != "" {
 			_, err := fmt.Fprintln(out, message)
@@ -239,84 +266,142 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		}
 		return nil
 	}
+	printPlan := func(writer io.Writer) {
+		fmt.Fprintln(writer, "Current:", management.ManagerRelease)
+		fmt.Fprintln(writer, "Target: ", target)
+		if *toolsOnly {
+			fmt.Fprintln(writer, "Scope: selected host and tools; this CLI is retained")
+		}
+		printUpgradeToolsPlan(writer, plan, target)
+	}
 	if !jsonOutput(out) {
-		fmt.Fprintln(out, "Current:", management.ManagerRelease)
-		fmt.Fprintln(out, "Target: ", target)
+		printPlan(out)
 	}
 	if *check {
-		return finish("checked", false, "")
+		return finish("checked", "")
 	}
-	if comparison == 0 && !*force {
-		return finish("up_to_date", false, "Loki is already up to date.")
+	if !cliWork && !toolWork {
+		return finish("up_to_date", "Loki is already up to date.")
 	}
-	if comparison < 0 && !*force {
+	if cliWork && comparison < 0 && !*force {
 		return fmt.Errorf("target is older than the current CLI; use --force to allow a downgrade")
+	}
+	if toolWork && !*force {
+		for _, current := range []string{plan.ManagerCurrent, plan.ReleaseCurrent} {
+			if current != "" {
+				if c, err := compareReleaseVersions(target, current); err != nil {
+					return err
+				} else if c < 0 {
+					return fmt.Errorf("target is older than the selected host or tool release; use --force to allow a downgrade")
+				}
+			}
+		}
 	}
 	if !*yes {
 		prompt := out
 		if jsonOutput(out) {
 			prompt = diagnostics
-			fmt.Fprintln(prompt, "Current:", management.ManagerRelease)
-			fmt.Fprintln(prompt, "Target: ", target)
+			printPlan(prompt)
 		}
-		fmt.Fprint(prompt, "Upgrade CLI to "+target+"? [y/N]: ")
-		reader := bufio.NewReader(input)
-		line, err := reader.ReadString('\n')
+		fmt.Fprint(prompt, "Apply this upgrade plan? [y/N]: ")
+		line, err := bufio.NewReader(input).ReadString('\n')
 		if err != nil && err != io.EOF {
 			return err
 		}
 		answer := strings.ToLower(strings.TrimSpace(line))
 		if err == io.EOF || (answer != "y" && answer != "yes") {
-			return finish("cancelled", false, "Upgrade cancelled.")
+			return finish("cancelled", "Upgrade cancelled.")
 		}
 	}
-	executable, err := deps.executable()
+	runner, err := deps.executable()
 	if err != nil {
 		return err
 	}
-	executable, err = filepath.EvalSymlinks(executable)
+	runner, err = filepath.EvalSymlinks(runner)
 	if err != nil {
 		return err
 	}
-	executable, err = deps.location(store, executable)
-	if err != nil {
-		return err
+	executable := runner
+	if cliWork {
+		executable, err = deps.location(store, runner)
+		if err != nil {
+			return err
+		}
 	}
-	asset := "loki-manager-" + target + "-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
-	base := "https://github.com/jinyongp/loki/releases/download/v" + target + "/"
-	fmt.Fprintln(diagnostics, "Downloading Loki "+target+"...")
-	sums, err := upgradeDownload(ctx, deps.client, base+"SHA256SUMS", 2<<20)
-	if err != nil {
-		return err
+	if cliWork || toolWork && target != management.ManagerRelease {
+		asset := "loki-manager-" + target + "-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
+		base := "https://github.com/jinyongp/loki/releases/download/v" + target + "/"
+		fmt.Fprintln(diagnostics, "Downloading Loki "+target+"...")
+		sums, err := upgradeDownload(ctx, deps.client, base+"SHA256SUMS", 2<<20)
+		if err != nil {
+			return err
+		}
+		archive, err := upgradeDownload(ctx, deps.client, base+asset, managerDownloadLimit)
+		if err != nil {
+			return err
+		}
+		binary, err := verifiedUpgradeBinary(archive, sums, asset)
+		if err != nil {
+			return err
+		}
+		directory, err := os.MkdirTemp("", "loki-upgrade-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(directory)
+		name := "loki"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		runner = filepath.Join(directory, name)
+		if err := os.WriteFile(runner, binary, 0700); err != nil {
+			return err
+		}
+		actual, err := deps.run(ctx, runner, "version")
+		if err != nil || strings.TrimSpace(string(actual)) != "loki "+target {
+			return fmt.Errorf("downloaded CLI version does not match target release")
+		}
 	}
-	archive, err := upgradeDownload(ctx, deps.client, base+asset, managerDownloadLimit)
-	if err != nil {
-		return err
+	if toolWork {
+		if _, err := deps.run(ctx, runner, "_upgrade-apply", "--help"); err != nil {
+			return fmt.Errorf("target release cannot apply an integrated upgrade; use --cli-only for this release: %w", err)
+		}
 	}
-	binary, err := verifiedUpgradeBinary(archive, sums, asset)
-	if err != nil {
-		return err
+	if cliWork {
+		fmt.Fprintln(diagnostics, "Installing Loki "+target+"...")
+		if err := deps.install(ctx, store, runner, filepath.Dir(executable), target); err != nil {
+			return fmt.Errorf("CLI upgrade failed: %w", err)
+		}
+		cliChanged = true
 	}
-	directory, err := os.MkdirTemp("", "loki-upgrade-")
-	if err != nil {
-		return err
+	if toolWork {
+		request := upgradeApplyRequest{Version: target, Basis: plan.Basis, Selection: plan.Selection, Remember: plan.Remember, Force: *force}
+		applied, err = deps.apply(ctx, runner, store, request, input, diagnostics)
+		if err != nil {
+			message := "Upgrade incomplete. Retry 'loki upgrade --tools-only --version " + target + " --yes' to finish the selected host and tools."
+			if cliChanged {
+				message = "CLI updated to " + target + ". " + message
+			}
+			if finishErr := finish("partial", message); finishErr != nil {
+				return finishErr
+			}
+			return fmt.Errorf("execution-host/tool upgrade failed: %w", err)
+		}
 	}
-	defer os.RemoveAll(directory)
-	name := "loki"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
+	message := "Loki " + target + " installed."
+	if !cliChanged {
+		message = "Selected host and installed tools updated to " + target + "."
+	} else if applied.Changed {
+		message += "\nSelected host and installed tools updated."
 	}
-	candidate := filepath.Join(directory, name)
-	if err := os.WriteFile(candidate, binary, 0700); err != nil {
-		return err
+	if applied.ServicesRestarted {
+		message += "\nRunning services now use the updated tools."
 	}
-	result, err := deps.run(ctx, candidate, "version")
-	if err != nil || strings.TrimSpace(string(result)) != "loki "+target {
-		return fmt.Errorf("downloaded CLI version does not match target release")
+	if applied.Reconnect || cliChanged && plan != nil && plan.Reconnect {
+		message += "\nReconnect the client's Loki MCP server. The Codex app can stay open."
 	}
-	fmt.Fprintln(diagnostics, "Installing Loki "+target+"...")
-	if err := deps.install(ctx, store, candidate, filepath.Dir(executable), target); err != nil {
-		return fmt.Errorf("CLI upgrade failed: %w", err)
+	if *cliOnly {
+		message += "\nSelected host and tools were not updated. Reconnect existing MCP sessions to load the new CLI."
 	}
-	return finish("installed", true, "Loki "+target+" installed.")
+	return finish("installed", message)
 }

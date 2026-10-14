@@ -34,6 +34,34 @@ func TestManagerPublicationProtectsUnownedCommands(t *testing.T) {
 	}
 }
 
+func TestManagerBackupCleanupRejectsChangedBytes(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(source, []byte("owned manager"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	record, err := store.InstallManager(t.Context(), source, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(filepath.Dir(record.Executable), ".loki-manager-op-retained.tmp.previous")
+	if err := os.WriteFile(backup, []byte("unowned bytes"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(filepath.Join(store.Root, "manager-backups.json"), managerBackups{Schema: 1, Backups: []managerBackup{{ID: "op-retained", Previous: record}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Recover(); err == nil {
+		t.Fatal("changed backup was accepted")
+	}
+	if actual, err := os.ReadFile(backup); err != nil || string(actual) != "unowned bytes" {
+		t.Fatal("changed backup was removed", err)
+	}
+	if actual, err := os.ReadFile(record.Executable); err != nil || string(actual) != "owned manager" {
+		t.Fatal("active CLI changed", err)
+	}
+}
+
 func TestManagerExecutableRejectsCopiedOwnership(t *testing.T) {
 	store := Store{Root: t.TempDir()}
 	source := filepath.Join(t.TempDir(), "source")
