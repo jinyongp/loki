@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"loki/internal/management"
@@ -39,6 +40,17 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 		root = host.Root
 	}
 	view := operatorReport{Report: *report, CLIVersion: management.ManagerRelease, ExecutionHost: host, StateRoot: root, NextActions: statusNextActions(*report)}
+	if doctor {
+		// A fresh diagnostic has already run; point at recovery rather than
+		// asking users to repeat the same failed check.
+		actions := view.NextActions[:0]
+		for _, action := range view.NextActions {
+			if !strings.HasPrefix(action, "loki doctor") {
+				actions = append(actions, action)
+			}
+		}
+		view.NextActions = actions
+	}
 	if registry, err := store.HostRegistry(); err == nil {
 		view.DefaultHost = registry.Selected().Name
 		view.HostCount = len(registry.Hosts)
@@ -66,7 +78,11 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 		if err := printStatusForHost(out, *report, view.CLIVersion, &host, root); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "\nHost selection: %s; CLI default: %s (%d registered)\n", view.HostName, view.DefaultHost, view.HostCount)
+		hostName := view.HostName
+		if hostName == "" {
+			hostName = setupHostLabel(&host)
+		}
+		fmt.Fprintf(out, "\nHost selection: %s; CLI default: %s (%d registered)\n", hostName, view.DefaultHost, view.HostCount)
 		fmt.Fprintln(out, "  loki hosts list — inspect hosts; loki --host NAME status — inspect one")
 		fmt.Fprintln(out, "\nClient connections (on this computer):")
 		for _, client := range view.Connections {

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"loki/internal/progress"
 	"loki/internal/tools"
 	"os"
@@ -18,6 +20,44 @@ import (
 
 var missingSharedLibrary = regexp.MustCompile(`error while loading shared libraries: ([A-Za-z0-9_.+-]+):`)
 
+type setupSessionKey struct{}
+type setupSessionResult struct{ title, summary string }
+type setupSession struct{ results []setupSessionResult }
+
+func (s *setupSession) add(title, summary string) {
+	for _, r := range s.results {
+		if r.title == title && r.summary == summary {
+			return
+		}
+	}
+	s.results = append(s.results, setupSessionResult{title, summary})
+}
+
+func (s *setupSession) print(terminal *os.File) {
+	if len(s.results) == 1 {
+		printSetupResult(terminal, s.results[0].title, s.results[0].summary)
+	}
+	if len(s.results) > 1 {
+		fmt.Fprintln(terminal, "\n[RESULT] Setup summary")
+		for _, r := range s.results {
+			fmt.Fprintln(terminal, "  "+ansi.Strip(r.title))
+			for _, line := range strings.Split(ansi.Strip(r.summary), "\n") {
+				fmt.Fprintln(terminal, "    "+line)
+			}
+		}
+		fmt.Fprintln(terminal)
+	}
+	s.results = nil
+}
+
+func printSetupResult(terminal *os.File, title, summary string) {
+	fmt.Fprintf(terminal, "\n[RESULT] %s\n", ansi.Strip(title))
+	for _, line := range strings.Split(ansi.Strip(summary), "\n") {
+		fmt.Fprintf(terminal, "  %s\n", line)
+	}
+	fmt.Fprintln(terminal)
+}
+
 // Presentation summaries keep the original diagnostics available to JSON and
 // the setup details screen. A wrapped launch failure can hide its useful cause.
 func shortDiagnostic(message string) string {
@@ -29,16 +69,61 @@ func shortDiagnostic(message string) string {
 	return ansi.Truncate(line, 220, "…")
 }
 
-func setupWorking(terminal *os.File, title, host string) {
-	fmt.Fprintf(terminal, "\n[WORKING] %s\n  Host: %s\n  Progress output follows.\n\n", title, host)
+type setupActionError struct {
+	err     error
+	details string
+	host    string
+}
+
+func (e *setupActionError) Error() string { return e.err.Error() }
+func (e *setupActionError) Unwrap() error { return e.err }
+
+func setupErrorSummary(err error) string {
+	var action *setupActionError
+	if errors.As(err, &action) && action.host != "" {
+		return "Host: " + action.host + "\n" + shortDiagnostic(err.Error())
+	}
+	return shortDiagnostic(err.Error())
+}
+
+func setupErrorDetails(err error) string {
+	var action *setupActionError
+	if errors.As(err, &action) && action.details != "" {
+		header := err.Error()
+		if action.host != "" {
+			header = "Host: " + action.host + "\n" + header
+		}
+		return header + "\n\n" + action.details
+	}
+	return err.Error()
+}
+
+func setupWorking(terminal *os.File, title, host string, action func(io.Writer) error) error {
+	restore, err := setupProgressOutput(terminal)
+	if err != nil {
+		return err
+	}
+	defer restore()
+	// Keep streamed logs on the temporary screen. Restore scrollback before a
+	// result or another form is shown, including on failure or cancellation.
+	fmt.Fprint(terminal, ansi.SetModeAltScreenSaveCursor+ansi.EraseEntireScreen+ansi.CursorHomePosition)
+	defer fmt.Fprint(terminal, ansi.ResetModeAltScreenSaveCursor)
+	fmt.Fprintf(terminal, "[WORKING] %s\r\n  Host: %s\r\n\r\n", title, host)
+	var captured diagnosticTail
+	if err := action(io.MultiWriter(terminal, &captured)); err != nil {
+		return &setupActionError{err: err, details: captured.String(), host: host}
+	}
+	return nil
 }
 
 func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os.File) error {
-	setupWorking(terminal, "Checking readiness", setupHostLabel(host.selected))
-	var raw, diagnostics bytes.Buffer
-	stop := progress.StartHeartbeat(ctx, progress.NewLineReporter(terminal), progress.HeartbeatOptions{Operation: "setup", Phase: "readiness", Message: "Still checking tool readiness"})
-	checkErr := operatorStatus(ctx, host.frontend, host.selected, &commandOutput{Writer: &raw, json: true}, &diagnostics, true)
-	stop()
+	var raw bytes.Buffer
+	var diagnostics diagnosticTail
+	checkErr := setupWorking(terminal, "Checking readiness", setupHostLabel(host.selected), func(log io.Writer) error {
+		stop := progress.StartHeartbeat(ctx, progress.NewLineReporter(log), progress.HeartbeatOptions{Operation: "setup", Phase: "readiness", Message: "Still checking tool readiness"})
+		defer stop()
+		return operatorStatus(ctx, host.frontend, host.selected, &commandOutput{Writer: &raw, json: true}, io.MultiWriter(log, &diagnostics), true)
+	})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -47,7 +132,7 @@ func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os
 		if checkErr == nil {
 			checkErr = err
 		}
-		return showSetupResult(ctx, "Readiness — could not finish", shortDiagnostic(checkErr.Error()), diagnostics.String()+"\n"+raw.String(), input, terminal)
+		return showSetupResult(ctx, "Readiness — could not finish", "Host: "+setupHostLabel(host.selected)+"\n"+shortDiagnostic(checkErr.Error()), setupErrorDetails(checkErr)+"\n"+raw.String(), input, terminal)
 	}
 	title := "Readiness — ready"
 	if checkErr != nil || report.Ready == nil || !*report.Ready {
@@ -75,7 +160,7 @@ func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os
 		}
 	}
 	details.WriteString(diagnostics.String())
-	summary += "\nThis checks tools on the execution host; it does not test the Codex app connection."
+	summary += "\nCodex connection not tested."
 	return showSetupResult(ctx, title, summary, details.String(), input, terminal)
 }
 
@@ -84,11 +169,11 @@ func showSetupResult(ctx context.Context, title, summary, details string, input,
 	// after that buffer is restored, including when the user exits with Escape.
 	persistentSummary := ansi.Strip(summary)
 	defer func() {
-		fmt.Fprintf(terminal, "\n[RESULT] %s\n", ansi.Strip(title))
-		for _, line := range strings.Split(persistentSummary, "\n") {
-			fmt.Fprintf(terminal, "  %s\n", line)
+		if session, ok := ctx.Value(setupSessionKey{}).(*setupSession); ok {
+			session.add(title, persistentSummary)
+		} else {
+			printSetupResult(terminal, title, persistentSummary)
 		}
-		fmt.Fprintln(terminal)
 	}()
 	width, height, err := term.GetSize(int(terminal.Fd()))
 	if err != nil {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -11,6 +10,8 @@ import (
 	"sync"
 
 	"loki/internal/management"
+	"loki/internal/progress"
+	"loki/internal/tools"
 )
 
 type hostStatusResult struct {
@@ -28,7 +29,9 @@ func statusAllHosts(ctx context.Context, store management.Store, out, diagnostic
 		return err
 	}
 	results := make([]hostStatusResult, len(registry.Hosts))
-	logs := make([]bytes.Buffer, len(results))
+	logs := make([]diagnosticTail, len(results))
+	stop := progress.StartHeartbeat(ctx, progress.NewLineReporter(diagnostics), progress.HeartbeatOptions{Operation: "status", Phase: "hosts", Message: "Still checking execution hosts"})
+	defer stop()
 	jobs := make(chan int)
 	var workers sync.WaitGroup
 	for worker := 0; worker < min(4, len(results)); worker++ {
@@ -50,10 +53,11 @@ func statusAllHosts(ctx context.Context, store management.Store, out, diagnostic
 	}
 	close(jobs)
 	workers.Wait()
+	stop()
 	failed := false
 	for i, r := range results {
-		if logs[i].Len() > 0 {
-			fmt.Fprintf(diagnostics, "[%s]\n%s", r.Name, logs[i].String())
+		if logs[i].String() != "" {
+			fmt.Fprintf(diagnostics, "[%s]\n%s", r.Name, logs[i].String()+"\n")
 		}
 		failed = failed || r.Error != ""
 	}
@@ -69,20 +73,36 @@ func statusAllHosts(ctx context.Context, store management.Store, out, diagnostic
 				label += " (default)"
 			}
 			fmt.Fprintf(out, "\n%s\n  Target: %s\n", label, setupHostLabel(&r.Target))
-			if r.Error != "" {
+			if r.Report == nil {
 				fmt.Fprintln(out, "  Unavailable:", shortDiagnostic(r.Error))
 				continue
 			}
 			fmt.Fprintln(out, "  Host CLI:", r.Report.ManagerVersion)
-			installed, _ := setupToolCounts(*r.Report)
-			fmt.Fprintln(out, "  Installed tools:", installed)
+			installed, enabled := setupToolCounts(*r.Report)
+			fmt.Fprintf(out, "  Tools: %d installed, %d enabled\n", installed, enabled)
 			if doctor && r.Report.Ready != nil {
-				fmt.Fprintln(out, "  Ready:", *r.Report.Ready)
+				fmt.Fprintln(out, "  Ready:", displayValue(*r.Report.Ready))
+			}
+			for _, name := range publicToolNames {
+				state := r.Report.Tools[tools.ID(name)]
+				if !state.Installed {
+					continue
+				}
+				fmt.Fprintf(out, "  %s: %s\n", name, toolRuntimeLabel(state, r.Report.Target.Mode))
+				if state.Reason != "" {
+					fmt.Fprintln(out, "    "+shortDiagnostic(state.Reason))
+				}
+			}
+			if r.Error != "" {
+				fmt.Fprintln(out, "  Needs attention:", shortDiagnostic(r.Error))
+			}
+			if len(r.Report.Issues) > 0 || r.Error != "" {
+				fmt.Fprintln(out, "  Inspect: loki --host "+r.ID+" doctor --json")
 			}
 		}
 	}
 	if failed {
-		return fmt.Errorf("some hosts could not be inspected; other host results are retained")
+		return fmt.Errorf("some hosts are unavailable or need attention; other host results are retained")
 	}
 	return nil
 }

@@ -13,9 +13,9 @@ import (
 	signing "loki/modules/git/signing/public"
 )
 
-func setupGitSigning(ctx context.Context, host string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
+func setupGitSigning(ctx context.Context, host string, input, terminal *os.File, invoke func([]string, io.Writer, io.Writer) error) (bool, error) {
 	var status bytes.Buffer
-	if err := invoke([]string{"--json", "integrations", "status", "git"}, &status); err != nil {
+	if err := invoke([]string{"--json", "integrations", "status", "git"}, &status, terminal); err != nil {
 		return false, err
 	}
 	var current struct {
@@ -46,9 +46,10 @@ func setupGitSigning(ctx context.Context, host string, input, terminal *os.File,
 	if err != nil || aborted || !confirmed {
 		return false, err
 	}
-	setupWorking(terminal, "Configuring Git signing", host)
 	var output bytes.Buffer
-	if err := invoke([]string{"integrations", "setup", "git", "--identity-name", name, "--identity-email", email}, &output); err != nil {
+	if err := setupWorking(terminal, "Configuring Git signing", host, func(log io.Writer) error {
+		return invoke([]string{"integrations", "setup", "git", "--identity-name", name, "--identity-email", email}, io.MultiWriter(&output, log), log)
+	}); err != nil {
 		return false, err
 	}
 	return true, showSetupResult(ctx, "Git signing — configured", output.String(), "", input, terminal)

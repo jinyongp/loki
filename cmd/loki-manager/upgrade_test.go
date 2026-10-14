@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -209,5 +210,22 @@ func TestUpgradeHTTPFailureAndVersionMismatch(t *testing.T) {
 	deps.run = func(context.Context, string, ...string) ([]byte, error) { return []byte("loki 9.9.9"), nil }
 	if err := runUpgrade(t.Context(), management.Store{Root: t.TempDir()}, []string{"--yes"}, strings.NewReader(""), io.Discard, io.Discard, deps); err == nil || len(*runs) != 0 {
 		t.Fatalf("candidate mismatch: %v", err)
+	}
+}
+
+func TestUpgradeRetainsStartupFailureAndNextInput(t *testing.T) {
+	deps, _, _ := upgradeFixture(t, "9.0.0", false)
+	cause := errors.New("execution denied by platform")
+	deps.run = func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("runtime library could not load"), cause
+	}
+	input := strings.NewReader("y\nnext command\n")
+	err := runUpgrade(t.Context(), management.Store{Root: t.TempDir()}, nil, input, io.Discard, io.Discard, deps)
+	if !errors.Is(err, cause) || !strings.Contains(err.Error(), "could not start") || !strings.Contains(err.Error(), "runtime library could not load") {
+		t.Fatal("startup cause hidden", err)
+	}
+	remaining, _ := io.ReadAll(input)
+	if string(remaining) != "next command\n" {
+		t.Fatal("upgrade consumed subsequent input", string(remaining))
 	}
 }

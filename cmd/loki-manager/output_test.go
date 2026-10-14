@@ -187,7 +187,7 @@ func TestStatusSummarizesLaunchFailureAndRetainsJSONDiagnostics(t *testing.T) {
 	if err := result(&text, "Loki", report); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(text.String(), "libnspr4.so") != 1 || strings.Contains(text.String(), "<launching>") || strings.Contains(text.String(), "Call log:") || !strings.Contains(text.String(), "doctor --json") {
+	if strings.Count(text.String(), "libnspr4.so") != 1 || strings.Contains(text.String(), "<launching>") || strings.Contains(text.String(), "Call log:") || !strings.Contains(text.String(), "repeat this command with --json") {
 		t.Fatal("human status did not isolate the useful failure", text.String())
 	}
 	if err := result(&commandOutput{Writer: &raw, json: true}, "Loki", report); err != nil {

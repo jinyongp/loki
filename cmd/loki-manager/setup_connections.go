@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -23,7 +24,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 	choice := "codex"
 	for {
 		options := []huh.Option[string]{huh.NewOption("Connect Codex", "codex"), huh.NewOption("Inspect client connections", "status"), huh.NewOption("Disconnect Codex (keep tools and data)", "disconnect")}
-		if runtime.GOOS == "windows" && supportsManagedTunnel(host.selected) && report.Target.Mode == tools.Full {
+		if runtime.GOOS == "windows" && supportsManagedTunnel(host.selected) && (report.Target.Mode == tools.Full || report.Tools == nil) {
 			options = append(options, huh.NewOption("Manage OpenAI tunnel", "openai"))
 		}
 		options = append(options, huh.NewOption("Back", ""))
@@ -38,7 +39,7 @@ func setupConnections(ctx context.Context, host setupMenuHost, report management
 			if ctx.Err() != nil {
 				return changed, ctx.Err()
 			}
-			if viewErr := showSetupResult(ctx, "Client connection — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+			if viewErr := showSetupResult(ctx, "Client connection — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
 				return changed, viewErr
 			}
 		}
@@ -87,10 +88,24 @@ func setupConnectionAction(ctx context.Context, host setupMenuHost, report manag
 			}
 		}
 		var result bytes.Buffer
-		if err := runConnections(ctx, host.frontend, registeredConnectionArguments(host.frontend, host.selected, []string{action, "openai"}), input, &result, terminal); err != nil {
+		if err := setupWorking(terminal, "OpenAI tunnel: "+action, setupHostLabel(host.selected), func(log io.Writer) error {
+			return runConnections(ctx, host.frontend, registeredConnectionArguments(host.frontend, host.selected, []string{action, "openai"}), input, io.MultiWriter(&result, log), log)
+		}); err != nil {
 			return false, err
 		}
 		return action != "status", showSetupResult(ctx, "OpenAI tunnel — "+action+" completed", shortDiagnostic(result.String()), result.String(), input, terminal)
+	}
+	if report.Tools == nil {
+		err := setupWorking(terminal, "Checking tool configuration", setupHostLabel(host.selected), func(log io.Writer) error {
+			current, err := inspectOperatorHost(ctx, host.frontend, host.selected, log, false)
+			if err == nil {
+				report = *current
+			}
+			return err
+		})
+		if err != nil {
+			return false, err
+		}
 	}
 	installed, enabled := setupToolCounts(report)
 	if installed == 0 || enabled == 0 {
@@ -103,17 +118,16 @@ func setupConnectionAction(ctx context.Context, host setupMenuHost, report manag
 		return false, err
 	}
 	arguments := []string{"codex", "--config", config}
-	setupWorking(terminal, "Connecting Codex", setupHostLabel(host.selected))
 	var result setupChangedWriter
-	var diagnostics bytes.Buffer
 	output := &commandOutput{Writer: &result, json: true}
-	if host.selected != nil && host.selected.Remote() {
-		err = connectCodexOnHost(ctx, host.frontend, host.selected, arguments, output, &diagnostics)
-	} else {
-		err = connectCodex(host.frontend, arguments, output, &diagnostics)
-	}
+	err = setupWorking(terminal, "Connecting Codex", setupHostLabel(host.selected), func(log io.Writer) error {
+		if host.selected != nil && host.selected.Remote() {
+			return connectCodexOnHost(ctx, host.frontend, host.selected, arguments, output, log)
+		}
+		return connectCodex(host.frontend, arguments, output, log)
+	})
 	if err != nil {
-		return false, fmt.Errorf("%w\n%s", err, diagnostics.String())
+		return false, err
 	}
 	changed := result.changed()
 	title, summary := "Codex — unchanged", "This host's Loki connection is already configured."

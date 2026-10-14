@@ -140,8 +140,8 @@ func printHelp(out io.Writer, entry helpEntry) {
 		if entry.path == "" {
 			printCommandGroup(out, "Get started", []string{"setup", "status", "doctor", "upgrade"})
 			printCommandGroup(out, "Manage resources", []string{"tools", "hosts", "connections", "integrations"})
-			printCommandGroup(out, "Data and recovery", []string{"backup", "backups", "restore", "rollback"})
-			printCommandGroup(out, "CLI information", []string{"version"})
+			printCommandGroup(out, "Data and recovery", []string{"backup", "backups", "restore", "rollback", "uninstall"})
+			printCommandGroup(out, "CLI information", []string{"version", "install"})
 		} else if entry.path == "tools" {
 			printCommandGroup(out, "Manage tools", []string{"tools manage", "tools list", "tools install", "tools update", "tools enable", "tools disable", "tools uninstall"})
 			printCommandGroup(out, "Run tools", []string{"tools start", "tools stop", "tools restart", "tools serve"})

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -88,7 +89,7 @@ func applyBrowserFeatures(state tools.State, selected []string, invoke func([]st
 	return err == nil, err
 }
 
-func setupBrowserFeatures(ctx context.Context, state tools.State, host string, input, terminal *os.File, invoke func([]string) error) (bool, error) {
+func setupBrowserFeatures(ctx context.Context, state tools.State, host string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
 	selected := slices.Clone(state.Capabilities)
 	width, _, err := term.GetSize(int(terminal.Fd()))
 	if err != nil {
@@ -117,8 +118,12 @@ func setupBrowserFeatures(ctx context.Context, state tools.State, host string, i
 	if err != nil || aborted {
 		return false, err
 	}
-	setupWorking(terminal, "Saving browser features", host)
-	changed, err := applyBrowserFeatures(state, selected, invoke)
+	var changed bool
+	err = setupWorking(terminal, "Saving browser features", host, func(log io.Writer) error {
+		var err error
+		changed, err = applyBrowserFeatures(state, selected, func(args []string) error { return invoke(args, log) })
+		return err
+	})
 	if err != nil {
 		return false, err
 	}

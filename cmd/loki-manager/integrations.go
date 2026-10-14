@@ -25,7 +25,7 @@ type githubImport struct {
 func integrationFile(path string, private bool) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, fmt.Errorf("integration input file cannot be opened")
+		return nil, fmt.Errorf("integration input file cannot be opened: %w", err)
 	}
 	if !info.Mode().IsRegular() || info.Size() > tools.MaxManifestBytes {
 		return nil, fmt.Errorf("integration input must be a bounded regular file; private keys require owner-only permissions")
@@ -37,11 +37,14 @@ func integrationFile(path string, private bool) ([]byte, error) {
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("integration input file cannot be opened")
+		return nil, fmt.Errorf("integration input file cannot be opened: %w", err)
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, tools.MaxManifestBytes+1))
-	if err != nil || len(data) > tools.MaxManifestBytes {
+	if err != nil {
+		return nil, fmt.Errorf("integration input file cannot be read: %w", err)
+	}
+	if len(data) > tools.MaxManifestBytes {
 		return nil, fmt.Errorf("integration input exceeds its supported bound")
 	}
 	return data, nil

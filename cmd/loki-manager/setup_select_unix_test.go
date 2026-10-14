@@ -28,8 +28,44 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
+	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "remote-home", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
+	}
+}
+
+func TestSetupProgressRestoresTerminal(t *testing.T) {
+	for _, kind := range []string{"working-success", "working-failure", "working-cancel"} {
+		t.Run(kind, func(t *testing.T) {
+			master, terminal, err := pty.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer master.Close()
+			defer terminal.Close()
+			if err := pty.Setsize(terminal, &pty.Winsize{Rows: 20, Cols: 50}); err != nil {
+				t.Fatal(err)
+			}
+			captured := make(chan string, 1)
+			go func() {
+				var transcript strings.Builder
+				buffer := make([]byte, 4096)
+				for {
+					n, err := master.Read(buffer)
+					transcript.Write(buffer[:n])
+					if err != nil || strings.Contains(transcript.String(), "[RESULT] Fixture action complete") {
+						captured <- transcript.String()
+						return
+					}
+				}
+			}()
+			setupProgressFixture(t, terminal, kind)
+			select {
+			case transcript := <-captured:
+				assertSetupProgressTranscript(t, transcript)
+			case <-time.After(5 * time.Second):
+				t.Fatal("progress did not restore terminal output")
+			}
+		})
 	}
 }
 
@@ -131,7 +167,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if kind == "readiness" {
 		installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"ready":false,"healthy":false,"tools":{"browser":{"installed":true,"enabled":true,"readiness":"degraded","reason":"Chrome startup failed\n<launching> long Chrome command\nerror while loading shared libraries: libnspr4.so: cannot open shared object file"}}}`)
 	}
-	if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" {
+	if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" || kind == "remote-home" {
 		installSetupSSHFixture(t, `{}`)
 		t.Setenv("CODEX_HOME", t.TempDir())
 		if kind == "preparation-failed" {
@@ -146,7 +182,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
 		if kind == "install-many-failed" {
 			failure := errors.New("download failed before installation")
-			changed, err := installSetupTools(ctx, management.Report{Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.Full}}, "Fixture Linux", terminal, terminal, func([]string) error { return failure })
+			changed, err := installSetupTools(ctx, management.Report{Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.Full}}, "Fixture Linux", terminal, terminal, func([]string, io.Writer) error { return failure })
 			if errors.Is(err, failure) {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
 			} else {
@@ -154,7 +190,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			}
 			finished <- err
 		} else if strings.HasPrefix(kind, "git-signing") {
-			changed, err := setupGitSigning(ctx, "Fixture Linux", terminal, terminal, func(args []string, output io.Writer) error {
+			changed, err := setupGitSigning(ctx, "Fixture Linux", terminal, terminal, func(args []string, output, diagnostics io.Writer) error {
 				if reflect.DeepEqual(args, []string{"--json", "integrations", "status", "git"}) {
 					_, err := io.WriteString(output, `{"identity":{"name":"Saved Author","email":"saved@example.com"}}`)
 					return err
@@ -175,7 +211,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- err
 		} else if strings.HasPrefix(kind, "features-") {
 			state := tools.State{Installed: true, Enabled: false, Capabilities: []string{"pdf"}}
-			changed, err := setupBrowserFeatures(ctx, state, "WSL: Ubuntu", terminal, terminal, func(args []string) error { featureCommand = args; return nil })
+			changed, err := setupBrowserFeatures(ctx, state, "WSL: Ubuntu", terminal, terminal, func(args []string, log io.Writer) error { featureCommand = args; return nil })
 			if err == nil {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
 			}
@@ -208,7 +244,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
-			if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" {
+			if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" || kind == "remote-home" {
 				host.explicit = true
 				host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
 			}
@@ -262,7 +298,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\x1b")
 		waitFor("Missing Linux library")
 		_, _ = io.WriteString(master, "\r")
-		transcript := waitFor("[RESULT] Readiness — needs attention", "does not test the Codex app connection")
+		transcript := waitFor("[RESULT] Readiness — needs attention", "Codex connection not tested.")
 		if !strings.Contains(transcript, "[RESULT] Readiness — needs attention") {
 			t.Fatal("readiness result missing from restored terminal", transcript)
 		}
@@ -336,19 +372,28 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	} else if kind == "fresh" {
 		waitFor("Choose execution host")
 		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "remote-home" {
+		waitFor("Manage tools")
+		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "unreachable-tools" {
-		waitFor("Host unavailable")
+		waitFor("Manage tools")
 		_, _ = io.WriteString(master, "\r")
-		waitFor("Action — could not finish", "cannot manage tools")
+		waitFor("Host preparation — needs attention")
 		_, _ = io.WriteString(master, "\r")
-		waitFor("Host unavailable")
+		waitFor("Manage tools")
 		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "unreachable" || kind == "preparation-failed" {
 		if kind == "preparation-failed" {
+			waitFor("Manage tools")
+			_, _ = io.WriteString(master, "\r")
 			waitFor("Host preparation — needs attention")
+			_, _ = io.WriteString(master, "\x1b[B\r")
+			waitFor("Page 1/", "SSH fixture authentication denied")
+			_, _ = io.WriteString(master, "\x1b")
+			waitFor("Continue — return to menu")
 			_, _ = io.WriteString(master, "\r")
 		}
-		waitFor("Host unavailable")
+		waitFor("Manage tools")
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("Inspect client connections")
 		_, _ = io.WriteString(master, "\x1b[B\r")
@@ -356,7 +401,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\r")
 		waitFor("Client connections", "Inspect client connections")
 		_, _ = io.WriteString(master, "\x1b")
-		waitFor("Host unavailable")
+		waitFor("Manage tools")
 		_, _ = io.WriteString(master, "\x1b")
 	} else {
 		if kind == "home" {
@@ -387,6 +432,11 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	case <-ctx.Done():
 		t.Fatal("menu did not exit")
+	}
+	if kind == "remote-home" {
+		if calls, err := os.ReadFile(os.Getenv("LOKI_REVIEW_SSH_LOG")); !os.IsNotExist(err) {
+			t.Fatalf("opening setup contacted the remote host: %s (%v)", calls, err)
+		}
 	}
 	after, err := term.GetState(int(terminal.Fd()))
 	if err != nil || !reflect.DeepEqual(before, after) {

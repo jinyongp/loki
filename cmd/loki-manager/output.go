@@ -196,6 +196,10 @@ func printStatusForHost(out io.Writer, report management.Report, cliVersion stri
 	}
 	if report.Ready != nil {
 		fmt.Fprintln(writer, "  Ready:", displayValue(*report.Ready))
+		_, enabled := setupToolCounts(report)
+		if enabled == 0 {
+			fmt.Fprintln(writer, "  No tools are enabled for client use.")
+		}
 	}
 	ids := []tools.ID{}
 	reported := map[string]bool{}
@@ -250,7 +254,7 @@ func printStatusForHost(out io.Writer, report management.Report, cliVersion stri
 		}
 	}
 	if detailed {
-		fmt.Fprintln(writer, "\nFull diagnostics: loki doctor --json (or setup > Details).")
+		fmt.Fprintln(writer, "\nFull diagnostics: repeat this command with --json, keeping the same host options.")
 	}
 	if len(report.Deployments) > 0 {
 		if err := result(writer, "\nDeployments:", report.Deployments); err != nil {

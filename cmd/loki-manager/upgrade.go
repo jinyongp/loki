@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -324,7 +323,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			printPlan(prompt)
 		}
 		fmt.Fprint(prompt, "Apply this upgrade plan? [y/N]: ")
-		line, err := bufio.NewReader(input).ReadString('\n')
+		line, err := readSetupLine(input, 4096)
 		if err != nil && err != io.EOF {
 			return err
 		}
@@ -378,8 +377,14 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			return err
 		}
 		actual, err := deps.run(ctx, runner, "version")
-		if err != nil || strings.TrimSpace(string(actual)) != "loki "+target {
-			return fmt.Errorf("downloaded CLI version does not match target release")
+		if err != nil {
+			if detail := shortDiagnostic(string(actual)); detail != "" {
+				return fmt.Errorf("downloaded CLI could not start: %w\n%s", err, detail)
+			}
+			return fmt.Errorf("downloaded CLI could not start: %w", err)
+		}
+		if strings.TrimSpace(string(actual)) != "loki "+target {
+			return fmt.Errorf("downloaded CLI version does not match target release %s: %s", target, shortDiagnostic(string(actual)))
 		}
 	}
 	if toolWork {

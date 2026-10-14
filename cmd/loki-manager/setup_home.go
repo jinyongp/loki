@@ -30,11 +30,40 @@ func setupTerminal(input *os.File, diagnostics io.Writer) (*os.File, bool) {
 	return terminal, ok && term.IsTerminal(int(input.Fd())) && term.IsTerminal(int(terminal.Fd())) && os.Getenv("TERM") != "dumb"
 }
 
+func prepareSetupMenuHost(ctx context.Context, host *setupMenuHost, prefix *[]string, diagnostics io.Writer) (bool, error) {
+	if host.selected == nil || !host.selected.Remote() {
+		return false, nil
+	}
+	previous := *host.selected
+	prepared, err := ensureSetupExecutionHost(ctx, host.frontend, previous, !host.explicit, diagnostics)
+	if err != nil {
+		return false, err
+	}
+	metadataSaved := !host.explicit
+	if host.explicit && previous != prepared {
+		if record, lookupErr := host.frontend.HostForTarget(previous); lookupErr == nil {
+			err = host.frontend.UpdateHostTarget(record.ID, previous, prepared)
+			metadataSaved = err == nil
+		}
+	}
+	if err != nil {
+		return false, err
+	}
+	host.selected = &prepared
+	if host.explicit {
+		*prefix = setupBoundArguments(host.frontend, prepared)
+	}
+	return prepared != previous && (metadataSaved || prepared.Command != previous.Command), nil
+}
+
 func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, input *os.File, out, diagnostics io.Writer) error {
 	terminal, interactive := setupTerminal(input, diagnostics)
 	if !interactive {
 		return runToolsMenu(ctx, prefix, host, input, out, diagnostics)
 	}
+	session := &setupSession{}
+	ctx = context.WithValue(ctx, setupSessionKey{}, session)
+	defer session.print(terminal)
 	changed := false
 	if host.selected == nil && !host.explicit {
 		selected, updated, err := chooseSetupHost(ctx, host.frontend, input, diagnostics, false)
@@ -45,39 +74,6 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return success(out, "Setup cancelled. No changes made.", map[string]any{"state": "cancelled", "changed": false})
 		}
 		host.selected, changed = selected, true
-	} else if host.selected != nil && host.selected.Remote() {
-		setupWorking(terminal, "Preparing execution host", setupHostLabel(host.selected))
-		metadataSaved := !host.explicit
-		previous := *host.selected
-		prepared, err := ensureSetupExecutionHost(ctx, host.frontend, previous, !host.explicit, diagnostics)
-		if err == nil && host.explicit && previous != prepared {
-			if record, lookupErr := host.frontend.HostForTarget(previous); lookupErr == nil {
-				err = host.frontend.UpdateHostTarget(record.ID, previous, prepared)
-				metadataSaved = err == nil
-			}
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if viewErr := showSetupResult(ctx, "Host preparation — needs attention", shortDiagnostic(err.Error())+"\nClient connections and Change execution host remain available.", err.Error(), input, terminal); viewErr != nil {
-				return viewErr
-			}
-		} else {
-			changed = changed || prepared != *host.selected && (metadataSaved || prepared.Command != previous.Command)
-			host.selected = &prepared
-			if host.explicit {
-				prefix = setupBoundArguments(host.frontend, prepared)
-			}
-		}
-	}
-	if err := prepareInstalledBrowserHost(ctx, host, input, diagnostics); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if viewErr := showSetupResult(ctx, "Browser preparation — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
-			return viewErr
-		}
 	}
 	for {
 		if err := ctx.Err(); err != nil {
@@ -90,16 +86,22 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				return err
 			}
 		}
-		report, inspectErr := inspectOperatorHost(ctx, host.frontend, host.selected, diagnostics, false)
+		var report *management.Report
+		var inspectErr error
+		if host.selected == nil || !host.selected.Remote() {
+			report, inspectErr = inspectOperatorHost(ctx, host.frontend, host.selected, diagnostics, false)
+		}
 		description := "Host: " + setupHostLabel(host.selected)
 		if inspectErr != nil {
 			description += "\nHost unavailable. Check access or choose Change execution host."
 			description += "\n" + shortDiagnostic(inspectErr.Error())
+		} else if report == nil {
+			description += "\nTool state is checked when you choose an action."
 		} else {
 			installed, enabled := setupToolCounts(*report)
 			description += fmt.Sprintf("\nTools: %d installed · %d enabled. Runtime readiness: run Check readiness.", installed, enabled)
 		}
-		options := []huh.Option[string]{huh.NewOption("Manage tools — install, enable, disable or uninstall", "tools"), huh.NewOption("Client connections — connect Codex or manage a tunnel", "connections"), huh.NewOption("Check readiness — diagnose tools on this host", "doctor")}
+		options := []huh.Option[string]{huh.NewOption("Manage tools — install, enable, disable or uninstall", "tools"), huh.NewOption("Client connections — connect Codex or manage a tunnel", "connections"), huh.NewOption("Check readiness — prepare this host and diagnose tools", "doctor")}
 		if !host.explicit {
 			options = append(options, huh.NewOption("Change execution host", "host"))
 		}
@@ -111,7 +113,32 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return err
 		}
 		if aborted || choice == "" {
-			return success(out, "Setup closed. Saved changes are retained. Action results are shown above.\n'loki status' shows configuration; 'loki doctor' runs a fresh readiness check.", map[string]any{"changed": changed})
+			session.print(terminal)
+			return success(out, "Setup closed.", map[string]any{"changed": changed})
+		}
+		if choice == "tools" || choice == "doctor" {
+			var updated bool
+			err = setupWorking(terminal, "Preparing execution host", setupHostLabel(host.selected), func(log io.Writer) error {
+				var err error
+				updated, err = prepareSetupMenuHost(ctx, &host, &prefix, log)
+				if err == nil && choice == "tools" {
+					report, err = inspectOperatorHost(ctx, host.frontend, host.selected, log, false)
+				}
+				if err == nil && choice == "doctor" {
+					err = prepareInstalledBrowserHost(ctx, host, input, log)
+				}
+				return err
+			})
+			changed = changed || updated
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if err := showSetupResult(ctx, "Host preparation — needs attention", setupErrorSummary(err)+"\nClient connections and Change execution host remain available.", setupErrorDetails(err), input, terminal); err != nil {
+					return err
+				}
+				continue
+			}
 		}
 		switch choice {
 		case "host":
@@ -119,10 +146,6 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			changed = changed || updated
 			err = selectErr
 		case "tools":
-			if inspectErr != nil {
-				err = fmt.Errorf("cannot manage tools on %s: %w\nCheck host access or choose Change execution host", setupHostLabel(host.selected), inspectErr)
-				break
-			}
 			var result setupChangedWriter
 			err = runToolsMenu(ctx, prefix, host, input, &commandOutput{Writer: &result, json: true}, diagnostics)
 			changed = changed || result.changed()
@@ -137,7 +160,7 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			err = setupReadiness(ctx, host, input, terminal)
 		}
 		if err != nil {
-			if viewErr := showSetupResult(ctx, "Action — could not finish", shortDiagnostic(err.Error())+"\nSaved changes are retained. Retry or choose another action.", err.Error(), input, terminal); viewErr != nil {
+			if viewErr := showSetupResult(ctx, "Action — could not finish", setupErrorSummary(err)+"\nSaved changes are retained. Retry or choose another action.", setupErrorDetails(err), input, terminal); viewErr != nil {
 				return viewErr
 			}
 		}
@@ -161,7 +184,7 @@ func toolSupportedOnHost(name string, target tools.Target) bool {
 	return target.OS == "linux" || name == "browser" && (target.OS != "windows" || target.Arch != "arm64")
 }
 
-func installSetupTools(ctx context.Context, report management.Report, hostLabel string, input, terminal *os.File, invoke func([]string) error) (bool, error) {
+func installSetupTools(ctx context.Context, report management.Report, hostLabel string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
 	options := []huh.Option[string]{}
 	for _, name := range publicToolNames {
 		if !report.Tools[tools.ID(name)].Installed && toolSupportedOnHost(name, report.Target) {
@@ -187,7 +210,8 @@ func installSetupTools(ctx context.Context, report management.Report, hostLabel 
 	if action == "install-enable" {
 		command = []string{"setup"}
 	}
-	setupWorking(terminal, "Installing selected tools", hostLabel)
-	err = invoke(append(command, selected...))
+	err = setupWorking(terminal, "Installing selected tools", hostLabel, func(log io.Writer) error {
+		return invoke(append(command, selected...), log)
+	})
 	return err == nil, err
 }

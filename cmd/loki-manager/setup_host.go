@@ -201,8 +201,9 @@ func prepareSetupHost(ctx context.Context, store management.Store, input, termin
 	default:
 		return nil, false, fmt.Errorf("unknown execution host preparation")
 	}
-	setupWorking(terminal, "Selecting and preparing execution host", preparationLabel)
-	if err := runHosts(ctx, store, command[1:], terminal, terminal); err != nil {
+	if err := setupWorking(terminal, "Selecting and preparing execution host", preparationLabel, func(log io.Writer) error {
+		return runHosts(ctx, store, command[1:], log, log)
+	}); err != nil {
 		return nil, false, err
 	}
 	selected, err := store.ExecutionSelection()

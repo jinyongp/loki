@@ -28,12 +28,12 @@ func installSetupSSHFixture(t *testing.T, report string) string {
 	t.Setenv("LOKI_REVIEW_CLI_VERSION", management.ManagerRelease)
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$LOKI_REVIEW_SSH_LOG"
-if [ "$LOKI_REVIEW_SSH_UNREACHABLE" = 1 ]; then exit 1; fi
+if [ "$LOKI_REVIEW_SSH_UNREACHABLE" = 1 ]; then printf 'SSH fixture authentication denied\n' >&2; exit 1; fi
 case "$*" in
   *"'uname -s;"*) printf 'Linux\nx86_64\n/home/fixture\n' ;;
   *"'version'"*) printf 'loki %s\n' "$LOKI_REVIEW_CLI_VERSION" ;;
   *"'tools' 'status'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
-  *"'tools' 'doctor'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
+  *"'tools' 'doctor'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT"; if [ "$LOKI_REVIEW_SSH_DOCTOR_FAIL" = 1 ]; then exit 1; fi ;;
   *"'_connection-state'"*) printf '%s\n' "$LOKI_REVIEW_SSH_REPORT" ;;
   *"'_browser-environment'"*)
     if [ "$LOKI_REVIEW_BROWSER_MISSING" = 1 ]; then

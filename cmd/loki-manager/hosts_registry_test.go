@@ -436,3 +436,17 @@ func TestHostPurgeRequiresExplicitName(t *testing.T) {
 		t.Fatal("invalid purge created state", err)
 	}
 }
+
+func TestAllHostDoctorRetainsReachableDegradedTools(t *testing.T) {
+	installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"ready":false,"healthy":false,"tools":{"browser":{"installed":true,"enabled":true,"readiness":"degraded","reason":"missing runtime library"}}}`)
+	t.Setenv("LOKI_REVIEW_SSH_DOCTOR_FAIL", "1")
+	store := management.Store{Root: t.TempDir()}
+	if _, err := store.RegisterHost("degraded", management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err := statusAllHosts(t.Context(), store, &out, io.Discard, true)
+	if err == nil || !strings.Contains(out.String(), "browser: needs attention") || !strings.Contains(out.String(), "missing runtime library") || strings.Contains(out.String(), "Unavailable:") {
+		t.Fatal("reachable tool failure misreported as unavailable", out.String(), err)
+	}
+}

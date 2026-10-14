@@ -35,7 +35,9 @@ func TestSetupConsoleHelper(t *testing.T) {
 	var options setupOptions
 	if root := os.Getenv("LOKI_SETUP_MENU_ROOT"); root != "" {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
-		if kind := os.Getenv("LOKI_SETUP_MENU_KIND"); kind == "home" || kind == "fresh" {
+		if kind := os.Getenv("LOKI_SETUP_MENU_KIND"); strings.HasPrefix(kind, "working-") {
+			setupProgressFixture(t, os.Stderr, kind)
+		} else if kind == "home" || kind == "fresh" {
 			host.explicit = kind == "home"
 			err = runSetupMenu(t.Context(), []string{"--root", root}, host, os.Stdin, os.Stdout, os.Stderr)
 		} else {
@@ -76,6 +78,9 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 		{"management menu exit", "\x1b", 0, true},
 		{"home", "\x1b", 0, true},
 		{"fresh", "\x1b", 0, true},
+		{"working-success", "", 0, true},
+		{"working-failure", "", 0, true},
+		{"working-cancel", "", 0, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			console, err := xpty.NewConPty(100, 30)
@@ -101,6 +106,7 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 			defer cmd.Process.Kill()
 			ready := make(chan struct{}, 1)
 			result := make(chan string, 1)
+			transcript := make(chan string, 1)
 			go func() {
 				var screen strings.Builder
 				buffer := make([]byte, 4096)
@@ -115,6 +121,8 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 						readyText = "Manage tools"
 					} else if test.name == "fresh" {
 						readyText = "Choose execution host"
+					} else if strings.HasPrefix(test.name, "working-") {
+						readyText = "[RESULT] Fixture action complete"
 					}
 					if !signaled && strings.Contains(text, readyText) {
 						signaled = true
@@ -124,6 +132,7 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 						line := text[start+len("LOKI_SETUP_RESULT:"):]
 						if end := strings.IndexByte(line, '\n'); end >= 0 {
 							result <- strings.TrimSpace(line[:end])
+							transcript <- screen.String()
 							reported = true
 						}
 					}
@@ -151,6 +160,9 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 			}
 			if err := cmd.Wait(); err != nil {
 				t.Fatal(err)
+			}
+			if strings.HasPrefix(test.name, "working-") {
+				assertSetupProgressTranscript(t, <-transcript)
 			}
 			if test.menu {
 				if _, err := os.Stat(menuRoot); !os.IsNotExist(err) {

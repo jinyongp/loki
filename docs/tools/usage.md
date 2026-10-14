@@ -64,17 +64,25 @@ GitHub offers **Configure GitHub access**. Enable these tools before configuring
 their integrations. Disabled tools do not offer an action that requires enabled
 services.
 
+Opening setup for a saved remote host does not start or prepare that host.
+Manage tools prepares its CLI when needed. Check readiness prepares the host,
+repairs missing browser dependencies when applicable, and then checks tool runtime.
+Client configuration can still be inspected or removed while the host is unavailable.
+
 Interactive setup uses a dedicated terminal screen for each choice. **CHOOSE**
-means input is required; **WORKING** labels progress output; **RESULT** remains
-visible until Continue or Esc. Enter chooses an action or confirms the current
+means input is required; **WORKING** shows temporary progress output; **RESULT**
+remains visible until Continue or Esc. Enter chooses an action or confirms the current
 selection. Connection setup confirms saved settings separately from tool runtime
 readiness. Readiness results show concise causes and keep full diagnostics under
 **Details**, with next/previous pages for long logs. Narrow screens shorten the
 summary while keeping the complete output in Details. Leaving a result screen
-restores the original terminal and prints its full summary there, including on
-Esc, so completed actions and readiness failures remain readable after setup
-closes. Readiness checks tools on the selected host; it does not test the client
-app connection. `loki status` shows configuration without starting tools or
+restores the original terminal. Setup prints the collected result summaries once
+on exit, including on Esc, and omits repeated identical results. Direct tool menus
+collect their results until that menu exits as well. Progress logs disappear when the action
+finishes. Failed actions keep the latest detailed output under Details; long output
+states when earlier progress was omitted. Setup exits with a short closing message. Readiness checks
+tools on the selected host; it does not test the client app connection.
+`loki status` shows configuration without starting tools or
 testing connections; `loki doctor` runs a fresh tool readiness check.
 
 Client-connection actions and cancellation return to **Client connections**;
@@ -596,3 +604,10 @@ A host can be detached after its connections have been removed. Detachment keeps
 the host and data. `hosts remove NAME --purge` deletes only verified Loki-owned
 infrastructure; external SSH/WSL hosts and shared infrastructure are retained.
 The native frontend host cannot be removed.
+
+`doctor` with no enabled tools reports that no tools are enabled for
+client use; a healthy installation alone does not grant tool access.
+`status --all-hosts` and `doctor --all-hosts` show each host's installed/enabled tools
+and runtime state. A reachable host with degraded tools is reported as needing
+attention, separately from an unavailable host. Repeat a diagnostic command with
+`--json` and the same host/root options to read its full report.

@@ -74,12 +74,19 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
 		return fmt.Errorf("interactive setup needs a terminal; use 'loki setup TOOL...' or 'loki tools install TOOL' for scripts")
 	}
-	invoke := func(command []string, destination io.Writer) error {
-		return run(ctx, append(append([]string{}, prefix...), command...), destination, diagnostics)
+	var ownSession *setupSession
+	if _, ok := ctx.Value(setupSessionKey{}).(*setupSession); !ok {
+		session := &setupSession{}
+		ownSession = session
+		ctx = context.WithValue(ctx, setupSessionKey{}, session)
+		defer session.print(terminal)
+	}
+	invoke := func(command []string, destination io.Writer, log io.Writer) error {
+		return run(ctx, append(append([]string{}, prefix...), command...), destination, log)
 	}
 	load := func() (management.Report, error) {
 		var raw bytes.Buffer
-		err := invoke([]string{"--json", "status"}, &raw)
+		err := invoke([]string{"--json", "status"}, &raw, diagnostics)
 		var report management.Report
 		if err == nil {
 			err = json.Unmarshal(raw.Bytes(), &report)
@@ -132,6 +139,9 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return err
 		}
 		if aborted || selected == "" {
+			if ownSession != nil {
+				ownSession.print(terminal)
+			}
 			return success(out, "Setup closed.", map[string]any{"changed": changed || !reflect.DeepEqual(initial, report.Tools)})
 		}
 		cursor = selected
@@ -143,9 +153,10 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				return err
 			}
 			if !aborted && confirmed {
-				setupWorking(terminal, "Uninstalling all tools", hostLabel)
-				if err := invoke([]string{"tools", "uninstall", "--all"}, diagnostics); err != nil {
-					if viewErr := showSetupResult(ctx, "Uninstall — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+				if err := setupWorking(terminal, "Uninstalling all tools", hostLabel, func(log io.Writer) error {
+					return invoke([]string{"tools", "uninstall", "--all"}, log, log)
+				}); err != nil {
+					if viewErr := showSetupResult(ctx, "Uninstall — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
 						return viewErr
 					}
 				} else {
@@ -159,9 +170,9 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			continue
 		}
 		if selected == "install-many" {
-			updated, err := installSetupTools(ctx, report, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
+			updated, err := installSetupTools(ctx, report, hostLabel, input, terminal, func(command []string, log io.Writer) error { return invoke(command, log, log) })
 			if err != nil {
-				if viewErr := showSetupResult(ctx, "Installation — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+				if viewErr := showSetupResult(ctx, "Installation — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
 					return viewErr
 				}
 			} else if updated {
@@ -175,7 +186,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		if selected == "host" {
 			_, updated, err := chooseSetupHost(ctx, host.frontend, input, diagnostics, false)
 			if err != nil {
-				if viewErr := showSetupResult(ctx, "Host selection — needs attention", shortDiagnostic(err.Error()), err.Error(), input, terminal); viewErr != nil {
+				if viewErr := showSetupResult(ctx, "Host selection — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
 					return viewErr
 				}
 			}
@@ -212,7 +223,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			var updated bool
 			var actionErr error
 			if action == "features" {
-				updated, actionErr = setupBrowserFeatures(ctx, state, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
+				updated, actionErr = setupBrowserFeatures(ctx, state, hostLabel, input, terminal, func(command []string, log io.Writer) error { return invoke(command, log, log) })
 			} else {
 				updated, actionErr = setupGitSigning(ctx, hostLabel, input, terminal, invoke)
 			}
@@ -221,7 +232,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if err := showSetupResult(ctx, selected+" configuration — needs attention", shortDiagnostic(actionErr.Error()), actionErr.Error(), input, terminal); err != nil {
+				if err := showSetupResult(ctx, selected+" configuration — needs attention", setupErrorSummary(actionErr), setupErrorDetails(actionErr), input, terminal); err != nil {
 					return err
 				}
 			}
@@ -238,15 +249,15 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				continue
 			}
 		}
-		setupWorking(terminal, selected+": "+action, hostLabel)
-		apply := func(command []string) error { return invoke(command, diagnostics) }
-		if err := applySetupAction(selected, action, report, apply); err != nil {
+		if err := setupWorking(terminal, selected+": "+action, hostLabel, func(log io.Writer) error {
+			return applySetupAction(selected, action, report, func(command []string) error { return invoke(command, log, log) })
+		}); err != nil {
 			// Re-read state on the next pass, including a partially completed
 			// installation or an activation whose service start failed.
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if viewErr := showSetupResult(ctx, selected+" — needs attention", shortDiagnostic(err.Error())+"\nSaved changes are retained. Review the tool state and retry.", err.Error(), input, terminal); viewErr != nil {
+			if viewErr := showSetupResult(ctx, selected+" — needs attention", setupErrorSummary(err)+"\nSaved changes are retained. Review the tool state and retry.", setupErrorDetails(err), input, terminal); viewErr != nil {
 				return viewErr
 			}
 		} else {
