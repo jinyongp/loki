@@ -75,9 +75,18 @@ def accept(candidate, browser=False):
                 # that Codex will launch, rather than a separate canned command.
                 invoke('tools','connect','--config',str(config),'codex')
                 connection = tomllib.loads(config.read_text())['mcp_servers']['loki']
-                if Path(connection['command']).resolve() != binary.resolve() or connection['args'][:2] != ['--host','local'] or '--workspace' in connection['args']:
+                native_host = json.loads(invoke('hosts','show','local','--json'))
+                launch_args = connection['args']
+                expected_prefix = ['--root', str(root), '--host-id', native_host['id']]
+                if Path(connection['command']).resolve() != binary.resolve() or launch_args[:4] != expected_prefix or '--workspace' in launch_args or native_host['target']['host']['kind'] != 'local' or native_host['target'].get('system',False):
                     raise ValueError('default Codex connection did not pin its host without granting project files')
-                asyncio.run(protocol(binary,root,workspace,invoke,launch=[connection['command'],*connection['args']]))
+                # A saved connection must not follow a newly selected CLI default.
+                invoke('hosts','add','offline','--type','ssh','--address','loki-acceptance.invalid')
+                invoke('hosts','use','offline')
+                def invoke_native(*arguments):
+                    return invoke('--host-id',native_host['id'],*arguments)
+                asyncio.run(protocol(binary,root,workspace,invoke_native,launch=[connection['command'],*launch_args]))
+                invoke('hosts','use','local')
                 invoke('tools','remove','browser')
             elif config.read_text() != original:
                 raise ValueError('management-only install modified Codex configuration')

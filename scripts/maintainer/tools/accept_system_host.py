@@ -42,6 +42,7 @@ def accept(candidate):
         binary.chmod(0o755)
         frontend = scratch / "frontend"
         owned = False
+        owned_name = "system"
 
         def run(*args, expected=0):
             result = subprocess.run([str(binary), "--root", str(frontend), *args], capture_output=True, text=True, timeout=240)
@@ -53,6 +54,7 @@ def accept(candidate):
             run("install")
             run("hosts", "prepare", "local", "--json")
             owned = True
+            owned_name = json.loads(run("hosts","show","--json"))["name"]
             status = json.loads(run("status", "--json"))
             if status["target"]["mode"] != "full" or status["tools"] != {}:
                 raise ValueError("ordinary commands did not use the remembered administrator host")
@@ -64,7 +66,7 @@ def accept(candidate):
             if forbidden.returncode == 0 or "outside system-host authority" not in forbidden.stderr:
                 raise ValueError("administrator socket admitted a caller-controlled catalog")
             run("tools", "uninstall", "--all", "--purge-data", "--json")
-            run("hosts", "remove", "--purge", "--json")
+            run("hosts", "remove", owned_name, "--purge", "--json")
             owned = False
             for path in [root, command, socket, *units]:
                 if subprocess.run(["sudo", "test", "-e", str(path)]).returncode == 0:
@@ -73,7 +75,7 @@ def accept(candidate):
                 raise ValueError("frontend remained bound to its removed administrator host")
         finally:
             if owned:
-                subprocess.run([str(binary), "--root", str(frontend), "hosts", "remove", "--purge"], timeout=240, check=False)
+                subprocess.run([str(binary), "--root", str(frontend), "hosts", "remove", owned_name, "--purge"], timeout=240, check=False)
         print(json.dumps({"native_system_host_acceptance": "pass", "uid": uid, "namespace": "owned disposable runner", "docker_retained": True}))
 
 
