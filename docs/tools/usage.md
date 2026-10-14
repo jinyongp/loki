@@ -90,6 +90,24 @@ display is unnecessary. The URL binds only to runtime loopback: remote SSH or
 isolated container deployments need forwarding to that runtime's displayed port.
 The screen serves the captured image, not a live interactive view of the page.
 
+DevTools screenshots activate the requested tab before capture, including after
+a Lighthouse audit. `resize_page` sets the page viewport; docked DevTools does
+not consume the requested width. That size persists when changing other
+emulation features and when Lighthouse restores the page after an audit.
+Protocol errors return before the outer MCP call deadline. If an MCP request is
+canceled or reaches that deadline, Loki stops the affected owned engine and
+subsequent calls explain that the client must reconnect. Other engines remain
+available. Interrupted actions are never replayed automatically.
+
+Playwright recordings retain actual MCP upload paths and handled dialog outcomes
+in JavaScript/TypeScript replay code. A fake upload path is replaced with
+`setInputFiles`; ordinary text containing a fake path remains ordinary text.
+If a manual upload's real path or a dialog outcome cannot be recovered, the
+affected action is omitted with an explicit warning. Check these warnings before
+replaying code, and retain its referenced files on the execution host.
+`browser_resume` without stepping returns when execution resumes; it does not
+wait for another pause. Step and location requests retain their next-pause behavior.
+
 Extension installation/reload waits for the new service worker to start before
 returning. An extension action activates the selected MCP page first, ensuring
 the callback receives the intended page even when DevTools has focus.

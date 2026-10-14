@@ -10,6 +10,7 @@ import re
 from accept_browser_candidate import accept, protocol
 from mcp_probe import Client, result
 from accept_browser_interactions import interactions
+from accept_browser_regressions import regressions
 
 CAPABILITIES = ['unsafe-code', 'vision', 'pdf', 'devtools', 'network', 'storage',
                 'testing', 'tracing', 'config', 'extensions', 'pwa', 'webmcp',
@@ -92,6 +93,11 @@ async def optional_protocol(binary, root, workspace, invoke):
 
         await interactions(client, root, workspace)
 
+        bundles = list((root / 'tools' / 'browser' / 'generations').glob('*/runtime.json'))
+        if len(bundles) != 1:
+            raise ValueError('Expected the single accepted browser runtime generation')
+        await regressions(client, workspace, bundles[0].parent)
+
         # A changed selection must revoke the cached privileged tool immediately.
         invoke('tools', 'enable', 'browser', '--capabilities', '')
         denied = await client.request('tools/call', {'name':'browser_run_code_unsafe', 'arguments':{'code':'async page => await page.title()'}})
@@ -101,7 +107,8 @@ async def optional_protocol(binary, root, workspace, invoke):
         print(json.dumps({'optional_browser_acceptance':'pass', 'capability_discovery':CAPABILITIES,
                           'executed':['vision pointer', 'pdf bytes', 'storage', 'testing', 'network interception',
                                       'tracing', 'video bytes', 'config', 'unsafe-code and revocation',
-                                      'extensions install/action/reload/uninstall', 'headless annotation UI and PNG', 'annotation cancellation and invalid-request rejection', 'webmcp listing', 'third-party listing'],
+                                      'extensions install/action/reload/uninstall', 'headless annotation UI and PNG', 'annotation cancellation and invalid-request rejection', 'webmcp listing', 'third-party listing',
+                                      'post-Lighthouse screenshot and continued session', 'docked viewport dimensions', 'recorded upload and dialog replay', 'actual paused action resume'],
                           'remaining':['PWA installation',
                                        'WebMCP invocation', 'third-party invocation', 'memory snapshot analysis']}))
     finally:

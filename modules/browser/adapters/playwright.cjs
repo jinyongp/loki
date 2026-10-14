@@ -11,6 +11,140 @@ const sessions = new WeakMap();
 const tool = core.tools.browserTools.find(tool => tool.schema.name === 'browser_annotate');
 if (!tool) throw new Error('Pinned Playwright annotation tool is unavailable');
 
+// The pinned recorder treats a file input's change event as a text fill, and
+// emits a dismiss placeholder for every dialog signal. Keep the original action
+// ordering but capture the actual MCP upload paths and dialog outcomes.
+const recordings = new WeakMap();
+const browserTool = name => {
+  const value = core.tools.browserTools.find(tool => tool.schema.name === name);
+  if (!value) throw new Error(`Pinned Playwright tool ${name} is unavailable`);
+  return value;
+};
+const resumeTool = browserTool('browser_resume');
+const resumeExecution = resumeTool.handle;
+resumeTool.handle = async (context, params, response) => {
+  if (params.step || params.location) return resumeExecution(context, params, response);
+  // The pinned handler waits for another pause even after an ordinary resume.
+  // A script that finishes without pausing again leaves its MCP call hanging.
+  const browserContext = await context.ensureBrowserContext();
+  await browserContext.debugger.resume();
+  response.addTextResult('Script execution resumed.');
+};
+const recordingStart = browserTool('browser_start_recording');
+const startRecording = recordingStart.handle;
+recordingStart.handle = async (context, params, response) => {
+  const browserContext = await context.ensureBrowserContext();
+  const start = browserContext._startRecording;
+  const state = {actions: [], dialogs: new Map(), upload: undefined};
+  browserContext._startRecording = function(options, sink) {
+    const action = (page, data, code) => {
+      const files = state.upload?.page === page ? state.upload.files : undefined;
+      const fileInput = data.name === 'fill' && data.text?.startsWith('C:\\fakepath\\')
+        ? files ? Promise.resolve(true) : page.locator(data.selector).evaluate(element => element.tagName === 'INPUT' && element.type === 'file', {timeout: 1000}).catch(() => undefined)
+        : Promise.resolve(false);
+      return {page, data, code, files, fileInput};
+    };
+    return start.call(this, options, {
+      actionAdded(page, data, code) {state.actions.push(action(page, data, code));sink.actionAdded(page, data, code);},
+      actionUpdated(page, data, code) {
+        const updated = action(page, data, code);
+        if (state.actions.length) state.actions[state.actions.length - 1] = updated;else state.actions.push(updated);
+        sink.actionUpdated(page, data, code);
+      },
+      signalAdded(page, signal, code) {
+        const last = state.actions.at(-1);
+        if (last && code) last.code = code;
+        sink.signalAdded(page, signal, code);
+      },
+    });
+  };
+  try {
+    await startRecording(context, params, response);
+    recordings.set(context, state);
+  } finally {
+    browserContext._startRecording = start;
+  }
+};
+const uploadTool = browserTool('browser_file_upload');
+const uploadFiles = uploadTool.handle;
+uploadTool.handle = async (context, params, response, signal) => {
+  const state = recordings.get(context);
+  if (!state || !params.paths) return uploadFiles(context, params, response, signal);
+  const tab = await context.ensureTab();
+  state.upload = {page: tab.page, files: await Promise.all(params.paths.map(file => response.resolveClientFilename(file)))};
+  try {return await uploadFiles(context, params, response, signal);} finally {state.upload = undefined;}
+};
+const dialogTool = browserTool('browser_handle_dialog');
+const handleDialog = dialogTool.handle;
+dialogTool.handle = async (context, params, response, signal) => {
+  const state = recordings.get(context);
+  const tab = state && await context.ensureTab();
+  const modal = tab?.modalStates().find(value => value.type === 'dialog');
+  if (!modal) return handleDialog(context, params, response, signal);
+  const dialog = modal.dialog;
+  const original = params.accept ? dialog.accept : dialog.dismiss;
+  const method = params.accept ? 'accept' : 'dismiss';
+  dialog[method] = async function(...args) {
+    const result = await original.apply(this, args);
+    const outcomes = state.dialogs.get(tab.page) || [];
+    outcomes.push({accept: params.accept, promptText: params.promptText});
+    state.dialogs.set(tab.page, outcomes);
+    return result;
+  };
+  try {return await handleDialog(context, params, response, signal);} finally {dialog[method] = original;}
+};
+const recordingStop = browserTool('browser_stop_recording');
+const stopRecording = recordingStop.handle;
+recordingStop.handle = async (context, params, response) => {
+  const state = recordings.get(context);
+  if (!state) return stopRecording(context, params, response);
+  const stop = context.stopRecording;
+  const warnings = [];
+  context.stopRecording = async function() {
+    const result = await stop.call(this);
+    if (!result) return result;
+    const language = context.codegenLanguage();
+    const javascript = ['typescript', 'javascript'].includes(language);
+    const python = language === 'python';
+    await Promise.all(state.actions.map(async action => {action.fileInput = await action.fileInput;}));
+    const dialogCounts = new Map();
+    const dialogIndexes = new Map();
+    for (const action of state.actions) {
+      if (action.code.includes('dialog.dismiss()')) dialogCounts.set(action.page, (dialogCounts.get(action.page) || 0) + 1);
+    }
+    return state.actions.map(action => {
+      let code = action.code;
+      if (action.fileInput !== false) {
+        const index = code.lastIndexOf('.fill(');
+        if (!action.files || !javascript && !python || index < 0) {
+          warnings.push('A recorded file upload was omitted: replay requires actual host paths and a supported code language.');
+          return '';
+        }
+        code = code.slice(0, index) + `.${javascript ? 'setInputFiles' : 'set_input_files'}(${JSON.stringify(action.files)})${javascript ? ';' : ''}`;
+      }
+      if (code.includes('dialog.dismiss()')) {
+        const outcomes = state.dialogs.get(action.page) || [];
+        const index = dialogIndexes.get(action.page) || 0;
+        dialogIndexes.set(action.page, index + 1);
+        if (outcomes.length !== dialogCounts.get(action.page) || !javascript) {
+          warnings.push('A recorded dialog action was omitted: its actual outcome could not be recovered in this code language.');
+          return '';
+        }
+        const outcome = outcomes[index];
+        if (outcome.accept) code = code.replace('dialog.dismiss()', `dialog.accept(${outcome.promptText === undefined ? '' : JSON.stringify(outcome.promptText)})`);
+      }
+      return code;
+    }).filter(code => code.trim());
+  };
+  try {
+    await stopRecording(context, params, response);
+    for (const warning of new Set(warnings)) response.addTextResult(warning);
+  } finally {
+    context.stopRecording = stop;
+    recordings.delete(context);
+  }
+};
+
 const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Loki page annotations</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"><style>
 body{font:16px system-ui;margin:24px;background:#101827;color:#eef2ff}main{max-width:1280px;margin:auto}

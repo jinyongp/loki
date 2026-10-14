@@ -161,6 +161,8 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 	}
 	var client *mcp.Client
 	var upstream *mcp.ClientSession
+	var stoppedMu sync.Mutex
+	var stopped error
 	resources := &ownedResourceProxy{server: server, owners: owners, options: o}
 	if o.ForwardOwnedResources && o.AuthorizeResource == nil {
 		return nil, fmt.Errorf("owned resource forwarding requires a resource authorizer")
@@ -277,6 +279,12 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 					if err := o.Authorize(name); err != nil {
 						return nil, err
 					}
+					stoppedMu.Lock()
+					stopErr := stopped
+					stoppedMu.Unlock()
+					if stopErr != nil {
+						return nil, stopErr
+					}
 					params := &mcp.CallToolParams{Name: name, Arguments: req.Params.Arguments, Meta: upstreamMeta(req.Params.Meta), InputResponses: req.Params.InputResponses, RequestState: req.Params.RequestState}
 					if original := req.Params.GetProgressToken(); original != nil {
 						token := fmt.Sprintf("%s-progress-%d", o.Owner, serial.Add(1))
@@ -290,8 +298,15 @@ func attach(ctx context.Context, server *mcp.Server, owners *bindingOwners, o Op
 					defer cancel()
 					result, err := engine.CallTool(callCtx, params)
 					if callCtx.Err() != nil {
+						// An interrupted mutation may still be running upstream. Stop
+						// the owned engine without replaying it, and preserve a useful
+						// recovery error for the handlers still registered downstream.
+						stopErr := fmt.Errorf("%s upstream call canceled or timed out; owned session stopped, reconnect to continue: %w", o.Owner, callCtx.Err())
+						stoppedMu.Lock()
+						stopped = stopErr
+						stoppedMu.Unlock()
 						_ = engine.Close()
-						return nil, fmt.Errorf("upstream call canceled or timed out; owned session stopped, reconnect to continue: %w", callCtx.Err())
+						return nil, stopErr
 					}
 					return result, err
 				})

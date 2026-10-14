@@ -235,14 +235,12 @@ func Prepare(ctx context.Context, o Options) (Launch, error) {
 		}
 	} else {
 		args = []string{filepath.Join(o.Bundle, "node_modules", "chrome-devtools-mcp", "build", "src", "bin", "chrome-devtools-mcp.js"), "--headless", "--executablePath", chrome, "--userDataDir", profile, "--filesystemRoot", output, "--no-usage-statistics", "--no-performance-crux"}
-		if slices.Contains(o.Capabilities, "extensions") {
-			adapter, err := writeEngineAdapter(profile, "loki-devtools.mjs", devtoolsAdapter)
-			if err != nil {
-				cleanup()
-				return Launch{}, err
-			}
-			args = append([]string{adapter}, args...)
+		adapter, err := writeEngineAdapter(profile, "loki-devtools.mjs", devtoolsAdapter)
+		if err != nil {
+			cleanup()
+			return Launch{}, err
 		}
+		args = append([]string{adapter}, args...)
 		if o.Proxy != "" {
 			args = append(args, "--chromeArg=--proxy-server="+o.Proxy)
 		}
