@@ -34,12 +34,27 @@ func setupActions(state tools.State) []setupAction {
 
 func setupStateLabel(state tools.State) string {
 	if !state.Installed {
-		return "not installed | —"
+		return "not installed"
 	}
 	if state.Enabled {
 		return "installed | enabled"
 	}
 	return "installed | disabled"
+}
+
+func setupToolActions(id string, state tools.State, mode tools.Mode) []setupAction {
+	actions := setupActions(state)
+	if state.Installed && id == "browser" {
+		actions = append([]setupAction{{"Optional features — video recording, PDF and more", "features"}}, actions...)
+	}
+	if state.Installed && state.Enabled && mode == tools.Full {
+		if id == "git" {
+			actions = append(actions, setupAction{"Configure commit signing", "configure"})
+		} else if id == "github" {
+			actions = append(actions, setupAction{"Configure GitHub access", "configure"})
+		}
+	}
+	return actions
 }
 
 // Use the command router so the menu reads and changes the selected execution
@@ -92,11 +107,14 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		choices := make([]huh.Option[string], 0, len(publicToolNames)+1)
 		for _, name := range publicToolNames {
 			state := report.Tools[tools.ID(name)]
-			label := setupStateLabel(state) + " | " + toolRuntimeLabel(state, report.Target.Mode)
+			label := setupStateLabel(state)
+			if state.Installed && state.Enabled {
+				label += " | " + toolRuntimeLabel(state, report.Target.Mode)
+			}
 			if !toolSupportedOnHost(name, report.Target) {
 				label = "requires a Linux host"
 			}
-			choices = append(choices, huh.NewOption(fmt.Sprintf("%-13s %-40s %s", name, label, setupToolDescriptions[name]), name))
+			choices = append(choices, huh.NewOption(fmt.Sprintf("%s — %s — %s", name, label, setupToolDescriptions[name]), name))
 		}
 		choices = append(choices, huh.NewOption("Install multiple tools", "install-many"))
 		if installed, _ := setupToolCounts(report); installed > 0 {
@@ -171,13 +189,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			}
 			continue
 		}
-		actions := setupActions(state)
-		if state.Installed && selected == "browser" {
-			actions = append([]setupAction{{"Optional features — video recording, PDF and more", "features"}}, actions...)
-		}
-		if state.Installed && report.Target.Mode == tools.Full && (selected == "github" || selected == "git") {
-			actions = append(actions, setupAction{"Configure authentication", "configure"})
-		}
+		actions := setupToolActions(selected, state, report.Target.Mode)
 		actionChoices := make([]huh.Option[string], 0, len(actions)+1)
 		for _, action := range actions {
 			actionChoices = append(actionChoices, huh.NewOption(action.label, action.name))
@@ -196,14 +208,20 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		if aborted || action == "" {
 			continue
 		}
-		if action == "features" {
-			updated, featureErr := setupBrowserFeatures(ctx, state, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
+		if action == "features" || action == "configure" && selected == "git" {
+			var updated bool
+			var actionErr error
+			if action == "features" {
+				updated, actionErr = setupBrowserFeatures(ctx, state, hostLabel, input, terminal, func(command []string) error { return invoke(command, diagnostics) })
+			} else {
+				updated, actionErr = setupGitSigning(ctx, hostLabel, input, terminal, invoke)
+			}
 			changed = changed || updated
-			if featureErr != nil {
+			if actionErr != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if err := showSetupResult(ctx, "Browser features — needs attention", shortDiagnostic(featureErr.Error()), featureErr.Error(), input, terminal); err != nil {
+				if err := showSetupResult(ctx, selected+" configuration — needs attention", shortDiagnostic(actionErr.Error()), actionErr.Error(), input, terminal); err != nil {
 					return err
 				}
 			}

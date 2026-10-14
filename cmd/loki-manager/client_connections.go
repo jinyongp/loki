@@ -142,5 +142,5 @@ func disconnectCodex(config string, out io.Writer) error {
 	if err := writeCodexConfiguration(config, old, next); err != nil {
 		return err
 	}
-	return success(out, "Loki disconnected from Codex. Other settings, tool programs and data are retained. Reopen the Codex project.", map[string]any{"changed": true, "config": config})
+	return success(out, "Loki disconnected from Codex. Other settings, tool programs and data are retained. Reload the Loki MCP connection in Codex.", map[string]any{"changed": true, "config": config})
 }

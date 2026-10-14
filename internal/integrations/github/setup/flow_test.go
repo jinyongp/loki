@@ -70,6 +70,42 @@ func TestRunFinishesExistingConfigureOnEnter(t *testing.T) {
 	}
 }
 
+func TestGitHubConfirmationLeavesFollowingMenuInput(t *testing.T) {
+	input := strings.NewReader("\nnext-menu-input\n")
+	transport := func(_ context.Context, request Request) (View, error) {
+		switch request.Action {
+		case "begin":
+			return View{Phase: "installation", RequireConfirmation: true}, nil
+		case "finish":
+			return View{Phase: "ready"}, nil
+		default:
+			return View{}, errors.New("unexpected setup operation")
+		}
+	}
+	if err := Run(t.Context(), transport, Options{Input: input, PollInterval: time.Hour}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	remaining, err := io.ReadAll(input)
+	if err != nil || string(remaining) != "next-menu-input\n" {
+		t.Fatalf("GitHub confirmation consumed another menu's input: %q (%v)", remaining, err)
+	}
+}
+
+func TestGitHubRequiredConfirmationRejectsClosedInput(t *testing.T) {
+	transport := func(_ context.Context, request Request) (View, error) {
+		if request.Action != "begin" {
+			t.Error("closed input must not approve installation access", request.Action)
+		}
+		return View{Phase: "installation", RequireConfirmation: true}, nil
+	}
+	for _, text := range []string{"", "invalid answer without newline"} {
+		err := Run(t.Context(), transport, Options{Input: strings.NewReader(text), PollInterval: time.Hour, Timeout: 100 * time.Millisecond}, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "confirmation input ended") {
+			t.Fatal("closed input waited for a timeout or approved setup", err)
+		}
+	}
+}
+
 func TestRunWaitsForAllAccountsBeforeApplyingBatch(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		t.Run(map[bool]string{false: "initial", true: "existing"}[existing], func(t *testing.T) {

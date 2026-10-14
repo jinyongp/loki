@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -25,7 +28,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "unreachable", "preparation-failed", "connections", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
+	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -41,7 +44,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if err := pty.Setsize(terminal, &pty.Winsize{Rows: 30, Cols: 120}); err != nil {
 		t.Fatal(err)
 	}
-	if kind == "result-narrow" || kind == "features-narrow" || kind == "browser-menu-narrow" {
+	if kind == "result-narrow" || kind == "features-narrow" || kind == "browser-menu-narrow" || kind == "hosts-back-narrow" || kind == "git-signing-narrow" {
 		if err := pty.Setsize(terminal, &pty.Winsize{Rows: 20, Cols: 50}); err != nil {
 			t.Fatal(err)
 		}
@@ -94,8 +97,12 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		return screen.String()
 	}
 	root := filepath.Join(t.TempDir(), "untouched")
+	if strings.HasPrefix(kind, "connections") || kind == "readiness" {
+		t.Setenv("CODEX_HOME", t.TempDir())
+	}
 	var initialState management.Snapshot
-	if kind == "browser-menu-narrow" {
+	var initialConfig []byte
+	if kind == "browser-menu-narrow" || kind == "connections-connect-unchanged" {
 		store := management.Store{Root: root}
 		initialState, err = store.Load()
 		if err != nil {
@@ -104,17 +111,27 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		artifact := tools.Artifact{Module: "browser", Release: management.Release, Target: management.LocalTarget(tools.ProjectHost), URL: "https://example.com/browser.zip", SHA256: strings.Repeat("a", 64), Bytes: 1, Format: "zip"}
 		initialState.Installed["browser"] = management.Installation{Artifact: artifact, Manifest: tools.Manifest{Schema: 1, ID: "browser", Release: management.Release, Targets: []tools.Target{artifact.Target}, Capabilities: slices.Clone(browser.Capabilities)}}
 		initialState.Config.Tools = []tools.Selection{{ID: "browser", Enabled: false, Capabilities: slices.Clone(browser.Capabilities)}}
+		if kind == "connections-connect-unchanged" {
+			initialState.Config.Tools[0].Enabled = true
+		}
 		if err := store.Save(initialState); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if kind == "connections" || kind == "readiness" {
-		t.Setenv("CODEX_HOME", t.TempDir())
+		if kind == "connections-connect-unchanged" {
+			if err := connectCodex(store, []string{"codex"}, io.Discard, io.Discard); err != nil {
+				t.Fatal(err)
+			}
+			config, _ := defaultCodexConfig()
+			initialConfig, err = os.ReadFile(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	if kind == "readiness" {
 		installSetupSSHFixture(t, `{"target":{"os":"linux","arch":"amd64","mode":"project-host"},"ready":false,"healthy":false,"tools":{"browser":{"installed":true,"enabled":true,"readiness":"degraded","reason":"Chrome startup failed\n<launching> long Chrome command\nerror while loading shared libraries: libnspr4.so: cannot open shared object file"}}}`)
 	}
-	if kind == "unreachable" || kind == "preparation-failed" {
+	if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" {
 		installSetupSSHFixture(t, `{}`)
 		t.Setenv("CODEX_HOME", t.TempDir())
 		if kind == "preparation-failed" {
@@ -123,10 +140,40 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	}
 	var output bytes.Buffer
 	var featureCommand []string
+	var signingCommand []string
 	finished := make(chan error, 1)
 	go func() {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
-		if strings.HasPrefix(kind, "features-") {
+		if kind == "install-many-failed" {
+			failure := errors.New("download failed before installation")
+			changed, err := installSetupTools(ctx, management.Report{Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.Full}}, "Fixture Linux", terminal, terminal, func([]string) error { return failure })
+			if errors.Is(err, failure) {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
+			} else {
+				err = fmt.Errorf("installation failure was lost: %v", err)
+			}
+			finished <- err
+		} else if strings.HasPrefix(kind, "git-signing") {
+			changed, err := setupGitSigning(ctx, "Fixture Linux", terminal, terminal, func(args []string, output io.Writer) error {
+				if reflect.DeepEqual(args, []string{"--json", "integrations", "status", "git"}) {
+					_, err := io.WriteString(output, `{"identity":{"name":"Saved Author","email":"saved@example.com"}}`)
+					return err
+				}
+				signingCommand = append([]string{}, args...)
+				_, err := io.WriteString(output, "Public signing key: ssh-ed25519 fixture")
+				return err
+			})
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
+			}
+			finished <- err
+		} else if strings.HasPrefix(kind, "hosts-back") {
+			_, changed, err := chooseSetupHost(ctx, host.frontend, terminal, terminal, false)
+			if err == nil {
+				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
+			}
+			finished <- err
+		} else if strings.HasPrefix(kind, "features-") {
 			state := tools.State{Installed: true, Enabled: false, Capabilities: []string{"pdf"}}
 			changed, err := setupBrowserFeatures(ctx, state, "WSL: Ubuntu", terminal, terminal, func(args []string) error { featureCommand = args; return nil })
 			if err == nil {
@@ -150,7 +197,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": false})
 			}
 			finished <- err
-		} else if kind == "connections" {
+		} else if strings.HasPrefix(kind, "connections") {
 			report := management.Report{Target: management.LocalTarget(tools.ProjectHost), Tools: map[tools.ID]tools.State{"browser": {Installed: true, Enabled: true}}}
 			changed, err := setupConnections(ctx, host, report, terminal, terminal)
 			if err == nil {
@@ -161,14 +208,30 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
-			if kind == "unreachable" || kind == "preparation-failed" {
+			if strings.HasPrefix(kind, "unreachable") || kind == "preparation-failed" {
 				host.explicit = true
 				host.selected = &management.ExecutionSelection{Schema: 1, Host: tools.Host{Kind: "ssh", Address: "fixture@host"}, Command: "loki"}
 			}
 			finished <- runSetupMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		}
 	}()
-	if kind == "browser-menu-narrow" {
+	if kind == "install-many-failed" {
+		waitFor("Install tools")
+		_, _ = io.WriteString(master, " \r")
+		waitFor("Install and enable")
+		_, _ = io.WriteString(master, "\r")
+	} else if strings.HasPrefix(kind, "git-signing") {
+		waitFor("Git signing name")
+		if kind == "git-signing-cancel" {
+			_, _ = io.WriteString(master, "\x1b")
+		} else {
+			_, _ = io.WriteString(master, "\r\r")
+			waitFor("Configure commit signing?", "Saved Author", "saved@example.com")
+			_, _ = io.WriteString(master, "\x1b[D\r")
+			waitFor("Git signing — configured", "Public signing key")
+			_, _ = io.WriteString(master, "\r")
+		}
+	} else if kind == "browser-menu-narrow" {
 		waitFor("Loki tools")
 		_, _ = io.WriteString(master, "\r")
 		waitFor("Optional features — video recording")
@@ -231,8 +294,54 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\r")
 		waitFor("Loki tools: browser")
 		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Client connections", "Inspect client connections")
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Loki client connections (on this computer)")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Client connections", "Inspect client connections")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "connections-disconnect-unchanged" {
+		waitFor("Client connections")
+		_, _ = io.WriteString(master, "\x1b[B\x1b[B\r")
+		waitFor("Disconnect Local", "from Codex?")
+		_, _ = io.WriteString(master, "\x1b[D\r")
+		waitFor("Codex — unchanged", "No Loki-managed connection")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Client connections")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "connections-connect-unchanged" {
+		waitFor("Client connections")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Connect Codex to", "Loki tools: browser")
+		_, _ = io.WriteString(master, "\x1b[D\r")
+		waitFor("Codex — unchanged", "already configured")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Client connections")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if strings.HasPrefix(kind, "hosts-back") {
+		transcript := waitFor("Choose execution host", "Set up another execution host")
+		if strings.Contains(transcript, "managed services") || strings.Contains(transcript, "SSH Linux host") {
+			t.Fatal("preparation routes mixed with saved hosts", transcript)
+		}
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Set up execution host", "SSH Linux host")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Choose execution host", "Set up another execution host")
+		// Reopen the submenu to establish that Back returned to a live chooser.
+		_, _ = io.WriteString(master, "\x1b[B\r")
+		waitFor("Set up execution host", "SSH Linux host")
+		_, _ = io.WriteString(master, strings.Repeat("\x1b[B", len(setupHostPreparationChoices(runtime.GOOS))-1)+"\r")
+		waitFor("Choose execution host", "Set up another execution host")
+		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "fresh" {
 		waitFor("Choose execution host")
+		_, _ = io.WriteString(master, "\x1b")
+	} else if kind == "unreachable-tools" {
+		waitFor("Host unavailable")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Action — could not finish", "cannot manage tools")
+		_, _ = io.WriteString(master, "\r")
+		waitFor("Host unavailable")
 		_, _ = io.WriteString(master, "\x1b")
 	} else if kind == "unreachable" || kind == "preparation-failed" {
 		if kind == "preparation-failed" {
@@ -245,6 +354,8 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\x1b[B\r")
 		waitFor("codex: not configured")
 		_, _ = io.WriteString(master, "\r")
+		waitFor("Client connections", "Inspect client connections")
+		_, _ = io.WriteString(master, "\x1b")
 		waitFor("Host unavailable")
 		_, _ = io.WriteString(master, "\x1b")
 	} else {
@@ -281,10 +392,17 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("terminal was not restored", err)
 	}
-	if kind == "browser-menu-narrow" {
+	if kind == "browser-menu-narrow" || kind == "connections-connect-unchanged" {
 		after, err := (management.Store{Root: root}).Load()
 		if err != nil || !reflect.DeepEqual(after, initialState) {
 			t.Fatal("cancelled feature menu changed installation", err)
+		}
+		if kind == "connections-connect-unchanged" {
+			config, _ := defaultCodexConfig()
+			actual, err := os.ReadFile(config)
+			if err != nil || !bytes.Equal(actual, initialConfig) {
+				t.Fatal("repeated connection rewrote Codex settings", err)
+			}
 		}
 	} else if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("cancelled menu changed installation", err)
@@ -293,11 +411,19 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		Changed bool `json:"changed"`
 		Success bool `json:"success"`
 	}
-	wantChanged := kind == "features-save" || kind == "features-narrow"
+	wantChanged := kind == "features-save" || kind == "features-narrow" || strings.HasPrefix(kind, "git-signing") && kind != "git-signing-cancel"
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil || !result.Success || result.Changed != wantChanged {
 		t.Fatalf("menu contaminated JSON output: %s (%v)", output.String(), err)
 	}
-	if wantChanged {
+	if strings.HasPrefix(kind, "git-signing") {
+		want := []string{"integrations", "setup", "git", "--identity-name", "Saved Author", "--identity-email", "saved@example.com"}
+		if kind == "git-signing-cancel" {
+			want = nil
+		}
+		if !reflect.DeepEqual(signingCommand, want) {
+			t.Fatal("signing configuration did not preserve the identity or mutated on cancel", signingCommand)
+		}
+	} else if wantChanged {
 		if len(featureCommand) != 5 || featureCommand[1] != "disable" || !strings.Contains(featureCommand[4], "devtools") || !strings.Contains(featureCommand[4], "pdf") {
 			t.Fatal("feature save lost checked choices or enabled browser", featureCommand)
 		}

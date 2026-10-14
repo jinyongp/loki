@@ -41,7 +41,10 @@ func removeManagedHost(ctx context.Context, frontend management.Store, selected 
 	if present {
 		result, err := (windowshost.ExecNativeRunner{}).Run(ctx, "wsl.exe", []string{"--unregister", record.Distribution})
 		if err != nil || result.ExitCode != 0 {
-			return fmt.Errorf("owned WSL removal interrupted; retry hosts remove --purge")
+			if host, lookupErr := frontend.HostForTarget(selected); lookupErr == nil {
+				return fmt.Errorf("owned WSL removal interrupted; retry 'loki hosts remove %s --purge'", host.Name)
+			}
+			return fmt.Errorf("owned WSL removal interrupted; find this host with 'loki hosts list', then retry 'loki hosts remove NAME --purge'")
 		}
 	}
 	path := filepath.Join(frontend.Root, "control", "hosts", record.Distribution)

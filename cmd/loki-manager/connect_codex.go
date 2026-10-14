@@ -256,7 +256,7 @@ func connectCodexOnHost(ctx context.Context, store management.Store, selected *m
 	if err := writeCodexConfiguration(*config, old, next); err != nil {
 		return err
 	}
-	return success(out, "Codex tool connection configured: "+*config+"\nReopen the Codex project to load "+server, map[string]any{"config": *config, "server": server, "changed": true})
+	return success(out, "Codex tool connection configured: "+*config+"\nReload the "+server+" MCP connection in Codex to load these settings.", map[string]any{"config": *config, "server": server, "changed": true})
 }
 
 func writeCodexConfiguration(config string, old, next []byte) error {

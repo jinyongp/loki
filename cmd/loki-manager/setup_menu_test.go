@@ -55,7 +55,7 @@ func TestSetupMenuAvailableActions(t *testing.T) {
 		want  []string
 		label string
 	}{
-		{tools.State{}, []string{"install-enable", "install"}, "not installed | —"},
+		{tools.State{}, []string{"install-enable", "install"}, "not installed"},
 		{tools.State{Installed: true}, []string{"enable", "uninstall"}, "installed | disabled"},
 		{tools.State{Installed: true, Enabled: true}, []string{"disable", "enable", "uninstall"}, "installed | enabled"},
 	} {
@@ -101,5 +101,21 @@ func TestSetupMenuActionsRespectInstallationActivationAndServices(t *testing.T) 
 				t.Fatalf("calls %v, error %v", calls, err)
 			}
 		})
+	}
+}
+
+func TestIntegrationMenuRequiresEnabledFullTool(t *testing.T) {
+	for _, id := range []string{"git", "github"} {
+		for _, mode := range []tools.Mode{tools.Full, tools.ProjectHost} {
+			for _, state := range []tools.State{{}, {Installed: true}, {Installed: true, Enabled: true}} {
+				configure := false
+				for _, action := range setupToolActions(id, state, mode) {
+					configure = configure || action.name == "configure"
+				}
+				if configure != (state.Installed && state.Enabled && mode == tools.Full) {
+					t.Fatalf("%s configuration offered without its enabled full-mode prerequisite: %+v %s", id, state, mode)
+				}
+			}
+		}
 	}
 }

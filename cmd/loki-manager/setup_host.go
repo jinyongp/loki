@@ -65,61 +65,96 @@ func selectFullSetupHost(ctx context.Context, store management.Store, input *os.
 	return selected, nil
 }
 
-// Host preparation is an explicit choice, made before downloads or host changes.
-func chooseSetupHost(ctx context.Context, store management.Store, input *os.File, diagnostics io.Writer, full bool) (*management.ExecutionSelection, bool, error) {
-	terminal, ok := diagnostics.(*os.File)
-	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
-		return nil, false, fmt.Errorf("choose an execution host first with 'loki hosts prepare' or 'loki hosts use'; run 'loki setup' in a terminal for guided host selection")
-	}
+func setupSavedHostChoices(registry management.HostRegistry, full bool) []huh.Option[string] {
 	choices := []huh.Option[string]{}
-	registry, err := store.HostRegistry()
-	if err != nil {
-		return nil, false, err
-	}
 	for _, h := range registry.Hosts {
 		if full && !h.Target.Remote() {
 			continue
 		}
 		label := h.Name + " — " + setupHostLabel(&h.Target)
 		if h.ID == registry.Default {
-			label += " (default)"
+			label += " (Loki default)"
 		}
 		choices = append(choices, huh.NewOption(label, "registered:"+h.ID))
 	}
-	if !full {
-		choices = append(choices, huh.NewOption("Local "+runtime.GOOS+" — native browser", "local"))
+	return append(choices, huh.NewOption("Set up another execution host...", "prepare"), huh.NewOption("Back", ""))
+}
+
+func setupHostPreparationChoices(platform string) []huh.Option[string] {
+	choices := []huh.Option[string]{}
+	if platform == "windows" {
+		choices = append(choices,
+			huh.NewOption("Existing WSL distribution — select an installed distribution...", "wsl"),
+			huh.NewOption("Dedicated WSL: loki-tools — create or reuse Loki's host...", "managed-wsl"))
 	}
-	if runtime.GOOS == "windows" {
-		choices = append(choices, huh.NewOption("Managed WSL: loki-tools — create or reuse Loki's dedicated Linux host", "managed-wsl"), huh.NewOption("Existing WSL distribution — choose by name (prepare CLI automatically)", "wsl"))
+	if platform == "linux" {
+		choices = append(choices, huh.NewOption("Local Linux — set up managed services...", "system"))
 	}
-	if runtime.GOOS == "linux" {
-		choices = append(choices, huh.NewOption("Local Linux — prepare managed services (administrator access)", "system"))
+	return append(choices, huh.NewOption("SSH Linux host — enter an address...", "ssh"), huh.NewOption("Back", ""))
+}
+
+// Host preparation is a separate choice, before downloads or host changes.
+func chooseSetupHost(ctx context.Context, store management.Store, input *os.File, diagnostics io.Writer, full bool) (*management.ExecutionSelection, bool, error) {
+	terminal, ok := diagnostics.(*os.File)
+	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
+		return nil, false, fmt.Errorf("choose an execution host first with 'loki hosts prepare' or 'loki hosts use'; run 'loki setup' in a terminal for guided host selection")
 	}
-	choices = append(choices, huh.NewOption("SSH Linux host — prepare services using existing SSH access", "ssh"), huh.NewOption("Back", ""))
-	choice := ""
-	description := "Each host has its own installed tools and data. Switching hosts does not move them."
+	registry, err := store.HostRegistry()
+	if err != nil {
+		return nil, false, err
+	}
+	choices := setupSavedHostChoices(registry, full)
+	description := "Use a saved host, or set up another execution host."
 	if full {
-		description = "This tool needs Linux services. Choose where to install them. Existing tools and data stay on their current host."
+		description = "This tool needs Linux services. Use a saved Linux host, or set one up."
 	}
-	description += "\nThis becomes the default for Loki commands. Existing Codex connections keep their host. Connect Codex adds a connection for this host."
-	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose execution host").Description(description).Options(choices...).Value(&choice)))
+	description += "\nSelection sets Loki's default. Tools, data and existing Codex connections stay on their hosts."
+	for {
+		choice := choices[0].Value
+		for _, option := range choices {
+			if option.Value == "registered:"+registry.Default {
+				choice = option.Value
+			}
+		}
+		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose execution host").Description(description).Options(choices...).Value(&choice)))
+		aborted, err := runSetupForm(ctx, form, input, terminal)
+		if err != nil || aborted || choice == "" {
+			return nil, false, err
+		}
+		if strings.HasPrefix(choice, "registered:") {
+			if err := store.UseHost(strings.TrimPrefix(choice, "registered:")); err != nil {
+				return nil, false, err
+			}
+			selected, err := store.ExecutionSelection()
+			return selected, err == nil, err
+		}
+		selected, changed, err := prepareSetupHost(ctx, store, input, terminal)
+		if err != nil || changed {
+			return selected, changed, err
+		}
+	}
+}
+
+func prepareSetupHost(ctx context.Context, store management.Store, input, terminal *os.File) (*management.ExecutionSelection, bool, error) {
+	choices := setupHostPreparationChoices(runtime.GOOS)
+	choice := choices[0].Value
+	description := "Prepare a host, then choose which tools to install."
+	if runtime.GOOS == "windows" {
+		description += "\nExisting WSL uses your distribution; dedicated WSL uses a separate loki-tools distribution."
+	}
+	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Set up execution host").
+		Description(description).
+		Options(choices...).Value(&choice)))
 	aborted, err := runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted || choice == "" {
 		return nil, false, err
 	}
-	if strings.HasPrefix(choice, "registered:") {
-		if err := store.UseHost(strings.TrimPrefix(choice, "registered:")); err != nil {
-			return nil, false, err
-		}
-		selected, err := store.ExecutionSelection()
-		return selected, err == nil, err
-	}
-	command := []string{"hosts", "use", "local"}
-	preparationLabel := setupHostLabel(nil)
+	var command []string
+	var preparationLabel string
 	switch choice {
 	case "managed-wsl":
 		confirmed := false
-		form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Prepare WSL: loki-tools?").Description("Create a dedicated Ubuntu-24.04 distribution if missing, install Linux services and remember this host. Existing user distributions are preserved.").Affirmative("Prepare host").Negative("Back").Value(&confirmed)))
+		form = huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Set up dedicated WSL: loki-tools?").Description("Create a separate Ubuntu-24.04 distribution if missing and prepare its Loki CLI. Your existing WSL distributions stay separate. Tools are installed in the next step.").Affirmative("Prepare host").Negative("Back").Value(&confirmed)))
 		aborted, err = runSetupForm(ctx, form, input, terminal)
 		if err != nil || aborted || !confirmed {
 			return nil, false, err
@@ -138,8 +173,8 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 			options = append(options, huh.NewOption(name, name))
 		}
 		options = append(options, huh.NewOption("Back", ""))
-		name := ""
-		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose WSL distribution").Description("Uses this distribution's default user. Installs the Loki CLI in that user's private directory if needed, then continues setup.").Options(options...).Value(&name)))
+		name := options[0].Value
+		form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Choose existing WSL distribution").Description("Uses an already installed distribution and its default user. Prepares the Loki CLI if needed; no new distribution is created.").Options(options...).Value(&name)))
 		aborted, err = runSetupForm(ctx, form, input, terminal)
 		if err != nil || aborted || name == "" {
 			return nil, false, err
@@ -151,7 +186,7 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		preparationLabel = "Local Linux (managed system host)"
 	case "ssh":
 		address := ""
-		form = huh.NewForm(huh.NewGroup(huh.NewInput().Title("SSH destination (user@host)").Description("Prepare Loki and Linux services on this host; administrator access may be required.").Value(&address).Validate(func(value string) error {
+		form = huh.NewForm(huh.NewGroup(huh.NewInput().Title("SSH destination (user@host)").Description("Use existing SSH access to prepare the Loki CLI on this Linux host. Tools are installed in the next step.").Value(&address).Validate(func(value string) error {
 			if strings.TrimSpace(value) == "" {
 				return fmt.Errorf("enter an SSH destination")
 			}
@@ -163,9 +198,11 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 		}
 		command = []string{"hosts", "prepare", "ssh", "--address", strings.TrimSpace(address)}
 		preparationLabel = "SSH: " + strings.TrimSpace(address)
+	default:
+		return nil, false, fmt.Errorf("unknown execution host preparation")
 	}
 	setupWorking(terminal, "Selecting and preparing execution host", preparationLabel)
-	if err := runHosts(ctx, store, command[1:], diagnostics, diagnostics); err != nil {
+	if err := runHosts(ctx, store, command[1:], terminal, terminal); err != nil {
 		return nil, false, err
 	}
 	selected, err := store.ExecutionSelection()

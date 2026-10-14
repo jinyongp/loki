@@ -37,6 +37,16 @@ setup home shows the host and offers **Manage tools**, **Client connections**,
 **Check readiness**, and **Change execution host**. Existing host selections are
 reused. An unreachable host can be changed from the home screen.
 
+The host chooser lists saved hosts, including the native local host, and marks
+the **Loki default**. **Set up another execution host** opens a separate menu:
+on Windows, choose an existing WSL distribution, a dedicated `loki-tools` WSL
+distribution, or an SSH Linux host. On Linux, managed local services are also
+available. Existing WSL prepares Loki in a distribution you already have;
+dedicated WSL creates or reuses Loki's separate distribution. Saved hosts can be
+selected directly without repeating preparation. Back returns to the saved-host
+chooser. Host selection sets Loki's default; existing Codex connections keep
+their original hosts.
+
 Manage tools shows installation, activation and runtime verification separately.
 Use ↑/↓ and Enter to choose a tool and an action. **Install multiple tools** uses
 Space to select several tools. Missing tools offer **Install and enable** or
@@ -47,6 +57,12 @@ uninstall can restart remaining enabled services. Native browsers start on deman
 Uninstall confirmation names the tool and target, and retains user data.
 Esc goes back or exits. Completed actions are retained on exit. `loki tools manage`
 opens the tool menu directly. The target is shown in every management screen.
+
+Enabled full-mode Git offers **Configure commit signing**, which collects the
+name and email, reuses the saved identity, and confirms the service restart.
+GitHub offers **Configure GitHub access**. Enable these tools before configuring
+their integrations. Disabled tools do not offer an action that requires enabled
+services.
 
 Interactive setup uses a dedicated terminal screen for each choice. **CHOOSE**
 means input is required; **WORKING** labels progress output; **RESULT** remains
@@ -60,6 +76,13 @@ Esc, so completed actions and readiness failures remain readable after setup
 closes. Readiness checks tools on the selected host; it does not test the client
 app connection. `loki status` shows configuration without starting tools or
 testing connections; `loki doctor` runs a fresh tool readiness check.
+
+Client-connection actions and cancellation return to **Client connections**;
+Back leaves that menu. Repeating an existing Codex connection or disconnecting
+an absent connection reports **unchanged**. Reload the Loki MCP connection in
+Codex after saved connection changes; saving settings does not itself establish
+a live client connection. GitHub's installation confirmation reads only its
+answer and leaves subsequent menu input untouched.
 
 On Windows, an older Loki MCP connection can keep its renamed CLI executable
 locked after an upgrade. Locked, verified backups retain their ownership records

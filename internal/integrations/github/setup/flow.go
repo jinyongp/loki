@@ -3,7 +3,6 @@
 package githubsetup
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -230,18 +229,34 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	finished := make(chan string)
+	type confirmationLine struct {
+		text string
+		err  error
+	}
+	var finished chan confirmationLine
+	var readNext chan struct{}
+	inputPending := false
 	if view.RequireConfirmation || view.AppSettingsURL != "" {
 		input := options.Input
 		if input == nil {
 			input = os.Stdin
 		}
+		finished = make(chan confirmationLine)
+		readNext = make(chan struct{}, 1)
 		go func() {
-			scanner := bufio.NewScanner(input)
-			for scanner.Scan() {
+			for {
 				select {
-				case finished <- scanner.Text():
+				case <-readNext:
 				case <-ctx.Done():
+					return
+				}
+				line, err := readConfirmationLine(ctx, input)
+				select {
+				case finished <- confirmationLine{line, err}:
+				case <-ctx.Done():
+					return
+				}
+				if err != nil {
 					return
 				}
 			}
@@ -250,6 +265,10 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 	for {
 		switch view.Phase {
 		case "installation":
+			if finished != nil && !inputPending {
+				readNext <- struct{}{}
+				inputPending = true
+			}
 			action := "poll"
 			var installationID int64
 			select {
@@ -257,10 +276,25 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 				if view.RequireConfirmation {
 					continue
 				}
-			case line := <-finished:
+			case input := <-finished:
+				inputPending = false
+				if input.err != nil && (input.err != io.EOF || input.text == "") {
+					if input.err == io.EOF && !view.RequireConfirmation {
+						finished = nil // Automatic installation polling remains available.
+						continue
+					}
+					return errors.New("GitHub confirmation input ended or could not be read; rerun setup to continue")
+				}
+				if input.err == io.EOF {
+					finished = nil
+				}
+				line := input.text
 				action = "finish"
 				if strings.TrimSpace(line) != "" {
 					if view.RequireConfirmation {
+						if input.err == io.EOF {
+							return errors.New("GitHub confirmation input ended or could not be read; rerun setup to continue")
+						}
 						fmt.Fprintln(output, "After configuring your accounts in GitHub, press Enter to connect all approved installations.")
 						continue
 					}
@@ -295,6 +329,32 @@ func Run(ctx context.Context, transport Transport, options Options, output io.Wr
 			return err
 		}
 	}
+}
+
+// Do not buffer or start another read until the flow needs another answer.
+// Setup returns to a menu that owns subsequent terminal input.
+func readConfirmationLine(ctx context.Context, input io.Reader) (string, error) {
+	line := make([]byte, 0, 128)
+	var one [1]byte
+	for len(line) <= 4096 {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		n, err := input.Read(one[:])
+		if n > 0 {
+			if one[0] == '\n' {
+				return string(line), nil
+			}
+			line = append(line, one[0])
+		}
+		if err != nil {
+			return string(line), err
+		}
+		if n == 0 {
+			return "", io.ErrNoProgress
+		}
+	}
+	return "", errors.New("GitHub confirmation input exceeds its bound")
 }
 
 func configureInstallationID(raw string) (int64, bool) {

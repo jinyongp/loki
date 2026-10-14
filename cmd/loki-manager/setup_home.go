@@ -120,7 +120,8 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			err = selectErr
 		case "tools":
 			if inspectErr != nil {
-				continue
+				err = fmt.Errorf("cannot manage tools on %s: %w\nCheck host access or choose Change execution host", setupHostLabel(host.selected), inspectErr)
+				break
 			}
 			var result setupChangedWriter
 			err = runToolsMenu(ctx, prefix, host, input, &commandOutput{Writer: &result, json: true}, diagnostics)
@@ -187,5 +188,6 @@ func installSetupTools(ctx context.Context, report management.Report, hostLabel 
 		command = []string{"setup"}
 	}
 	setupWorking(terminal, "Installing selected tools", hostLabel)
-	return true, invoke(append(command, selected...))
+	err = invoke(append(command, selected...))
+	return err == nil, err
 }
