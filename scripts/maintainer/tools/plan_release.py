@@ -85,7 +85,9 @@ def go_tests(closure):
 
 def fingerprints(release):
     inputs, units = Inputs(), {}
-    inputs.known.update({SCRIPTS+"prepare_test_tools.py", SCRIPTS+"verify_release_tools.py"})
+    inputs.known.update({SCRIPTS+"prepare_test_tools.py", SCRIPTS+"verify_release_tools.py",
+                         SCRIPTS+"dependency_inventory.py", SCRIPTS+"dependency_watch.py",
+                         "packaging/tools/dependency-policy.json"})
     common = [SCRIPTS+name for name in ("release_config.py", "input_cache.py", "plan_release.py", "release_pipeline.py")]+["LICENSE"]
     contracts = {"schema": 2, "composition": CONTRACT}
     for system, arch, runner in TARGETS:

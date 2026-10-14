@@ -145,7 +145,7 @@ Releaseway가 버전 선택·tag 생성·제품 빌드·OCI 게시·Pages를 수
 
 릴리스 노트는 현재 조립한 `notes: file`을 전달하고 `notes-existing: verify`로 기존 draft/published 본문과 동일성을 확인한다. 자동 commit 노트 생성은 기능 설명·설치 안내를 의미 기반으로 생성해 주는 기능이 아니므로 현재 제품 노트를 유지한다. action의 state/release-url/notes-report를 summary와 진단 artifact로 보존한다. 중복 create/upload/edit와 공개 asset 교체 로직은 추가하지 않는다.
 
-외부 Action·Go·Node·BuildKit·frontend·native base·browser engine/Chrome·도구 입력은 구현 시 공식 upstream의 최신 안정 버전을 확인해 정확한 version/commit/digest로 고정한다. 이전 근거 파일은 보존하고 새 입력 receipt를 만들어 영향받은 closure를 다시 검증한다. 실행 도중 upstream 최신 버전을 자동으로 골라 받아 동일 계획의 결과물이 달라지게 하지 않는다. 최신 버전 여부와 Action 계약 검사는 final 검증에서 수행한다.
+외부 Action·Go·Node·BuildKit·frontend·native base·browser engine/Chrome·도구 입력은 검토한 version/commit/digest로 고정한다. 배포와 일반 CI는 고정 입력의 일관성·무결성·실제 동작을 검증하며 upstream 최신 버전과 비교하지 않는다. 새 버전 조사는 별도의 주간 GitHub Actions에서 수행하고 재사용하는 추적 Issue 하나에 제안만 갱신한다. 채택은 별도 PR에서 receipt와 관련 핀을 함께 갱신하고 영향받은 closure를 검증한 뒤 결정한다. 자세한 운영 정책은 [의존성 업데이트](dependency-updates.md)를 따른다.
 
 Releaseway는 단일 `release.yml`의 `publish` job에서 사용하며 이전 6개 dispatch 워크플로는 제거했다. 기존 성공 릴리스 evidence는 바꾸지 않으며 이 소스 변경을 실제 공개 검증 통과로 기록하지 않는다.
 

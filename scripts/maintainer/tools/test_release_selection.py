@@ -29,6 +29,17 @@ class RealClosureSelectionTests(unittest.TestCase):
             current,_=plan_release.fingerprints("0.2.4")
         return plan_release.select("0.2.4",current,copy.deepcopy(self.baseline))
 
+    def test_advisory_dependency_changes_do_not_rebuild_products(self):
+        _, inputs = plan_release.fingerprints("0.2.4")
+        paths = ["scripts/maintainer/tools/dependency_inventory.py",
+                 "scripts/maintainer/tools/dependency_watch.py",
+                 "packaging/tools/dependency-policy.json"]
+        for path in paths:
+            self.assertIn(path, inputs.known)
+            plan = self.changed(path)
+            for key in ("manager", "browser", "full", "manager-checks", "browser-checks", "full-checks"):
+                self.assertEqual(plan["matrices"][key], [], (path, key))
+
     def test_cli_help_has_no_browser_or_full_build_or_checks(self):
         plan=self.changed("cmd/loki-manager/help.go")
         self.assertEqual(len(plan["matrices"]["manager"]),6)

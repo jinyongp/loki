@@ -300,3 +300,10 @@ The publisher preserves and verifies OCI manifest digests in GHCR, uploads
 original ZIPs, native catalogs, acceptance records and `SHA256SUMS`, then
 publishes the latest release. Other full-module and desktop SSH checks retain
 their actual validation status; publication does not imply those checks passed.
+
+## Dependency proposals
+
+Release source checks verify accepted pin consistency offline. New upstream versions
+are investigated only by the separate weekly/manual dependency-watch workflow,
+which maintains one advisory issue and never changes or releases code. See
+[dependency update policy](../../../docs/tools/dependency-updates.md).

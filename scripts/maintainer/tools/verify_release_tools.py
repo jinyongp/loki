@@ -1,60 +1,55 @@
-"""Compare locked release inputs with official stable upstream metadata."""
-import json
+"""Verify accepted pin consistency offline; newer upstream versions never gate CI."""
 import re
-import subprocess
-from urllib.request import urlopen
-
-from release_config import ROOT, CONFIG
+from dependency_inventory import ROOT, inventory, literals, policy, read
 
 
-def document(url):
-    with urlopen(url,timeout=30) as response:
-        return json.load(response)
+def verify(root=ROOT):
+    config = read(root/'packaging/tools/release.json')
+    package = read(root/'modules/browser/package.json')
+    lock = read(root/'package-lock.json')['packages']
+    acquisition = literals(root/'scripts/maintainer/tools/acquire_browser_inputs.py')['VERSIONS']
+    assembly = literals(root/'scripts/maintainer/tools/build_browser_bundle.py')['VERSIONS']
+    if acquisition != assembly:
+        raise ValueError('Browser acquisition and assembly pins differ')
+    engines = [read(root/'package.json'), package, lock[''], lock['modules/browser']]
+    if any(item.get('engines', {}).get('node') != acquisition['node'] for item in engines):
+        raise ValueError('Node engine pins differ between manifests, lock and acquisition')
+    for name, version in package['dependencies'].items():
+        if lock['node_modules/'+name]['version'] != version or lock['modules/browser']['dependencies'][name] != version:
+            raise ValueError('npm manifest and lock pins differ: '+name)
+    constants = dict(re.findall(r'^const (\w+) = "([^"]+)"', (root/'modules/browser/browser.go').read_text(), re.M))
+    expected = {'NodeVersion': acquisition['node'], 'ChromeVersion': acquisition['chrome'],
+                'PlaywrightVersion': package['dependencies']['@playwright/mcp'],
+                'DevToolsVersion': package['dependencies']['chrome-devtools-mcp'],
+                'PlaywrightCoreVersion': lock['node_modules/playwright-core']['version']}
+    if any(constants.get(key) != version for key, version in expected.items()):
+        raise ValueError('Runtime browser version checks differ from accepted inputs')
+    for path in (root/'packaging/tools/inputs').glob('browser-*-*.json'):
+        for name, asset in read(path).get('assets', {}).items():
+            if asset['version'] != acquisition[name] or not re.fullmatch('[a-f0-9]{64}', asset.get('sha256', '')) or not isinstance(asset.get('bytes'), int) or asset['bytes'] <= 0:
+                raise ValueError('Invalid or inconsistent browser receipt: '+path.name)
+    minimum = re.search(r'^go (\S+)', (root/'go.mod').read_text(), re.M).group(1)
+    if tuple(map(int, config['go'].split('.'))) < tuple(map(int, minimum.split('.'))):
+        raise ValueError('Pinned build Go is older than the module requirement')
+    workflow = (root/'.github/workflows/release.yml').read_text()
+    if set(re.findall(r"go-version:\s*['\"]?([0-9.]+)", workflow)) != {config['go']}:
+        raise ValueError('Release workflow Go pins differ from the build configuration')
+    owners = literals(root/'scripts/maintainer/tools/build_go_vendor.py')['OWNERS']
+    for path in (root/'packaging/tools/inputs').glob('*-source-linux-*.json'):
+        value = read(path)
+        if value.get('owner') in owners:
+            accepted = owners[value['owner']]
+            if any(value['source'][key] != accepted[key] for key in ['version', 'commit']):
+                raise ValueError('Vendor source receipt differs from accepted pin: '+path.name)
+    items = inventory(root)
+    for item in items:
+        if item['kind'] not in {'action', 'image'} and len(item['current']) != 1:
+            raise ValueError('Dependency pins differ between targets: '+item['id'])
+    selected_policy = policy(root/'packaging/tools/dependency-policy.json')
+    if set(selected_policy['holds']) - {item['id'] for item in items}:
+        raise ValueError('Dependency policy names an unused dependency')
+    print('Accepted dependency pins are internally consistent (offline).', flush=True)
 
 
-def github(path):
-    return json.loads(subprocess.check_output(["gh","api",path],text=True,timeout=45))
-
-
-def verify():
-    go = next(item["version"] for item in document("https://go.dev/dl/?mode=json") if item["stable"])
-    if go != "go"+CONFIG["go"]:
-        raise ValueError("Go stable pin requires a reviewed source update")
-    node = document("https://nodejs.org/dist/index.json")[0]["version"].removeprefix("v")
-    lock = json.loads((ROOT/"package-lock.json").read_text())
-    engines = [json.loads((ROOT/"package.json").read_text()),
-               json.loads((ROOT/"modules/browser/package.json").read_text()),
-               lock["packages"][""], lock["packages"]["modules/browser"]]
-    if any(package.get("engines", {}).get("node") != node for package in engines):
-        raise ValueError("npm manifest/lock Node engines require a consistent reviewed update")
-    chrome = document("https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json")["channels"]["Stable"]["version"]
-    for path in (ROOT/"packaging/tools/inputs").glob("browser-*-*.json"):
-        recipe=json.loads(path.read_text())
-        if "assets" in recipe and (recipe["assets"]["node"]["version"] != node or recipe["assets"]["chrome"]["version"] != chrome):
-            raise ValueError("browser stable Node/Chrome receipts require a reviewed update: "+path.name)
-    package=json.loads((ROOT/"modules/browser/package.json").read_text())
-    for name in ("@playwright/mcp","chrome-devtools-mcp"):
-        expected=document("https://registry.npmjs.org/"+name.replace("/","%2f"))["dist-tags"]["latest"]
-        if package["dependencies"][name] != expected:
-            raise ValueError("browser MCP stable pin requires a reviewed update: "+name)
-    workflow=(ROOT/".github/workflows/release.yml").read_text()
-    for repository, locked in sorted(set(re.findall(r"uses: ([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([a-f0-9]{40})",workflow))):
-        release=github(f"repos/{repository}/releases/latest")
-        ref=github(f"repos/{repository}/git/ref/tags/{release['tag_name']}")["object"]
-        if ref["type"]=="tag":ref=github(f"repos/{repository}/git/tags/{ref['sha']}")["object"]
-        if ref["sha"] != locked:
-            raise ValueError("Action stable pin requires a reviewed update: "+repository)
-    from build_go_vendor import OWNERS
-    workspace=json.loads((ROOT/"packaging/tools/inputs/workspace-linux-amd64.json").read_text())
-    if github("repos/BurntSushi/ripgrep/releases/latest")["tag_name"].removeprefix("v") != workspace["inputs"][0]["version"]:
-        raise ValueError("ripgrep stable pin requires a reviewed update")
-    for owner,repository in (("github","cli/cli"),("coordination","jinyongp/devtools")):
-        if github(f"repos/{repository}/releases/latest")["tag_name"] != "v"+OWNERS[owner]["version"]:
-            raise ValueError("native stable tool pin requires a reviewed update: "+repository)
-    for repository,selected in (("moby/buildkit","v0.34.0"),("docker/buildx","v0.38.0")):
-        if github(f"repos/{repository}/releases/latest")["tag_name"] != selected:
-            raise ValueError("image builder stable pin requires a reviewed update: "+repository)
-    print("Official stable tool and action pins verified.",flush=True)
-
-
-if __name__=="__main__":verify()
+if __name__ == '__main__':
+    verify()
