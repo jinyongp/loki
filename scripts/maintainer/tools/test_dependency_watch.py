@@ -108,6 +108,22 @@ class AdvisoryPolicy(unittest.TestCase):
 
 
 class IssueLifecycle(unittest.TestCase):
+    def test_proposals_use_sections_and_fold_long_pin_details(self):
+        row = dict(item('action:actions/download-artifact', 'action', 'a'*40),
+                   source='actions/download-artifact', paths=['first.yml', 'second.yml'],
+                   status='review', candidate=dict(version='b'*40, release='v8.0.2',
+                   url='https://github.com/actions/download-artifact/releases/tag/v8.0.2',
+                   published='2026-10-07T10:09:51Z'))
+        body, _ = watch.render(dict(rows=[row]))
+        self.assertFalse(any(line.startswith('|') for line in body.splitlines()))
+        self.assertIn('### actions/download-artifact', body)
+        self.assertIn('Published 2026-10-07', body)
+        self.assertNotIn('2026-10-07T10:09:51Z', body.split(watch.STATE)[0])
+        self.assertIn('['+'a'*12+']', body.split('<details>')[0])
+        details = body.split('<details>')[1].split('</details>')[0]
+        for value in ['a'*40, 'b'*40, 'first.yml', 'second.yml']:
+            self.assertIn(value, details)
+
     def test_one_issue_noop_close_reopen_and_supersede(self):
         github = Issues()
         self.assertEqual(watch.publish(report('1.0.0'), github)['action'], 'none')

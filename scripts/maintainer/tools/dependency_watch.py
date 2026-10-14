@@ -209,24 +209,53 @@ def render(report, old_body=''):
             rows.append(row)
     rows.sort(key=lambda row: row['id'])
     counts = {status: sum(x['status']==status for x in report['rows']) for status in ['current', 'review', 'held', 'unknown']}
-    lines = [START, 'New versions are proposals, not requirements for releasing Loki.', '',
-             'Pins change only through a reviewed PR with the affected native acceptance checks. No automatic changes, merges or releases.', '',
-             f"Current: {counts['current']} · Review: {counts['review']} · Held: {counts['held']} · Unknown: {counts['unknown']}", '',
-             '| Dependency | Accepted | Candidate | Review state | Pins |', '| --- | --- | --- | --- | --- |']
-    for row in rows:
-        candidate = row.get('candidate', {})
-        version = candidate.get('release', candidate.get('version', 'unknown'))
-        url = candidate.get('url', '')
-        target = escape(version)
-        if re.match(r'^https://[^\s()<>]+$', url):
-            target = '['+target+']('+url+')'
-        details = [row['status'], row.get('reason', row.get('error', ''))]
-        details += [candidate.get('channel', ''), candidate.get('published', '') or '']
-        if row['status'] == 'review':
-            details.append('verify platforms, compatibility, known issues and runtime; update receipts/locks together')
-        lines.append('| '+escape(row['id'])+' | '+escape(', '.join(row['current']))+' | '+target+' | '+escape('; '.join(x for x in details if x))+' | '+escape(', '.join(row['paths']))+' |')
-    lines += ['', 'Holds live in `packaging/tools/dependency-policy.json`: record a reason and an expiry date (UTC) or exact candidate version.',
-              'Direct Go/npm dependencies are tracked. Playwright FFmpeg follows the MCP dependency; OS package closures are reviewed with their base image/tool update. Image digests track the existing OS/tool tag, without forcing a distribution upgrade.', '',
+    lines = [START, 'New versions are review proposals. Accepted pins remain valid for Loki releases.', '',
+             f"To review: {counts['review']} · Held: {counts['held']} · Unavailable: {counts['unknown']} · Unchanged: {counts['current']}", '',
+             'Adopt selected proposals through a reviewed PR: verify supported platforms, compatibility and runtime, and update linked receipts and locks together.']
+    for status, heading in [('review', 'To review'), ('held', 'On hold'), ('unknown', 'Lookup unavailable')]:
+        selected = [row for row in rows if row['status'] == status]
+        if not selected:
+            continue
+        lines += ['', '## '+heading]
+        for row in selected:
+            candidate = row.get('candidate', {})
+            version = candidate.get('release', candidate.get('version', 'unknown'))
+            url = candidate.get('url', '')
+            target = escape(version)
+            if len(target) > 30:
+                target = target.removeprefix('sha256:')[:12]
+            if re.match(r'^https://[^\s()<>]+$', url):
+                target = '['+target+']('+url+')'
+            current = []
+            for accepted in row['current']:
+                label = escape(accepted if len(accepted) <= 30 else accepted.removeprefix('sha256:')[:12])
+                if row['kind'] == 'action':
+                    current.append('['+label+'](https://github.com/'+row['source']+'/commit/'+accepted+')')
+                else:
+                    current.append('`'+label+'`')
+            name = row['id'].split(':', 1)[-1] if ':' in row['id'] else row['id']
+            proposal = 'Last known proposal' if status == 'unknown' else 'Proposed'
+            lines += ['', '### '+escape(name), '', 'Accepted: '+', '.join(current)+' → '+proposal+': '+target]
+            metadata = []
+            if candidate.get('published'):
+                metadata.append('Published '+escape(candidate['published'][:10]))
+            if candidate.get('channel'):
+                metadata.append(escape(candidate['channel']))
+            if metadata:
+                lines += ['', ' · '.join(metadata)]
+            if row.get('reason') or row.get('error'):
+                lines += ['', escape(row.get('reason', row.get('error')))]
+            detailed = len(row['paths']) > 1 or any(len(value)>30 for value in row['current']) or len(candidate.get('version', '')) > 30
+            if detailed:
+                lines += ['', '<details>', '<summary>Pin locations and full references</summary>', '']
+                for accepted in row['current']:
+                    lines.append('- Accepted: `'+escape(accepted)+'`')
+                if candidate.get('version'):
+                    lines.append('- Candidate reference: `'+escape(candidate['version'])+'`')
+                lines += ['']+['- `'+escape(path)+'`' for path in row['paths']]+['', '</details>']
+            else:
+                lines += ['', 'Pins: '+', '.join('`'+escape(path)+'`' for path in row['paths'])]
+    lines += ['', '[Update and hold policy](https://github.com/jinyongp/loki/blob/main/docs/tools/dependency-updates.md)', '',
               STATE+json.dumps(dict(schema=1, rows=rows), sort_keys=True, separators=(',', ':')).replace('-->', '--\\u003e')+' -->', END]
     managed = '\n'.join(lines)
     if old_body:

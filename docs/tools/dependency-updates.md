@@ -24,8 +24,9 @@ this investigation is not a vulnerability scanner. New major versions require
 compatibility review. A release being labelled stable or having aged does not
 establish that it works with Loki.
 
-The issue lists the accepted versions, candidate, official release link and
-available publication/channel information. Image proposals stay on the accepted
+The issue uses dependency sections rather than tables, with accepted → proposed
+versions, official release links and publication dates. Long references and multiple
+pin locations are collapsed; shared review instructions appear once. Image proposals stay on the accepted
 OS/tool tag. A new Ubuntu release does not silently change the distribution.
 FFmpeg follows the revision required by the latest stable Playwright MCP, not
 an unrelated FFmpeg release stream. Node's channel is explicit in the policy:
