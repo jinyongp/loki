@@ -47,7 +47,7 @@ class Issues:
 
 class PinContracts(unittest.TestCase):
     def test_release_pin_verification_never_queries_upstream(self):
-        with patch('urllib.request.urlopen', side_effect=AssertionError('release queried upstream')), patch('subprocess.run', side_effect=AssertionError('release invoked an external lookup')):
+        with patch('urllib.request.urlopen', side_effect=AssertionError('release queried upstream')), patch('urllib.request.OpenerDirector.open', side_effect=AssertionError('release opened an upstream connection')), patch('subprocess.run', side_effect=AssertionError('release invoked an external lookup')):
             verify_release_tools.verify()
 
     def test_changed_receipt_is_rejected_without_a_latest_version_check(self):

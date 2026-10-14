@@ -87,7 +87,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		"scripts/build/build-wsl.sh",
 		"scripts/verify/verify-release.sh",
 		"scripts/verify/verify-wsl.sh",
-		"scripts/verify/release-pins.sh",
+		"scripts/maintainer/tools/verify_release_tools.py",
 		"scripts/maintainer/lifecycle.sh",
 		"tools/release/bootstrapbuild/main.go",
 		"tools/release/releasebuild/main.go",
@@ -100,6 +100,7 @@ func TestCanonicalReleasePackagingPaths(t *testing.T) {
 		}
 	}
 	for _, obsolete := range []string{
+		"scripts/verify/release-pins.sh",
 		"packaging/container/Dockerfile",
 		"packaging/go/execution-contract.json",
 		"scripts/build-oci.sh",

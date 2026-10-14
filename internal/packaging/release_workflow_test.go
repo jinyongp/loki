@@ -218,44 +218,6 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	}
 }
 
-func TestReleasePinVerifierCoversCurrentStableToolchain(t *testing.T) {
-	root := filepath.Join("..", "..")
-	raw, err := os.ReadFile(filepath.Join(root, "scripts", "verify", "release-pins.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(raw)
-	for _, required := range []string{
-		"https://go.dev/dl/?mode=json",
-		"https://static.rust-lang.org/dist/channel-rust-stable.toml",
-		"https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
-		"APKINDEX.tar.gz",
-		"jinyongp/devtools",
-		"cli/cli",
-		"BurntSushi/ripgrep",
-		"releaseway/actions",
-		"https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages",
-		"latest_package_version docker-ce",
-		"latest_package_version docker-compose-plugin",
-		"docker/dockerfile:1",
-		"alpine/git:latest",
-		"docker buildx imagetools inspect",
-		"packaging/images/Dockerfile|core",
-		"packaging/images/browser.Dockerfile|browser",
-		"packaging/release-inputs/Dockerfile|release-inputs",
-		"verify_frontend",
-		"verify_go_builder",
-		"verify_alpine_runtime",
-		"release dependency check unavailable",
-		"current digest could not be resolved after 3 attempts",
-		"while test \"$attempt\" -le 3",
-	} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("release pin verifier lacks %q", required)
-		}
-	}
-}
-
 func TestInstallerDocumentationKeepsCanonicalOneLineInstall(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
