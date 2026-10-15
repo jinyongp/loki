@@ -3,6 +3,29 @@
 This report records executed checks and the published release. Pending checks
 retain their actual validation status.
 
+## Finding current release evidence
+
+Start with the [current release](https://github.com/jinyongp/loki/releases/latest)
+and its `loki-release-lock.json` asset. The sections below retain historical
+execution records; their version numbers and labels such as `Unreleased` describe
+the stage at which those checks ran, not the latest release's support status.
+
+The lock's `release` and `source_commit` identify the release source. Each entry
+in `units` records its target, immutable artifact or image identity, and
+`acceptance`: the source commit, OS/architecture/mode, validation fingerprint,
+`passed`, and GitHub Actions `run_id`/`run_attempt`. Follow the referenced run's
+job logs for the exact checks and results. Reused artifacts retain their own
+release and URL; a newer catalog does not imply every module was rebuilt.
+
+The [release workflow](../../.github/workflows/release.yml) separates source
+checks from manager, browser and full-runtime acceptance. A successful push run
+does not establish packaged acceptance. Publication, installer Pages deployment
+and public installation verification are separate jobs; check their actual
+conclusions before treating a release as complete. A native build, browser tool
+execution, desktop image rendering and live external integration establish
+different capabilities. Historical gaps below require current evidence rather
+than assumptions that they are either still open or already resolved.
+
 ## Published 0.2.11
 
 [Loki 0.2.11](https://github.com/jinyongp/loki/releases/tag/v0.2.11) was
