@@ -301,7 +301,9 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			_, _ = io.WriteString(master, "\x1b[B\r")
 			waitFor("Page 2/", "[unsafe-code]")
 			_, _ = io.WriteString(master, "\x1b")
-			waitFor("Browser features — unchanged")
+			// Details repeats the result title. Wait for the result's own
+			// control before sending Enter, including split terminal frames.
+			waitFor("Continue — return to menu")
 			_, _ = io.WriteString(master, "\r")
 		} else {
 			_, _ = io.WriteString(master, " \r")
