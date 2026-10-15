@@ -108,11 +108,21 @@ func (s *setupSession) startScreen(ctx context.Context) *setupScreen {
 	if s.screen == nil {
 		screen := &setupScreen{done: make(chan struct{})}
 		model := &setupScreenModel{cancel: s.cancel}
-		screen.program = tea.NewProgram(model, tea.WithInput(s.input), tea.WithOutput(setupTerminalOutput{File: s.terminal, fd: s.terminal.Fd()}), tea.WithContext(ctx))
+		// Context cancellation kills Bubble Tea without waiting for its input
+		// reader. Request a graceful quit instead, so terminal descriptors stay
+		// valid until all readers have stopped and Run has restored the console.
+		screen.program = tea.NewProgram(model, tea.WithInput(s.input), tea.WithOutput(setupTerminalOutput{File: s.terminal, fd: s.terminal.Fd()}))
 		s.screen = screen
 		go func() {
 			_, screen.err = screen.program.Run()
 			close(screen.done)
+		}()
+		go func() {
+			select {
+			case <-ctx.Done():
+				screen.program.Quit()
+			case <-screen.done:
+			}
 		}()
 	}
 	return s.screen
