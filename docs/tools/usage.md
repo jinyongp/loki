@@ -48,8 +48,10 @@ chooser. Host selection sets Loki's default; existing Codex connections keep
 their original hosts.
 
 Manage tools shows installation, activation and runtime verification separately.
-Use ↑/↓ and Enter to choose a tool and an action. **Install multiple tools** uses
-Space to select several tools. Missing tools offer **Install and enable** or
+Use ↑/↓ and Enter to choose a tool and an action. Names and states are aligned;
+the focused tool's description and runtime details appear above the list. Space
+marks missing tools for installation directly in this list; Enter opens the
+installation choices for the marked tools. Missing tools offer **Install and enable** or
 **Install only**; installed tools offer **Enable** or **Disable**, and **Uninstall**.
 Installation alone leaves new tools disabled. Unsupported tools explain their
 Linux-host requirement. Full services are reconciled after activation changes;

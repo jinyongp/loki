@@ -109,40 +109,25 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 		if initial == nil {
 			initial = report.Tools
 		}
-		choices := make([]huh.Option[string], 0, len(publicToolNames)+1)
-		for _, name := range publicToolNames {
-			state := report.Tools[tools.ID(name)]
-			label := setupStateLabel(state)
-			if state.Installed && state.Enabled {
-				label += " | " + toolRuntimeLabel(state, report.Target.Mode)
-			}
-			if !toolSupportedOnHost(name, report.Target) {
-				label = "requires a Linux host"
-			}
-			choices = append(choices, huh.NewOption(fmt.Sprintf("%s — %s — %s", name, label, setupToolDescriptions[name]), name))
-		}
-		choices = append(choices, huh.NewOption("Install multiple tools", "install-many"))
-		if installed, _ := setupToolCounts(report); installed > 0 {
-			choices = append(choices, huh.NewOption("Uninstall all tools (keep data)", "uninstall-all"))
-		}
-		if !host.explicit {
-			choices = append(choices, huh.NewOption("Change execution host", "host"))
-		}
-		choices = append(choices, huh.NewOption("Done", ""))
 		selected := cursor
 		hostLabel := setupHostLabel(host.selected)
-		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title("Loki tools").Description("Host: " + hostLabel + "\nInstall, enable, disable or uninstall. ↑/↓ move · Enter choose · Esc back").Options(choices...).Value(&selected)))
+		picker := newSetupToolsPicker(report, hostLabel, !host.explicit, &selected)
+		form := huh.NewForm(huh.NewGroup(picker))
 		aborted, err := runSetupForm(ctx, form, input, terminal)
 		if err != nil {
 			return err
 		}
-		if aborted || selected == "" {
+		installations := picker.installations()
+		if aborted || selected == "" && len(installations) == 0 {
 			if ownSession != nil {
 				ownSession.print(terminal)
 			}
 			return success(out, "Setup closed.", map[string]any{"changed": changed || !reflect.DeepEqual(initial, report.Tools)})
 		}
 		cursor = selected
+		if len(installations) > 0 {
+			selected, cursor = "install-many", installations[0]
+		}
 		if selected == "uninstall-all" {
 			confirmed := false
 			form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Uninstall all tools on " + hostLabel + "?").Description("Remove all tool programs and stop their services on this host. User data, credentials, the host and CLI are retained.").Affirmative("Uninstall all tools").Negative("Back").Value(&confirmed)))
@@ -168,7 +153,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			continue
 		}
 		if selected == "install-many" {
-			updated, err := installSetupTools(ctx, report, hostLabel, input, terminal, func(command []string, log io.Writer) error { return invoke(command, log, log) })
+			updated, err := installSetupTools(ctx, installations, hostLabel, input, terminal, func(command []string, log io.Writer) error { return invoke(command, log, log) })
 			if err != nil {
 				if viewErr := showSetupResult(ctx, "Installation — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
 					return viewErr

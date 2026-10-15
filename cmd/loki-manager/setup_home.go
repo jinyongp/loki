@@ -190,25 +190,13 @@ func toolSupportedOnHost(name string, target tools.Target) bool {
 	return target.OS == "linux" || name == "browser" && (target.OS != "windows" || target.Arch != "arm64")
 }
 
-func installSetupTools(ctx context.Context, report management.Report, hostLabel string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
-	options := []huh.Option[string]{}
-	for _, name := range publicToolNames {
-		if !report.Tools[tools.ID(name)].Installed && toolSupportedOnHost(name, report.Target) {
-			options = append(options, huh.NewOption(name+" — "+setupToolDescriptions[name], name))
-		}
-	}
-	if len(options) == 0 {
-		return false, showSetupResult(ctx, "Installation — nothing to add", "All supported tools are installed on "+hostLabel+".", "", input, terminal)
-	}
-	var selected []string
-	form := huh.NewForm(huh.NewGroup(huh.NewMultiSelect[string]().Title("Install tools").Description("Host: " + hostLabel + "\nSpace select · Enter continue · Esc back").Options(options...).Value(&selected)))
-	aborted, err := runSetupForm(ctx, form, input, terminal)
-	if err != nil || aborted || len(selected) == 0 {
-		return false, err
+func installSetupTools(ctx context.Context, selected []string, hostLabel string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
+	if len(selected) == 0 {
+		return false, nil
 	}
 	action := "install-enable"
-	form = huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(strings.Join(selected, ", ")).Description("Host: "+hostLabel).Options(huh.NewOption("Install and enable", "install-enable"), huh.NewOption("Install only (disabled)", "install"), huh.NewOption("Back", "")).Value(&action)))
-	aborted, err = runSetupForm(ctx, form, input, terminal)
+	form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(strings.Join(selected, ", ")).Description("Host: "+hostLabel).Options(huh.NewOption("Install and enable", "install-enable"), huh.NewOption("Install only (disabled)", "install"), huh.NewOption("Back", "")).Value(&action)))
+	aborted, err := runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted || action == "" {
 		return false, err
 	}

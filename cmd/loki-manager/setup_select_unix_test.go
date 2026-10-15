@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"golang.org/x/term"
@@ -28,7 +29,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "remote-home", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "features-all-result", "browser-menu-narrow"} {
+	for _, kind := range []string{"tools", "tools-install-cancel", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "remote-home", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "features-all-result", "browser-menu-narrow"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -184,7 +185,19 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		host := setupMenuHost{frontend: management.Store{Root: root}}
 		if kind == "install-many-failed" {
 			failure := errors.New("download failed before installation")
-			changed, err := installSetupTools(ctx, management.Report{Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.Full}}, "Fixture Linux", terminal, terminal, func([]string, io.Writer) error { return failure })
+			cursor := "browser"
+			picker := newSetupToolsPicker(management.Report{Target: tools.Target{OS: "linux", Arch: "amd64", Mode: tools.Full}}, "Fixture Linux", false, &cursor)
+			_, err := runSetupForm(ctx, huh.NewForm(huh.NewGroup(picker)), terminal, terminal)
+			if err != nil {
+				finished <- err
+				return
+			}
+			changed, err := installSetupTools(ctx, picker.installations(), "Fixture Linux", terminal, terminal, func(command []string, _ io.Writer) error {
+				if !reflect.DeepEqual(command, []string{"setup", "browser", "workspace"}) {
+					return fmt.Errorf("wrong batch installation: %v", command)
+				}
+				return failure
+			})
 			if errors.Is(err, failure) {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
 			} else {
@@ -248,7 +261,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
 			}
 			finished <- err
-		} else if kind == "tools" || kind == "browser-menu-narrow" {
+		} else if kind == "tools" || kind == "tools-install-cancel" || kind == "browser-menu-narrow" {
 			finished <- runToolsMenu(ctx, []string{"--root", root}, host, terminal, &commandOutput{Writer: &output, json: true}, terminal)
 		} else {
 			host.explicit = kind == "home"
@@ -260,10 +273,17 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 	}()
 	if kind == "install-many-failed" {
-		waitFor("Install tools")
-		_, _ = io.WriteString(master, " \r")
+		waitFor("Loki tools", "coordination")
+		_, _ = io.WriteString(master, " \x1b[B \r")
 		waitFor("Install and enable")
 		_, _ = io.WriteString(master, "\r")
+	} else if kind == "tools-install-cancel" {
+		waitFor("Loki tools", "coordination")
+		_, _ = io.WriteString(master, " \x1b[B \r")
+		waitFor("browser, workspace", "Install and enable")
+		_, _ = io.WriteString(master, "\x1b")
+		waitFor("Loki tools", "coordination")
+		_, _ = io.WriteString(master, "\x1b")
 	} else if strings.HasPrefix(kind, "git-signing") {
 		waitFor("Git signing name")
 		if kind == "git-signing-cancel" {
@@ -435,7 +455,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		_, _ = io.WriteString(master, "\x1b")
 		waitFor("coordination")
 		if kind == "tools" {
-			_, _ = io.WriteString(master, strings.Repeat("\x1b[B", len(publicToolNames)+1)+"\r")
+			_, _ = io.WriteString(master, strings.Repeat("\x1b[B", len(publicToolNames))+"\r")
 			waitFor("Choose execution host")
 			_, _ = io.WriteString(master, "\x1b")
 			waitFor("coordination")
