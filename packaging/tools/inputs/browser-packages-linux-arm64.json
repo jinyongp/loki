@@ -243,12 +243,33 @@
       "version": "2.3.2-1build1.1"
     },
     {
-      "archive": "libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.8_arm64.deb",
-      "bytes": 51868,
+      "archive": "libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_arm64.deb",
+      "bytes": 51926,
       "name": "libapparmor1",
-      "sha256": "02674239eb575406dae2474e460ee801ebb9c7336892df30772f03e8a7ec7bab",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.8_arm64.deb",
-      "version": "4.0.1really4.0.1-0ubuntu0.24.04.8"
+      "sha256": "4af41833a547112a434bf5f9f83ca9607f8b1cd981197e5b2b14e5bf4c58b820",
+      "signed_index": {
+        "indices": [
+          {
+            "bytes": 126127,
+            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-security_InRelease",
+            "sha256": "16af1ca8aa09572ae6d4ad55a083c69defb84961b3f9fe7a4b4f297cc690afa5"
+          },
+          {
+            "bytes": 126125,
+            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-updates_InRelease",
+            "sha256": "e1cc62b7aa9a5ab3eb01359e28a7bfa402891bcb5e01507523ac20a01ef7e6f9"
+          },
+          {
+            "bytes": 255850,
+            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble_InRelease",
+            "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"
+          }
+        ],
+        "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+        "verification": "APT authenticated InRelease and package index"
+      },
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_arm64.deb",
+      "version": "4.0.1really4.0.1-0ubuntu0.24.04.9"
     },
     {
       "archive": "libargon2-1_0~20190702+dfsg-4build1_arm64.deb",

@@ -243,12 +243,33 @@
       "version": "2.3.2-1build1.1"
     },
     {
-      "archive": "libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.8_amd64.deb",
-      "bytes": 51408,
+      "archive": "libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_amd64.deb",
+      "bytes": 51476,
       "name": "libapparmor1",
-      "sha256": "9c9ab793bcf772315fc754abb9b9a9f1ef4f828bd5d1c0a40c6e192624f3e86e",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.8_amd64.deb",
-      "version": "4.0.1really4.0.1-0ubuntu0.24.04.8"
+      "sha256": "75b570d7517e24c3693c4503b4691ac1fd82934d93faa91460309f22104c5617",
+      "signed_index": {
+        "indices": [
+          {
+            "bytes": 126127,
+            "name": "archive.ubuntu.com_ubuntu_dists_noble-security_InRelease",
+            "sha256": "16af1ca8aa09572ae6d4ad55a083c69defb84961b3f9fe7a4b4f297cc690afa5"
+          },
+          {
+            "bytes": 126125,
+            "name": "archive.ubuntu.com_ubuntu_dists_noble-updates_InRelease",
+            "sha256": "e1cc62b7aa9a5ab3eb01359e28a7bfa402891bcb5e01507523ac20a01ef7e6f9"
+          },
+          {
+            "bytes": 255850,
+            "name": "archive.ubuntu.com_ubuntu_dists_noble_InRelease",
+            "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"
+          }
+        ],
+        "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+        "verification": "APT authenticated InRelease and package index"
+      },
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_amd64.deb",
+      "version": "4.0.1really4.0.1-0ubuntu0.24.04.9"
     },
     {
       "archive": "libargon2-1_0~20190702+dfsg-4build1_amd64.deb",
