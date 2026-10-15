@@ -267,3 +267,20 @@ func TestBatchCrashRecoveryFailsClosedAfterExternalChange(t *testing.T) {
 		t.Fatalf("recovery failure allowed later mutation: %v", err)
 	}
 }
+
+func TestBatchRetainsExternalChangeBeforePublication(t *testing.T) {
+	files := fixture(t)
+	operations := batchFixtureOperationSet(t, files)
+	files.batchFault = func(stage string, index int) error {
+		if stage == "before_apply" && index == 1 {
+			return os.WriteFile(filepath.Join(files.Policy.Root(), "replace.txt"), []byte("external change\n"), 0600)
+		}
+		return nil
+	}
+	_, err := files.Batch(t.Context(), "18000000-0000-4000-8000-000000000001", operations)
+	if fault.Describe(err).Code != fault.CodeOutcomeUnknown {
+		t.Fatalf("unproven rollback: %v", err)
+	}
+	requireWorkspaceContent(t, files, "replace.txt", "external change\n")
+	requireWorkspaceContent(t, files, "move.txt", "move\n")
+}

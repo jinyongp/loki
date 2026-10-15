@@ -615,3 +615,20 @@ client use; a healthy installation alone does not grant tool access.
 and runtime state. A reachable host with degraded tools is reported as needing
 attention, separately from an unavailable host. Repeat a diagnostic command with
 `--json` and the same host/root options to read its full report.
+
+## Workspace editing
+
+`expected_sha256` is an optimistic edit precondition. Existing-file replacements,
+revision restores, image overwrites and batch replacements check the current
+content again after preparing their replacement, immediately before publication.
+A detected change rejects publication and retains the external content. A batch
+whose rollback cannot prove the original state reports `outcome_unknown` and
+requires inspecting affected paths; it does not overwrite an unknown external
+version to force a rollback.
+
+The file service serializes mutations through one `Files` instance. Job processes,
+editors and other service instances do not share that lock. The final content
+check and rename are separate system calls, so this is not an atomic
+compare-and-swap against arbitrary writers. Stop other writers for an exclusive
+edit, or give independent tasks separate worktrees and reconcile their changes.
+The revision saved before an edit does not include an intervening external write.

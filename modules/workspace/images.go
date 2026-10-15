@@ -127,7 +127,12 @@ func (f *Files) writeImage(path, encoded, mime string, overwrite bool, expected,
 			return nil, err
 		}
 	}
-	if err = f.Policy.AtomicWrite(path, data, 0600, exists); err != nil {
+	if exists {
+		err = f.writeIfUnchanged(path, data, 0600, expected)
+	} else {
+		err = f.Policy.AtomicWrite(path, data, 0600, false)
+	}
+	if err != nil {
 		return nil, err
 	}
 	relative, _ := policy.Relative(path)

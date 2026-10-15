@@ -194,7 +194,12 @@ func (f *Files) Restore(path, revision, expected string) (map[string]any, error)
 	} else if expected != "missing" {
 		return nil, fault.New(fault.CodeConflict, "restore target is missing; confirm the absence before restoring", false, "confirm the target is absent and retry with expected_sha256='missing'")
 	}
-	if err = f.Policy.AtomicWrite(path, previous, os.FileMode(metadata.Mode), undo != nil); err != nil {
+	if undo != nil {
+		err = f.writeIfUnchanged(path, previous, os.FileMode(metadata.Mode), expected)
+	} else {
+		err = f.Policy.AtomicWrite(path, previous, os.FileMode(metadata.Mode), false)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return map[string]any{"path": path, "restored_revision": revision, "undo_revision": undo, "sha256": metadata.SHA256, "bytes": metadata.Bytes}, nil

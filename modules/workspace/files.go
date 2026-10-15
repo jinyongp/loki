@@ -275,7 +275,7 @@ func (f *Files) Replace(path, old, new, expected string, count int) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	if err = f.Policy.AtomicWrite(path, updated, info.Mode(), true); err != nil {
+	if err = f.writeIfUnchanged(path, updated, info.Mode(), expected); err != nil {
 		return nil, err
 	}
 	return map[string]any{"path": path, "replacements": actual, "previous_revision": revision, "sha256": Digest(updated)}, nil

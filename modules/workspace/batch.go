@@ -426,7 +426,7 @@ func (f *Files) applyBatchStep(step batchPlanStep) error {
 	case "create":
 		return f.Policy.AtomicWrite(step.journal.Path, step.content, os.FileMode(step.journal.Mode), false)
 	case "replace":
-		return f.Policy.AtomicWrite(step.journal.Path, step.content, os.FileMode(step.journal.Mode), true)
+		return f.writeIfUnchanged(step.journal.Path, step.content, os.FileMode(step.journal.Mode), step.journal.BeforeSHA256)
 	case "move":
 		return f.Policy.Move(step.journal.Source, step.journal.Destination)
 	default:
@@ -484,7 +484,7 @@ func (f *Files) rollbackBatchLocked(record batchJournalRecord) error {
 			if metadata.SHA256 != step.BeforeSHA256 {
 				return errors.New("batch replace recovery revision does not match preimage")
 			}
-			if err := f.Policy.AtomicWrite(step.Path, previous, os.FileMode(metadata.Mode), true); err != nil {
+			if err := f.writeIfUnchanged(step.Path, previous, os.FileMode(metadata.Mode), step.AfterSHA256); err != nil {
 				return err
 			}
 		case "move":
