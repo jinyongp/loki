@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1012,6 +1013,11 @@ func TestDuplicateCapacityAndRetentionAreBounded(t *testing.T) {
 	second := strings.Repeat("d", 32)
 	runner := &fakeRunner{blockObserve: true, observing: make(chan struct{})}
 	l := lifecycleFixture(t, runner, 5*time.Second, 20*time.Millisecond, 1)
+	// Expiration must depend on the tested clock transition, not scheduler or
+	// filesystem delays while cancellation persists its terminal result.
+	startedAt := time.Now().UTC()
+	var elapsed atomic.Int64
+	l.now = func() time.Time { return startedAt.Add(time.Duration(elapsed.Load())) }
 	if err := l.start(launcherSpec(first)); err != nil {
 		t.Fatal(err)
 	}
@@ -1034,7 +1040,7 @@ func TestDuplicateCapacityAndRetentionAreBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	cancel()
-	time.Sleep(40 * time.Millisecond)
+	elapsed.Store(int64(40 * time.Millisecond))
 
 	runner.mu.Lock()
 	runner.blockObserve = false
