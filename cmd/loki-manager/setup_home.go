@@ -61,9 +61,10 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 	if !interactive {
 		return runToolsMenu(ctx, prefix, host, input, out, diagnostics)
 	}
-	session := &setupSession{}
-	ctx = context.WithValue(ctx, setupSessionKey{}, session)
-	defer session.print(terminal)
+	ctx, ownSession := setupSessionContext(ctx, input, terminal)
+	if ownSession != nil {
+		defer ownSession.print(terminal)
+	}
 	changed := false
 	if host.selected == nil && !host.explicit {
 		selected, updated, err := chooseSetupHost(ctx, host.frontend, input, diagnostics, false)
@@ -71,6 +72,9 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return err
 		}
 		if !updated {
+			if ownSession != nil {
+				ownSession.print(terminal)
+			}
 			return success(out, "Setup cancelled. No changes made.", map[string]any{"state": "cancelled", "changed": false})
 		}
 		host.selected, changed = selected, true
@@ -113,12 +117,14 @@ func runSetupMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 			return err
 		}
 		if aborted || choice == "" {
-			session.print(terminal)
+			if ownSession != nil {
+				ownSession.print(terminal)
+			}
 			return success(out, "Setup closed.", map[string]any{"changed": changed})
 		}
 		if choice == "tools" || choice == "doctor" {
 			var updated bool
-			err = setupWorking(terminal, "Preparing execution host", setupHostLabel(host.selected), func(log io.Writer) error {
+			err = setupWorking(ctx, terminal, "Preparing execution host", setupHostLabel(host.selected), func(log io.Writer) error {
 				var err error
 				updated, err = prepareSetupMenuHost(ctx, &host, &prefix, log)
 				if err == nil && choice == "tools" {
@@ -210,7 +216,7 @@ func installSetupTools(ctx context.Context, report management.Report, hostLabel 
 	if action == "install-enable" {
 		command = []string{"setup"}
 	}
-	err = setupWorking(terminal, "Installing selected tools", hostLabel, func(log io.Writer) error {
+	err = setupWorking(ctx, terminal, "Installing selected tools", hostLabel, func(log io.Writer) error {
 		return invoke(append(command, selected...), log)
 	})
 	return err == nil, err

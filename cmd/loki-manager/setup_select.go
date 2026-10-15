@@ -95,7 +95,10 @@ func runSetupScreen(ctx context.Context, form *huh.Form, input, output *os.File,
 	keys.MultiSelect.Toggle.SetHelp("space", "select")
 	form.WithKeyMap(keys).WithShowHelp(true)
 	if width, height, err := term.GetSize(int(output.Fd())); err == nil {
-		form.WithWidth(max(20, width-4)).WithHeight(max(10, height-4))
+		resizeSetupForm(form, width, height)
+	}
+	if session, _ := ctx.Value(setupSessionKey{}).(*setupSession); session != nil {
+		return session.startScreen(ctx).runForm(ctx, form, phase)
 	}
 	// Graceful quit waits for terminal input readers before restoring state.
 	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Quit
@@ -142,8 +145,15 @@ func (m *setupSelectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, cancelled := msg.(setupSelectionCancelled); cancelled {
 		return m, tea.Quit
 	}
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		resizeSetupForm(m.form, size.Width, size.Height)
+	}
 	_, cmd := m.form.Update(msg)
 	return m, cmd
+}
+
+func resizeSetupForm(form *huh.Form, width, height int) {
+	form.WithWidth(max(20, width-4)).WithHeight(max(10, height-4))
 }
 
 func (m *setupSelectionModel) View() tea.View {

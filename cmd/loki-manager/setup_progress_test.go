@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"loki/internal/progress"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
@@ -28,7 +30,7 @@ func setupProgressFixture(t *testing.T, terminal *os.File, kind string) {
 		failure = context.Canceled
 	}
 	fmt.Fprint(terminal, "Existing terminal history\r\n")
-	err = setupWorking(terminal, "Fixture action", "Fixture host", func(log io.Writer) error {
+	err = setupWorking(t.Context(), terminal, "Fixture action", "Fixture host", func(log io.Writer) error {
 		// More output than the viewport must still stay off normal scrollback.
 		fmt.Fprint(log, strings.Repeat("Temporary action log\r\n", 60))
 		return failure
@@ -94,5 +96,43 @@ func TestSetupSessionSummarizesOnce(t *testing.T) {
 	text := string(raw)
 	if strings.Count(text, "[RESULT]") != 1 || strings.Count(text, "Browser installed.") != 1 || !strings.Contains(text, "Browser verified.") {
 		t.Fatal("session repeated or lost results", text)
+	}
+}
+
+// Exercise real input ownership while a persistent setup screen is active.
+func setupSessionInputFixture(t *testing.T, input, terminal *os.File, kind string) {
+	t.Helper()
+	ctx, session := setupSessionContext(t.Context(), input, terminal)
+	defer session.print(terminal)
+	err := setupWorking(ctx, terminal, "Input fixture", "Fixture host", func(log io.Writer) error {
+		if kind == "session-cancel" {
+			fmt.Fprintln(log, "Waiting for cancellation")
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		stop := progress.StartHeartbeat(ctx, progress.NewLineReporter(log), progress.HeartbeatOptions{Every: time.Millisecond, Message: "Waiting for administrator input"})
+		defer stop()
+		password, err := browserAdministratorPassword(ctx, browserEnvironmentReport{AdministratorRequired: true, Missing: []string{"fixture-package"}}, input, log)
+		defer clear(password)
+		if err != nil {
+			return err
+		}
+		if string(password) != "fixture-secret-password" {
+			return errors.New("password input was consumed by the menu")
+		}
+		fmt.Fprintln(log, "Authentication fixture complete")
+		return nil
+	})
+	if kind == "session-cancel" {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("working cancellation was lost: %v", err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := showSetupResult(ctx, "Password input — accepted", "Protected input reached the action.", "", input, terminal); err != nil {
+		t.Fatal(err)
 	}
 }

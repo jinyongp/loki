@@ -176,7 +176,7 @@ func prepareBrowserEnvironment(ctx context.Context, password []byte, diagnostics
 	return nil
 }
 
-func browserAdministratorPassword(report browserEnvironmentReport, input io.Reader, diagnostics io.Writer) ([]byte, error) {
+func browserAdministratorPassword(ctx context.Context, report browserEnvironmentReport, input io.Reader, diagnostics io.Writer) ([]byte, error) {
 	if !report.AdministratorRequired {
 		return nil, nil
 	}
@@ -185,10 +185,7 @@ func browserAdministratorPassword(report browserEnvironmentReport, input io.Read
 		return nil, fmt.Errorf("browser system packages need administrator authentication; retry loki setup in an interactive terminal")
 	}
 	fmt.Fprintln(diagnostics, "Missing browser system packages:", strings.Join(report.Missing, ", "))
-	fmt.Fprint(diagnostics, "[INPUT REQUIRED] Administrator password for browser system packages (hidden): ")
-	password, err := term.ReadPassword(int(file.Fd()))
-	fmt.Fprintln(diagnostics)
-	return password, err
+	return setupPassword(ctx, file, diagnostics, "[INPUT REQUIRED] Administrator password for browser system packages (hidden): ")
 }
 
 func prepareLocalBrowserHost(ctx context.Context, input io.Reader, diagnostics io.Writer) error {
@@ -197,7 +194,7 @@ func prepareLocalBrowserHost(ctx context.Context, input io.Reader, diagnostics i
 	if err != nil {
 		return err
 	}
-	password, err := browserAdministratorPassword(report, input, diagnostics)
+	password, err := browserAdministratorPassword(ctx, report, input, diagnostics)
 	defer clear(password)
 	if err != nil {
 		return err
@@ -226,7 +223,7 @@ func prepareRemoteBrowserHost(ctx context.Context, selected management.Execution
 	if !report.Applicable || !report.Supported || len(report.Missing) == 0 {
 		return nil
 	}
-	password, err := browserAdministratorPassword(report, input, diagnostics)
+	password, err := browserAdministratorPassword(ctx, report, input, diagnostics)
 	defer clear(password)
 	if err != nil {
 		return err

@@ -88,7 +88,7 @@ func setupConnectionAction(ctx context.Context, host setupMenuHost, report manag
 			}
 		}
 		var result bytes.Buffer
-		if err := setupWorking(terminal, "OpenAI tunnel: "+action, setupHostLabel(host.selected), func(log io.Writer) error {
+		if err := setupWorking(ctx, terminal, "OpenAI tunnel: "+action, setupHostLabel(host.selected), func(log io.Writer) error {
 			return runConnections(ctx, host.frontend, registeredConnectionArguments(host.frontend, host.selected, []string{action, "openai"}), input, io.MultiWriter(&result, log), log)
 		}); err != nil {
 			return false, err
@@ -96,7 +96,7 @@ func setupConnectionAction(ctx context.Context, host setupMenuHost, report manag
 		return action != "status", showSetupResult(ctx, "OpenAI tunnel — "+action+" completed", shortDiagnostic(result.String()), result.String(), input, terminal)
 	}
 	if report.Tools == nil {
-		err := setupWorking(terminal, "Checking tool configuration", setupHostLabel(host.selected), func(log io.Writer) error {
+		err := setupWorking(ctx, terminal, "Checking tool configuration", setupHostLabel(host.selected), func(log io.Writer) error {
 			current, err := inspectOperatorHost(ctx, host.frontend, host.selected, log, false)
 			if err == nil {
 				report = *current
@@ -120,7 +120,7 @@ func setupConnectionAction(ctx context.Context, host setupMenuHost, report manag
 	arguments := []string{"codex", "--config", config}
 	var result setupChangedWriter
 	output := &commandOutput{Writer: &result, json: true}
-	err = setupWorking(terminal, "Connecting Codex", setupHostLabel(host.selected), func(log io.Writer) error {
+	err = setupWorking(ctx, terminal, "Connecting Codex", setupHostLabel(host.selected), func(log io.Writer) error {
 		if host.selected != nil && host.selected.Remote() {
 			return connectCodexOnHost(ctx, host.frontend, host.selected, arguments, output, log)
 		}

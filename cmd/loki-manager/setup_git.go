@@ -47,7 +47,7 @@ func setupGitSigning(ctx context.Context, host string, input, terminal *os.File,
 		return false, err
 	}
 	var output bytes.Buffer
-	if err := setupWorking(terminal, "Configuring Git signing", host, func(log io.Writer) error {
+	if err := setupWorking(ctx, terminal, "Configuring Git signing", host, func(log io.Writer) error {
 		return invoke([]string{"integrations", "setup", "git", "--identity-name", name, "--identity-email", email}, io.MultiWriter(&output, log), log)
 	}); err != nil {
 		return false, err

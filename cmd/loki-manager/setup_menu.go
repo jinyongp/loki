@@ -74,13 +74,11 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
 		return fmt.Errorf("interactive setup needs a terminal; use 'loki setup TOOL...' or 'loki tools install TOOL' for scripts")
 	}
-	var ownSession *setupSession
-	if _, ok := ctx.Value(setupSessionKey{}).(*setupSession); !ok {
-		session := &setupSession{}
-		ownSession = session
-		ctx = context.WithValue(ctx, setupSessionKey{}, session)
-		defer session.print(terminal)
+	ctx, ownSession := setupSessionContext(ctx, input, terminal)
+	if ownSession != nil {
+		defer ownSession.print(terminal)
 	}
+
 	invoke := func(command []string, destination io.Writer, log io.Writer) error {
 		return run(ctx, append(append([]string{}, prefix...), command...), destination, log)
 	}
@@ -153,7 +151,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				return err
 			}
 			if !aborted && confirmed {
-				if err := setupWorking(terminal, "Uninstalling all tools", hostLabel, func(log io.Writer) error {
+				if err := setupWorking(ctx, terminal, "Uninstalling all tools", hostLabel, func(log io.Writer) error {
 					return invoke([]string{"tools", "uninstall", "--all"}, log, log)
 				}); err != nil {
 					if viewErr := showSetupResult(ctx, "Uninstall — needs attention", setupErrorSummary(err), setupErrorDetails(err), input, terminal); viewErr != nil {
@@ -249,7 +247,7 @@ func runToolsMenu(ctx context.Context, prefix []string, host setupMenuHost, inpu
 				continue
 			}
 		}
-		if err := setupWorking(terminal, selected+": "+action, hostLabel, func(log io.Writer) error {
+		if err := setupWorking(ctx, terminal, selected+": "+action, hostLabel, func(log io.Writer) error {
 			return applySetupAction(selected, action, report, func(command []string) error { return invoke(command, log, log) })
 		}); err != nil {
 			// Re-read state on the next pass, including a partially completed

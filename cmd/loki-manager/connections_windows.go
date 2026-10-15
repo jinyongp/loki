@@ -323,8 +323,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 		}
 		if setup.TunnelID == "" {
 			if file, ok := input.(*os.File); !*keyStdin && ok && term.IsTerminal(int(file.Fd())) {
-				fmt.Fprint(diagnostics, "OpenAI tunnel ID: ")
-				setup.TunnelID, err = readSetupLine(input, 256)
+				setup.TunnelID, err = setupTunnelID(ctx, file, diagnostics)
 				if err != nil {
 					return err
 				}
@@ -339,9 +338,7 @@ func runConnections(ctx context.Context, store management.Store, args []string, 
 				return fmt.Errorf("runtime key exceeds its bound")
 			}
 		} else if file, ok := input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-			fmt.Fprint(diagnostics, "OpenAI runtime API key (input hidden; Enter keeps the stored key): ")
-			key, err = term.ReadPassword(int(file.Fd()))
-			fmt.Fprintln(diagnostics)
+			key, err = setupPassword(ctx, file, diagnostics, "OpenAI runtime API key (input hidden; Enter keeps the stored key): ")
 		}
 		if err != nil {
 			return err

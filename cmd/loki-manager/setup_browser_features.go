@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
-	"github.com/charmbracelet/x/ansi"
-	"golang.org/x/term"
 	"loki/internal/tools"
 )
 
@@ -55,15 +53,15 @@ func browserFeatureHelp() string {
 }
 
 func browserFeatureSummary(state tools.State) string {
-	optional := "none selected; video recording is off"
-	if len(state.Capabilities) > 0 {
-		labels := make([]string, 0, len(state.Capabilities))
-		for _, id := range state.Capabilities {
-			labels = append(labels, browserFeatureLabel(id))
-		}
-		optional = strings.Join(labels, ", ")
+	lines := []string{"Navigation and screenshots are included."}
+	if len(state.Capabilities) == 0 {
+		return strings.Join(append(lines, "Optional features: none selected; video recording is off."), "\n")
 	}
-	return "Navigation and screenshots are included.\nOptional features: " + optional
+	lines = append(lines, fmt.Sprintf("Optional features: %d selected.", len(state.Capabilities)))
+	for _, id := range state.Capabilities {
+		lines = append(lines, "  • "+browserFeatureLabel(id))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func browserFeatureMenuSummary(state tools.State) string {
@@ -91,35 +89,21 @@ func applyBrowserFeatures(state tools.State, selected []string, invoke func([]st
 
 func setupBrowserFeatures(ctx context.Context, state tools.State, host string, input, terminal *os.File, invoke func([]string, io.Writer) error) (bool, error) {
 	selected := slices.Clone(state.Capabilities)
-	width, _, err := term.GetSize(int(terminal.Fd()))
-	if err != nil {
-		width = 80
-	}
-	option := func(label, id string) huh.Option[string] {
-		// Huh's option viewport clips long lines instead of wrapping them.
-		// Reserve space for its cursor, checkbox and field padding.
-		return huh.NewOption(ansi.Wordwrap(label, max(12, width-12), ""), id)
-	}
-	options := make([]huh.Option[string], 0, len(browserFeatures))
-	for _, feature := range browserFeatures {
-		options = append(options, option(browserFeatureLabel(feature.id)+" — "+feature.description, feature.id))
-	}
+	features := slices.Clone(browserFeatures)
 	// Preserve selections written by a newer manager rather than silently
 	// dropping them when this menu saves a different feature.
 	for _, id := range selected {
 		if !slices.ContainsFunc(browserFeatures, func(feature browserFeature) bool { return feature.id == id }) {
-			options = append(options, option(id+" — existing selection", id))
+			features = append(features, browserFeature{id, id, "Existing selection"})
 		}
 	}
-	form := huh.NewForm(huh.NewGroup(huh.NewMultiSelect[string]().Title("Optional browser features").
-		Description("Host: " + host + "\nNavigation and screenshots are included.\nSpace toggle · Enter save · Esc cancel.\nSaving keeps browser activation.").
-		Options(options...).Height(14).Filterable(false).Value(&selected)))
+	form := huh.NewForm(huh.NewGroup(newBrowserFeaturePicker(features, host, &selected)))
 	aborted, err := runSetupForm(ctx, form, input, terminal)
 	if err != nil || aborted {
 		return false, err
 	}
 	var changed bool
-	err = setupWorking(terminal, "Saving browser features", host, func(log io.Writer) error {
+	err = setupWorking(ctx, terminal, "Saving browser features", host, func(log io.Writer) error {
 		var err error
 		changed, err = applyBrowserFeatures(state, selected, func(args []string) error { return invoke(args, log) })
 		return err
@@ -128,11 +112,12 @@ func setupBrowserFeatures(ctx context.Context, state tools.State, host string, i
 		return false, err
 	}
 	state.Capabilities = selected
-	summary := fmt.Sprintf("Host: %s\n%s\nBrowser activation: %s.", host, browserFeatureSummary(state), setupStateLabel(state))
+	summary := fmt.Sprintf("Host: %s\nBrowser activation: %s.", host, setupStateLabel(state))
 	title := "Browser features — unchanged"
 	if changed {
 		title = "Browser features — saved"
 		summary += "\nReconnect the client's Loki MCP server to load the selected features."
 	}
+	summary += "\n" + browserFeatureSummary(state)
 	return changed, showSetupResult(ctx, title, summary, "", input, terminal)
 }

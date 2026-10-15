@@ -28,7 +28,7 @@ import (
 )
 
 func TestSetupMenuKeyboardBackAndExit(t *testing.T) {
-	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "remote-home", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "browser-menu-narrow"} {
+	for _, kind := range []string{"tools", "home", "fresh", "hosts-back", "hosts-back-narrow", "unreachable", "unreachable-tools", "preparation-failed", "remote-home", "connections", "connections-connect-unchanged", "connections-disconnect-unchanged", "install-many-failed", "git-signing-save", "git-signing-cancel", "git-signing-narrow", "result", "result-narrow", "result-escape", "readiness", "features-save", "features-cancel", "features-narrow", "features-all-result", "browser-menu-narrow"} {
 		t.Run(kind, func(t *testing.T) { testSetupMenuKeyboardBackAndExit(t, kind) })
 	}
 }
@@ -107,6 +107,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			}
 		}
 	}()
+	var completeTranscript strings.Builder
 	waitFor := func(texts ...string) string {
 		t.Helper()
 		var screen strings.Builder
@@ -126,6 +127,7 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 					t.Fatal("terminal closed before rendering", texts)
 				}
 				screen.WriteString(chunk)
+				completeTranscript.WriteString(chunk)
 			case <-ctx.Done():
 				t.Fatal("menu did not render", texts)
 			}
@@ -211,6 +213,12 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 			finished <- err
 		} else if strings.HasPrefix(kind, "features-") {
 			state := tools.State{Installed: true, Enabled: false, Capabilities: []string{"pdf"}}
+			if kind == "features-all-result" {
+				state.Capabilities = nil
+				for _, feature := range browserFeatures {
+					state.Capabilities = append(state.Capabilities, feature.id)
+				}
+			}
 			changed, err := setupBrowserFeatures(ctx, state, "WSL: Ubuntu", terminal, terminal, func(args []string, log io.Writer) error { featureCommand = args; return nil })
 			if err == nil {
 				err = success(&commandOutput{Writer: &output, json: true}, "", map[string]any{"changed": changed})
@@ -285,6 +293,16 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		}
 		if kind == "features-cancel" {
 			_, _ = io.WriteString(master, "\x1b")
+		} else if kind == "features-all-result" {
+			_, _ = io.WriteString(master, "\r")
+			waitFor("Browser features — unchanged", "Optional features: 14 selected.", "Details — read full output")
+			_, _ = io.WriteString(master, "\x1b[B\r")
+			waitFor("Page 1/")
+			_, _ = io.WriteString(master, "\x1b[B\r")
+			waitFor("Page 2/", "[unsafe-code]")
+			_, _ = io.WriteString(master, "\x1b")
+			waitFor("Browser features — unchanged")
+			_, _ = io.WriteString(master, "\r")
 		} else {
 			_, _ = io.WriteString(master, " \r")
 			waitFor("Browser features — saved")
@@ -319,7 +337,8 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		if kind == "result-narrow" {
 			lastLine = "  Final recovery instruction"
 		}
-		transcript := waitFor(lastLine)
+		waitFor("[RESULT] Readiness — needs attention", lastLine)
+		transcript := completeTranscript.String()
 		restored := strings.Index(transcript, "\x1b[?1049l")
 		result := strings.Index(transcript, "[RESULT] Readiness — needs attention")
 		if restored < 0 || result < restored {
@@ -433,6 +452,14 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	case <-ctx.Done():
 		t.Fatal("menu did not exit")
 	}
+	fmt.Fprint(terminal, "SETUP_SESSION_CLOSED\r\n")
+	waitFor("SETUP_SESSION_CLOSED")
+	if kind == "home" || kind == "preparation-failed" || kind == "browser-menu-narrow" || strings.HasPrefix(kind, "result") {
+		transcript := completeTranscript.String()
+		if enters, exits := strings.Count(transcript, ansi.SetModeAltScreenSaveCursor), strings.Count(transcript, ansi.ResetModeAltScreenSaveCursor); enters != 1 || exits != 1 {
+			t.Fatalf("stage transitions exposed the shell: %d screen entries, %d exits", enters, exits)
+		}
+	}
 	if kind == "remote-home" {
 		if calls, err := os.ReadFile(os.Getenv("LOKI_REVIEW_SSH_LOG")); !os.IsNotExist(err) {
 			t.Fatalf("opening setup contacted the remote host: %s (%v)", calls, err)
@@ -477,8 +504,8 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 		if len(featureCommand) != 5 || featureCommand[1] != "disable" || !strings.Contains(featureCommand[4], "devtools") || !strings.Contains(featureCommand[4], "pdf") {
 			t.Fatal("feature save lost checked choices or enabled browser", featureCommand)
 		}
-	} else if kind == "features-cancel" && featureCommand != nil {
-		t.Fatal("cancel saved features", featureCommand)
+	} else if (kind == "features-cancel" || kind == "features-all-result") && featureCommand != nil {
+		t.Fatal("unchanged or cancelled features were saved", featureCommand)
 	}
 }
 
@@ -578,4 +605,88 @@ func setupKeyboardPrompt(t *testing.T, keys string, cancelPrompt bool) (setupOpt
 		t.Fatalf("terminal mode was not restored: %v", err)
 	}
 	return completed.options, completed.err
+}
+
+func TestSetupSessionInputOwnership(t *testing.T) {
+	for _, kind := range []string{"session-password", "session-cancel"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Setenv("TERM", "xterm-256color")
+			master, terminal, err := pty.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer master.Close()
+			defer terminal.Close()
+			if err := pty.Setsize(terminal, &pty.Winsize{Rows: 30, Cols: 100}); err != nil {
+				t.Fatal(err)
+			}
+			before, err := term.GetState(int(terminal.Fd()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			chunks := make(chan string, 32)
+			stop := make(chan struct{})
+			defer close(stop)
+			go func() {
+				buffer := make([]byte, 4096)
+				for {
+					n, err := master.Read(buffer)
+					select {
+					case chunks <- string(buffer[:n]):
+					case <-stop:
+						return
+					}
+					if err != nil {
+						return
+					}
+				}
+			}()
+			var transcript strings.Builder
+			waitFor := func(text string) {
+				t.Helper()
+				var current strings.Builder
+				timeout := time.NewTimer(5 * time.Second)
+				defer timeout.Stop()
+				for !strings.Contains(ansi.Strip(current.String()), text) {
+					select {
+					case chunk := <-chunks:
+						current.WriteString(chunk)
+						transcript.WriteString(chunk)
+					case <-timeout.C:
+						t.Fatalf("input stage did not render %q: %s", text, current.String())
+					}
+				}
+			}
+			finished := make(chan struct{})
+			go func() {
+				setupSessionInputFixture(t, terminal, terminal, kind)
+				fmt.Fprint(terminal, "INPUT_FIXTURE_CLOSED\r\n")
+				close(finished)
+			}()
+			if kind == "session-cancel" {
+				waitFor("Waiting for cancellation")
+				io.WriteString(master, "\x03")
+			} else {
+				waitFor("Administrator password")
+				// Background progress must leave the focused input usable.
+				time.Sleep(20 * time.Millisecond)
+				io.WriteString(master, "fixture-secret-password\r")
+				waitFor("Password input — accepted")
+				io.WriteString(master, "\r")
+			}
+			waitFor("INPUT_FIXTURE_CLOSED")
+			<-finished
+			after, err := term.GetState(int(terminal.Fd()))
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("session did not restore input", err)
+			}
+			if strings.Contains(transcript.String(), "fixture-secret-password") {
+				t.Fatal("password appeared in terminal output")
+			}
+			want := 1
+			if enters, exits := strings.Count(transcript.String(), ansi.SetModeAltScreenSaveCursor), strings.Count(transcript.String(), ansi.ResetModeAltScreenSaveCursor); enters != want || exits != want {
+				t.Fatalf("unexpected screen lifecycle: %d entries, %d exits; want %d", enters, exits, want)
+			}
+		})
+	}
 }

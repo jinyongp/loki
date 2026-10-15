@@ -99,6 +99,10 @@ func chooseSetupHost(ctx context.Context, store management.Store, input *os.File
 	if !ok || !term.IsTerminal(int(input.Fd())) || !term.IsTerminal(int(terminal.Fd())) || os.Getenv("TERM") == "dumb" {
 		return nil, false, fmt.Errorf("choose an execution host first with 'loki hosts prepare' or 'loki hosts use'; run 'loki setup' in a terminal for guided host selection")
 	}
+	ctx, ownSession := setupSessionContext(ctx, input, terminal)
+	if ownSession != nil {
+		defer ownSession.print(terminal)
+	}
 	registry, err := store.HostRegistry()
 	if err != nil {
 		return nil, false, err
@@ -201,7 +205,7 @@ func prepareSetupHost(ctx context.Context, store management.Store, input, termin
 	default:
 		return nil, false, fmt.Errorf("unknown execution host preparation")
 	}
-	if err := setupWorking(terminal, "Selecting and preparing execution host", preparationLabel, func(log io.Writer) error {
+	if err := setupWorking(ctx, terminal, "Selecting and preparing execution host", preparationLabel, func(log io.Writer) error {
 		return runHosts(ctx, store, command[1:], log, log)
 	}); err != nil {
 		return nil, false, err

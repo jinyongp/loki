@@ -22,7 +22,12 @@ var missingSharedLibrary = regexp.MustCompile(`error while loading shared librar
 
 type setupSessionKey struct{}
 type setupSessionResult struct{ title, summary string }
-type setupSession struct{ results []setupSessionResult }
+type setupSession struct {
+	results         []setupSessionResult
+	input, terminal *os.File
+	cancel          context.CancelFunc
+	screen          *setupScreen
+}
 
 func (s *setupSession) add(title, summary string) {
 	for _, r := range s.results {
@@ -34,6 +39,14 @@ func (s *setupSession) add(title, summary string) {
 }
 
 func (s *setupSession) print(terminal *os.File) {
+	if s.screen != nil {
+		s.screen.close()
+		s.screen = nil
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
+
 	if len(s.results) == 1 {
 		printSetupResult(terminal, s.results[0].title, s.results[0].summary)
 	}
@@ -98,7 +111,21 @@ func setupErrorDetails(err error) string {
 	return err.Error()
 }
 
-func setupWorking(terminal *os.File, title, host string, action func(io.Writer) error) error {
+func setupWorking(ctx context.Context, terminal *os.File, title, host string, action func(io.Writer) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if session, _ := ctx.Value(setupSessionKey{}).(*setupSession); session != nil {
+		screen := session.startScreen(ctx)
+		if err := screen.showWork(ctx, title, host); err != nil {
+			return err
+		}
+		log := &setupScreenLog{screen: screen, title: title, host: host}
+		if err := action(log); err != nil {
+			return &setupActionError{err: err, details: log.tail.String(), host: host}
+		}
+		return nil
+	}
 	restore, err := setupProgressOutput(terminal)
 	if err != nil {
 		return err
@@ -119,7 +146,7 @@ func setupWorking(terminal *os.File, title, host string, action func(io.Writer) 
 func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os.File) error {
 	var raw bytes.Buffer
 	var diagnostics diagnosticTail
-	checkErr := setupWorking(terminal, "Checking readiness", setupHostLabel(host.selected), func(log io.Writer) error {
+	checkErr := setupWorking(ctx, terminal, "Checking readiness", setupHostLabel(host.selected), func(log io.Writer) error {
 		stop := progress.StartHeartbeat(ctx, progress.NewLineReporter(log), progress.HeartbeatOptions{Operation: "setup", Phase: "readiness", Message: "Still checking tool readiness"})
 		defer stop()
 		return operatorStatus(ctx, host.frontend, host.selected, &commandOutput{Writer: &raw, json: true}, io.MultiWriter(log, &diagnostics), true)
@@ -165,16 +192,14 @@ func setupReadiness(ctx context.Context, host setupMenuHost, input, terminal *os
 }
 
 func showSetupResult(ctx context.Context, title, summary, details string, input, terminal *os.File) error {
+	ctx, ownSession := setupSessionContext(ctx, input, terminal)
+	if ownSession != nil {
+		defer ownSession.print(terminal)
+	}
 	// Result screens use the alternate buffer. Preserve the untruncated summary
 	// after that buffer is restored, including when the user exits with Escape.
 	persistentSummary := ansi.Strip(summary)
-	defer func() {
-		if session, ok := ctx.Value(setupSessionKey{}).(*setupSession); ok {
-			session.add(title, persistentSummary)
-		} else {
-			printSetupResult(terminal, title, persistentSummary)
-		}
-	}()
+	defer ctx.Value(setupSessionKey{}).(*setupSession).add(title, persistentSummary)
 	width, height, err := term.GetSize(int(terminal.Fd()))
 	if err != nil {
 		width, height = 80, 24
@@ -189,7 +214,7 @@ func showSetupResult(ctx context.Context, title, summary, details string, input,
 		choice := "back"
 		options := []huh.Option[string]{huh.NewOption("Continue — return to menu", "back")}
 		if strings.TrimSpace(details) != "" {
-			options = append(options, huh.NewOption("Details — read diagnostic output", "details"))
+			options = append(options, huh.NewOption("Details — read full output", "details"))
 		}
 		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Title(title).Description(summary).Options(options...).Value(&choice)))
 		aborted, err := runSetupScreen(ctx, form, input, terminal, "RESULT · Review before continuing")
