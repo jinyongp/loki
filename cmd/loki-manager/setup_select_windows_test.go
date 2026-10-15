@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,11 @@ func TestSetupWindowsKeyboardConsole(t *testing.T) {
 					{"Install only", "\x1b"},
 					{"coordination", "\x1b"},
 					{"Manage tools", "\x1b"},
+				}
+				if runtime.GOARCH == "arm64" {
+					// Native Windows arm64 has no browser bundle. The same
+					// navigation must return through its unavailable result.
+					steps[2].text = "Tool unavailable on this host"
 				}
 				if test.name == "session-password" {
 					steps = []struct{ text, keys string }{{"Administrator password", "fixture-secret-password\r"}, {"Password input — accepted", "\r"}}
