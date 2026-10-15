@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -126,6 +127,9 @@ func (f *Files) Read(path string, offset, limit int) (map[string]any, error) {
 }
 
 func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit int) (map[string]any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	relative, err := policy.Relative(path)
 	if err != nil {
 		return nil, err
@@ -148,6 +152,7 @@ func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit i
 	entries := []map[string]any{}
 	seen := 0
 	more := false
+	remaining := maxListScanEntries
 	var walk func(string, int) error
 	walk = func(current string, depth int) error {
 		if err := ctx.Err(); err != nil {
@@ -157,7 +162,7 @@ func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit i
 		if err != nil {
 			return err
 		}
-		children, err := dir.ReadDir(-1)
+		children, err := readListDirectory(ctx, dir, &remaining)
 		dir.Close()
 		if err != nil {
 			return err
@@ -169,6 +174,9 @@ func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit i
 		directories := []entry{}
 		files := []entry{}
 		for _, child := range children {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			path := filepath.Join(current, child.Name())
 			item, err := f.Policy.Open(path, unix.O_PATH, 0)
 			if err != nil {
@@ -188,6 +196,9 @@ func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit i
 		}
 		sort.Slice(directories, func(i, j int) bool { return directories[i].path < directories[j].path })
 		sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for _, e := range append(append([]entry{}, directories...), files...) {
 			if seen < start {
 				seen++
@@ -224,6 +235,34 @@ func (f *Files) List(ctx context.Context, path string, maxDepth, offset, limit i
 		return nil, err
 	}
 	return map[string]any{"entries": entries, "offset": start, "next_offset": start + len(entries), "has_more": more}, nil
+}
+
+// This is a request-wide work bound, independent of the response page size.
+const maxListScanEntries = 100000
+
+func readListDirectory(ctx context.Context, dir fs.ReadDirFile, remaining *int) ([]fs.DirEntry, error) {
+	var children []fs.DirEntry
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		batch, err := dir.ReadDir(min(256, *remaining+1))
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return nil, cancelErr
+		}
+		if len(batch) > *remaining {
+			return nil, fault.New(fault.CodeQuotaExceeded, "directory listing exceeds the 100000-entry scan limit", false,
+				"list a narrower directory; reducing limit only changes the response size")
+		}
+		*remaining -= len(batch)
+		children = append(children, batch...)
+		if errors.Is(err, io.EOF) {
+			return children, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 }
 
 func (f *Files) Create(path, content string) (map[string]any, error) {

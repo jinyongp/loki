@@ -616,7 +616,7 @@ and runtime state. A reachable host with degraded tools is reported as needing
 attention, separately from an unavailable host. Repeat a diagnostic command with
 `--json` and the same host/root options to read its full report.
 
-## Workspace editing
+## Workspace editing and listing
 
 `expected_sha256` is an optimistic edit precondition. Existing-file replacements,
 revision restores, image overwrites and batch replacements check the current
@@ -632,3 +632,11 @@ check and rename are separate system calls, so this is not an atomic
 compare-and-swap against arbitrary writers. Stop other writers for an exclusive
 edit, or give independent tasks separate worktrees and reconcile their changes.
 The revision saved before an edit does not include an intervening external write.
+
+Directory listing retains directory-first lexical order within each directory
+and offset pagination. Each request scans at most 100,000 directory entries
+across visited directories, including entries later excluded by path policy.
+An oversized scan returns `quota_exceeded` rather than a partial sorted page;
+select a narrower path. `limit` bounds response entries, not scan cost. Scans
+read bounded chunks and check cancellation between chunks and metadata reads.
+Pages are live views, not snapshots: restart pagination if the tree changes.
