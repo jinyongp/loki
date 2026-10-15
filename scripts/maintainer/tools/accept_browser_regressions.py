@@ -35,6 +35,7 @@ async def regressions(client, workspace, bundle):
         site = Path(temporary)
         (site / 'index.html').write_text('''<!doctype html><html lang="en"><meta charset="utf-8"><title>Browser regression</title>
 <h1>Browser regression</h1><label>Name <input id="name"></label><label>Literal <input id="literal"></label>
+<label>Dialog literal <input id="dialog-literal"></label>
 <label>Upload <input id="upload" type="file" multiple></label>
 <button id="accept" onclick="answers.push(prompt('Accept fixture'))">Accept prompt</button>
 <button id="dismiss" onclick="answers.push(prompt('Dismiss fixture'))">Dismiss prompt</button>
@@ -73,6 +74,7 @@ async def regressions(client, workspace, bundle):
             await call('browser_fill_form', {'fields': [
                 {'name': 'Name', 'target': '#name', 'type': 'textbox', 'value': 'Recorded name'},
                 {'name': 'Literal', 'target': '#literal', 'type': 'textbox', 'value': r'C:\fakepath\plain.txt'},
+                {'name': 'Dialog literal', 'target': '#dialog-literal', 'type': 'textbox', 'value': 'Search for dialog.dismiss() in the source'},
             ]})
             await call('browser_click', {'target': '#upload'})
             await call('browser_file_upload', {'paths': paths})
@@ -94,7 +96,7 @@ async def regressions(client, workspace, bundle):
 (async()=>{const browser=await chromium.launch({headless:true,chromiumSandbox:true,executablePath:settings.chrome});
 try{const page=await browser.newPage();await page.goto(settings.origin);
 await new (Object.getPrototypeOf(async function(){}).constructor)('page',settings.code)(page);
-console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector('#name').value,literal:document.querySelector('#literal').value,files:[...document.querySelector('#upload').files].map(f=>f.name),answers}))));
+console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector('#name').value,literal:document.querySelector('#literal').value,dialogLiteral:document.querySelector('#dialog-literal').value,files:[...document.querySelector('#upload').files].map(f=>f.name),answers}))));
 }finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});''', encoding='utf-8')
             process = await asyncio.create_subprocess_exec(str(bundle / runtime['node']), str(replay), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             try:
@@ -104,7 +106,7 @@ console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector
                     process.kill()
                     await process.wait()
                 raise
-            expected = {'name': 'Recorded name', 'literal': r'C:\fakepath\plain.txt', 'files': [Path(path).name for path in paths], 'answers': ['Actual response', None]}
+            expected = {'name': 'Recorded name', 'literal': r'C:\fakepath\plain.txt', 'dialogLiteral': 'Search for dialog.dismiss() in the source', 'files': [Path(path).name for path in paths], 'answers': ['Actual response', None]}
             if process.returncode or json.loads(stdout.splitlines()[-1]) != expected:
                 raise ValueError('Recorded code did not replay actual final state: ' + stdout.decode() + stderr.decode())
 

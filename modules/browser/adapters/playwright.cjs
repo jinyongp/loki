@@ -42,18 +42,25 @@ recordingStart.handle = async (context, params, response) => {
       const fileInput = data.name === 'fill' && data.text?.startsWith('C:\\fakepath\\')
         ? files ? Promise.resolve(true) : page.locator(data.selector).evaluate(element => element.tagName === 'INPUT' && element.type === 'file', {timeout: 1000}).catch(() => undefined)
         : Promise.resolve(false);
-      return {page, data, code, files, fileInput};
+      return {page, data, code, files, fileInput, dialog: false};
     };
     return start.call(this, options, {
       actionAdded(page, data, code) {state.actions.push(action(page, data, code));sink.actionAdded(page, data, code);},
       actionUpdated(page, data, code) {
         const updated = action(page, data, code);
+        // Upstream merges the previous action's signals, but sends only action
+        // metadata here. Retain the dialog signal when that action is updated.
+        const last = state.actions.at(-1);
+        updated.dialog = last?.page === page && last.dialog;
         if (state.actions.length) state.actions[state.actions.length - 1] = updated;else state.actions.push(updated);
         sink.actionUpdated(page, data, code);
       },
       signalAdded(page, signal, code) {
         const last = state.actions.at(-1);
-        if (last && code) last.code = code;
+        if (last?.page === page && code) {
+          last.code = code;
+          if (signal.name === 'dialog') last.dialog = true;
+        }
         sink.signalAdded(page, signal, code);
       },
     });
@@ -110,7 +117,7 @@ recordingStop.handle = async (context, params, response) => {
     const dialogCounts = new Map();
     const dialogIndexes = new Map();
     for (const action of state.actions) {
-      if (action.code.includes('dialog.dismiss()')) dialogCounts.set(action.page, (dialogCounts.get(action.page) || 0) + 1);
+      if (action.dialog) dialogCounts.set(action.page, (dialogCounts.get(action.page) || 0) + 1);
     }
     return state.actions.map(action => {
       let code = action.code;
@@ -122,7 +129,7 @@ recordingStop.handle = async (context, params, response) => {
         }
         code = code.slice(0, index) + `.${javascript ? 'setInputFiles' : 'set_input_files'}(${JSON.stringify(action.files)})${javascript ? ';' : ''}`;
       }
-      if (code.includes('dialog.dismiss()')) {
+      if (action.dialog) {
         const outcomes = state.dialogs.get(action.page) || [];
         const index = dialogIndexes.get(action.page) || 0;
         dialogIndexes.set(action.page, index + 1);
@@ -131,7 +138,7 @@ recordingStop.handle = async (context, params, response) => {
           return '';
         }
         const outcome = outcomes[index];
-        if (outcome.accept) code = code.replace('dialog.dismiss()', `dialog.accept(${outcome.promptText === undefined ? '' : JSON.stringify(outcome.promptText)})`);
+        if (outcome.accept) code = code.replace('dialog.dismiss()', () => `dialog.accept(${outcome.promptText === undefined ? '' : JSON.stringify(outcome.promptText)})`);
       }
       return code;
     }).filter(code => code.trim());
