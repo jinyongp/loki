@@ -280,7 +280,12 @@ func testSetupMenuKeyboardBackAndExit(t *testing.T, kind string) {
 	} else if kind == "tools-install-cancel" {
 		waitFor("Loki tools", "coordination")
 		_, _ = io.WriteString(master, " \x1b[B \r")
-		waitFor("browser, workspace", "Install and enable")
+		selectedTools := "browser, workspace"
+		if runtime.GOOS == "darwin" {
+			// Native macOS cannot mark the Linux-only workspace tool.
+			selectedTools = "browser"
+		}
+		waitFor(selectedTools, "Install and enable")
 		_, _ = io.WriteString(master, "\x1b")
 		waitFor("Loki tools", "coordination")
 		_, _ = io.WriteString(master, "\x1b")
