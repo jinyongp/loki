@@ -15,6 +15,26 @@ if (!tool) throw new Error('Pinned Playwright annotation tool is unavailable');
 // emits a dismiss placeholder for every dialog signal. Keep the original action
 // ordering but capture the actual MCP upload paths and dialog outcomes.
 const recordings = new WeakMap();
+function recordedUploadCode(action, language) {
+  const javascript = ['typescript', 'javascript'].includes(language);
+  if (!action.files || !javascript && language !== 'python') return;
+  // Recognize the complete statement emitted by the pinned generator from its
+  // action metadata. Never search for a method name inside paths or selectors,
+  // and retain the surrounding popup/download scope and result declarations.
+  const locator = core.iso.asLocator(javascript ? 'javascript' : 'python', action.data.selector);
+  const text = core.iso.escapeWithQuotes(action.data.text, javascript ? "'" : '"');
+  const fill = `${locator}.fill(${text})${javascript ? ';' : ''}`;
+  const prefix = javascript ? /^([ \t]*await page\d*\.)(.*)$/ : /^([ \t]*page\d*\.)(.*)$/;
+  let matches = 0;
+  const code = action.code.split('\n').map(line => {
+    const statement = line.match(prefix);
+    if (!statement || statement[2] !== fill) return line;
+    ++matches;
+    return `${statement[1]}${locator}.${javascript ? 'setInputFiles' : 'set_input_files'}(${JSON.stringify(action.files)})${javascript ? ';' : ''}`;
+  }).join('\n');
+  // An upstream codegen change must produce a warning, not guessed replay code.
+  return matches === 1 ? code : undefined;
+}
 const browserTool = name => {
   const value = core.tools.browserTools.find(tool => tool.schema.name === name);
   if (!value) throw new Error(`Pinned Playwright tool ${name} is unavailable`);
@@ -39,8 +59,8 @@ recordingStart.handle = async (context, params, response) => {
   browserContext._startRecording = function(options, sink) {
     const action = (page, data, code) => {
       const files = state.upload?.page === page ? state.upload.files : undefined;
-      const fileInput = data.name === 'fill' && data.text?.startsWith('C:\\fakepath\\')
-        ? files ? Promise.resolve(true) : page.locator(data.selector).evaluate(element => element.tagName === 'INPUT' && element.type === 'file', {timeout: 1000}).catch(() => undefined)
+      const fileInput = data.name === 'fill' && (files || data.text?.startsWith('C:\\fakepath\\'))
+        ? page.locator(data.selector).evaluate(element => element.tagName === 'INPUT' && element.type === 'file', undefined, {timeout: 1000}).catch(() => undefined)
         : Promise.resolve(false);
       return {page, data, code, files, fileInput, dialog: false};
     };
@@ -112,7 +132,6 @@ recordingStop.handle = async (context, params, response) => {
     if (!result) return result;
     const language = context.codegenLanguage();
     const javascript = ['typescript', 'javascript'].includes(language);
-    const python = language === 'python';
     await Promise.all(state.actions.map(async action => {action.fileInput = await action.fileInput;}));
     const dialogCounts = new Map();
     const dialogIndexes = new Map();
@@ -121,14 +140,9 @@ recordingStop.handle = async (context, params, response) => {
     }
     return state.actions.map(action => {
       let code = action.code;
-      if (action.fileInput !== false) {
-        const index = code.lastIndexOf('.fill(');
-        if (!action.files || !javascript && !python || index < 0) {
-          warnings.push('A recorded file upload was omitted: replay requires actual host paths and a supported code language.');
-          return '';
-        }
-        code = code.slice(0, index) + `.${javascript ? 'setInputFiles' : 'set_input_files'}(${JSON.stringify(action.files)})${javascript ? ';' : ''}`;
-      }
+      // Consume each action's dialog outcome even when the upload is omitted.
+      // Otherwise the next retained action would replay the previous answer.
+      let outcome;
       if (action.dialog) {
         const outcomes = state.dialogs.get(action.page) || [];
         const index = dialogIndexes.get(action.page) || 0;
@@ -137,9 +151,16 @@ recordingStop.handle = async (context, params, response) => {
           warnings.push('A recorded dialog action was omitted: its actual outcome could not be recovered in this code language.');
           return '';
         }
-        const outcome = outcomes[index];
-        if (outcome.accept) code = code.replace('dialog.dismiss()', () => `dialog.accept(${outcome.promptText === undefined ? '' : JSON.stringify(outcome.promptText)})`);
+        outcome = outcomes[index];
       }
+      if (action.fileInput !== false) {
+        code = action.fileInput === true ? recordedUploadCode(action, language) : undefined;
+        if (code === undefined) {
+          warnings.push('A recorded file upload was omitted: replay requires actual host paths and a supported code language.');
+          return '';
+        }
+      }
+      if (outcome?.accept) code = code.replace('dialog.dismiss()', () => `dialog.accept(${outcome.promptText === undefined ? '' : JSON.stringify(outcome.promptText)})`);
       return code;
     }).filter(code => code.trim());
   };
