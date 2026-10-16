@@ -616,6 +616,23 @@ and runtime state. A reachable host with degraded tools is reported as needing
 attention, separately from an unavailable host. Repeat a diagnostic command with
 `--json` and the same host/root options to read its full report.
 
+## Encrypted store initialization recovery
+
+If a secret or GitHub credential store's first initialization is interrupted,
+retry the same initialization or credential provisioning command. A private
+`initialization.json` record preserves the original key and encrypted initial
+document. Recovery publishes only missing files whose existing counterparts
+match that record; it keeps the original document even if retry input differs.
+Reads and updates remain blocked until initialization finishes and removes the
+record. Treat this record as private key material and retain it for recovery.
+
+A partial store without a recovery record cannot be distinguished from a
+previously initialized store with missing files. This includes interruptions
+from older builds that did not create the record. Restore the missing files
+from a matching backup; do not delete or regenerate the remaining key to force
+initialization. A conflicting or damaged record also requires inspecting and
+restoring the matching store instead of resetting its contents.
+
 ## Workspace editing and listing
 
 `expected_sha256` is an optimistic edit precondition. Existing-file replacements,

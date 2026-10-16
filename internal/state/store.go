@@ -26,9 +26,10 @@ import (
 )
 
 var (
-	ErrDecrypt       = errors.New("secret store cannot be decrypted")
-	ErrConflict      = errors.New("state revision changed; inspect current state and retry")
-	ErrUninitialized = errors.New("secret store is not initialized; run 'sudo loki secret init'")
+	ErrDecrypt               = errors.New("secret store cannot be decrypted")
+	ErrInitializationPending = errors.New("secret store initialization is pending; retry its initialization command")
+	ErrConflict              = errors.New("state revision changed; inspect current state and retry")
+	ErrUninitialized         = errors.New("secret store is not initialized; run 'sudo loki secret init'")
 )
 
 const maxBytes = 128 << 20
@@ -190,6 +191,13 @@ func decrypt(key, encoded []byte) (Snapshot, int, error) {
 }
 
 func (s Store) load() (Snapshot, []byte, error) {
+	// Never allow updates while an initialization intent could restore its
+	// original snapshot after an interruption. Initialize must finish first.
+	if _, err := os.Lstat(filepath.Join(s.Dir, initializationFile)); err == nil {
+		return Snapshot{}, nil, ErrInitializationPending
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Snapshot{}, nil, err
+	}
 	key, err := readPrivate(filepath.Join(s.Dir, "master.key"), 32)
 	if errors.Is(err, os.ErrNotExist) {
 		return Snapshot{}, nil, ErrUninitialized
@@ -234,7 +242,7 @@ func (s Store) Initialize(ctx context.Context, data json.RawMessage) (bool, erro
 	if err := safeDirectory(s.Dir); err != nil {
 		return false, err
 	}
-	return s.initialize(ctx, data)
+	return s.initialize(ctx, data, safeio.PublishPrivate)
 }
 
 func safeDirectory(dir string) error {
@@ -249,43 +257,6 @@ func safeDirectory(dir string) error {
 		return errors.New("state directory must be private")
 	}
 	return nil
-}
-
-func (s Store) initialize(ctx context.Context, data json.RawMessage) (bool, error) {
-	if err := s.validate(data); err != nil {
-		return false, err
-	}
-	release, err := lock(ctx, s.Dir)
-	if err != nil {
-		return false, err
-	}
-	defer release()
-	keyPath := filepath.Join(s.Dir, "master.key")
-	storePath := filepath.Join(s.Dir, "store.json")
-	_, keyErr := os.Lstat(keyPath)
-	_, storeErr := os.Lstat(storePath)
-	if keyErr == nil && storeErr == nil {
-		_, _, err := s.load()
-		return false, err
-	}
-	if !errors.Is(keyErr, os.ErrNotExist) || !errors.Is(storeErr, os.ErrNotExist) {
-		return false, errors.New("secret store is only partially initialized")
-	}
-	key := make([]byte, 32)
-	if _, err = rand.Read(key); err != nil {
-		return false, err
-	}
-	encoded, err := seal(key, Snapshot{Revision: 1, Data: data})
-	if err != nil {
-		return false, err
-	}
-	if err = safeio.PublishPrivate(keyPath, key, false); err != nil {
-		return false, err
-	}
-	if err = safeio.PublishPrivate(storePath, encoded, false); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func (s Store) Update(ctx context.Context, expected *uint64, mutate func(json.RawMessage) (json.RawMessage, error)) (Snapshot, error) {
@@ -593,7 +564,7 @@ func ImportLegacyIntoExistingWithTransform(
 	marker, _ := json.Marshal(map[string]any{
 		"source_version": 1,
 		"target_version": 2,
-		"source_sha256": fingerprint,
+		"source_sha256":  fingerprint,
 	})
 	if err = safeio.PublishPrivate(filepath.Join(stage, "migration.json"), marker, false); err != nil {
 		return err
