@@ -256,3 +256,56 @@ func TestIntegratedPlanReadsCatalogWithoutCreatingResources(t *testing.T) {
 		t.Fatal("check prepared resources", err)
 	}
 }
+
+func TestAlreadyCurrentUpgradeRunsHealthWithoutPublishing(t *testing.T) {
+	for _, check := range []bool{false, true} {
+		deps, _, _ := upgradeFixture(t, management.ManagerRelease, false)
+		deps.plan = func(context.Context, management.Store, string, io.Writer) (*upgradeToolsPlan, error) {
+			return &upgradeToolsPlan{Installed: 1, Basis: strings.Repeat("a", 64)}, nil
+		}
+		deps.run = func(context.Context, string, ...string) ([]byte, error) { return nil, nil }
+		deps.install = func(context.Context, management.Store, string, string, string) error {
+			t.Fatal("already current CLI was installed again")
+			return nil
+		}
+		calls := 0
+		deps.apply = func(context.Context, string, management.Store, upgradeApplyRequest, io.Reader, io.Writer) (upgradeApplyResult, error) {
+			calls++
+			return upgradeApplyResult{Health: &upgradeHealth{State: "passed"}}, nil
+		}
+		var out bytes.Buffer
+		args := []string{}
+		if check {
+			args = append(args, "--check")
+		}
+		if err := runUpgrade(t.Context(), management.Store{Root: t.TempDir()}, args, strings.NewReader(""), &commandOutput{Writer: &out, json: true}, io.Discard, deps); err != nil {
+			t.Fatal(err)
+		}
+		value := singleJSON(t, out.Bytes())
+		if check && calls != 0 || !check && calls != 1 || value["changed"] != false {
+			t.Fatal("read-only planning probed tools or current CLI was republished", calls, value)
+		}
+		if !check && value["applied"].(map[string]any)["health"].(map[string]any)["state"] != "passed" {
+			t.Fatal(value)
+		}
+	}
+}
+
+func TestAllHostUpgradeDiagnosesCurrentHostsAlongsideUpdates(t *testing.T) {
+	deps, _, _ := upgradeFixture(t, "0.2.99", false)
+	deps.plan = func(context.Context, management.Store, string, io.Writer) (*upgradeToolsPlan, error) {
+		return &upgradeToolsPlan{All: true, Update: true, Basis: strings.Repeat("c", 64), Hosts: []*upgradeToolsPlan{
+			{HostID: "current", Installed: 1, Basis: strings.Repeat("a", 64)},
+			{HostID: "update", Update: true, Installed: 1, Basis: strings.Repeat("b", 64)},
+		}}, nil
+	}
+	deps.apply = func(_ context.Context, _ string, _ management.Store, request upgradeApplyRequest, _ io.Reader, _ io.Writer) (upgradeApplyResult, error) {
+		if !request.All || len(request.Targets) != 2 || request.Targets[0].HostID != "current" || request.Targets[1].HostID != "update" {
+			t.Fatal("already-current host health was omitted", request)
+		}
+		return upgradeApplyResult{}, nil
+	}
+	if err := runUpgrade(t.Context(), management.Store{Root: t.TempDir()}, []string{"-y"}, strings.NewReader(""), io.Discard, io.Discard, deps); err != nil {
+		t.Fatal(err)
+	}
+}

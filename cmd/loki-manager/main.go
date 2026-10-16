@@ -666,13 +666,26 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		_, browserInstalled := state.Installed["browser"]
-		if mode == tools.ProjectHost && (slices.Contains(f.Args(), "browser") || args[1] == "update" && browserInstalled) {
+		prepareBrowser := slices.Contains(f.Args(), "browser")
+		if mode == tools.ProjectHost && args[1] == "update" && browserInstalled {
+			before, err := store.Status()
+			if err != nil {
+				return err
+			}
+			changes, err := changedUpgradeTools(before, release)
+			if err != nil {
+				return err
+			}
+			prepareBrowser = slices.ContainsFunc(changes, func(change upgradeToolChange) bool { return change.ID == "browser" })
+		}
+		if mode == tools.ProjectHost && prepareBrowser {
 			if err := prepareLocalBrowserHost(ctx, os.Stdin, diagnostics); err != nil {
 				return err
 			}
 		}
 		if args[1] == "update" {
 			updated, updateErr := updateInstalledTools(ctx, store, release, diagnostics)
+			scopeUpgradeHealth(store, nil, updated.Health)
 			message := "Installed tools are up to date."
 			if updated.Changed {
 				message = "Updated all installed tools to " + release.Release + "; activation and data are preserved."
@@ -681,18 +694,22 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 				message += "\nReconnect the client's Loki MCP server to load the new programs."
 			}
 			if updateErr != nil {
-				message = "Tool update incomplete; inspect the error and retry."
+				message = "Tool update needs attention; see the automatic health report and error."
 				if jsonOutput(out) {
 					if err := json.NewEncoder(out).Encode(updated); err != nil {
 						return err
 					}
 				} else {
 					fmt.Fprintln(out, message)
+					printUpgradeHealth(out, updated.Health)
 				}
 				return updateErr
 			}
-			if err := success(out, message, map[string]any{"release": updated.Release, "changed": updated.Changed, "services_restarted": updated.ServicesRestarted, "reconnect_required": updated.Reconnect}); err != nil {
+			if err := success(out, message, map[string]any{"release": updated.Release, "changed": updated.Changed, "services_restarted": updated.ServicesRestarted, "reconnect_required": updated.Reconnect, "health": updated.Health}); err != nil {
 				return err
+			}
+			if !jsonOutput(out) {
+				printUpgradeHealth(out, updated.Health)
 			}
 			return updateErr
 		}

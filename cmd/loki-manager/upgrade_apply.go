@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 
 	"loki/internal/management"
@@ -28,6 +28,7 @@ type upgradeApplyRequest struct {
 }
 
 type upgradeApplyResult struct {
+	Health             *upgradeHealth      `json:"health,omitempty"`
 	Hosts              []hostUpgradeResult `json:"hosts,omitempty"`
 	Changed            bool                `json:"changed"`
 	HostManagerUpdated bool                `json:"host_manager_updated"`
@@ -217,6 +218,8 @@ func applyUpgradeTools(ctx context.Context, frontend management.Store, request u
 		applied.Changed = applied.Changed || updated.Changed
 		applied.ServicesRestarted = updated.ServicesRestarted
 		applied.Reconnect = updated.Reconnect || applied.HostManagerUpdated && enabled
+		applied.Health = updated.Health
+		scopeUpgradeHealth(frontend, selected, applied.Health)
 	} else if err == nil {
 		err = fmt.Errorf("invalid tools update result: %w", decodeErr)
 	}
@@ -264,10 +267,11 @@ func upgradeUserHostManager(ctx context.Context, selected management.ExecutionSe
 }
 
 type toolUpdateResult struct {
-	Release           string `json:"release"`
-	Changed           bool   `json:"changed"`
-	ServicesRestarted bool   `json:"services_restarted"`
-	Reconnect         bool   `json:"reconnect_required"`
+	Health            *upgradeHealth `json:"health,omitempty"`
+	Release           string         `json:"release"`
+	Changed           bool           `json:"changed"`
+	ServicesRestarted bool           `json:"services_restarted"`
+	Reconnect         bool           `json:"reconnect_required"`
 }
 
 // Update files and apply new full-mode resources only when a deployment was
@@ -279,22 +283,29 @@ func updateInstalledTools(ctx context.Context, store management.Store, catalog t
 			_, err := store.ReconcileFull(ctx, backend)
 			return err
 		},
-		verify: verifyInstalledBrowser,
+		diagnose: diagnoseUpgradeTools,
 	})
 }
 
 type toolUpdateDependencies struct {
 	backend   func(management.Store, io.Writer) (management.FullBackend, error)
 	reconcile func(context.Context, management.Store, management.FullBackend) error
-	verify    func(context.Context, management.Store, io.Writer) error
+	diagnose  func(context.Context, management.Store, io.Writer) (*upgradeHealth, error)
 }
 
-func updateInstalledToolsWith(ctx context.Context, store management.Store, catalog tools.Catalog, diagnostics io.Writer, deps toolUpdateDependencies) (toolUpdateResult, error) {
-	updated := toolUpdateResult{Release: catalog.Release}
+func updateInstalledToolsWith(ctx context.Context, store management.Store, catalog tools.Catalog, diagnostics io.Writer, deps toolUpdateDependencies) (updated toolUpdateResult, updateErr error) {
+	updated = toolUpdateResult{Release: catalog.Release}
 	before, err := store.Status()
 	if err != nil {
 		return updated, err
 	}
+	// Diagnose even when the update fails or packages are already current. Keep
+	// the original error and any completed changes alongside the fresh report.
+	defer func() {
+		var healthErr error
+		updated.Health, healthErr = deps.diagnose(ctx, store, diagnostics)
+		updateErr = errors.Join(updateErr, healthErr)
+	}()
 	changes, err := changedUpgradeTools(before, catalog)
 	if err != nil {
 		return updated, err
@@ -342,11 +353,6 @@ func updateInstalledToolsWith(ctx context.Context, store management.Store, catal
 		}
 		updated.ServicesRestarted = true
 		updated.Changed = true
-	}
-	if before.Tools["browser"].Installed && slices.ContainsFunc(changes, func(change upgradeToolChange) bool { return change.ID == "browser" }) {
-		if err := deps.verify(ctx, store, diagnostics); err != nil {
-			return updated, fmt.Errorf("tools updated but browser readiness failed: %w", err)
-		}
 	}
 	return updated, nil
 }

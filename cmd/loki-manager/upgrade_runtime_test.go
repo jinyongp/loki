@@ -43,8 +43,8 @@ func (*upgradeRuntimeProbe) Observe(context.Context, management.DeploymentReserv
 }
 func (p *upgradeRuntimeProbe) dependencies() toolUpdateDependencies {
 	return toolUpdateDependencies{
-		backend: func(management.Store, io.Writer) (management.FullBackend, error) { return p, nil },
-		verify:  func(context.Context, management.Store, io.Writer) error { return nil },
+		backend:  func(management.Store, io.Writer) (management.FullBackend, error) { return p, nil },
+		diagnose: func(context.Context, management.Store, io.Writer) (*upgradeHealth, error) { return nil, nil },
 		reconcile: func(ctx context.Context, store management.Store, b management.FullBackend) error {
 			p.reconciles++
 			if p.fail {

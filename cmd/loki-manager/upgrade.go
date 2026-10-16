@@ -252,6 +252,15 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		}
 	}
 	toolWork := plan != nil && plan.Update
+	// A normal upgrade also checks already-current installations. Planning and
+	// cancellation stay probe-free; --cli-only never touches the execution host.
+	healthWork := plan != nil && plan.Installed > 0
+	if plan != nil && plan.All {
+		for _, child := range plan.Hosts {
+			healthWork = healthWork || child.Installed > 0
+		}
+	}
+	applyWork := toolWork || healthWork
 	cliChanged := false
 	applied := upgradeApplyResult{}
 	updateAvailable := !*toolsOnly && comparison > 0 || toolWork
@@ -271,8 +280,10 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 					state = "failed: " + shortDiagnostic(host.Error)
 				}
 				fmt.Fprintf(out, "  %s: %s\n", name, state)
+				printUpgradeHealth(out, host.Result.Health)
 			}
 		}
+		printUpgradeHealth(out, applied.Health)
 		if message != "" {
 			_, err := fmt.Fprintln(out, message)
 			return err
@@ -293,7 +304,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 	if *check {
 		return finish("checked", "")
 	}
-	if !cliWork && !toolWork {
+	if !cliWork && !applyWork {
 		return finish("up_to_date", "Loki is already up to date.")
 	}
 	if cliWork && comparison < 0 && !*force {
@@ -316,7 +327,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			}
 		}
 	}
-	if !*yes {
+	if !*yes && (cliWork || toolWork) {
 		prompt := out
 		if jsonOutput(out) {
 			prompt = diagnostics
@@ -347,7 +358,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			return err
 		}
 	}
-	if cliWork || toolWork && target != management.ManagerRelease {
+	if cliWork || applyWork && target != management.ManagerRelease {
 		asset := "loki-manager-" + target + "-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
 		base := "https://github.com/jinyongp/loki/releases/download/v" + target + "/"
 		fmt.Fprintln(diagnostics, "Downloading Loki "+target+"...")
@@ -387,7 +398,7 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			return fmt.Errorf("downloaded CLI version does not match target release %s: %s", target, shortDiagnostic(string(actual)))
 		}
 	}
-	if toolWork {
+	if applyWork {
 		protocol, err := deps.run(ctx, runner, "_upgrade-apply", "--help")
 		if err != nil {
 			return fmt.Errorf("target release cannot apply an integrated upgrade; use --cli-only for this release: %w", err)
@@ -403,13 +414,13 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 		}
 		cliChanged = true
 	}
-	if toolWork {
+	if applyWork {
 		request := upgradeApplyRequest{Version: target, Basis: plan.Basis, HostID: plan.HostID, Selection: plan.Selection, Remember: plan.Remember, Force: *force}
 		if plan.All {
 			request.All = true
 			request.Failures = plan.Failures
 			for _, child := range plan.Hosts {
-				if child.Update {
+				if child.Update || child.Installed > 0 {
 					request.Targets = append(request.Targets, upgradeApplyRequest{Version: target, Basis: child.Basis, HostID: child.HostID, Selection: child.Selection, Force: *force})
 				}
 			}
@@ -427,6 +438,9 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			if *force {
 				message += " Retain --force for the approved downgrade."
 			}
+			if applied.Health != nil && applied.Health.State == "failed" {
+				message = "Upgrade needs attention. Follow the automatic health report above; completed changes are retained."
+			}
 			if cliChanged {
 				message = "CLI updated to " + target + ". " + message
 			}
@@ -435,6 +449,9 @@ func runUpgrade(ctx context.Context, store management.Store, args []string, inpu
 			}
 			return fmt.Errorf("execution-host/tool upgrade failed: %w", err)
 		}
+	}
+	if !cliWork && !toolWork {
+		return finish("up_to_date", "Loki is already up to date.")
 	}
 	message := "Loki " + target + " installed."
 	if !cliChanged {

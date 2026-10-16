@@ -276,6 +276,19 @@ and tools, using a verified target-release manager temporarily when needed.
 The two scope options are mutually exclusive. A CLI already at the target release
 does not prevent updating an older host, tool packages or a pending runtime switch.
 
+After tool updates, `upgrade` automatically runs the resource checks and runtime
+probes used by `doctor` on the selected host. It also checks installed tools that
+are already current, without asking for upgrade confirmation when nothing changes.
+A failed check produces a nonzero exit, retains completed changes, and includes the
+problem and recovery commands in the upgrade result. There is no need to run
+`doctor` separately after upgrading. `--all-hosts` retains each host's health result;
+`--cli-only`, `--check` and cancelled updates do not run these checks.
+
+Runtime checks cover enabled tools. Disabled tools and stopped full services stay
+inactive; their installed resources are checked and the result says `deferred` for
+runtime readiness. Runtime data problems in stopped services remain unverified
+until those services start. `loki tools update` performs the same automatic check.
+
 Global `--host` options before `upgrade` override the tool target; the frontend CLI
 still updates on this computer. Each native manager and release catalog is checked
 against the official release SHA-256 manifest. `--version MAJOR.MINOR.PATCH` selects
@@ -300,7 +313,8 @@ loki upgrade --tools-only --version VERSION --yes
 ```
 
 `--json` emits one result, including the plan, completed changes, runtime and
-reconnection state. Progress and prompts stay on stderr. `loki tools update`
+reconnection state, and an `applied.health` report (`passed`, `failed` or
+`deferred`) when tool checks ran. Progress and prompts stay on stderr. `loki tools update`
 remains a targeted management command; ordinary updates need only `loki upgrade`.
 Older releases that predate integrated upgrades need the public installer once
 to obtain this command flow.
@@ -618,8 +632,9 @@ attention, separately from an unavailable host. Repeat a diagnostic command with
 
 ## Encrypted store initialization recovery
 
-Run `loki doctor` when application secrets or GitHub credentials fail to
-initialize. For recognized incomplete, conflicting or undecryptable stores,
+`loki upgrade` checks active tools automatically and includes recovery guidance
+when a store failure is observed. To investigate a failure at another time, run
+`loki doctor`. For recognized incomplete, conflicting or undecryptable stores,
 Loki reports the affected store, whether automatic recovery is
 possible, and the next commands for the same execution host and management root.
 The human report and `--json` output include the same recovery guidance; private
