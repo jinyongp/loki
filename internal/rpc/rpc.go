@@ -165,9 +165,10 @@ func readBoundedFrame(reader io.Reader, maximum int) ([]byte, error) {
 }
 
 type response struct {
-	OK     bool   `json:"ok"`
-	Result any    `json:"result,omitempty"`
-	Error  string `json:"error,omitempty"`
+	StoreRecovery *fault.StoreRecovery `json:"store_recovery,omitempty"`
+	OK            bool                 `json:"ok"`
+	Result        any                  `json:"result,omitempty"`
+	Error         string               `json:"error,omitempty"`
 }
 
 func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
@@ -244,6 +245,10 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	r := response{OK: err == nil, Result: result}
 	if err != nil {
 		r.Error = fault.Public(err)
+		var recovery *fault.StoreRecovery
+		if errors.As(err, &recovery) && recovery.Valid() {
+			r.StoreRecovery = recovery
+		}
 		r.Result = nil
 	}
 	data, marshalErr := json.Marshal(r)
@@ -342,14 +347,18 @@ func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) 
 		return nil, err
 	}
 	var r struct {
-		OK     bool            `json:"ok"`
-		Result json.RawMessage `json:"result"`
-		Error  string          `json:"error"`
+		StoreRecovery *fault.StoreRecovery `json:"store_recovery"`
+		OK            bool                 `json:"ok"`
+		Result        json.RawMessage      `json:"result"`
+		Error         string               `json:"error"`
 	}
 	if json.Unmarshal(encoded, &r) != nil {
 		return nil, errors.New("invalid runtime response")
 	}
 	if !r.OK {
+		if r.StoreRecovery != nil && r.StoreRecovery.Valid() {
+			return nil, r.StoreRecovery
+		}
 		return nil, fault.Error(r.Error)
 	}
 	return r.Result, nil

@@ -200,6 +200,11 @@ func (s Store) load() (Snapshot, []byte, error) {
 	}
 	key, err := readPrivate(filepath.Join(s.Dir, "master.key"), 32)
 	if errors.Is(err, os.ErrNotExist) {
+		if _, storeErr := os.Lstat(filepath.Join(s.Dir, "store.json")); storeErr == nil {
+			return Snapshot{}, nil, &RecoveryError{Reason: "missing_key"}
+		} else if !errors.Is(storeErr, os.ErrNotExist) {
+			return Snapshot{}, nil, storeErr
+		}
 		return Snapshot{}, nil, ErrUninitialized
 	}
 	if err != nil {
@@ -207,7 +212,7 @@ func (s Store) load() (Snapshot, []byte, error) {
 	}
 	data, err := readPrivate(filepath.Join(s.Dir, "store.json"), maxBytes)
 	if errors.Is(err, os.ErrNotExist) {
-		return Snapshot{}, nil, ErrUninitialized
+		return Snapshot{}, nil, &RecoveryError{Reason: "missing_data"}
 	}
 	if err != nil {
 		return Snapshot{}, nil, err

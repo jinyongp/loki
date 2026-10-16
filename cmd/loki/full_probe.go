@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"loki/internal/fault"
 	"net"
 	"net/http"
 	"net/url"
@@ -221,6 +222,7 @@ func runFullProbe(args []string, stderr io.Writer) int {
 		}
 	}()
 	if err != nil {
+		fault.WriteStoreRecovery(stderr, err)
 		fmt.Fprintln(stderr, "Full service probe failed:", err)
 		return 1
 	}

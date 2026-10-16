@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"loki/internal/fault"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -67,6 +68,7 @@ func runRuntime(args []string, stderr io.Writer) int {
 	defer cancel()
 	err = appruntime.RunRuntime(ctx, options, configuration, contract, generation, func() error { return daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") }, func(error) { fmt.Fprintln(stderr, "runtime audit write failed") })
 	if err != nil {
+		fault.WriteStoreRecovery(stderr, err)
 		fmt.Fprintln(stderr, "runtime service failed:", err)
 		return 1
 	}

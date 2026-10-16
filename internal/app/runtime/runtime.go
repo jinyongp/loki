@@ -168,6 +168,11 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		}
 	}
 	githubCredentials := githubapp.Credentials{StateDirectory: githubState}
+	if selected["github"] {
+		if err := githubCredentials.ResumeInitialization(ctx); err != nil {
+			return fmt.Errorf("resume selected GitHub credential initialization: %w", err)
+		}
+	}
 	var devtoolsClient *devtools.Client
 	groups := []uint32{o.RunnerGID}
 	if workspaceGroup := uint32(o.SocketGID); workspaceGroup != o.RunnerGID {

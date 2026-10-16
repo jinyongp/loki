@@ -2,6 +2,7 @@ package secret
 
 import (
 	"context"
+	"loki/internal/fault"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,5 +38,20 @@ func TestEncryptedVaultLifecycle(t *testing.T) {
 	}
 	if _, err = c.RemoveProfile(ctx, "web"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPartialVaultHasPublicRecoveryGuidance(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "master.key"), make([]byte, 32), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Controller{StateDirectory: dir}).Initialize(t.Context())
+	detail := fault.Describe(err)
+	if detail.Code != fault.CodeUnavailable || detail.Retryable || !strings.Contains(detail.Message, "Application secrets") || !strings.Contains(detail.NextAction, "loki backups list") || strings.Contains(detail.Message, dir) {
+		t.Fatalf("unhelpful/private recovery guidance: %+v", detail)
 	}
 }

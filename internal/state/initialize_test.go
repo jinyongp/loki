@@ -299,3 +299,23 @@ func TestInitializationStaleIntentCannotRollBackUpdates(t *testing.T) {
 		t.Fatal("stale initialization intent changed committed data")
 	}
 }
+
+func TestPartialStoreReadExplainsMissingComponent(t *testing.T) {
+	for _, tc := range []struct{ existing, reason string }{{"master.key", "missing_data"}, {"store.json", "missing_key"}} {
+		t.Run(tc.existing, func(t *testing.T) {
+			s := Store{Dir: t.TempDir()}
+			if err := os.Chmod(s.Dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(s.Dir, tc.existing), make([]byte, 32), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Load(t.Context()); RecoveryReason(err) != tc.reason {
+				t.Fatalf("partial store read was hidden: %v", err)
+			}
+			if _, err := s.Initialize(t.Context(), json.RawMessage(`{}`)); RecoveryReason(err) != tc.reason {
+				t.Fatalf("partial store init was hidden: %v", err)
+			}
+		})
+	}
+}

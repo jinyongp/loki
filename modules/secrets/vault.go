@@ -21,6 +21,9 @@ func (c Controller) backend() state.Store {
 	return state.Store{Dir: c.StateDirectory, Validate: Validate}
 }
 func publicStateError(err error) error {
+	if reason := state.RecoveryReason(err); reason != "" {
+		return &fault.StoreRecovery{Schema: 1, Owner: "secrets", Reason: reason}
+	}
 	switch {
 	case errors.Is(err, state.ErrConflict):
 		return secretMutationConflict("secret vault revision changed")

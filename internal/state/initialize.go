@@ -51,7 +51,11 @@ func (s Store) initialize(ctx context.Context, data json.RawMessage, publish fun
 		}
 	}
 	if keyErr == nil || storeErr == nil {
-		return false, errors.New("secret store is only partially initialized without a recovery record; restore missing files from a matching backup")
+		reason := "missing_data"
+		if keyErr != nil {
+			reason = "missing_key"
+		}
+		return false, &RecoveryError{Reason: reason}
 	}
 	key := make([]byte, 32)
 	if _, err = rand.Read(key); err != nil {
@@ -89,11 +93,11 @@ func (s Store) resumeInitialization(ctx context.Context, publish func(string, []
 	}
 	var intent initializationIntent
 	if json.Unmarshal(encoded, &intent) != nil || intent.Schema != 1 || len(intent.Key) != 32 || len(intent.Store) > maxBytes {
-		return false, errors.New("secret store initialization recovery record is invalid")
+		return false, &RecoveryError{Reason: "invalid_record"}
 	}
 	snapshot, version, err := decrypt(intent.Key, intent.Store)
 	if err != nil || version != 2 || snapshot.Revision != 1 {
-		return false, errors.New("secret store initialization recovery record is invalid")
+		return false, &RecoveryError{Reason: "invalid_record"}
 	}
 	if err = s.validate(snapshot.Data); err != nil {
 		return false, err
@@ -114,7 +118,7 @@ func (s Store) resumeInitialization(ctx context.Context, publish func(string, []
 		} else if err != nil {
 			return false, err
 		} else if !bytes.Equal(current, file.data) {
-			return false, errors.New("secret store files conflict with initialization recovery record; restore from a matching backup")
+			return false, &RecoveryError{Reason: "conflicting_record"}
 		}
 	}
 	for _, file := range files {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"loki/internal/fault"
 	"loki/internal/state"
 )
 
@@ -53,9 +54,22 @@ func (c Credentials) backend() state.Store {
 func (c Credentials) Initialize(ctx context.Context) (map[string]any, error) {
 	created, err := c.backend().Initialize(ctx, json.RawMessage(`{"schema":1,"values":{}}`))
 	if err != nil {
-		return nil, fmt.Errorf("GitHub credential store could not initialize")
+		return nil, credentialStateError(err, "GitHub credential store could not initialize")
 	}
 	return map[string]any{"initialized": true, "created": created}, nil
+}
+
+// ResumeInitialization finishes only a recorded initialization. An unused
+// provider store (for example with a separate App key file) must not block the
+// runtime merely because its old files are damaged; its consumers report that
+// failure when they actually need the store.
+func (c Credentials) ResumeInitialization(ctx context.Context) error {
+	_, err := c.backend().Load(ctx)
+	if !errors.Is(err, state.ErrInitializationPending) {
+		return nil
+	}
+	_, err = c.Initialize(ctx)
+	return err
 }
 
 func (c Credentials) Get(ctx context.Context, id Credential) (string, error) {
@@ -67,7 +81,7 @@ func (c Credentials) Get(ctx context.Context, id Credential) (string, error) {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("GitHub credential store is unavailable")
+		return "", credentialStateError(err, "GitHub credential store is unavailable")
 	}
 	var d credentialDocument
 	if err := json.Unmarshal(snapshot.Data, &d); err != nil {
@@ -89,7 +103,7 @@ func (c Credentials) Configured(ctx context.Context, id Credential) (bool, error
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("GitHub credential store is unavailable")
+		return false, credentialStateError(err, "GitHub credential store is unavailable")
 	}
 	var d credentialDocument
 	if err := json.Unmarshal(snapshot.Data, &d); err != nil {
@@ -112,7 +126,7 @@ func (c Credentials) Set(ctx context.Context, id Credential, value string) (map[
 	}
 	store := c.backend()
 	if _, err := store.Initialize(ctx, json.RawMessage(`{"schema":1,"values":{}}`)); err != nil {
-		return nil, fmt.Errorf("GitHub credential store could not initialize")
+		return nil, credentialStateError(err, "GitHub credential store could not initialize")
 	}
 	rotated := false
 	snapshot, err := store.Update(ctx, nil, func(data json.RawMessage) (json.RawMessage, error) {
@@ -125,7 +139,14 @@ func (c Credentials) Set(ctx context.Context, id Credential, value string) (map[
 		return json.Marshal(d)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("GitHub credential could not be saved")
+		return nil, credentialStateError(err, "GitHub credential could not be saved")
 	}
 	return map[string]any{"configured": true, "credential": id, "revision": snapshot.Revision, "rotated": rotated}, nil
+}
+
+func credentialStateError(err error, fallback string) error {
+	if reason := state.RecoveryReason(err); reason != "" {
+		return &fault.StoreRecovery{Schema: 1, Owner: "github", Reason: reason}
+	}
+	return fmt.Errorf("%s", fallback)
 }

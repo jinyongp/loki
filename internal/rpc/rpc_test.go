@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"loki/internal/control/identity"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/fault"
 )
 
 func TestDecodeRejectsUnknownAndTrailingOperationInput(t *testing.T) {
@@ -182,6 +184,33 @@ func TestClientDisconnectCancelsServerOperationContext(t *testing.T) {
 	}
 
 	cancelServer()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStoreRecoverySurvivesRPC(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "runtime.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	want := &fault.StoreRecovery{Schema: 1, Owner: "github", Reason: "missing_key"}
+	server := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Operations: map[string]Operation{"status": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) {
+		return nil, fmt.Errorf("private-context: %w", want)
+	}}}}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(ctx, listener) }()
+	uid := uint32(os.Getuid())
+	_, err = (Client{Socket: socket, ExpectedUID: &uid}).Call(ctx, map[string]any{"operation": "status"})
+	var got *fault.StoreRecovery
+	if !errors.As(err, &got) || *got != *want || strings.Contains(err.Error(), "private-context") {
+		t.Fatalf("lost safe recovery metadata: %v", err)
+	}
+	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}

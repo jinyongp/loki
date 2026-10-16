@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"syscall"
 )
 
@@ -62,6 +63,10 @@ func Describe(err error) Detail {
 	var detailed *detailedError
 	if errors.As(err, &detailed) {
 		return detailed.detail
+	}
+	var recovery *StoreRecovery
+	if errors.As(err, &recovery) && recovery.Valid() {
+		return Detail{Code: CodeUnavailable, Message: recovery.Error(), Retryable: recovery.Reason == "initialization_pending", NextAction: strings.Join(recovery.NextActions(), "; ")}
 	}
 	var safe Error
 	if errors.As(err, &safe) {
