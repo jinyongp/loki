@@ -37,10 +37,15 @@ async def regressions(client, workspace, bundle):
 <h1>Browser regression</h1><label>Name <input id="name"></label><label>Literal <input id="literal"></label>
 <label>Dialog literal <input id="dialog-literal"></label>
 <label>Upload <input id="upload" type="file" multiple></label>
+<label>Clear upload <input id="clear-upload" type="file" multiple></label>
+<label>Popup upload <input id="popup-upload" type="file" onchange="window.open('popup.html')"></label>
+<label>Manual upload <input id="manual-upload" type="file" onchange="answers.push(prompt('Manual upload'))"></label>
 <button id="accept" onclick="answers.push(prompt('Accept fixture'))">Accept prompt</button>
 <button id="dismiss" onclick="answers.push(prompt('Dismiss fixture'))">Dismiss prompt</button>
 <button id="count" onclick="counter.textContent=Number(counter.textContent)+1">Count</button><output id="counter">0</output>
-<script>window.answers=[]</script></html>''', encoding='utf-8')
+<script>window.answers=[];window.popupClicks=0</script></html>''', encoding='utf-8')
+        (site / 'popup.html').write_text('''<!doctype html><title>Upload popup</title>
+<button onclick="opener.popupClicks++">Complete upload</button>''', encoding='utf-8')
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(QuietHandler, directory=str(site)))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -66,7 +71,7 @@ async def regressions(client, workspace, bundle):
             await call('list_pages')
 
             paths = []
-            for name in ["upload 'quoted'.txt", 'second.txt']:
+            for name in ['report.fill(.txt', 'data.fill(test).csv', "upload 'quoted'.txt"]:
                 staged = json.loads(text(await call('loki_browser_files', {'engine': 'browser/playwright', 'action': 'stage', 'name': name, 'data': base64.b64encode(b'replay fixture').decode()})))
                 paths.append(staged['execution_host_path'])
             await call('browser_navigate', {'url': origin})
@@ -78,6 +83,18 @@ async def regressions(client, workspace, bundle):
             ]})
             await call('browser_click', {'target': '#upload'})
             await call('browser_file_upload', {'paths': paths})
+            await call('browser_click', {'target': '#clear-upload'})
+            await call('browser_file_upload', {'paths': paths[:1]})
+            await call('browser_click', {'target': '#clear-upload'})
+            await call('browser_file_upload', {'paths': []})
+            await call('browser_click', {'target': '#popup-upload'})
+            await call('browser_file_upload', {'paths': paths[1:2]})
+            tabs = text(await call('browser_tabs', {'action': 'list'}))
+            popup_index = int(re.findall(r'^- (\d+):.*\(' + re.escape(origin + 'popup.html') + r'\)', tabs, re.M)[0])
+            main_index = int(re.findall(r'^- (\d+):.*\(' + re.escape(origin) + r'\)', tabs, re.M)[0])
+            await call('browser_tabs', {'action': 'select', 'index': popup_index})
+            await call('browser_click', {'target': 'button'})
+            await call('browser_tabs', {'action': 'select', 'index': main_index})
             await call('browser_click', {'target': '#accept'})
             await call('browser_handle_dialog', {'accept': True, 'promptText': 'Actual response'})
             await call('browser_click', {'target': '#dismiss'})
@@ -90,25 +107,42 @@ async def regressions(client, workspace, bundle):
             # Replay outside the MCP modal-state observer so the recorded dialog
             # listeners, rather than another tool call, must complete the flow.
             runtime = json.loads((bundle / 'runtime.json').read_text())
-            replay = site / 'replay.cjs'
-            settings = {'bundle': str(bundle), 'chrome': str(bundle / runtime['chrome']), 'origin': origin, 'code': code}
-            replay.write_text('const settings=' + json.dumps(settings) + ';\n' + '''const {chromium}=require(settings.bundle+'/node_modules/playwright');
+            async def replay_recording(code, expected):
+                replay = site / 'replay.cjs'
+                settings = {'bundle': str(bundle), 'chrome': str(bundle / runtime['chrome']), 'origin': origin, 'code': code}
+                replay.write_text('const settings=' + json.dumps(settings) + ';\n' + '''const {chromium}=require(settings.bundle+'/node_modules/playwright');
 (async()=>{const browser=await chromium.launch({headless:true,chromiumSandbox:true,executablePath:settings.chrome});
 try{const page=await browser.newPage();await page.goto(settings.origin);
 await new (Object.getPrototypeOf(async function(){}).constructor)('page',settings.code)(page);
-console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector('#name').value,literal:document.querySelector('#literal').value,dialogLiteral:document.querySelector('#dialog-literal').value,files:[...document.querySelector('#upload').files].map(f=>f.name),answers}))));
+console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector('#name').value,literal:document.querySelector('#literal').value,dialogLiteral:document.querySelector('#dialog-literal').value,files:[...document.querySelector('#upload').files].map(f=>f.name),clearFiles:document.querySelector('#clear-upload').files.length,popupFiles:[...document.querySelector('#popup-upload').files].map(f=>f.name),popupClicks,answers}))));
 }finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1});''', encoding='utf-8')
-            process = await asyncio.create_subprocess_exec(str(bundle / runtime['node']), str(replay), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), 30)
-            except BaseException:
-                if process.returncode is None:
-                    process.kill()
-                    await process.wait()
-                raise
-            expected = {'name': 'Recorded name', 'literal': r'C:\fakepath\plain.txt', 'dialogLiteral': 'Search for dialog.dismiss() in the source', 'files': [Path(path).name for path in paths], 'answers': ['Actual response', None]}
-            if process.returncode or json.loads(stdout.splitlines()[-1]) != expected:
-                raise ValueError('Recorded code did not replay actual final state: ' + stdout.decode() + stderr.decode())
+                process = await asyncio.create_subprocess_exec(str(bundle / runtime['node']), str(replay), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                try:
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), 30)
+                except BaseException:
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
+                    raise
+                if process.returncode or json.loads(stdout.splitlines()[-1]) != expected:
+                    raise ValueError('Recorded code did not replay actual final state: ' + stdout.decode() + stderr.decode())
+
+            await replay_recording(code, {'name': 'Recorded name', 'literal': r'C:\fakepath\plain.txt', 'dialogLiteral': 'Search for dialog.dismiss() in the source', 'files': [Path(path).name for path in paths], 'clearFiles': 0, 'popupFiles': [Path(paths[1]).name], 'popupClicks': 1, 'answers': ['Actual response', None]})
+
+            # An upload outside browser_file_upload has no recoverable host path.
+            # Omitting it must not apply its answer to the next retained dialog.
+            for first_accept in [False, True]:
+                await call('browser_navigate', {'url': origin})
+                await call('browser_start_recording')
+                await call('browser_run_code_unsafe', {'code': 'async page => await page.locator("#manual-upload").setInputFiles(' + json.dumps(paths[:1]) + ')'})
+                await call('browser_handle_dialog', {'accept': first_accept, 'promptText': 'First answer'})
+                await call('browser_click', {'target': '#accept'})
+                await call('browser_handle_dialog', {'accept': not first_accept, 'promptText': 'Second answer'})
+                recorded = text(await call('browser_stop_recording'))
+                if 'A recorded file upload was omitted' not in recorded or 'A recorded dialog action was omitted' in recorded:
+                    raise ValueError('Manual upload omission affected a recoverable dialog: ' + recorded)
+                code = re.search(r'```js\n(.*?)\n```', recorded, re.S).group(1)
+                await replay_recording(code, {'name': '', 'literal': '', 'dialogLiteral': '', 'files': [], 'clearFiles': 0, 'popupFiles': [], 'popupClicks': 0, 'answers': [None if first_accept else 'Second answer']})
 
             # The debugger belongs to this exact MCP context. Attach a fixture
             # client through Playwright's owned registry to create a real pause,
@@ -156,7 +190,7 @@ console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector
                     paused.kill()
                     await paused.wait()
             await call('browser_close')
-            print(json.dumps({'browser_regressions': 'pass', 'viewport': [960, 720], 'post_audit_capture': 'pass', 'follow_up_calls': 'pass', 'recorded_upload_and_dialog_replay': 'pass', 'actual_debugger_resume': 'pass'}))
+            print(json.dumps({'browser_regressions': 'pass', 'viewport': [960, 720], 'post_audit_capture': 'pass', 'follow_up_calls': 'pass', 'recorded_upload_and_dialog_replay': 'pass', 'unusual_upload_names': 'pass', 'cleared_upload': 'pass', 'upload_popup': 'pass', 'omitted_upload_dialog_alignment': 'pass', 'actual_debugger_resume': 'pass'}))
         finally:
             server.shutdown()
             server.server_close()
