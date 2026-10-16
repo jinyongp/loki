@@ -46,10 +46,11 @@ async function recorder(language = 'javascript') {
     browser_handle_dialog: async (_context, params) => dialog[params.accept ? 'accept' : 'dismiss'](),
   };
   const browserTools = Object.entries(handlers).map(([name, handle]) => ({schema: {name}, handle}));
+  const Tab = class {async headerSnapshot() {return this.readHeader();}};
   const entry = '/fixture/cli.js';
   const mockedRequire = name => {
     if (name === entry) return {};
-    if (name === 'node:module') return {createRequire: () => () => ({tools: {browserTools}, iso: {asLocator: locator, escapeWithQuotes: quote}})};
+    if (name === 'node:module') return {createRequire: () => () => ({tools: {browserTools, Tab}, iso: {asLocator: locator, escapeWithQuotes: quote}})};
     return require(name);
   };
   vm.runInNewContext(source, {require: mockedRequire, process: {argv: ['node', 'adapter', entry]}, Buffer});
@@ -58,6 +59,7 @@ async function recorder(language = 'javascript') {
   await tool('browser_start_recording').handle(context, {}, response);
   return {
     page,
+    header(tab) {return Tab.prototype.headerSnapshot.call(tab);},
     action(data, code) {sink.actionAdded(page, data, code);},
     async upload(files, text, code = fillCode(language, text), selector = '#upload') {
       uploadAction = () => sink.actionAdded(page, {name: 'fill', text, selector}, code);
@@ -81,6 +83,24 @@ async function recorder(language = 'javascript') {
     },
   };
 }
+
+test('tab headers stay responsive while a dialog blocks another tab', async () => {
+  const recording = await recorder();
+  let blocked = true;
+  const tab = {
+    context: {tabs() {return [{modalStates() {return blocked ? [{type: 'dialog'}] : [];}}];}},
+    _lastHeader: {title: 'Upload popup'},
+    page: {url() {return 'about:blank';}},
+    isCurrentTab() {return true;},
+    async readHeader() {
+      if (blocked) throw new Error('Renderer is blocked by the opener dialog');
+      return {title: 'Live title'};
+    },
+  };
+  assert.deepEqual({...await recording.header(tab)}, {title: 'Upload popup', url: 'about:blank', current: true, changed: true});
+  blocked = false;
+  assert.deepEqual(await recording.header(tab), {title: 'Live title'});
+});
 
 for (const language of ['javascript', 'typescript', 'python']) {
   for (const name of ['ordinary.txt', 'report.fill(.txt', 'data.fill(test).csv', `quoted '" $&.txt`]) {

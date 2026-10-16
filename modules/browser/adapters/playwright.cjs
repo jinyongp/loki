@@ -40,6 +40,16 @@ const browserTool = name => {
   if (!value) throw new Error(`Pinned Playwright tool ${name} is unavailable`);
   return value;
 };
+const headerSnapshot = core.tools.Tab.prototype.headerSnapshot;
+core.tools.Tab.prototype.headerSnapshot = async function() {
+  // A dialog can block JavaScript in its opener/popup too. Upstream races only
+  // this tab's modal state, so querying another tab's title can strand the MCP
+  // response that the client needs before it can handle the dialog.
+  if (this.context.tabs().some(tab => tab.modalStates().some(state => state.type === 'dialog'))) {
+    return {...this._lastHeader, url: this.page.url(), current: this.isCurrentTab(), changed: true};
+  }
+  return headerSnapshot.call(this);
+};
 const resumeTool = browserTool('browser_resume');
 const resumeExecution = resumeTool.handle;
 resumeTool.handle = async (context, params, response) => {
