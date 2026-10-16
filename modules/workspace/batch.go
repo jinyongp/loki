@@ -209,7 +209,8 @@ func (f *Files) pruneBatchRecords() error {
 		if err != nil {
 			return err
 		}
-		if record.State == batchStateInProgress {
+		// Unresolved recovery records are safety barriers, not disposable history.
+		if record.State == batchStateInProgress || record.State == batchStateRecoveryBad {
 			continue
 		}
 		when, _ := time.Parse(time.RFC3339Nano, record.UpdatedAt)
@@ -543,6 +544,9 @@ func (f *Files) reconcileBatchesLocked() error {
 			return fault.New(fault.CodeOutcomeUnknown, "workspace batch recovery state is unreadable; no workspace mutation was attempted", false, "run diagnostics and repair the runtime recovery state")
 		}
 		if record.State != batchStateInProgress {
+			if record.State == batchStateRecoveryBad {
+				return fault.New(fault.CodeOutcomeUnknown, "workspace batch recovery remains unresolved; no workspace mutation was attempted", false, "inspect every affected path and repair the runtime recovery state before another mutation")
+			}
 			continue
 		}
 		if err := f.rollbackBatchLocked(record); err != nil {

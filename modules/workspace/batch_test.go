@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -257,14 +258,57 @@ func TestBatchCrashRecoveryFailsClosedAfterExternalChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer recovered.Close()
-	if _, err := recovered.Create("trigger.txt", "blocked\n"); err == nil {
-		t.Fatal("mutation continued after ambiguous crash recovery")
-	} else if detail := fault.Describe(err); detail.Code != fault.CodeOutcomeUnknown {
-		t.Fatalf("ambiguous recovery error = %#v", detail)
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := recovered.Create("trigger.txt", "blocked\n"); err == nil {
+			t.Fatalf("mutation continued after ambiguous crash recovery on attempt %d", attempt)
+		} else if detail := fault.Describe(err); detail.Code != fault.CodeOutcomeUnknown {
+			t.Fatalf("ambiguous recovery error = %#v", detail)
+		}
+	}
+	restarted, err := New(files.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	if _, err := restarted.Create("trigger.txt", "blocked\n"); fault.Describe(err).Code != fault.CodeOutcomeUnknown {
+		t.Fatalf("restart bypassed ambiguous recovery: %v", err)
 	}
 	requireWorkspaceContent(t, recovered, "created.txt", "external\n")
 	if _, err := os.Stat(filepath.Join(recovered.Policy.Root(), "trigger.txt")); !os.IsNotExist(err) {
 		t.Fatalf("recovery failure allowed later mutation: %v", err)
+	}
+	// Retention pressure must not erase the record that keeps this workspace
+	// blocked. Populate completed history after the unresolved failure.
+	failed, failedPath, exists, err := recovered.batchRecord(requestID)
+	if err != nil || !exists {
+		t.Fatalf("failed recovery record missing: %v", err)
+	}
+	failed.UpdatedAt = "2000-01-01T00:00:00Z"
+	if err := publishBatchRecord(failedPath, failed); err != nil {
+		t.Fatal(err)
+	}
+	for index := range maxBatchJournalFiles {
+		completed := failed
+		completed.RequestID = fmt.Sprintf("%08x-0000-4000-8000-000000000000", index+1)
+		completed.State = batchStateApplied
+		completed.UpdatedAt = "2026-01-01T00:00:00Z"
+		completed.Error = nil
+		path, err := recovered.batchRecordPath(completed.RequestID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := publishBatchRecord(path, completed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := recovered.pruneBatchRecords(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(failedPath); err != nil {
+		t.Fatalf("retention erased unresolved recovery evidence: %v", err)
+	}
+	if _, err := restarted.Create("trigger.txt", "blocked\n"); fault.Describe(err).Code != fault.CodeOutcomeUnknown {
+		t.Fatalf("retention bypassed ambiguous recovery: %v", err)
 	}
 }
 
