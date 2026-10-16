@@ -2,7 +2,9 @@ package management
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"loki/internal/fault"
 	"slices"
 	"strconv"
 	"time"
@@ -50,6 +52,10 @@ func (b *DockerFullBackend) waitService(ctx context.Context, record fullDockerRe
 	var last error
 	for {
 		last = b.probeService(ctx, record, spec, "")
+		var recovery *fault.StoreRecovery
+		if errors.As(last, &recovery) {
+			return last
+		}
 		if last == nil {
 			return nil
 		}
@@ -72,6 +78,11 @@ func (b *DockerFullBackend) probeService(ctx context.Context, record fullDockerR
 		return err
 	}
 	if !inspection.State.Running {
+		if spec.Service == "runtime" {
+			if recovery := b.runtimeStoreRecovery(ctx, inspection); recovery != nil {
+				return recovery
+			}
+		}
 		return fmt.Errorf("%s is %s", spec.Service, inspection.State.Status)
 	}
 	role, user := spec.Service, "10000:10001"
@@ -114,6 +125,12 @@ func (b *DockerFullBackend) probeService(ctx context.Context, record fullDockerR
 	command := []string{"container", "exec", "--user", user, spec.Name, record.Worker, "full-probe", "--role", role}
 	command = append(command, args...)
 	_, err = b.command(ctx, "probing "+spec.Service, nil, command...)
+	var failure *dockerCommandFailure
+	if errors.As(err, &failure) {
+		if recovery := fault.ParseStoreRecovery([]byte(failure.diagnostics)); recovery != nil {
+			return recovery
+		}
+	}
 	return err
 }
 
@@ -127,6 +144,10 @@ func (b *DockerFullBackend) Observe(ctx context.Context, r DeploymentReservation
 	for _, spec := range record.Specs {
 		if err := b.probeService(ctx, record, spec, ""); err != nil {
 			result.Services[spec.Service] = err.Error()
+			var recovery *fault.StoreRecovery
+			if errors.As(err, &recovery) {
+				result.StoreRecovery = append(result.StoreRecovery, *recovery)
+			}
 			result.Ready = false
 			result.State = "degraded"
 		} else {
@@ -165,3 +186,19 @@ func (b *DockerFullBackend) Observe(ctx context.Context, r DeploymentReservation
 }
 
 var _ FullBackend = (*DockerFullBackend)(nil)
+
+// Called only after inspectContainer + verifySpec. Restrict diagnostics to the
+// current start so a previous failed attempt cannot label a healthy new one.
+func (b *DockerFullBackend) runtimeStoreRecovery(ctx context.Context, inspection fullContainerInspection) *fault.StoreRecovery {
+	started, err := time.Parse(time.RFC3339Nano, inspection.State.StartedAt)
+	if err != nil || started.IsZero() || !dockerIDPattern.MatchString(inspection.ID) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	data, err := b.commandOutput(ctx, "reading owned runtime recovery status", nil, true, "container", "logs", "--tail", "64", "--since", inspection.State.StartedAt, inspection.ID)
+	if err != nil {
+		return nil
+	}
+	return fault.ParseStoreRecovery(data)
+}

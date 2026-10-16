@@ -937,6 +937,10 @@
     {
       "from": "loki/tools/toolchainfetch",
       "to": "loki/modules/execution/toolchains"
+    },
+    {
+      "from": "loki/internal/management",
+      "to": "loki/internal/fault"
     }
   ],
   "edge_exceptions": [],

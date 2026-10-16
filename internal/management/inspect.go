@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"loki/internal/fault"
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 // Status never runs a tool or claims observed readiness. Doctor performs owned
 // resource checks and invokes only explicitly supplied module probes.
 type Report struct {
+	StoreRecovery  []fault.StoreRecovery    `json:"store_recovery,omitempty"`
 	Installed      bool                     `json:"installed"`
 	Release        string                   `json:"release"`
 	ManagerVersion string                   `json:"manager_version,omitempty"`
@@ -148,6 +150,10 @@ func (s Store) Doctor(ctx context.Context, probes map[tools.ID]Probe) (Report, e
 			}
 		}
 		if checkErr != nil {
+			var recovery *fault.StoreRecovery
+			if errors.As(checkErr, &recovery) && recovery.Valid() && !slices.Contains(r.StoreRecovery, *recovery) {
+				r.StoreRecovery = append(r.StoreRecovery, *recovery)
+			}
 			observed.Readiness, observed.Reason = tools.Degraded, checkErr.Error()
 			issue(fmt.Sprintf("%s: %s", id, observed.Reason))
 		} else if probes[id] != nil {

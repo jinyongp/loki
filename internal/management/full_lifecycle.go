@@ -3,14 +3,16 @@ package management
 import (
 	"context"
 	"fmt"
+	"loki/internal/fault"
 	"os"
 	"path/filepath"
 )
 
 type FullObservation struct {
-	State    string            `json:"state"`
-	Ready    bool              `json:"ready"`
-	Services map[string]string `json:"services"`
+	StoreRecovery []fault.StoreRecovery `json:"store_recovery,omitempty"`
+	State         string                `json:"state"`
+	Ready         bool                  `json:"ready"`
+	Services      map[string]string     `json:"services"`
 }
 
 // FullBackend is an owned service publisher. Prepare and Start must be

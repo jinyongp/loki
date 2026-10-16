@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"loki/internal/tools"
@@ -68,6 +69,14 @@ func (s Store) FullProbes(backend FullBackend) (map[tools.ID]Probe, error) {
 			})
 			if observationError != nil {
 				return observationError
+			}
+			if slices.Contains(roles[module], "runtime") {
+				for _, recovery := range observed.StoreRecovery {
+					if recovery.Valid() {
+						copy := recovery
+						return &copy
+					}
+				}
 			}
 			for _, role := range roles[module] {
 				if observed.Services[role] != "ready" {

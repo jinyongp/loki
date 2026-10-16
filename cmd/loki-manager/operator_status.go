@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,6 +58,14 @@ func operatorStatus(ctx context.Context, store management.Store, selected *manag
 		view.HostCount = len(registry.Hosts)
 		if record, err := store.HostForTarget(host); err == nil {
 			view.HostName = record.Name
+		}
+	}
+	if len(report.StoreRecovery) > 0 {
+		prefix := recoveryCommandPrefix(store.Root, host, view.HostName)
+		for i, action := range view.NextActions {
+			if strings.HasPrefix(action, "loki ") {
+				view.NextActions[i] = prefix + strings.TrimPrefix(action, "loki")
+			}
 		}
 	}
 	client := inspectCodexConnection()
@@ -161,6 +171,19 @@ func inspectOperatorHost(ctx context.Context, store management.Store, selected *
 }
 
 func statusNextActions(report management.Report) []string {
+	if len(report.StoreRecovery) > 0 {
+		var actions []string
+		for _, recovery := range report.StoreRecovery {
+			for _, action := range recovery.NextActions() {
+				if !slices.Contains(actions, action) {
+					actions = append(actions, action)
+				}
+			}
+		}
+		if len(actions) > 0 {
+			return actions
+		}
+	}
 	if report.Tools == nil {
 		return []string{"loki hosts show — inspect the selected execution host", "loki setup — check access or choose another host"}
 	}
@@ -209,4 +232,42 @@ func toolRuntimeLabel(state tools.State, mode tools.Mode) string {
 		return "on demand; not checked"
 	}
 	return "not checked"
+}
+
+func recoveryCommandPrefix(root string, host management.ExecutionSelection, name string) string {
+	args := []string{"loki"}
+	if name != "" {
+		args = append(args, "--root", root, "--host", name)
+	} else {
+		args = append(args, "--host", host.Host.Kind)
+		if host.Root != "" {
+			root = host.Root
+		}
+		args = append(args, "--root", root)
+		if host.Host.Kind == "ssh" {
+			args = append(args, "--address", host.Host.Address, "--remote-command", host.Command)
+		}
+		if host.Host.Kind == "wsl" {
+			args = append(args, "--distribution", host.Host.Distribution)
+			if host.User != "" {
+				args = append(args, "--remote-user", host.User)
+			}
+		}
+		if host.System {
+			args = append(args, "--system-socket", host.Socket)
+		}
+	}
+	for i, arg := range args {
+		if arg != "" && strings.IndexFunc(arg, func(r rune) bool {
+			return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/_-.@:=", r))
+		}) < 0 {
+			continue
+		}
+		if runtime.GOOS == "windows" {
+			args[i] = "'" + strings.ReplaceAll(arg, "'", "''") + "'"
+		} else {
+			args[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
+		}
+	}
+	return strings.Join(args, " ")
 }

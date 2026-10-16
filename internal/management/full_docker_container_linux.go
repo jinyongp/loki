@@ -72,8 +72,9 @@ type fullContainerInspection struct {
 		Labels          map[string]string
 	}
 	State struct {
-		Running bool
-		Status  string
+		Running   bool
+		StartedAt string
+		Status    string
 	}
 	HostConfig struct {
 		Init                                   *bool

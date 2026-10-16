@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"loki/internal/fault"
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
@@ -177,5 +179,34 @@ func TestStateRejectsUnknownFieldsAndTrailingDocuments(t *testing.T) {
 		if _, err := s.Load(); err == nil {
 			t.Fatal("accepted ambiguous state")
 		}
+	}
+}
+
+func TestDoctorPreservesSafeStoreRecovery(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Installed["browser"] = ownedFixture(t, s, "browser")
+	state.Config.Tools = []tools.Selection{{ID: "browser", Enabled: true}}
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	want := fault.StoreRecovery{Schema: 1, Owner: "github", Reason: "missing_key"}
+	r, err := s.Doctor(t.Context(), map[tools.ID]Probe{"browser": func(context.Context, string) error { return fmt.Errorf("owned runtime: %w", &want) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.StoreRecovery) != 1 || r.StoreRecovery[0] != want || r.Healthy == nil || *r.Healthy {
+		t.Fatalf("doctor lost recovery details: %+v", r)
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Report
+	if err := json.Unmarshal(raw, &decoded); err != nil || len(decoded.StoreRecovery) != 1 {
+		t.Fatal("recovery lost in JSON", err)
 	}
 }

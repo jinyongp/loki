@@ -93,6 +93,10 @@ func (b *DockerFullBackend) dockerCommand(args ...string) []string {
 // Only bounded output is retained. Long acquisition operations report elapsed
 // time without exposing environment, private configuration or command input.
 func (b *DockerFullBackend) command(ctx context.Context, label string, input io.Reader, args ...string) ([]byte, error) {
+	return b.commandOutput(ctx, label, input, false, args...)
+}
+
+func (b *DockerFullBackend) commandOutput(ctx context.Context, label string, input io.Reader, combined bool, args ...string) ([]byte, error) {
 	if !filepath.IsAbs(b.Binary) || !filepath.IsAbs(b.Socket) {
 		return nil, fmt.Errorf("invalid owned Docker backend")
 	}
@@ -144,6 +148,9 @@ func (b *DockerFullBackend) command(ctx context.Context, label string, input io.
 	}
 	if stdout.overflow || stderr.overflow {
 		return nil, fmt.Errorf("%s exceeded the bounded Docker diagnostic output", label)
+	}
+	if combined {
+		return append(append(stdout.Bytes(), '\n'), stderr.Bytes()...), nil
 	}
 	return stdout.Bytes(), nil
 }

@@ -618,20 +618,25 @@ attention, separately from an unavailable host. Repeat a diagnostic command with
 
 ## Encrypted store initialization recovery
 
-If a secret or GitHub credential store's first initialization is interrupted,
-retry the same initialization or credential provisioning command. A private
-`initialization.json` record preserves the original key and encrypted initial
-document. Recovery publishes only missing files whose existing counterparts
-match that record; it keeps the original document even if retry input differs.
-Reads and updates remain blocked until initialization finishes and removes the
-record. Treat this record as private key material and retain it for recovery.
+Run `loki doctor` when application secrets or GitHub credentials fail to
+initialize. For recognized incomplete, conflicting or undecryptable stores,
+Loki reports the affected store, whether automatic recovery is
+possible, and the next commands for the same execution host and management root.
+The human report and `--json` output include the same recovery guidance; private
+keys, encrypted contents and raw runtime logs are not included.
 
-A partial store without a recovery record cannot be distinguished from a
-previously initialized store with missing files. This includes interruptions
-from older builds that did not create the record. Restore the missing files
-from a matching backup; do not delete or regenerate the remaining key to force
-initialization. A conflicting or damaged record also requires inspecting and
-restoring the matching store instead of resetting its contents.
+For an interrupted initialization with a verified recovery record, the report
+points to `loki tools restart`. Restarting selected services resumes the original
+key and initial document instead of replacing them with retry input. This can
+interrupt active jobs. Reads and updates remain blocked until recovery finishes.
+
+For an unexplained partial store from an older build, damaged recovery record or
+conflicting data, Loki cannot prove that the store was never used and will not
+reset it. The report points to `loki backups list` and `loki restore BACKUP-ID` on
+the affected host. Choose a known working backup; restore also reverts programs,
+settings and tool data, and creates a safety backup of current state first.
+Without a working backup, the remaining store files alone cannot recover missing
+secrets. Do not delete or replace encryption keys to force initialization.
 
 ## Workspace editing and listing
 

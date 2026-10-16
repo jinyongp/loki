@@ -67,3 +67,33 @@ func TestUnreachableHostStatusRetainsTargetAndDoesNotClaimEmptyTools(t *testing.
 		}
 	}
 }
+
+func TestDoctorOffersRecoveryOnTheAffectedHost(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
+	installSetupSSHFixture(t, `{"installed":true,"tools":{"secrets":{"installed":true,"enabled":true,"readiness":"degraded"}},"issues":["Encrypted application-secret store needs recovery"],"healthy":false,"ready":false,"store_recovery":[{"schema":1,"owner":"secrets","reason":"missing_data"}]}`)
+	t.Setenv("LOKI_REVIEW_SSH_DOCTOR_FAIL", "1")
+	for _, structured := range []bool{false, true} {
+		var out bytes.Buffer
+		args := []string{"--host", "ssh", "--address", "fixture@host", "--root", "/srv/custom root", "doctor"}
+		if structured {
+			args = append(args, "--json")
+		}
+		if err := run(t.Context(), args, &out, io.Discard); err == nil {
+			t.Fatal("doctor accepted failed store")
+		}
+		if structured {
+			value := singleJSON(t, out.Bytes())
+			if len(value["store_recovery"].([]any)) != 1 {
+				t.Fatal("JSON omitted store diagnosis")
+			}
+		}
+		for _, want := range []string{"--host ssh", "--address fixture@host", "/srv/custom root", "backups list", "restore BACKUP-ID"} {
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("missing scoped recovery action %q: %s", want, out.String())
+			}
+		}
+		if strings.Contains(out.String(), "loki setup —") {
+			t.Fatal("doctor replaced recovery with generic setup advice")
+		}
+	}
+}
