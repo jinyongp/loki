@@ -428,10 +428,8 @@ func (c *Controller) StagePatch(ctx context.Context, cwd, patch string, reverse 
 	if patch == "" || len(patch) > c.Config.MaxPatchBytes {
 		return nil, fault.Error("patch is empty or exceeds the patch limit")
 	}
-	for _, marker := range []string{"\x00", "GIT binary patch", "Binary files ", "new file mode ", "deleted file mode ", "old mode ", "new mode ", "rename from ", "rename to ", "copy from ", "copy to "} {
-		if strings.Contains(patch, marker) {
-			return nil, fault.Error("only modifications to regular text files may be partially staged")
-		}
+	if strings.ContainsRune(patch, '\x00') {
+		return nil, fault.Error("only modifications to regular text files may be partially staged")
 	}
 	full, err := c.Paths.ResolveCWD(cwd)
 	if err != nil {
@@ -476,6 +474,16 @@ func (c *Controller) StagePatch(ctx context.Context, cwd, patch string, reverse 
 	}
 	if len(files) == 0 || len(files) > c.Config.MaxPatchFiles {
 		return nil, fault.Error("staging patch has no files or changes too many files")
+	}
+	// Let Git distinguish extended headers from literal file content. Its
+	// summary is empty for text modifications, including content that quotes
+	// mode/rename/binary headers; structural changes produce a summary.
+	summary, err := c.git(ctx, full, data, c.Config.MaxOutputBytes, "apply", "--summary")
+	if err != nil {
+		return nil, err
+	}
+	if summary.ExitCode != 0 || summary.Truncated || len(summary.Raw) != 0 {
+		return nil, fault.Error("only modifications to regular text files may be partially staged")
 	}
 	args := []string{"apply", "--cached"}
 	if reverse {

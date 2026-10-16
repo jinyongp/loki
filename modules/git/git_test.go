@@ -113,7 +113,8 @@ func TestIndexPathsAndPartialPatch(t *testing.T) {
 			t.Fatalf("accepted path %s", bad)
 		}
 	}
-	if _, err := c.StagePatch(t.Context(), "repo", patch+"new file mode 120000\n", false, nil); err == nil {
+	modePatch := "diff --git a/a.txt b/a.txt\nold mode 100644\nnew mode 100755\n"
+	if _, err := c.StagePatch(t.Context(), "repo", modePatch, false, nil); err == nil {
 		t.Fatal("mode patch accepted")
 	}
 	write(t, c, ":(glob)*", "literal\n")
@@ -218,5 +219,88 @@ func TestGitConcurrentCASAndWorktree(t *testing.T) {
 	}
 	if _, err := c.Index(t.Context(), "foreign"); err == nil {
 		t.Fatal("external Git metadata accepted")
+	}
+}
+
+func TestStagePatchPreservesLiteralDiffContent(t *testing.T) {
+	for _, marker := range []string{"new file mode 100644", "deleted file mode 100644", "old mode 100644", "new mode 100755", "rename from old-path", "rename to new-path", "copy from old-path", "copy to new-path", "GIT binary patch", "Binary files are compared differently"} {
+		t.Run(marker, func(t *testing.T) {
+			c := fixture(t)
+			// Exercise the same words in paths, context, deletions and additions.
+			name := marker + ".txt"
+			before := marker + "\nremove " + marker + "\n"
+			after := marker + "\nadd " + marker + "\n"
+			write(t, c, name, before)
+			git(t, c, "add", "--", name)
+			git(t, c, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "baseline")
+			write(t, c, name, after)
+			patch := git(t, c, "diff", "--", name)
+			initial := index(t, c)
+			staged, err := c.StagePatch(t.Context(), "repo", patch, false, &initial)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := git(t, c, "show", ":"+name); got != after {
+				t.Fatalf("staged content %q, want %q", got, after)
+			}
+			current := staged["index_sha256"].(string)
+			if _, err = c.StagePatch(t.Context(), "repo", patch, true, &current); err != nil {
+				t.Fatal(err)
+			}
+			if index(t, c) != initial {
+				t.Fatal("reverse patch did not restore the index")
+			}
+			if got, err := os.ReadFile(filepath.Join(c.Paths.Root(), "repo", name)); err != nil || string(got) != after {
+				t.Fatalf("worktree changed: %q %v", got, err)
+			}
+		})
+	}
+}
+
+func TestStagePatchRejectsStructuralChanges(t *testing.T) {
+	for _, kind := range []string{"create", "delete", "mode", "rename", "copy", "binary"} {
+		t.Run(kind, func(t *testing.T) {
+			c := fixture(t)
+			initial := "ordinary text\n"
+			if kind == "binary" {
+				initial = "initial\x00bytes\n"
+			}
+			write(t, c, "a.txt", initial)
+			git(t, c, "add", "a.txt")
+			git(t, c, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "baseline")
+			switch kind {
+			case "create", "copy":
+				write(t, c, "b.txt", initial)
+				git(t, c, "add", "b.txt")
+			case "delete":
+				git(t, c, "rm", "a.txt")
+			case "mode":
+				git(t, c, "update-index", "--chmod=+x", "a.txt")
+			case "rename":
+				git(t, c, "mv", "a.txt", "b.txt")
+			case "binary":
+				write(t, c, "a.txt", "changed\x00bytes\n")
+				git(t, c, "add", "a.txt")
+			}
+			args := []string{"diff", "--cached", "--binary", "--find-renames"}
+			if kind == "copy" {
+				args = append(args, "--find-copies", "--find-copies-harder")
+			}
+			patch := git(t, c, args...)
+			if patch == "" {
+				t.Fatal("fixture did not produce a patch")
+			}
+			git(t, c, "reset", "--mixed", "HEAD")
+			// Keep the old path available so path validation alone cannot reject
+			// deletion/rename metadata before Git inspects the patch structure.
+			write(t, c, "a.txt", initial)
+			before := index(t, c)
+			if _, err := c.StagePatch(t.Context(), "repo", patch, false, &before); err == nil {
+				t.Fatalf("accepted %s patch", kind)
+			}
+			if index(t, c) != before {
+				t.Fatal("rejected patch changed the index")
+			}
+		})
 	}
 }
