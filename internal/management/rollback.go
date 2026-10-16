@@ -74,6 +74,9 @@ func (s Store) RollbackTools(ctx context.Context) error {
 		}
 		releases = append(releases, release)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	t := transaction{Schema: 1, ID: fmt.Sprintf("op-%d", time.Now().UnixNano()), Action: "rollback", Phase: tools.Prepared, Previous: current, Candidate: previous.Previous}
 	if err := t.validate(); err != nil {
 		return err

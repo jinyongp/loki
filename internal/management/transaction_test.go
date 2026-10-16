@@ -74,6 +74,27 @@ func fixtureCatalog(items ...Installation) tools.Catalog {
 	return c
 }
 
+func TestCancelledRollbackToEmptyInstallationRetainsTools(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	installation := ownedFixture(t, s, "browser")
+	if err := s.InstallTools(t.Context(), fixtureCatalog(installation), []tools.ID{"browser"}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := s.RollbackTools(ctx); err != context.Canceled {
+		t.Fatalf("cancelled rollback returned %v", err)
+	}
+	after, err := s.Load()
+	if err != nil || snapshotDigest(after) != snapshotDigest(before) {
+		t.Fatalf("cancelled rollback changed the installation: %v", err)
+	}
+}
+
 func TestInstallClosureFailureKeepsOriginalSnapshot(t *testing.T) {
 	s := Store{Root: t.TempDir()}
 	state, _ := s.Load()
