@@ -61,13 +61,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reject(w, 404, "preview not found")
 		return
 	}
-	path := r.URL.Path
+	path := r.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
 	route, path, ok := ResolveRoute(preview, path)
 	if !ok {
 		reject(w, 404, "preview route not found")
+		return
+	}
+	decodedPath, err := url.PathUnescape(path)
+	if err != nil {
+		reject(w, 400, "invalid request path")
 		return
 	}
 	if p.Validate == nil || !p.Validate(ctx, route) {
@@ -96,8 +101,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme = "http"
 			pr.Out.URL.Host = target
-			pr.Out.URL.Path = path
-			pr.Out.URL.RawPath = ""
+			pr.Out.URL.Path = decodedPath
+			pr.Out.URL.RawPath = path
 			pr.Out.Host = target
 			for _, name := range privateHeaders {
 				pr.Out.Header.Del(name)
@@ -132,8 +137,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				location.Scheme = "https"
 				location.Host = publicHost
 				if route.Prefix != "/" {
+					location.RawPath = (&url.URL{Path: route.Prefix}).EscapedPath() + location.EscapedPath()
 					location.Path = route.Prefix + location.Path
-					location.RawPath = ""
 				}
 				h.Set("Location", location.String())
 			}

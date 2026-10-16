@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -114,17 +115,34 @@ func NormalizeRoutes(routes []Route) ([]Route, error) {
 	})
 	return result, nil
 }
+
+// ResolveRoute maps an escaped URL path, preserving encoded bytes in the
+// remainder. Only literal slashes separate route segments: an encoded slash
+// inside an object key must not select a different upstream route.
 func ResolveRoute(p Preview, path string) (Route, string, bool) {
+	decoded, err := url.PathUnescape(path)
+	if err != nil || !strings.HasPrefix(path, "/") {
+		return Route{}, "", false
+	}
+	segments := strings.Split(path[1:], "/")
 	for _, r := range p.Routes {
 		if r.Prefix == "/" {
-			return r, path, !strings.HasPrefix(path, "/_loki/")
+			return r, path, !strings.HasPrefix(decoded, "/_loki/")
 		}
-		if path == r.Prefix || strings.HasPrefix(path, r.Prefix+"/") {
-			next := strings.TrimPrefix(path, r.Prefix)
-			if next == "" {
-				next = "/"
+		prefix := strings.Split(r.Prefix[1:], "/")
+		if len(segments) < len(prefix) {
+			continue
+		}
+		matches := true
+		for i, part := range prefix {
+			segment, err := url.PathUnescape(segments[i])
+			if err != nil || segment != part {
+				matches = false
+				break
 			}
-			return r, next, true
+		}
+		if matches {
+			return r, "/" + strings.Join(segments[len(prefix):], "/"), true
 		}
 	}
 	return Route{}, "", false

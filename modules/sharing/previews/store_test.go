@@ -97,3 +97,31 @@ func TestRoutesAndLifetime(t *testing.T) {
 		}
 	}
 }
+
+func TestEscapedRouteSegments(t *testing.T) {
+	routes, err := Normalize(map[string]int{"/": 3000, "/api": 4000, "/api/objects": 5000, "/한글 %": 6000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := Preview{Routes: routes}
+	for _, tc := range []struct {
+		path, next string
+		port       int
+		ok         bool
+	}{
+		{"/api/objects/a%2Fb", "/a%2Fb", 5000, true},
+		{"/api%2Fobjects/a%2Fb", "/api%2Fobjects/a%2Fb", 3000, true},
+		{"/api/objects%2Fa", "/objects%2Fa", 4000, true},
+		{"/%61pi/objects/a%2fb", "/a%2fb", 5000, true},
+		{"/api", "/", 4000, true},
+		{"/api/", "/", 4000, true},
+		{"/%ED%95%9C%EA%B8%80%20%25/a%2Fb", "/a%2Fb", 6000, true},
+		{"/%5Floki%2Fprivate", "/%5Floki%2Fprivate", 3000, false},
+		{"/%broken", "", 0, false},
+	} {
+		route, next, ok := ResolveRoute(preview, tc.path)
+		if route.Port != tc.port || next != tc.next || ok != tc.ok {
+			t.Errorf("%q => port=%d next=%q ok=%t; want %+v", tc.path, route.Port, next, ok, tc)
+		}
+	}
+}

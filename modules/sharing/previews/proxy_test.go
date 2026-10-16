@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -120,5 +121,49 @@ func TestWebsocketUpgradeTunnel(t *testing.T) {
 	}
 	if string(frame) != string([]byte{0x81, 1, 'y'}) {
 		t.Fatal(frame)
+	}
+}
+
+func TestHTTPProxyPreservesEncodedPaths(t *testing.T) {
+	for _, prefix := range []string{"", "/api", "/한글 %"} {
+		for _, encoded := range []string{"a%2Fb", "a%2fb", "a%25b", "%ED%95%9C%EA%B8%80", "a%252Fb", "a%3Fb%23c", "%61", "../a%2Fb", "/a%2Fb"} {
+			for _, redirect := range []bool{false, true} {
+				t.Run(fmt.Sprintf("prefix=%s/%s/redirect=%t", prefix, encoded, redirect), func(t *testing.T) {
+					upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if redirect {
+							w.Header().Set("Location", "http://"+r.Host+"/objects/"+encoded+"?x=a%2Fb#part")
+							w.WriteHeader(302)
+						} else {
+							fmt.Fprint(w, r.RequestURI)
+						}
+					}))
+					defer upstream.Close()
+					_, pt, _ := net.SplitHostPort(strings.TrimPrefix(upstream.URL, "http://"))
+					port, _ := strconv.Atoi(pt)
+					store := New("preview.test", 0, nil)
+					routes := map[string]int{"/": port}
+					if prefix != "" {
+						routes[prefix] = port
+					}
+					share, err := store.Publish(routes, "", "", 60)
+					if err != nil {
+						t.Fatal(err)
+					}
+					proxy := NewProxy(store, func(context.Context, Route) bool { return true })
+					defer proxy.Close()
+					req := httptest.NewRequest("GET", share["url"].(string)+(&url.URL{Path: prefix}).EscapedPath()+"/objects/"+encoded+"?x=a%2Fb", nil)
+					w := httptest.NewRecorder()
+					proxy.ServeHTTP(w, req)
+					if redirect {
+						want := share["url"].(string) + (&url.URL{Path: prefix}).EscapedPath() + "/objects/" + encoded + "?x=a%2Fb#part"
+						if got := w.Header().Get("Location"); got != want {
+							t.Errorf("Location got %q want %q", got, want)
+						}
+					} else if got, want := w.Body.String(), "/objects/"+encoded+"?x=a%2Fb"; got != want {
+						t.Errorf("upstream URI got %q want %q", got, want)
+					}
+				})
+			}
+		}
 	}
 }
