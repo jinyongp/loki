@@ -313,6 +313,30 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparedSource := exec.CommandContext(ctx, worker, "host", "secret-migration-source")
+	preparedSource.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+	var preparationInput, preparationOutput, preparationDiagnostic bytes.Buffer
+	preparationManifest := hostmigration.SourceTransferManifest{Action: "prepare", Version: 1, SourceRoot: legacy.StateDirectory, Policy: strings.Repeat("a", 64), Plan: appvalues.MigrationPlan{Version: 1, Mappings: plan.Mappings, Resources: plan.Resources}, Writes: []lifecycle.MigrationWriteCheckpoint{}}
+	if err := hostmigration.WriteSourceTransferManifest(&preparationInput, preparationManifest); err != nil {
+		t.Fatal(err)
+	}
+	preparedSource.Stdin, preparedSource.Stdout, preparedSource.Stderr = &preparationInput, &preparationOutput, &preparationDiagnostic
+	if err := preparedSource.Run(); err != nil {
+		t.Fatal("root helper read-only migration preparation", err, preparationDiagnostic.String())
+	}
+	publicPlan, err := privateio.ReadBytes(&preparationOutput, lifecycle.MaxSourceManifestBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedPlan, _ := json.Marshal(plan)
+	if !bytes.Equal(publicPlan, expectedPlan) || preparationDiagnostic.Len() != 0 {
+		t.Fatal("source helper plan differs from the exact source revision/mappings")
+	}
+	for _, value := range []string{"source-session-canary", "public-migration.example", "synthetic-platform-owner"} {
+		if bytes.Contains(publicPlan, []byte(value)) {
+			t.Fatal("source helper plan exposed a source value")
+		}
+	}
 	journalRoot := filepath.Join(root, "migration-journal")
 	if _, err := lifecycle.EnsureFileStore(journalRoot); err != nil {
 		t.Fatal(err)
@@ -341,6 +365,57 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	}
 	migrationOperation = lifecycle.MigrationOperationUUID(migrationRecord.ID)
 	sourceOwner := hostmigration.SourceOwner{Journal: journal, ID: migrationRecord.ID}
+	// A real root worker owns source decryption. The host sees only the
+	// ciphertext proof; lose its final ACK after durable publication.
+	backupWorker := exec.CommandContext(ctx, worker, "host", "secret-migration-source")
+	backupWorker.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+	backupInput, err := backupWorker.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupOutput, err := backupWorker.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var backupDiagnostics bytes.Buffer
+	backupWorker.Stderr = &backupDiagnostics
+	if err := backupWorker.Start(); err != nil {
+		t.Fatal(err)
+	}
+	backupWaited := false
+	t.Cleanup(func() {
+		if !backupWaited {
+			_ = backupWorker.Process.Kill()
+			_ = backupWorker.Wait()
+		}
+	})
+	backupChannel := &sourceMetadataCapture{input: backupOutput, output: backupInput}
+	backupManifest := hostmigration.SourceTransferManifest{Action: "backup", Recipient: intent.Recipient, ArchivePath: intent.BackupPath, Version: 1, Operation: migrationOperation, Policy: intent.Policy, SourceRoot: legacy.StateDirectory, Plan: plan, Writes: []lifecycle.MigrationWriteCheckpoint{}}
+	if err := hostmigration.WriteSourceTransferManifest(backupChannel, backupManifest); err != nil {
+		t.Fatal("root backup manifest", err)
+	}
+	backupLostAck := errors.New("synthetic encrypted source publication ACK loss")
+	err = hostmigration.CheckpointSourceTransfer(ctx, backupChannel, migrationOperation, func(event hostmigration.SourceEvent) error {
+		if err := sourceOwner.Checkpoint(event); err != nil {
+			return err
+		}
+		if event.Type == "archive_published" {
+			return backupLostAck
+		}
+		return nil
+	})
+	backupWorkerErr := backupWorker.Wait()
+	backupWaited = true
+	if !errors.Is(err, backupLostAck) || backupWorkerErr == nil {
+		t.Fatal("root backup publication ACK loss not exercised", err)
+	}
+	for _, value := range []string{"source-session-canary", "public-migration.example", "synthetic-platform-owner"} {
+		if bytes.Contains(backupChannel.metadata.Bytes(), []byte(value)) || bytes.Contains(backupDiagnostics.Bytes(), []byte(value)) {
+			t.Fatal("source backup worker exposed values through metadata channel")
+		}
+	}
+	// Resume the same archive and original operation rather than encrypting
+	// another ciphertext or reopening source writers after the lost ACK.
 	if err := sourceOwner.Backup(ctx); err != nil {
 		t.Fatal(err)
 	}

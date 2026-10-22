@@ -53,6 +53,22 @@ func ServeSourceTransferManifest(ctx context.Context, channel io.ReadWriteCloser
 		return ErrSourceSession
 	}
 	clear(canonical)
+	if manifest.Action == "prepare" {
+		defer channel.Close()
+		plan, err := (secret.Controller{StateDirectory: manifest.SourceRoot}).PrepareApplicationMigration(ctx, manifest.Plan.Mappings, manifest.Plan.Resources, manifest.BaseEnvironment)
+		if err != nil {
+			return ErrSourceSession
+		}
+		metadata, err := json.Marshal(plan)
+		if err != nil {
+			return ErrSourceSession
+		}
+		defer clear(metadata)
+		return privateio.WriteBytes(channel, metadata, sourceManifestLimit)
+	}
+	if manifest.Action == "backup" {
+		return ServeSourceBackup(ctx, manifest, channel)
+	}
 	session := SourceSession{Source: secret.Controller{StateDirectory: manifest.SourceRoot}, Target: admin.ApplicationClient{Socket: manifest.TargetSocket, ExpectedUID: manifest.TargetUID}, Operation: manifest.Operation, Policy: manifest.Policy, Plan: manifest.Plan, BaseEnvironment: manifest.BaseEnvironment, Writes: manifest.Writes}
 	return ServeSourceTransfer(ctx, session, channel)
 }

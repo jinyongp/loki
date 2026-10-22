@@ -6,11 +6,65 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
+	"loki/internal/control/appvalues"
 	"loki/internal/platform/privateio"
 )
+
+func TestSourceBackupEventsRequireOriginalProofBeforeMigration(t *testing.T) {
+	root := privateLifecycleRoot(t)
+	lock, err := AcquireOperationLock(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	j, err := OpenOperationJournal(root, lock, OperationJournalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := migrationIntentFixture(t, root)
+	r, err := j.BeginSecretMigration(intent, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := MigrationOperationUUID(r.ID)
+	checkpoint := func(kind string, proof *appvalues.SourceBackupProof) error {
+		return j.CheckpointMigrationSourceEvent(r.ID, SourceEvent{Operation: operation, Type: kind, Archive: proof}, time.Now())
+	}
+	if err := checkpoint("source_frozen", nil); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint("source_backup_complete", nil) == nil {
+		t.Fatal("target writes allowed before durable encrypted backup")
+	}
+	proof := appvalues.SourceBackupProof{Version: 1, Operation: operation, Revision: intent.Plan.Revision, Recipient: intent.Recipient, CipherSHA256: strings.Repeat("e", 64), Bytes: 4096}
+	wrong := proof
+	wrong.Revision++
+	if checkpoint("archive_prepared", &wrong) == nil || checkpoint("archive_published", &proof) == nil {
+		t.Fatal("foreign source proof or publication without preparation accepted")
+	}
+	if err := checkpoint("archive_prepared", &proof); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint("source_backup_complete", nil) == nil {
+		t.Fatal("prepared but unpublished archive allowed target writes")
+	}
+	if err := checkpoint("archive_published", &proof); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkpoint("archive_published", &proof); err != nil {
+		t.Fatal("same publication ACK recovery", err)
+	}
+	if err := checkpoint("source_backup_complete", nil); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint("source_frozen", nil) == nil || checkpoint("archive_prepared", &proof) == nil {
+		t.Fatal("source backup restarted after target writes became possible")
+	}
+}
 
 func TestSourceChannelRejectsForeignOrMalformedEventsBeforeHostEffects(t *testing.T) {
 	operation := "123e4567-e89b-42d3-a456-426614174551"

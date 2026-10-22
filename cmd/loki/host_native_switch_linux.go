@@ -344,7 +344,7 @@ func (n nativeMaintenanceChannel) begin(ctx context.Context, r lifecycle.Operati
 		_, err = c.Begin(ctx, id, r.Maintenance.Interrupt)
 		return err
 	}
-	if r.NativeSwitch.SourceRelease == "" {
+	if r.NativeSwitch != nil && r.NativeSwitch.SourceRelease == "" {
 		if _, err := os.Lstat(filepath.Join(n.root, "var/lib/loki-go/launcher/journal")); errors.Is(err, os.ErrNotExist) {
 			return nil // First launcher inherits this fence before admission.
 		}

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -16,9 +17,18 @@ import (
 	"loki/internal/config"
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
 	"loki/modules/execution/jobs"
 )
+
+func TestNativeMigrationDoesNotUseFirstInstallMaintenanceBypass(t *testing.T) {
+	channel := nativeMaintenanceChannel{root: t.TempDir()}
+	r := lifecycle.OperationRecord{ID: strings.Repeat("a", 32), Kind: lifecycle.OperationSecretMigration, Maintenance: &lifecycle.OperationMaintenance{}}
+	if err := channel.begin(context.Background(), r); err == nil {
+		t.Fatal("migration with missing Job history was treated as a first installation")
+	}
+}
 
 func TestNativeReceiptRejectsChangedExecutableAndUnmanagedSelection(t *testing.T) {
 	root := t.TempDir()

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/control/appvalues"
 	"loki/internal/host/lifecycle"
 	managedcommand "loki/internal/platform/command"
 )
@@ -33,7 +34,14 @@ func verifyPublishedMigrationArchive(record lifecycle.OperationRecord) error {
 	if archive == nil || !archive.Published {
 		return fmt.Errorf("original encrypted source backup must be durably published")
 	}
-	fd, err := unix.Openat2(unix.AT_FDCWD, record.SecretMigration.Intent.BackupPath, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	return verifyMigrationArchiveFile(record.SecretMigration.Intent.BackupPath, archive)
+}
+
+func verifyMigrationArchiveFile(path string, archive *lifecycle.MigrationArchiveCheckpoint) error {
+	if archive == nil || archive.Bytes < 1 || archive.Bytes > 129<<20 {
+		return fmt.Errorf("invalid original source archive metadata")
+	}
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
 	if err != nil {
 		return fmt.Errorf("original encrypted source backup is unavailable")
 	}
@@ -55,15 +63,39 @@ func verifyPublishedMigrationArchive(record lifecycle.OperationRecord) error {
 // transaction journal. The helper receives no Docker socket, workspace, task
 // root, target provider files or other generation.
 func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, candidate DeploymentReservation) error {
+	return b.runSecretMigrationSource(ctx, candidate, false)
+}
+
+func (b *DockerFullBackend) BackupSecretMigrationSource(ctx context.Context, candidate DeploymentReservation) error {
+	return b.runSecretMigrationSource(ctx, candidate, true)
+}
+
+func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candidate DeploymentReservation, backup bool) error {
 	operation, err := b.migrationRecord(ctx)
 	if err != nil {
 		return err
 	}
-	if operation.State != lifecycle.OperationApplying || operation.Phase != lifecycle.PhaseMigrate {
+	if operation.State != lifecycle.OperationApplying || !backup && operation.Phase != lifecycle.PhaseMigrate || backup && operation.Phase != lifecycle.PhaseAdmitted && operation.Phase != lifecycle.PhaseSnapshot && operation.Phase != lifecycle.PhaseMigrate {
 		return fmt.Errorf("source transfer requires the original migration phase")
 	}
-	if err := verifyPublishedMigrationArchive(operation); err != nil {
+	if !backup {
+		if err := verifyPublishedMigrationArchive(operation); err != nil {
+			return err
+		}
+	} else if archive := operation.SecretMigration.Archive; archive != nil && verifyMigrationArchiveFile(operation.SecretMigration.Intent.BackupPath, archive) == nil {
+		if operation.Phase == lifecycle.PhaseMigrate {
+			return nil
+		}
+		scope := ctx.Value(fullMigrationMaintenanceKey{}).(*fullMigrationMaintenanceScope)
+		if !archive.Published {
+			if _, err := scope.journal.CheckpointMigrationArchive(operation.ID, archive.CipherSHA256, archive.Bytes, true, time.Now()); err != nil {
+				return err
+			}
+		}
+		_, err := scope.journal.AdvanceSecretMigration(operation.ID, lifecycle.PhaseMigrate, time.Now())
 		return err
+	} else if archive != nil && archive.Published {
+		return fmt.Errorf("published original source archive is unavailable; do not regenerate it")
 	}
 	intent := operation.SecretMigration.Intent
 	if intent.SourceRoot != "/var/lib/loki/runtime" {
@@ -76,27 +108,27 @@ func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, c
 	if record.MigrationCandidate == nil || record.Preparing {
 		return fmt.Errorf("original private candidate is unavailable")
 	}
-	sourceVolume := storeSourceVolume(b.Store)
-	volumeMetadata, err := b.command(ctx, "verifying original source volume ownership", nil, "volume", "inspect", "--format", "{{json .}}", sourceVolume.Source)
+	sourceVolume, err := b.verifiedSecretSourceVolume(ctx)
 	if err != nil {
 		return err
-	}
-	var volume struct {
-		Name    string
-		Driver  string
-		Labels  map[string]string
-		Options map[string]string
-	}
-	if json.Unmarshal(volumeMetadata, &volume) != nil || volume.Name != sourceVolume.Source || volume.Driver != "local" || len(volume.Options) != 0 || volume.Labels[fullOwnerLabel] != b.Store.FullOwner() || volume.Labels[fullResourceLabel] != sourceVolume.Source {
-		return fmt.Errorf("source volume is foreign or unsupported")
 	}
 	_, contract, err := b.Store.fullApplicationInputs()
 	if err != nil {
 		return err
 	}
 	manifest := lifecycle.SourceTransferManifest{Version: 1, Operation: lifecycle.MigrationOperationUUID(operation.ID), Policy: intent.Policy, SourceRoot: intent.SourceRoot, TargetSocket: "/run/loki/secrets/admin/control.sock", TargetUID: 10006, Plan: intent.Plan, BaseEnvironment: contract.Environment, Writes: operation.SecretMigration.Writes}
+	if backup {
+		manifest.Action, manifest.Recipient, manifest.TargetSocket, manifest.TargetUID = "backup", intent.Recipient, "", 0
+		manifest.ArchivePath = "/work/source.age"
+		if archive := operation.SecretMigration.Archive; archive != nil {
+			manifest.PreviousBackup = &appvalues.SourceBackupProof{Version: 1, Operation: manifest.Operation, Revision: intent.Plan.Revision, Recipient: intent.Recipient, CipherSHA256: archive.CipherSHA256, Bytes: archive.Bytes}
+		}
+	}
 	projection := filepath.Join("/dev/shm", b.Store.FullOwner()+"-migration-"+operation.ID, "secrets")
-	mounts := []FullMount{sourceVolume, {Kind: "bind", Source: filepath.Join(projection, "admin"), Target: "/run/loki/secrets/admin", ReadOnly: true}}
+	mounts := []FullMount{sourceVolume}
+	if !backup {
+		mounts = append(mounts, FullMount{Kind: "bind", Source: filepath.Join(projection, "admin"), Target: "/run/loki/secrets/admin", ReadOnly: true})
+	}
 	workerBound := false
 	for _, mount := range record.Specs[0].Mounts {
 		if mount.Kind == "bind" && mount.ReadOnly && strings.HasPrefix(record.Worker, mount.Target+"/") {
@@ -126,6 +158,9 @@ func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, c
 		}
 	}
 	args := []string{"run", "--rm", "--interactive", "--name", b.containerName(candidate, "prepare"), "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "1073741824", "--pids-limit", "64", "--log-driver", "none", "--entrypoint", record.Worker}
+	if backup {
+		args = append(args, "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--memory", "2147483648", "--tmpfs", "/work:rw,nosuid,nodev,noexec,size=136314880,uid=0,gid=0,mode=0700")
+	}
 	for _, label := range b.labels(candidate, "prepare") {
 		args = append(args, "--label", label)
 	}
@@ -137,6 +172,23 @@ func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, c
 		args = append(args, "--mount", argument)
 	}
 	args = append(args, record.Specs[0].Image, "host", "secret-migration-source")
+	return b.exchangeSecretSourceHelper(ctx, args, func(channel fullSourceChannel) error {
+		if err := lifecycle.WriteSourceTransferManifest(channel, manifest); err != nil {
+			return err
+		}
+		scope := ctx.Value(fullMigrationMaintenanceKey{}).(*fullMigrationMaintenanceScope)
+		return lifecycle.CheckpointSourceTransfer(ctx, channel, manifest.Operation, func(event lifecycle.SourceEvent) error {
+			if event.Type == "archive_published" {
+				if err := b.copySecretSourceArchive(ctx, candidate, operation, event); err != nil {
+					return err
+				}
+			}
+			return scope.journal.CheckpointMigrationSourceEvent(operation.ID, event, time.Now())
+		})
+	})
+}
+
+func (b *DockerFullBackend) exchangeSecretSourceHelper(ctx context.Context, args []string, exchange func(fullSourceChannel) error) error {
 	argv := b.dockerCommand(args...)
 	command := managedcommand.New(ctx, argv[0], argv[1:]...)
 	environment := []string{}
@@ -172,13 +224,7 @@ func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, c
 	defer cleanup()
 	channel := fullSourceChannel{input: output, output: input}
 	defer channel.Close()
-	transferErr := lifecycle.WriteSourceTransferManifest(channel, manifest)
-	if transferErr == nil {
-		scope := ctx.Value(fullMigrationMaintenanceKey{}).(*fullMigrationMaintenanceScope)
-		transferErr = lifecycle.CheckpointSourceTransfer(ctx, channel, manifest.Operation, func(event lifecycle.SourceEvent) error {
-			return scope.journal.CheckpointMigrationSourceEvent(operation.ID, event, time.Now())
-		})
-	}
+	transferErr := exchange(channel)
 	channel.Close()
 	if transferErr != nil {
 		managedcommand.Cleanup(command)
@@ -191,6 +237,23 @@ func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, c
 		return fmt.Errorf("source helper did not complete; resume the original host migration")
 	}
 	return nil
+}
+
+func (b *DockerFullBackend) verifiedSecretSourceVolume(ctx context.Context) (FullMount, error) {
+	source := storeSourceVolume(b.Store)
+	metadata, err := b.command(ctx, "verifying original source volume ownership", nil, "volume", "inspect", "--format", "{{json .}}", source.Source)
+	if err != nil {
+		return FullMount{}, err
+	}
+	var volume struct {
+		Name, Driver string
+		Labels       map[string]string
+		Options      map[string]string
+	}
+	if json.Unmarshal(metadata, &volume) != nil || volume.Name != source.Source || volume.Driver != "local" || len(volume.Options) != 0 || volume.Labels[fullOwnerLabel] != b.Store.FullOwner() || volume.Labels[fullResourceLabel] != source.Source {
+		return FullMount{}, fmt.Errorf("source volume is foreign or unsupported")
+	}
+	return source, nil
 }
 
 func storeSourceVolume(store Store) FullMount {

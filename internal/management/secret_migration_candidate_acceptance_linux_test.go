@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	hostapplication "loki/internal/host/application"
 	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
+	legacyfixture "loki/internal/state"
 )
 
 // This exercises candidate ownership/manual protection, not migration completion.
@@ -176,6 +178,17 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent.ExpectedPolicy, intent.Policy = beforePolicy.Digest(), afterPolicy.Digest()
+	intent.SourceRoot = "/var/lib/loki/runtime"
+	backupDirectory := filepath.Join(store.Root, "operator-backup")
+	if err := os.Mkdir(backupDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	intent.BackupPath = filepath.Join(backupDirectory, "source.age")
+	seedManagedMigrationSource(t, ctx, b, image)
+	preparedPlan, err := b.PrepareSecretMigrationSource(ctx, intent.Plan.Mappings, intent.Plan.Resources)
+	if err != nil || !reflect.DeepEqual(preparedPlan, intent.Plan) {
+		t.Fatal("isolated full source preflight differs from complete original mapping", err)
+	}
 	err = store.WithSecretMigrationJournal(ctx, lifecycle.OperationJournalOptions{}, func(j *lifecycle.OperationJournal) error {
 		operation, err := j.BeginSecretMigration(intent, time.Now())
 		if err != nil {
@@ -192,6 +205,12 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 				return err
 			}
 			candidate = preparedCandidate
+			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
+				return err
+			}
+			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
+				return err
+			}
 			if err := b.StartSecretMigrationCandidate(scoped, candidate); err != nil {
 				return err
 			}
@@ -221,6 +240,16 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			if _, err := b.MigrationCandidateProtection(scoped, candidate, "unlock", []byte("synthetic-full-candidate-passphrase")); err != nil {
 				return err
 			}
+			if err := b.TransferSecretMigrationSource(scoped, candidate); err != nil {
+				return err
+			}
+			ready, found, err := j.Active()
+			if err != nil || !found || ready.ID != operation.ID || ready.Phase != lifecycle.PhaseSwitch || ready.SecretMigration.Archive == nil || !ready.SecretMigration.Archive.Published {
+				t.Fatal("full source transfer did not publish its backup and privately compare every slot", err)
+			}
+			if err := verifyPublishedMigrationArchive(ready); err != nil {
+				return err
+			}
 			record, err := b.record(candidate)
 			if err != nil || record.Specs[0].Memory != 1<<30 || record.Specs[0].PIDs != 64 || record.Specs[0].RestartPolicy != "no" {
 				t.Fatal("private candidate lost its shipping isolation budget", err)
@@ -238,5 +267,45 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 	stillBefore, err := b.command(ctx, "verifying candidate preserved original selector", nil, inspect...)
 	if err != nil || string(stillBefore) != string(beforeBytes) {
 		t.Fatal("candidate changed active selection", err)
+	}
+}
+
+// The acceptance fixture seeds an isolated synthetic AES document directly.
+// Production management code does not import the legacy store/decoder.
+func seedManagedMigrationSource(t *testing.T, ctx context.Context, b *DockerFullBackend, image string) {
+	t.Helper()
+	root := filepath.Join(b.Store.Root, "synthetic-source")
+	fixture := legacyfixture.Store{Dir: root}
+	if _, err := fixture.Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{"web":{"secrets":{"TOKEN":"synthetic-full-source-canary\nvalue"}},"github-app":{"secrets":{"PRIVATE_KEY":"synthetic-platform-preserved"}}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	volume := storeSourceVolume(b.Store)
+	if err := b.ownedVolume(ctx, volume); err != nil {
+		t.Fatal(err)
+	}
+	mount, err := dockerMountArgument(volume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := b.command(ctx, "creating owned synthetic migration source", nil, "create", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--user", "0:0", "--label", fullOwnerLabel+"="+b.Store.FullOwner(), "--mount", mount, "--entrypoint", "/bin/sh", image, "-ec", "chown -R 10000:10001 /var/lib/loki/runtime; chmod 0700 /var/lib/loki/runtime")
+	if err != nil {
+		t.Fatal(err)
+	}
+	container := strings.TrimSpace(string(created))
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 15*time.Second)
+		defer stop()
+		_, _ = b.command(cleanup, "removing owned synthetic source writer", nil, "rm", "--force", container)
+		if err := b.ownedVolume(cleanup, volume); err == nil {
+			_, _ = b.command(cleanup, "removing owned synthetic source volume", nil, "volume", "rm", volume.Source)
+		}
+	})
+	for _, name := range []string{"master.key", "store.json", "state.lock"} {
+		if _, err := b.command(ctx, "seeding isolated synthetic encrypted source", nil, "cp", filepath.Join(root, name), container+":"+volume.Target+"/"+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.command(ctx, "protecting synthetic source role directory", nil, "start", "--attach", container); err != nil {
+		t.Fatal(err)
 	}
 }

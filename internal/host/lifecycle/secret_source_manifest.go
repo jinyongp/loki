@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
+
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/platform/privateio"
@@ -17,22 +19,51 @@ const MaxSourceManifestBytes = 128 << 20
 // SourceTransferManifest is public metadata for the owned helper namespace.
 // Its type has no source value, key, passphrase or task-context field.
 type SourceTransferManifest struct {
-	Version         int                        `json:"version"`
-	Operation       string                     `json:"operation"`
-	Policy          string                     `json:"policy"`
-	SourceRoot      string                     `json:"source_root"`
-	TargetSocket    string                     `json:"target_socket"`
-	TargetUID       uint32                     `json:"target_uid"`
-	Plan            appvalues.MigrationPlan    `json:"plan"`
-	BaseEnvironment map[string]string          `json:"base_environment"`
-	Writes          []MigrationWriteCheckpoint `json:"writes"`
+	Action          string                       `json:"action,omitempty"`
+	Recipient       string                       `json:"recipient,omitempty"`
+	ArchivePath     string                       `json:"archive_path,omitempty"`
+	PreviousBackup  *appvalues.SourceBackupProof `json:"previous_backup,omitempty"`
+	Version         int                          `json:"version"`
+	Operation       string                       `json:"operation"`
+	Policy          string                       `json:"policy"`
+	SourceRoot      string                       `json:"source_root"`
+	TargetSocket    string                       `json:"target_socket"`
+	TargetUID       uint32                       `json:"target_uid"`
+	Plan            appvalues.MigrationPlan      `json:"plan"`
+	BaseEnvironment map[string]string            `json:"base_environment"`
+	Writes          []MigrationWriteCheckpoint   `json:"writes"`
 }
 
 func (m SourceTransferManifest) Valid() bool {
-	if m.Version != 1 || !controlpolicy.ApplicationUUID.MatchString(m.Operation) || !migrationHex(m.Policy, 32) || m.TargetUID == 0 || m.Plan.Version != 1 || m.Plan.Revision == 0 || m.Plan.Mappings == nil || m.Writes == nil || len(m.Plan.Resources) == 0 || len(m.TargetSocket) >= 108 {
+	if m.Version != 1 || !migrationHex(m.Policy, 32) || m.Plan.Version != 1 || m.Plan.Mappings == nil || m.Writes == nil || len(m.Plan.Resources) == 0 || len(m.TargetSocket) >= 108 {
 		return false
 	}
-	for _, path := range []string{m.SourceRoot, m.TargetSocket} {
+	if m.Action == "prepare" {
+		if m.Operation != "" || m.Plan.Revision != 0 || m.Plan.Values != 0 || len(m.Writes) != 0 || m.TargetSocket != "" || m.TargetUID != 0 || m.Recipient != "" || m.ArchivePath != "" || m.PreviousBackup != nil {
+			return false
+		}
+	} else if !controlpolicy.ApplicationUUID.MatchString(m.Operation) || m.Plan.Revision == 0 {
+		return false
+	}
+	paths := []string{m.SourceRoot}
+	if m.Action == "backup" {
+		recipient, err := age.ParseX25519Recipient(m.Recipient)
+		if err != nil || recipient.String() != m.Recipient || m.TargetSocket != "" || m.TargetUID != 0 {
+			return false
+		}
+		paths = append(paths, m.ArchivePath)
+		if proof := m.PreviousBackup; proof != nil && (proof.Version != 1 || proof.Operation != m.Operation || proof.Revision != m.Plan.Revision || proof.Recipient != m.Recipient || !migrationHex(proof.CipherSHA256, 32) || proof.Bytes < 1 || proof.Bytes > 129<<20) {
+			return false
+		}
+	} else if m.Action == "" || m.Action == "transfer" {
+		if m.TargetUID == 0 || m.Recipient != "" || m.ArchivePath != "" || m.PreviousBackup != nil {
+			return false
+		}
+		paths = append(paths, m.TargetSocket)
+	} else if m.Action != "prepare" {
+		return false
+	}
+	for _, path := range paths {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
 			return false
 		}
@@ -56,7 +87,34 @@ func WriteSourceTransferManifest(channel io.Writer, manifest SourceTransferManif
 // release. Every immutable write/delivery effect stays in the canonical journal.
 func (j *OperationJournal) CheckpointMigrationSourceEvent(id string, event SourceEvent, now time.Time) error {
 	r, found, err := j.Active()
-	if err != nil || !found || r.ID != id || r.Kind != OperationSecretMigration || r.SecretMigration == nil || r.State != OperationApplying || r.Phase != PhaseMigrate || event.Operation != MigrationOperationUUID(id) {
+	if err != nil || !found || r.ID != id || r.Kind != OperationSecretMigration || r.SecretMigration == nil || r.State != OperationApplying || event.Operation != MigrationOperationUUID(id) {
+		return ErrSourceSession
+	}
+	if event.Type == "source_frozen" || event.Type == "archive_prepared" || event.Type == "archive_published" || event.Type == "source_backup_complete" {
+		if event.Write != nil || event.Binding != nil || event.Attempt != "" || event.Count != 0 {
+			return ErrSourceSession
+		}
+		switch event.Type {
+		case "source_frozen":
+			if event.Archive != nil || r.Phase != PhaseAdmitted && r.Phase != PhaseSnapshot {
+				return ErrSourceSession
+			}
+			_, err = j.AdvanceSecretMigration(id, PhaseSnapshot, now)
+		case "source_backup_complete":
+			if event.Archive != nil || r.Phase != PhaseSnapshot {
+				return ErrSourceSession
+			}
+			_, err = j.AdvanceSecretMigration(id, PhaseMigrate, now)
+		default:
+			proof := event.Archive
+			if proof == nil || proof.Version != 1 || proof.Operation != event.Operation || proof.Revision != r.SecretMigration.Intent.Plan.Revision || proof.Recipient != r.SecretMigration.Intent.Recipient {
+				return ErrSourceSession
+			}
+			_, err = j.CheckpointMigrationArchive(id, proof.CipherSHA256, proof.Bytes, event.Type == "archive_published", now)
+		}
+		return err
+	}
+	if r.Phase != PhaseMigrate || event.Archive != nil {
 		return ErrSourceSession
 	}
 	switch event.Type {

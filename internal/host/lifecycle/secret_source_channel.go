@@ -24,6 +24,7 @@ type SourceEvent struct {
 	Binding   *appvalues.MigrationComparisonBinding `json:"binding,omitempty"`
 	Attempt   string                                `json:"attempt,omitempty"`
 	Count     int                                   `json:"count,omitempty"`
+	Archive   *appvalues.SourceBackupProof          `json:"archive,omitempty"`
 }
 
 type sourceEnvelope struct {
@@ -101,7 +102,7 @@ func CheckpointSourceTransfer(ctx context.Context, channel io.ReadWriteCloser, o
 		if ackErr != nil {
 			return ErrSourceSession
 		}
-		if envelope.Event.Type == "target_sealed" {
+		if envelope.Event.Type == "target_sealed" || envelope.Event.Type == "source_backup_complete" {
 			return nil
 		}
 	}
