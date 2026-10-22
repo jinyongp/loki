@@ -191,6 +191,19 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		if unix.Lstat(stageRuntime, &st) != nil || st.Uid != options.UID || st.Gid != options.GID || st.Mode&07777 != 0700 {
 			t.Fatal("candidate runtime is traversable by the agent")
 		}
+		missing := candidate.HostGeneration + ".retained"
+		if err := os.Rename(candidate.HostGeneration, missing); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CommitCandidate(stageOptions, first.Identity, generation); err == nil {
+			t.Fatal("selection manufactured an empty missing candidate")
+		}
+		if _, err := os.Lstat(candidate.HostGeneration); !os.IsNotExist(err) {
+			t.Fatal("failed selection recreated a lost candidate generation", err)
+		}
+		if err := os.Rename(missing, candidate.HostGeneration); err != nil {
+			t.Fatal(err)
+		}
 		selected, err := CommitCandidate(stageOptions, first.Identity, generation)
 		if err != nil || selected != candidate.Identity {
 			t.Fatal("selector/policy publication failed", err)
@@ -212,6 +225,29 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		}
 		if _, err := PrepareState(stalePolicy); err == nil {
 			t.Fatal("restart silently rebound a selected generation to changed policy")
+		}
+		for _, name := range []string{"dvt", "metadata", "."} {
+			t.Run("lost selected "+name, func(t *testing.T) {
+				path := filepath.Join(candidate.HostGeneration, name)
+				saved := path + ".retained"
+				if err := os.Rename(path, saved); err != nil {
+					t.Fatal(err)
+				}
+				defer func() {
+					if err := os.Rename(saved, path); err != nil {
+						t.Error(err)
+					}
+				}()
+				if _, err := PrepareState(options); err == nil {
+					t.Fatal("restart manufactured empty selected application state")
+				}
+				if _, err := CommitCandidate(stageOptions, first.Identity, generation); err == nil {
+					t.Fatal("selector ACK replay manufactured empty selected state")
+				}
+				if _, err := os.Lstat(path); !os.IsNotExist(err) {
+					t.Fatal("failed recovery created missing selected state", err)
+				}
+			})
 		}
 	})
 	if os.Chown(first.HostGeneration, 0, 0) != nil {

@@ -21,6 +21,16 @@ func (b *DockerFullBackend) Start(ctx context.Context, r DeploymentReservation) 
 	if record.MigrationCandidate != nil {
 		return fmt.Errorf("candidate startup requires its private migration readiness channel")
 	}
+	// The optional broker must be started before MCP discovery waits for it.
+	// Keep it independent of the dependency graph so generic tools can still
+	// start when protected values are unavailable; observe its health below.
+	for _, spec := range record.Specs {
+		if spec.Service == "secrets" {
+			if err := b.startService(ctx, r, spec); err != nil {
+				return err
+			}
+		}
+	}
 	for _, name := range record.Order {
 		var spec fullContainerSpec
 		for _, current := range record.Specs {
@@ -29,26 +39,31 @@ func (b *DockerFullBackend) Start(ctx context.Context, r DeploymentReservation) 
 				break
 			}
 		}
-		inspection, err := b.inspectContainer(ctx, spec.Name)
-		if err != nil {
+		if err := b.startService(ctx, r, spec); err != nil {
 			return err
 		}
-		if err := b.verifySpec(r, spec, inspection); err != nil {
-			return err
-		}
-		if !inspection.State.Running {
-			fmt.Fprintf(b.Diagnostics, "Starting %s...\n", name)
-			if _, err := b.command(ctx, "starting "+name, nil, "container", "start", spec.Name); err != nil {
-				return err
-			}
-		}
-		// Dependencies start in order. Configuration readiness is observed
-		// after all roles start, so an unconfigured provider can be set up.
+		// Required peers become ready in dependency order. The optional
+		// broker above can become ready concurrently with ordinary roles.
 		if err := b.waitService(ctx, record, spec); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (b *DockerFullBackend) startService(ctx context.Context, r DeploymentReservation, spec fullContainerSpec) error {
+	inspection, err := b.inspectContainer(ctx, spec.Name)
+	if err != nil {
+		return err
+	}
+	if err := b.verifySpec(r, spec, inspection); err != nil {
+		return err
+	}
+	if !inspection.State.Running {
+		fmt.Fprintf(b.Diagnostics, "Starting %s...\n", spec.Service)
+		_, err = b.command(ctx, "starting "+spec.Service, nil, "container", "start", spec.Name)
+	}
+	return err
 }
 
 func (b *DockerFullBackend) waitService(ctx context.Context, record fullDockerRecord, spec fullContainerSpec) error {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 	"loki/internal/config"
@@ -18,6 +19,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/execution"
 	hostapplication "loki/internal/host/application"
+	"loki/internal/host/lifecycle"
 	secret "loki/modules/secrets"
 )
 
@@ -43,7 +45,46 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
+	runtimeParent, err := os.MkdirTemp("/dev/shm", "n-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(runtimeParent) })
+	providerHost, brokerHost := os.Getenv("LOKI_SECRET_TEST_DEVTOOLS"), os.Getenv("LOKI_SECRET_TEST_BROKER")
+	if providerHost == "" {
+		providerHost = "/opt/loki/bin/devtools"
+	}
+	if brokerHost == "" {
+		brokerHost = "/opt/loki/bin/loki-secret-broker"
+	}
+	_, providerErr := os.Stat(providerHost)
+	_, brokerErr := os.Stat(brokerHost)
+	withCandidate := providerErr == nil && brokerErr == nil
+	if !withCandidate && os.Getenv("LOKI_REQUIRE_NATIVE_MIGRATION") == "1" {
+		t.Fatal("mandatory native candidate executables are unavailable")
+	}
+	binary := "/opt/loki/bin/devtools"
+	if withCandidate {
+		directory := filepath.Join(root, "bin")
+		if err := os.Mkdir(directory, 0755); err != nil {
+			t.Fatal(err)
+		}
+		copyProgram := func(source, name string) string {
+			t.Helper()
+			body, err := os.ReadFile(source)
+			path := filepath.Join(directory, name)
+			if err != nil || os.WriteFile(path, body, 0555) != nil || os.Chmod(path, 0555) != nil {
+				t.Fatal("owned native executable fixture", err)
+			}
+			return path
+		}
+		providerHost, brokerHost = copyProgram(providerHost, "devtools"), copyProgram(brokerHost, "loki-secret-broker")
+		binary = providerHost
+	}
 	application := hostapplication.PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, Principal: "agent", IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "app-state"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: "/run/loki-go/secrets", Binary: "/opt/loki/bin/devtools", Configuration: c, Contract: contract}
+	application.Binary, application.RuntimeRoot = binary, filepath.Join(runtimeParent, "secrets")
+	previousResource := controlpolicy.ApplicationResource{ID: "123e4567-e89b-42d3-a456-426614174592", Alias: "existing", Repository: "owner/existing", Network: "none", Environments: []string{"common"}, Keys: map[string]string{"OLD": "secret"}, Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true}}}
+	application.Resources = []controlpolicy.ApplicationResource{previousResource}
 	before, err := hostapplication.PrepareState(application)
 	if err != nil {
 		t.Fatal(err)
@@ -69,10 +110,13 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	options := NativePrepareOptions{Application: application, SourceRoot: source.StateDirectory, Recipient: identity.Recipient().String(), BackupPath: filepath.Join(directory, "source.age"), Mappings: []appvalues.MigrationProfileMapping{{Profile: "web", Resource: resource.ID, Environment: "common", Keys: []appvalues.MigrationKeyMapping{{Source: "TOKEN", Name: "TOKEN", Kind: "secret"}}}}}
+	options := NativePrepareOptions{Application: application, BeforeResources: []controlpolicy.ApplicationResource{previousResource}, SourceRoot: source.StateDirectory, Recipient: identity.Recipient().String(), BackupPath: filepath.Join(directory, "source.age"), Mappings: []appvalues.MigrationProfileMapping{{Profile: "web", Resource: resource.ID, Environment: "common", Keys: []appvalues.MigrationKeyMapping{{Source: "TOKEN", Name: "TOKEN", Kind: "secret"}}}}}
 	intent, err := PrepareNative(t.Context(), options)
-	if err != nil || !intent.Valid() || intent.Mode != "native" || intent.Before != before.Identity || intent.Plan.Values != 1 || intent.Plan.Revision == 0 || intent.CandidateGeneration == before.Identity.ActiveGeneration || !strings.HasPrefix(intent.RuntimeRoot, "/run/loki-go/secret-migration-") {
+	if err != nil || !intent.Valid() || intent.Mode != "native" || intent.Before != before.Identity || intent.Plan.Values != 1 || intent.Plan.Revision == 0 || intent.CandidateGeneration == before.Identity.ActiveGeneration || !strings.HasPrefix(intent.RuntimeRoot, filepath.Join(runtimeParent, "secret-migration-")) {
 		t.Fatal("native preparation did not bind the actual source and original identity", err)
+	}
+	if len(intent.BeforeResources) != 1 || intent.BeforeResources[0].ID != previousResource.ID || intent.BeforeResources[0].Alias != previousResource.Alias || intent.ExpectedPolicy == intent.Policy {
+		t.Fatal("native journal intent lost the original catalog needed by rollback")
 	}
 	encoded, err := json.Marshal(intent)
 	valueHash := sha256.Sum256([]byte(canary))
@@ -91,6 +135,49 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(filepath.Join(application.StateRoot, "generations")); err != nil || len(entries) != 1 {
 		t.Fatal("prepare materialized a candidate generation", err)
+	}
+	if _, err := os.Lstat(intent.RuntimeRoot); !os.IsNotExist(err) {
+		t.Fatal("prepare materialized candidate runtime state", err)
+	}
+	if withCandidate {
+		journalRoot := filepath.Join(root, "journal")
+		if _, err := lifecycle.EnsureFileStore(journalRoot); err != nil {
+			t.Fatal(err)
+		}
+		lock, err := lifecycle.AcquireOperationLock(journalRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lock.Close()
+		journal, err := lifecycle.OpenOperationJournal(journalRoot, lock, lifecycle.OperationJournalOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		record, err := journal.BeginSecretMigration(intent, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner := SourceOwner{Journal: journal, ID: record.ID}
+		current := application
+		current.Resources = options.BeforeResources
+		for attempt := 0; attempt < 2; attempt++ {
+			candidate, err := owner.PrepareNativeCandidate(current, brokerHost, providerHost)
+			if err != nil || candidate.Operation != lifecycle.MigrationOperationUUID(record.ID) || candidate.Preparation.Identity.ActiveGeneration != intent.CandidateGeneration || candidate.Preparation.Layout.PolicySHA256 != intent.Policy {
+				t.Fatal("original native candidate binding/replay", err)
+			}
+			if entries, err := os.ReadDir(filepath.Join(candidate.Preparation.HostGeneration, "dvt")); err != nil || len(entries) != 0 {
+				t.Fatal("native preparation initialized cryptographic state", err)
+			}
+		}
+		if actual, err := hostapplication.ReadIdentity(application.IdentityFile); err != nil || actual != before.Identity {
+			t.Fatal("inactive native preparation changed the selector", err)
+		}
+		if _, err := journal.RequestSecretMigrationRollback(record.ID, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := owner.PrepareNativeCandidate(current, brokerHost, providerHost); err == nil {
+			t.Fatal("native candidate preparation resumed after rollback choice")
+		}
 	}
 	options.Recipient = "invalid-recipient"
 	options.SourceRoot = filepath.Join(root, "missing-source")

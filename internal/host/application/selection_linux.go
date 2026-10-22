@@ -70,6 +70,11 @@ func CommitCandidate(options PrepareOptions, expected Identity, generation strin
 	if current != expected {
 		return Identity{}, invalid
 	}
+	target := expected
+	target.ActiveGeneration = generation
+	if err := RequireExistingGeneration(options.StateRoot, target); err != nil {
+		return Identity{}, err
+	}
 	prepared, err := PrepareCandidate(options, expected, generation)
 	if err != nil {
 		return Identity{}, err

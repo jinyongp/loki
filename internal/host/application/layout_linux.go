@@ -201,6 +201,11 @@ func prepareDirectories(options PrepareOptions, runtimeFiles bool, candidate *ca
 	if err != nil {
 		return Preparation{}, err
 	}
+	if identity.Version == 2 {
+		if err := RequireExistingGeneration(options.StateRoot, identity); err != nil {
+			return Preparation{}, err
+		}
+	}
 	if candidate != nil {
 		if identity != candidate.expected {
 			return Preparation{}, invalid

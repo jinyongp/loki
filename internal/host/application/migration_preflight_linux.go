@@ -13,6 +13,29 @@ import (
 
 var errMaterializedGeneration = errors.New("existing application generation contains state; preserve it through application backup/restore before legacy migration")
 
+// RequireExistingGeneration prevents restart/selection from manufacturing an
+// empty replacement for an already prepared generation. Only directory
+// identities are inspected; provider files and keys remain opaque.
+func RequireExistingGeneration(stateRoot string, identity Identity) error {
+	if !filepath.IsAbs(stateRoot) || filepath.Clean(stateRoot) != stateRoot || stateRoot == "/" || !generationID.MatchString(identity.ActiveGeneration) || identity.UID == 0 || identity.GID == 0 {
+		return invalid
+	}
+	root := filepath.Join(stateRoot, "generations", identity.ActiveGeneration)
+	for _, path := range []string{root, filepath.Join(root, "dvt"), filepath.Join(root, "metadata")} {
+		fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+		if err != nil {
+			return invalid
+		}
+		var info unix.Stat_t
+		err = unix.Fstat(fd, &info)
+		unix.Close(fd)
+		if err != nil || info.Uid != identity.UID || info.Gid != identity.GID || info.Mode&07777 != 0700 {
+			return invalid
+		}
+	}
+	return nil
+}
+
 // RequireEmptyGeneration protects already managed application values and
 // mutation history from being silently dropped by a legacy-source migration.
 // It examines directory metadata only, without opening provider data or keys.

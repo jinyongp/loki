@@ -284,7 +284,7 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate, rollbac
 		want := before
 		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, intent.CandidateGeneration, intent.Policy
 		if rollbackDriver {
-			want.ActiveGeneration, want.PolicySHA256 = before.ActiveGeneration, intent.ExpectedPolicy
+			want = before
 		}
 		if err != nil || actual != want {
 			t.Fatal("serving driver did not preserve original generation/policy selection", err)

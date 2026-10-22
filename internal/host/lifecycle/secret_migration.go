@@ -23,21 +23,24 @@ var errSecretMigration = errors.New("resume the original secret migration and it
 // canonical host journal. Source decoding and private equality remain in their
 // respective owners; this package never imports the legacy vault or broker.
 type SecretMigrationIntent struct {
-	Plan                appvalues.MigrationPlan       `json:"plan"`
-	Before              appvalues.ApplicationIdentity `json:"before"`
-	CandidateGeneration string                        `json:"candidate_generation"`
-	ExpectedPolicy      string                        `json:"expected_policy"`
-	Policy              string                        `json:"policy"`
-	Mode                string                        `json:"mode"`
-	SourceRoot          string                        `json:"source_root"`
-	IdentityFile        string                        `json:"identity_file"`
-	StateRoot           string                        `json:"state_root"`
-	ServiceStateRoot    string                        `json:"service_state_root"`
-	RuntimeRoot         string                        `json:"runtime_root"`
-	Binary              string                        `json:"binary"`
-	Recipient           string                        `json:"recipient"`
-	BackupPath          string                        `json:"backup_path"`
-	Interrupt           bool                          `json:"interrupt"`
+	Plan   appvalues.MigrationPlan       `json:"plan"`
+	Before appvalues.ApplicationIdentity `json:"before"`
+	// Native/Compose owners retain the original public catalog here. Full
+	// management already owns it in the enclosing transaction's Previous.
+	BeforeResources     []controlpolicy.ApplicationResource `json:"before_resources,omitempty"`
+	CandidateGeneration string                              `json:"candidate_generation"`
+	ExpectedPolicy      string                              `json:"expected_policy"`
+	Policy              string                              `json:"policy"`
+	Mode                string                              `json:"mode"`
+	SourceRoot          string                              `json:"source_root"`
+	IdentityFile        string                              `json:"identity_file"`
+	StateRoot           string                              `json:"state_root"`
+	ServiceStateRoot    string                              `json:"service_state_root"`
+	RuntimeRoot         string                              `json:"runtime_root"`
+	Binary              string                              `json:"binary"`
+	Recipient           string                              `json:"recipient"`
+	BackupPath          string                              `json:"backup_path"`
+	Interrupt           bool                                `json:"interrupt"`
 }
 
 func migrationHex(value string, size int) bool {
@@ -46,6 +49,15 @@ func migrationHex(value string, size int) bool {
 }
 
 func (i SecretMigrationIntent) Valid() bool {
+	if i.Mode == "managed-full" && len(i.BeforeResources) != 0 {
+		return false
+	}
+	if len(i.BeforeResources) != 0 {
+		before, err := controlpolicy.CanonicalApplications(i.BeforeResources, nil)
+		if err != nil || !reflect.DeepEqual(before, i.BeforeResources) {
+			return false
+		}
+	}
 	if i.Plan.Version != 1 || i.Plan.Revision == 0 || i.Plan.Values < 0 || i.Plan.Values > 128*512 || i.Plan.Mappings == nil || len(i.Plan.Mappings) > 128*512+128 || len(i.Plan.Resources) == 0 ||
 		!migrationHex(i.CandidateGeneration, 16) || i.CandidateGeneration == i.Before.ActiveGeneration || !migrationHex(i.Before.ActiveGeneration, 16) ||
 		!migrationHex(i.Policy, 32) || !migrationHex(i.ExpectedPolicy, 32) || i.Mode != "native" && i.Mode != "compose" && i.Mode != "managed-full" ||

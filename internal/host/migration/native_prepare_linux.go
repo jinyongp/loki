@@ -56,7 +56,10 @@ func PrepareNative(ctx context.Context, options NativePrepareOptions) (lifecycle
 		return intent, err
 	}
 	previousOptions := application
-	previousOptions.Resources = options.BeforeResources
+	previousOptions.Resources, err = controlpolicy.CanonicalApplications(options.BeforeResources, application.Contract.Environment)
+	if err != nil {
+		return intent, err
+	}
 	previous, err := hostapplication.PolicyDigest(previousOptions)
 	if err != nil || before.Version == 2 && before.PolicySHA256 != previous {
 		return intent, ErrSourceSession
@@ -75,6 +78,7 @@ func PrepareNative(ctx context.Context, options NativePrepareOptions) (lifecycle
 	}
 	id := hex.EncodeToString(generation[:])
 	intent = lifecycle.SecretMigrationIntent{Plan: plan, Before: before, CandidateGeneration: id, ExpectedPolicy: previous, Policy: next, Mode: "native", SourceRoot: options.SourceRoot, IdentityFile: application.IdentityFile, StateRoot: application.StateRoot, ServiceStateRoot: application.ServiceStateRoot, RuntimeRoot: filepath.Join(filepath.Dir(application.RuntimeRoot), "secret-migration-"+id), Binary: application.Binary, Recipient: options.Recipient, BackupPath: options.BackupPath, Interrupt: options.Interrupt}
+	intent.BeforeResources = previousOptions.Resources
 	application.RuntimeRoot, application.MigrationOperation = intent.RuntimeRoot, lifecycle.MigrationOperationUUID(id)
 	if err := hostapplication.ValidateMetadata(application); err != nil {
 		return lifecycle.SecretMigrationIntent{}, err
