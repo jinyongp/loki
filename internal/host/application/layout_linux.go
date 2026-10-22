@@ -40,6 +40,7 @@ type PrepareOptions struct {
 	UID, GID, AgentUID, MetadataGID                                uint32
 	IdentityFile, StateRoot, ServiceStateRoot, RuntimeRoot, Binary string
 	Principal                                                      string
+	JobDeploymentID                                                string
 	Configuration                                                  config.Config
 	Contract                                                       execution.Contract
 	Resources                                                      []controlpolicy.ApplicationResource
@@ -73,7 +74,21 @@ func newID() (string, error) {
 // Only the returned HostGeneration is mounted into the broker namespace; the
 // host selector and other generations remain outside that namespace.
 func Prepare(options PrepareOptions) (Preparation, error) {
+	return prepare(options, true)
+}
+
+// PrepareState prepares only persistent host metadata and an empty generation.
+// A networkless administrator preparation container uses it before binding
+// precisely that generation into the unprivileged broker namespace.
+func PrepareState(options PrepareOptions) (Preparation, error) {
+	return prepare(options, false)
+}
+
+func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 	if options.UID == 0 || options.GID == 0 || options.AgentUID == 0 || options.MetadataGID == 0 || options.UID == options.AgentUID || options.GID == options.MetadataGID || !controlpolicy.ApplicationAlias.MatchString(options.Principal) {
+		return Preparation{}, invalid
+	}
+	if options.JobDeploymentID != "" && !deploymentID.MatchString(options.JobDeploymentID) {
 		return Preparation{}, invalid
 	}
 	for _, path := range []string{options.IdentityFile, options.StateRoot, options.ServiceStateRoot, options.RuntimeRoot, options.Binary} {
@@ -94,6 +109,7 @@ func Prepare(options PrepareOptions) (Preparation, error) {
 		base[name] = value
 	}
 	layout := appvalues.BrokerLayout{UID: options.UID, LauncherUID: 0, Binary: options.Binary, Root: filepath.Join(options.ServiceStateRoot, "dvt"), ApplicationRoot: filepath.Join(options.ServiceStateRoot, "metadata"), Socket: filepath.Join(options.RuntimeRoot, "jobs", "control.sock"), MetadataSocket: filepath.Join(options.RuntimeRoot, "metadata", "control.sock"), AdminSocket: filepath.Join(options.RuntimeRoot, "admin", "control.sock"), RuntimeRoot: filepath.Join(options.RuntimeRoot, "private"), Inbox: filepath.Join(options.RuntimeRoot, "inbox"), AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, Principal: options.Principal, Resources: resources, BaseEnvironment: base, PolicySHA256: policy.Digest()}
+	layout.JobDeploymentID = options.JobDeploymentID
 	for _, path := range []string{layout.Socket, layout.MetadataSocket, layout.AdminSocket} {
 		if len(path) >= 108 {
 			return Preparation{}, invalid
@@ -119,6 +135,9 @@ func Prepare(options PrepareOptions) (Preparation, error) {
 		if err := ownedDirectory(filepath.Join(generation, name), options.UID, options.GID, 0700, false); err != nil {
 			return Preparation{}, err
 		}
+	}
+	if !runtimeFiles {
+		return Preparation{Identity: identity, Layout: layout, HostGeneration: generation}, nil
 	}
 	if err := ownedDirectory(options.RuntimeRoot, 0, 0, 0755, true); err != nil {
 		return Preparation{}, err

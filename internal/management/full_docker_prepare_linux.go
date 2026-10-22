@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -202,6 +204,25 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 	if err := realDirectories(layoutDirectory); err != nil {
 		return err
 	}
+	for _, service := range t.Services {
+		if service.Name != "secrets" {
+			continue
+		}
+		runtimeRoot := filepath.Join("/dev/shm", t.Owner+"-secret-runtime")
+		if err := os.Mkdir(runtimeRoot, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		if err := realDirectories(runtimeRoot); err != nil {
+			return err
+		}
+		catalog := json.RawMessage(`{"resources":[]}`)
+		if err := readOwnedJSON(filepath.Join(b.Store.Root, "application-resources.json"), tools.MaxManifestBytes, &catalog); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := writeFullFile(filepath.Join(layoutDirectory, "application-resources.json"), catalog); err != nil {
+			return err
+		}
+	}
 	authDirectory, err := b.prepareAuthentication()
 	if err != nil {
 		return err
@@ -324,13 +345,15 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 				l.Launcher["Volumes"] = append(bindings, map[string]string{"path": hostPath, "name": mount.Source})
 				// The launcher validates files through the same owned directory;
 				// child containers mount the declared named volume directly.
-				service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: hostPath, Target: hostPath})
+				service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: hostPath, Target: hostPath, ReadOnly: mount.ReadOnly})
 			}
 		}
 		if service.Name == "launcher" || service.Name == "runtime" && l.Runtime["DockerSocket"] == "/run/docker.sock" {
 			service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: b.Socket, Target: "/run/docker.sock"})
 		}
-		service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: layoutDirectory, Target: "/etc/loki/layout", ReadOnly: true})
+		if service.Name != "secrets" {
+			service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: layoutDirectory, Target: "/etc/loki/layout", ReadOnly: true})
+		}
 		if service.Name == "mcp" {
 			service.Mounts = append(service.Mounts, FullMount{Kind: "bind", Source: authDirectory, Target: "/etc/loki/auth", ReadOnly: true})
 		}
@@ -348,14 +371,47 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 			return err
 		}
 	}
-	if err := atomicJSON(filepath.Join(directory, "services.json"), record); err != nil {
-		return err
-	}
-	bootstrap, err := t.Bootstrap(uint32(os.Geteuid()), layoutDirectory, authDirectory)
+	bootstrap, err := t.Bootstrap(uint32(os.Geteuid()), layoutDirectory, authDirectory, r.ID)
 	if err != nil {
 		return err
 	}
 	if err := b.bootstrap(ctx, r, t, bootstrap); err != nil {
+		return err
+	}
+	for i := range record.Specs {
+		spec := &record.Specs[i]
+		if spec.Service != "secrets" {
+			continue
+		}
+		var prepared struct {
+			Prepared   bool   `json:"prepared"`
+			Policy     string `json:"policy"`
+			UID        uint32 `json:"broker_uid"`
+			GID        uint32 `json:"broker_gid"`
+			Deployment string `json:"deployment_id"`
+			Runner     string `json:"runner_id"`
+			Generation string `json:"active_generation"`
+		}
+		if err := readOwnedJSON(filepath.Join(layoutDirectory, "secrets-prepared.json"), 4096, &prepared); err != nil {
+			return err
+		}
+		if !prepared.Prepared || prepared.UID != 10006 || prepared.GID != 10006 || !deploymentIDPattern.MatchString(prepared.Deployment) || !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(prepared.Generation) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(prepared.Policy) || !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(prepared.Runner) {
+			return fmt.Errorf("owned app generation preparation was not confirmed")
+		}
+		for j, mount := range spec.Mounts {
+			if mount.Kind != "volume" || mount.Target != "/var/lib/loki/secrets" {
+				continue
+			}
+			hostPath, err := b.volumePath(ctx, mount)
+			if err != nil {
+				return err
+			}
+			spec.Mounts[j] = FullMount{Kind: "bind", Source: filepath.Join(hostPath, "generations", prepared.Generation), Target: mount.Target}
+			spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join(hostPath, "secrets-admin.json"), Target: "/etc/loki/secret-admin.json", ReadOnly: true})
+		}
+		spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", t.Owner+"-secret-runtime", "layout.json"), Target: "/run/loki/secrets/layout.json", ReadOnly: true})
+	}
+	if err := atomicJSON(filepath.Join(directory, "services.json"), record); err != nil {
 		return err
 	}
 	for _, spec := range record.Specs {
@@ -380,6 +436,13 @@ func (b *DockerFullBackend) serviceSpecification(r DeploymentReservation, t Full
 	github := "/etc/loki/layout/github.toml"
 	common := []string{"--config", config, "--github-config", github}
 	switch s.Name {
+	case "secrets":
+		program, err := t.Resources.ServiceProgram("secrets", "secret-broker")
+		if err != nil {
+			return result, err
+		}
+		result.Command = []string{program, "--layout", "/run/loki/secrets/layout.json"}
+		result.Memory, result.PIDs = 512<<20, 128
 	case "runtime":
 		result.Command = append([]string{worker, "runtime", "--layout", "/etc/loki/layout/runtime.json"}, common...)
 		result.Capabilities = []string{"CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"}

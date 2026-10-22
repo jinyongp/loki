@@ -22,6 +22,7 @@ import (
 
 type MetadataOptions struct {
 	Ready     func() error
+	Serving   func() bool
 	Socket    string
 	AgentUID  uint32
 	GroupID   uint32
@@ -59,6 +60,9 @@ func ServeMetadata(ctx context.Context, options MetadataOptions) error {
 	}
 	for _, operation := range []string{"inspect", "write", "delete"} {
 		server.Operations[operation] = rpc.Operation{Grant: controlpolicy.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			if options.Serving != nil && !options.Serving() {
+				return nil, fault.New(fault.CodeUnavailable, "application value roles are starting", true, "retry when the service is ready")
+			}
 			var request appvalues.RPCRequest
 			if privateio.Decode(raw, &request) != nil || request.Operation != operation {
 				return nil, fault.New(fault.CodeInvalidInput, "invalid application value request", false, "use the resource-scoped operation schema")

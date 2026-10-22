@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -67,6 +68,25 @@ func runFullProbe(args []string, stderr io.Writer) int {
 	defer cancel()
 	err := func() error {
 		switch *role {
+		case "application-values":
+			if *uid <= 0 || *uid > 4294967295 || *socket == "" {
+				return errors.New("application probe requires its dedicated UID and socket")
+			}
+			expected := uint32(*uid)
+			raw, err := (rpc.Client{Socket: *socket, ExpectedUID: &expected, Limits: rpc.Limits{RequestBytes: 128 << 10, ResponseBytes: 128 << 10, Timeout: 5 * time.Second}}).Call(ctx, map[string]any{"operation": "inspect", "action": "resources"})
+			if err != nil {
+				return err
+			}
+			var result struct {
+				Action   string            `json:"action"`
+				Revision string            `json:"revision"`
+				Items    []json.RawMessage `json:"items"`
+			}
+			if json.Unmarshal(raw, &result) != nil || result.Action != "resources" || len(result.Revision) != 64 || result.Items == nil {
+				return errors.New("invalid application readiness metadata")
+			}
+			_, err = hex.DecodeString(result.Revision)
+			return err
 		case "module":
 			if *module != "git" && *module != "workspace" && *module != "sharing" {
 				return errors.New("unsupported native module readiness probe")

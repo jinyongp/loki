@@ -88,6 +88,9 @@ func (b *DockerFullBackend) probeService(ctx context.Context, record fullDockerR
 	role, user := spec.Service, "10000:10001"
 	args := []string{}
 	switch role {
+	case "secrets":
+		role = "application-values"
+		args = []string{"--socket", "/run/loki/secrets/metadata/control.sock", "--expected-uid", "10006"}
 	case "endpoints":
 		args = []string{"--socket", "/run/loki/endpoints/control.sock", "--expected-uid", "0"}
 	case "runtime":

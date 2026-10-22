@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Boot and reboot a disposable, networkless same-architecture systemd VM."""
+"""Boot and reboot a disposable same-architecture VM without external network."""
 import argparse
 import hashlib
 import os
@@ -59,14 +59,17 @@ def main():
         run("qemu-img", "create", "-f", "qcow2", "-F", "qcow2", "-b", image, work / "guest.qcow2", "6G")
         guest = (ROOT / "scripts/verify/secret-reboot-guest.sh").read_text()
         # cloud-init writes one owned test fixture and runs it on both boots.
-        # There are no guest passwords, SSH keys, network, or unlock credentials.
-        user = "#cloud-config\nwrite_files:\n  - path: /var/lib/cloud/scripts/per-boot/loki-secret-reboot\n    permissions: '0700'\n    content: |\n" + "".join("      " + line + "\n" for line in guest.splitlines())
+        # There are no guest passwords, SSH keys, or unlock credentials.
+        user = "#cloud-config\nusers: []\nssh_genkeytypes: []\nssh_pwauth: false\npackage_update: false\npackage_upgrade: false\nwrite_files:\n  - path: /var/lib/cloud/scripts/per-boot/loki-secret-reboot\n    permissions: '0700'\n    content: |\n" + "".join("      " + line + "\n" for line in guest.splitlines())
         (work / "user-data").write_text(user)
         (work / "meta-data").write_text("instance-id: loki-secret-reboot\nlocal-hostname: loki-secret-reboot\n")
-        (work / "network-config").write_text("version: 2\nethernets: {}\n")
+        # One unconnected QEMU hub gives networkd a configured local link,
+        # without a host bridge, socket, user-mode forwarding, DNS or gateway.
+        # It avoids wait-online's absent-interface timeout on the arm64 image.
+        (work / "network-config").write_text('version: 2\nethernets:\n  fixture:\n    match:\n      macaddress: "52:54:00:12:34:56"\n    dhcp4: false\n    dhcp6: false\n    addresses: [10.77.0.2/24]\n')
         run("cloud-localds", "--network-config=" + str(work / "network-config"), work / "seed.iso", work / "user-data", work / "meta-data")
         kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
-        command = ["qemu-system-x86_64" if arch == "amd64" else "qemu-system-aarch64", "-machine", "q35" if arch == "amd64" else "virt", "-accel", "kvm" if kvm else "tcg", "-cpu", "host" if kvm else "max", "-m", "2048", "-smp", "2", "-nographic", "-monitor", "none", "-nic", "none"]
+        command = ["qemu-system-x86_64" if arch == "amd64" else "qemu-system-aarch64", "-machine", "q35" if arch == "amd64" else "virt", "-accel", "kvm" if kvm else "tcg,thread=multi", "-cpu", "host" if kvm else ("max" if arch == "amd64" else "cortex-a72"), "-m", "2048", "-smp", "2", "-nographic", "-monitor", "none", "-netdev", "hubport,id=fixture,hubid=0", "-device", "virtio-net-pci,netdev=fixture,mac=52:54:00:12:34:56", "-object", "rng-random,filename=/dev/urandom,id=rng0", "-device", "virtio-rng-pci,rng=rng0"]
         if arch == "arm64":
             firmware = Path("/usr/share/AAVMF/AAVMF_CODE.fd")
             variables = Path("/usr/share/AAVMF/AAVMF_VARS.fd")
@@ -81,12 +84,18 @@ def main():
         started = time.monotonic()
         with log.open("wb") as output:
             process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
-            try:
-                result = process.wait(timeout=900)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-                result = -1
+            while True:
+                try:
+                    result = process.wait(timeout=30)
+                    break
+                except subprocess.TimeoutExpired:
+                    elapsed = time.monotonic() - started
+                    print(f"VM {arch}: {elapsed:.0f}s elapsed", flush=True)
+                    if elapsed >= 900:
+                        process.kill()
+                        process.wait()
+                        result = -1
+                        break
         text = log.read_text(errors="replace")
         if result != 0 or "LOKI_SECRET_REBOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FIRST_BOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FAIL" in text:
             print(text[-24000:])

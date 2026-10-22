@@ -95,14 +95,16 @@ func (s Store) PlanFull() (FullPlan, error) {
 		slices.Sort(owners)
 		plan.Services = append(plan.Services, FullService{Name: name, Role: role, Network: network, Requires: requires, DataOwners: owners})
 	}
-	runtimeNeeded := resources["browser"] || resources["github"] || resources["secrets"] || resources["coordination"] || resources["execution"] || resources["sharing"]
+	runtimeNeeded := resources["browser"] || resources["github"] || resources["coordination"] || resources["execution"] || resources["sharing"]
 	executorNeeded := resources["execution"] || resources["git"] || resources["sharing"]
 	mcpDependencies := []string{}
+	_, applicationValues := enabled["secrets"]
+	if applicationValues {
+		add("secrets", "application-values", "none", nil, []string{"secrets"})
+		mcpDependencies = append(mcpDependencies, "secrets")
+	}
 	if runtimeNeeded {
 		owners := []string{"runtime-audit"}
-		if _, ok := enabled["secrets"]; ok {
-			owners = append(owners, "secrets")
-		}
 		if _, ok := enabled["github"]; ok {
 			owners = append(owners, "providers/github")
 		}
@@ -113,7 +115,11 @@ func (s Store) PlanFull() (FullPlan, error) {
 		mcpDependencies = append(mcpDependencies, "runtime")
 	}
 	if executorNeeded {
-		add("launcher", "administrator", "none", nil, []string{"execution/launcher", "execution/toolchains"})
+		var dependencies []string
+		if applicationValues {
+			dependencies = []string{"secrets"}
+		}
+		add("launcher", "administrator", "none", dependencies, []string{"execution/launcher", "execution/toolchains"})
 		add("executor", "executor", "none", []string{"launcher"}, []string{"execution/jobs"})
 		mcpDependencies = append(mcpDependencies, "executor")
 	}

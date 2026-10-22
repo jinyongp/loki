@@ -40,9 +40,21 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	}
 	defer os.RemoveAll(runtimeRoot)
 	options := PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "state"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: runtimeRoot, Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: c, Contract: contract}
+	options.JobDeploymentID = "deployment-" + strings.Repeat("1", 32)
+	stateOnly, err := PrepareState(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(runtimeRoot)
+	if err != nil || len(entries) != 0 || stateOnly.LayoutFile != "" || stateOnly.Identity.DeploymentID == options.JobDeploymentID || stateOnly.Layout.JobDeploymentID != options.JobDeploymentID {
+		t.Fatal("persistent preparation mixed app identity, runtime or OCI reservation", err)
+	}
 	first, err := Prepare(options)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if first.Identity != stateOnly.Identity {
+		t.Fatal("runtime preparation replaced persistent app identity")
 	}
 	again, err := Prepare(options)
 	if err != nil || first.Identity != again.Identity || first.Layout.PolicySHA256 != again.Layout.PolicySHA256 {

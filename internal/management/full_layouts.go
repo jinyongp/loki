@@ -44,6 +44,9 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 		"Tools": public, "ToolsConfigPath": "/etc/loki/activation/state.json", "ToolsConfigSnapshot": true,
 		"ExecutionContract": contract, "Environment": map[string]string{"HOME": "/home/runner", "PATH": "/opt/loki/bin:/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
 	}
+	if services["secrets"] {
+		result.MCP["ApplicationSocket"], result.MCP["ApplicationUID"], result.MCP["ApplicationCatalog"] = "/run/loki/secrets/metadata/control.sock", 10006, "/etc/loki/layout/application-resources.json"
+	}
 	if _, ok := selected["workspace"]; ok {
 		program, err := r.ServiceProgram("workspace", "rg")
 		if err != nil {
@@ -76,12 +79,13 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 		// to the runtime. Private execution is admitted for Git without job MCP.
 		runtimeTools := []string{}
 		for _, program := range r.Plan.Programs {
-			if program.Module == "execution" || program.Module == "browser" || program.Module == "github" || program.Module == "secrets" || program.Module == "coordination" || program.Module == "sharing" {
+			if program.Module == "execution" || program.Module == "browser" || program.Module == "github" || program.Module == "coordination" || program.Module == "sharing" {
 				runtimeTools = append(runtimeTools, string(program.Module))
 			}
 		}
 		result.Runtime = map[string]any{
-			"Tools": runtimeTools, "ToolGate": gate, "Socket": "/run/loki/runtime/control.sock", "SocketGID": 10001, "AgentUID": 10000, "RunnerUID": 10000, "RunnerGID": 10000,
+			"ApplicationValuesExternal": true,
+			"Tools":                     runtimeTools, "ToolGate": gate, "Socket": "/run/loki/runtime/control.sock", "SocketGID": 10001, "AgentUID": 10000, "RunnerUID": 10000, "RunnerGID": 10000,
 			"StateDirectory": "/var/lib/loki/runtime", "AuditPath": "/var/lib/loki/runtime/audit.jsonl", "ExecutionContract": contract,
 			"Workspace": "/workspace", "SnapshotDirectory": "/var/lib/loki/runner/snapshots",
 		}
@@ -92,8 +96,8 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 				result.Runtime["Workspace"] = "/var/lib/loki/runtime/ports"
 			}
 		}
-		if _, ok := selected["secrets"]; ok {
-			result.Runtime["SecretStateDirectory"], result.Runtime["InboxDirectory"] = "/var/lib/loki/secrets", "/var/lib/loki/secrets/inbox"
+		if services["secrets"] {
+			result.Runtime["ApplicationCatalog"] = "/etc/loki/layout/application-resources.json"
 		}
 		if choice, ok := selected["github"]; ok {
 			program, err := r.ServiceProgram("github", "gh")
@@ -150,6 +154,9 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 			"Image": image, "GatewayImage": gateway, "GatewayBinary": binary, "GatewayExecutionContract": contract, "GatewayEgressPolicy": egress, "GatewayProxyPort": 18766, "GatewayMemoryBytes": 134217728, "GatewayPIDs": 64, "GatewayTmpfsBytes": 33554432,
 			"Workspace": "/workspace", "ToolchainStore": "/var/lib/loki/toolchains", "WorkloadUID": 10000, "WorkloadGID": 10000, "MemoryBytes": 1073741824, "PIDs": 256, "TmpfsBytes": 67108864,
 			"RunTimeoutSeconds": 86400, "ResultRetentionSeconds": 3600, "MaxJobs": 64, "MaxConcurrentJobs": 8, "MaxOutputBytes": 262144,
+		}
+		if services["secrets"] {
+			result.Launcher["SecretSocket"], result.Launcher["SecretBrokerUID"], result.Launcher["SecretPrincipal"], result.Launcher["ApplicationCatalog"] = "/run/loki/secrets/jobs/control.sock", 10006, "agent", "/etc/loki/layout/application-resources.json"
 		}
 	}
 	if services["egress"] && result.EgressPolicy == "" {

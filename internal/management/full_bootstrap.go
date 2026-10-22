@@ -16,7 +16,7 @@ type FullBootstrap struct {
 	Script string      `json:"script"`
 }
 
-func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory string) (FullBootstrap, error) {
+func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, deployment string) (FullBootstrap, error) {
 	result := FullBootstrap{Mounts: []FullMount{}}
 	if len(t.Services) == 0 {
 		return result, nil
@@ -44,6 +44,8 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 				unique[mount.Target] = mount
 			} else if mount.Target == "/etc/loki/activation" {
 				unique["/loki-control"] = FullMount{Kind: "bind", Source: mount.Source, Target: "/loki-control"}
+			} else if service.Name == "secrets" && mount.Kind == "bind" && mount.Target == "/run/loki/secrets" {
+				unique[mount.Target] = mount
 			}
 		}
 	}
@@ -99,9 +101,6 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 		if mount.Target == "/var/lib/loki/runtime" {
 			directory(mount.Target+"/ports", 0, 0, "0700")
 		}
-		if mount.Target == "/var/lib/loki/secrets" {
-			directory(mount.Target+"/inbox", 0, 0, "0700")
-		}
 		if mount.Target == "/var/lib/loki/runner" {
 			for _, name := range []string{"state", "config", "gh-config", "data", "xdg-state", "snapshots"} {
 				directory(mount.Target+"/"+name, 10000, 10000, "0700")
@@ -120,7 +119,7 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 	}
 	fmt.Fprintf(&script, "test ! -L /loki-auth\ntest \"$(stat -c %%u /loki-auth)\" = %d\ntest -f /loki-auth/token\ntest ! -L /loki-auth/token\ntest \"$(stat -c %%u /loki-auth/token)\" = %d\nchgrp 10001 /loki-auth /loki-auth/token\nchmod 2750 /loki-auth\nchmod 0640 /loki-auth/token\n", hostUID, hostUID)
 	fmt.Fprintf(&script, "test ! -L /loki-layout\ntest \"$(stat -c %%u /loki-layout)\" = %d\nchgrp 10001 /loki-layout\nchmod 2750 /loki-layout\n", hostUID)
-	for _, name := range []string{"loki.toml", "mcp.json", "runtime.json", "launcher.json", "executor.json", "github.toml", "ingress.toml", "signing.gitconfig", "allowed-signers", "signing.pub"} {
+	for _, name := range []string{"loki.toml", "mcp.json", "runtime.json", "launcher.json", "executor.json", "application-resources.json", "github.toml", "ingress.toml", "signing.gitconfig", "allowed-signers", "signing.pub"} {
 		mode := "0640"
 		if name == "signing.gitconfig" || name == "allowed-signers" || name == "signing.pub" {
 			// These public inputs are mounted individually into jobs whose
@@ -128,6 +127,32 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory s
 			mode = "0644"
 		}
 		fmt.Fprintf(&script, "if test -e '/loki-layout/%s'; then test -f '/loki-layout/%s'; test ! -L '/loki-layout/%s'; chown 0:10001 '/loki-layout/%s'; chmod %s '/loki-layout/%s'; fi\n", name, name, name, name, mode, name)
+	}
+	if _, exists := unique["/run/loki/secrets"]; exists {
+		if !deploymentIDPattern.MatchString(deployment) {
+			return result, fmt.Errorf("secret preparation requires the original owned OCI reservation")
+		}
+		program, err := t.Resources.ServiceProgram("runtime-core", "devtools")
+		if err != nil {
+			return result, err
+		}
+		contract, err := t.Resources.ServiceAsset("runtime-core", "execution-contract")
+		if err != nil {
+			return result, err
+		}
+		// A newly allocated host tmpfs root is empty and owned by this host
+		// operator. Existing root-owned preparation is preserved and validated
+		// by the same deployment metadata owner as native systemd.
+		fmt.Fprintf(&script, "test ! -L /run/loki/secrets\nif test \"$(stat -c %%u /run/loki/secrets)\" != 0; then test \"$(stat -c %%u /run/loki/secrets)\" = %d; test -z \"$(ls -A /run/loki/secrets)\"; fi\ninstall -d -o 0 -g 0 -m 0755 /run/loki/secrets\n", hostUID)
+		args := []string{"/opt/loki/bin/loki", "host", "prepare-secrets", "--uid", "10006", "--gid", "10006", "--agent-uid", "10000", "--metadata-gid", "10001", "--identity", "/var/lib/loki/secrets/deployment.json", "--state", "/var/lib/loki/secrets", "--service-state", "/var/lib/loki/secrets", "--runtime", "/run/loki/secrets", "--devtools", program, "--config", "/loki-layout/loki.toml", "--github-config", "/loki-layout/github.toml", "--execution-contract", contract, "--catalog", "/loki-layout/application-resources.json", "--unit-directory=", "--overlay-directory=", "--job-deployment", deployment}
+		for i, arg := range args {
+			if i > 0 {
+				script.WriteByte(' ')
+			}
+			script.WriteString("'" + strings.ReplaceAll(arg, "'", "'\\''") + "'")
+		}
+		script.WriteString(" > /loki-layout/secrets-prepared.json\n")
+		fmt.Fprintf(&script, "chown %d /loki-layout/secrets-prepared.json\nchmod 0600 /loki-layout/secrets-prepared.json\n", hostUID)
 	}
 	result.Script = script.String()
 	return result, nil

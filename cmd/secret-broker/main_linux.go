@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -97,6 +98,7 @@ func run(args []string) int {
 			return 2
 		}
 		results := make(chan error, 3)
+		var serving atomic.Bool
 		go func() {
 			err := service.Serve(ctx)
 			if err != nil && ctx.Err() == nil {
@@ -105,7 +107,7 @@ func run(args []string) int {
 			results <- err
 		}()
 		go func() {
-			err := secretbroker.ServeMetadata(ctx, secretbroker.MetadataOptions{Ready: roleReady, Socket: config.MetadataSocket, AgentUID: config.AgentUID, GroupID: config.MetadataGID, Principal: config.Principal, Values: values})
+			err := secretbroker.ServeMetadata(ctx, secretbroker.MetadataOptions{Ready: roleReady, Serving: serving.Load, Socket: config.MetadataSocket, AgentUID: config.AgentUID, GroupID: config.MetadataGID, Principal: config.Principal, Values: values})
 			if err != nil && ctx.Err() == nil {
 				fmt.Fprintln(os.Stderr, "secret broker metadata role unavailable")
 			}
@@ -140,6 +142,7 @@ func run(args []string) int {
 				return 0
 			}
 		}
+		serving.Store(true)
 		if daemon.Notify(os.Getenv("NOTIFY_SOCKET"), "READY=1") != nil {
 			stopServices(3)
 			return 1

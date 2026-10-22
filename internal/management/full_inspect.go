@@ -35,7 +35,7 @@ func (s Store) FullProbes(backend FullBackend) (map[tools.ID]Probe, error) {
 	roles := map[tools.ID][]string{
 		"runtime-core": {"mcp"}, "workspace": {"mcp", "workspace"}, "git": {"mcp", "launcher", "executor", "git"},
 		"execution": {"runtime", "launcher", "executor"}, "browser": {"runtime", "browser-proxy", "browser", "mcp"},
-		"github": {"runtime", "egress", "github"}, "secrets": {"runtime"}, "coordination": {"runtime", "egress"}, "sharing": {"runtime", "launcher", "executor", "endpoints", "mcp", "sharing"},
+		"github": {"runtime", "egress", "github"}, "secrets": {"secrets", "mcp"}, "coordination": {"runtime", "egress"}, "sharing": {"runtime", "launcher", "executor", "endpoints", "mcp", "sharing"},
 	}
 	for _, service := range plan.Services {
 		if service.Name == "endpoints" {

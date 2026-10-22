@@ -34,6 +34,8 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	gid := flags.Uint64("gid", 0, "allocated dedicated broker GID")
 	agent := flags.Uint64("agent-uid", 0, "installed agent UID")
 	metadataGroup := flags.Uint64("metadata-gid", 0, "installed metadata socket group")
+	jobDeployment := flags.String("job-deployment", "", "current owned OCI reservation; app identity remains stable")
+	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
 	identity := flags.String("identity", "/etc/loki-go/secrets-deployment.json", "protected host deployment metadata")
 	state := flags.String("state", "/var/lib/loki-go/secrets", "host app-generation store")
 	serviceState := flags.String("service-state", "/var/lib/loki-go/secrets", "app state path inside the service namespace")
@@ -46,6 +48,9 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	unitDirectory := flags.String("unit-directory", "/etc/systemd/system/loki-go-secrets.service.d", "native generation binding drop-in directory; empty disables")
 	overlayDirectory := flags.String("overlay-directory", "/etc/loki-go", "native role layouts to bind to this generation; empty disables")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
 		return 2
 	}
 	for _, id := range []uint64{*uid, *gid, *agent, *metadataGroup} {
@@ -69,7 +74,11 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "host resource catalog is unavailable")
 		return 1
 	}
-	prepared, err := hostapplication.Prepare(hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources})
+	prepare := hostapplication.Prepare
+	if *stateOnly {
+		prepare = hostapplication.PrepareState
+	}
+	prepared, err := prepare(hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources})
 	if err != nil {
 		fmt.Fprintln(stderr, "secret service metadata or filesystem ownership requires recovery")
 		return 1
@@ -117,7 +126,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	if json.NewEncoder(stdout).Encode(map[string]any{"prepared": true, "policy": prepared.Layout.PolicySHA256, "broker_uid": prepared.Identity.UID, "broker_gid": prepared.Identity.GID}) != nil {
+	if json.NewEncoder(stdout).Encode(map[string]any{"prepared": true, "policy": prepared.Layout.PolicySHA256, "broker_uid": prepared.Identity.UID, "broker_gid": prepared.Identity.GID, "deployment_id": prepared.Identity.DeploymentID, "runner_id": prepared.Identity.RunnerID, "active_generation": prepared.Identity.ActiveGeneration}) != nil {
 		return 1
 	}
 	return 0

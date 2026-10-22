@@ -54,6 +54,7 @@ func TestLayoutsKeepPrivateGitExecutionOutOfPublicTools(t *testing.T) {
 func TestLayoutsPersonalAuthorizationIsExplicitAndSecretsHaveSeparateOwner(t *testing.T) {
 	resources := layoutResources([]tools.Selection{{ID: "github", Enabled: true}, {ID: "secrets", Enabled: true}})
 	resources.Plan.Programs = append(resources.Plan.Programs, FullProgram{Module: "github"}, FullProgram{Module: "secrets"})
+	resources.Plan.Services = append(resources.Plan.Services, FullService{Name: "secrets"})
 	layout, err := resources.Layouts()
 	if err != nil {
 		t.Fatal(err)
@@ -64,9 +65,28 @@ func TestLayoutsPersonalAuthorizationIsExplicitAndSecretsHaveSeparateOwner(t *te
 	if layout.Runtime["GitHubStateDirectory"] == layout.Runtime["SecretStateDirectory"] {
 		t.Fatal("provider and application credentials share data owner")
 	}
+	if _, exists := layout.Runtime["SecretStateDirectory"]; exists || layout.Runtime["ApplicationValuesExternal"] != true || slices.Contains(layout.Runtime["Tools"].([]string), "secrets") {
+		t.Fatal("platform runtime retained application value authority")
+	}
+	if layout.MCP["ApplicationUID"] != 10006 || layout.MCP["ApplicationSocket"] != "/run/loki/secrets/metadata/control.sock" {
+		t.Fatal("MCP did not use its finite metadata peer")
+	}
 	resources.Plan.Enabled[0].Capabilities = []string{"personal-projects"}
 	layout, err = resources.Layouts()
 	if err != nil || layout.Runtime["PersonalProjects"] != true {
 		t.Fatalf("explicit personal authorization missing: %v", err)
+	}
+}
+
+func TestApplicationOnlyLayoutsNeedNoPlatformRuntime(t *testing.T) {
+	resources := layoutResources([]tools.Selection{{ID: "secrets", Enabled: true}})
+	resources.Plan.Services = []FullService{{Name: "mcp"}, {Name: "secrets"}}
+	resources.Plan.Programs = append(resources.Plan.Programs, FullProgram{Module: "secrets"})
+	layout, err := resources.Layouts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layout.Runtime != nil || layout.MCP["RuntimeSocket"] != nil || layout.MCP["ApplicationUID"] != 10006 {
+		t.Fatal("app-only composition retained root platform runtime")
 	}
 }
