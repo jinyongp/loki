@@ -94,6 +94,8 @@ func TestRealComposeApplicationService(t *testing.T) {
 			NetworkMode    string
 			CapAdd         []string
 			ReadonlyRootfs bool
+			Memory         int64
+			PidsLimit      *int64
 		}
 		Mounts []struct{ Source, Destination string }
 	}
@@ -103,6 +105,9 @@ func TestRealComposeApplicationService(t *testing.T) {
 	c := containers[0]
 	if c.Config.User != "10006:10006" || c.HostConfig.NetworkMode != "none" || len(c.HostConfig.CapAdd) != 0 || !c.HostConfig.ReadonlyRootfs {
 		t.Fatal("broker identity or isolation changed")
+	}
+	if c.HostConfig.Memory != 1<<30 || c.HostConfig.PidsLimit == nil || *c.HostConfig.PidsLimit != 64 {
+		t.Fatal("broker no longer has the planned eight-Job memory/process budget")
 	}
 	for _, mount := range c.Mounts {
 		if mount.Destination == "/workspace" || strings.Contains(mount.Destination, "docker.sock") || mount.Destination == "/var/lib/loki/runtime" || mount.Destination == "/var/lib/loki/app-store" {

@@ -176,10 +176,17 @@ func run(ctx context.Context, action string) error {
 			if action == "check" && status.State == jobs.StateTerminal && (status.Cleanup == jobs.CleanupComplete || status.Cleanup == jobs.CleanupNotRequired) {
 				return nil
 			}
-			if action == "generic" && status.State == jobs.StateTerminal {
+			// Terminal outcome is persisted before container cleanup. Wait for the
+			// separate cleanup checkpoint before judging the completed operation.
+			if action == "generic" && status.State == jobs.StateTerminal && status.Cleanup != jobs.CleanupPending {
 				output, err := client.Output(ctx, id)
 				if err != nil || status.Outcome != jobs.OutcomeExited || status.ExitCode == nil || *status.ExitCode != 0 || status.Cleanup != jobs.CleanupComplete || output.Output != "native-generic-ready" || !output.Complete || output.Truncated || output.OutputGap != nil {
-					return errors.New("generic Job did not complete independently without injected app values")
+					exitCode := "unknown"
+					if status.ExitCode != nil {
+						exitCode = fmt.Sprint(*status.ExitCode)
+					}
+					// Report metadata only: unexpected output could contain an injected value.
+					return fmt.Errorf("generic Job failed: outcome=%s exit=%s cleanup=%s output_bytes=%d expected_output=%t complete=%t truncated=%t gap=%t output_error=%t", status.Outcome, exitCode, status.Cleanup, len(output.Output), output.Output == "native-generic-ready", output.Complete, output.Truncated, output.OutputGap != nil, err != nil)
 				}
 				return nil
 			}

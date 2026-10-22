@@ -142,6 +142,9 @@ PY
   test "$pid" -gt 1
   test "$(awk '/^Uid:/{print $2}' "/proc/$pid/status")" = 21006
   test "$(awk '/^CapEff:/{print $2}' "/proc/$pid/status")" = 0000000000000000
+  broker_cgroup=$(awk -F: '$1=="0" {print $3}' "/proc/$pid/cgroup")
+  test "$(cat "/sys/fs/cgroup$broker_cgroup/memory.max")" = 1073741824
+  test "$(cat "/sys/fs/cgroup$broker_cgroup/pids.max")" = 64
   test ! -e "/proc/$pid/root/workspace"
   test ! -e "/proc/$pid/root/run/docker.sock"
   test ! -e "/proc/$pid/root/etc/loki-go/secrets-deployment.json"

@@ -11,6 +11,18 @@ import (
 	"loki/internal/tools"
 )
 
+func TestFullBrokerUsesPlannedEightJobResourceBudget(t *testing.T) {
+	b := &DockerFullBackend{Store: Store{Root: t.TempDir()}}
+	topology := FullTopology{Resources: FullResources{Payloads: map[tools.ID]FullPayload{
+		"secrets": {Programs: map[string]string{"secret-broker": "bin/broker"}},
+	}}}
+	r := DeploymentReservation{ID: "deployment-" + strings.Repeat("a", 32), PlanDigest: strings.Repeat("b", 64)}
+	spec, err := b.serviceSpecification(r, topology, FullServiceResources{Name: "secrets", UID: 10006, GID: 10006}, FullLayouts{}, "/opt/loki/bin/loki")
+	if err != nil || spec.Memory != 1<<30 || spec.PIDs != 64 {
+		t.Fatalf("eight-Job broker budget: memory=%d pids=%d err=%v", spec.Memory, spec.PIDs, err)
+	}
+}
+
 func TestFullContainerOwnershipRejectsForeignDeploymentAndUnrecognizedChildren(t *testing.T) {
 	b := &DockerFullBackend{Store: Store{Root: t.TempDir()}}
 	r := DeploymentReservation{ID: "deployment-" + strings.Repeat("a", 32), PlanDigest: strings.Repeat("b", 64), Services: []string{"mcp"}}

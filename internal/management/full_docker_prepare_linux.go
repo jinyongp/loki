@@ -480,7 +480,7 @@ func (b *DockerFullBackend) serviceSpecification(r DeploymentReservation, t Full
 			return result, err
 		}
 		result.Command = []string{program, "--layout", "/run/loki/secrets/layout.json"}
-		result.Memory, result.PIDs = 512<<20, 128
+		result.Memory, result.PIDs = 1<<30, 64
 	case "runtime":
 		result.Command = append([]string{worker, "runtime", "--layout", "/etc/loki/layout/runtime.json"}, common...)
 		result.Capabilities = []string{"CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"}
