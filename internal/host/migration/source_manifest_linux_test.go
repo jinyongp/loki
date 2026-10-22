@@ -23,7 +23,7 @@ func TestSourceManifestRejectsAliasesAndUnknownFieldsBeforeSourceAccess(t *testi
 	resource := controlpolicy.ApplicationResource{ID: "123e4567-e89b-42d3-a456-426614174561", Alias: "app", Repository: "owner/repo", Network: "none", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}}
 	manifest := SourceTransferManifest{Version: 1, Operation: "123e4567-e89b-42d3-a456-426614174562", Policy: strings.Repeat("a", 64), SourceRoot: source, TargetSocket: "/tmp/source-manifest-broker.sock", TargetUID: 10006, Plan: appvalues.MigrationPlan{Version: 1, Revision: 1, Values: 1, Resources: []controlpolicy.ApplicationResource{resource}, Mappings: []appvalues.MigrationProfileMapping{{Profile: "app", Resource: resource.ID, Environment: "common", Keys: []appvalues.MigrationKeyMapping{{Source: "TOKEN", Name: "TOKEN", Kind: "secret"}}}}}, Writes: []lifecycle.MigrationWriteCheckpoint{}}
 	canonical, err := json.Marshal(manifest)
-	if err != nil || !manifest.valid() {
+	if err != nil || !manifest.Valid() {
 		t.Fatal("invalid public manifest fixture", err)
 	}
 	for _, test := range []struct{ name, suffix string }{

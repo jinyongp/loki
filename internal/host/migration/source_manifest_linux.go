@@ -7,56 +7,22 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"path/filepath"
-	"strings"
 
 	"loki/internal/admin"
-	"loki/internal/control/appvalues"
-	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
 	"loki/internal/platform/privateio"
 	secret "loki/modules/secrets"
 )
 
-const sourceManifestLimit = 128 << 20
+const sourceManifestLimit = lifecycle.MaxSourceManifestBytes
 
 // SourceTransferManifest is public metadata sent by the existing host owner to
 // its private helper. Fixed source/socket paths refer to that helper's verified
 // mounts. Source keys, values, passphrases and task contexts have no fields here.
-type SourceTransferManifest struct {
-	Version         int                                  `json:"version"`
-	Operation       string                               `json:"operation"`
-	Policy          string                               `json:"policy"`
-	SourceRoot      string                               `json:"source_root"`
-	TargetSocket    string                               `json:"target_socket"`
-	TargetUID       uint32                               `json:"target_uid"`
-	Plan            appvalues.MigrationPlan              `json:"plan"`
-	BaseEnvironment map[string]string                    `json:"base_environment"`
-	Writes          []lifecycle.MigrationWriteCheckpoint `json:"writes"`
-}
-
-func (m SourceTransferManifest) valid() bool {
-	if m.Version != 1 || !controlpolicy.ApplicationUUID.MatchString(m.Operation) || !validDigest(m.Policy) || m.TargetUID == 0 || m.Plan.Version != 1 || m.Plan.Revision == 0 || m.Plan.Mappings == nil || m.Writes == nil || len(m.Plan.Resources) == 0 || len(m.TargetSocket) >= 108 {
-		return false
-	}
-	for _, path := range []string{m.SourceRoot, m.TargetSocket} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
-			return false
-		}
-	}
-	return true
-}
+type SourceTransferManifest = lifecycle.SourceTransferManifest
 
 func WriteSourceTransferManifest(channel io.Writer, m SourceTransferManifest) error {
-	if !m.valid() {
-		return ErrSourceSession
-	}
-	encoded, err := json.Marshal(m)
-	if err != nil {
-		return ErrSourceSession
-	}
-	defer clear(encoded)
-	return privateio.WriteBytes(channel, encoded, sourceManifestLimit)
+	return lifecycle.WriteSourceTransferManifest(channel, m)
 }
 
 // ServeSourceTransferManifest accepts only the host's canonical typed metadata
@@ -76,7 +42,7 @@ func ServeSourceTransferManifest(ctx context.Context, channel io.ReadWriteCloser
 	}
 	defer clear(encoded)
 	var manifest SourceTransferManifest
-	if json.Unmarshal(encoded, &manifest) != nil || !manifest.valid() {
+	if json.Unmarshal(encoded, &manifest) != nil || !manifest.Valid() {
 		channel.Close()
 		return ErrSourceSession
 	}

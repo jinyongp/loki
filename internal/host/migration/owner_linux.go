@@ -81,48 +81,10 @@ func (o SourceOwner) Backup(ctx context.Context) error {
 // canonical host journal has durably accepted it. An event cannot select an
 // operation, advance cutover or release maintenance.
 func (o SourceOwner) Checkpoint(event SourceEvent) error {
-	r, err := o.current()
-	if err != nil || r.Phase != lifecycle.PhaseMigrate || event.Operation != lifecycle.MigrationOperationUUID(o.ID) {
+	if o.Journal == nil {
 		return ErrSourceSession
 	}
-	switch event.Type {
-	case "target_sealed":
-		if event.Write != nil || event.Binding != nil || event.Attempt != "" || event.Count != 0 {
-			return ErrSourceSession
-		}
-		_, err = o.Journal.AdvanceSecretMigration(o.ID, lifecycle.PhaseSwitch, time.Now())
-	case "write_prepared", "write_completed":
-		if event.Write == nil || event.Binding != nil || event.Attempt != "" || event.Count != 0 || (event.Type == "write_completed") != event.Write.Complete {
-			return ErrSourceSession
-		}
-		if event.Type == "write_prepared" {
-			_, err = o.Journal.CheckpointMigrationWrite(o.ID, *event.Write, time.Now())
-		} else {
-			// Check the entire immutable original before accepting its completion.
-			found := false
-			for _, w := range r.SecretMigration.Writes {
-				w.Complete = true
-				found = found || w == *event.Write
-			}
-			if !found {
-				return ErrSourceSession
-			}
-			_, err = o.Journal.CompleteMigrationWrite(o.ID, event.Write.Request, time.Now())
-		}
-	case "comparison_prepared":
-		if event.Write != nil || event.Binding == nil || event.Attempt != "" || event.Count != 0 {
-			return ErrSourceSession
-		}
-		_, err = o.Journal.CheckpointMigrationComparison(o.ID, *event.Binding, time.Now())
-	case "comparison_completed":
-		if event.Write != nil || event.Binding != nil || event.Attempt == "" || event.Count < 1 {
-			return ErrSourceSession
-		}
-		_, err = o.Journal.CompleteMigrationComparison(o.ID, event.Attempt, event.Count, time.Now())
-	default:
-		return ErrSourceSession
-	}
-	return err
+	return o.Journal.CheckpointMigrationSourceEvent(o.ID, event, time.Now())
 }
 
 // Session reconstructs recovery exclusively from the current canonical record.

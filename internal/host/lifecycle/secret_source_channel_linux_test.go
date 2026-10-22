@@ -1,6 +1,6 @@
 //go:build linux
 
-package migration
+package lifecycle
 
 import (
 	"context"

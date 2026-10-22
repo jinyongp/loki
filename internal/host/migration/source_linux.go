@@ -23,18 +23,11 @@ import (
 	secret "loki/modules/secrets"
 )
 
-var ErrSourceSession = errors.New("original migration source session did not complete")
+var ErrSourceSession = lifecycle.ErrSourceSession
 
 // SourceEvent never contains value bytes or plaintext hashes. Its synchronous
 // checkpoint is acknowledged before the corresponding provider effect/approval.
-type SourceEvent struct {
-	Operation string                                `json:"operation"`
-	Type      string                                `json:"type"`
-	Write     *lifecycle.MigrationWriteCheckpoint   `json:"write,omitempty"`
-	Binding   *appvalues.MigrationComparisonBinding `json:"binding,omitempty"`
-	Attempt   string                                `json:"attempt,omitempty"`
-	Count     int                                   `json:"count,omitempty"`
-}
+type SourceEvent = lifecycle.SourceEvent
 
 type SourceSession struct {
 	Source          secret.Controller
