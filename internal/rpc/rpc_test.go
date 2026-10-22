@@ -78,8 +78,11 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	s := Server{Principals: identity.UnixResolver{AgentUID: uint32(os.Getuid())}, Operations: map[string]Operation{
 		"echo":    {Grant: controlpolicy.Agent, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) { return Decode[map[string]any](raw) }},
 		"failure": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return nil, errors.New("synthetic-private-value") }},
-		"panic":   {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { panic("private-panic") }},
-		"large":   {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
+		"locked": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) {
+			return nil, fault.WithCorrelation(fault.New(fault.CodeVaultLocked, "application vault is locked", true, "unlock the existing vault"), "fixture-correlation")
+		}},
+		"panic": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { panic("private-panic") }},
+		"large": {Grant: controlpolicy.Agent, Handle: func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("x", MaxBytes), nil }},
 	}, Audit: func(e Event) { mu.Lock(); defer mu.Unlock(); events = append(events, e) }}
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(ctx, listener) }()
@@ -88,6 +91,11 @@ func TestSocketRoundtripBoundsAndSanitization(t *testing.T) {
 	result, err := c.Call(ctx, map[string]any{"operation": "echo", "value": "hello", "profile": "fixture", "action_name": "web", "secret_value": "synthetic-hidden"})
 	if err != nil || !strings.Contains(string(result), "hello") {
 		t.Fatalf("roundtrip: %s %v", result, err)
+	}
+	_, lockedErr := c.Call(ctx, map[string]any{"operation": "locked"})
+	detail := fault.Describe(lockedErr)
+	if detail.Code != fault.CodeVaultLocked || !detail.Retryable || detail.CorrelationID != "fixture-correlation" || detail.NextAction != "unlock the existing vault" {
+		t.Fatalf("typed error was lost over the socket: %+v", detail)
 	}
 	for _, operation := range []string{"failure", "panic", "large", "missing"} {
 		_, err := c.Call(ctx, map[string]any{"operation": operation})

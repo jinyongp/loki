@@ -15,6 +15,7 @@ import (
 	"loki/internal/app/secretbroker"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
+	"loki/modules/secrets/application"
 	provider "loki/modules/secrets/devtools"
 )
 
@@ -30,6 +31,13 @@ type layout struct {
 	InstanceID      string                              `json:"instance_id"`
 	Resources       []controlpolicy.ApplicationResource `json:"resources"`
 	BaseEnvironment map[string]string                   `json:"base_environment"`
+	MetadataSocket  string                              `json:"metadata_socket,omitempty"`
+	MetadataGID     uint32                              `json:"metadata_gid,omitempty"`
+	AgentUID        uint32                              `json:"agent_uid,omitempty"`
+	Principal       string                              `json:"principal,omitempty"`
+	AdminSocket     string                              `json:"admin_socket,omitempty"`
+	ApplicationRoot string                              `json:"application_root,omitempty"`
+	Inbox           string                              `json:"inbox,omitempty"`
 }
 
 func run(args []string) int {
@@ -57,6 +65,30 @@ func run(args []string) int {
 	service, err := secretbroker.New(secretbroker.Options{Provider: p, Socket: config.Socket, LauncherUID: config.LauncherUID, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, RunnerID: config.RunnerID, InstanceID: config.InstanceID, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
 	if err != nil {
 		return 2
+	}
+	if config.MetadataSocket != "" || config.AdminSocket != "" || config.ApplicationRoot != "" || config.Inbox != "" {
+		if config.MetadataSocket == "" || config.AdminSocket == "" || config.ApplicationRoot == "" || config.Inbox == "" || config.AgentUID == 0 || config.AgentUID == config.UID || config.Principal == "" {
+			return 2
+		}
+		values, err := application.New(application.Options{Provider: p, Root: config.ApplicationRoot, Inbox: config.Inbox, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
+		if err != nil {
+			return 2
+		}
+		results := make(chan error, 3)
+		go func() { results <- service.Serve(ctx) }()
+		go func() {
+			results <- secretbroker.ServeMetadata(ctx, secretbroker.MetadataOptions{Socket: config.MetadataSocket, AgentUID: config.AgentUID, GroupID: config.MetadataGID, Principal: config.Principal, Values: values})
+		}()
+		go func() { results <- secretbroker.ServeAdmin(ctx, config.AdminSocket, values) }()
+		first := <-results
+		wasCanceled := ctx.Err() != nil
+		cancel()
+		<-results
+		<-results
+		if first != nil && !wasCanceled {
+			return 1
+		}
+		return 0
 	}
 	if err = service.Serve(ctx); err != nil && ctx.Err() == nil {
 		return 1

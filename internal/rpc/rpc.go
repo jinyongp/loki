@@ -166,6 +166,7 @@ func readBoundedFrame(reader io.Reader, maximum int) ([]byte, error) {
 
 type response struct {
 	StoreRecovery *fault.StoreRecovery `json:"store_recovery,omitempty"`
+	ErrorDetail   *fault.Detail        `json:"error_detail,omitempty"`
 	OK            bool                 `json:"ok"`
 	Result        any                  `json:"result,omitempty"`
 	Error         string               `json:"error,omitempty"`
@@ -245,6 +246,8 @@ func (s *Server) handle(ctx context.Context, conn *net.UnixConn) {
 	r := response{OK: err == nil, Result: result}
 	if err != nil {
 		r.Error = fault.Public(err)
+		detail := fault.Describe(err)
+		r.ErrorDetail = &detail
 		var recovery *fault.StoreRecovery
 		if errors.As(err, &recovery) && recovery.Valid() {
 			r.StoreRecovery = recovery
@@ -348,6 +351,7 @@ func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) 
 	}
 	var r struct {
 		StoreRecovery *fault.StoreRecovery `json:"store_recovery"`
+		ErrorDetail   *fault.Detail        `json:"error_detail"`
 		OK            bool                 `json:"ok"`
 		Result        json.RawMessage      `json:"result"`
 		Error         string               `json:"error"`
@@ -358,6 +362,13 @@ func (c Client) Call(ctx context.Context, request any) (json.RawMessage, error) 
 	if !r.OK {
 		if r.StoreRecovery != nil && r.StoreRecovery.Valid() {
 			return nil, r.StoreRecovery
+		}
+		if r.ErrorDetail != nil {
+			d := r.ErrorDetail
+			if d.Message != r.Error || len(d.Message) > 4096 || len(d.NextAction) > 4096 || len(d.CorrelationID) > 128 || !fault.ValidCode(d.Code) {
+				return nil, errors.New("invalid runtime error detail")
+			}
+			return nil, fault.WithCorrelation(fault.New(d.Code, d.Message, d.Retryable, d.NextAction), d.CorrelationID)
 		}
 		return nil, fault.Error(r.Error)
 	}

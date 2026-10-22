@@ -69,31 +69,45 @@ func (l *Log) ReadPage(offset, limit int) (map[string]any, error) {
 	if limit > 200 {
 		return nil, errors.New("audit limit exceeds 200")
 	}
+	records, complete, err := l.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	start := min(offset, len(records))
+	end := min(start+limit, len(records))
+	hasMore := end < len(records)
+	var nextOffset any
+	if hasMore {
+		nextOffset = end
+	}
+	return map[string]any{"records": records[start:end], "offset": start, "limit": limit, "has_more": hasMore, "next_offset": nextOffset, "total": len(records), "complete": complete}, nil
+}
+
+// Snapshot returns one bounded, coherent metadata tail for callers that must
+// apply resource authorization before pagination and bind cursors to revisions.
+func (l *Log) Snapshot() ([]json.RawMessage, bool, error) {
 	records := []json.RawMessage{}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	f, err := l.open(unix.O_RDONLY)
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]any{
-			"records": records, "offset": 0, "limit": limit, "has_more": false,
-			"next_offset": nil, "total": 0, "complete": true,
-		}, nil
+		return records, true, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	tailStart := max(int64(0), info.Size()-maxTail)
 	if _, err = f.Seek(tailStart, io.SeekStart); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	data, err := io.ReadAll(io.LimitReader(f, maxTail))
+	data, err := io.ReadAll(io.LimitReader(f, info.Size()-tailStart))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if tailStart > 0 {
 		_, data, _ = bytes.Cut(data, []byte{'\n'})
@@ -105,18 +119,7 @@ func (l *Log) ReadPage(offset, limit int) (map[string]any, error) {
 			records = append(records, append(json.RawMessage(nil), line...))
 		}
 	}
-	start := min(offset, len(records))
-	end := min(start+limit, len(records))
-	hasMore := end < len(records)
-	var nextOffset any
-	if hasMore {
-		nextOffset = end
-	}
-	return map[string]any{
-		"records": records[start:end], "offset": start, "limit": limit,
-		"has_more": hasMore, "next_offset": nextOffset, "total": len(records),
-		"complete": tailStart == 0,
-	}, nil
+	return records, tailStart == 0, nil
 }
 
 func (l *Log) Read(limit int) (map[string]any, error) {

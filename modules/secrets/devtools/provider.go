@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -66,11 +65,13 @@ func (p *Provider) invoke(ctx context.Context, args []string, input []byte, targ
 	cmd.Stdin = bytes.NewReader(input)
 	output := &boundedBuffer{limit: MaxPrivatePayloadFrame}
 	cmd.Stdout = output
-	cmd.Stderr = io.Discard
+	stderr := &boundedBuffer{limit: MaxPrivateControlFrame}
+	cmd.Stderr = stderr
 	err := cmd.Run()
 	defer clear(output.Bytes())
+	defer clear(stderr.Bytes())
 	if err != nil {
-		return ErrUnavailable
+		return providerFailure(stderr.Bytes())
 	}
 	var envelope struct {
 		Schema int             `json:"schema_version"`

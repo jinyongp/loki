@@ -37,6 +37,8 @@ func SecretV2OutputSchema(tool string) map[string]any {
 		status := object(map[string]any{"action": map[string]any{"const": "status"}, "resource": alias, "state": map[string]any{"type": "string", "enum": []string{"ready", "locked", "uninitialized", "recovery_required", "unavailable"}}, "integrity_verified": boolean, "verification_pending": boolean}, "action", "resource", "state", "integrity_verified", "verification_pending")
 		values := page("values", value, true)
 		values["properties"].(map[string]any)["env"] = env
+		values["properties"].(map[string]any)["integrity_verified"] = boolean
+		values["properties"].(map[string]any)["verification_pending"] = boolean
 		values["required"] = append(values["required"].([]string), "env")
 		return map[string]any{"type": "object", "oneOf": []any{page("resources", resource, false), values, page("imports", stage, true), status, page("audit", audit, true)}}
 	}

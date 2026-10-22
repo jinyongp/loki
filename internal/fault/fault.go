@@ -16,16 +16,23 @@ func (e Error) Error() string { return string(e) }
 type Code string
 
 const (
-	CodeInvalidInput    Code = "invalid_input"
-	CodeConflict        Code = "conflict"
-	CodeDenied          Code = "denied"
-	CodeUnavailable     Code = "unavailable"
-	CodeQuotaExceeded   Code = "quota_exceeded"
-	CodeFailed          Code = "failed"
-	CodeOutcomeUnknown  Code = "outcome_unknown"
-	CodeRequestExpired  Code = "request_expired"
-	CodeDeliveryUnknown Code = "delivery_unknown"
-	CodeOutputLost      Code = "output_lost"
+	CodeInvalidInput     Code = "invalid_input"
+	CodeConflict         Code = "conflict"
+	CodeDenied           Code = "denied"
+	CodeUnavailable      Code = "unavailable"
+	CodeQuotaExceeded    Code = "quota_exceeded"
+	CodeFailed           Code = "failed"
+	CodeOutcomeUnknown   Code = "outcome_unknown"
+	CodeRequestExpired   Code = "request_expired"
+	CodeDeliveryUnknown  Code = "delivery_unknown"
+	CodeOutputLost       Code = "output_lost"
+	CodeNotAuthorized    Code = "not_authorized"
+	CodeValueExists      Code = "value_exists"
+	CodeStageExpired     Code = "stage_expired"
+	CodeVaultLocked      Code = "vault_locked"
+	CodeRecoveryRequired Code = "recovery_required"
+	CodeInputExpired     Code = "input_expired"
+	CodeLimitExceeded    Code = "limit_exceeded"
 )
 
 type Detail struct {
@@ -34,6 +41,18 @@ type Detail struct {
 	Retryable     bool   `json:"retryable"`
 	CorrelationID string `json:"correlation_id,omitempty"`
 	NextAction    string `json:"next_action,omitempty"`
+}
+
+// ValidCode bounds the error vocabulary accepted across authenticated IPC.
+func ValidCode(code Code) bool {
+	switch code {
+	case CodeInvalidInput, CodeConflict, CodeDenied, CodeUnavailable, CodeQuotaExceeded,
+		CodeFailed, CodeOutcomeUnknown, CodeRequestExpired, CodeDeliveryUnknown,
+		CodeOutputLost, CodeNotAuthorized, CodeValueExists, CodeStageExpired,
+		CodeVaultLocked, CodeRecoveryRequired, CodeInputExpired, CodeLimitExceeded:
+		return true
+	}
+	return false
 }
 
 type detailedError struct {
