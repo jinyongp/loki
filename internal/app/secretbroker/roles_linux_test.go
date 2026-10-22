@@ -39,6 +39,20 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if os.Chmod(root, 0755) != nil {
 		t.Fatal("fixture root permissions")
 	}
+	copyExecutable := func(source, name string) string {
+		t.Helper()
+		data, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(root, name)
+		if os.WriteFile(path, data, 0555) != nil || os.Chmod(path, 0555) != nil {
+			t.Fatal("fixture executable")
+		}
+		return path
+	}
+	broker = copyExecutable(broker, "broker-bin")
+	provider = copyExecutable(provider, "provider-bin")
 	makeDir := func(name string, mode os.FileMode, gid int) string {
 		t.Helper()
 		path := filepath.Join(root, name)
