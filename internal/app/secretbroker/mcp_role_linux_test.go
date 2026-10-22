@@ -31,6 +31,13 @@ func verifyBrokerMCPDiscovery(t *testing.T, ctx context.Context, root, worker, s
 	if contract == "" {
 		contract = "/usr/share/doc/loki/container-execution-contract.json"
 	}
+	// The runner's checkout ancestor may be private to its own UID. The
+	// agent gets only this copied public contract in the fixture projection.
+	contractBody, err := os.ReadFile(contract)
+	contract = filepath.Join(root, "mcp-contract.json")
+	if err != nil || os.WriteFile(contract, contractBody, 0644) != nil || os.Chmod(contract, 0644) != nil {
+		t.Fatal("public agent execution contract", err)
+	}
 	paths := map[string]any{
 		"mcp-tools.json":     tools.Config{Schema: 1, Release: tools.Release, Host: tools.Host{Kind: "local"}, Mode: tools.Full, Tools: []tools.Selection{{ID: "secrets", Enabled: true}}},
 		"mcp-resources.json": map[string]any{"resources": resources},

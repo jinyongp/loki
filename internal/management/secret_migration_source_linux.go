@@ -4,8 +4,6 @@ package management
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"loki/internal/control/appvalues"
 	"loki/internal/host/lifecycle"
 	managedcommand "loki/internal/platform/command"
@@ -38,24 +35,7 @@ func verifyPublishedMigrationArchive(record lifecycle.OperationRecord) error {
 }
 
 func verifyMigrationArchiveFile(path string, archive *lifecycle.MigrationArchiveCheckpoint) error {
-	if archive == nil || archive.Bytes < 1 || archive.Bytes > 129<<20 {
-		return fmt.Errorf("invalid original source archive metadata")
-	}
-	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
-	if err != nil {
-		return fmt.Errorf("original encrypted source backup is unavailable")
-	}
-	file := os.NewFile(uintptr(fd), "original-encrypted-source-backup")
-	defer file.Close()
-	var info unix.Stat_t
-	if unix.Fstat(fd, &info) != nil || info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&07777 != 0600 || info.Uid != uint32(os.Geteuid()) || info.Nlink != 1 || info.Size != archive.Bytes {
-		return fmt.Errorf("original encrypted source backup ownership or size changed")
-	}
-	digest := sha256.New()
-	if _, err := io.Copy(digest, io.LimitReader(file, archive.Bytes+1)); err != nil || hex.EncodeToString(digest.Sum(nil)) != archive.CipherSHA256 {
-		return fmt.Errorf("original encrypted source backup integrity changed")
-	}
-	return nil
+	return lifecycle.VerifyMigrationSourceArchive(path, archive)
 }
 
 // TransferSecretMigrationSource keeps legacy plaintext inside the private root

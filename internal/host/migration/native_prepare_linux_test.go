@@ -172,11 +172,42 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 		if actual, err := hostapplication.ReadIdentity(application.IdentityFile); err != nil || actual != before.Identity {
 			t.Fatal("inactive native preparation changed the selector", err)
 		}
+		if err := owner.Backup(t.Context()); err != nil {
+			t.Fatal("native original encrypted source backup", err)
+		}
+		backedUp, active, err := journal.Active()
+		if err != nil || !active || backedUp.SecretMigration.Archive == nil || !backedUp.SecretMigration.Archive.Published || lifecycle.VerifyMigrationSourceArchive(intent.BackupPath, backedUp.SecretMigration.Archive) != nil {
+			t.Fatal("native source archive publication was not independently verified", err)
+		}
+		if _, err := owner.SelectNativeCandidate(t.Context(), current); err == nil {
+			t.Fatal("native selection bypassed actual private value comparison")
+		}
+		if _, err := source.SetSecret(t.Context(), "web", "TOKEN", "must-remain-fenced", true); err == nil {
+			t.Fatal("native source writer escaped the original pending gate")
+		}
 		if _, err := journal.RequestSecretMigrationRollback(record.ID, time.Now()); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := owner.PrepareNativeCandidate(current, brokerHost, providerHost); err == nil {
 			t.Fatal("native candidate preparation resumed after rollback choice")
+		}
+		if err := owner.FinishNativeSource(t.Context()); err == nil {
+			t.Fatal("native source gate released before terminal host evidence")
+		}
+		if _, err := journal.CompleteSecretMigration(record.ID, true, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		for attempt := 0; attempt < 2; attempt++ {
+			if err := owner.FinishNativeSource(t.Context()); err != nil {
+				t.Fatal("native original source disposition/ACK replay", err)
+			}
+		}
+		if fence, err := source.ApplicationMigrationState(t.Context()); err != nil || fence != nil {
+			t.Fatal("native source rollback did not reopen the original store", err)
+		}
+		pending, active, err := journal.Active()
+		if err != nil || !active || pending.ID != record.ID || pending.Maintenance.Released {
+			t.Fatal("native source ACK bypassed the remaining app/Job gate owners", err)
 		}
 	}
 	options.Recipient = "invalid-recipient"

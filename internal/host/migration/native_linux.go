@@ -184,6 +184,15 @@ func (c NativeCandidate) Stop(ctx context.Context) error {
 	if !c.valid() {
 		return errNativeCandidate
 	}
+	return c.stopOwned(ctx)
+}
+
+// Cleanup uses the original unit identity, even if a payload/jail disappeared.
+// Starting a service still requires every executable and namespace check above.
+func (c NativeCandidate) stopOwned(ctx context.Context) error {
+	if os.Geteuid() != 0 {
+		return errNativeCandidate
+	}
 	properties, err := c.properties(ctx)
 	if err != nil {
 		return err

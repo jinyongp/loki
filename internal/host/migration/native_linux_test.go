@@ -191,4 +191,20 @@ func TestRealNativeCandidateNamespaceAndManualProtection(t *testing.T) {
 	if _, err := candidate.Client().Call(ctx, appvalues.AdminRequest{Action: "protection_unlock"}, []byte("synthetic-native-candidate-passphrase")); err != nil {
 		t.Fatal("explicit native candidate unlock", err)
 	}
+	foreign := candidate
+	foreign.Operation = "123e4567-e89b-42d3-a456-426614174599"
+	if err := foreign.stopOwned(ctx); err == nil {
+		t.Fatal("foreign operation stopped the original native unit")
+	}
+	if state, err := candidate.Status(ctx); err != nil || state != "unlocked" {
+		t.Fatal("foreign cleanup changed the original running unit", err)
+	}
+	metadataOnly := candidate
+	metadataOnly.BrokerHost, metadataOnly.ProviderHost = filepath.Join(root, "missing-broker"), filepath.Join(root, "missing-provider")
+	if err := metadataOnly.Start(ctx); err == nil {
+		t.Fatal("missing payload allowed another native service start")
+	}
+	if err := metadataOnly.stopOwned(ctx); err != nil {
+		t.Fatal("original native cleanup incorrectly required retained executables", err)
+	}
 }
