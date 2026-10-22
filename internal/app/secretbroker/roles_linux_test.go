@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -29,11 +30,27 @@ import (
 	secret "loki/modules/secrets"
 )
 
+type sourceMetadataCapture struct {
+	input    io.ReadCloser
+	output   io.WriteCloser
+	metadata bytes.Buffer
+}
+
+func (c *sourceMetadataCapture) Read(body []byte) (int, error) {
+	n, err := c.input.Read(body)
+	_, _ = c.metadata.Write(body[:n])
+	return n, err
+}
+func (c *sourceMetadataCapture) Write(body []byte) (int, error) { return c.output.Write(body) }
+func (c *sourceMetadataCapture) Close() error {
+	return errors.Join(c.input.Close(), c.output.Close())
+}
+
 func TestRealApplicationRoleSockets(t *testing.T) {
-	broker, provider := os.Getenv("LOKI_SECRET_TEST_BROKER"), os.Getenv("LOKI_SECRET_TEST_DEVTOOLS")
-	if broker == "" || provider == "" || os.Geteuid() != 0 {
+	broker, provider, worker := os.Getenv("LOKI_SECRET_TEST_BROKER"), os.Getenv("LOKI_SECRET_TEST_DEVTOOLS"), os.Getenv("LOKI_SECRET_TEST_WORKER")
+	if broker == "" || provider == "" || worker == "" || os.Geteuid() != 0 {
 		if os.Getenv("LOKI_REQUIRE_SECRET_ROLES") == "1" {
-			t.Fatal("root and exact native broker/provider binaries are required")
+			t.Fatal("root and exact native worker/broker/provider binaries are required")
 		}
 		t.Skip("native values Actions suite supplies root and exact binaries")
 	}
@@ -389,8 +406,49 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	}
 	sourceOwner.Journal = journal
 	expired = pending()
-	if err := sourceOwner.Transfer(ctx, client, nil); !errors.Is(err, checkpointError) {
+	sourceSession, err = sourceOwner.Session(client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	producer := exec.CommandContext(ctx, worker, "host", "secret-migration-source")
+	producer.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+	producerInput, err := producer.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	producerOutput, err := producer.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var producerDiagnostics bytes.Buffer
+	producer.Stderr = &producerDiagnostics
+	if err := producer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	producerWaited := false
+	t.Cleanup(func() {
+		if !producerWaited {
+			_ = producer.Process.Kill()
+			_ = producer.Wait()
+		}
+	})
+	producerChannel := &sourceMetadataCapture{input: producerOutput, output: producerInput}
+	manifest := hostmigration.SourceTransferManifest{Version: 1, SourceRoot: legacy.StateDirectory, TargetSocket: client.Socket, TargetUID: client.ExpectedUID, Operation: migrationOperation, Policy: intent.Policy, Plan: plan, BaseEnvironment: nil, Writes: sourceSession.Writes}
+	if err := hostmigration.WriteSourceTransferManifest(producerChannel, manifest); err != nil {
+		t.Fatal("root source helper manifest", err)
+	}
+	if err := hostmigration.CheckpointSourceTransfer(ctx, producerChannel, migrationOperation, sourceOwner.Checkpoint); !errors.Is(err, checkpointError) {
 		t.Fatal("sealed candidate ready checkpoint loss not exercised", err)
+	}
+	producerErr := producer.Wait()
+	producerWaited = true
+	if producerErr == nil {
+		t.Fatal("root helper did not stop after host checkpoint NACK")
+	}
+	for _, value := range []string{"source-session-canary", "public-migration.example", "synthetic-platform-owner"} {
+		if bytes.Contains(producerChannel.metadata.Bytes(), []byte(value)) || bytes.Contains(producerDiagnostics.Bytes(), []byte(value)) {
+			t.Fatal("root source helper exposed values through host metadata channel")
+		}
 	}
 	journal, err = lifecycle.OpenOperationJournal(journalRoot, journalLock, lifecycle.OperationJournalOptions{})
 	if err != nil {
@@ -403,10 +461,28 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal("prepared a second migration over the fenced source", err)
 	}
 	write("fenced")
+	exportRevision, err := client.Call(ctx, appvalues.AdminRequest{Action: "revision", Resource: migratedResource.Alias}, nil)
+	if err != nil {
+		t.Fatal("root application backup revision", err)
+	}
+	var backupRevision struct {
+		Revision string `json:"revision"`
+	}
+	if json.Unmarshal(exportRevision, &backupRevision) != nil {
+		t.Fatal("invalid application backup revision metadata")
+	}
+	backupRequest := appvalues.AdminRequest{Action: "backup_export", Resource: migratedResource.Alias, Revision: backupRevision.Revision, RequestID: migrationOperation, Recipient: recoveryIdentity.Recipient().String()}
+	exportProof, err := client.ExportApplication(ctx, backupRequest, migratedResource.ID, intent.Policy)
+	if err != nil {
+		t.Fatal("root private application-only logical export", err)
+	}
 	stopAfterRestart(true)
 	_ = startBroker()
 	unlockAfterRestart(expired)
 	write("fenced")
+	if replayed, err := client.ExportApplication(ctx, backupRequest, migratedResource.ID, intent.Policy); err != nil || replayed != exportProof {
+		t.Fatal("broker restart changed original encrypted logical export", err)
+	}
 	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_end", RequestID: migrationOperation}, nil); err != nil {
 		t.Fatal("original private application maintenance release", err)
 	}

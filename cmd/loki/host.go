@@ -151,6 +151,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "secret-migration-source":
+		return runHostSecretSource(args[1:], stdout, stderr)
 	case "prepare-secrets":
 		return runHostPrepareSecrets(args[1:], stdout, stderr)
 	case "maintenance":

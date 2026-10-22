@@ -1,5 +1,6 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki","to":"loki/internal/host/migration"},
     {"from":"loki/internal/admin","to":"loki/internal/control/policy"},
     {"from":"loki/internal/host/migration","to":"loki/internal/host/application"},
     {"from":"loki/internal/host/migration","to":"loki/internal/admin"},

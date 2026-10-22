@@ -86,6 +86,11 @@ func (o SourceOwner) Checkpoint(event SourceEvent) error {
 		return ErrSourceSession
 	}
 	switch event.Type {
+	case "target_sealed":
+		if event.Write != nil || event.Binding != nil || event.Attempt != "" || event.Count != 0 {
+			return ErrSourceSession
+		}
+		_, err = o.Journal.AdvanceSecretMigration(o.ID, lifecycle.PhaseSwitch, time.Now())
 	case "write_prepared", "write_completed":
 		if event.Write == nil || event.Binding != nil || event.Attempt != "" || event.Count != 0 || (event.Type == "write_completed") != event.Write.Complete {
 			return ErrSourceSession
@@ -140,12 +145,5 @@ func (o SourceOwner) Transfer(ctx context.Context, target admin.ApplicationClien
 	if err != nil {
 		return err
 	}
-	if err := session.Transfer(ctx); err != nil {
-		return err
-	}
-	if err := target.FenceApplicationWrites(ctx, session.Operation, true); err != nil {
-		return err
-	}
-	_, err = o.Journal.AdvanceSecretMigration(o.ID, lifecycle.PhaseSwitch, time.Now())
-	return err
+	return session.TransferAndSeal(ctx)
 }

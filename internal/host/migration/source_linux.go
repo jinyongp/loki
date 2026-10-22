@@ -229,3 +229,15 @@ func (s SourceSession) Transfer(ctx context.Context) error {
 		return nil
 	})
 }
+
+// TransferAndSeal completes private equality before closing all value writers.
+// The host's ready-for-selection checkpoint follows the durable gate ACK.
+func (s SourceSession) TransferAndSeal(ctx context.Context) error {
+	if err := s.Transfer(ctx); err != nil {
+		return err
+	}
+	if err := s.Target.FenceApplicationWrites(ctx, s.Operation, true); err != nil {
+		return err
+	}
+	return s.emit(SourceEvent{Type: "target_sealed"})
+}
