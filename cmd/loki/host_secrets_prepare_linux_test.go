@@ -172,6 +172,29 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	commit := append(append([]string{}, candidateArgs...), "--commit-candidate", "--candidate-policy", candidate["policy"].(string))
+	retained := filepath.Join(root, "store", "generations", before.ActiveGeneration, "dvt", "synthetic-retained-state")
+	if err := os.WriteFile(retained, []byte("synthetic-ciphertext"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if code := runHostPrepareSecrets(commit, &bytes.Buffer{}, &bytes.Buffer{}); code != 1 {
+		t.Fatal("selector publication discarded already managed state", code)
+	}
+	if err := os.Remove(retained); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		var report bytes.Buffer
+		if code := runHostPrepareSecrets(commit, &report, &bytes.Buffer{}); code != 0 {
+			t.Fatal("verified candidate selector publication/retry", code)
+		}
+		var selected hostapplication.Identity
+		want := before
+		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, generation, candidate["policy"].(string)
+		if json.Unmarshal(report.Bytes(), &selected) != nil || selected != want {
+			t.Fatal("selector did not atomically bind the exact generation and policy")
+		}
+	}
 }
 
 func TestHostOfflineMaintenanceJournalLock(t *testing.T) {

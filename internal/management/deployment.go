@@ -107,6 +107,12 @@ func (s Store) reserveDeploymentLocked(expected FullPlan) (DeploymentReservation
 	if err := s.RequireMutable(); err != nil {
 		return DeploymentReservation{}, err
 	}
+	return s.reserveDeploymentPlanLocked(expected, "")
+}
+
+// The original migration owner may reserve its derived serving identity while
+// retaining the pending transaction. Other callers use reserveDeploymentLocked.
+func (s Store) reserveDeploymentPlanLocked(expected FullPlan, reservationID string) (DeploymentReservation, error) {
 	plan, err := s.PlanFull()
 	if err != nil {
 		return DeploymentReservation{}, err
@@ -122,11 +128,16 @@ func (s Store) reserveDeploymentLocked(expected FullPlan) (DeploymentReservation
 	if err != nil {
 		return DeploymentReservation{}, err
 	}
-	var random [16]byte
-	if _, err := rand.Read(random[:]); err != nil {
-		return DeploymentReservation{}, err
+	if reservationID == "" {
+		var random [16]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return DeploymentReservation{}, err
+		}
+		reservationID = "deployment-" + hex.EncodeToString(random[:])
+	} else if !deploymentIDPattern.MatchString(reservationID) {
+		return DeploymentReservation{}, fmt.Errorf("invalid derived serving reservation")
 	}
-	reservation := DeploymentReservation{ID: "deployment-" + hex.EncodeToString(random[:]), Release: plan.Release, PlanDigest: fullPlanDigest(plan), Artifacts: []tools.Artifact{}, Services: []string{}}
+	reservation := DeploymentReservation{ID: reservationID, Release: plan.Release, PlanDigest: fullPlanDigest(plan), Artifacts: []tools.Artifact{}, Services: []string{}}
 	for _, program := range plan.Programs {
 		artifact := state.Installed[program.Module].Artifact
 		if artifact.Identity() != program.Identity {
@@ -136,6 +147,14 @@ func (s Store) reserveDeploymentLocked(expected FullPlan) (DeploymentReservation
 	}
 	for _, service := range plan.Services {
 		reservation.Services = append(reservation.Services, service.Name)
+	}
+	for _, existing := range r.Deployments {
+		if existing.ID == reservation.ID {
+			if !reflect.DeepEqual(existing, reservation) {
+				return DeploymentReservation{}, fmt.Errorf("derived serving identity belongs to another composition")
+			}
+			return existing, nil
+		}
 	}
 	r.Deployments = append(r.Deployments, reservation)
 	if err := r.validate(); err != nil {

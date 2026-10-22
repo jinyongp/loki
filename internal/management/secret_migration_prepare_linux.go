@@ -24,6 +24,9 @@ func (b *DockerFullBackend) PrepareSecretMigrationSource(ctx context.Context, ma
 	if err := b.Store.requireNoPendingSecretMigration(); err != nil {
 		return plan, err
 	}
+	if _, err := b.InspectSecretMigrationIdentity(ctx); err != nil {
+		return plan, err
+	}
 	c, contract, err := b.Store.fullApplicationInputs()
 	if err != nil {
 		return plan, err

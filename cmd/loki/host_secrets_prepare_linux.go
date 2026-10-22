@@ -40,6 +40,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	interrupt := flags.Bool("interrupt-jobs", false, "persist the original explicit host interruption choice")
 	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
 	inspectIdentity := flags.Bool("inspect-identity", false, "inspect existing public selector metadata without preparing state")
+	requireEmpty := flags.Bool("require-empty-generation", false, "require no existing app values/replay history before legacy migration; inspection only")
 	identity := flags.String("identity", "/etc/loki-go/secrets-deployment.json", "protected host deployment metadata")
 	state := flags.String("state", "/var/lib/loki-go/secrets", "host app-generation store")
 	serviceState := flags.String("service-state", "/var/lib/loki-go/secrets", "app state path inside the service namespace")
@@ -57,19 +58,33 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	candidateGeneration := flags.String("candidate-generation", "", "inactive generation owned by the original migration")
 	candidateBefore := flags.String("candidate-before", "", "canonical public identity observed by the host owner")
 	candidateOperation := flags.String("candidate-operation", "", "original migration operation UUID")
+	commitCandidate := flags.Bool("commit-candidate", false, "publish the original host owner's verified candidate selector")
+	candidatePolicy := flags.String("candidate-policy", "", "frozen target policy digest required for selector publication")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	if *inspectIdentity {
-		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *maintenance != "" || *interrupt {
+		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *interrupt {
 			return 2
 		}
 		existing, err := hostapplication.ReadIdentity(*identity)
-		if err != nil || json.NewEncoder(stdout).Encode(existing) != nil {
+		if err != nil {
 			fmt.Fprintln(stderr, "existing application identity is unavailable")
 			return 1
 		}
+		if *requireEmpty {
+			if err := hostapplication.RequireEmptyGeneration(*state, existing); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
+		if json.NewEncoder(stdout).Encode(existing) != nil {
+			return 1
+		}
 		return 0
+	}
+	if *requireEmpty {
+		return 2
 	}
 	if *maintenance == "" {
 		if *interrupt {
@@ -81,7 +96,10 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
 		return 2
 	}
-	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != ""
+	if *commitCandidate != (*candidatePolicy != "") {
+		return 2
+	}
+	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate
 	var before hostapplication.Identity
 	if isCandidate {
 		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
@@ -145,7 +163,26 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 			return hostapplication.PrepareCandidate(options, before, *candidateGeneration)
 		}
 	}
-	prepared, err := prepare(hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources})
+	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
+	if *commitCandidate {
+		policy, err := hostpolicy.CompileApplications(c, contract, resources)
+		if err != nil || policy.Digest() != *candidatePolicy {
+			fmt.Fprintln(stderr, "candidate policy changed before selector publication")
+			return 1
+		}
+		if err := hostapplication.RequireEmptyGeneration(*state, before); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		options.MigrationOperation = *candidateOperation
+		selected, err := hostapplication.CommitCandidate(options, before, *candidateGeneration)
+		if err != nil || json.NewEncoder(stdout).Encode(selected) != nil {
+			fmt.Fprintln(stderr, "candidate selector publication requires original host recovery")
+			return 1
+		}
+		return 0
+	}
+	prepared, err := prepare(options)
 	if err != nil {
 		fmt.Fprintln(stderr, "secret service metadata or filesystem ownership requires recovery")
 		return 1

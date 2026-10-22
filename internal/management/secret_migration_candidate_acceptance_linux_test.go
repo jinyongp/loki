@@ -20,9 +20,17 @@ import (
 	legacyfixture "loki/internal/state"
 )
 
-// This exercises candidate ownership/manual protection, not migration completion.
-// Original source transfer and terminal cutover have separate required gates.
+// This exercises actual candidate/source/selector effects. Required service
+// restart, health and whole paired recovery have separate acceptance gates.
 func TestRealManagedFullMigrationCandidate(t *testing.T) {
+	for _, selectCandidate := range []bool{false, true} {
+		t.Run(map[bool]string{false: "retain_original", true: "select_candidate"}[selectCandidate], func(t *testing.T) {
+			runRealManagedFullMigrationCandidate(t, selectCandidate)
+		})
+	}
+}
+
+func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
 	if image == "" {
 		if os.Getenv("LOKI_REQUIRE_NATIVE_SECRET_COMPOSE") == "1" {
@@ -39,6 +47,16 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 	}
 	state, err := store.Load()
 	if err != nil {
+		t.Fatal(err)
+	}
+	// This component fixture exercises the application/MCP serving stack.
+	// Protected Job/launcher replacement remains a separate required gate.
+	for index := range state.Config.Tools {
+		if state.Config.Tools[index].ID == "workspace" {
+			state.Config.Tools[index].Enabled = false
+		}
+	}
+	if err := store.Save(state); err != nil {
 		t.Fatal(err)
 	}
 	core, err := store.Generation(state.Installed["runtime-core"].Artifact)
@@ -104,10 +122,20 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	var candidate DeploymentReservation
+	var serving *DeploymentReservation
 	var projection string
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
+		if serving != nil {
+			ids, _ := b.containerIDs(cleanup, *serving)
+			for _, id := range ids {
+				container, err := b.inspectContainer(cleanup, id)
+				if err == nil && b.requireParent(*serving, container) == nil {
+					_, _ = b.command(cleanup, "cleaning exact serving fixture container", nil, "rm", "--force", id)
+				}
+			}
+		}
 		if candidate.ID != "" {
 			ids, _ := b.containerIDs(cleanup, candidate)
 			for _, id := range ids {
@@ -126,9 +154,27 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			_, _ = b.command(cleanup, "cleaning owned candidate tmpfs fixture", nil, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--entrypoint", "/bin/sh", "--mount", mount, image, "-ec", "rm -rf /fixture-runtime/secrets")
 			_ = os.Remove(filepath.Dir(projection))
 		}
+		if serving != nil {
+			normalRuntime := filepath.Join("/dev/shm", store.FullOwner()+"-secret-runtime")
+			mount, _ := dockerMountArgument(FullMount{Kind: "bind", Source: normalRuntime, Target: "/fixture-runtime"})
+			_, _ = b.command(cleanup, "cleaning selected runtime fixture", nil, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--entrypoint", "/bin/sh", "--mount", mount, image, "-ec", "rm -rf /fixture-runtime/secrets")
+			_ = os.Remove(normalRuntime)
+		}
 		if err := b.ownedVolume(cleanup, volume); err == nil {
 			if _, err := b.command(cleanup, "removing owned synthetic app volume", nil, "volume", "rm", volume.Source); err != nil {
 				t.Error(err)
+			}
+		}
+		if serving != nil {
+			names, _ := b.command(cleanup, "listing owned serving fixture volumes", nil, "volume", "ls", "--filter", "label="+fullOwnerLabel+"="+store.FullOwner(), "--format", "{{.Name}}")
+			for _, name := range strings.Fields(string(names)) {
+				if strings.HasPrefix(name, store.FullOwner()+"-") {
+					_, _ = b.command(cleanup, "removing exact owned serving fixture volume", nil, "volume", "rm", name)
+				}
+			}
+			networks, _ := b.command(cleanup, "listing exact owned fixture networks", nil, "network", "ls", "--filter", "label="+fullOwnerLabel+"="+store.FullOwner(), "--format", "{{.ID}}")
+			for _, id := range strings.Fields(string(networks)) {
+				_, _ = b.command(cleanup, "removing exact owned fixture network", nil, "network", "rm", id)
 			}
 		}
 	})
@@ -210,11 +256,31 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 				return err
 			}
 			candidate = preparedCandidate
+			sourceMount, _ := dockerMountArgument(storeSourceVolume(store))
+			writerBytes, err := b.command(scoped, "creating owned source writer refusal fixture", nil, "run", "--rm", "--detach", "--network", "none", "--read-only", "--cap-drop", "ALL", "--user", "10000:10001", "--memory", "33554432", "--pids-limit", "8", "--label", fullOwnerLabel+"="+store.FullOwner(), "--mount", sourceMount, "--entrypoint", "/bin/sh", image, "-ec", "exec sleep 30")
+			if err != nil {
+				return err
+			}
+			writer := strings.TrimSpace(string(writerBytes))
+			defer b.command(context.Background(), "cleaning exact source writer fixture", nil, "rm", "--force", writer)
+			if err := b.BackupSecretMigrationSource(scoped, candidate); err == nil {
+				t.Fatal("migration froze/backed up a source with a running writer")
+			}
+			refused, found, err := j.Active()
+			if err != nil || !found || refused.Phase != lifecycle.PhaseAdmitted || refused.SecretMigration.Archive != nil {
+				t.Fatal("source writer refusal advanced the original operation", err)
+			}
+			if _, err := b.command(scoped, "stopping exact source writer fixture", nil, "rm", "--force", writer); err != nil {
+				return err
+			}
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
 				return fmt.Errorf("original source backup: %w", err)
 			}
 			if err := b.FinishSecretMigrationSource(scoped, candidate); err == nil {
 				t.Fatal("source writers reopened before a terminal host result")
+			}
+			if err := b.CommitSecretMigrationCandidate(scoped, candidate); err == nil {
+				t.Fatal("candidate selected before private equality")
 			}
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
 				return err
@@ -273,6 +339,32 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			if err != nil || string(original) != string(beforeBytes) {
 				return fmt.Errorf("candidate unexpectedly changed selection")
 			}
+			if selectCandidate {
+				for attempt := 0; attempt < 2; attempt++ {
+					if err := b.CommitSecretMigrationCandidate(scoped, candidate); err != nil {
+						return err
+					}
+				}
+				selected, found, err := j.Active()
+				if err != nil || !found || selected.Phase != lifecycle.PhaseRestart || selected.State != lifecycle.OperationApplying {
+					t.Fatal("selection bypassed restart/health checkpoints", err)
+				}
+				if err := b.FinishSecretMigrationSource(scoped, candidate); err == nil {
+					t.Fatal("source writers reopened before actual restart/health")
+				}
+				restarted, err := b.RestartSecretMigration(scoped)
+				serving = restarted.Deployment
+				if err != nil || serving == nil || !restarted.Observation.Ready {
+					return fmt.Errorf("selected serving restart/health: %w", err)
+				}
+				if err := b.FinalizeSecretMigration(scoped, candidate, *serving); err != nil {
+					return err
+				}
+				if _, found, err := j.Active(); err != nil || found {
+					t.Fatal("completed serving stack retained an unacknowledged host release", err)
+				}
+				return nil
+			}
 			if _, err := j.CompleteSecretMigration(operation.ID, true, time.Now()); err != nil {
 				return err
 			}
@@ -289,8 +381,13 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 	}
 	inspect := append(append([]string{}, base...), image, "-ec", "/opt/loki/modules/runtime-core/program host prepare-secrets --inspect-identity --identity /var/lib/loki/secrets/deployment.json")
 	stillBefore, err := b.command(ctx, "verifying candidate preserved original selector", nil, inspect...)
-	if err != nil || string(stillBefore) != string(beforeBytes) {
-		t.Fatal("candidate changed active selection", err)
+	wantIdentity := before
+	if selectCandidate {
+		wantIdentity.Version, wantIdentity.ActiveGeneration, wantIdentity.PolicySHA256 = 2, intent.CandidateGeneration, intent.Policy
+	}
+	var actualIdentity hostapplication.Identity
+	if err != nil || json.Unmarshal(stillBefore, &actualIdentity) != nil || actualIdentity != wantIdentity {
+		t.Fatal("actual selector differs from the original host checkpoint", err)
 	}
 }
 

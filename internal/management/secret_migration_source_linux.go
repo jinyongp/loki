@@ -158,6 +158,11 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 	if err != nil {
 		return err
 	}
+	if !finish {
+		if err := b.requireOfflineSecretSource(ctx, sourceVolume, candidate); err != nil {
+			return err
+		}
+	}
 	_, contract, err := b.Store.fullApplicationInputs()
 	if err != nil {
 		return err
@@ -312,7 +317,10 @@ func (b *DockerFullBackend) exchangeSecretSourceHelper(ctx context.Context, args
 }
 
 func (b *DockerFullBackend) verifiedSecretSourceVolume(ctx context.Context) (FullMount, error) {
-	source := storeSourceVolume(b.Store)
+	return b.verifiedMigrationVolume(ctx, storeSourceVolume(b.Store))
+}
+
+func (b *DockerFullBackend) verifiedMigrationVolume(ctx context.Context, source FullMount) (FullMount, error) {
 	metadata, err := b.command(ctx, "verifying original source volume ownership", nil, "volume", "inspect", "--format", "{{json .}}", source.Source)
 	if err != nil {
 		return FullMount{}, err
@@ -326,6 +334,29 @@ func (b *DockerFullBackend) verifiedSecretSourceVolume(ctx context.Context) (Ful
 		return FullMount{}, fmt.Errorf("source volume is foreign or unsupported")
 	}
 	return source, nil
+}
+
+func (b *DockerFullBackend) requireOfflineSecretSource(ctx context.Context, source FullMount, candidate DeploymentReservation) error {
+	data, err := b.command(ctx, "verifying source writers are stopped", nil, "container", "ls", "--filter", "volume="+source.Source, "--format", "{{.ID}}")
+	if err != nil {
+		return err
+	}
+	ids, err := dockerLines(data)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		container, err := b.inspectContainer(ctx, id)
+		if err != nil {
+			return err
+		}
+		// Only the original interrupted helper may still hold this mount.
+		// The caller removes that exact owned helper before starting another.
+		if b.requireParent(candidate, container) != nil || container.Config.Labels[fullServiceLabel] != "prepare" {
+			return fmt.Errorf("stop original source writers under the host maintenance fence before migration")
+		}
+	}
+	return nil
 }
 
 func storeSourceVolume(store Store) FullMount {
