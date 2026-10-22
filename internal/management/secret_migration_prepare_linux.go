@@ -10,6 +10,7 @@ import (
 
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	hostapplication "loki/internal/host/application"
 	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/privateio"
@@ -42,6 +43,13 @@ func (b *DockerFullBackend) PrepareSecretMigrationSource(ctx context.Context, ma
 	worker, err := inputs.ServiceProgram("runtime-core", "loki")
 	if err != nil {
 		return plan, err
+	}
+	provider, err := inputs.ServiceProgram("runtime-core", "devtools")
+	if err != nil {
+		return plan, err
+	}
+	if err := hostapplication.ValidateMetadata(hostapplication.PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, Principal: "agent", IdentityFile: "/var/lib/loki/secrets/deployment.json", StateRoot: "/var/lib/loki/secrets", ServiceStateRoot: "/var/lib/loki/secrets", RuntimeRoot: "/run/loki/secrets", Binary: provider, Configuration: c, Contract: contract, Resources: canonical, MigrationOperation: "00000000-0000-4000-8000-000000000000"}); err != nil {
+		return plan, fmt.Errorf("migration metadata exceeds the installed service contract or is invalid")
 	}
 	image, err := inputs.Image("runtime-core", "service")
 	if err != nil {

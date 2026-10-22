@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	hostapplication "loki/internal/host/application"
 	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/tools"
@@ -94,6 +95,10 @@ func (s *fullMigrationRecordStore) Publish(record lifecycle.OperationRecord, ove
 		c, contract, err := s.store.fullApplicationInputs()
 		if err != nil {
 			return err
+		}
+		intent := record.SecretMigration.Intent
+		if err := hostapplication.ValidateMetadata(hostapplication.PrepareOptions{UID: intent.Before.UID, GID: intent.Before.GID, AgentUID: intent.Before.AgentUID, MetadataGID: intent.Before.MetadataGID, Principal: "agent", IdentityFile: intent.IdentityFile, StateRoot: intent.StateRoot, ServiceStateRoot: intent.ServiceStateRoot, RuntimeRoot: intent.RuntimeRoot, Binary: intent.Binary, Configuration: c, Contract: contract, Resources: intent.Plan.Resources, MigrationOperation: lifecycle.MigrationOperationUUID(record.ID)}); err != nil {
+			return fmt.Errorf("migration metadata is unsupported by the installed service contract")
 		}
 		oldPolicy, err := hostpolicy.CompileApplications(c, contract, before.ApplicationResources)
 		if err != nil || oldPolicy.Digest() != record.SecretMigration.Intent.ExpectedPolicy {

@@ -4,6 +4,7 @@ package management
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,43 @@ import (
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/tools"
 )
+
+func TestFullMigrationRejectsUnservableMetadataBeforeAdmission(t *testing.T) {
+	store := migrationCandidateStore(t)
+	intent := fullMigrationIntentFixture(t, store)
+	resource := intent.Plan.Resources[0]
+	for index := 0; index < 17000; index++ {
+		resource.Environments = append(resource.Environments, fmt.Sprintf("env-%05d-%s", index, strings.Repeat("a", 50)))
+	}
+	c, contract, err := store.fullApplicationInputs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent.Plan.Resources, err = controlpolicy.CanonicalApplications([]controlpolicy.ApplicationResource{resource}, contract.Environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := hostpolicy.CompileApplications(c, contract, intent.Plan.Resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent.Policy = policy.Digest()
+	err = store.WithSecretMigrationJournal(t.Context(), lifecycle.OperationJournalOptions{}, func(j *lifecycle.OperationJournal) error {
+		if _, err := j.BeginSecretMigration(intent, time.Now()); err == nil {
+			t.Fatal("oversized candidate metadata admitted before the service could read it")
+		}
+		if _, found, err := j.Active(); err != nil || found {
+			t.Fatal("failed preflight left an admitted host operation", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(store.Root, "transaction.json")); !os.IsNotExist(err) {
+		t.Fatal("failed metadata preflight published a transaction", err)
+	}
+}
 
 func fullMigrationIntentFixture(t *testing.T, store Store) lifecycle.SecretMigrationIntent {
 	t.Helper()

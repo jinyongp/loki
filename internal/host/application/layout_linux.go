@@ -101,24 +101,43 @@ func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *can
 	if options.MigrationOperation != "" && (candidate == nil || !controlpolicy.ApplicationUUID.MatchString(options.MigrationOperation)) {
 		return Preparation{}, invalid
 	}
+	layout, err := brokerMetadata(options)
+	if err != nil {
+		return Preparation{}, err
+	}
+	return prepareDirectories(options, runtimeFiles, candidate, layout)
+}
+
+// ValidateMetadata checks the same catalog/layout bytes used by preparation,
+// before admission can freeze a source or create a recovery backup. It performs
+// no filesystem access, identity allocation or provider operation.
+func ValidateMetadata(options PrepareOptions) error {
+	_, err := brokerMetadata(options)
+	return err
+}
+
+func brokerMetadata(options PrepareOptions) (appvalues.BrokerLayout, error) {
+	if options.MigrationOperation != "" && !controlpolicy.ApplicationUUID.MatchString(options.MigrationOperation) {
+		return appvalues.BrokerLayout{}, invalid
+	}
 	if options.UID == 0 || options.GID == 0 || options.AgentUID == 0 || options.MetadataGID == 0 || options.UID == options.AgentUID || options.GID == options.MetadataGID || !controlpolicy.ApplicationAlias.MatchString(options.Principal) {
-		return Preparation{}, invalid
+		return appvalues.BrokerLayout{}, invalid
 	}
 	if options.JobDeploymentID != "" && !deploymentID.MatchString(options.JobDeploymentID) {
-		return Preparation{}, invalid
+		return appvalues.BrokerLayout{}, invalid
 	}
 	for _, path := range []string{options.IdentityFile, options.StateRoot, options.ServiceStateRoot, options.RuntimeRoot, options.Binary} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || strings.ContainsAny(path, "\x00\r\n") {
-			return Preparation{}, invalid
+			return appvalues.BrokerLayout{}, invalid
 		}
 	}
 	resources, err := controlpolicy.CanonicalApplications(options.Resources, options.Contract.Environment)
 	if err != nil {
-		return Preparation{}, invalid
+		return appvalues.BrokerLayout{}, invalid
 	}
 	policy, err := hostpolicy.CompileApplications(options.Configuration, options.Contract, resources)
 	if err != nil {
-		return Preparation{}, invalid
+		return appvalues.BrokerLayout{}, invalid
 	}
 	base := make(map[string]string, len(options.Contract.Environment))
 	for name, value := range options.Contract.Environment {
@@ -126,14 +145,30 @@ func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *can
 	}
 	layout := appvalues.BrokerLayout{UID: options.UID, LauncherUID: 0, Binary: options.Binary, Root: filepath.Join(options.ServiceStateRoot, "dvt"), ApplicationRoot: filepath.Join(options.ServiceStateRoot, "metadata"), Socket: filepath.Join(options.RuntimeRoot, "jobs", "control.sock"), MetadataSocket: filepath.Join(options.RuntimeRoot, "metadata", "control.sock"), AdminSocket: filepath.Join(options.RuntimeRoot, "admin", "control.sock"), RuntimeRoot: filepath.Join(options.RuntimeRoot, "private"), Inbox: filepath.Join(options.RuntimeRoot, "inbox"), AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, Principal: options.Principal, Resources: resources, BaseEnvironment: base, PolicySHA256: policy.Digest()}
 	layout.JobDeploymentID = options.JobDeploymentID
-	if candidate != nil {
-		layout.MigrationOperation = options.MigrationOperation
-	}
+	layout.MigrationOperation = options.MigrationOperation
 	for _, path := range []string{layout.Socket, layout.MetadataSocket, layout.AdminSocket} {
 		if len(path) >= 108 {
-			return Preparation{}, invalid
+			return appvalues.BrokerLayout{}, invalid
 		}
 	}
+	// Valid identities have fixed encoded lengths. Budget their exact lengths
+	// without creating or reading a deployment selector during preflight.
+	budget := layout
+	budget.DeploymentID, budget.RunnerID = "deployment-"+strings.Repeat("0", 32), "00000000-0000-0000-0000-000000000000"
+	encoded, err := json.Marshal(budget)
+	if err != nil || len(encoded) > 1<<20 {
+		return appvalues.BrokerLayout{}, invalid
+	}
+	catalog, err := json.Marshal(struct {
+		Resources []controlpolicy.ApplicationResource `json:"resources"`
+	}{resources})
+	if err != nil || len(catalog) > 1<<20 {
+		return appvalues.BrokerLayout{}, invalid
+	}
+	return layout, nil
+}
+
+func prepareDirectories(options PrepareOptions, runtimeFiles bool, candidate *candidateSelection, layout appvalues.BrokerLayout) (Preparation, error) {
 	if err := ownedDirectory(options.StateRoot, 0, 0, 0700, false); err != nil {
 		return Preparation{}, err
 	}

@@ -1,5 +1,6 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/management","to":"loki/internal/host/application"},
     {"from":"loki/internal/management","to":"loki/internal/control/appvalues"},
     {"from":"loki/internal/management","to":"loki/internal/platform/privateio"},
     {"from":"loki/cmd/loki","to":"loki/internal/host/migration"},

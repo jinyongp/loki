@@ -4,6 +4,7 @@ package application
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,45 @@ import (
 	"loki/internal/execution"
 	hostpolicy "loki/internal/host/policy"
 )
+
+func TestMetadataPreflightRejectsUnservableLayoutBeforeCreatingState(t *testing.T) {
+	c, err := config.Load("../../../config/runtime.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("../../../packaging/native/execution-contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := execution.Load(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	options := PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "state"), ServiceStateRoot: "/var/lib/loki/secrets", RuntimeRoot: "/run/loki/secrets", Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: c, Contract: contract}
+	if err := ValidateMetadata(options); err != nil {
+		t.Fatal("ordinary metadata preflight", err)
+	}
+	resource := controlpolicy.ApplicationResource{ID: "123e4567-e89b-42d3-a456-426614174581", Alias: "web", Repository: "owner/repo", Network: "none", Keys: map[string]string{"TOKEN": "secret"}, Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Execute: true}}}
+	for index := 0; index < 17000; index++ {
+		resource.Environments = append(resource.Environments, fmt.Sprintf("env-%05d-%s", index, strings.Repeat("a", 50)))
+	}
+	options.Resources = []controlpolicy.ApplicationResource{resource}
+	if _, err := hostpolicy.CompileApplications(c, contract, options.Resources); err != nil {
+		t.Fatal("fixture must be semantically valid policy", err)
+	}
+	if ValidateMetadata(options) == nil {
+		t.Fatal("service metadata beyond its existing 1MiB reader limit accepted")
+	}
+	if _, err := PrepareState(options); err == nil {
+		t.Fatal("unservable metadata created an inactive/active store")
+	}
+	for _, path := range []string{options.StateRoot, options.IdentityFile} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatal("preflight touched persistent state", err)
+		}
+	}
+}
 
 func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if os.Geteuid() != 0 {
