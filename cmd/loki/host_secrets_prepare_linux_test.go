@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"loki/internal/daemon"
 )
 
 // Exercise the shipped installer entry point with the shipped container role
@@ -95,6 +97,10 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 				t.Fatal("legacy app authority retained")
 			}
 		case "launcher":
+			var inventory hostLauncherLayout
+			if err := daemon.ReadJSON(path, &inventory); err != nil {
+				t.Fatal("host Job inventory rejected the frozen launcher layout", err)
+			}
 			if fields["InitialMaintenanceOperation"] != "123e4567-e89b-12d3-a456-426614174399" || fields["InitialMaintenanceInterrupt"] != true {
 				t.Fatal("initial host operation or original interruption choice was lost")
 			}

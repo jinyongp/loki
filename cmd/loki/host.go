@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/host/lifecycle"
+	"loki/internal/platform/sandbox"
 	"loki/internal/progress"
 	"loki/modules/execution/jobs"
 )
@@ -30,35 +32,48 @@ type hostLifecycle interface {
 }
 
 type hostLauncherLayout struct {
-	Socket                   string
-	SocketGID                int
-	ExecutorUID              uint32
-	StateDirectory           string
-	DockerSocket             string
-	DockerPeerUID            uint32
-	PolicySHA256             string
-	Image                    string
-	GatewayImage             string
-	GatewayBinary            string
-	GatewayExecutionContract string
-	GatewayEgressPolicy      string
-	GatewayProxyPort         int
-	GatewayMemoryBytes       int64
-	GatewayPIDs              int64
-	GatewayTmpfsBytes        int64
-	Workspace                string
-	ToolchainStore           string
-	Environment              []string
-	WorkloadUID              uint32
-	WorkloadGID              uint32
-	MemoryBytes              int64
-	PIDs                     int64
-	TmpfsBytes               int64
-	RunTimeoutSeconds        int
-	ResultRetentionSeconds   int
-	MaxJobs                  int
-	MaxConcurrentJobs        int
-	MaxOutputBytes           int
+	InitialMaintenanceOperation   string
+	InitialMaintenanceInterrupt   bool
+	ApplicationCatalog            string
+	ApplicationResources          []controlpolicy.ApplicationResource
+	SecretSocket                  string
+	SecretBrokerUID               uint32
+	SecretPrincipal               string
+	Volumes                       []sandbox.VolumeBinding
+	DeploymentOwner, DeploymentID string
+	Socket                        string
+	SocketGID                     int
+	ExecutorUID                   uint32
+	StateDirectory                string
+	DockerSocket                  string
+	DockerPeerUID                 uint32
+	PolicySHA256                  string
+	Image                         string
+	GatewayImage                  string
+	GatewayBinary                 string
+	GatewayExecutionContract      string
+	GatewayEgressPolicy           string
+	GatewayProxyPort              int
+	GatewayMemoryBytes            int64
+	GatewayPIDs                   int64
+	GatewayTmpfsBytes             int64
+	Workspace                     string
+	ToolchainStore                string
+	SigningSocketVolume           string
+	SigningPublicKey              string
+	SigningGitConfig              string
+	SigningAllowedSigners         string
+	Environment                   []string
+	WorkloadUID                   uint32
+	WorkloadGID                   uint32
+	MemoryBytes                   int64
+	PIDs                          int64
+	TmpfsBytes                    int64
+	RunTimeoutSeconds             int
+	ResultRetentionSeconds        int
+	MaxJobs                       int
+	MaxConcurrentJobs             int
+	MaxOutputBytes                int
 }
 
 type launcherJournalInventory struct {
