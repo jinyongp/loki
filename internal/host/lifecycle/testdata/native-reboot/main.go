@@ -48,6 +48,9 @@ func writePublic(path string, value any) error {
 	if err := os.WriteFile(path, raw, 0640); err != nil {
 		return err
 	}
+	if err := os.Chmod(path, 0640); err != nil {
+		return err
+	}
 	return os.Chown(path, 0, 21001)
 }
 
