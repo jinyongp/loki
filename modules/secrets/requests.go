@@ -159,6 +159,9 @@ func (c Controller) mutateRequest(
 	var result map[string]any
 	nextRevision := expectedRevision + 1
 	_, err = c.backend().Update(ctx, &expectedRevision, func(data json.RawMessage) (json.RawMessage, error) {
+		if err := c.checkApplicationMigrationWrite(false); err != nil {
+			return nil, err
+		}
 		document, decodeErr := decode(data)
 		if decodeErr != nil {
 			return nil, decodeErr

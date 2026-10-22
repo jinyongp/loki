@@ -243,6 +243,34 @@ func (s Store) Load(ctx context.Context) (Snapshot, error) {
 	return snapshot, err
 }
 
+// WithSnapshot borrows a validated snapshot under the existing writer lock.
+// It is used for an offline source checkpoint/backup without manufacturing a
+// write or advancing its revision. The callback must not retain plaintext or
+// recursively call this Store. Other processes cannot update until it returns.
+func (s Store) WithSnapshot(ctx context.Context, expected *uint64, inspect func(Snapshot) error) error {
+	if inspect == nil {
+		return errors.New("snapshot callback is required")
+	}
+	release, err := lock(ctx, s.Dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return ErrUninitialized
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+	snapshot, key, err := s.load()
+	defer clear(key)
+	defer clear(snapshot.Data)
+	if err != nil {
+		return err
+	}
+	if expected != nil && *expected != snapshot.Revision {
+		return ErrConflict
+	}
+	return inspect(snapshot)
+}
+
 func (s Store) Initialize(ctx context.Context, data json.RawMessage) (bool, error) {
 	if err := safeDirectory(s.Dir); err != nil {
 		return false, err

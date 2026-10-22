@@ -1,5 +1,6 @@
 {
   "allowed_edges": [
+    {"from":"loki/modules/secrets","to":"loki/internal/platform/safeio"},
     {"from":"loki/cmd/loki","to":"loki/internal/management"},
     {"from":"loki/internal/host/lifecycle","to":"loki/internal/control/policy"},
     {"from":"loki/internal/host/lifecycle","to":"loki/internal/host/policy"},

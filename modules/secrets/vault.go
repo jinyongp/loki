@@ -77,8 +77,17 @@ func pageRange(total, offset, limit, maxLimit int) (int, int, int, bool, any, er
 	return start, end, limit, hasMore, next, nil
 }
 func (c Controller) mutateExpected(ctx context.Context, expected *uint64, change func(document) (map[string]any, error)) (map[string]any, error) {
+	return c.mutateScoped(ctx, expected, false, change)
+}
+
+func (c Controller) mutateScoped(ctx context.Context, expected *uint64, managed bool, change func(document) (map[string]any, error)) (map[string]any, error) {
 	var result map[string]any
 	snapshot, err := c.backend().Update(ctx, expected, func(data json.RawMessage) (json.RawMessage, error) {
+		// Check under the same lock as the mutation. A host process dying must
+		// not reopen the source while its migration operation remains pending.
+		if err := c.checkApplicationMigrationWrite(managed); err != nil {
+			return nil, err
+		}
 		document, err := decode(data)
 		if err != nil {
 			return nil, err

@@ -97,7 +97,7 @@ func (m ManagedController) Set(ctx context.Context, id ManagedCredential, value 
 			return nil, err
 		}
 	}
-	return m.vault.mutate(ctx, func(document document) (map[string]any, error) {
+	return m.vault.mutateScoped(ctx, nil, true, func(document document) (map[string]any, error) {
 		profiles := object(document["profiles"])
 		valueProfile := object(profiles[location.profile])
 		if valueProfile == nil {
