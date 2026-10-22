@@ -43,7 +43,29 @@ func candidateArtifact(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeExecutable(t, filepath.Join(root, "opt/loki/bin/loki"), "#!/bin/sh\nset -eu\ncase \"$1\" in\n  toolchain) exit 0 ;;\n  migrate-vault) test \"${TEST_MIGRATE_FAIL:-0}\" != 1 || exit 1; while test \"$#\" -gt 0; do if test \"$1\" = --destination; then mkdir -p \"$2\"; : > \"$2/imported-by-candidate\"; exit 0; fi; shift; done ;;\nesac\nexit 1\n")
+	writeExecutable(t, filepath.Join(root, "opt/loki/bin/loki"), `#!/bin/sh
+set -eu
+case "$1" in
+  toolchain) exit 0 ;;
+  host)
+    test "$2" = native-switch || exit 1
+    echo "native $3 $(readlink "$TEST_ROOT/opt/loki-go/current" || true)" >> "$TEST_SYSTEMCTL_LOG"
+    if test "$3" = begin; then
+      test "${TEST_NATIVE_BUSY:-0}" != 1 || exit 1
+      previous=$(readlink "$TEST_ROOT/opt/loki-go/current" || true)
+      previous=${previous#releases/}
+      printf '123e4567-e89b-12d3-a456-426614174399 %s\n' "${previous:--}"
+    fi
+    exit 0 ;;
+  migrate-vault)
+    test "${TEST_MIGRATE_FAIL:-0}" != 1 || exit 1
+    while test "$#" -gt 0; do
+      if test "$1" = --destination; then mkdir -p "$2"; : > "$2/imported-by-candidate"; exit 0; fi
+      shift
+    done ;;
+esac
+exit 1
+`)
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/lifecycle"), string(lifecycle))
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/devtools"), "#!/bin/sh\nexit 0\n")
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/render-layouts"), "#!/bin/sh\nset -eu\nmkdir -p \"$2\"\nfor f in runtime.json mcp.json launcher.json executor.json identity.env; do : > \"$2/$f\"; chmod 0640 \"$2/$f\"; done\n")
@@ -171,6 +193,30 @@ func shortTempRoot(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	return root
+}
+
+func TestLifecycleBusyFencePrecedesLinkAndServiceChanges(t *testing.T) {
+	root := shortTempRoot(t)
+	environment, closeSockets := lifecycleEnvironment(t, root)
+	defer closeSockets()
+	uid, gid := fmt.Sprint(os.Getuid()), fmt.Sprint(os.Getgid())
+	first, second := candidateArtifact(t, "first"), candidateArtifact(t, "second")
+	runLifecycle(t, environment, true, "install", first, "v1", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
+	runLifecycle(t, append(environment, "TEST_NATIVE_BUSY=1"), false, "install", second, "v2", uid, gid, gid, uid, lifecycleExecutorUID(uid), lifecycleJobImage)
+	selected, err := os.Readlink(filepath.Join(root, "opt/loki-go/current"))
+	if err != nil || selected != "releases/v1" {
+		t.Fatalf("busy fence changed selection: %q %v", selected, err)
+	}
+	var logPath string
+	for _, value := range environment {
+		if strings.HasPrefix(value, "TEST_SYSTEMCTL_LOG=") {
+			logPath = strings.TrimPrefix(value, "TEST_SYSTEMCTL_LOG=")
+		}
+	}
+	log, err := os.ReadFile(logPath)
+	if err != nil || !strings.HasSuffix(string(log), "native begin releases/v1\n") {
+		t.Fatalf("service mutation after busy fence: %s %v", log, err)
+	}
 }
 
 func TestLifecycleActivatesAndRollsBackReleases(t *testing.T) {

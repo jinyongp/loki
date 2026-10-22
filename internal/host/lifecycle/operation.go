@@ -42,12 +42,13 @@ const (
 	OperationDisableComponent  OperationKind = "disable_component"
 	OperationSetIngressHosts   OperationKind = "set_ingress_hosts"
 	OperationUpdateIntegration OperationKind = "update_integration"
+	OperationNativeSwitch      OperationKind = "native_switch"
 )
 
 func (k OperationKind) Valid() bool {
 	switch k {
 	case OperationApply, OperationBackup, OperationInstall, OperationRollback, OperationRestore, OperationUninstall,
-		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration:
+		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration, OperationNativeSwitch:
 		return true
 	default:
 		return false
@@ -114,6 +115,7 @@ type OperationRecord struct {
 	UpdatedAt             string                `json:"updated_at"`
 	CompletedAt           string                `json:"completed_at,omitempty"`
 	Maintenance           *OperationMaintenance `json:"maintenance,omitempty"`
+	NativeSwitch          *NativeSwitchIntent   `json:"native_switch,omitempty"`
 }
 
 // OperationMaintenance retains the exact interruption choice across crashes.
@@ -143,6 +145,12 @@ func (r OperationRecord) Valid() bool {
 		return false
 	}
 	if !validOperationError(r.OriginalError) || !validOperationError(r.RecoveryError) {
+		return false
+	}
+	if r.Kind == OperationNativeSwitch {
+		return r.validNativeSwitch()
+	}
+	if r.NativeSwitch != nil {
 		return false
 	}
 	started, startErr := time.Parse(time.RFC3339Nano, r.StartedAt)

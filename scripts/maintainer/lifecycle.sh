@@ -6,6 +6,8 @@ SYSTEMCTL=${LOKI_SYSTEMCTL:-systemctl}
 HEALTH_ATTEMPTS=${LOKI_HEALTH_ATTEMPTS:-100}
 HEALTH_INTERVAL=${LOKI_HEALTH_INTERVAL:-0.2}
 SUITE=loki-go.target
+INTERRUPT_ACTIVE_JOBS=false
+MAINTENANCE_OPERATION=
 SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-secrets.service loki-go-browser-proxy.service loki-go-browser.service loki-go-launcher.service loki-go-executor.service loki-go-mcp.service"
 
 case "$ROOT" in /*) ;; *) echo "LOKI_INSTALL_ROOT must be absolute" >&2; exit 2 ;; esac
@@ -185,7 +187,8 @@ prepare_state() {
     chmod 0640 "$config/application-resources.json"
     install -d -m 0755 /run/loki-go /var/lib/loki-go/secrets-root
     "$release/opt/loki/bin/loki" host prepare-secrets --uid "$secrets_uid" --gid "$secrets_gid" \
-      --agent-uid "$runner_uid" --metadata-gid "$workspace_gid"
+      --agent-uid "$runner_uid" --metadata-gid "$workspace_gid" \
+      --maintenance-operation "$MAINTENANCE_OPERATION" --interrupt-jobs="$INTERRUPT_ACTIVE_JOBS"
   fi
   install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" \
     "$(rooted /var/lib/loki-go/browser)" "$(rooted /var/lib/loki-go/launcher)"
@@ -270,12 +273,23 @@ switch_to() {
   test -d "$release" || fail "release $release_id is not installed"
   preflight_integration
   current=$(rooted /opt/loki-go/current)
-  old=$(read_link "$current")
+  install -d -m 0755 "$(rooted /var/lib/loki-go)"
+  # The original intent is durable before any link/layout/service mutation.
+  # On retry, the journal returns the original source even if the link already
+  # points at the candidate after a process/power failure.
+  admission=$("$release/opt/loki/bin/loki" host native-switch begin --root "$ROOT" \
+    --target "$release_id" --interrupt-active-jobs="$INTERRUPT_ACTIVE_JOBS") || return 1
+  set -- $admission
+  test "$#" -eq 2 || fail "invalid native maintenance response"
+  MAINTENANCE_OPERATION=$1
+  old=
+  test "$2" = - || old="releases/$2"
   atomic_link "releases/$release_id" "$current"
   if (activate_release "$release"); then
     if test -n "$old" -a "$old" != "releases/$release_id"; then
       atomic_link "$old" "$(rooted /opt/loki-go/previous)"
     fi
+    "$release/opt/loki/bin/loki" host native-switch finish --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION"
     return 0
   fi
   echo "release $release_id failed health check; restoring previous release" >&2
@@ -283,9 +297,11 @@ switch_to() {
     atomic_link "$old" "$current"
     restored="$(rooted /opt/loki-go)/$old"
     (activate_release "$restored") || fail "previous release also failed health check"
+    "$release/opt/loki/bin/loki" host native-switch finish --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION" --restored
   else
     rm -f "$current"
     run_systemctl disable --now "$SUITE" || true
+    # No healthy release exists. Keep the original operation/fence for retry.
   fi
   return 1
 }
@@ -317,6 +333,7 @@ install_release() {
   )
   install -d -m 0755 "$temporary"
   cp -a --no-preserve=ownership "$artifact/rootfs/." "$temporary/"
+  install -m 0644 "$artifact/SHA256SUMS" "$temporary/SHA256SUMS"
   install_args=""
   if test "$ROOT" != / || test "${LOKI_SKIP_APT:-0}" = 1; then install_args=--skip-apt; fi
   "$temporary/opt/loki/bin/loki" toolchain install --bundle "$temporary/usr/share/loki/toolchain" --root "$temporary" $install_args
@@ -339,18 +356,14 @@ rollback() {
   old=$(read_link "$current")
   target=$(read_link "$previous")
   test -n "$old" -a -n "$target" || fail "no previous release is available"
-  atomic_link "$target" "$current"
-  release="$(rooted /opt/loki-go)/$target"
-  if (activate_release "$release"); then
-    atomic_link "$old" "$previous"
-    return 0
-  fi
-  atomic_link "$old" "$current"
-  release="$(rooted /opt/loki-go)/$old"
-  (activate_release "$release") || fail "rollback and recovery both failed health checks"
-  return 1
+  case "$target" in releases/*) ;; *) fail "previous release link is unmanaged" ;; esac
+  switch_to "${target#releases/}"
 }
 
+if test "${1-}" = --interrupt-active-jobs; then
+  INTERRUPT_ACTIVE_JOBS=true
+  shift
+fi
 command=${1-}
 case "$command" in
   install) acquire_lock; shift; install_release "$@" ;;
