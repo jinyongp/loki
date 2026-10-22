@@ -61,6 +61,7 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 		"--catalog", catalog, "--service-catalog", "/etc/loki/application-resources.json",
 		"--role-source", templates,
 		"--overlay-directory", roles, "--unit-directory=", "--owner", "loki-tools-1234567890abcdef",
+		"--maintenance-operation", "123e4567-e89b-12d3-a456-426614174399", "--interrupt-jobs",
 	}
 	var firstReport []byte
 	for attempt := range 2 {
@@ -94,6 +95,9 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 				t.Fatal("legacy app authority retained")
 			}
 		case "launcher":
+			if fields["InitialMaintenanceOperation"] != "123e4567-e89b-12d3-a456-426614174399" || fields["InitialMaintenanceInterrupt"] != true {
+				t.Fatal("initial host operation or original interruption choice was lost")
+			}
 			if fields["SecretSocket"] != filepath.Join(runtimeRoot, "jobs", "control.sock") || fields["SecretBrokerUID"] != float64(10006) || fields["DeploymentOwner"] != "loki-tools-1234567890abcdef" {
 				t.Fatal("launcher identity binding is inconsistent")
 			}

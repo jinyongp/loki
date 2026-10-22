@@ -2,9 +2,24 @@ package launcher
 
 import (
 	"context"
+	"errors"
 
 	"loki/modules/execution/jobs"
 )
+
+func (o Options) prepareInitialMaintenance() error {
+	if o.InitialMaintenanceOperation == "" {
+		if o.InitialMaintenanceInterrupt {
+			return errors.New("startup interruption requires the original host operation")
+		}
+		return nil
+	}
+	if o.Journal == nil {
+		return errors.New("startup maintenance requires the canonical Job journal")
+	}
+	_, err := o.Journal.BeginMaintenance(o.InitialMaintenanceOperation, o.InitialMaintenanceInterrupt)
+	return err
+}
 
 type maintenanceRequest struct {
 	Operation   string `json:"operation"`

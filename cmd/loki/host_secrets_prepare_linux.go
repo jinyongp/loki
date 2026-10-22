@@ -19,6 +19,7 @@ import (
 	hostapplication "loki/internal/host/application"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/safeio"
+	"loki/modules/execution/jobs"
 )
 
 // runHostPrepareSecrets is an installer/unit implementation command. It creates
@@ -35,6 +36,8 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	agent := flags.Uint64("agent-uid", 0, "installed agent UID")
 	metadataGroup := flags.Uint64("metadata-gid", 0, "installed metadata socket group")
 	jobDeployment := flags.String("job-deployment", "", "current owned OCI reservation; app identity remains stable")
+	maintenance := flags.String("maintenance-operation", "", "original host operation inherited before launcher admission")
+	interrupt := flags.Bool("interrupt-jobs", false, "persist the original explicit host interruption choice")
 	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
 	identity := flags.String("identity", "/etc/loki-go/secrets-deployment.json", "protected host deployment metadata")
 	state := flags.String("state", "/var/lib/loki-go/secrets", "host app-generation store")
@@ -51,6 +54,13 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	overlayDirectory := flags.String("overlay-directory", "/etc/loki-go", "native role layouts to bind to this generation; empty disables")
 	roleSource := flags.String("role-source", "", "immutable role layout source; defaults to overlay directory")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if *maintenance == "" {
+		if *interrupt {
+			return 2
+		}
+	} else if _, err := jobs.JobIDForRequestID(*maintenance); err != nil || *maintenance != strings.ToLower(*maintenance) {
 		return 2
 	}
 	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
@@ -151,7 +161,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		changes := map[string]map[string]any{
 			"mcp.json":      {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationSocket": prepared.Layout.MetadataSocket, "ApplicationUID": prepared.Identity.UID},
 			"runtime.json":  {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationValuesExternal": true},
-			"launcher.json": {"ApplicationCatalog": common["ApplicationCatalog"], "SecretSocket": prepared.Layout.Socket, "SecretBrokerUID": prepared.Identity.UID, "SecretPrincipal": "agent", "DeploymentID": jobDeployment, "DeploymentOwner": ownerName},
+			"launcher.json": {"ApplicationCatalog": common["ApplicationCatalog"], "SecretSocket": prepared.Layout.Socket, "SecretBrokerUID": prepared.Identity.UID, "SecretPrincipal": "agent", "DeploymentID": jobDeployment, "DeploymentOwner": ownerName, "InitialMaintenanceOperation": *maintenance, "InitialMaintenanceInterrupt": *interrupt},
 		}
 		for name, fields := range changes {
 			path := filepath.Join(*overlayDirectory, name)

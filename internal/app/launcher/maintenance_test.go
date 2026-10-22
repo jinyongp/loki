@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +36,69 @@ func TestMaintenanceOperationStrictWireContract(t *testing.T) {
 type blockedMaintenanceResolver struct {
 	entered chan struct{}
 	release chan struct{}
+}
+
+func TestInitialMaintenanceDoesNotReopenOrReplaceRecordedIntent(t *testing.T) {
+	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Minute, 8)
+	id := "123e4567-e89b-12d3-a456-426614174399"
+	options := Options{Journal: l.journal, InitialMaintenanceOperation: id, InitialMaintenanceInterrupt: true}
+	if err := options.prepareInitialMaintenance(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := l.journal.MaintenanceStatus()
+	if err != nil || state == nil || !state.Active || !state.Interrupt || state.OperationID != id {
+		t.Fatal("startup did not inherit durable host intent", err)
+	}
+	changed := options
+	changed.InitialMaintenanceOperation = "123e4567-e89b-12d3-a456-426614174388"
+	if err := changed.prepareInitialMaintenance(); err == nil {
+		t.Fatal("startup replaced another active host operation")
+	}
+	changed = options
+	changed.InitialMaintenanceInterrupt = false
+	if err := changed.prepareInitialMaintenance(); err == nil {
+		t.Fatal("startup changed the original interruption grant")
+	}
+	if _, err := l.journal.EndMaintenance(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := options.prepareInitialMaintenance(); err != nil {
+		t.Fatal(err)
+	}
+	state, err = l.journal.MaintenanceStatus()
+	if err != nil || state.Active {
+		t.Fatal("stale startup layout reactivated a completed host operation", err)
+	}
+	if err := (Options{InitialMaintenanceInterrupt: true}).prepareInitialMaintenance(); err == nil {
+		t.Fatal("interruption without host identity accepted")
+	}
+}
+
+func TestLauncherPublishesInitialFenceBeforeReadiness(t *testing.T) {
+	journal := launcherJournal(t, time.Minute, 8)
+	id := "123e4567-e89b-12d3-a456-426614174399"
+	stop := errors.New("fixture stops at readiness")
+	ready := false
+	parent := t.TempDir()
+	if err := os.Chmod(parent, 0750); err != nil {
+		t.Fatal(err)
+	}
+	err := Run(t.Context(), Options{
+		Socket: filepath.Join(parent, "launcher.sock"), SocketGID: os.Getgid(), ExecutorUID: 1001,
+		Policy: launcherPolicy(t), Runner: &fakeRunner{}, Journal: journal, RunTimeout: time.Second,
+		InitialMaintenanceOperation: id, InitialMaintenanceInterrupt: true,
+		Ready: func() error {
+			state, err := journal.MaintenanceStatus()
+			if err != nil || state == nil || state.OperationID != id || !state.Active {
+				t.Fatal("readiness preceded durable admission fence", err)
+			}
+			ready = true
+			return stop
+		},
+	})
+	if !ready || !errors.Is(err, stop) {
+		t.Fatal("fixture did not reach fenced readiness", err)
+	}
 }
 
 func (r *blockedMaintenanceResolver) Resolve(ctx context.Context, _ string, _ []jobs.ToolchainRef) (ResolvedToolchains, error) {

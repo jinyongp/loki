@@ -31,6 +31,8 @@ const (
 )
 
 type launcherLayout struct {
+	InitialMaintenanceOperation   string
+	InitialMaintenanceInterrupt   bool
 	ApplicationCatalog            string
 	ApplicationResources          []controlpolicy.ApplicationResource
 	SecretSocket                  string
@@ -146,14 +148,16 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		return applauncher.Options{}, err
 	}
 	options := applauncher.Options{
-		Socket:            layout.Socket,
-		SocketGID:         layout.SocketGID,
-		ExecutorUID:       layout.ExecutorUID,
-		Policy:            policy,
-		Runner:            engine,
-		Toolchains:        launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
-		RunTimeout:        time.Duration(layout.RunTimeoutSeconds) * time.Second,
-		MaxConcurrentJobs: layout.MaxConcurrentJobs,
+		InitialMaintenanceOperation: layout.InitialMaintenanceOperation,
+		InitialMaintenanceInterrupt: layout.InitialMaintenanceInterrupt,
+		Socket:                      layout.Socket,
+		SocketGID:                   layout.SocketGID,
+		ExecutorUID:                 layout.ExecutorUID,
+		Policy:                      policy,
+		Runner:                      engine,
+		Toolchains:                  launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
+		RunTimeout:                  time.Duration(layout.RunTimeoutSeconds) * time.Second,
+		MaxConcurrentJobs:           layout.MaxConcurrentJobs,
 	}
 	if layout.SecretSocket != "" || layout.SecretBrokerUID != 0 {
 		if !filepath.IsAbs(layout.SecretSocket) || filepath.Clean(layout.SecretSocket) != layout.SecretSocket || layout.SecretBrokerUID == 0 || layout.SecretBrokerUID == layout.ExecutorUID || layout.SecretBrokerUID == layout.WorkloadUID || layout.SecretPrincipal == "" || layout.DeploymentID == "" || layout.ApplicationCatalog == "" {

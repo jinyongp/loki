@@ -55,17 +55,19 @@ type ToolchainResolver interface {
 }
 
 type Options struct {
-	Protected         *ProtectedOptions
-	Socket            string
-	SocketGID         int
-	ExecutorUID       uint32
-	Policy            sandbox.Policy
-	Runner            Runner
-	Toolchains        ToolchainResolver
-	Journal           *jobs.Journal
-	RunTimeout        time.Duration
-	MaxConcurrentJobs int
-	Ready             func() error
+	InitialMaintenanceOperation string
+	InitialMaintenanceInterrupt bool
+	Protected                   *ProtectedOptions
+	Socket                      string
+	SocketGID                   int
+	ExecutorUID                 uint32
+	Policy                      sandbox.Policy
+	Runner                      Runner
+	Toolchains                  ToolchainResolver
+	Journal                     *jobs.Journal
+	RunTimeout                  time.Duration
+	MaxConcurrentJobs           int
+	Ready                       func() error
 }
 
 type lifecycle struct {
@@ -1532,6 +1534,11 @@ func Run(ctx context.Context, options Options) error {
 		return err
 	}
 	defer lifecycle.close()
+	// A freshly created/restored launcher must inherit the original host
+	// operation before recovery or a public listener can admit new Jobs.
+	if err := options.prepareInitialMaintenance(); err != nil {
+		return err
+	}
 	if err = lifecycle.reconcile(); err != nil {
 		return err
 	}
