@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	charm.land/bubbletea/v2 v2.0.10
 	charm.land/huh/v2 v2.0.3
+	filippo.io/age v1.3.2
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/xpty v0.1.3
 	github.com/creack/pty v1.1.24
@@ -25,6 +26,7 @@ require (
 require (
 	charm.land/bubbles/v2 v2.0.0 // indirect
 	charm.land/lipgloss/v2 v2.0.1 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/catppuccin/go v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -50,6 +52,7 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
