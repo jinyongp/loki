@@ -72,7 +72,7 @@ func readPrivate(path string, maximum int) ([]byte, error) {
 	f := os.NewFile(uintptr(fd), "private-application-metadata")
 	defer f.Close()
 	var st unix.Stat_t
-	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Mode&0777 != 0600 || st.Uid != uint32(os.Geteuid()) || st.Nlink != 1 {
+	if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Mode&07777 != 0600 || st.Uid != uint32(os.Geteuid()) || st.Nlink != 1 {
 		return nil, unavailable()
 	}
 	data, err := io.ReadAll(io.LimitReader(f, int64(maximum)+1))

@@ -75,8 +75,15 @@ func (s *Service) unset(ctx context.Context, principal string, r controlpolicy.A
 		}
 		receipt = unsetReceipt{Revision: result.Revision, Changed: result.Changed, Present: present}
 		data, _ := json.Marshal(receipt)
-		if err := safeio.PublishPrivate(path, data, false); err != nil && !errors.Is(err, os.ErrExist) {
-			return nil, unavailable()
+		if err := safeio.PublishPrivate(path, data, false); err != nil {
+			if !errors.Is(err, os.ErrExist) {
+				return nil, unavailable()
+			}
+			existing, e := readPrivate(path, 4096)
+			var previous unsetReceipt
+			if e != nil || privateio.Decode(existing, &previous) != nil || previous != receipt {
+				return nil, unavailable()
+			}
 		}
 	}
 	out := mutationResponse(q, r, provider.ChangeResult{Revision: receipt.Revision, Changed: receipt.Changed, Replayed: replayed})

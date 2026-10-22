@@ -39,7 +39,7 @@ type Service struct {
 }
 
 func New(options Options) (*Service, error) {
-	if options.Provider == nil || len(options.PolicySHA256) != 64 || options.DeploymentID == "" {
+	if options.Provider == nil || !revisionPattern.MatchString(options.PolicySHA256) || options.DeploymentID == "" || len(options.DeploymentID) > 128 || strings.ContainsAny(options.DeploymentID, "\x00\r\n ") {
 		return nil, unavailable()
 	}
 	resources, err := controlpolicy.CanonicalApplications(options.Resources, options.BaseEnvironment)
@@ -47,6 +47,11 @@ func New(options Options) (*Service, error) {
 		return nil, invalid()
 	}
 	options.Resources = resources
+	base := make(map[string]string, len(options.BaseEnvironment))
+	for name, value := range options.BaseEnvironment {
+		base[name] = value
+	}
+	options.BaseEnvironment = base
 	if err := privateDirectory(options.Root, false); err != nil {
 		return nil, unavailable()
 	}
@@ -124,7 +129,9 @@ func safeError(err error) error {
 		return fault.New(fault.CodeRecoveryRequired, "application vault requires recovery", false, "inspect protection; do not initialize over existing state")
 	case "vault_input_too_large", "limit_exceeded":
 		return fault.New(fault.CodeLimitExceeded, "application value limit exceeded", false, "reduce the bounded input")
-	case "invalid_argument", "env_not_found", "key_not_found", "value_expired":
+	case "value_expired":
+		return fault.New(fault.CodeInputExpired, "the selected application input has expired", false, "inspect the exact layer before an administrator edit")
+	case "invalid_argument", "env_not_found", "key_not_found":
 		return invalid()
 	}
 	return unavailable()
