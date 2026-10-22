@@ -165,13 +165,18 @@ func run(ctx context.Context, action string) error {
 		if err != nil || action == "check" && !result.Replayed || action != "check" && result.Replayed {
 			return fmt.Errorf("unexpected replay state: %v", err)
 		}
+		var last jobs.Status
 		for {
 			status, err := client.Inspect(ctx, id)
 			if err != nil {
-				return err
+				return fmt.Errorf("Job inspect after state=%s outcome=%s cleanup=%s: %w", last.State, last.Outcome, last.Cleanup, err)
 			}
+			last = status
 			if action == "start" && status.State == jobs.StateRunning {
 				return nil
+			}
+			if action == "start" && status.State == jobs.StateTerminal {
+				return fmt.Errorf("protected Job ended before running: outcome=%s cleanup=%s", status.Outcome, status.Cleanup)
 			}
 			if action == "check" && status.State == jobs.StateTerminal && (status.Cleanup == jobs.CleanupComplete || status.Cleanup == jobs.CleanupNotRequired) {
 				return nil
@@ -196,12 +201,26 @@ func run(ctx context.Context, action string) error {
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
-	case "journal":
+	case "journal", "diagnostics":
 		items, err := jobs.ReadJournalSnapshot("/var/lib/loki-go/launcher/journal", jobs.JournalLimits{MaxRecords: 64, MaxRecordBytes: jobs.JournalRecordBudget(262144), MaxOutputBytes: 262144, Retention: time.Hour})
 		if err != nil {
 			return err
 		}
 		for _, item := range items {
+			if action == "diagnostics" {
+				if item.RequestID != requestID {
+					continue
+				}
+				stage, outcome, cleanup := "", "", ""
+				if item.Protected != nil && item.Protected.Prepared != nil {
+					stage = item.Protected.Prepared.Stage
+				}
+				if item.Result != nil {
+					outcome, cleanup = string(item.Result.Outcome), string(item.Result.Cleanup)
+				}
+				fmt.Printf("LOKI_SECRET_JOB state=%s instance_bound=%t private_stage=%s outcome=%s cleanup=%s\n", item.State, item.InstanceRef != "", stage, outcome, cleanup)
+				return nil
+			}
 			if item.RequestID == requestID && item.Protected != nil && strings.Contains(item.Protected.Authority.ResourceID, "9af6c2e6") {
 				return nil
 			}

@@ -92,7 +92,7 @@ def main():
         tag = "loki-secret-verification:reboot-" + work.name
         registry_tag = tag + "-registry"
         try:
-            run("docker", "buildx", "build", "--load", "--file", ROOT / "internal/platform/sandbox/testdata/oci-image/Dockerfile", "--tag", tag, ROOT)
+            run("docker", "buildx", "build", "--load", "--target", "native-reboot", "--file", ROOT / "internal/platform/sandbox/testdata/oci-image/Dockerfile", "--tag", tag, ROOT)
             run("docker", "tag", registry, registry_tag)
             run("docker", "save", "--output", payload / "images.tar", tag, registry_tag)
             (payload / "workload-tag").write_text(tag + "\n")
@@ -144,6 +144,11 @@ def main():
                 except subprocess.TimeoutExpired:
                     elapsed = time.monotonic() - started
                     print(f"VM {arch}: {elapsed:.0f}s elapsed", flush=True)
+                    # Emit only explicit fixture phase markers, never guest
+                    # output, daemon logs, private values or application data.
+                    phases = [line for line in log.read_text(errors="replace").splitlines() if line.startswith("LOKI_SECRET_PHASE=")]
+                    if phases:
+                        print(phases[-1], flush=True)
                     if elapsed >= 1200:
                         process.kill()
                         process.wait()

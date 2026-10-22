@@ -18,6 +18,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine/git:2.54.0@sha256:832b1cd1a271509f3d5272a1a62d4cb2ab1a53426ebde1f6c2cb7349f907dc6f AS git-root
 
+# The reboot fixture exercises native broker/launcher units and shell Jobs.
+# Keeping Git and the management CLI out of this workload avoids cloning their
+# unrelated layers through the disposable guest's vfs storage driver under TCG.
+# The canonical OCI acceptance image remains the default final stage below.
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS native-reboot
+COPY --from=build /out/loki-job-bootstrap /opt/loki/bin/loki-job-bootstrap
+WORKDIR /workspace
+CMD ["/bin/sh"]
+
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 COPY --from=git-root / /
 COPY --from=build /out/loki /opt/loki/bin/loki

@@ -10,7 +10,9 @@ diagnose() {
   if test "$result" -ne 0; then
     echo LOKI_SECRET_REBOOT_FAIL
     systemctl status loki-go-secrets.service loki-go-secrets-prepare.service loki-go-launcher.service loki-go-runtime.service loki-reboot-docker.service --no-pager || true
-    journalctl -b -u loki-go-secrets.service -u loki-go-secrets-prepare.service -u loki-go-launcher.service -u loki-go-runtime.service -u loki-reboot-docker.service --no-pager -n 80 || true
+    journalctl -b -u loki-reboot-docker.service --no-pager -n 20 || true
+    journalctl -b -u loki-go-secrets.service -u loki-go-secrets-prepare.service -u loki-go-launcher.service -u loki-go-runtime.service --no-pager -n 80 || true
+    if test -x /opt/loki/bin/native-reboot-peer; then /opt/loki/bin/native-reboot-peer diagnostics || true; fi
     echo "LOKI_SECRET_REBOOT_FAIL phase=$phase exit=$result"
     systemctl poweroff --no-block || true
   fi
@@ -166,6 +168,7 @@ PY
   phase=launcher-start
   systemctl start loki-go-launcher.service
   phase=protected-job-start
+  echo "LOKI_SECRET_PHASE=$phase"
   runuser -u loki-executor -- /opt/loki/bin/native-reboot-peer start
   /opt/loki/bin/native-reboot-peer journal
   cat /proc/sys/kernel/random/boot_id > "$state/boot-id"
@@ -192,6 +195,7 @@ else
   systemctl stop loki-go-secrets.service
   coordination
   phase=generic-job-without-broker
+  echo "LOKI_SECRET_PHASE=$phase"
   runuser -u loki-executor -- /opt/loki/bin/native-reboot-peer generic
   test -z "$(docker ps -aq --filter label=io.loki.job.id)"
   echo LOKI_SECRET_REBOOT_PASS
