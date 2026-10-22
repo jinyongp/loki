@@ -142,15 +142,18 @@ func (b *DockerFullBackend) StartSecretMigrationCandidate(ctx context.Context, r
 	}
 	ready, stop := context.WithTimeout(ctx, 30*time.Second)
 	defer stop()
+	var firstFailure error
 	for {
 		if _, err := b.candidateProtection(ready, r, "status", nil); err == nil {
 			return nil
+		} else if firstFailure == nil {
+			firstFailure = err
 		}
 		timer := time.NewTimer(100 * time.Millisecond)
 		select {
 		case <-ready.Done():
 			timer.Stop()
-			return fmt.Errorf("private candidate readiness was not established")
+			return fmt.Errorf("private candidate readiness was not established: %w", firstFailure)
 		case <-timer.C:
 		}
 	}

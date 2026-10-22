@@ -46,6 +46,13 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The ordinary metadata fixture creates private 0700 payload directories.
+	// Shipping executable payload mounts are traversable by their service UID.
+	for _, directory := range []string{core, secretGeneration} {
+		if err := os.Chmod(directory, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	copyID, err := b.command(ctx, "creating isolated shipping extraction fixture", nil, "create", image)
 	if err != nil {
 		t.Fatal(err)
@@ -66,10 +73,14 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if broker:=os.Getenv("LOKI_TEST_NATIVE_SECRET_BROKER");broker!="" {
-		body,err:=os.ReadFile(broker)
-		if err!=nil{t.Fatal(err)}
-		if err:=os.WriteFile(filepath.Join(secretGeneration,"program"),body,0555);err!=nil{t.Fatal(err)}
+	if broker := os.Getenv("LOKI_TEST_NATIVE_SECRET_BROKER"); broker != "" {
+		body, err := os.ReadFile(broker)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(secretGeneration, "program"), body, 0555); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, path := range []string{filepath.Join(core, "program"), filepath.Join(core, "provider"), filepath.Join(secretGeneration, "program")} {
 		if err := os.Chmod(path, 0555); err != nil {
