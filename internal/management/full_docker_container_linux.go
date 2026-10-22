@@ -17,21 +17,22 @@ const fullSpecLabel = "io.loki.full.spec"
 // The saved specification is public deployment metadata. Credentials enter
 // through separately owned read-only files, never arguments or this record.
 type fullContainerSpec struct {
-	HostNetwork  bool              `json:"host_network,omitempty"`
-	Name         string            `json:"name"`
-	Service      string            `json:"service"`
-	Image        string            `json:"image"`
-	User         string            `json:"user"`
-	Groups       []string          `json:"groups"`
-	Command      []string          `json:"command"`
-	Mounts       []FullMount       `json:"mounts"`
-	Networks     []string          `json:"networks"`
-	Capabilities []string          `json:"capabilities"`
-	Publish      string            `json:"publish,omitempty"`
-	Memory       int64             `json:"memory"`
-	PIDs         int64             `json:"pids"`
-	Seccomp      string            `json:"seccomp,omitempty"`
-	Tmpfs        map[string]string `json:"tmpfs"`
+	HostNetwork   bool              `json:"host_network,omitempty"`
+	Name          string            `json:"name"`
+	Service       string            `json:"service"`
+	Image         string            `json:"image"`
+	User          string            `json:"user"`
+	Groups        []string          `json:"groups"`
+	Command       []string          `json:"command"`
+	Mounts        []FullMount       `json:"mounts"`
+	Networks      []string          `json:"networks"`
+	Capabilities  []string          `json:"capabilities"`
+	Publish       string            `json:"publish,omitempty"`
+	Memory        int64             `json:"memory"`
+	PIDs          int64             `json:"pids"`
+	Seccomp       string            `json:"seccomp,omitempty"`
+	Tmpfs         map[string]string `json:"tmpfs"`
+	RestartPolicy string            `json:"restart_policy,omitempty"`
 }
 
 func (s fullContainerSpec) digest() string {
@@ -77,6 +78,7 @@ type fullContainerInspection struct {
 		Status    string
 	}
 	HostConfig struct {
+		RestartPolicy                          struct{ Name string }
 		Init                                   *bool
 		PidMode, IpcMode, UTSMode              string
 		Binds, VolumesFrom, Links              []string
@@ -146,6 +148,9 @@ func (b *DockerFullBackend) requireParent(r DeploymentReservation, c fullContain
 func (b *DockerFullBackend) verifySpec(r DeploymentReservation, s fullContainerSpec, c fullContainerInspection) error {
 	if err := b.requireParent(r, c); err != nil {
 		return err
+	}
+	if s.RestartPolicy != "" && c.HostConfig.RestartPolicy.Name != s.RestartPolicy {
+		return fmt.Errorf("service restart policy differs from its owned lifecycle")
 	}
 	if c.Config.Labels[fullSpecLabel] != s.digest() || c.Config.Image != s.Image || c.Config.User != s.User || !reflect.DeepEqual(c.Config.Entrypoint, []string{s.Command[0]}) || !reflect.DeepEqual(c.Config.Cmd, s.Command[1:]) || !c.HostConfig.ReadonlyRootfs || c.HostConfig.Privileged || !slices.Contains(c.HostConfig.CapDrop, "ALL") || !slices.Contains(c.HostConfig.SecurityOpt, "no-new-privileges") && !slices.Contains(c.HostConfig.SecurityOpt, "no-new-privileges:true") || c.HostConfig.Memory != s.Memory || c.HostConfig.PidsLimit != s.PIDs {
 		return fmt.Errorf("existing service differs from its saved execution policy; preserving it")
@@ -293,7 +298,14 @@ func (b *DockerFullBackend) createContainer(ctx context.Context, r DeploymentRes
 			return b.verifySpec(r, s, current)
 		}
 	}
-	args := []string{"container", "create", "--name", s.Name, "--init", "--restart", "unless-stopped", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--user", s.User, "--memory", strconv.FormatInt(s.Memory, 10), "--pids-limit", strconv.FormatInt(s.PIDs, 10), "--shm-size", "256m"}
+	restart := "unless-stopped"
+	if s.RestartPolicy != "" {
+		if s.RestartPolicy != "no" {
+			return fmt.Errorf("unsupported owned service restart policy")
+		}
+		restart = s.RestartPolicy
+	}
+	args := []string{"container", "create", "--name", s.Name, "--init", "--restart", restart, "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--user", s.User, "--memory", strconv.FormatInt(s.Memory, 10), "--pids-limit", strconv.FormatInt(s.PIDs, 10), "--shm-size", "256m"}
 	for _, label := range append(b.labels(r, s.Service), fullSpecLabel+"="+s.digest()) {
 		args = append(args, "--label", label)
 	}

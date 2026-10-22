@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"loki/internal/daemon"
+	hostapplication "loki/internal/host/application"
 	"loki/modules/execution/jobs"
 )
 
@@ -114,6 +116,50 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 				t.Fatal("metadata identity binding is inconsistent")
 			}
 		}
+	}
+	beforeBytes, err := os.ReadFile(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before hostapplication.Identity
+	if json.Unmarshal(beforeBytes, &before) != nil {
+		t.Fatal("invalid fixture identity")
+	}
+	beforeArgument, _ := json.Marshal(before)
+	activeLayout, err := os.ReadFile(filepath.Join(runtimeRoot, "layout.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	activeAdmin, err := os.ReadFile(filepath.Join(filepath.Dir(identity), "secrets-admin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateRuntime, err := os.MkdirTemp("/dev/shm", "loki-cli-candidate-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(candidateRuntime)
+	generation := strings.Repeat("b", 32)
+	if generation == before.ActiveGeneration {
+		generation = strings.Repeat("c", 32)
+	}
+	candidateArgs := []string{"--uid", "10006", "--gid", "10006", "--agent-uid", "10000", "--metadata-gid", "10001", "--state", filepath.Join(root, "store"), "--identity", identity, "--runtime", candidateRuntime, "--service-state", "/var/lib/loki/secrets", "--config", "../../packaging/images/config/loki.toml", "--execution-contract", "../../packaging/images/config/execution-contract.json", "--catalog", catalog, "--overlay-directory=", "--unit-directory=", "--candidate-generation", generation, "--candidate-before", string(beforeArgument), "--candidate-operation", "123e4567-e89b-42d3-a456-426614174571"}
+	var candidateReport bytes.Buffer
+	if code := runHostPrepareSecrets(candidateArgs, &candidateReport, &bytes.Buffer{}); code != 0 {
+		t.Fatal("owned candidate preparation failed", code)
+	}
+	var candidate map[string]any
+	if json.Unmarshal(candidateReport.Bytes(), &candidate) != nil || candidate["candidate"] != true || candidate["active_generation"] != generation {
+		t.Fatal("candidate metadata did not identify its inactive generation")
+	}
+	for path, want := range map[string][]byte{identity: beforeBytes, filepath.Join(runtimeRoot, "layout.json"): activeLayout, filepath.Join(filepath.Dir(identity), "secrets-admin.json"): activeAdmin} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatal("candidate CLI rewrote active identity or role channels", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(candidateRuntime, "admin-layout.json")); err != nil {
+		t.Fatal("candidate did not get its own private administrator layout", err)
 	}
 	if err := filepath.WalkDir(filepath.Join(root, "store"), func(path string, entry os.DirEntry, err error) error {
 		if err != nil {

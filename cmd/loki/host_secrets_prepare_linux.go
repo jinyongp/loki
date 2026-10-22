@@ -39,6 +39,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	maintenance := flags.String("maintenance-operation", "", "original host operation inherited before launcher admission")
 	interrupt := flags.Bool("interrupt-jobs", false, "persist the original explicit host interruption choice")
 	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
+	inspectIdentity := flags.Bool("inspect-identity", false, "inspect existing public selector metadata without preparing state")
 	identity := flags.String("identity", "/etc/loki-go/secrets-deployment.json", "protected host deployment metadata")
 	state := flags.String("state", "/var/lib/loki-go/secrets", "host app-generation store")
 	serviceState := flags.String("service-state", "/var/lib/loki-go/secrets", "app state path inside the service namespace")
@@ -53,8 +54,22 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	unitDirectory := flags.String("unit-directory", "/etc/systemd/system/loki-go-secrets.service.d", "native generation binding drop-in directory; empty disables")
 	overlayDirectory := flags.String("overlay-directory", "/etc/loki-go", "native role layouts to bind to this generation; empty disables")
 	roleSource := flags.String("role-source", "", "immutable role layout source; defaults to overlay directory")
+	candidateGeneration := flags.String("candidate-generation", "", "inactive generation owned by the original migration")
+	candidateBefore := flags.String("candidate-before", "", "canonical public identity observed by the host owner")
+	candidateOperation := flags.String("candidate-operation", "", "original migration operation UUID")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
+	}
+	if *inspectIdentity {
+		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *maintenance != "" || *interrupt {
+			return 2
+		}
+		existing, err := hostapplication.ReadIdentity(*identity)
+		if err != nil || json.NewEncoder(stdout).Encode(existing) != nil {
+			fmt.Fprintln(stderr, "existing application identity is unavailable")
+			return 1
+		}
+		return 0
 	}
 	if *maintenance == "" {
 		if *interrupt {
@@ -65,6 +80,17 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	}
 	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
 		return 2
+	}
+	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != ""
+	var before hostapplication.Identity
+	if isCandidate {
+		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
+			return 2
+		}
+		canonical, _ := json.Marshal(before)
+		if string(canonical) != *candidateBefore {
+			return 2
+		}
 	}
 	if *serviceCatalog == "" {
 		*serviceCatalog = *catalog
@@ -112,6 +138,12 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	prepare := hostapplication.Prepare
 	if *stateOnly {
 		prepare = hostapplication.PrepareState
+	}
+	if isCandidate {
+		prepare = func(options hostapplication.PrepareOptions) (hostapplication.Preparation, error) {
+			options.MigrationOperation = *candidateOperation
+			return hostapplication.PrepareCandidate(options, before, *candidateGeneration)
+		}
 	}
 	prepared, err := prepare(hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources})
 	if err != nil {
@@ -180,7 +212,11 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	if json.NewEncoder(stdout).Encode(map[string]any{"prepared": true, "policy": prepared.Layout.PolicySHA256, "broker_uid": prepared.Identity.UID, "broker_gid": prepared.Identity.GID, "deployment_id": prepared.Identity.DeploymentID, "runner_id": prepared.Identity.RunnerID, "active_generation": prepared.Identity.ActiveGeneration}) != nil {
+	result := map[string]any{"prepared": true, "policy": prepared.Layout.PolicySHA256, "broker_uid": prepared.Identity.UID, "broker_gid": prepared.Identity.GID, "deployment_id": prepared.Identity.DeploymentID, "runner_id": prepared.Identity.RunnerID, "active_generation": prepared.Identity.ActiveGeneration}
+	if isCandidate {
+		result["candidate"] = true
+	}
+	if json.NewEncoder(stdout).Encode(result) != nil {
 		return 1
 	}
 	return 0

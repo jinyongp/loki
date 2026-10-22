@@ -34,5 +34,5 @@ CGO_ENABLED=0 go test -c -o "$test_binary" ./internal/management
 chmod 0555 "$test_binary"
 (
   cd internal/management
-  "$test_binary" -test.run '^TestRealManagedFullAdmission$' -test.v -test.timeout=3m
+  "$test_binary" -test.run '^TestRealManagedFull(Admission|MigrationCandidate)$' -test.v -test.timeout=5m
 )

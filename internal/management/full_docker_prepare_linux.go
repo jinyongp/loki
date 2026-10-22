@@ -20,13 +20,14 @@ import (
 )
 
 type fullDockerRecord struct {
-	Preparing       bool                   `json:"preparing,omitempty"`
-	StopMaintenance *fullMaintenanceIntent `json:"stop_maintenance,omitempty"`
-	Schema          int                    `json:"schema"`
-	Reservation     DeploymentReservation  `json:"reservation"`
-	Worker          string                 `json:"worker"`
-	Specs           []fullContainerSpec    `json:"specs"`
-	Order           []string               `json:"order"`
+	MigrationCandidate *fullMigrationCandidateBinding `json:"migration_candidate,omitempty"`
+	Preparing          bool                           `json:"preparing,omitempty"`
+	StopMaintenance    *fullMaintenanceIntent         `json:"stop_maintenance,omitempty"`
+	Schema             int                            `json:"schema"`
+	Reservation        DeploymentReservation          `json:"reservation"`
+	Worker             string                         `json:"worker"`
+	Specs              []fullContainerSpec            `json:"specs"`
+	Order              []string                       `json:"order"`
 }
 
 func (b *DockerFullBackend) deploymentDirectory(r DeploymentReservation) (string, error) {
@@ -64,8 +65,14 @@ func (b *DockerFullBackend) record(r DeploymentReservation) (fullDockerRecord, e
 	if !b.validStopMaintenance(r, record.StopMaintenance) {
 		return record, fmt.Errorf("saved stop intent differs from its deployment")
 	}
+	if !b.validMigrationCandidate(record) {
+		return record, fmt.Errorf("candidate service differs from its original host migration")
+	}
 	seen := map[string]bool{}
 	for _, spec := range record.Specs {
+		if spec.RestartPolicy != "" && spec.RestartPolicy != "no" {
+			return record, fmt.Errorf("unsupported saved service restart policy")
+		}
 		if !slices.Contains(r.Services, spec.Service) || seen[spec.Service] || spec.Name != b.containerName(r, spec.Service) || len(spec.Command) == 0 || !filepath.IsAbs(spec.Command[0]) || !imageDigestPattern.MatchString(spec.Image) {
 			return record, fmt.Errorf("invalid saved deployment service")
 		}
@@ -197,7 +204,9 @@ func (b *DockerFullBackend) volumePath(ctx context.Context, mount FullMount) (st
 
 func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation, t FullTopology, l FullLayouts) error {
 	preparing := true
-	if previous, err := b.record(r); err == nil && previous.StopMaintenance != nil {
+	if previous, err := b.record(r); err == nil && previous.MigrationCandidate != nil {
+		return fmt.Errorf("candidate services require the original migration owner")
+	} else if err == nil && previous.StopMaintenance != nil {
 		return fmt.Errorf("deployment stop is interrupted; retry stop before starting services")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

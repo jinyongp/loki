@@ -213,11 +213,9 @@ func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *can
 }
 
 func loadIdentity(options PrepareOptions) (Identity, error) {
-	var identity Identity
-	err := daemon.ReadJSON(options.IdentityFile, &identity)
+	identity, err := ReadIdentity(options.IdentityFile)
 	if err == nil {
-		versionValid := identity.Version == 1 && identity.PolicySHA256 == "" || identity.Version == 2 && policyDigest.MatchString(identity.PolicySHA256)
-		if !versionValid || identity.UID != options.UID || identity.GID != options.GID || identity.AgentUID != options.AgentUID || identity.MetadataGID != options.MetadataGID || !deploymentID.MatchString(identity.DeploymentID) || !controlpolicy.ApplicationUUID.MatchString(identity.RunnerID) || !generationID.MatchString(identity.ActiveGeneration) {
+		if identity.UID != options.UID || identity.GID != options.GID || identity.AgentUID != options.AgentUID || identity.MetadataGID != options.MetadataGID {
 			return Identity{}, invalid
 		}
 		return identity, nil
@@ -238,6 +236,20 @@ func loadIdentity(options PrepareOptions) (Identity, error) {
 	raw, _ := json.Marshal(identity)
 	if err := safeio.PublishPrivate(options.IdentityFile, raw, false); err != nil {
 		return Identity{}, err
+	}
+	return identity, nil
+}
+
+// ReadIdentity observes existing selector metadata without creating directories,
+// assigning a new identity, opening provider data or initializing protection.
+func ReadIdentity(path string) (Identity, error) {
+	var identity Identity
+	if err := daemon.ReadJSON(path, &identity); err != nil {
+		return Identity{}, err
+	}
+	versionValid := identity.Version == 1 && identity.PolicySHA256 == "" || identity.Version == 2 && policyDigest.MatchString(identity.PolicySHA256)
+	if !versionValid || identity.UID == 0 || identity.GID == 0 || identity.AgentUID == 0 || identity.MetadataGID == 0 || identity.UID == identity.AgentUID || identity.GID == identity.MetadataGID || !deploymentID.MatchString(identity.DeploymentID) || !controlpolicy.ApplicationUUID.MatchString(identity.RunnerID) || !generationID.MatchString(identity.ActiveGeneration) {
+		return Identity{}, invalid
 	}
 	return identity, nil
 }
