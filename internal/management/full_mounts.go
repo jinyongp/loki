@@ -148,6 +148,9 @@ func (s Store) FullTopology() (FullTopology, error) {
 		needed := map[tools.ID]bool{"runtime-core": true}
 		switch service.Name {
 		case "mcp":
+			if public["secrets"] {
+				entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "secrets", "metadata"), Target: "/run/loki/secrets/metadata", ReadOnly: true})
+			}
 			if public["workspace"] || public["git"] || public["sharing"] || public["coordination"] {
 				mount, _ := data("workspace", false)
 				entry.Mounts = append(entry.Mounts, mount)
@@ -158,10 +161,6 @@ func (s Store) FullTopology() (FullTopology, error) {
 				}
 			}
 			for _, peer := range service.Requires {
-				if peer == "secrets" {
-					entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "secrets", "metadata"), Target: "/run/loki/secrets/metadata", ReadOnly: true})
-					continue
-				}
 				if peer == "git-signing" {
 					peer = "signing"
 				}

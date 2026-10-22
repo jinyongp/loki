@@ -305,6 +305,42 @@ func TestRuntimeUnitSeparatesRunnerState(t *testing.T) {
 	if strings.Contains(text, "StateDirectory=loki-go/runtime loki-go/") {
 		t.Fatal("root runtime still creates runner state")
 	}
+	var writable []string
+	for _, line := range strings.Split(text, "\n") {
+		if paths, ok := strings.CutPrefix(line, "ReadWritePaths="); ok {
+			writable = append(writable, strings.Fields(paths)...)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "packaging/native/execution-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Directories map[string]struct{ Path, Owner string } `json:"directories"`
+	}
+	if err := json.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for name, directory := range contract.Directories {
+		if directory.Owner != "runner" || directory.Path == "/workspace" {
+			continue
+		}
+		allowed := false
+		for _, path := range writable {
+			path = strings.TrimPrefix(path, "-")
+			if directory.Path == path || strings.HasPrefix(directory.Path, path+"/") {
+				allowed = true
+			}
+		}
+		if !allowed {
+			t.Fatalf("runtime contract directory %s is read-only under ProtectSystem=strict", name)
+		}
+	}
+	for _, path := range writable {
+		if path == "/var/lib/loki-go" || path == "/var/cache/loki-go" {
+			t.Fatal("runtime write access includes other service owners")
+		}
+	}
 	tmpfiles, err := os.ReadFile(filepath.Join(root, "packaging", "native", "tmpfiles.d", "runtime.conf"))
 	if err != nil {
 		t.Fatal(err)

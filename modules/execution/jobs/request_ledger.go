@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/platform/privateio"
 	"loki/internal/platform/safeio"
 )
 
@@ -101,6 +102,18 @@ func (j *Journal) loadSpent() error {
 			}
 			continue
 		}
+		if strings.HasPrefix(entry.Name(), "maintenance-") {
+			var m Maintenance
+			if privateio.Decode(raw, &m) != nil || !validMaintenance(m) || entry.Name() != maintenanceRequestName(m.OperationID) {
+				return errors.New("invalid host maintenance admission history")
+			}
+			j.spentBytes += maintenanceRequestBudget(raw, m.Active)
+			if j.spentBytes > protectedLedgerBudget {
+				return ErrJournalCapacity
+			}
+			j.maintenanceRequests[m.OperationID] = m
+			continue
+		}
 		var s spentRequest
 		d := json.NewDecoder(bytes.NewReader(raw))
 		d.DisallowUnknownFields()
@@ -117,7 +130,7 @@ func (j *Journal) loadSpent() error {
 		}
 		j.spent[s.JobID] = s
 	}
-	return nil
+	return j.reconcileMaintenanceRequests()
 }
 
 // AdmitProtectedRequest reserves the one-attempt identity before any OCI or

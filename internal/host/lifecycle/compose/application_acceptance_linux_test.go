@@ -13,6 +13,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	controlpolicy "loki/internal/control/policy"
+	"loki/internal/platform/safeio"
 )
 
 func TestRealComposeApplicationService(t *testing.T) {
@@ -110,6 +113,10 @@ func TestRealComposeApplicationService(t *testing.T) {
 		t.Helper()
 		layout := filepath.Join(filepath.Dir(filepath.Dir(state.ApplicationStateSource)), "secrets-admin.json")
 		args := []string{"run", "--rm", "--interactive", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--mount", applicationBind(filepath.Join(state.ApplicationRuntimeRoot, "admin"), "/run/loki/secrets/admin", false), "--mount", applicationBind(layout, "/fixture/admin.json", true), "--entrypoint", "/opt/loki/bin/loki", image, "secret", "protection", action, "--layout", "/fixture/admin.json"}
+		if action == "revision" {
+			args = args[:len(args)-5]
+			args = append(args, "secret", "app", "revision", "fixture", "--layout", "/fixture/admin.json")
+		}
 		if input != nil {
 			args = append(args, "--stdin")
 		}
@@ -169,5 +176,54 @@ func TestRealComposeApplicationService(t *testing.T) {
 	}
 	if live, err := b.launcherRunning(ctx, state); err != nil || live {
 		t.Fatal("offline helper restarted the launcher", err)
+	}
+	// Change public grants through the same frozen role preparation used by
+	// Restart. Existing ciphertext/generation and the manual unlock credential
+	// must survive; a process must read the new policy after its actual restart.
+	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "40", "launcher"); err != nil {
+		t.Fatal(err)
+	}
+	operation = "123e4567-e89b-12d3-a456-426614174377"
+	if err := b.BeginJobMaintenance(ctx, operation, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.compose(ctx, state, "stop", "--timeout", "5", "application-values", "launcher"); err != nil {
+		t.Fatal(err)
+	}
+	resource := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "fixture", Repository: "repo:fixture", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true}}}
+	catalog, _ := json.Marshal(map[string]any{"resources": []controlpolicy.ApplicationResource{resource}})
+	if err := safeio.PublishPrivate(filepath.Join(b.root, "application-resources.json"), catalog, true); err != nil {
+		t.Fatal(err)
+	}
+	previousPolicy, previousGeneration := state.ApplicationPolicySHA256, state.ApplicationStateSource
+	if err := b.prepareApplicationValues(ctx, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.ApplicationPolicySHA256 == previousPolicy || state.ApplicationStateSource != previousGeneration {
+		t.Fatal("resource policy change lost the active encrypted generation or kept stale grants")
+	}
+	if err := b.saveRuntime(state); err != nil {
+		t.Fatal(err)
+	}
+	b.ExpectedApplicationPolicy = previousPolicy
+	if err := b.ValidateApplicationPolicy(ctx); err == nil {
+		t.Fatal("stale prepared role digest passed the commit guard")
+	}
+	b.ExpectedApplicationPolicy = state.ApplicationPolicySHA256
+	if err := b.ValidateApplicationPolicy(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "40", "application-values", "launcher"); err != nil {
+		t.Fatal(err)
+	}
+	if admin("status", nil)["state"] != "locked" {
+		t.Fatal("policy replacement reused a live key session")
+	}
+	admin("unlock", passphrase)
+	if result := admin("revision", nil); result["resource"] != "fixture" || result["revision"] == "" || result["revision"] == nil {
+		t.Fatal("restarted broker did not load the new resource policy")
+	}
+	if err := b.EndJobMaintenance(ctx, operation); err != nil {
+		t.Fatal(err)
 	}
 }

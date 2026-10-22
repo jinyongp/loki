@@ -151,6 +151,8 @@ def main():
                         break
         text = log.read_text(errors="replace")
         if result != 0 or "LOKI_SECRET_REBOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FIRST_BOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FAIL" in text:
+            important = [line for line in text.splitlines() if any(marker in line for marker in ["LOKI_SECRET", "native owned fixture", "loki:", "Job for loki", "Failed at step", "Traceback", "validate runner"]) ]
+            print("\n".join(important)[-16000:])
             print(text[-24000:])
             raise RuntimeError("actual VM reboot verification failed")
         print(f"PASS: new kernel boot ID, fresh broker instance, locked vault, erased tmpfs credential; {arch}, {time.monotonic()-started:.1f}s", flush=True)

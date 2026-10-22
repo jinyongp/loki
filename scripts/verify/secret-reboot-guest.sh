@@ -2,6 +2,7 @@
 # Disposable NoCloud guest only. The payload contains no unlock credential.
 set -eu
 umask 077
+phase=boot
 exec >/dev/console 2>&1
 diagnose() {
   result=$?
@@ -10,6 +11,7 @@ diagnose() {
     echo LOKI_SECRET_REBOOT_FAIL
     systemctl status loki-go-secrets.service loki-go-secrets-prepare.service loki-go-launcher.service loki-go-runtime.service loki-reboot-docker.service --no-pager || true
     journalctl -b -u loki-go-secrets.service -u loki-go-secrets-prepare.service -u loki-go-launcher.service -u loki-go-runtime.service -u loki-reboot-docker.service --no-pager -n 80 || true
+    echo "LOKI_SECRET_REBOOT_FAIL phase=$phase exit=$result"
     systemctl poweroff --no-block || true
   fi
 }
@@ -32,7 +34,9 @@ start_docker() {
   done
 }
 coordination() {
+  phase=coordination-start
   systemctl start loki-go-runtime.service
+  phase=coordination-rpc
   runuser -u loki-agent -- /opt/loki/bin/native-reboot-peer coordination
 }
 if test ! -f "$state/boot-id"; then
@@ -150,12 +154,15 @@ PY
   # Broker unavailability must not take down the independent native runtime.
   systemctl stop loki-go-secrets.service
   coordination
+  phase=broker-restart-after-coordination
   systemctl start loki-go-secrets.service
   case "$(status)" in locked|locked_manual) ;; *) exit 1;; esac
   /opt/loki/bin/loki secret protection unlock --file /run/loki-fixture.pass
   test "$(status)" = unlocked
   /opt/loki/bin/native-reboot-peer seed
+  phase=launcher-start
   systemctl start loki-go-launcher.service
+  phase=protected-job-start
   runuser -u loki-executor -- /opt/loki/bin/native-reboot-peer start
   /opt/loki/bin/native-reboot-peer journal
   cat /proc/sys/kernel/random/boot_id > "$state/boot-id"

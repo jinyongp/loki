@@ -55,6 +55,9 @@ func (l *lifecycle) beginMaintenance(ctx context.Context, request maintenanceReq
 		return jobs.Maintenance{}, err
 	}
 	defer l.admission.Unlock()
+	if state, replay, err := l.journal.MaintenanceReplay(request.OperationID, request.Interrupt); replay || err != nil {
+		return state, err
+	}
 	previous, err := l.journal.MaintenanceStatus()
 	if err != nil {
 		return jobs.Maintenance{}, err

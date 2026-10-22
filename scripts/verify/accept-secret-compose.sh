@@ -22,7 +22,10 @@ test -n "$endpoint"
 tag="$endpoint/loki-native-secret:fixture"
 docker tag "$image" "$tag"
 docker push "$tag"
-LOKI_TEST_NATIVE_SECRET_IMAGE=$(docker image inspect --format '{{index .RepoDigests 0}}' "$tag")
+LOKI_TEST_NATIVE_SECRET_IMAGE=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag" | while IFS= read -r reference; do
+  case "$reference" in "$endpoint/loki-native-secret@sha256:"*) printf '%s\n' "$reference" ;; esac
+done)
+test -n "$LOKI_TEST_NATIVE_SECRET_IMAGE"
 export LOKI_TEST_NATIVE_SECRET_IMAGE
 export LOKI_REQUIRE_NATIVE_SECRET_COMPOSE=1
 go test -count=1 -v -timeout=3m ./internal/host/lifecycle/compose -run '^TestRealComposeApplicationService$'

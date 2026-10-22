@@ -108,7 +108,6 @@ func (s Store) PlanFull() (FullPlan, error) {
 	_, applicationValues := enabled["secrets"]
 	if applicationValues {
 		add("secrets", "application-values", "none", nil, []string{"secrets"})
-		mcpDependencies = append(mcpDependencies, "secrets")
 	}
 	if runtimeNeeded {
 		owners := []string{"runtime-audit"}
@@ -122,11 +121,9 @@ func (s Store) PlanFull() (FullPlan, error) {
 		mcpDependencies = append(mcpDependencies, "runtime")
 	}
 	if executorNeeded {
-		var dependencies []string
-		if applicationValues {
-			dependencies = []string{"secrets"}
-		}
-		add("launcher", "administrator", "none", dependencies, []string{"execution/launcher", "execution/toolchains"})
+		// The protected capability is optional at call time. A missing broker
+		// must not prevent non-secret Jobs, coordination or workspace startup.
+		add("launcher", "administrator", "none", nil, []string{"execution/launcher", "execution/toolchains"})
 		add("executor", "executor", "none", []string{"launcher"}, []string{"execution/jobs"})
 		mcpDependencies = append(mcpDependencies, "executor")
 	}

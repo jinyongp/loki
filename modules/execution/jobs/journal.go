@@ -30,15 +30,16 @@ type JournalLimits struct {
 }
 
 type Journal struct {
-	dir         string
-	limits      JournalLimits
-	lockFile    *os.File
-	mu          sync.Mutex
-	records     map[string]Record
-	spent       map[string]spentRequest
-	spentBytes  int64
-	closed      bool
-	maintenance *Maintenance
+	dir                 string
+	limits              JournalLimits
+	lockFile            *os.File
+	mu                  sync.Mutex
+	records             map[string]Record
+	spent               map[string]spentRequest
+	spentBytes          int64
+	closed              bool
+	maintenance         *Maintenance
+	maintenanceRequests map[string]Maintenance
 }
 
 type journalEnvelope struct {
@@ -124,7 +125,7 @@ func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
 		return nil, err
 	}
 
-	journal := &Journal{dir: dir, limits: limits, lockFile: lockFile, records: map[string]Record{}, spent: map[string]spentRequest{}}
+	journal := &Journal{dir: dir, limits: limits, lockFile: lockFile, records: map[string]Record{}, spent: map[string]spentRequest{}, maintenanceRequests: map[string]Maintenance{}}
 	if journal.maintenance, err = loadMaintenance(dir); err != nil {
 		journal.Close()
 		return nil, err

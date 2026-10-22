@@ -107,3 +107,87 @@ func TestMaintenanceRejectsUnsafeMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestMaintenanceHistorySurvivesNewOperationsAndCrashWindows(t *testing.T) {
+	dir := privateJournalDir(t)
+	j := testJournal(t, dir)
+	first := "11111111-1111-4111-8111-111111111111"
+	second := "22222222-2222-4222-8222-222222222222"
+	third := "33333333-3333-4333-8333-333333333333"
+	for _, id := range []string{first, second} {
+		if _, err := j.BeginMaintenance(id, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := j.EndMaintenance(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	j = testJournal(t, dir)
+	if result, err := j.BeginMaintenance(first, false); err != nil || result.Active {
+		t.Fatalf("old startup layout reopened admission fence: %+v %v", result, err)
+	}
+	if _, err := j.BeginMaintenance(first, true); !errors.Is(err, ErrReplayConflict) {
+		t.Fatal("historical operation accepted a changed interruption choice", err)
+	}
+	if err := j.AdmissionAllowed(); err != nil {
+		t.Fatal(err)
+	}
+	// Crash after the durable admission reservation but before current-fence
+	// publication. The same request ledger must restore the pending fence.
+	value := Maintenance{Version: 1, OperationID: third, Active: true}
+	if err := j.reserveMaintenanceRequest(value); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	j = testJournal(t, dir)
+	if err := j.AdmissionAllowed(); !errors.Is(err, ErrMaintenanceBusy) {
+		t.Fatal("crash before current-fence publication lost admission intent", err)
+	}
+	if _, err := j.EndMaintenance(first); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := j.BeginMaintenance(second, false); err != nil || result.Active {
+		t.Fatalf("historical replay replaced current operation: %+v %v", result, err)
+	}
+	state, err := j.MaintenanceStatus()
+	if err != nil || state == nil || state.OperationID != third || !state.Active {
+		t.Fatal("old ACK changed the pending operation", state, err)
+	}
+	// Completion was durable, but the current-fence publication/ACK was lost.
+	value.Active = false
+	if err := j.reserveMaintenanceRequest(value); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Close(); err != nil {
+		t.Fatal(err)
+	}
+	j = testJournal(t, dir)
+	if err := j.AdmissionAllowed(); err != nil {
+		t.Fatal("lost release ACK kept a spent operation active", err)
+	}
+}
+
+func TestMaintenanceReservesTerminalHistoryBeforeAnyFence(t *testing.T) {
+	j := testJournal(t, privateJournalDir(t))
+	id := "11111111-1111-4111-8111-111111111111"
+	j.spentBytes = protectedLedgerBudget
+	if _, err := j.BeginMaintenance(id, false); !errors.Is(err, ErrJournalCapacity) {
+		t.Fatal("full root ledger admitted a new maintenance identity", err)
+	}
+	if err := j.AdmissionAllowed(); err != nil {
+		t.Fatal("capacity rejection changed admission", err)
+	}
+	j.spentBytes = 0
+	if _, err := j.BeginMaintenance(id, false); err != nil {
+		t.Fatal(err)
+	}
+	j.spentBytes = protectedLedgerBudget
+	if _, err := j.EndMaintenance(id); err != nil {
+		t.Fatal("admitted operation could not use its reserved completion space", err)
+	}
+}

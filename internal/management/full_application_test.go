@@ -89,6 +89,11 @@ func TestApplicationFullTopologyHasOneIsolatedValueOwner(t *testing.T) {
 			t.Fatalf("unexpected service %s", service.Name)
 		}
 	}
+	for _, service := range topology.Resources.Plan.Services {
+		if service.Name != "secrets" && slices.Contains(service.Requires, "secrets") {
+			t.Fatal("optional broker failure blocks non-secret service startup")
+		}
+	}
 	reservation, err := store.ReserveDeployment(topology.Resources.Plan)
 	if err != nil {
 		t.Fatal(err)
