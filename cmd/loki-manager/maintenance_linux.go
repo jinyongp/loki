@@ -23,6 +23,9 @@ func privilegedMaintenance(ctx context.Context, store management.Store, args []s
 		return true, err
 	}
 	argv := []string{"-n", binary, "--root", store.Root}
+	if management.JobInterruptionRequested(ctx) {
+		argv = append(argv, "--interrupt-active-jobs")
+	}
 	if jsonOutput(out) {
 		argv = append(argv, "--json")
 	}

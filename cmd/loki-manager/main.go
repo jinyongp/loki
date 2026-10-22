@@ -40,6 +40,15 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 	if err != nil {
 		return err
 	}
+	var interruptJobs bool
+	args, interruptJobs, err = interruptionArguments(args)
+	if err != nil {
+		return err
+	}
+	interruptJobs = interruptJobs || management.JobInterruptionRequested(ctx)
+	if interruptJobs {
+		ctx = management.WithJobInterruption(ctx)
+	}
 	flags := flag.NewFlagSet("loki", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	flags.Usage = func() {
@@ -61,6 +70,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 		return err
 	}
 	executionArgs := slices.Clone(args[:len(args)-len(flags.Args())])
+	if interruptJobs {
+		executionArgs = append([]string{"--interrupt-active-jobs"}, executionArgs...)
+	}
 	args = flags.Args()
 	systemArgs := args
 	if structured && len(args) > 0 && args[0] == "_system-relay" {
@@ -385,6 +397,9 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 			return err
 		}
 		defer cleanup()
+		if interruptJobs {
+			remoteArgs = append([]string{"--interrupt-active-jobs"}, remoteArgs...)
+		}
 		if *root != "" {
 			remoteArgs = append([]string{"--root", *root}, remoteArgs...)
 		}
@@ -746,7 +761,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer) error {
 				}
 			}
 		})
-		if err := store.SetEnabled(tools.ID(f.Arg(0)), args[1] == "enable", caps); err != nil {
+		if err := store.SetEnabledContext(ctx, tools.ID(f.Arg(0)), args[1] == "enable", caps, *noStart); err != nil {
 			return err
 		}
 		if !*noStart {

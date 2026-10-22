@@ -116,7 +116,7 @@ func runGitIntegration(ctx context.Context, store management.Store, args []strin
 		}
 	}
 	if !slices.Contains(choice.Capabilities, "signing") {
-		if err := store.SetEnabled("git", true, append(slices.Clone(choice.Capabilities), "signing")); err != nil {
+		if err := store.SetEnabledContext(ctx, "git", true, append(slices.Clone(choice.Capabilities), "signing"), true); err != nil {
 			return err
 		}
 	}

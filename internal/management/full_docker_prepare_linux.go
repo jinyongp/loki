@@ -20,11 +20,13 @@ import (
 )
 
 type fullDockerRecord struct {
-	Schema      int                   `json:"schema"`
-	Reservation DeploymentReservation `json:"reservation"`
-	Worker      string                `json:"worker"`
-	Specs       []fullContainerSpec   `json:"specs"`
-	Order       []string              `json:"order"`
+	Preparing       bool                   `json:"preparing,omitempty"`
+	StopMaintenance *fullMaintenanceIntent `json:"stop_maintenance,omitempty"`
+	Schema          int                    `json:"schema"`
+	Reservation     DeploymentReservation  `json:"reservation"`
+	Worker          string                 `json:"worker"`
+	Specs           []fullContainerSpec    `json:"specs"`
+	Order           []string               `json:"order"`
 }
 
 func (b *DockerFullBackend) deploymentDirectory(r DeploymentReservation) (string, error) {
@@ -58,6 +60,9 @@ func (b *DockerFullBackend) record(r DeploymentReservation) (fullDockerRecord, e
 	}
 	if record.Schema != 1 || !reflect.DeepEqual(record.Reservation, r) || len(record.Specs) != len(r.Services) || !filepath.IsAbs(record.Worker) {
 		return record, fmt.Errorf("deployment service record has incompatible ownership")
+	}
+	if record.StopMaintenance != nil && record.StopMaintenance.OperationID != deploymentStopUUID(r) {
+		return record, fmt.Errorf("saved stop intent differs from its deployment")
 	}
 	seen := map[string]bool{}
 	for _, spec := range record.Specs {
@@ -191,6 +196,14 @@ func (b *DockerFullBackend) volumePath(ctx context.Context, mount FullMount) (st
 }
 
 func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation, t FullTopology, l FullLayouts) error {
+	preparing := true
+	if previous, err := b.record(r); err == nil && previous.StopMaintenance != nil {
+		return fmt.Errorf("deployment stop is interrupted; retry stop before starting services")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	} else if err == nil {
+		preparing = previous.Preparing
+	}
 	if r.PlanDigest != fullPlanDigest(t.Resources.Plan) || t.Owner != b.Store.FullOwner() {
 		return fmt.Errorf("full preparation plan does not match its reservation")
 	}
@@ -381,6 +394,12 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 			return err
 		}
 	}
+	if preparing {
+		record.Preparing = true
+		if err := atomicJSON(filepath.Join(directory, "services.json"), record); err != nil {
+			return err
+		}
+	}
 	bootstrap, err := t.Bootstrap(uint32(os.Geteuid()), layoutDirectory, authDirectory, r.ID)
 	if err != nil {
 		return err
@@ -421,6 +440,7 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 		}
 		spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", t.Owner+"-secret-runtime", "secrets", "layout.json"), Target: "/run/loki/secrets/layout.json", ReadOnly: true})
 	}
+	record.Preparing = false
 	if err := atomicJSON(filepath.Join(directory, "services.json"), record); err != nil {
 		return err
 	}

@@ -49,6 +49,16 @@ func TestSystemProtocolRequiresExplicitRemovalScope(t *testing.T) {
 	}
 }
 
+func TestSystemProtocolPreservesFiniteInterruptionWithoutExtraAuthority(t *testing.T) {
+	args, input, err := ValidateSystemArguments([]string{"--interrupt-active-jobs", "--root", "/ignored", "tools", "stop"})
+	if err != nil || input || strings.Join(args, " ") != "--interrupt-active-jobs tools stop" {
+		t.Fatal(args, input, err)
+	}
+	if _, _, err := ValidateSystemArguments([]string{"--interrupt-active-jobs", "tools", "install", "git", "--catalog", "/tmp/foreign"}); err == nil {
+		t.Fatal("interruption enlarged acquisition authority")
+	}
+}
+
 func TestSystemProtocolDuplexKeepsChannelsSeparate(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "child")

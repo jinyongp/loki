@@ -38,6 +38,7 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	interrupt := flags.Bool("interrupt", false, "explicitly cancel and verify owned Job cleanup")
 	offline := flags.Bool("offline", false, "acknowledge completed cleanup while holding the stopped launcher's journal lock")
 	launcherLayout := flags.String("launcher-layout", "", "frozen launcher layout for offline end/status only")
+	stateMount := flags.String("state-mount", "", "fixed isolated helper mount: /var/lib/loki/launcher")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
 		return 2
 	}
@@ -50,9 +51,12 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 				return 2
 			}
 		}
-		return runOfflineHostMaintenance(action, *operation, *launcherLayout, stdout, stderr)
+		if *stateMount != "" && *stateMount != "/var/lib/loki/launcher" {
+			return 2
+		}
+		return runOfflineHostMaintenance(action, *operation, *launcherLayout, *stateMount, stdout, stderr)
 	}
-	if *launcherLayout != "" {
+	if *launcherLayout != "" || *stateMount != "" {
 		return 2
 	}
 	client, err := remote.NewHostMaintenance(*socket)
@@ -82,11 +86,14 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 
 // The exclusive canonical journal lock prevents an offline helper racing a
 // live launcher. EndMaintenance also refuses retained, unverified Job cleanup.
-func runOfflineHostMaintenance(action, operation, path string, stdout, stderr io.Writer) int {
+func runOfflineHostMaintenance(action, operation, path, stateMount string, stdout, stderr io.Writer) int {
 	var layout hostLauncherLayout
 	if daemon.ReadJSON(path, &layout) != nil || !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory || layout.StateDirectory == "/" {
 		fmt.Fprintln(stderr, "stopped launcher layout is unavailable")
 		return 1
+	}
+	if stateMount != "" {
+		layout.StateDirectory = stateMount
 	}
 	journal, err := jobs.OpenJournal(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{MaxRecords: layout.MaxJobs, MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes), MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second})
 	if err != nil {

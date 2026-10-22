@@ -3,6 +3,7 @@ package management
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,8 +33,11 @@ type Snapshot struct {
 }
 
 type Store struct {
-	Root        string
-	hostRemoval bool
+	// MaintenanceBackend keeps mutations on the caller's selected daemon and
+	// transport. It is transient; no driver authority is serialized.
+	MaintenanceBackend FullBackend
+	Root               string
+	hostRemoval        bool
 	// ArchiveDirectory is a transient acquisition source for receipt-bound
 	// offline installation. It is never persisted in desired host state.
 	ArchiveDirectory string
@@ -273,6 +277,10 @@ func (s Store) Generation(a tools.Artifact) (string, error) {
 }
 
 func (s Store) SetEnabled(id tools.ID, enabled bool, capabilities []string) error {
+	return s.SetEnabledContext(context.Background(), id, enabled, capabilities, true)
+}
+
+func (s Store) SetEnabledContext(ctx context.Context, id tools.ID, enabled bool, capabilities []string, deferServices bool) error {
 	unlock, err := s.Lock()
 	if err != nil {
 		return err
@@ -285,6 +293,7 @@ func (s Store) SetEnabled(id tools.ID, enabled bool, capabilities []string) erro
 	if err != nil {
 		return err
 	}
+	before := snapshotDigest(state)
 	_, exists := state.Installed[id]
 	if !exists {
 		return fmt.Errorf("tool %s is not installed", id)
@@ -316,6 +325,12 @@ func (s Store) SetEnabled(id tools.ID, enabled bool, capabilities []string) erro
 		state.Config.Tools = append(state.Config.Tools, selection)
 	}
 	if _, err := registry.ResolveConfig(LocalTarget(state.Config.Mode), state.Config); err != nil {
+		return err
+	}
+	if before == snapshotDigest(state) {
+		return nil
+	}
+	if err := s.pauseFullMutationLocked(ctx, deferServices); err != nil {
 		return err
 	}
 	return s.Save(state)

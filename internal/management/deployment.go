@@ -99,6 +99,11 @@ func (s Store) ReserveDeployment(expected FullPlan) (DeploymentReservation, erro
 		return DeploymentReservation{}, err
 	}
 	defer unlock()
+	return s.reserveDeploymentLocked(expected)
+}
+
+// Caller owns the common management mutation lock for the whole lifecycle.
+func (s Store) reserveDeploymentLocked(expected FullPlan) (DeploymentReservation, error) {
 	if err := s.RequireMutable(); err != nil {
 		return DeploymentReservation{}, err
 	}
@@ -163,6 +168,10 @@ func (s Store) ReleaseDeployment(ctx context.Context, id string, observer Deploy
 		return err
 	}
 	defer unlock()
+	return s.releaseDeploymentLocked(ctx, id, observer)
+}
+
+func (s Store) releaseDeploymentLocked(ctx context.Context, id string, observer DeploymentObserver) error {
 	r, err := s.deploymentRegistry()
 	if err != nil {
 		return err

@@ -172,7 +172,7 @@ func runIntegrations(ctx context.Context, store management.Store, args []string,
 	}
 	if *personal && !slices.Contains(choice.Capabilities, "personal-projects") {
 		caps := append(slices.Clone(choice.Capabilities), "personal-projects")
-		if err := store.SetEnabled("github", true, caps); err != nil {
+		if err := store.SetEnabledContext(ctx, "github", true, caps, true); err != nil {
 			return err
 		}
 	}

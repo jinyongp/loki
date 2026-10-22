@@ -15,6 +15,9 @@ func (b *DockerFullBackend) Start(ctx context.Context, r DeploymentReservation) 
 	if err != nil {
 		return err
 	}
+	if record.StopMaintenance != nil || record.Preparing {
+		return fmt.Errorf("deployment stop is interrupted; retry stop")
+	}
 	for _, name := range record.Order {
 		var spec fullContainerSpec
 		for _, current := range record.Specs {

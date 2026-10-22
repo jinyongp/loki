@@ -259,7 +259,7 @@ func RemoveSystemHost(ctx context.Context, uid uint32, diagnostics io.Writer) er
 	if !ok {
 		return fmt.Errorf("system host requires its local owned Docker backend")
 	}
-	if err := owned.RequireIdle(ctx); err != nil {
+	if err := CheckMaintenanceIdle(ctx, owned); err != nil {
 		return err
 	}
 	record.Removing = true

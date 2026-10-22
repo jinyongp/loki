@@ -3,7 +3,9 @@ package management
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 )
@@ -61,6 +63,19 @@ func (b *DockerFullBackend) removeChildNetwork(ctx context.Context, r Deployment
 // children. Inspect every selected object before removing any of them. A failed
 // daemon request never becomes proof that retained generations are unused.
 func (b *DockerFullBackend) Stop(ctx context.Context, r DeploymentReservation) error {
+	// A reservation is durable before image acquisition or service metadata.
+	// Only an actual absence proof can retire a never-created deployment.
+	if _, err := b.record(r); errors.Is(err, os.ErrNotExist) {
+		return b.ConfirmAbsent(ctx, r)
+	} else if err != nil {
+		return err
+	}
+	// Admission is fenced before the first service signal, including starts
+	// still in preflight. A failed cleanup retains both original stop intent
+	// and the reservation for an exact retry.
+	if err := b.beginStopMaintenance(ctx, r); err != nil {
+		return err
+	}
 	ids, err := b.containerIDs(ctx, r)
 	if err != nil {
 		return err
@@ -111,7 +126,10 @@ func (b *DockerFullBackend) Stop(ctx context.Context, r DeploymentReservation) e
 			return err
 		}
 	}
-	return b.ConfirmAbsent(ctx, r)
+	if err := b.ConfirmAbsent(ctx, r); err != nil {
+		return err
+	}
+	return b.endStopMaintenance(ctx, r)
 }
 
 func (b *DockerFullBackend) ConfirmAbsent(ctx context.Context, r DeploymentReservation) error {

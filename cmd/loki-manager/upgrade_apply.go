@@ -324,13 +324,14 @@ func updateInstalledToolsWith(ctx context.Context, store management.Store, catal
 		if err != nil {
 			return updated, err
 		}
-		if idle, ok := backend.(idleMaintenanceBackend); ok {
-			if err := idle.RequireIdle(ctx); err != nil {
+		if _, ok := backend.(idleMaintenanceBackend); ok {
+			if err := management.CheckMaintenanceIdle(ctx, backend); err != nil {
 				return updated, fmt.Errorf("active jobs block tool updates: %w", err)
 			}
 		}
 	}
 	if files {
+		store.MaintenanceBackend = backend
 		if err := store.UpdateTools(ctx, catalog, diagnostics); err != nil {
 			return updated, err
 		}
@@ -343,8 +344,8 @@ func updateInstalledToolsWith(ctx context.Context, store management.Store, catal
 	updated.Reconnect = updated.Reconnect || restart
 	if restart {
 		fmt.Fprintln(diagnostics, "Replacing running services with the updated tools...")
-		if idle, ok := backend.(idleMaintenanceBackend); ok {
-			if err := idle.RequireIdle(ctx); err != nil {
+		if _, ok := backend.(idleMaintenanceBackend); ok {
+			if err := management.CheckMaintenanceIdle(ctx, backend); err != nil {
 				return updated, fmt.Errorf("tools staged but new active jobs block service replacement; retry 'loki upgrade --tools-only': %w", err)
 			}
 		}

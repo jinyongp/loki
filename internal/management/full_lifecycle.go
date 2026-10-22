@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"loki/internal/fault"
-	"os"
-	"path/filepath"
 )
 
 type FullObservation struct {
@@ -33,26 +31,16 @@ type FullLifecycleReport struct {
 }
 
 func (s Store) deploymentLock() (func(), error) {
-	if err := s.ensure(); err != nil {
-		return nil, err
-	}
-	file, err := os.OpenFile(filepath.Join(s.Root, "deployment-mutation.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-	}
-	unlock, err := lockFile(file)
-	if err != nil {
-		file.Close()
-		return nil, fmt.Errorf("full lifecycle operation is already running: %w", err)
-	}
-	return func() { unlock(); _ = file.Close() }, nil
+	// Selection publication and service creation must share the same kernel
+	// lock. Separate locks allowed a stale start after a mutation's stop proof.
+	return s.Lock()
 }
 
 func (s Store) stopDeployment(ctx context.Context, backend FullBackend, reservation DeploymentReservation) error {
 	if err := backend.Stop(ctx, reservation); err != nil {
 		return err
 	}
-	return s.ReleaseDeployment(ctx, reservation.ID, backend)
+	return s.releaseDeploymentLocked(ctx, reservation.ID, backend)
 }
 
 // ReconcileFull keeps desired selection independent of actual services. Cached
@@ -84,7 +72,16 @@ func (s Store) ReconcileFull(ctx context.Context, backend FullBackend) (FullLife
 	digest := fullPlanDigest(topology.Resources.Plan)
 	var matching *DeploymentReservation
 	for _, reservation := range reservations {
-		if len(topology.Services) != 0 && matching == nil && reservation.PlanDigest == digest {
+		stopping := false
+		if current, ok := backend.(interface {
+			DeploymentStopping(DeploymentReservation) (bool, error)
+		}); ok {
+			stopping, err = current.DeploymentStopping(reservation)
+			if err != nil {
+				return result, err
+			}
+		}
+		if len(topology.Services) != 0 && matching == nil && reservation.PlanDigest == digest && !stopping {
 			copy := reservation
 			matching = &copy
 			continue
@@ -107,7 +104,7 @@ func (s Store) ReconcileFull(ctx context.Context, backend FullBackend) (FullLife
 			return result, nil
 		}
 	} else {
-		reservation, err := s.ReserveDeployment(topology.Resources.Plan)
+		reservation, err := s.reserveDeploymentLocked(topology.Resources.Plan)
 		if err != nil {
 			return result, err
 		}

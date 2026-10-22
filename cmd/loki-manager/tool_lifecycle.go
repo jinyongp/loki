@@ -37,8 +37,8 @@ func reconcileToolActivation(ctx context.Context, store management.Store, diagno
 	if err != nil {
 		return err
 	}
-	if idle, ok := backend.(idleMaintenanceBackend); ok {
-		if err := idle.RequireIdle(ctx); err != nil {
+	if _, ok := backend.(idleMaintenanceBackend); ok {
+		if err := management.CheckMaintenanceIdle(ctx, backend); err != nil {
 			return err
 		}
 	}
@@ -80,8 +80,8 @@ func uninstallTool(ctx context.Context, store management.Store, id tools.ID, dia
 		if err != nil {
 			return err
 		}
-		if idle, ok := backend.(idleMaintenanceBackend); ok {
-			if err := idle.RequireIdle(ctx); err != nil {
+		if _, ok := backend.(idleMaintenanceBackend); ok {
+			if err := management.CheckMaintenanceIdle(ctx, backend); err != nil {
 				return err
 			}
 		}

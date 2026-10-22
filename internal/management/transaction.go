@@ -295,6 +295,13 @@ func (s Store) applyCatalog(ctx context.Context, catalog tools.Catalog, selected
 	if err := validateComposition(candidate); err != nil {
 		return err
 	}
+	if changed, err := s.runningArtifactsChange(candidate); err != nil {
+		return err
+	} else if changed {
+		if err := s.pauseFullMutationLocked(ctx, false); err != nil {
+			return err
+		}
+	}
 	t := transaction{Schema: 1, ID: fmt.Sprintf("op-%d", time.Now().UnixNano()), Action: "install", Phase: tools.Prepared, Previous: state, Candidate: candidate}
 	if update {
 		t.Action = "update"

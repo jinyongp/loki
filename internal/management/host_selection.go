@@ -96,6 +96,15 @@ func (s Store) ForgetExecutionHost(preparation bool) error {
 }
 
 func RelaySelection(ctx context.Context, selected ExecutionSelection, args []string) (*exec.Cmd, error) {
+	if JobInterruptionRequested(ctx) {
+		present := false
+		for _, arg := range args {
+			present = present || arg == "--interrupt-active-jobs" || strings.HasPrefix(arg, "--interrupt-active-jobs=")
+		}
+		if !present {
+			args = append([]string{"--interrupt-active-jobs"}, args...)
+		}
+	}
 	if err := selected.Validate(); err != nil {
 		return nil, err
 	}

@@ -5,12 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"loki/internal/management"
 	"loki/internal/tools"
 )
 
 type idleMaintenanceBackend interface{ RequireIdle(context.Context) error }
+
+func interruptionArguments(args []string) ([]string, bool, error) {
+	result := make([]string, 0, len(args))
+	interrupt, seen := false, false
+	for _, arg := range args {
+		if arg == "--interrupt-active-jobs" || strings.HasPrefix(arg, "--interrupt-active-jobs=") {
+			if seen {
+				return nil, false, fmt.Errorf("--interrupt-active-jobs must appear once")
+			}
+			seen = true
+			switch arg {
+			case "--interrupt-active-jobs", "--interrupt-active-jobs=true":
+				interrupt = true
+			case "--interrupt-active-jobs=false":
+			default:
+				return nil, false, fmt.Errorf("invalid interruption choice")
+			}
+		} else {
+			result = append(result, arg)
+		}
+	}
+	return result, interrupt, nil
+}
 
 func runMaintenance(ctx context.Context, store management.Store, args []string, input io.Reader, out, diagnostics io.Writer) (retErr error) {
 	if len(args) == 0 {
@@ -86,11 +110,11 @@ func runMaintenance(ctx context.Context, store management.Store, args []string, 
 		if err != nil {
 			return err
 		}
-		idle, ok := backend.(idleMaintenanceBackend)
+		_, ok := backend.(idleMaintenanceBackend)
 		if !ok {
 			return fmt.Errorf("host does not provide safe maintenance readiness")
 		}
-		if err := idle.RequireIdle(ctx); err != nil {
+		if err := management.CheckMaintenanceIdle(ctx, backend); err != nil {
 			return err
 		}
 		data, ok = backend.(management.RestoreDataBackupBackend)

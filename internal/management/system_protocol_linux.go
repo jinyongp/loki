@@ -27,11 +27,19 @@ type systemRequest struct {
 // filesystem credentials and remote commands are not administrator operations.
 func ValidateSystemArguments(args []string) ([]string, bool, error) {
 	var clean []string
+	interruptionSeen := false
 	for _, arg := range args {
 		if len(arg) > 4096 || strings.ContainsAny(arg, "\x00\r\n") {
 			return nil, false, fmt.Errorf("invalid system request argument")
 		}
 		if arg == "--json" || arg == "--json=true" || arg == "--json=false" {
+			continue
+		}
+		if arg == "--interrupt-active-jobs" || strings.HasPrefix(arg, "--interrupt-active-jobs=") {
+			if interruptionSeen || arg != "--interrupt-active-jobs" && arg != "--interrupt-active-jobs=true" && arg != "--interrupt-active-jobs=false" {
+				return nil, false, fmt.Errorf("invalid explicit interruption choice")
+			}
+			interruptionSeen = true
 			continue
 		}
 		clean = append(clean, arg)

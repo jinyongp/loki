@@ -128,6 +128,11 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, 
 		}
 		fmt.Fprintf(&script, "if test -e '/loki-layout/%s'; then test -f '/loki-layout/%s'; test ! -L '/loki-layout/%s'; chown 0:10001 '/loki-layout/%s'; chmod %s '/loki-layout/%s'; fi\n", name, name, name, name, mode, name)
 	}
+	if _, exists := unique["/var/lib/loki/launcher"]; exists {
+		// Prepare the canonical journal before any launcher container exists,
+		// so partial service creation can still be stopped under its lock.
+		script.WriteString("test ! -L /var/lib/loki/launcher/journal\nif test -e /var/lib/loki/launcher/journal; then test -d /var/lib/loki/launcher/journal; test \"$(stat -c %u /var/lib/loki/launcher/journal)\" = 0; test \"$(stat -c %a /var/lib/loki/launcher/journal)\" = 700; else install -d -o 0 -g 0 -m 0700 /var/lib/loki/launcher/journal; /opt/loki/bin/loki host maintenance status --offline --launcher-layout /loki-layout/launcher.json --state-mount /var/lib/loki/launcher >/dev/null; fi\n")
+	}
 	if _, exists := unique["/run/loki/secrets"]; exists {
 		if !deploymentIDPattern.MatchString(deployment) {
 			return result, fmt.Errorf("secret preparation requires the original owned OCI reservation")

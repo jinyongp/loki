@@ -13,15 +13,72 @@ import (
 )
 
 type lifecycleBackend struct {
+	prepareHook   func() error
+	fenceError    error
 	startFailures int
 	stopError     error
 	prepared      []string
 	running       map[string]bool
 }
 
+func (b *lifecycleBackend) FenceJobs(context.Context, DeploymentReservation) error {
+	return b.fenceError
+}
+
 func (b *lifecycleBackend) Prepare(_ context.Context, reservation DeploymentReservation, _ FullTopology, _ FullLayouts) error {
+	if b.prepareHook != nil {
+		if err := b.prepareHook(); err != nil {
+			return err
+		}
+	}
 	b.prepared = append(b.prepared, reservation.ID)
 	return nil
+}
+
+func TestFullLifecycleSerializesSelectionPublication(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux full lifecycle")
+	}
+	store := lifecycleStore(t)
+	backend := &lifecycleBackend{running: map[string]bool{}}
+	store.MaintenanceBackend = backend
+	backend.prepareHook = func() error {
+		if err := store.SetEnabled("workspace", false, nil); err == nil {
+			return errors.New("selection changed while a stale service start owned the host")
+		}
+		return nil
+	}
+	if _, err := store.ReconcileFull(t.Context(), backend); err != nil {
+		t.Fatal(err)
+	}
+	state, err := store.Load()
+	if err != nil || len(state.Config.Tools) == 0 || !state.Config.Tools[0].Enabled {
+		t.Fatal("service preparation published a different selection", err)
+	}
+}
+
+func TestFullSelectionBusyFencePreservesActivation(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux full lifecycle")
+	}
+	store := lifecycleStore(t)
+	backend := &lifecycleBackend{running: map[string]bool{}}
+	store.MaintenanceBackend = backend
+	if _, err := store.ReconcileFull(t.Context(), backend); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(store.ActivationPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend.fenceError = errors.New("active Job rejects mutation")
+	if err := store.SetEnabled("workspace", false, nil); err == nil {
+		t.Fatal("busy fence permitted activation publication")
+	}
+	after, err := os.ReadFile(store.ActivationPath())
+	if err != nil || string(before) != string(after) {
+		t.Fatal("busy rejection changed activation", err)
+	}
 }
 func (b *lifecycleBackend) Start(_ context.Context, reservation DeploymentReservation) error {
 	if b.startFailures > 0 {
@@ -125,6 +182,7 @@ func TestFullLifecycleFailedShutdownKeepsProgramsProtected(t *testing.T) {
 	if _, err := store.ReconcileFull(t.Context(), backend); err != nil {
 		t.Fatal(err)
 	}
+	store.MaintenanceBackend = backend
 	if err := store.SetEnabled("workspace", false, nil); err != nil {
 		t.Fatal(err)
 	}

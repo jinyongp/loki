@@ -205,7 +205,7 @@ func runGitHubSetupRelay(ctx context.Context, store management.Store, input io.R
 	}
 	if setup.Action == "begin" {
 		if setup.PersonalProjects && !slices.Contains(choice.Capabilities, "personal-projects") {
-			if err := store.SetEnabled("github", true, append(slices.Clone(choice.Capabilities), "personal-projects")); err != nil {
+			if err := store.SetEnabledContext(ctx, "github", true, append(slices.Clone(choice.Capabilities), "personal-projects"), true); err != nil {
 				return err
 			}
 		}

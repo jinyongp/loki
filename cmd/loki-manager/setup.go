@@ -145,7 +145,7 @@ func runSetup(ctx context.Context, store management.Store, options setupOptions,
 		}
 	}
 	for _, id := range options.selected {
-		if err := store.SetEnabled(id, true, nil); err != nil {
+		if err := store.SetEnabledContext(ctx, id, true, nil, true); err != nil {
 			return err
 		}
 	}
