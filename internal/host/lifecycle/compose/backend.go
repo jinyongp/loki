@@ -36,6 +36,7 @@ const (
 )
 
 var persistentVolumes = []string{
+	"application-state",
 	"launcher-state",
 	"runtime-state",
 	"runner-state",
@@ -52,6 +53,31 @@ type Runner interface {
 type ExecRunner struct {
 	Executable string
 	Prefix     []string
+}
+
+type PrivateRunner interface {
+	RunPrivate(context.Context, []string, io.Reader, ...string) ([]byte, error)
+}
+
+// Private helpers return bounded metadata on stdout. Never mix stderr or
+// command diagnostics with private input or a structured completion receipt.
+func (r ExecRunner) RunPrivate(ctx context.Context, env []string, input io.Reader, args ...string) ([]byte, error) {
+	executable := strings.TrimSpace(r.Executable)
+	if executable == "" {
+		executable = "docker"
+	}
+	cmd := exec.CommandContext(ctx, executable, append(append([]string(nil), r.Prefix...), args...)...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdin = input
+	var output commandOutput
+	cmd.Stdout = &output
+	cmd.Stderr = io.Discard
+	if err := cmd.Run(); err != nil {
+		clear(output.head)
+		clear(output.tail)
+		return nil, errors.New("private host helper failed")
+	}
+	return append([]byte(nil), output.head...), nil
 }
 
 func (r ExecRunner) Run(ctx context.Context, env []string, args ...string) ([]byte, error) {
@@ -92,14 +118,16 @@ type Backend struct {
 }
 
 type runtimeState struct {
-	Version      int      `json:"version"`
-	GenerationID string   `json:"generation_id"`
-	CoreImage    string   `json:"core_image"`
-	BrowserImage string   `json:"browser_image,omitempty"`
-	Workspace    string   `json:"workspace"`
-	MCPPort      int      `json:"mcp_port,omitempty"`
-	Profiles     []string `json:"profiles,omitempty"`
-	IngressHosts []string `json:"ingress_hosts,omitempty"`
+	Version                int      `json:"version"`
+	GenerationID           string   `json:"generation_id"`
+	CoreImage              string   `json:"core_image"`
+	BrowserImage           string   `json:"browser_image,omitempty"`
+	Workspace              string   `json:"workspace"`
+	MCPPort                int      `json:"mcp_port,omitempty"`
+	Profiles               []string `json:"profiles,omitempty"`
+	IngressHosts           []string `json:"ingress_hosts,omitempty"`
+	ApplicationStateSource string   `json:"application_state_source,omitempty"`
+	ApplicationRuntimeRoot string   `json:"application_runtime_root,omitempty"`
 }
 
 func (s runtimeState) effectiveMCPPort() int {
@@ -476,6 +504,12 @@ func (b *Backend) Restart(ctx context.Context) error {
 	if !found {
 		return errors.New("compose lifecycle runtime is not activated")
 	}
+	if err = b.prepareApplicationValues(ctx, &state); err != nil {
+		return err
+	}
+	if err = b.saveRuntime(state); err != nil {
+		return err
+	}
 	b.report("restart", "Starting required services; missing container images will be downloaded if needed...")
 	_, err = b.compose(ctx, state, "up", "-d", "--remove-orphans")
 	return err
@@ -779,6 +813,14 @@ func (s runtimeState) validate() error {
 	if s.BrowserImage != "" && !validImageRef(s.BrowserImage) {
 		return errors.New("compose lifecycle browser image is invalid")
 	}
+	for _, path := range []string{s.ApplicationStateSource, s.ApplicationRuntimeRoot} {
+		if path != "" && (!filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || strings.ContainsAny(path, "\x00\r\n")) {
+			return errors.New("application role binding is invalid")
+		}
+	}
+	if (s.ApplicationStateSource == "") != (s.ApplicationRuntimeRoot == "") {
+		return errors.New("application role binding is incomplete")
+	}
 	if s.MCPPort != 0 && (s.MCPPort < 1024 || s.MCPPort > 65535) {
 		return errors.New("compose lifecycle MCP port is invalid")
 	}
@@ -892,6 +934,8 @@ func (b *Backend) composeEnvironment(
 	ingressPath string,
 ) ([]string, error) {
 	env := []string{
+		"LOKI_APP_STATE_ROOT=" + safelyUnprepared(state.ApplicationStateSource, "data"),
+		"LOKI_APP_RUNTIME_ROOT=" + safelyUnprepared(state.ApplicationRuntimeRoot, "runtime"),
 		"LOKI_IMAGE=" + state.CoreImage,
 		"LOKI_JOB_IMAGE=" + state.CoreImage,
 		"LOKI_WORKSPACE=" + state.Workspace,

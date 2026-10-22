@@ -159,7 +159,7 @@ func (s Store) FullTopology() (FullTopology, error) {
 			}
 			for _, peer := range service.Requires {
 				if peer == "secrets" {
-					entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "metadata"), Target: "/run/loki/secrets/metadata", ReadOnly: true})
+					entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "secrets", "metadata"), Target: "/run/loki/secrets/metadata", ReadOnly: true})
 					continue
 				}
 				if peer == "git-signing" {
@@ -198,11 +198,11 @@ func (s Store) FullTopology() (FullTopology, error) {
 			entry.Mounts = append(entry.Mounts, mount)
 			entry.Mounts = append(entry.Mounts, socket("launcher", false))
 			if public["secrets"] {
-				entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "jobs"), Target: "/run/loki/secrets/jobs", ReadOnly: true})
+				entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "secrets", "jobs"), Target: "/run/loki/secrets/jobs", ReadOnly: true})
 			}
 		case "secrets":
 			needed["secrets"] = true
-			entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime"), Target: "/run/loki/secrets"})
+			entry.Mounts = append(entry.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", result.Owner+"-secret-runtime", "secrets"), Target: "/run/loki/secrets"})
 		case "executor":
 			needed["execution"] = true
 			entry.Mounts = append(entry.Mounts, socket("executor", false), socket("launcher", true))

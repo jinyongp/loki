@@ -1,6 +1,7 @@
 package packaging
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,28 +25,59 @@ type composeSource struct {
 }
 
 type composeService struct {
-	Image       string   `yaml:"image"`
-	Command     []string `yaml:"command"`
-	User        string   `yaml:"user"`
-	Networks    []string `yaml:"networks"`
-	Ports       []string `yaml:"ports"`
-	Volumes     []string `yaml:"volumes"`
-	Secrets     []any    `yaml:"secrets"`
-	Configs     []any    `yaml:"configs"`
-	Tmpfs       []string `yaml:"tmpfs"`
-	ReadOnly    bool     `yaml:"read_only"`
-	CapDrop     []string `yaml:"cap_drop"`
-	CapAdd      []string `yaml:"cap_add"`
-	GroupAdd    []string `yaml:"group_add"`
-	Security    []string `yaml:"security_opt"`
-	NetworkMode string   `yaml:"network_mode"`
-	Profiles    []string `yaml:"profiles"`
+	Image       string         `yaml:"image"`
+	Command     []string       `yaml:"command"`
+	User        string         `yaml:"user"`
+	Networks    []string       `yaml:"networks"`
+	Ports       []string       `yaml:"ports"`
+	Volumes     composeVolumes `yaml:"volumes"`
+	Secrets     []any          `yaml:"secrets"`
+	Configs     []any          `yaml:"configs"`
+	Tmpfs       []string       `yaml:"tmpfs"`
+	ReadOnly    bool           `yaml:"read_only"`
+	CapDrop     []string       `yaml:"cap_drop"`
+	CapAdd      []string       `yaml:"cap_add"`
+	GroupAdd    []string       `yaml:"group_add"`
+	Security    []string       `yaml:"security_opt"`
+	NetworkMode string         `yaml:"network_mode"`
+	Profiles    []string       `yaml:"profiles"`
 	Healthcheck struct {
 		Test []string `yaml:"test"`
 	} `yaml:"healthcheck"`
 	DependsOn map[string]struct {
 		Condition string `yaml:"condition"`
 	} `yaml:"depends_on"`
+}
+
+// Preserve mount checks for both Compose forms, including strict host binds.
+type composeVolumes []string
+
+func (v *composeVolumes) UnmarshalYAML(node *yaml.Node) error {
+	for _, entry := range node.Content {
+		if entry.Kind == yaml.ScalarNode {
+			*v = append(*v, entry.Value)
+			continue
+		}
+		var mount struct {
+			Type, Source, Target string
+			ReadOnly             bool `yaml:"read_only"`
+			Bind                 *struct {
+				Create *bool `yaml:"create_host_path"`
+			} `yaml:"bind"`
+		}
+		if err := entry.Decode(&mount); err != nil {
+			return err
+		}
+		if mount.Type != "bind" || mount.Source == "" || mount.Target == "" || mount.Bind == nil || mount.Bind.Create == nil || *mount.Bind.Create {
+			return fmt.Errorf("long bind mount must name an existing host source")
+		}
+		text := mount.Source + ":" + mount.Target
+		if mount.ReadOnly {
+			text += ":ro"
+		}
+		*v = append(*v, text)
+	}
+	return nil
 }
 
 func TestComposeDefinesIsolatedCoreTopology(t *testing.T) {

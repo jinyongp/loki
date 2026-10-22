@@ -119,4 +119,22 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if unix.Lstat(first.HostGeneration, &st) != nil || st.Uid != 0 {
 		t.Fatal("foreign state ownership changed")
 	}
+	bad := options
+	bad.StateRoot = filepath.Join(root, "foreign-state")
+	bad.IdentityFile = filepath.Join(root, "must-not-create-identity.json")
+	if err := os.Mkdir(bad.StateRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(bad.StateRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bad.StateRoot, "preserve"), []byte("foreign state"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareState(bad); err == nil {
+		t.Fatal("foreign nonempty public state adopted")
+	}
+	if _, err := os.Lstat(bad.IdentityFile); !os.IsNotExist(err) {
+		t.Fatal("invalid state created a deployment identity", err)
+	}
 }

@@ -24,6 +24,10 @@ func (r progressCheckingRunner) Run(ctx context.Context, env []string, args ...s
 		if r.latest.Phase != "snapshot-stop" {
 			r.t.Error("service shutdown began without progress")
 		}
+	case len(args) > 0 && args[0] == "run" && strings.Contains(args[len(args)-1], "host prepare-secrets"):
+		if r.latest.Phase != "application-prepare" {
+			r.t.Error("application preparation began without progress")
+		}
 	case len(args) > 0 && args[0] == "run":
 		if r.latest.Phase != "snapshot-volume" {
 			r.t.Error("volume backup began without progress")

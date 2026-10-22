@@ -98,11 +98,12 @@ func (b *DockerFullBackend) ownedVolume(ctx context.Context, mount FullMount) er
 		Driver     string
 		Mountpoint string
 		Labels     map[string]string
+		Options    map[string]string
 	}
 	if err := json.Unmarshal(data, &volume); err != nil {
 		return err
 	}
-	if volume.Name != mount.Source || volume.Driver != "local" || volume.Labels[fullOwnerLabel] != owner || volume.Labels[fullResourceLabel] != mount.Source || !filepath.IsAbs(volume.Mountpoint) {
+	if volume.Name != mount.Source || volume.Driver != "local" || len(volume.Options) != 0 || volume.Labels[fullOwnerLabel] != owner || volume.Labels[fullResourceLabel] != mount.Source || !filepath.IsAbs(volume.Mountpoint) || volume.Mountpoint == "/" {
 		return fmt.Errorf("existing volume is foreign or has an unsupported driver; preserving it")
 	}
 	return nil

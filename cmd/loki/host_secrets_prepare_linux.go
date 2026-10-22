@@ -45,13 +45,38 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	github := flags.String("github-config", "", "public GitHub configuration fragment")
 	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "effective execution contract")
 	catalog := flags.String("catalog", "/etc/loki-go/application-resources.json", "host resource catalog")
+	serviceCatalog := flags.String("service-catalog", "", "catalog path inside role namespaces; defaults to catalog")
+	deploymentOwner := flags.String("owner", "", "explicit owned launcher namespace; defaults to identity path binding")
 	unitDirectory := flags.String("unit-directory", "/etc/systemd/system/loki-go-secrets.service.d", "native generation binding drop-in directory; empty disables")
 	overlayDirectory := flags.String("overlay-directory", "/etc/loki-go", "native role layouts to bind to this generation; empty disables")
+	roleSource := flags.String("role-source", "", "immutable role layout source; defaults to overlay directory")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
 		return 2
+	}
+	if *serviceCatalog == "" {
+		*serviceCatalog = *catalog
+	}
+	if *roleSource == "" {
+		*roleSource = *overlayDirectory
+	}
+	for _, path := range []string{*overlayDirectory, *roleSource} {
+		if path != "" && (!filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || strings.ContainsAny(path, "\x00\r\n")) {
+			return 2
+		}
+	}
+	if !filepath.IsAbs(*serviceCatalog) || filepath.Clean(*serviceCatalog) != *serviceCatalog || strings.ContainsAny(*serviceCatalog, "\x00\r\n") {
+		return 2
+	}
+	if *deploymentOwner != "" {
+		if len(*deploymentOwner) != 27 || !strings.HasPrefix(*deploymentOwner, "loki-tools-") || *deploymentOwner != strings.ToLower(*deploymentOwner) {
+			return 2
+		}
+		if _, err := hex.DecodeString(strings.TrimPrefix(*deploymentOwner, "loki-tools-")); err != nil {
+			return 2
+		}
 	}
 	for _, id := range []uint64{*uid, *gid, *agent, *metadataGroup} {
 		if id == 0 || id > uint64(^uint32(0)) {
@@ -102,17 +127,36 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if *overlayDirectory != "" {
+		catalogBody, _ := json.Marshal(struct {
+			Resources any `json:"resources"`
+		}{Resources: prepared.Layout.Resources})
+		if prepared.Layout.Resources == nil {
+			catalogBody = []byte(`{"resources":[]}`)
+		}
+		catalogFile := filepath.Join(*overlayDirectory, "application-resources.json")
+		if safeio.PublishPrivate(catalogFile, catalogBody, true) != nil || os.Chown(catalogFile, 0, int(*metadataGroup)) != nil || os.Chmod(catalogFile, 0640) != nil {
+			fmt.Fprintln(stderr, "role resource catalog could not be prepared")
+			return 1
+		}
 		owner := sha256.Sum256([]byte(filepath.Clean(*identity)))
-		common := map[string]any{"ApplicationCatalog": *catalog}
+		ownerName := "loki-tools-" + hex.EncodeToString(owner[:8])
+		if *deploymentOwner != "" {
+			ownerName = *deploymentOwner
+		}
+		jobDeployment := prepared.Layout.JobDeploymentID
+		if jobDeployment == "" {
+			jobDeployment = prepared.Identity.DeploymentID
+		}
+		common := map[string]any{"ApplicationCatalog": *serviceCatalog}
 		changes := map[string]map[string]any{
 			"mcp.json":      {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationSocket": prepared.Layout.MetadataSocket, "ApplicationUID": prepared.Identity.UID},
 			"runtime.json":  {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationValuesExternal": true},
-			"launcher.json": {"ApplicationCatalog": common["ApplicationCatalog"], "SecretSocket": prepared.Layout.Socket, "SecretBrokerUID": prepared.Identity.UID, "SecretPrincipal": "agent", "DeploymentID": prepared.Identity.DeploymentID, "DeploymentOwner": "loki-tools-" + hex.EncodeToString(owner[:8])},
+			"launcher.json": {"ApplicationCatalog": common["ApplicationCatalog"], "SecretSocket": prepared.Layout.Socket, "SecretBrokerUID": prepared.Identity.UID, "SecretPrincipal": "agent", "DeploymentID": jobDeployment, "DeploymentOwner": ownerName},
 		}
 		for name, fields := range changes {
 			path := filepath.Join(*overlayDirectory, name)
 			var layout map[string]any
-			if daemon.ReadJSON(path, &layout) != nil {
+			if daemon.ReadJSON(filepath.Join(*roleSource, name), &layout) != nil {
 				fmt.Fprintln(stderr, "native role layout is unavailable")
 				return 1
 			}

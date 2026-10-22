@@ -2,8 +2,10 @@ package compose
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,10 +23,11 @@ type runnerCall struct {
 }
 
 type fakeRunner struct {
-	mu      sync.Mutex
-	calls   []runnerCall
-	outputs map[string][]byte
-	errs    map[string]error
+	mu                sync.Mutex
+	calls             []runnerCall
+	outputs           map[string][]byte
+	errs              map[string]error
+	applicationVolume []byte
 }
 
 func (r *fakeRunner) Run(_ context.Context, env []string, args ...string) ([]byte, error) {
@@ -37,7 +40,16 @@ func (r *fakeRunner) Run(_ context.Context, env []string, args ...string) ([]byt
 	if err := r.errs[key]; err != nil {
 		return nil, err
 	}
-	return append([]byte(nil), r.outputs[key]...), nil
+	if value, exists := r.outputs[key]; exists {
+		return append([]byte(nil), value...), nil
+	}
+	if slices.Equal(args, []string{"volume", "inspect", "loki_application-state"}) {
+		return append([]byte(nil), r.applicationVolume...), nil
+	}
+	if len(args) > 0 && args[0] == "run" && strings.Contains(args[len(args)-1], "host prepare-secrets") {
+		return []byte(`{"prepared":true,"broker_uid":10006,"broker_gid":10006,"policy":"4444444444444444444444444444444444444444444444444444444444444444","deployment_id":"deployment-11111111111111111111111111111111","runner_id":"33333333-3333-4333-8333-333333333333","active_generation":"22222222222222222222222222222222"}`), nil
+	}
+	return nil, nil
 }
 
 func (r *fakeRunner) snapshot() []runnerCall {
@@ -95,6 +107,9 @@ func composeBackendFixture(t *testing.T) (*Backend, *fakeRunner, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	owner := fmt.Sprintf("loki-tools-%x", sha256.Sum256([]byte(filepath.Clean(root))))[:27]
+	runner.applicationVolume = []byte(fmt.Sprintf(`[{"Name":"loki_application-state","Driver":"local","Mountpoint":"/var/lib/docker/volumes/loki_application-state/_data","Labels":{"io.loki.application.owner":%q}}]`, owner))
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Join("/dev/shm", owner+"-compose-secrets")) })
 	workspace := filepath.Join(t.TempDir(), "workspace")
 	if err = os.Mkdir(workspace, 0700); err != nil {
 		t.Fatal(err)

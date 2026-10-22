@@ -146,6 +146,7 @@ services:
       LOKI_SIGNING_GIT_CONFIG_FILE: "${LOKI_SIGNING_GIT_CONFIG_FILE:-}"
       LOKI_SIGNING_ALLOWED_SIGNERS_FILE: "${LOKI_SIGNING_ALLOWED_SIGNERS_FILE:-}"
     user: "0:0"
+    cap_add: [DAC_OVERRIDE]
     group_add: ["10001"]
     network_mode: none
     depends_on:
@@ -155,6 +156,26 @@ services:
       - toolchain-store:/var/lib/loki/toolchains
       - launcher-socket:/run/loki/launcher
       - /run/docker.sock:/run/docker.sock
+      - type: bind
+        source: ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}
+        target: ${LOKI_WORKSPACE:?set LOKI_WORKSPACE to an absolute host directory}
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/jobs
+        target: /run/loki/secrets/jobs
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/launcher.json
+        target: /etc/loki/launcher.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/application-resources.json
+        target: /etc/loki/application-resources.json
+        read_only: true
+        bind: {create_host_path: false}
     configs:
       - source: github_config
         target: /etc/loki/github.toml
@@ -211,6 +232,16 @@ services:
       - user-skills:/var/lib/loki/runner/agents
       - runner-cache:/var/cache/loki
       - sockets:/run/loki
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/runtime.json
+        target: /etc/loki/runtime.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/application-resources.json
+        target: /etc/loki/application-resources.json
+        read_only: true
+        bind: {create_host_path: false}
     configs:
       - source: github_config
         target: /etc/loki/github.toml
@@ -231,6 +262,54 @@ services:
     mem_limit: 1g
     pids_limit: 512
 
+  application-values:
+    <<: *loki-service
+    entrypoint: [/opt/loki/bin/loki-secret-broker]
+    command: [--layout, /run/loki/secrets/layout.json]
+    user: "10006:10006"
+    group_add: ["10001"]
+    network_mode: none
+    volumes:
+      - type: bind
+        source: ${LOKI_APP_STATE_ROOT:-/dev/shm/loki-app-unprepared/data}
+        target: /var/lib/loki/secrets
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/layout.json
+        target: /run/loki/secrets/layout.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/private
+        target: /run/loki/secrets/private
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/jobs
+        target: /run/loki/secrets/jobs
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/admin
+        target: /run/loki/secrets/admin
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/metadata
+        target: /run/loki/secrets/metadata
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/inbox
+        target: /run/loki/secrets/inbox
+        bind: {create_host_path: false}
+    tmpfs:
+      - /tmp:uid=10006,gid=10006,mode=0700
+    healthcheck:
+      test: [CMD, /opt/loki/bin/loki, full-probe, --role, application-listeners, --socket, /run/loki/secrets, --expected-uid, "10006"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    pids_limit: 128
+
   mcp:
     <<: *loki-service
     command: [mcp, --config, /etc/loki/loki.toml, --github-config, /etc/loki/github.toml, --layout, /etc/loki/mcp.json, --token-file, /run/secrets/mcp_token]
@@ -248,6 +327,21 @@ services:
       - sockets:/run/loki
       - signing-socket:/run/loki/signing
       - executor-socket:/run/loki/executor
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/metadata
+        target: /run/loki/secrets/metadata
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/mcp.json
+        target: /etc/loki/mcp.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/application-resources.json
+        target: /etc/loki/application-resources.json
+        read_only: true
+        bind: {create_host_path: false}
     configs:
       - source: github_config
         target: /etc/loki/github.toml

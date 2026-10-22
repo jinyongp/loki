@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	appnetwork "loki/internal/app/network"
@@ -68,6 +69,24 @@ func runFullProbe(args []string, stderr io.Writer) int {
 	defer cancel()
 	err := func() error {
 		switch *role {
+		case "application-listeners":
+			if *uid <= 0 || *uid > 4294967295 || !filepath.IsAbs(*socket) || filepath.Clean(*socket) != *socket {
+				return errors.New("application listener probe requires its root and dedicated UID")
+			}
+			var pid int32
+			for _, name := range []string{"jobs", "admin", "metadata"} {
+				connection, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", filepath.Join(*socket, name, "control.sock"))
+				if err != nil {
+					return err
+				}
+				peer, err := rpc.PeerCredentials(connection.(*net.UnixConn))
+				connection.Close()
+				if err != nil || peer.UID != uint32(*uid) || peer.PID <= 0 || pid != 0 && peer.PID != pid {
+					return errors.New("application listeners do not belong to one live broker")
+				}
+				pid = peer.PID
+			}
+			return nil
 		case "application-values":
 			if *uid <= 0 || *uid > 4294967295 || *socket == "" {
 				return errors.New("application probe requires its dedicated UID and socket")

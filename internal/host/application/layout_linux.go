@@ -115,11 +115,6 @@ func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 			return Preparation{}, invalid
 		}
 	}
-	identity, err := loadIdentity(options)
-	if err != nil {
-		return Preparation{}, err
-	}
-	layout.DeploymentID, layout.RunnerID = identity.DeploymentID, identity.RunnerID
 	if err := ownedDirectory(options.StateRoot, 0, 0, 0700, false); err != nil {
 		return Preparation{}, err
 	}
@@ -127,6 +122,11 @@ func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 	if err := ownedDirectory(parent, 0, 0, 0700, false); err != nil {
 		return Preparation{}, err
 	}
+	identity, err := loadIdentity(options)
+	if err != nil {
+		return Preparation{}, err
+	}
+	layout.DeploymentID, layout.RunnerID = identity.DeploymentID, identity.RunnerID
 	generation := filepath.Join(parent, identity.ActiveGeneration)
 	if err := ownedDirectory(generation, options.UID, options.GID, 0700, false); err != nil {
 		return Preparation{}, err
@@ -234,7 +234,7 @@ func ownedDirectory(path string, uid, gid uint32, mode uint32, tmpfs bool) error
 		}
 	}
 	if !created && (st.Uid != uid || st.Gid != gid || st.Mode&07777 != mode) {
-		if st.Uid != 0 || st.Gid != 0 || st.Mode&07777 != mode && st.Mode&07777 != 0700 {
+		if st.Uid != 0 || st.Gid != 0 || st.Mode&07777 != mode && st.Mode&07777 != 0700 && st.Mode&07777 != 0755 {
 			return invalid
 		}
 		entries, readErr := file.ReadDir(1)

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -208,7 +209,16 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 		if service.Name != "secrets" {
 			continue
 		}
-		runtimeRoot := filepath.Join("/dev/shm", t.Owner+"-secret-runtime")
+		ancestor := filepath.Join("/dev/shm", t.Owner+"-secret-runtime")
+		if err := os.Mkdir(ancestor, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		var owner, st unix.Stat_t
+		var fs unix.Statfs_t
+		if unix.Lstat(b.Store.Root, &owner) != nil || unix.Lstat(ancestor, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFDIR || st.Mode&07777 != 0700 || st.Uid != owner.Uid || unix.Statfs(ancestor, &fs) != nil || fs.Type != unix.TMPFS_MAGIC {
+			return fmt.Errorf("application runtime ancestor is not private host-owned tmpfs")
+		}
+		runtimeRoot := filepath.Join(ancestor, "secrets")
 		if err := os.Mkdir(runtimeRoot, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
@@ -409,7 +419,7 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 			spec.Mounts[j] = FullMount{Kind: "bind", Source: filepath.Join(hostPath, "generations", prepared.Generation), Target: mount.Target}
 			spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join(hostPath, "secrets-admin.json"), Target: "/etc/loki/secret-admin.json", ReadOnly: true})
 		}
-		spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", t.Owner+"-secret-runtime", "layout.json"), Target: "/run/loki/secrets/layout.json", ReadOnly: true})
+		spec.Mounts = append(spec.Mounts, FullMount{Kind: "bind", Source: filepath.Join("/dev/shm", t.Owner+"-secret-runtime", "secrets", "layout.json"), Target: "/run/loki/secrets/layout.json", ReadOnly: true})
 	}
 	if err := atomicJSON(filepath.Join(directory, "services.json"), record); err != nil {
 		return err
