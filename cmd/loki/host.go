@@ -86,7 +86,7 @@ func activeJobsFromLauncherLayout(ctx context.Context, layout hostLauncherLayout
 	}
 	records, err := jobs.ReadJournalSnapshot(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{
 		MaxRecords:     layout.MaxJobs,
-		MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
+		MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes),
 		MaxOutputBytes: layout.MaxOutputBytes,
 		Retention:      time.Duration(layout.ResultRetentionSeconds) * time.Second,
 	})

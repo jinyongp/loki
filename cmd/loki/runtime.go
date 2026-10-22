@@ -19,7 +19,8 @@ import (
 
 type runtimeLayout struct {
 	appruntime.RuntimeOptions
-	ExecutionContract string
+	ExecutionContract  string
+	ApplicationCatalog string
 }
 
 func runRuntime(args []string, stderr io.Writer) int {
@@ -59,7 +60,7 @@ func runRuntime(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid runtime execution contract:", err)
 		return 2
 	}
-	generation, err := hostpolicy.Compile(configuration, contract)
+	generation, _, err := hostpolicy.CompileApplicationFile(configuration, contract, layout.ApplicationCatalog)
 	if err != nil {
 		fmt.Fprintln(stderr, "invalid runtime effective policy:", err)
 		return 2

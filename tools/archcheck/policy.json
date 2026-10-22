@@ -1,5 +1,9 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/host/policy","to":"loki/internal/daemon"},
+    {"from":"loki/cmd/launcher","to":"loki/internal/control/policy"},
+    {"from":"loki/cmd/launcher","to":"loki/internal/platform/repository"},
+    {"from":"loki/internal/app/secretbroker","to":"loki/internal/platform/safeio"},
     {"from":"loki/cmd/loki","to":"loki/internal/control/policy"},
     {"from":"loki/cmd/loki","to":"loki/internal/platform/safeio"},
     {"from":"loki/cmd/loki","to":"loki/internal/control/appvalues"},

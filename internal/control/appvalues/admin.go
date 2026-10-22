@@ -4,7 +4,7 @@ package appvalues
 // bounded frame and cannot be represented in this administrative request.
 type AdminRequest struct {
 	Action      string   `json:"action"`
-	Resource    string   `json:"resource"`
+	Resource    string   `json:"resource,omitempty"`
 	Environment string   `json:"env,omitempty"`
 	Principal   string   `json:"principal,omitempty"`
 	Variables   []string `json:"variables,omitempty"`
@@ -14,4 +14,19 @@ type AdminRequest struct {
 	Name        string   `json:"name,omitempty"`
 	Empty       bool     `json:"empty,omitempty"`
 	Replace     bool     `json:"replace,omitempty"`
+}
+
+// InputLimit describes only the private byte frame, never a public JSON value.
+func (r AdminRequest) InputLimit() int {
+	switch r.Action {
+	case "stage":
+		return 500000
+	case "set_secret":
+		if !r.Empty {
+			return 65536
+		}
+	case "protection_init", "protection_unlock":
+		return 65536
+	}
+	return 0
 }

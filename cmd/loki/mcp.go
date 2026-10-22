@@ -21,6 +21,7 @@ import (
 	appruntime "loki/internal/app/runtime"
 	"loki/internal/auth"
 	"loki/internal/config"
+	"loki/internal/control/appvalues"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
 	cloudflareaccess "loki/internal/integrations/access/cloudflare"
@@ -32,6 +33,9 @@ import (
 )
 
 type mcpLayout struct {
+	ApplicationCatalog                                                    string
+	ApplicationSocket                                                     string
+	ApplicationUID                                                        *uint32
 	EndpointSocket                                                        string
 	Tools                                                                 []string
 	BrowserProtocol                                                       string
@@ -52,7 +56,11 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	if err != nil {
 		return mcpapp.MCPOptions{}, err
 	}
-	needsRuntime := selected["secrets"] || selected["github"] || selected["coordination"] || selected["execution"] || selected["sharing"]
+	hasApplications := l.ApplicationSocket != "" || l.ApplicationUID != nil
+	if hasApplications && (!filepath.IsAbs(l.ApplicationSocket) || filepath.Clean(l.ApplicationSocket) != l.ApplicationSocket || l.ApplicationUID == nil || *l.ApplicationUID == 0 || l.ApplicationCatalog == "") {
+		return mcpapp.MCPOptions{}, errors.New("application metadata peer requires its dedicated non-root UID and host catalog")
+	}
+	needsRuntime := selected["secrets"] && !hasApplications || selected["github"] || selected["coordination"] || selected["execution"] || selected["sharing"]
 	needsPorts := selected["execution"] || selected["sharing"]
 	for _, peer := range []struct {
 		socket   string
@@ -109,6 +117,9 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 	}
 	if l.RuntimeSocket != "" {
 		options.Runtime = rpc.Client{Socket: l.RuntimeSocket, ExpectedUID: l.RuntimeUID}
+	}
+	if hasApplications {
+		options.ApplicationSecrets = rpc.Client{Socket: l.ApplicationSocket, ExpectedUID: l.ApplicationUID, Limits: rpc.Limits{RequestBytes: 128 << 10, ResponseBytes: 128 << 10, Timeout: 30 * time.Second}}
 	}
 	if l.PortGuardSocket != "" {
 		options.PortGuard = rpc.Client{Socket: l.PortGuardSocket, ExpectedUID: l.PortGuardUID}
@@ -188,7 +199,11 @@ func (l mcpLayout) options(token string) (mcpapp.MCPOptions, error) {
 			if _, err := gate.Selection(module); err != nil {
 				return err
 			}
-			if err := readiness.authorize(ctx, module, options.Runtime, executor); err != nil {
+			if module == "secrets" && options.ApplicationSecrets != nil {
+				if _, err := options.ApplicationSecrets.Call(ctx, appvalues.RPCRequest{Operation: "inspect", Request: appvalues.Request{Action: "resources"}}); err != nil {
+					return errors.New("application metadata service is unavailable; inspect secret protection on its execution host")
+				}
+			} else if err := readiness.authorize(ctx, module, options.Runtime, executor); err != nil {
 				return err
 			}
 			native := ""
@@ -297,7 +312,7 @@ func runMCP(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid MCP execution contract")
 		return 2
 	}
-	options.Policy, err = hostpolicy.Compile(c, contract)
+	options.Policy, _, err = hostpolicy.CompileApplicationFile(c, contract, layout.ApplicationCatalog)
 	if err != nil {
 		fmt.Fprintln(stderr, "invalid MCP effective policy")
 		return 2

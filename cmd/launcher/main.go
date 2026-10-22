@@ -14,8 +14,10 @@ import (
 	"time"
 
 	applauncher "loki/internal/app/launcher"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	hostpolicy "loki/internal/host/policy"
+	"loki/internal/platform/repository"
 	"loki/internal/platform/sandbox"
 	"loki/modules/execution/jobs"
 	"loki/modules/execution/toolchains"
@@ -29,6 +31,11 @@ const (
 )
 
 type launcherLayout struct {
+	ApplicationCatalog            string
+	ApplicationResources          []controlpolicy.ApplicationResource
+	SecretSocket                  string
+	SecretBrokerUID               uint32
+	SecretPrincipal               string
 	Volumes                       []sandbox.VolumeBinding
 	DeploymentOwner, DeploymentID string
 	Socket                        string
@@ -138,7 +145,7 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 	if err != nil {
 		return applauncher.Options{}, err
 	}
-	return applauncher.Options{
+	options := applauncher.Options{
 		Socket:            layout.Socket,
 		SocketGID:         layout.SocketGID,
 		ExecutorUID:       layout.ExecutorUID,
@@ -147,7 +154,33 @@ func buildLauncher(layout launcherLayout) (applauncher.Options, error) {
 		Toolchains:        launcherToolchainResolver{store: toolchain.GenerationStore{Root: layout.ToolchainStore}},
 		RunTimeout:        time.Duration(layout.RunTimeoutSeconds) * time.Second,
 		MaxConcurrentJobs: layout.MaxConcurrentJobs,
-	}, nil
+	}
+	if layout.SecretSocket != "" || layout.SecretBrokerUID != 0 {
+		if !filepath.IsAbs(layout.SecretSocket) || filepath.Clean(layout.SecretSocket) != layout.SecretSocket || layout.SecretBrokerUID == 0 || layout.SecretBrokerUID == layout.ExecutorUID || layout.SecretBrokerUID == layout.WorkloadUID || layout.SecretPrincipal == "" || layout.DeploymentID == "" || layout.ApplicationCatalog == "" {
+			return applauncher.Options{}, errors.New("protected Job peer and policy configuration is incomplete")
+		}
+		base := map[string]string{}
+		for _, entry := range layout.Environment {
+			key, value, _ := strings.Cut(entry, "=")
+			base[key] = value
+		}
+		resources, err := controlpolicy.CanonicalApplications(layout.ApplicationResources, base)
+		if err != nil {
+			return applauncher.Options{}, err
+		}
+		options.Protected = &applauncher.ProtectedOptions{Socket: layout.SecretSocket, BrokerUID: layout.SecretBrokerUID, Principal: layout.SecretPrincipal, DeploymentID: layout.DeploymentID, Resources: resources, Repository: func(ctx context.Context, cwd string) (string, error) {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			resolver, err := repository.New(layout.Workspace)
+			if err != nil {
+				return "", err
+			}
+			defer resolver.Close()
+			return resolver.Identity(cwd)
+		}}
+	}
+	return options, nil
 }
 
 func openLauncherJournal(layout launcherLayout) (*jobs.Journal, error) {
@@ -157,7 +190,7 @@ func openLauncherJournal(layout launcherLayout) (*jobs.Journal, error) {
 	}
 	return jobs.OpenJournal(journalDirectory, jobs.JournalLimits{
 		MaxRecords:     layout.MaxJobs,
-		MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
+		MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes),
 		MaxOutputBytes: layout.MaxOutputBytes,
 		Retention:      time.Duration(layout.ResultRetentionSeconds) * time.Second,
 	})
@@ -171,7 +204,7 @@ func requireLauncherRoot(euid int) error {
 }
 
 func resolveLauncherPolicy(layout *launcherLayout, configPath, githubConfigPath, executionContractPath string) error {
-	generation, contract, err := hostpolicy.CompileFiles(configPath, githubConfigPath, executionContractPath)
+	generation, contract, resources, err := hostpolicy.CompileFilesWithApplications(configPath, githubConfigPath, executionContractPath, layout.ApplicationCatalog)
 	if err != nil {
 		return err
 	}
@@ -180,6 +213,7 @@ func resolveLauncherPolicy(layout *launcherLayout, configPath, githubConfigPath,
 		return err
 	}
 	layout.PolicySHA256 = generation.Digest()
+	layout.ApplicationResources = resources
 	layout.Environment = environment
 	layout.GatewayExecutionContract = executionContractPath
 	return nil

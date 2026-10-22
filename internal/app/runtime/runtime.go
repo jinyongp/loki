@@ -29,6 +29,7 @@ import (
 
 // RuntimeOptions is administrator-owned role configuration, never tool input.
 type RuntimeOptions struct {
+	ApplicationValuesExternal                         bool
 	PersonalProjects                                  bool
 	ToolGate                                          *config.ToolGate
 	Tools                                             []string
@@ -50,6 +51,9 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	selected, err := runtimeSelection(o.Tools)
 	if err != nil {
 		return err
+	}
+	if o.ApplicationValuesExternal {
+		selected["secrets"] = false
 	}
 	if o.PortInspectorUID != nil && (*o.PortInspectorUID == 0 || *o.PortInspectorUID == o.AgentUID || !selected["browser"]) {
 		return errors.New("port inspector requires the browser resource and a distinct non-root UID")

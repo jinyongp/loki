@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"time"
 )
 
 var editRevision = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -56,7 +57,8 @@ type InputInspection struct {
 }
 
 type ProtectionStatus struct {
-	State string `json:"state"`
+	State         string     `json:"state"`
+	IdleExpiresAt *time.Time `json:"idle_expires_at,omitempty"`
 }
 
 func scopeArgs(app, env string) ([]string, error) {

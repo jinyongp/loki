@@ -117,8 +117,10 @@ func safeError(err error) error {
 		return unavailable()
 	}
 	switch p.Code {
-	case "revision_conflict", "request_conflict", "kind_conflict", "input_changed":
+	case "revision_conflict", "request_conflict", "kind_conflict", "input_changed", "vault_already_initialized":
 		return conflict()
+	case "key_access_denied":
+		return fault.New(fault.CodeDenied, "application vault protection denied access", false, "verify the original passphrase; do not initialize over existing state")
 	case "value_exists":
 		return fault.New(fault.CodeValueExists, "the selected layer already contains a value", false, "unset the exact layer or use the administrator replacement operation")
 	case "request_expired":

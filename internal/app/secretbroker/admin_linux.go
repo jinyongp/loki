@@ -19,17 +19,29 @@ type adminResponse struct {
 	Error  *fault.Detail  `json:"error,omitempty"`
 }
 
+type AdminOptions struct {
+	Socket string
+	Values *application.Service
+	Ready  func() error
+}
+
 // ServeAdmin authenticates the kernel UID before accepting either frame. The
 // second frame is private input and is erased after the one operation ends.
-func ServeAdmin(ctx context.Context, socket string, values *application.Service) error {
+func ServeAdmin(ctx context.Context, options AdminOptions) error {
+	values := options.Values
 	if values == nil {
 		return errWire
 	}
-	l, err := listenPrivate(socket)
+	l, err := listenPrivate(options.Socket)
 	if err != nil {
 		return err
 	}
 	defer l.Close()
+	if options.Ready != nil {
+		if err := options.Ready(); err != nil {
+			return err
+		}
+	}
 	stop := context.AfterFunc(ctx, func() { l.Close() })
 	defer stop()
 	var wg sync.WaitGroup
@@ -69,11 +81,11 @@ func serveAdmin(ctx context.Context, conn *net.UnixConn, values *application.Ser
 		return
 	}
 	var body []byte
-	if request.Action == "stage" || request.Action == "set_secret" && !request.Empty {
+	if limit := request.InputLimit(); limit > 0 {
 		var err error
 		// Explicit empty=true distinguishes an intentional empty secret from
 		// a disconnected private writer without inventing a payload byte.
-		body, err = privateio.ReadBytes(conn, application.MaxStageBytes)
+		body, err = privateio.ReadBytes(conn, limit)
 		if err != nil {
 			return
 		}

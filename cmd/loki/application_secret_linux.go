@@ -133,8 +133,9 @@ func prepareApplicationResource(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	catalog := flags.String("catalog", "", "current administrator-owned resource catalog")
 	changePath := flags.String("change", "", "typed set/remove/disable resource change")
-	configuration := flags.String("config", "/etc/loki-go/runtime.toml", "effective runtime configuration")
-	contractPath := flags.String("execution-contract", "/etc/loki-go/execution-contract.json", "installed execution contract")
+	configuration := flags.String("config", "/etc/loki-go/config.toml", "effective runtime configuration")
+	githubConfiguration := flags.String("github-config", "", "deployment-provided public GitHub TOML configuration")
+	contractPath := flags.String("execution-contract", "/usr/share/doc/loki/execution-contract.json", "installed execution contract")
 	output := flags.String("output", "", "new immutable plan file")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || *catalog == "" || *changePath == "" || *output == "" {
 		return 2
@@ -147,7 +148,7 @@ func prepareApplicationResource(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "resource input metadata is unavailable")
 		return 1
 	}
-	c, err := config.Load(*configuration)
+	c, err := config.LoadWithGitHub(*configuration, *githubConfiguration)
 	if err != nil {
 		fmt.Fprintln(stderr, "runtime configuration is unavailable")
 		return 1

@@ -41,6 +41,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
 		case "secret":
+			if len(args) > 1 && args[1] == "protection" {
+				return runSecretProtection(args[2:], os.Stdin, stdout, stderr)
+			}
 			if len(args) > 1 && args[1] == "app" {
 				return runApplicationAdministration(args[2:], os.Stdin, stdout, stderr)
 			}

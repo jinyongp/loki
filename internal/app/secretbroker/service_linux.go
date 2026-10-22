@@ -21,6 +21,7 @@ import (
 )
 
 type Options struct {
+	Ready           func() error
 	Provider        *provider.Provider
 	Socket          string
 	LauncherUID     uint32
@@ -80,6 +81,11 @@ func (s *Service) Serve(ctx context.Context) error {
 		return errWire
 	}
 	defer listener.Close()
+	if s.options.Ready != nil {
+		if err := s.options.Ready(); err != nil {
+			return err
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var wg sync.WaitGroup

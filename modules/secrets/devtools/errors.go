@@ -26,7 +26,7 @@ func providerFailure(raw []byte) error {
 	}
 	code := envelope.Error.Code
 	switch code {
-	case "invalid_argument", "revision_conflict", "request_conflict", "request_expired", "request_not_found", "value_exists", "kind_conflict", "value_expired", "env_not_found", "key_not_found", "vault_locked", "vault_recovery_required", "key_missing", "integrity_failed", "vault_input_too_large", "key_backend_unavailable", "lock_pending", "key_session_protocol_mismatch", "key_access_denied", "input_changed", "limit_exceeded", "storage_error":
+	case "invalid_argument", "revision_conflict", "request_conflict", "request_expired", "request_not_found", "value_exists", "kind_conflict", "value_expired", "env_not_found", "key_not_found", "vault_locked", "vault_recovery_required", "vault_already_initialized", "key_missing", "integrity_failed", "vault_input_too_large", "key_backend_unavailable", "lock_pending", "key_session_protocol_mismatch", "key_access_denied", "input_changed", "limit_exceeded", "storage_error":
 	default:
 		code = "unavailable"
 	}

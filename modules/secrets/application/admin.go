@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strings"
+	"time"
 
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/fault"
 	provider "loki/modules/secrets/devtools"
 )
 
@@ -19,6 +22,9 @@ type AdminRequest = appvalues.AdminRequest
 var adminUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if strings.HasPrefix(q.Action, "protection_") {
+		return s.protection(ctx, q, body)
+	}
 	if q.Action == "revision" {
 		if len(body) != 0 || q.Revision != "" || q.RequestID != "" || q.Name != "" || q.Principal != "" || q.Members != nil || q.Variables != nil || q.Empty || q.Replace {
 			return nil, invalid()
@@ -165,4 +171,40 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 		return nil, err
 	}
 	return map[string]any{"action": q.Action, "resource": r.Alias, "revision": result.Revision, "request_id": q.RequestID, "changed": result.Changed, "replayed": result.Replayed}, nil
+}
+
+func (s *Service) protection(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if q.Resource != "" || q.Environment != "" || q.Principal != "" || q.Variables != nil || q.Members != nil || q.Revision != "" || q.RequestID != "" || q.Name != "" || q.Empty || q.Replace {
+		return nil, invalid()
+	}
+	action := strings.TrimPrefix(q.Action, "protection_")
+	switch action {
+	case "status", "init", "unlock", "lock", "recover":
+	default:
+		return nil, invalid()
+	}
+	if action == "status" {
+		if len(body) != 0 {
+			return nil, invalid()
+		}
+		result, err := s.options.Provider.ProtectionStatus(ctx)
+		if err != nil {
+			return nil, safeError(err)
+		}
+		return map[string]any{"action": "status", "state": result.State}, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result, err := s.options.Provider.Protection(ctx, action, body)
+	code := "success"
+	if err != nil {
+		code = string(fault.Describe(safeError(err)).Code)
+	}
+	if s.audit.Append(map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "principal": "host-admin", "scope": "protection", "action": q.Action, "result": code}) != nil {
+		return nil, unavailable()
+	}
+	if err != nil {
+		return nil, safeError(err)
+	}
+	return map[string]any{"action": action, "state": result.Item.State, "changed": result.Changed}, nil
 }

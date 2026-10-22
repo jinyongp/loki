@@ -126,23 +126,28 @@ func CompileApplications(c config.Config, contract execution.Contract, resources
 }
 
 func CompileFiles(configPath, githubConfigPath, executionContractPath string) (controlpolicy.Generation, execution.Contract, error) {
+	generation, contract, _, err := CompileFilesWithApplications(configPath, githubConfigPath, executionContractPath, "")
+	return generation, contract, err
+}
+
+func CompileFilesWithApplications(configPath, githubConfigPath, executionContractPath, applicationsPath string) (controlpolicy.Generation, execution.Contract, []controlpolicy.ApplicationResource, error) {
 	c, err := config.LoadWithGitHub(configPath, githubConfigPath)
 	if err != nil {
-		return controlpolicy.Generation{}, execution.Contract{}, err
+		return controlpolicy.Generation{}, execution.Contract{}, nil, err
 	}
 	raw, err := os.ReadFile(executionContractPath)
 	if err != nil {
-		return controlpolicy.Generation{}, execution.Contract{}, err
+		return controlpolicy.Generation{}, execution.Contract{}, nil, err
 	}
 	contract, err := execution.Load(raw)
 	if err != nil {
-		return controlpolicy.Generation{}, execution.Contract{}, err
+		return controlpolicy.Generation{}, execution.Contract{}, nil, err
 	}
-	generation, err := Compile(c, contract)
+	generation, resources, err := CompileApplicationFile(c, contract, applicationsPath)
 	if err != nil {
-		return controlpolicy.Generation{}, execution.Contract{}, err
+		return controlpolicy.Generation{}, execution.Contract{}, nil, err
 	}
-	return generation, contract, nil
+	return generation, contract, resources, nil
 }
 
 func compileDocument(c config.Config, contract execution.Contract) (Document, error) {

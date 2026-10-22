@@ -327,7 +327,7 @@ func TestHostDoctorBlocksWhenRecoveredActiveJobsExceedLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	journal, err := jobs.OpenJournal(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{
-		MaxRecords: layout.MaxJobs, MaxRecordBytes: int64(layout.MaxOutputBytes)*6 + (64 << 10),
+		MaxRecords: layout.MaxJobs, MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes),
 		MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second,
 	})
 	if err != nil {

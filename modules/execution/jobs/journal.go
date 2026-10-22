@@ -46,6 +46,17 @@ type journalEnvelope struct {
 	SHA256  string          `json:"sha256"`
 }
 
+// JournalRecordBudget reserves the worst-case escaped result text, the
+// independently persisted base64 masked prefix and bounded metadata together.
+// Callers validate their output limit before selecting this record budget.
+func JournalRecordBudget(outputBytes int) int64 {
+	if outputBytes < 1 || outputBytes > MaxOutputBytes {
+		return 0
+	}
+	n := int64(outputBytes)
+	return 6*n + 4*((n+2)/3) + (64 << 10)
+}
+
 func normalizeJournalLimits(limits JournalLimits) (JournalLimits, error) {
 	if limits.MaxRecords == 0 {
 		limits.MaxRecords = 1024
@@ -280,7 +291,7 @@ func (j *Journal) admit(
 		// Masked bytes are retained as base64 and also as a repaired UTF-8
 		// result. Control bytes can cost six JSON bytes each in the latter.
 		n := int64(j.limits.MaxOutputBytes)
-		if j.limits.MaxRecordBytes < 6*n+4*((n+2)/3)+(64<<10) {
+		if j.limits.MaxRecordBytes < JournalRecordBudget(int(n)) {
 			return Record{}, false, errors.New("protected output record budget is insufficient")
 		}
 		if err := j.reserveSpent(record); err != nil {

@@ -5,6 +5,7 @@ import (
 
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/daemon"
 	"loki/internal/execution"
 )
 
@@ -14,6 +15,37 @@ type ApplicationChange struct {
 	Action   string                             `json:"action"`
 	Alias    string                             `json:"alias"`
 	Resource *controlpolicy.ApplicationResource `json:"resource,omitempty"`
+}
+
+// LoadApplications reads only an administrator/service-owned bounded catalog.
+// Values and private provider identities are never part of this document.
+func LoadApplications(path string) ([]controlpolicy.ApplicationResource, error) {
+	if path == "" {
+		return nil, nil
+	}
+	var document struct {
+		Resources []controlpolicy.ApplicationResource `json:"resources"`
+	}
+	if err := daemon.ReadJSON(path, &document); err != nil {
+		return nil, err
+	}
+	if document.Resources == nil {
+		return nil, errors.New("application catalog requires an explicit resources array")
+	}
+	return document.Resources, nil
+}
+
+func CompileApplicationFile(c config.Config, contract execution.Contract, path string) (controlpolicy.Generation, []controlpolicy.ApplicationResource, error) {
+	resources, err := LoadApplications(path)
+	if err != nil {
+		return controlpolicy.Generation{}, nil, err
+	}
+	resources, err = controlpolicy.CanonicalApplications(resources, contract.Environment)
+	if err != nil {
+		return controlpolicy.Generation{}, nil, err
+	}
+	generation, err := CompileApplications(c, contract, resources)
+	return generation, resources, err
 }
 
 type ApplicationPlan struct {

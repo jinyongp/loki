@@ -75,14 +75,19 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if os.Chown(inbox, 1000, 1000) != nil || os.Chmod(inbox, 0700) != nil {
 		t.Fatal("fixture inbox")
 	}
+	runtimeRoot := filepath.Join(inbox, "runtime")
+	if os.Mkdir(runtimeRoot, 0700) != nil || os.Chown(runtimeRoot, 1000, 1000) != nil || os.Chmod(runtimeRoot, 0700) != nil {
+		t.Fatal("fixture runtime lease root")
+	}
 	resource := controlpolicy.ApplicationResource{ID: "c199846b-43ad-468c-9229-11976d4e5b3a", Alias: "demo", Repository: "github.com/fixture/app", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Write: true}}, Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none"}
 	layout := map[string]any{"uid": 1000, "launcher_uid": 0, "binary": provider, "root": data, "socket": jobs, "deployment_id": "1bbf75ed-1b51-46bd-8255-31536e945564", "policy_sha256": strings.Repeat("a", 64), "runner_id": "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", "instance_id": "a203906e-1c9c-4cc5-acb7-a68d118c54da", "resources": []controlpolicy.ApplicationResource{resource}, "metadata_socket": metaSocket, "metadata_gid": 10000, "agent_uid": 10000, "principal": "agent", "admin_socket": adminSocket, "application_root": metadata, "inbox": inbox}
+	layout["runtime_root"] = runtimeRoot
 	encoded, _ := json.Marshal(layout)
 	layoutPath := filepath.Join(root, "layout.json")
 	if os.WriteFile(layoutPath, encoded, 0644) != nil || os.Chmod(layoutPath, 0644) != nil {
 		t.Fatal("fixture layout")
 	}
-	startBroker := func() func() {
+	startBroker := func() func(bool) {
 		t.Helper()
 		cmd := exec.CommandContext(ctx, broker, "--layout", layoutPath)
 		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
@@ -96,12 +101,16 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait() }()
 		var once sync.Once
-		stop := func() {
+		stop := func(abrupt bool) {
 			once.Do(func() {
-				_ = cmd.Process.Signal(syscall.SIGTERM)
+				if abrupt {
+					_ = cmd.Process.Kill()
+				} else {
+					_ = cmd.Process.Signal(syscall.SIGTERM)
+				}
 				select {
 				case err := <-done:
-					if err != nil {
+					if err != nil && !abrupt {
 						t.Errorf("broker shutdown: %v", err)
 					}
 				case <-time.After(3 * time.Second):
@@ -111,12 +120,19 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 				}
 			})
 		}
-		t.Cleanup(stop)
+		t.Cleanup(func() { stop(false) })
 		for {
 			_, metaErr := os.Stat(metaSocket)
 			_, adminErr := os.Stat(adminSocket)
 			if metaErr == nil && adminErr == nil {
-				break
+				conn, err := net.DialTimeout("unix", adminSocket, 50*time.Millisecond)
+				if err == nil {
+					peer, err := rpc.PeerCredentials(conn.(*net.UnixConn))
+					conn.Close()
+					if err == nil && int(peer.PID) == cmd.Process.Pid {
+						break
+					}
+				}
 			}
 			select {
 			case err := <-done:
@@ -173,7 +189,9 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 			t.Fatalf("synthetic provider %s failed: %v", args[0], err)
 		}
 	}
-	providerCall("synthetic-role-fixture-passphrase", "vault", "init", "--backend", "passphrase", "--passphrase-stdin")
+	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "protection_init"}, []byte("synthetic-role-fixture-passphrase")); err != nil {
+		t.Fatal("private manual initialization failed", err)
+	}
 	t.Cleanup(func() { providerCall("", "vault", "lock") })
 	stageRaw, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("TOKEN=synthetic-private-restart-canary\n"))
 	if err != nil {
@@ -206,7 +224,10 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(inbox, stage.ID+".data")); !os.IsNotExist(err) {
 		t.Fatal("staged plaintext survived import")
 	}
-	stopBroker()
+	stopBroker(false)
+	stopAfterRestart := startBroker()
+	write("true")
+	stopAfterRestart(true)
 	_ = startBroker()
 	write("true")
 }

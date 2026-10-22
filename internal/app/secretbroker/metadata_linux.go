@@ -21,6 +21,7 @@ import (
 )
 
 type MetadataOptions struct {
+	Ready     func() error
 	Socket    string
 	AgentUID  uint32
 	GroupID   uint32
@@ -39,6 +40,11 @@ func ServeMetadata(ctx context.Context, options MetadataOptions) error {
 		return err
 	}
 	defer listener.Close()
+	if options.Ready != nil {
+		if err := options.Ready(); err != nil {
+			return err
+		}
+	}
 	server := rpc.Server{
 		Limits:         rpc.Limits{RequestBytes: privateio.MaxControlFrame, ResponseBytes: privateio.MaxControlFrame, Timeout: 30 * time.Second},
 		MaxConnections: 16,

@@ -43,8 +43,8 @@ func (c ApplicationClient) Call(ctx context.Context, q appvalues.AdminRequest, b
 	if privateio.WriteControl(conn, q) != nil {
 		return nil, privateio.ErrInvalid
 	}
-	if q.Action == "stage" || q.Action == "set_secret" && !q.Empty {
-		if privateio.WriteBytes(conn, body, 500000) != nil {
+	if limit := q.InputLimit(); limit > 0 {
+		if privateio.WriteBytes(conn, body, limit) != nil {
 			return nil, privateio.ErrInvalid
 		}
 	} else if len(body) != 0 {

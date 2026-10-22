@@ -41,6 +41,7 @@ type MCPOptions struct {
 	Tools                                                []string
 	OnAuditError                                         func(error)
 	Runtime, PortGuard                                   rpc.Caller
+	ApplicationSecrets                                   rpc.Caller
 	Browser                                              mcptransport.BrowserCaller
 	Jobs                                                 jobs.Controller
 	GitJobs                                              jobs.Runner
@@ -83,7 +84,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if len(options.Token) < 43 || strings.ContainsAny(options.Token, "\r\n") {
 		return nil, errors.New("MCP requires a valid bearer token")
 	}
-	if (selected["secrets"] || selected["github"] || selected["coordination"]) && options.Runtime == nil {
+	if (selected["secrets"] && options.ApplicationSecrets == nil || selected["github"] || selected["coordination"]) && options.Runtime == nil {
 		return nil, errors.New("selected tools require the runtime service client")
 	}
 	if selected["execution"] && (options.Jobs == nil || options.PortGuard == nil || options.Runtime == nil) {
