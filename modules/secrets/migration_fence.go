@@ -98,11 +98,6 @@ func (c Controller) publishApplicationMigrationFence(fence ApplicationMigrationF
 	if !fence.valid() {
 		return ErrApplicationMigration
 	}
-	body, _ := json.Marshal(fence)
-	path := filepath.Join(c.StateDirectory, applicationMigrationFenceFile)
-	if err := safeio.PublishPrivate(path, body, true); err != nil {
-		return err
-	}
 	// The existing trusted store owner must be able to enforce the gate even
 	// when the host administrator has a different UID. Agent/workload mounts
 	// do not expose this private source directory.
@@ -114,7 +109,9 @@ func (c Controller) publishApplicationMigrationFence(fence ApplicationMigrationF
 	if !ok {
 		return ErrApplicationMigration
 	}
-	return os.Chown(path, int(st.Uid), int(st.Gid))
+	body, _ := json.Marshal(fence)
+	path := filepath.Join(c.StateDirectory, applicationMigrationFenceFile)
+	return safeio.PublishPrivateOwned(path, body, true, int(st.Uid), int(st.Gid))
 }
 
 // BeginApplicationMigration freezes all cooperating source writers at exactly
@@ -134,7 +131,9 @@ func (c Controller) BeginApplicationMigration(ctx context.Context, revision uint
 			if previous.Operation != operation || previous.Revision != revision || previous.State != "pending" {
 				return ErrApplicationMigration
 			}
-			return nil
+			// Reconfirm owner and directory durability after a lost publication
+			// response; a matching file alone is not a persisted writer gate.
+			return c.publishApplicationMigrationFence(*previous)
 		}
 		return c.publishApplicationMigrationFence(want)
 	})
@@ -156,14 +155,14 @@ func (c Controller) FinishApplicationMigration(ctx context.Context, revision uin
 			if committed {
 				return ErrApplicationMigration
 			}
-			return nil
+			return c.syncApplicationMigrationDirectory()
 		}
 		if fence.Operation != operation || fence.Revision != revision {
 			return ErrApplicationMigration
 		}
 		if fence.State == "committed" {
 			if committed {
-				return nil
+				return c.publishApplicationMigrationFence(*fence)
 			}
 			return ErrApplicationMigration
 		}
@@ -177,11 +176,15 @@ func (c Controller) FinishApplicationMigration(ctx context.Context, revision uin
 		if err := os.Remove(filepath.Join(c.StateDirectory, applicationMigrationFenceFile)); err != nil {
 			return err
 		}
-		dir, err := os.Open(c.StateDirectory)
-		if err != nil {
-			return err
-		}
-		defer dir.Close()
-		return dir.Sync()
+		return c.syncApplicationMigrationDirectory()
 	})
+}
+
+func (c Controller) syncApplicationMigrationDirectory() error {
+	dir, err := os.Open(c.StateDirectory)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }

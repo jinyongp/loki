@@ -8,11 +8,55 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	"filippo.io/age"
 	"loki/internal/state"
 )
+
+func TestMigrationCipherPublicationHasOneWinnerAndOneDurableName(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "source.age")
+	type result struct {
+		body string
+		err  error
+	}
+	done := make(chan result, 2)
+	for _, body := range []string{"synthetic-ciphertext-one", "synthetic-ciphertext-two"} {
+		go func() { done <- result{body, publishMigrationCipher(path, []byte(body))} }()
+	}
+	winner := ""
+	for range 2 {
+		got := <-done
+		if got.err == nil {
+			if winner != "" {
+				t.Fatal("multiple writers replaced the original recovery archive")
+			}
+			winner = got.body
+		} else if !errors.Is(got.err, os.ErrExist) {
+			t.Fatal(got.err)
+		}
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || winner == "" || string(body) != winner {
+		t.Fatal("archive does not contain the original winning publication", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0600 || info.Sys().(*syscall.Stat_t).Nlink != 1 {
+		t.Fatal("archive publication left nonprivate or multiply-linked ciphertext", err)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".loki-migration-cipher-") {
+			t.Fatal("cipher publication left an unacknowledged temporary file")
+		}
+	}
+}
 
 func migrationBackupFixture(t *testing.T) (Controller, uint64, string, *age.X25519Identity, string) {
 	t.Helper()

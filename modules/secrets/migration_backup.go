@@ -135,7 +135,17 @@ func (c Controller) BackupApplicationMigration(ctx context.Context, revision uin
 				return errMigrationBackup
 			}
 			proof = *previous
-			return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			// A prior rename may have succeeded before its directory-sync ACK
+			// failed. Confirm durability before authorizing target writes.
+			directory, err := os.Open(filepath.Dir(path))
+			if err != nil {
+				return err
+			}
+			defer directory.Close()
+			return directory.Sync()
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return errMigrationBackup
 		}
@@ -182,9 +192,43 @@ func (c Controller) BackupApplicationMigration(ctx context.Context, revision uin
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return safeio.PublishPrivate(path, encrypted.Bytes(), false)
+		return publishMigrationCipher(path, encrypted.Bytes())
 	})
 	return proof, err
+}
+
+// Atomic no-replace rename keeps the published ciphertext single-linked even
+// if the helper dies immediately after publication. Link-then-unlink would
+// leave two names on that crash boundary and defeat exact archive recovery.
+func publishMigrationCipher(path string, ciphertext []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".loki-migration-cipher-")
+	if err != nil {
+		return err
+	}
+	name := file.Name()
+	defer os.Remove(name)
+	defer file.Close()
+	if err := file.Chmod(0600); err != nil {
+		return err
+	}
+	if _, err := file.Write(ciphertext); err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := unix.Renameat2(unix.AT_FDCWD, name, unix.AT_FDCWD, path, unix.RENAME_NOREPLACE); err != nil {
+		return err
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 // RestoreMigrationSource authenticates an entire archive before publishing a NEW

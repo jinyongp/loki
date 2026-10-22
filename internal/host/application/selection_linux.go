@@ -56,6 +56,15 @@ func CommitCandidate(options PrepareOptions, expected Identity, generation strin
 		if err != nil || active.Identity != want {
 			return Identity{}, invalid
 		}
+		// Reconfirm a previous selector rename after an uncertain fsync/ACK.
+		directory, err := os.Open(filepath.Dir(options.IdentityFile))
+		if err != nil {
+			return Identity{}, err
+		}
+		defer directory.Close()
+		if err := directory.Sync(); err != nil {
+			return Identity{}, err
+		}
 		return active.Identity, nil
 	}
 	if current != expected {

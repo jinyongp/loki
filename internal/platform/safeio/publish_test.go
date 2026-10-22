@@ -96,3 +96,33 @@ func TestPublishPrivateNoOverwritePreservesExistingAndCleansTemp(t *testing.T) {
 	}
 	assertNoPrivateTemps(t, dir)
 }
+
+func TestPrivateOwnerIsPreparedBeforeReplacingPublishedState(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fence.json")
+	if err := os.WriteFile(path, []byte("previous"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("synthetic owner preparation failure")
+	err := publishPrivate(path, []byte("replacement"), true, func(*os.File) error {
+		current, err := os.ReadFile(path)
+		if err != nil || string(current) != "previous" {
+			t.Fatal("replacement was visible before its owner could enforce it", err)
+		}
+		return failure
+	})
+	if !errors.Is(err, failure) {
+		t.Fatal("owner preparation failure was ignored", err)
+	}
+	current, err := os.ReadFile(path)
+	if err != nil || string(current) != "previous" {
+		t.Fatal("failed owner preparation replaced the original gate", err)
+	}
+	if err := PublishPrivateOwned(path, []byte("replacement"), true, os.Getuid(), os.Getgid()); err != nil {
+		t.Fatal(err)
+	}
+	if privateMode(t, path) != 0600 {
+		t.Fatal("owned publication changed private permissions")
+	}
+	assertNoPrivateTemps(t, dir)
+}
