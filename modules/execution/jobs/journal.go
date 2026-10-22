@@ -30,14 +30,15 @@ type JournalLimits struct {
 }
 
 type Journal struct {
-	dir        string
-	limits     JournalLimits
-	lockFile   *os.File
-	mu         sync.Mutex
-	records    map[string]Record
-	spent      map[string]spentRequest
-	spentBytes int64
-	closed     bool
+	dir         string
+	limits      JournalLimits
+	lockFile    *os.File
+	mu          sync.Mutex
+	records     map[string]Record
+	spent       map[string]spentRequest
+	spentBytes  int64
+	closed      bool
+	maintenance *Maintenance
 }
 
 type journalEnvelope struct {
@@ -124,6 +125,10 @@ func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
 	}
 
 	journal := &Journal{dir: dir, limits: limits, lockFile: lockFile, records: map[string]Record{}, spent: map[string]spentRequest{}}
+	if journal.maintenance, err = loadMaintenance(dir); err != nil {
+		journal.Close()
+		return nil, err
+	}
 	if err = journal.loadSpent(); err != nil {
 		journal.Close()
 		return nil, err
@@ -235,6 +240,9 @@ func (j *Journal) admit(
 	defer j.mu.Unlock()
 	if err := j.ready(); err != nil {
 		return Record{}, false, err
+	}
+	if j.maintenance != nil && j.maintenance.Active {
+		return Record{}, false, ErrMaintenanceBusy
 	}
 	if !jobIDPattern.MatchString(id) || !validBackendRef(backendRef) ||
 		!validReplayIdentity(requestID, requestSHA256) || !network.Valid() ||
@@ -572,6 +580,12 @@ func ReadJournalSnapshot(dir string, limits JournalLimits) ([]Record, error) {
 	result := make([]Record, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
+		if name == maintenanceFile {
+			if _, err := loadMaintenance(dir); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if name == "requests" {
 			if err := validateJournalDirectory(filepath.Join(dir, name)); err != nil {
 				return nil, err
@@ -707,6 +721,9 @@ func (j *Journal) load() error {
 	}
 	count := 0
 	for _, entry := range entries {
+		if entry.Name() == maintenanceFile {
+			continue // Validated while acquiring journal ownership.
+		}
 		if entry.Name() == "requests" {
 			if err := validateJournalDirectory(filepath.Join(j.dir, "requests")); err != nil {
 				return err

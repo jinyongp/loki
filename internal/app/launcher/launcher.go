@@ -80,6 +80,7 @@ type lifecycle struct {
 	timeout           time.Duration
 	maxConcurrentJobs int
 	now               func() time.Time
+	admission         sync.RWMutex
 
 	mu     sync.Mutex
 	active map[string]*ownedJob
@@ -168,6 +169,33 @@ func normalizeMaxConcurrentJobs(value int) (int, error) {
 
 func (l *lifecycle) operations() map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"maintenance_begin": {Grant: controlpolicy.HostAdministration, Timeout: launcherStopTimeout, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			var request maintenanceRequest
+			if err := privateio.Decode(raw, &request); err != nil {
+				return nil, err
+			}
+			if request.Operation != "maintenance_begin" {
+				return nil, privateio.ErrInvalid
+			}
+			return l.beginMaintenance(ctx, request)
+		}},
+		"maintenance_end": {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
+			var request struct {
+				Operation   string `json:"operation"`
+				OperationID string `json:"operation_id"`
+			}
+			if err := privateio.Decode(raw, &request); err != nil {
+				return nil, err
+			}
+			if request.Operation != "maintenance_end" {
+				return nil, privateio.ErrInvalid
+			}
+			if err := l.lockAdmission(ctx); err != nil {
+				return nil, err
+			}
+			defer l.admission.Unlock()
+			return l.journal.EndMaintenance(request.OperationID)
+		}},
 		"endpoint_resolve": {Grant: controlpolicy.HostAdministration, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			request, err := rpc.Decode[struct {
 				Port int `json:"port"`
@@ -442,6 +470,14 @@ func jobEndpointLeases(values []sandbox.EndpointBinding) []jobs.EndpointLease {
 }
 
 func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, policySHA256 string) (jobs.StartResult, error) {
+	l.admission.RLock()
+	defer l.admission.RUnlock()
+	if err := l.journal.AdmissionAllowed(); err != nil {
+		return jobs.StartResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return jobs.StartResult{}, err
+	}
 	var err error
 	if workload.RequestID != "" || workload.RequestSHA256 != "" {
 		if workload.InputPath != "" || workload.MaxOutputBytes != 0 {
