@@ -140,6 +140,9 @@ func (s *Service) Stage(ctx context.Context, q StageRequest, body []byte) (map[s
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.requireWritable(); err != nil {
+		return nil, err
+	}
 	if privateDirectory(s.options.Inbox, true) != nil {
 		return nil, unavailable()
 	}

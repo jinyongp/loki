@@ -21,6 +21,7 @@ import (
 	"loki/internal/admin"
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/fault"
 	"loki/internal/host/lifecycle"
 	hostmigration "loki/internal/host/migration"
 	"loki/internal/platform/privateio"
@@ -396,9 +397,17 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal("prepared a second migration over the fenced source", err)
 	}
 	expired = pending()
+	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_begin", RequestID: migrationOperation}, nil); err != nil {
+		t.Fatal("private application maintenance admission", err)
+	}
+	write("fenced")
 	stopAfterRestart(true)
 	_ = startBroker()
 	unlockAfterRestart(expired)
+	write("fenced")
+	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_end", RequestID: migrationOperation}, nil); err != nil {
+		t.Fatal("original private application maintenance release", err)
+	}
 	write("true")
 }
 
@@ -427,6 +436,12 @@ func TestApplicationRoleClient(t *testing.T) {
 			t.Fatal("invalid fixture metadata")
 		}
 		out, err := client.Call(ctx, request)
+		if os.Getenv("LOKI_ROLE_REPLAYED") == "fenced" {
+			if err == nil || fault.Describe(err).Code != fault.CodeUnavailable {
+				t.Fatal("agent mutation bypassed persistent application maintenance", err)
+			}
+			return
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

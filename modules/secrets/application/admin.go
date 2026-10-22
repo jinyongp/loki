@@ -43,6 +43,9 @@ func (s *Service) LockOnStart(ctx context.Context) error {
 }
 
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if strings.HasPrefix(q.Action, "maintenance_") {
+		return s.maintenance(q, body)
+	}
 	if strings.HasPrefix(q.Action, "protection_") {
 		return s.protection(ctx, q, body)
 	}
@@ -104,6 +107,9 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 	r := *resource
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.requireWritable(); err != nil {
+		return nil, err
+	}
 	action := q.Action
 	if q.Replace {
 		action += "_replace"

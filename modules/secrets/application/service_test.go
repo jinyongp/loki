@@ -298,6 +298,42 @@ func TestRealApplicationValues(t *testing.T) {
 			t.Fatal("rejected private administrator input changed values")
 		}
 	}
+	maintenanceID := id()
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_begin", RequestID: maintenanceID}, nil); err != nil {
+		t.Fatal("host value write fence", err)
+	}
+	fencedRevision := revision("common")
+	fenced := write("set_public", "PUB")
+	fenced.Value = ptr("must-not-write-during-backup")
+	code("write", fenced, fault.CodeUnavailable)
+	code("write", write("generate", "TOKEN"), fault.CodeUnavailable)
+	if _, err := s.Stage(ctx, StageRequest{Resource: "demo", Principal: "agent"}, []byte("TOKEN=must-not-stage-during-backup\n")); err == nil || fault.Describe(err).Code != fault.CodeUnavailable {
+		t.Fatal("private staging escaped maintenance", err)
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "set_public", Resource: "demo", Name: "PUB", Revision: fencedRevision, RequestID: id()}, []byte("must-not-write")); err == nil || fault.Describe(err).Code != fault.CodeUnavailable {
+		t.Fatal("root value mutation escaped maintenance", err)
+	}
+	if revision("common") != fencedRevision {
+		t.Fatal("fenced application mutation reached the provider")
+	}
+	s, err = New(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code("write", fenced, fault.CodeUnavailable)
+	if _, err := s.Admin(ctx, AdminRequest{Action: "protection_status"}, nil); err != nil {
+		t.Fatal("maintenance blocked manual protection inspection", err)
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_end", RequestID: id()}, nil); err == nil {
+		t.Fatal("another host operation released application writes")
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_end", RequestID: maintenanceID}, nil); err != nil {
+		t.Fatal("original value fence release", err)
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_begin", RequestID: maintenanceID}, nil); err != nil {
+		t.Fatal("completed value fence replay", err)
+	}
+	call("write", fenced)
 	audit := call("inspect", appvalues.Request{Action: "audit", Resource: ptr("demo")})
 	encoded, _ := json.Marshal(audit)
 	for _, forbidden := range []string{"synthetic-staged-canary", "synthetic-disappearing-canary", "after-unset", "operator-public-migration", "fingerprint", ".data", "passphrase"} {

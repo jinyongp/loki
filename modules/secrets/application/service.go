@@ -199,6 +199,9 @@ func (s *Service) Handle(ctx context.Context, principal, operation string, reque
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.requireWritable(); err != nil {
+		return nil, err
+	}
 	if request.Action == "import_staged" {
 		return s.importStaged(ctx, principal, r, request)
 	}
