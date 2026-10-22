@@ -21,6 +21,26 @@ type AdminRequest = appvalues.AdminRequest
 
 var adminUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// LockOnStart ends an earlier broker's unlocked key session, including after
+// SIGKILL outside a service manager. Starting a broker never initializes or
+// unlocks protection. This runs before admitting any role connection.
+func (s *Service) LockOnStart(ctx context.Context) error {
+	status, err := s.options.Provider.ProtectionStatus(ctx)
+	if err != nil {
+		return safeError(err)
+	}
+	if status.State != "unlocked" && status.State != "locking" {
+		return nil
+	}
+	if _, err := s.options.Provider.Protection(ctx, "lock", nil); err != nil {
+		return safeError(err)
+	}
+	if s.audit.Append(map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "principal": "service", "scope": "protection", "action": "restart_lock", "result": "success"}) != nil {
+		return unavailable()
+	}
+	return nil
+}
+
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
 	if strings.HasPrefix(q.Action, "protection_") {
 		return s.protection(ctx, q, body)

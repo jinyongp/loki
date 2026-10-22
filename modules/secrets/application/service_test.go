@@ -255,7 +255,9 @@ func TestRealApplicationValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	missingQ := appvalues.Request{Action: "import_staged", Resource: ptr("demo"), StageID: ptr(missing["stage_id"].(string)), ExpectedRevision: ptr(revision("common")), RequestID: ptr(id())}
-	if err := s.discardStage(*missingQ.StageID); err != nil {
+	// A new broker lifetime destroys even pending, unconsumed private input.
+	// Completed receipts still replay above without needing the old payload.
+	if err := ResetInbox(inbox); err != nil {
 		t.Fatal(err)
 	}
 	code("write", missingQ, fault.CodeStageExpired)

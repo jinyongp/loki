@@ -44,6 +44,9 @@ func TestRealManualProtectionDoesNotInitializeOrExtendOnStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := s.LockOnStart(ctx); err != nil {
+		t.Fatal(err)
+	}
 	call := func(action string, body []byte) map[string]any {
 		t.Helper()
 		out, err := s.Admin(ctx, appvalues.AdminRequest{Action: "protection_" + action}, body)
@@ -92,8 +95,12 @@ func TestRealManualProtectionDoesNotInitializeOrExtendOnStatus(t *testing.T) {
 	call("recover", nil)
 	// A new broker application object cannot implicitly create a new session.
 	call("lock", nil)
+	call("unlock", pass)
 	s, err = New(s.options)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.LockOnStart(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if out := call("status", nil); out["state"] != "locked_manual" && out["state"] != "locked" {
@@ -102,6 +109,9 @@ func TestRealManualProtectionDoesNotInitializeOrExtendOnStatus(t *testing.T) {
 	audit, err := os.ReadFile(filepath.Join(root, "audit.jsonl"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !bytes.Contains(audit, []byte(`"principal":"service"`)) {
+		t.Fatal("restart lock omitted service attribution")
 	}
 	for _, secret := range [][]byte{pass, []byte("wrong-before-init"), []byte("wrong-after-init")} {
 		if bytes.Contains(audit, secret) {

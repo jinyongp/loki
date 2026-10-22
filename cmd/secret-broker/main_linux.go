@@ -33,6 +33,7 @@ func run(args []string) int {
 	}
 	unix.Umask(0077)
 	if secretbroker.RestrictUnixSockets() != nil {
+		fmt.Fprintln(os.Stderr, "secret broker Unix socket restriction unavailable")
 		return 1
 	}
 	fullRoles := config.MetadataSocket != "" || config.AdminSocket != "" || config.ApplicationRoot != "" || config.Inbox != ""
@@ -51,6 +52,7 @@ func run(args []string) int {
 		}
 		lease, err := secretbroker.AcquireRuntime(config.RuntimeRoot, config.DeploymentID, config.RunnerID, sockets)
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "secret broker runtime lease unavailable")
 			return 1
 		}
 		defer lease.Close()
@@ -60,6 +62,7 @@ func run(args []string) int {
 	p, err := provider.New(verify, config.Binary, config.Root)
 	stop()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "secret broker provider contract unavailable")
 		return 1
 	}
 	ready := make(chan struct{}, 3)
@@ -83,17 +86,37 @@ func run(args []string) int {
 		return 2
 	}
 	if fullRoles {
+		if application.ResetInbox(config.Inbox) != nil {
+			return 2
+		}
 		values, err := application.New(application.Options{Provider: p, Root: config.ApplicationRoot, Inbox: config.Inbox, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
 		if err != nil {
 			return 2
 		}
+		if values.LockOnStart(ctx) != nil {
+			return 2
+		}
 		results := make(chan error, 3)
-		go func() { results <- service.Serve(ctx) }()
 		go func() {
-			results <- secretbroker.ServeMetadata(ctx, secretbroker.MetadataOptions{Ready: roleReady, Socket: config.MetadataSocket, AgentUID: config.AgentUID, GroupID: config.MetadataGID, Principal: config.Principal, Values: values})
+			err := service.Serve(ctx)
+			if err != nil && ctx.Err() == nil {
+				fmt.Fprintln(os.Stderr, "secret broker jobs role unavailable")
+			}
+			results <- err
 		}()
 		go func() {
-			results <- secretbroker.ServeAdmin(ctx, secretbroker.AdminOptions{Ready: roleReady, Socket: config.AdminSocket, Values: values})
+			err := secretbroker.ServeMetadata(ctx, secretbroker.MetadataOptions{Ready: roleReady, Socket: config.MetadataSocket, AgentUID: config.AgentUID, GroupID: config.MetadataGID, Principal: config.Principal, Values: values})
+			if err != nil && ctx.Err() == nil {
+				fmt.Fprintln(os.Stderr, "secret broker metadata role unavailable")
+			}
+			results <- err
+		}()
+		go func() {
+			err := secretbroker.ServeAdmin(ctx, secretbroker.AdminOptions{Ready: roleReady, Socket: config.AdminSocket, Values: values})
+			if err != nil && ctx.Err() == nil {
+				fmt.Fprintln(os.Stderr, "secret broker administrator role unavailable")
+			}
+			results <- err
 		}()
 		stopServices := func(count int) {
 			cancel()

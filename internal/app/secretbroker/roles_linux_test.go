@@ -75,11 +75,15 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if os.Chown(inbox, 1000, 1000) != nil || os.Chmod(inbox, 0700) != nil {
 		t.Fatal("fixture inbox")
 	}
-	runtimeRoot := filepath.Join(inbox, "runtime")
-	if os.Mkdir(runtimeRoot, 0700) != nil || os.Chown(runtimeRoot, 1000, 1000) != nil || os.Chmod(runtimeRoot, 0700) != nil {
+	runtimeRoot, err := os.MkdirTemp("/dev/shm", "loki-role-runtime-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(runtimeRoot) })
+	if os.Chown(runtimeRoot, 1000, 1000) != nil || os.Chmod(runtimeRoot, 0700) != nil {
 		t.Fatal("fixture runtime lease root")
 	}
-	resource := controlpolicy.ApplicationResource{ID: "c199846b-43ad-468c-9229-11976d4e5b3a", Alias: "demo", Repository: "github.com/fixture/app", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Write: true}}, Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none"}
+	resource := controlpolicy.ApplicationResource{ID: "c199846b-43ad-468c-9229-11976d4e5b3a", Alias: "demo", Repository: "github.com/fixture/app", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Write: true}}, Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret", "PENDING": "secret"}, Network: "none"}
 	layout := map[string]any{"uid": 1000, "launcher_uid": 0, "binary": provider, "root": data, "socket": jobs, "deployment_id": "1bbf75ed-1b51-46bd-8255-31536e945564", "policy_sha256": strings.Repeat("a", 64), "runner_id": "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", "instance_id": "a203906e-1c9c-4cc5-acb7-a68d118c54da", "resources": []controlpolicy.ApplicationResource{resource}, "metadata_socket": metaSocket, "metadata_gid": 10000, "agent_uid": 10000, "principal": "agent", "admin_socket": adminSocket, "application_root": metadata, "inbox": inbox}
 	layout["runtime_root"] = runtimeRoot
 	encoded, _ := json.Marshal(layout)
@@ -224,11 +228,42 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(inbox, stage.ID+".data")); !os.IsNotExist(err) {
 		t.Fatal("staged plaintext survived import")
 	}
+	pending := func() string {
+		t.Helper()
+		raw, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("PENDING=synthetic-unconsumed-input\n"))
+		var staged struct {
+			ID string `json:"stage_id"`
+		}
+		if err != nil || json.Unmarshal(raw, &staged) != nil || staged.ID == "" {
+			t.Fatal("pending stage failed", err)
+		}
+		return staged.ID
+	}
+	unlockAfterRestart := func(expired string) {
+		t.Helper()
+		if _, err := os.Stat(filepath.Join(inbox, expired+".data")); !os.IsNotExist(err) {
+			t.Fatal("pending plaintext survived broker restart", err)
+		}
+		raw, err := client.Call(ctx, appvalues.AdminRequest{Action: "protection_status"}, nil)
+		var status struct {
+			State string `json:"state"`
+		}
+		if err != nil || json.Unmarshal(raw, &status) != nil || status.State != "locked" && status.State != "locked_manual" {
+			t.Fatalf("restarted broker retained unlock: %s %v", raw, err)
+		}
+		if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "protection_unlock"}, []byte("synthetic-role-fixture-passphrase")); err != nil {
+			t.Fatal("explicit unlock after restart", err)
+		}
+	}
+	expired := pending()
 	stopBroker(false)
 	stopAfterRestart := startBroker()
+	unlockAfterRestart(expired)
 	write("true")
+	expired = pending()
 	stopAfterRestart(true)
 	_ = startBroker()
+	unlockAfterRestart(expired)
 	write("true")
 }
 
