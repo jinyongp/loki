@@ -32,6 +32,11 @@ func jobStatusResult(status jobs.Status) map[string]any {
 		"created_at": status.CreatedAt, "updated_at": status.UpdatedAt, "deadline_at": status.DeadlineAt,
 		"network": status.Network, "endpoints": append([]jobs.EndpointLease{}, status.Endpoints...),
 		"toolchains": append([]jobs.ToolchainRef{}, status.Toolchains...), "truncated": status.Truncated,
+		"output_complete": status.OutputComplete, "output_cursor": status.OutputCursor,
+		"exit_code": status.ExitCode,
+	}
+	if status.OutputGap != nil {
+		result["output_gap"] = status.OutputGap
 	}
 	if status.Outcome != "" {
 		result["outcome"] = status.Outcome
@@ -103,10 +108,15 @@ func JobHandlers(controller jobs.Controller, toolchains JobToolchainResolver) ma
 				if err != nil {
 					return nil, err
 				}
-				return objectResult(map[string]any{
+				value := map[string]any{
 					"action": "output", "job_id": result.JobID, "state": result.State,
 					"output": result.Output, "truncated": result.Truncated, "complete": result.Complete,
-				}, nil)
+					"output_complete": result.OutputComplete, "output_cursor": result.OutputCursor,
+				}
+				if result.OutputGap != nil {
+					value["output_gap"] = result.OutputGap
+				}
+				return objectResult(value, nil)
 			case "cancel":
 				result, err := controller.Cancel(ctx, request.JobID)
 				if err != nil {

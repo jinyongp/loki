@@ -100,32 +100,42 @@ type StartResult struct {
 }
 
 type Status struct {
-	JobID      string          `json:"job_id"`
-	State      State           `json:"state"`
-	CreatedAt  string          `json:"created_at"`
-	UpdatedAt  string          `json:"updated_at"`
-	DeadlineAt string          `json:"deadline_at"`
-	Network    NetworkProfile  `json:"network"`
-	Endpoints  []EndpointLease `json:"endpoints,omitempty"`
-	Toolchains []ToolchainRef  `json:"toolchains,omitempty"`
-	Outcome    Outcome         `json:"outcome,omitempty"`
-	ExitCode   *int64          `json:"exit_code,omitempty"`
-	Cleanup    CleanupStatus   `json:"cleanup,omitempty"`
-	Truncated  bool            `json:"truncated,omitempty"`
+	OutputComplete bool            `json:"output_complete"`
+	OutputGap      *OutputGap      `json:"output_gap,omitempty"`
+	OutputCursor   int64           `json:"output_cursor"`
+	JobID          string          `json:"job_id"`
+	State          State           `json:"state"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
+	DeadlineAt     string          `json:"deadline_at"`
+	Network        NetworkProfile  `json:"network"`
+	Endpoints      []EndpointLease `json:"endpoints,omitempty"`
+	Toolchains     []ToolchainRef  `json:"toolchains,omitempty"`
+	Outcome        Outcome         `json:"outcome,omitempty"`
+	ExitCode       *int64          `json:"exit_code,omitempty"`
+	Cleanup        CleanupStatus   `json:"cleanup,omitempty"`
+	Truncated      bool            `json:"truncated,omitempty"`
 }
 
 type OutputSnapshot struct {
-	JobID     string `json:"job_id"`
-	State     State  `json:"state"`
-	Output    string `json:"output"`
-	Truncated bool   `json:"truncated"`
-	Complete  bool   `json:"complete"`
+	OutputComplete bool       `json:"output_complete"`
+	OutputGap      *OutputGap `json:"output_gap,omitempty"`
+	OutputCursor   int64      `json:"output_cursor"`
+	JobID          string     `json:"job_id"`
+	State          State      `json:"state"`
+	Output         string     `json:"output"`
+	Truncated      bool       `json:"truncated"`
+	Complete       bool       `json:"complete"`
 }
 
 type CancelResult struct {
 	JobID    string `json:"job_id"`
 	Canceled bool   `json:"canceled"`
 	Status   Status `json:"status"`
+}
+
+func OutputIntegrityValid(cursor int64, complete bool, gap *OutputGap) bool {
+	return cursor >= 0 && cursor <= MaxOutputBytes && (gap == nil || gap.valid() && gap.Cursor == cursor && !complete)
 }
 
 type Launcher interface {
@@ -428,6 +438,11 @@ func statusFromRecord(record Record) Status {
 		status.Cleanup = record.Result.Cleanup
 		status.Truncated = record.Result.Output.Truncated
 	}
+	status.OutputComplete = record.State == StateTerminal
+	if p := record.Protected; p != nil {
+		status.OutputComplete, status.OutputGap, status.OutputCursor = p.Complete, p.Gap, p.Cursor
+		status.Truncated = p.Truncated
+	}
 	return status
 }
 
@@ -452,11 +467,16 @@ func OutputFromRecord(record Record) (OutputSnapshot, error) {
 		snapshot.Truncated = record.Result.Output.Truncated
 	}
 	if record.Protected != nil {
+		if record.Protected.OutputExpired {
+			return OutputSnapshot{}, ErrOutputExpired
+		}
 		output, err := NormalizeOutput(record.Protected.Output, MaxOutputBytes, record.Protected.Truncated)
 		if err != nil {
 			return OutputSnapshot{}, err
 		}
 		snapshot.Output, snapshot.Truncated, snapshot.Complete = output.Text, output.Truncated, record.Protected.Complete
+		snapshot.OutputGap, snapshot.OutputCursor = record.Protected.Gap, record.Protected.Cursor
 	}
+	snapshot.OutputComplete = snapshot.Complete
 	return snapshot, nil
 }

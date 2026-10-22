@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"errors"
+	"loki/internal/platform/privateio"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,11 +31,12 @@ const (
 	OutcomeOOMKilled    Outcome = "oom_killed"
 	OutcomeLaunchFailed Outcome = "launch_failed"
 	OutcomeUnknown      Outcome = "outcome_unknown"
+	OutcomeOutputLost   Outcome = "output_lost"
 )
 
 func (o Outcome) Valid() bool {
 	switch o {
-	case OutcomeExited, OutcomeCanceled, OutcomeTimedOut, OutcomeOOMKilled, OutcomeLaunchFailed, OutcomeUnknown:
+	case OutcomeExited, OutcomeCanceled, OutcomeTimedOut, OutcomeOOMKilled, OutcomeLaunchFailed, OutcomeUnknown, OutcomeOutputLost:
 		return true
 	default:
 		return false
@@ -111,6 +113,32 @@ type Record struct {
 
 func (r Record) valid(maxOutputBytes int) bool {
 	if p := r.Protected; p != nil {
+		if a := p.Authority; a != nil {
+			parts := strings.Split(r.BackendRef, ":")
+			if a.DeploymentID != p.DeploymentID || a.Resource != p.Resource || a.Environment != p.Environment || !requestIDPattern.MatchString(a.ResourceID) || a.ResourceID != strings.ToLower(a.ResourceID) || !sha256Pattern.MatchString(a.PolicySHA256) || len(parts) < 3 || parts[len(parts)-2] != a.PolicySHA256 || a.Principal == "" || a.Repository == "" {
+				return false
+			}
+		}
+		if p.CancelResult != nil && (p.CancelIntent == nil || p.CancelResult.Recorded && p.CancelResult.Revision < p.CancelIntent.Revision) {
+			return false
+		}
+		if p.CancelIntent != nil && (p.CancelIntent.Revision == 0 || p.CancelIntent.RequestID != privateio.OperationID(p.DeploymentID, r.ID, "cancel")) {
+			return false
+		}
+		if p.Cursor < 0 || p.Cursor > int64(maxOutputBytes) || !p.OutputExpired && p.Cursor != int64(len(p.Output)) || p.OutputExpired && len(p.Output) != 0 {
+			return false
+		}
+		if p.Gap != nil && (!p.Gap.valid() || p.Gap.Cursor != p.Cursor || p.Complete) {
+			return false
+		}
+		for _, stamp := range []string{p.CancelRequestedAt, p.OutputExpiresAt} {
+			if stamp != "" {
+				parsed, err := time.Parse(time.RFC3339Nano, stamp)
+				if err != nil || parsed.Location() != time.UTC {
+					return false
+				}
+			}
+		}
 		if !p.validReports(r.InstanceRef, r.ID) {
 			return false
 		}
@@ -118,6 +146,9 @@ func (r Record) valid(maxOutputBytes int) bool {
 			return false
 		}
 		if input := p.Prepared; input != nil {
+			if input.PrepareRequestID != privateio.OperationID(p.DeploymentID, r.ID, "prepare") || input.ApproveRequestID != privateio.OperationID(p.DeploymentID, r.ID, "approve") || input.DeliverRequestID != privateio.OperationID(p.DeploymentID, r.ID, "deliver") {
+				return false
+			}
 			if input.Stage != "prepared" && input.Stage != "approved" {
 				return false
 			}

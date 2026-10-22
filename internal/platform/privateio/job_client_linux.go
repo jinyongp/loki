@@ -15,6 +15,8 @@ import (
 
 var upstreamID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var runnerID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var ErrCollectorLost = errors.New("protected collector lost")
+var ErrOutputStorage = errors.New("protected output storage failed")
 
 type JobSession struct {
 	open JobOpen
@@ -42,7 +44,7 @@ func OpenJob(ctx context.Context, socket string, expectedUID uint32, open JobOpe
 	session.stop = context.AfterFunc(ctx, func() { unixConn.Close() })
 	fail := func() (*JobSession, error) { session.Close(); return nil, ErrInvalid }
 	_ = unixConn.SetDeadline(time.Now().Add(30 * time.Second))
-	if VerifyPeer(unixConn, expectedUID) != nil || WriteControl(unixConn, open) != nil {
+	if VerifyPeer(unixConn, expectedUID) != nil || WriteControl(unixConn, JobRequest{Open: &open}) != nil {
 		return fail()
 	}
 	var previous PreparedJob
@@ -141,7 +143,7 @@ func (s *JobSession) Collect(destination io.Writer) error {
 	for {
 		frame, err := ReadBytes(s.conn, (64<<10)+1)
 		if err != nil {
-			return errors.New("protected collector lost")
+			return ErrCollectorLost
 		}
 		if len(frame) == 1 && frame[0] == StreamEOF {
 			return nil
@@ -154,7 +156,7 @@ func (s *JobSession) Collect(destination io.Writer) error {
 		size := len(frame) - 1
 		clear(frame)
 		if err != nil || n != size {
-			return errors.New("protected output storage failed")
+			return ErrOutputStorage
 		}
 	}
 }

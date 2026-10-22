@@ -203,10 +203,18 @@ func (s *Service) authorize(open privateio.JobOpen) (controlpolicy.ApplicationRe
 
 func (s *Service) serveJob(serviceCtx context.Context, conn *net.UnixConn) {
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
-	var open privateio.JobOpen
-	if privateio.ReadControl(conn, &open) != nil {
+	var request privateio.JobRequest
+	if privateio.ReadControl(conn, &request) != nil {
 		return
 	}
+	if request.Reconcile != nil && request.Open == nil {
+		s.reconcileJob(serviceCtx, conn, *request.Reconcile)
+		return
+	}
+	if request.Open == nil || request.Reconcile != nil {
+		return
+	}
+	open := *request.Open
 	resource, err := s.authorize(open)
 	if err != nil {
 		return

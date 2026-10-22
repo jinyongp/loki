@@ -94,6 +94,7 @@ func (l *lifecycle) runProtected(id string, plan sandbox.Plan, parent context.Co
 	runner := l.runner.(protectedRunner)
 	started, startErr := runner.PrepareProtectedJob(ctx, plan)
 	bound := false
+	var observedResult sandbox.Result
 	if started.InstanceRef != "" {
 		_, err := l.journal.BindInstance(id, started.InstanceRef, l.now())
 		bound = err == nil
@@ -101,6 +102,13 @@ func (l *lifecycle) runProtected(id string, plan sandbox.Plan, parent context.Co
 	}
 	fail := func(cause error) {
 		cancel()
+		var exit *int64
+		if bound && started.Started {
+			if observedResult.ExitCodeKnown {
+				value := observedResult.ExitCode
+				exit = &value
+			}
+		}
 		cleanup := jobs.CleanupNotRequired
 		if started.Created {
 			cleanup = jobs.CleanupFailed
@@ -112,14 +120,31 @@ func (l *lifecycle) runProtected(id string, plan sandbox.Plan, parent context.Co
 		outcome := jobs.OutcomeUnknown
 		if !started.Started {
 			outcome = jobs.OutcomeLaunchFailed
-		}
-		if errors.Is(parent.Err(), context.Canceled) {
-			outcome = jobs.OutcomeCanceled
+		} else {
+			outcome = jobs.OutcomeOutputLost
+			reason := "collector_lost"
+			if errors.Is(cause, privateio.ErrOutputStorage) {
+				reason = "storage_failed"
+			}
+			cause = errors.Join(cause, l.journal.MarkOutputLost(id, reason, l.now()))
+			if record, ok, err := l.journal.Get(id); err == nil && ok && record.Protected.Complete {
+				outcome = jobs.OutcomeUnknown
+				if exit != nil {
+					outcome = jobs.OutcomeExited
+				}
+			}
 		}
 		if errors.Is(parent.Err(), context.DeadlineExceeded) {
 			outcome = jobs.OutcomeTimedOut
 		}
-		_, err := l.journal.MarkTerminal(id, jobs.Result{Outcome: outcome, Cleanup: cleanup}, l.now())
+		_, err := l.journal.MarkTerminal(id, jobs.Result{Outcome: outcome, Cleanup: cleanup, ExitCode: exit}, l.now())
+		if err == nil {
+			if record, ok, readErr := l.journal.Get(id); readErr != nil {
+				err = readErr
+			} else if ok {
+				err = l.reconcileProtectedReports(context.Background(), record)
+			}
+		}
 		job.err = errors.Join(cause, err)
 	}
 	if startErr != nil || !bound {
@@ -160,7 +185,13 @@ func (l *lifecycle) runProtected(id string, plan sandbox.Plan, parent context.Co
 		return
 	}
 	defer session.Close()
-	if err = session.ForwardBootstrap(func() error { return attachment.Start(ctx) }, attachment); err != nil {
+	if err = session.ForwardBootstrap(func() error {
+		if err := attachment.Start(ctx); err != nil {
+			return err
+		}
+		started.Started = true
+		return nil
+	}, attachment); err != nil {
 		fail(err)
 		return
 	}
@@ -206,6 +237,9 @@ func (l *lifecycle) runProtected(id string, plan sandbox.Plan, parent context.Co
 	var observeErr error
 	for {
 		result, observeErr = l.runner.ObserveJob(ctx, started.Resource, started.InstanceRef)
+		if result.ExitCodeKnown {
+			observedResult = result
+		}
 		if terminalSandboxResult(result) || ctx.Err() != nil {
 			break
 		}

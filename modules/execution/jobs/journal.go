@@ -20,7 +20,7 @@ import (
 	"loki/internal/platform/safeio"
 )
 
-const journalVersion = 2
+const journalVersion = 3
 
 type JournalLimits struct {
 	MaxRecords     int
@@ -30,12 +30,14 @@ type JournalLimits struct {
 }
 
 type Journal struct {
-	dir      string
-	limits   JournalLimits
-	lockFile *os.File
-	mu       sync.Mutex
-	records  map[string]Record
-	closed   bool
+	dir        string
+	limits     JournalLimits
+	lockFile   *os.File
+	mu         sync.Mutex
+	records    map[string]Record
+	spent      map[string]spentRequest
+	spentBytes int64
+	closed     bool
 }
 
 type journalEnvelope struct {
@@ -110,7 +112,11 @@ func OpenJournal(dir string, limits JournalLimits) (*Journal, error) {
 		return nil, err
 	}
 
-	journal := &Journal{dir: dir, limits: limits, lockFile: lockFile, records: map[string]Record{}}
+	journal := &Journal{dir: dir, limits: limits, lockFile: lockFile, records: map[string]Record{}, spent: map[string]spentRequest{}}
+	if err = journal.loadSpent(); err != nil {
+		journal.Close()
+		return nil, err
+	}
 	if err = journal.load(); err != nil {
 		journal.Close()
 		return nil, err
@@ -151,7 +157,7 @@ func (j *Journal) MaxOutputBytes() int {
 
 func (j *Journal) Admit(id, backendRef string, deadline, now time.Time) (Record, error) {
 	record, replayed, err := j.admit(
-		id, backendRef, "", "", NetworkNone, nil, nil, deadline, now, false,
+		id, backendRef, "", "", NetworkNone, nil, nil, deadline, now, false, nil,
 	)
 	if replayed {
 		return Record{}, errors.New("legacy job admission cannot replay")
@@ -205,14 +211,14 @@ func (j *Journal) AdmitRequestWithToolchains(
 		return Record{}, false, err
 	}
 	return j.admit(
-		id, backendRef, requestID, requestSHA256, network, endpoints, toolchains, deadline, now, true,
+		id, backendRef, requestID, requestSHA256, network, endpoints, toolchains, deadline, now, true, nil,
 	)
 }
 
 func (j *Journal) admit(
 	id, backendRef, requestID, requestSHA256 string,
 	network NetworkProfile, endpoints []EndpointRequest, toolchains []ToolchainRef,
-	deadline, now time.Time, allowReplay bool,
+	deadline, now time.Time, allowReplay bool, protected *ProtectedRecord,
 ) (Record, bool, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -232,10 +238,22 @@ func (j *Journal) admit(
 	if err := j.pruneExpired(now); err != nil {
 		return Record{}, false, err
 	}
+	if spent, exists := j.spent[id]; exists {
+		if spent.RequestID != requestID || spent.RequestSHA256 != requestSHA256 || protected == nil || spent.DeploymentID != protected.DeploymentID {
+			return Record{}, false, ErrReplayConflict
+		}
+		created, _ := time.Parse(time.RFC3339Nano, spent.CreatedAt)
+		if !now.Before(created.Add(protectedRequestRetention)) {
+			return Record{}, false, ErrRequestExpired
+		}
+		if _, retained := j.records[id]; !retained {
+			return Record{}, false, ErrDeliveryUnknown
+		}
+	}
 	if existing, exists := j.records[id]; exists {
 		if allowReplay && existing.RequestID == requestID && existing.RequestSHA256 == requestSHA256 &&
 			existing.Network == network && sameEndpointRequests(existing.EndpointRequests, endpoints) &&
-			sameToolchainRefs(existing.Toolchains, toolchains) {
+			sameToolchainRefs(existing.Toolchains, toolchains) && sameProtectedSelection(existing.Protected, protected) {
 			return cloneRecord(existing), true, nil
 		}
 		if allowReplay {
@@ -247,12 +265,27 @@ func (j *Journal) admit(
 		return Record{}, false, ErrJournalCapacity
 	}
 	record := Record{
-		ID: id, BackendRef: backendRef, RequestID: requestID, RequestSHA256: requestSHA256,
+		Protected: protected,
+		ID:        id, BackendRef: backendRef, RequestID: requestID, RequestSHA256: requestSHA256,
 		Network: network, EndpointRequests: append([]EndpointRequest(nil), endpoints...),
 		Toolchains: append([]ToolchainRef(nil), toolchains...),
 		State:      StateAdmitted,
 		CreatedAt:  now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano),
 		DeadlineAt: deadline.Format(time.RFC3339Nano),
+	}
+	if !record.valid(j.limits.MaxOutputBytes) {
+		return Record{}, false, errors.New("job admission record is invalid")
+	}
+	if protected != nil {
+		// Masked bytes are retained as base64 and also as a repaired UTF-8
+		// result. Control bytes can cost six JSON bytes each in the latter.
+		n := int64(j.limits.MaxOutputBytes)
+		if j.limits.MaxRecordBytes < 6*n+4*((n+2)/3)+(64<<10) {
+			return Record{}, false, errors.New("protected output record budget is insufficient")
+		}
+		if err := j.reserveSpent(record); err != nil {
+			return Record{}, false, err
+		}
 	}
 	if err := j.publish(record, false); err != nil {
 		return Record{}, false, err
@@ -401,11 +434,15 @@ func (j *Journal) MarkTerminal(id string, result Result, now time.Time) (Record,
 	if record.State != StateAdmitted && record.State != StateRunning {
 		return Record{}, errors.New("job terminal transition requires an active record")
 	}
+	record = cloneRecord(record)
 	if record.Protected != nil {
 		var err error
 		result.Output, err = NormalizeOutput(record.Protected.Output, j.limits.MaxOutputBytes, record.Protected.Truncated)
 		if err != nil {
 			return Record{}, err
+		}
+		if record.Protected.CancelRequestedAt != "" {
+			result.Outcome = OutcomeCanceled
 		}
 	}
 	if !result.Valid(j.limits.MaxOutputBytes) {
@@ -421,6 +458,10 @@ func (j *Journal) MarkTerminal(id string, result Result, now time.Time) (Record,
 	releaseEndpointLeases(&record, now)
 	record.UpdatedAt = now.Format(time.RFC3339Nano)
 	record.ExpiresAt = now.Add(j.limits.Retention).Format(time.RFC3339Nano)
+	if record.Protected != nil {
+		record.Protected.OutputExpiresAt = now.Add(min(j.limits.Retention, time.Hour)).Format(time.RFC3339Nano)
+		record.ExpiresAt = now.Add(protectedRequestRetention).Format(time.RFC3339Nano)
+	}
 	if err := j.publish(record, true); err != nil {
 		return Record{}, err
 	}
@@ -451,6 +492,7 @@ func (j *Journal) MarkCleanup(id string, status CleanupStatus, now time.Time) (R
 	if record.Result.Cleanup == CleanupFailed && status == CleanupFailed {
 		return cloneRecord(record), nil
 	}
+	record = cloneRecord(record)
 	now = now.UTC()
 	record.Result.Cleanup = status
 	if status == CleanupComplete {
@@ -458,7 +500,12 @@ func (j *Journal) MarkCleanup(id string, status CleanupStatus, now time.Time) (R
 	}
 	record.UpdatedAt = now.Format(time.RFC3339Nano)
 	if status == CleanupComplete {
-		record.ExpiresAt = now.Add(j.limits.Retention).Format(time.RFC3339Nano)
+		if record.Protected == nil {
+			record.ExpiresAt = now.Add(j.limits.Retention).Format(time.RFC3339Nano)
+		} else if expires, err := time.Parse(time.RFC3339Nano, record.ExpiresAt); err == nil && !expires.After(now) {
+			// Finalize old cleanup without reviving its expired replay window.
+			record.ExpiresAt = now.Add(time.Nanosecond).Format(time.RFC3339Nano)
+		}
 	}
 	if err := j.publish(record, true); err != nil {
 		return Record{}, err
@@ -514,6 +561,12 @@ func ReadJournalSnapshot(dir string, limits JournalLimits) ([]Record, error) {
 	result := make([]Record, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
+		if name == "requests" {
+			if err := validateJournalDirectory(filepath.Join(dir, name)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if name == "journal.lock" {
 			continue
 		}
@@ -563,6 +616,24 @@ func (j *Journal) Prune(now time.Time) error {
 
 func (j *Journal) pruneExpired(now time.Time) error {
 	for id, record := range j.records {
+		if p := record.Protected; p != nil && !p.OutputExpired && p.OutputExpiresAt != "" {
+			expires, err := time.Parse(time.RFC3339Nano, p.OutputExpiresAt)
+			if err != nil {
+				return err
+			}
+			if !now.Before(expires) {
+				record = cloneRecord(record)
+				record.Protected.Output = nil
+				record.Protected.OutputExpired = true
+				if record.Result != nil {
+					record.Result.Output.Text = ""
+				}
+				if err := j.publish(record, true); err != nil {
+					return err
+				}
+				j.records[id] = record
+			}
+		}
 		if record.State != StateTerminal || record.Result == nil ||
 			(record.Result.Cleanup != CleanupComplete && record.Result.Cleanup != CleanupNotRequired) {
 			continue
@@ -625,6 +696,12 @@ func (j *Journal) load() error {
 	}
 	count := 0
 	for _, entry := range entries {
+		if entry.Name() == "requests" {
+			if err := validateJournalDirectory(filepath.Join(j.dir, "requests")); err != nil {
+				return err
+			}
+			continue
+		}
 		if entry.Name() == "journal.lock" {
 			continue
 		}
@@ -657,6 +734,11 @@ func (j *Journal) load() error {
 			return errors.New("job journal record identity does not match its file")
 		}
 		j.records[id] = record
+		if record.Protected != nil {
+			if err := j.reserveSpent(record); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -686,7 +768,7 @@ func loadJournalRecord(path string, limits JournalLimits) (Record, error) {
 	var envelope journalEnvelope
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err = decoder.Decode(&envelope); err != nil || envelope.Version != journalVersion {
+	if err = decoder.Decode(&envelope); err != nil || envelope.Version != journalVersion && envelope.Version != 2 {
 		return Record{}, errors.New("job journal version is unsupported or invalid")
 	}
 	var trailing any
@@ -703,6 +785,9 @@ func loadJournalRecord(path string, limits JournalLimits) (Record, error) {
 	if err = recordDecoder.Decode(&record); err != nil {
 		return Record{}, errors.New("job journal record is invalid")
 	}
+	if envelope.Version == 2 && record.Protected != nil {
+		record.Protected.Cursor = int64(len(record.Protected.Output))
+	}
 	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.valid(limits.MaxOutputBytes) {
 		return Record{}, errors.New("job journal record is invalid")
 	}
@@ -713,6 +798,22 @@ func cloneRecord(record Record) Record {
 	copy := record
 	if record.Protected != nil {
 		p := *record.Protected
+		if p.Authority != nil {
+			authority := *p.Authority
+			p.Authority = &authority
+		}
+		if p.CancelIntent != nil {
+			intent := *p.CancelIntent
+			p.CancelIntent = &intent
+		}
+		if p.CancelResult != nil {
+			result := *p.CancelResult
+			p.CancelResult = &result
+		}
+		if p.Gap != nil {
+			gap := *p.Gap
+			p.Gap = &gap
+		}
 		p.Output = append([]byte(nil), p.Output...)
 		p.Reports = append([]ProtectedReport(nil), p.Reports...)
 		for i := range p.Reports {

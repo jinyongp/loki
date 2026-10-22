@@ -12,7 +12,7 @@ func jobStateSchema(description string) map[string]any {
 func jobOutcomeSchema(description string) map[string]any {
 	return map[string]any{
 		"type":        "string",
-		"enum":        []string{"exited", "canceled", "timed_out", "oom_killed", "launch_failed", "outcome_unknown"},
+		"enum":        []string{"exited", "canceled", "timed_out", "oom_killed", "launch_failed", "outcome_unknown", "output_lost"},
 		"description": description,
 	}
 }
@@ -121,7 +121,7 @@ func jobEndpointLeaseSchema() map[string]any {
 }
 
 func jobStatusOutputSchema() map[string]any {
-	return map[string]any{
+	schema := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
 			"job_id":      jobIDSchema("Opaque Loki Job identifier."),
@@ -137,7 +137,7 @@ func jobStatusOutputSchema() map[string]any {
 			"toolchains": jobToolchainRefListSchema("Immutable managed toolchain generations selected for this Job from project declarations."),
 			"outcome":    jobOutcomeSchema("Terminal Job outcome when available."),
 			"exit_code": map[string]any{
-				"type": "integer", "minimum": 0, "maximum": 255,
+				"type": []string{"integer", "null"}, "minimum": 0, "maximum": 255,
 				"description": "Observed process exit code when the backend produced one.",
 			},
 			"cleanup": jobCleanupSchema("Durable cleanup state when terminal evidence is available."),
@@ -148,6 +148,19 @@ func jobStatusOutputSchema() map[string]any {
 		},
 		"required": []string{"job_id", "state", "created_at", "updated_at", "deadline_at", "network", "endpoints", "toolchains"},
 	}
+	jobOutputIntegrityFields(schema)
+	return schema
+}
+
+func jobOutputIntegrityFields(schema map[string]any) {
+	p := schema["properties"].(map[string]any)
+	p["output_complete"] = map[string]any{"type": "boolean", "description": "True only after trustworthy output EOF; independent of execution outcome and truncation."}
+	p["output_cursor"] = map[string]any{"type": "integer", "minimum": 0, "maximum": 4194304, "description": "Durable masked byte offset for protected Jobs."}
+	p["output_gap"] = map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+		"cursor":         map[string]any{"type": "integer", "minimum": 0, "maximum": 4194304},
+		"reason":         map[string]any{"type": "string", "enum": []string{"collector_lost", "attach_lost", "masking_failed", "storage_failed", "recovery_interrupted"}},
+		"unknown_length": map[string]any{"const": true},
+	}, "required": []string{"cursor", "reason", "unknown_length"}}
 }
 
 func jobEndpointRequestListSchema(description string) map[string]any {
@@ -263,6 +276,7 @@ func jobTool() (*mcp.Tool, error) {
 	}
 
 	cancelStatus := jobStatusOutputSchema()
+	jobOutputIntegrityFields(outputOutput)
 	cancelOutput := map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{

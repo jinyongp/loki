@@ -565,10 +565,14 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 	var record jobs.Record
 	var replayed bool
 	if workload.RequestID != "" {
-		record, replayed, err = l.journal.AdmitRequestWithToolchains(
-			workload.ID, backendReference(plan), workload.RequestID, workload.RequestSHA256,
-			workload.Network, workload.Endpoints, workload.Toolchains, deadline, now,
-		)
+		if protected != nil {
+			record, replayed, err = l.journal.AdmitProtectedRequest(workload.ID, backendReference(plan), workload.RequestID, workload.RequestSHA256, workload.Network, workload.Endpoints, workload.Toolchains, protected.DeploymentID, workload.Resource, workload.Environment, deadline, now)
+		} else {
+			record, replayed, err = l.journal.AdmitRequestWithToolchains(
+				workload.ID, backendReference(plan), workload.RequestID, workload.RequestSHA256,
+				workload.Network, workload.Endpoints, workload.Toolchains, deadline, now,
+			)
+		}
 		if errors.Is(err, jobs.ErrReplayConflict) {
 			return jobs.StartResult{}, fault.New(
 				fault.CodeConflict, jobs.ErrReplayConflict.Error(),
@@ -592,6 +596,12 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 			"wait for retained job results to expire before retrying",
 		)
 	}
+	if errors.Is(err, jobs.ErrRequestExpired) {
+		return jobs.StartResult{}, fault.New(fault.CodeRequestExpired, jobs.ErrRequestExpired.Error(), false, "inspect retained request history; a spent request cannot be reused")
+	}
+	if errors.Is(err, jobs.ErrDeliveryUnknown) {
+		return jobs.StartResult{}, fault.New(fault.CodeDeliveryUnknown, jobs.ErrDeliveryUnknown.Error(), false, "inspect the original Job; do not repeat its external effects")
+	}
 	if err != nil {
 		return jobs.StartResult{}, fault.Error("launcher job admission failed")
 	}
@@ -599,8 +609,8 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 		return startResultFromRecord(record, true), nil
 	}
 	if protected != nil {
-		if _, err = l.journal.BindProtectedJob(workload.ID, protected.DeploymentID, workload.Resource, workload.Environment, l.now()); err != nil {
-			return jobs.StartResult{}, fault.Error("protected Job admission failed")
+		if err = l.journal.BindProtectedAuthority(workload.ID, l.protectedAuthority(*protected), l.now()); err != nil {
+			return jobs.StartResult{}, fault.Error("protected Job authority persistence failed")
 		}
 		protected.BaseEnvironment = []privateio.EnvironmentEntry{}
 		for _, entry := range plan.BootstrapEnvironment() {
@@ -1005,6 +1015,14 @@ func (l *lifecycle) reconcile() error {
 				if _, markErr := l.journal.MarkCleanup(record.ID, status, l.now()); markErr != nil {
 					return errors.Join(cleanupErr, markErr)
 				}
+				if record.Protected != nil && (cleanupErr != nil || status != jobs.CleanupComplete) {
+					return errors.New("protected Job recovery cleanup is incomplete")
+				}
+			}
+			if record.Protected != nil {
+				if err := l.reconcileProtectedReports(l.ctx, record); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -1032,13 +1050,41 @@ func (l *lifecycle) reconcile() error {
 		if record.Protected != nil {
 			// A replacement launcher never resumes raw collection with lost
 			// matcher state or re-delivers values. Clean only the exact instance.
+			var exit *int64
+			state, inspectErr := l.runner.InspectJob(l.ctx, resource, record.InstanceRef)
+			// ObserveJob waits for running workloads. Recovery must stop a Job
+			// whose collector is gone, rather than wait for its original timeout.
+			if inspectErr == nil && state.Terminal {
+				observed, observeErr := l.runner.ObserveJob(l.ctx, resource, record.InstanceRef)
+				if observeErr == nil && observed.ExitCodeKnown {
+					value := observed.ExitCode
+					exit = &value
+				}
+			}
+			if err := l.journal.MarkOutputLost(record.ID, "recovery_interrupted", l.now()); err != nil {
+				return err
+			}
 			cleanup, cleanupErr := l.runner.CleanupJob(context.Background(), resource, record.InstanceRef)
 			status := terminalCleanup(cleanup, cleanupErr)
-			if _, err = l.journal.MarkTerminal(record.ID, jobs.Result{Outcome: jobs.OutcomeUnknown, Cleanup: status}, l.now()); err != nil {
+			outcome := jobs.OutcomeOutputLost
+			if record.Protected.Complete {
+				outcome = jobs.OutcomeUnknown
+				if exit != nil {
+					outcome = jobs.OutcomeExited
+				}
+			}
+			if _, err = l.journal.MarkTerminal(record.ID, jobs.Result{Outcome: outcome, Cleanup: status, ExitCode: exit}, l.now()); err != nil {
 				return err
 			}
 			if cleanupErr != nil || status == jobs.CleanupFailed {
 				return errors.New("protected Job recovery cleanup is incomplete")
+			}
+			if latest, ok, err := l.journal.Get(record.ID); err != nil {
+				return err
+			} else if ok {
+				if err := l.reconcileProtectedReports(l.ctx, latest); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -1231,6 +1277,9 @@ func (l *lifecycle) output(ctx context.Context, id string) (jobs.OutputSnapshot,
 	}
 	snapshot, err := jobs.OutputFromRecord(record)
 	if err != nil {
+		if errors.Is(err, jobs.ErrOutputExpired) {
+			return jobs.OutputSnapshot{}, fault.New(fault.CodeUnavailable, err.Error(), false, "inspect Job status; retained output is no longer available")
+		}
 		return jobs.OutputSnapshot{}, err
 	}
 	if record.Protected != nil || record.State == jobs.StateTerminal || record.InstanceRef == "" {
@@ -1338,6 +1387,11 @@ func (l *lifecycle) cancelStatus(ctx context.Context, id string) (jobs.CancelRes
 			return jobs.CancelResult{JobID: id, Canceled: false, Status: status}, nil
 		}
 		return jobs.CancelResult{}, fault.Error("workload recovery is pending")
+	}
+	if record.Protected != nil {
+		if err := l.journal.RequestProtectedCancel(id, l.now()); err != nil {
+			return jobs.CancelResult{}, err
+		}
 	}
 	job.cancel()
 	select {

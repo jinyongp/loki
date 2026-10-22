@@ -142,6 +142,19 @@ type Execution struct {
 	ExitCode       *int64 `json:"exit_code,omitempty"`
 }
 
+func (p *Provider) ExecutionStatus(ctx context.Context, app, execution string) (Execution, error) {
+	if !profile.MatchString(app) || !id.MatchString(execution) {
+		return Execution{}, ErrUnavailable
+	}
+	var result struct {
+		Item Execution `json:"item"`
+	}
+	if p.invoke(ctx, []string{"values", "execution", "status", execution, "--profile", app}, nil, &result) != nil || result.Item.ID != execution {
+		return Execution{}, ErrUnavailable
+	}
+	return result.Item, nil
+}
+
 func (p *Provider) execution(ctx context.Context, operation, app, execution, request string, input any) (Execution, error) {
 	if !profile.MatchString(app) || !uuid.MatchString(request) || execution != "" && !id.MatchString(execution) || !AllowsDevtoolsCommand(DevtoolsJobs, "values execution "+operation) {
 		return Execution{}, ErrUnavailable

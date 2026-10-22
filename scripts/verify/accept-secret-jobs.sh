@@ -57,11 +57,13 @@ docker run --rm --init --name "$test_container" --read-only --network none \
   --cap-drop ALL --cap-add SETUID --cap-add SETGID --cap-add CHOWN --cap-add KILL --cap-add DAC_OVERRIDE \
   --security-opt no-new-privileges --memory 2g --pids-limit 128 \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m \
+  --tmpfs "$root/diskfull:rw,nosuid,nodev,noexec,size=64k,mode=0700" \
   --mount "type=bind,src=$root,dst=$root" \
   --mount "type=bind,src=$provider,dst=/fixture/devtools,readonly" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   -e LOKI_REQUIRE_PROTECTED_OCI=1 \
   -e "LOKI_PROTECTED_FIXTURE_ROOT=$root" \
+  -e "LOKI_PROTECTED_STORAGE_ROOT=$root/diskfull" \
   -e "LOKI_PROTECTED_OWNER=$fixture_owner" \
   -e "LOKI_TEST_DOCKER_IMAGE=$fixture" \
   -e LOKI_SECRET_TEST_DEVTOOLS=/fixture/devtools \
@@ -69,4 +71,4 @@ docker run --rm --init --name "$test_container" --read-only --network none \
   -e "LOKI_PROTECTED_NETWORK_CHECK=$root/network-check" \
   --entrypoint "$root/launcher.test" \
   alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 \
-  -test.run '^TestRealProtectedOCIJob$' -test.v -test.timeout 60s
+  -test.run '^TestRealProtectedOCI' -test.v -test.timeout 180s

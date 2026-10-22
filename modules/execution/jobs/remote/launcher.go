@@ -163,7 +163,7 @@ func (l *Launcher) Inspect(ctx context.Context, id string) (jobs.Status, error) 
 		return jobs.Status{}, err
 	}
 	var result jobs.Status
-	if err = decodeStrict(raw, &result); err != nil || result.JobID != id || !result.State.Valid() {
+	if err = decodeStrict(raw, &result); err != nil || result.JobID != id || !result.State.Valid() || !jobs.OutputIntegrityValid(result.OutputCursor, result.OutputComplete, result.OutputGap) {
 		return jobs.Status{}, errors.New("launcher returned an invalid inspect result")
 	}
 	return result, nil
@@ -182,7 +182,7 @@ func (l *Launcher) Output(ctx context.Context, id string) (jobs.OutputSnapshot, 
 	}
 	var result jobs.OutputSnapshot
 	if err = decodeStrict(raw, &result); err != nil || result.JobID != id || !result.State.Valid() ||
-		len(result.Output) > jobs.MaxOutputBytes {
+		len(result.Output) > jobs.MaxOutputBytes || !jobs.OutputIntegrityValid(result.OutputCursor, result.OutputComplete || result.Complete, result.OutputGap) {
 		return jobs.OutputSnapshot{}, errors.New("launcher returned an invalid output result")
 	}
 	return result, nil
@@ -201,7 +201,7 @@ func (l *Launcher) Cancel(ctx context.Context, id string) (jobs.CancelResult, er
 	}
 	var result jobs.CancelResult
 	if err = decodeStrict(raw, &result); err != nil || result.JobID != id ||
-		result.Status.JobID != id || !result.Status.State.Valid() {
+		result.Status.JobID != id || !result.Status.State.Valid() || !jobs.OutputIntegrityValid(result.Status.OutputCursor, result.Status.OutputComplete, result.Status.OutputGap) {
 		return jobs.CancelResult{}, errors.New("launcher returned an invalid cancel result")
 	}
 	return result, nil

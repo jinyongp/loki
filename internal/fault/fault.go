@@ -16,13 +16,16 @@ func (e Error) Error() string { return string(e) }
 type Code string
 
 const (
-	CodeInvalidInput   Code = "invalid_input"
-	CodeConflict       Code = "conflict"
-	CodeDenied         Code = "denied"
-	CodeUnavailable    Code = "unavailable"
-	CodeQuotaExceeded  Code = "quota_exceeded"
-	CodeFailed         Code = "failed"
-	CodeOutcomeUnknown Code = "outcome_unknown"
+	CodeInvalidInput    Code = "invalid_input"
+	CodeConflict        Code = "conflict"
+	CodeDenied          Code = "denied"
+	CodeUnavailable     Code = "unavailable"
+	CodeQuotaExceeded   Code = "quota_exceeded"
+	CodeFailed          Code = "failed"
+	CodeOutcomeUnknown  Code = "outcome_unknown"
+	CodeRequestExpired  Code = "request_expired"
+	CodeDeliveryUnknown Code = "delivery_unknown"
+	CodeOutputLost      Code = "output_lost"
 )
 
 type Detail struct {
