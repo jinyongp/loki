@@ -117,6 +117,17 @@ func ValidateMetadata(options PrepareOptions) error {
 	return err
 }
 
+// PolicyDigest uses the exact metadata constructor used by preparation, without
+// selecting or creating a generation. Migration preparation binds both policy
+// revisions through this owner rather than reconstructing a broker layout.
+func PolicyDigest(options PrepareOptions) (string, error) {
+	layout, err := brokerMetadata(options)
+	if err != nil {
+		return "", err
+	}
+	return layout.PolicySHA256, nil
+}
+
 func brokerMetadata(options PrepareOptions) (appvalues.BrokerLayout, error) {
 	if options.InitialMaintenanceOperation != "" && !controlpolicy.ApplicationUUID.MatchString(options.InitialMaintenanceOperation) {
 		return appvalues.BrokerLayout{}, invalid

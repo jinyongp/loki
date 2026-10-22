@@ -113,4 +113,13 @@ func TestSourceOwnerBackupRecoversOriginalPublicationAndRejectsMissingAcknowledg
 	if _, err := os.Lstat(intent.BackupPath); !os.IsNotExist(err) {
 		t.Fatal("acknowledged archive regenerated", err)
 	}
+	if _, err := j.RequestSecretMigrationRollback(r.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.Session(admin.ApplicationClient{Socket: "/tmp/test-admin.sock", ExpectedUID: 10006}, nil); err == nil {
+		t.Fatal("original source owner reopened transfer after rollback choice")
+	}
+	if err := owner.Backup(ctx); err == nil {
+		t.Fatal("original source owner resumed backup after rollback choice")
+	}
 }

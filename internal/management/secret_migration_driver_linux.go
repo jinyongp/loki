@@ -8,14 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
@@ -70,21 +66,8 @@ func (b *DockerFullBackend) PrepareSecretMigration(ctx context.Context, mappings
 	if err := b.Store.RequireMutable(); err != nil {
 		return intent, err
 	}
-	if !filepath.IsAbs(backup) || filepath.Clean(backup) != backup || backup == "/" {
-		return intent, fmt.Errorf("choose a private absolute operator backup path")
-	}
-	fd, err := unix.Openat2(unix.AT_FDCWD, filepath.Dir(backup), &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
-	if err != nil {
-		return intent, fmt.Errorf("create the private operator backup directory before preparing migration")
-	}
-	var info unix.Stat_t
-	err = unix.Fstat(fd, &info)
-	unix.Close(fd)
-	if err != nil || info.Uid != uint32(os.Geteuid()) || info.Mode&07777 != 0700 {
-		return intent, fmt.Errorf("operator backup directory must be private and owned")
-	}
-	if _, err := os.Lstat(backup); !errors.Is(err, os.ErrNotExist) {
-		return intent, fmt.Errorf("choose an unused operator backup filename")
+	if err := lifecycle.ValidateMigrationBackupDestination(backup); err != nil {
+		return intent, err
 	}
 	plan, err := b.PrepareSecretMigrationSource(ctx, mappings, resources)
 	if err != nil {

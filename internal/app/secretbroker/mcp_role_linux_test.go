@@ -27,10 +27,14 @@ func verifyBrokerMCPDiscovery(t *testing.T, ctx context.Context, root, worker, s
 	if os.Mkdir(audit, 0700) != nil || os.Chown(audit, 10000, 10000) != nil {
 		t.Fatal("private agent fixture")
 	}
+	contract := os.Getenv("LOKI_SECRET_TEST_EXECUTION_CONTRACT")
+	if contract == "" {
+		contract = "/usr/share/doc/loki/container-execution-contract.json"
+	}
 	paths := map[string]any{
 		"mcp-tools.json":     tools.Config{Schema: 1, Release: tools.Release, Host: tools.Host{Kind: "local"}, Mode: tools.Full, Tools: []tools.Selection{{ID: "secrets", Enabled: true}}},
 		"mcp-resources.json": map[string]any{"resources": resources},
-		"mcp-layout.json":    map[string]any{"Tools": []string{"secrets"}, "ToolsConfigPath": filepath.Join(root, "mcp-tools.json"), "ApplicationSocket": socket, "ApplicationUID": 1000, "ApplicationCatalog": filepath.Join(root, "mcp-resources.json"), "ExecutionContract": "/usr/share/doc/loki/container-execution-contract.json"},
+		"mcp-layout.json":    map[string]any{"Tools": []string{"secrets"}, "ToolsConfigPath": filepath.Join(root, "mcp-tools.json"), "ApplicationSocket": socket, "ApplicationUID": 1000, "ApplicationCatalog": filepath.Join(root, "mcp-resources.json"), "ExecutionContract": contract},
 	}
 	for name, value := range paths {
 		body, err := json.Marshal(value)
@@ -51,8 +55,9 @@ func verifyBrokerMCPDiscovery(t *testing.T, ctx context.Context, root, worker, s
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- command.Wait() }()
+	done := make(chan struct{})
+	var processErr error
+	go func() { processErr = command.Wait(); close(done) }()
 	defer func() {
 		_ = command.Process.Signal(syscall.SIGTERM)
 		select {
@@ -65,6 +70,11 @@ func verifyBrokerMCPDiscovery(t *testing.T, ctx context.Context, root, worker, s
 	deadline := time.Now().Add(3 * time.Second)
 	var failure []byte
 	for time.Now().Before(deadline) {
+		select {
+		case <-done:
+			t.Fatalf("agent fixture exited before discovery: %v: %s", processErr, diagnostic.String())
+		default:
+		}
 		probe := exec.CommandContext(ctx, worker, "full-probe", "--role", "mcp", "--address", "http://127.0.0.1:18765/mcp", "--token-file", token)
 		body, err := probe.CombinedOutput()
 		if err == nil {

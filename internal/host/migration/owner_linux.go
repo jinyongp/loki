@@ -25,7 +25,7 @@ func (o SourceOwner) current() (lifecycle.OperationRecord, error) {
 		return lifecycle.OperationRecord{}, ErrSourceSession
 	}
 	r, found, err := o.Journal.Active()
-	if err != nil || !found || r.ID != o.ID || r.Kind != lifecycle.OperationSecretMigration || r.SecretMigration == nil || r.State != lifecycle.OperationApplying {
+	if err != nil || !found || r.ID != o.ID || r.Kind != lifecycle.OperationSecretMigration || r.SecretMigration == nil || r.SecretMigration.RollbackRequested || r.State != lifecycle.OperationApplying {
 		return lifecycle.OperationRecord{}, ErrSourceSession
 	}
 	return r, nil

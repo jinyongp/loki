@@ -118,6 +118,14 @@ func runFullProbe(args []string, stderr io.Writer) int {
 			if err != nil || options.AuthorizeTool == nil {
 				return errors.New("native module probe requires current activation")
 			}
+			if *module == "secrets" {
+				// This finite metadata request carries no values. Preserve its
+				// transport failure here so namespace/peer errors can be
+				// distinguished from activation or public tool discovery.
+				if _, err := (rpc.Client{Socket: layout.ApplicationSocket, ExpectedUID: layout.ApplicationUID, Limits: rpc.Limits{Timeout: 5 * time.Second}}).Call(ctx, map[string]any{"operation": "inspect", "action": "resources"}); err != nil {
+					return fmt.Errorf("MCP application metadata peer: %w", err)
+				}
+			}
 			if err := options.AuthorizeTool(ctx, *module, ""); err != nil {
 				return err
 			}
