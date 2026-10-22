@@ -6,7 +6,7 @@ SYSTEMCTL=${LOKI_SYSTEMCTL:-systemctl}
 HEALTH_ATTEMPTS=${LOKI_HEALTH_ATTEMPTS:-100}
 HEALTH_INTERVAL=${LOKI_HEALTH_INTERVAL:-0.2}
 SUITE=loki-go.target
-SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-browser-proxy.service loki-go-browser.service loki-go-launcher.service loki-go-executor.service loki-go-mcp.service"
+SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-secrets.service loki-go-browser-proxy.service loki-go-browser.service loki-go-launcher.service loki-go-executor.service loki-go-mcp.service"
 
 case "$ROOT" in /*) ;; *) echo "LOKI_INSTALL_ROOT must be absolute" >&2; exit 2 ;; esac
 test "$(realpath -m "$ROOT")" = "$ROOT" || {
@@ -108,6 +108,16 @@ ensure_identities() {
   if ! id -nG runner | tr ' ' '\n' | grep -qx workspace; then usermod -a -G workspace runner; fi
   getent passwd loki-browser >/dev/null || useradd --uid "$browser_uid" --gid workspace --home-dir /var/lib/loki-go/browser --no-create-home --shell /usr/sbin/nologin loki-browser
   getent passwd loki-executor >/dev/null || useradd --uid "$executor_uid" --gid workspace --home-dir /var/lib/loki-go/executor --no-create-home --shell /usr/sbin/nologin loki-executor
+  getent group loki-secrets >/dev/null || groupadd --system loki-secrets
+  getent passwd loki-secrets >/dev/null || useradd --system --gid loki-secrets --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin loki-secrets
+  secrets_uid=$(id -u loki-secrets)
+  secrets_gid=$(getent group loki-secrets | cut -d: -f3)
+  test "$secrets_uid" -gt 0 -a "$secrets_gid" -gt 0 || fail "broker identity must be unprivileged"
+  test "$(id -g loki-secrets)" = "$secrets_gid" || fail "broker must use its private primary group"
+  for peer in "$runner_uid" "$browser_uid" "$executor_uid"; do
+    test "$secrets_uid" -ne "$peer" || fail "broker UID must be distinct from other service roles"
+  done
+  test "$secrets_gid" -ne "$workspace_gid" -a "$secrets_gid" -ne "$runner_gid" || fail "broker group must be private"
 }
 
 release_path() {
@@ -168,6 +178,15 @@ prepare_state() {
   chgrp "$workspace_gid" "$config/config.toml"
   "$release/opt/loki/libexec/render-layouts" "$release/usr/share/doc/loki" "$config" \
     "$runner_uid" "$runner_gid" "$workspace_gid" "$browser_uid" "$executor_uid" "$job_image"
+  if test "$ROOT" = /; then
+    printf 'SECRETS_UID=%s\nSECRETS_GID=%s\n' "$secrets_uid" "$secrets_gid" >> "$config/identity.env"
+    test -f "$config/application-resources.json" || printf '{"resources":[]}\n' > "$config/application-resources.json"
+    chown root:"$workspace_gid" "$config/application-resources.json"
+    chmod 0640 "$config/application-resources.json"
+    install -d -m 0755 /run/loki-go /var/lib/loki-go/secrets-root
+    "$release/opt/loki/bin/loki" host prepare-secrets --uid "$secrets_uid" --gid "$secrets_gid" \
+      --agent-uid "$runner_uid" --metadata-gid "$workspace_gid"
+  fi
   install -d -m 0700 "$(rooted /var/lib/loki-go/runtime/inbox)" "$(rooted /var/lib/loki-go/signing)" \
     "$(rooted /var/lib/loki-go/browser)" "$(rooted /var/lib/loki-go/launcher)"
   install -d -o "$runner_uid" -g "$runner_gid" -m 0700 \
@@ -231,6 +250,7 @@ health() {
     done
     if test "$active" = yes && \
        test -S "$(rooted /run/loki-go/runtime/control.sock)" && \
+       test -S "$(rooted /run/loki-go/secrets/metadata/control.sock)" && \
        test -S "$(rooted /run/loki-go/port-guard/control.sock)" && \
        test -S "$(rooted /run/loki-go/browser/control.sock)" && \
        test -S "$(rooted /run/loki-go/signing/agent.sock)" && \

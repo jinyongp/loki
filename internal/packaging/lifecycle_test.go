@@ -48,21 +48,23 @@ func candidateArtifact(t *testing.T, name string) string {
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/devtools"), "#!/bin/sh\nexit 0\n")
 	writeExecutable(t, filepath.Join(root, "opt/loki/libexec/render-layouts"), "#!/bin/sh\nset -eu\nmkdir -p \"$2\"\nfor f in runtime.json mcp.json launcher.json executor.json identity.env; do : > \"$2/$f\"; chmod 0640 \"$2/$f\"; done\n")
 	files := map[string]string{
-		"usr/share/doc/loki/config.toml":                       "version = 1\n",
-		"usr/share/doc/loki/gitconfig":                         "[user]\n",
-		"usr/lib/tmpfiles.d/loki-go.conf":                      "d /run/loki-go 0750 root workspace -\n",
-		"usr/lib/systemd/system/loki-go.target":                "[Unit]\nDescription=test\n",
-		"usr/lib/systemd/system/loki-go-runtime.service":       "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-launcher.service":      "[Service]\nExecStart=/opt/loki/bin/loki-launcher\n",
-		"usr/lib/systemd/system/loki-go-executor.service":      "[Service]\nExecStart=/opt/loki/bin/loki-executor\n",
-		"usr/lib/systemd/system/loki-go-mcp.service":           "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-port-guard.service":    "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-signing-agent.service": "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-browser.service":       "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-browser-proxy.service": "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"usr/lib/systemd/system/loki-go-egress-proxy.service":  "[Service]\nExecStart=/opt/loki/bin/loki\n",
-		"srv/workspace/loki/.agents/skills/verify/SKILL.md":    "verify\n",
-		"usr/share/loki/toolchain/manifest.json":               "{}\n",
+		"usr/share/doc/loki/config.toml":                         "version = 1\n",
+		"usr/share/doc/loki/gitconfig":                           "[user]\n",
+		"usr/lib/tmpfiles.d/loki-go.conf":                        "d /run/loki-go 0750 root workspace -\n",
+		"usr/lib/systemd/system/loki-go.target":                  "[Unit]\nDescription=test\n",
+		"usr/lib/systemd/system/loki-go-runtime.service":         "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-secrets.service":         "[Service]\nExecStart=/opt/loki/bin/loki-secret-broker\n",
+		"usr/lib/systemd/system/loki-go-secrets-prepare.service": "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-launcher.service":        "[Service]\nExecStart=/opt/loki/bin/loki-launcher\n",
+		"usr/lib/systemd/system/loki-go-executor.service":        "[Service]\nExecStart=/opt/loki/bin/loki-executor\n",
+		"usr/lib/systemd/system/loki-go-mcp.service":             "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-port-guard.service":      "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-signing-agent.service":   "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-browser.service":         "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-browser-proxy.service":   "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"usr/lib/systemd/system/loki-go-egress-proxy.service":    "[Service]\nExecStart=/opt/loki/bin/loki\n",
+		"srv/workspace/loki/.agents/skills/verify/SKILL.md":      "verify\n",
+		"usr/share/loki/toolchain/manifest.json":                 "{}\n",
 	}
 	for relative, content := range files {
 		path := filepath.Join(root, filepath.FromSlash(relative))
@@ -106,16 +108,18 @@ func lifecycleEnvironment(t *testing.T, root string) ([]string, func()) {
 	for _, relative := range []string{
 		"runtime/control.sock", "port-guard/control.sock", "browser/control.sock",
 		"signing/agent.sock", "launcher/control.sock", "executor/control.sock",
+		"secrets/metadata/control.sock",
 	} {
 		path := filepath.Join(root, "run/loki-go", relative)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	listeners := make([]net.Listener, 0, 6)
+	listeners := make([]net.Listener, 0, 7)
 	for _, relative := range []string{
 		"runtime/control.sock", "port-guard/control.sock", "browser/control.sock",
 		"signing/agent.sock", "launcher/control.sock", "executor/control.sock",
+		"secrets/metadata/control.sock",
 	} {
 		listener, err := net.Listen("unix", filepath.Join(root, "run/loki-go", relative))
 		if err != nil {

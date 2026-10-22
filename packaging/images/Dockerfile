@@ -20,7 +20,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags="-s -w -X loki/internal/buildinfo.Version=$LOKI_VERSION -X loki/internal/buildinfo.Commit=$LOKI_REVISION -X loki/internal/buildinfo.Date=$LOKI_DATE" \
       -o /out/loki ./cmd/loki \
  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-launcher ./cmd/launcher \
- && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-executor ./cmd/executor
+ && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-executor ./cmd/executor \
+ && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-secret-broker ./cmd/secret-broker \
+ && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/loki-job-bootstrap ./cmd/loki-job-bootstrap
 
 FROM --platform=$BUILDPLATFORM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS layout
 RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec /rootfs/opt/loki/share/skills /rootfs/opt/loki/toolchain/bin /rootfs/usr/local/bin /rootfs/usr/share/doc/loki \
@@ -33,12 +35,14 @@ RUN install -d -m 0755 /rootfs/etc /rootfs/opt/loki/bin /rootfs/opt/loki/libexec
       'runner:x:10000:10000:Loki runner:/home/runner:/bin/sh' \
       'egress:x:10002:10002:Loki egress:/nonexistent:/sbin/nologin' \
       'executor:x:10004:10001:Loki executor:/nonexistent:/sbin/nologin' \
+      'loki-secrets:x:10006:10006:Loki app secret broker:/nonexistent:/sbin/nologin' \
       > /rootfs/etc/passwd \
  && printf '%s\n' \
       'root:x:0:' \
       'runner:x:10000:' \
       'workspace:x:10001:runner' \
       'egress:x:10002:' \
+      'loki-secrets:x:10006:' \
       > /rootfs/etc/group \
  && install -d -o 10000 -g 10000 -m 0700 /rootfs/home/runner /rootfs/home/runner/.ssh \
  && install -d -o 0 -g 0 -m 0755 /rootfs/etc/loki-go \
@@ -97,6 +101,8 @@ COPY --from=layout /rootfs/ /
 COPY --from=build /out/loki /opt/loki/bin/loki
 COPY --from=build /out/loki-launcher /opt/loki/bin/loki-launcher
 COPY --from=build /out/loki-executor /opt/loki/bin/loki-executor
+COPY --from=build /out/loki-secret-broker /opt/loki/bin/loki-secret-broker
+COPY --from=build /out/loki-job-bootstrap /opt/loki/bin/loki-job-bootstrap
 COPY --from=artifacts --chmod=0755 /devtools/${TARGETARCH}/devtools /opt/loki/bin/devtools
 COPY --from=artifacts --chmod=0755 /ripgrep/${TARGETARCH}/rg /usr/bin/rg
 COPY --from=artifacts --chmod=0755 /gh/${TARGETARCH}/gh /usr/bin/gh

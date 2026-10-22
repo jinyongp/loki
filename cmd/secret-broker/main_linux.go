@@ -13,33 +13,13 @@ import (
 
 	"golang.org/x/sys/unix"
 	"loki/internal/app/secretbroker"
-	controlpolicy "loki/internal/control/policy"
+	"loki/internal/control/appvalues"
 	"loki/internal/daemon"
 	"loki/modules/secrets/application"
 	provider "loki/modules/secrets/devtools"
 )
 
-type layout struct {
-	UID             uint32                              `json:"uid"`
-	LauncherUID     uint32                              `json:"launcher_uid"`
-	Binary          string                              `json:"binary"`
-	Root            string                              `json:"root"`
-	Socket          string                              `json:"socket"`
-	DeploymentID    string                              `json:"deployment_id"`
-	PolicySHA256    string                              `json:"policy_sha256"`
-	RunnerID        string                              `json:"runner_id"`
-	InstanceID      string                              `json:"instance_id"`
-	Resources       []controlpolicy.ApplicationResource `json:"resources"`
-	BaseEnvironment map[string]string                   `json:"base_environment"`
-	MetadataSocket  string                              `json:"metadata_socket,omitempty"`
-	MetadataGID     uint32                              `json:"metadata_gid,omitempty"`
-	AgentUID        uint32                              `json:"agent_uid,omitempty"`
-	Principal       string                              `json:"principal,omitempty"`
-	AdminSocket     string                              `json:"admin_socket,omitempty"`
-	ApplicationRoot string                              `json:"application_root,omitempty"`
-	Inbox           string                              `json:"inbox,omitempty"`
-	RuntimeRoot     string                              `json:"runtime_root,omitempty"`
-}
+type layout = appvalues.BrokerLayout
 
 func run(args []string) int {
 	flags := flag.NewFlagSet("loki-secret-broker", flag.ContinueOnError)
@@ -52,6 +32,9 @@ func run(args []string) int {
 		return 2
 	}
 	unix.Umask(0077)
+	if secretbroker.RestrictUnixSockets() != nil {
+		return 1
+	}
 	fullRoles := config.MetadataSocket != "" || config.AdminSocket != "" || config.ApplicationRoot != "" || config.Inbox != ""
 	if fullRoles && (config.MetadataSocket == "" || config.AdminSocket == "" || config.ApplicationRoot == "" || config.Inbox == "" || config.RuntimeRoot == "" || config.AgentUID == 0 || config.AgentUID == config.UID || config.Principal == "") {
 		return 2
@@ -91,7 +74,11 @@ func run(args []string) int {
 			return ctx.Err()
 		}
 	}
-	service, err := secretbroker.New(secretbroker.Options{Ready: roleReady, Provider: p, Socket: config.Socket, LauncherUID: config.LauncherUID, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, RunnerID: config.RunnerID, InstanceID: config.InstanceID, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
+	jobDeployment := config.JobDeploymentID
+	if jobDeployment == "" {
+		jobDeployment = config.DeploymentID
+	}
+	service, err := secretbroker.New(secretbroker.Options{Ready: roleReady, Provider: p, Socket: config.Socket, LauncherUID: config.LauncherUID, DeploymentID: jobDeployment, PolicySHA256: config.PolicySHA256, RunnerID: config.RunnerID, InstanceID: config.InstanceID, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
 	if err != nil {
 		return 2
 	}

@@ -1,5 +1,15 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki","to":"loki/internal/host/application"},
+    {"from":"loki/internal/host/application","to":"loki/internal/config"},
+    {"from":"loki/internal/host/application","to":"loki/internal/control/appvalues"},
+    {"from":"loki/internal/host/application","to":"loki/internal/control/policy"},
+    {"from":"loki/internal/host/application","to":"loki/internal/daemon"},
+    {"from":"loki/internal/host/application","to":"loki/internal/execution"},
+    {"from":"loki/internal/host/application","to":"loki/internal/host/policy"},
+    {"from":"loki/internal/host/application","to":"loki/internal/platform/safeio"},
+    {"from":"loki/internal/control/appvalues","to":"loki/internal/control/policy"},
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/control/appvalues"},
     {"from":"loki/internal/host/policy","to":"loki/internal/daemon"},
     {"from":"loki/cmd/launcher","to":"loki/internal/control/policy"},
     {"from":"loki/cmd/launcher","to":"loki/internal/platform/repository"},
@@ -25,7 +35,6 @@
     {"from":"loki/modules/secrets/application","to":"loki/modules/secrets/devtools"},
     {"from":"loki/internal/platform/sandbox","to":"loki/internal/platform/privateio"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/app/secretbroker"},
-    {"from":"loki/cmd/secret-broker","to":"loki/internal/control/policy"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/daemon"},
     {"from":"loki/cmd/secret-broker","to":"loki/modules/secrets/devtools"},
     {"from":"loki/internal/app/launcher","to":"loki/internal/platform/privateio"},
@@ -992,6 +1001,7 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/internal/host/application": {"kind":"host","owner":"host-application","tags":["host-config"],"target":"internal/host/application"},
     "loki/internal/platform/repository": {"kind":"platform","owner":"platform","tags":[],"target":"internal/platform/repository"},
     "loki/cmd/secret-broker": {"kind":"role","owner":"secrets","tags":[],"target":"cmd/secret-broker"},
     "loki/modules/secrets/devtools": {"kind":"integration","owner":"secrets","tags":["devtools"],"target":"modules/secrets/devtools"},

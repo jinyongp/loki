@@ -1,5 +1,5 @@
 [Unit]
-Description=Loki Go runtime and encrypted secret broker
+Description=Loki Go platform runtime
 PartOf=loki-go.target
 After=local-fs.target systemd-tmpfiles-setup.service loki-go-signing-agent.service
 Wants=loki-go-signing-agent.service
@@ -32,6 +32,7 @@ ProtectKernelTunables=yes
 ProtectSystem=strict
 BindPaths=/srv/workspace/loki:/workspace
 ReadWritePaths=/srv/workspace/loki /var/lib/loki-go/runtime /var/lib/loki-go/runner /var/cache/loki-go/runner /var/tmp/loki-go/runner /var/tmp/loki-go/github /var/log/loki-go/runtime /run/loki-go -/run/docker.sock
+InaccessiblePaths=/var/lib/loki-go/secrets /run/loki-go/secrets /etc/loki-go/secrets-deployment.json /etc/loki-go/secrets-admin.json
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost

@@ -266,9 +266,12 @@ def assemble(recipe_path, output):
                 worker = "/opt/loki/modules/runtime-core/"+relative(core_payload["programs"]["loki"]).as_posix()
                 lines.append("RUN --network=none mkdir -p /opt/loki/bin && ln -s "+shlex.quote(worker)+" /opt/loki/bin/loki")
                 if role in ("workload", "git-workload"):
+                    execution_payload = json.loads((payloads["execution"][1] / "full-runtime.json").read_text(encoding="utf-8"))
+                    bootstrap = "/opt/loki/modules/execution/"+relative(execution_payload["programs"]["job-bootstrap"]).as_posix()
+                    lines.append("RUN --network=none ln -s "+shlex.quote(bootstrap)+" /opt/loki/bin/loki-job-bootstrap")
                     for program in ("node", "npm", "npx", "pnpm", "python", "python3", "uv", "uvx", "rustc", "cargo", "rustfmt", "cargo-fmt", "clippy-driver", "cargo-clippy", "rust-analyzer", "go", "gofmt"):
                         lines.append("RUN --network=none ln -s "+shlex.quote(worker)+" /opt/loki/bin/"+program)
-                identities = "runner:x:10000:10000::/home/runner:/bin/sh\\nloki:x:10001:10001::/nonexistent:/usr/sbin/nologin\\negress:x:10002:10002::/nonexistent:/usr/sbin/nologin\\nbrowser:x:10003:10003::/nonexistent:/usr/sbin/nologin\\nexecutor:x:10004:10004::/nonexistent:/usr/sbin/nologin\\nbrowser-proxy:x:10005:10005::/nonexistent:/usr/sbin/nologin\\n"
+                identities = "runner:x:10000:10000::/home/runner:/bin/sh\\nloki:x:10001:10001::/nonexistent:/usr/sbin/nologin\\negress:x:10002:10002::/nonexistent:/usr/sbin/nologin\\nbrowser:x:10003:10003::/nonexistent:/usr/sbin/nologin\\nexecutor:x:10004:10004::/nonexistent:/usr/sbin/nologin\\nbrowser-proxy:x:10005:10005::/nonexistent:/usr/sbin/nologin\\nloki-secrets:x:10006:10006::/nonexistent:/usr/sbin/nologin\\n"
                 lines.extend(["RUN --network=none mkdir -p /workspace /var/tmp/loki /home/runner && chmod 1777 /tmp /var/tmp && chown 10000:10000 /home/runner && printf '"+identities+"' >> /etc/passwd && printf 'runner:x:10000:\\nloki:x:10001:\\n' >> /etc/group", "ENV PATH=/opt/loki/bin:/usr/bin:/bin", "WORKDIR /workspace", "USER 10000:10000"])
                 lines.append(label)
                 (context / "Dockerfile").write_text("\n".join(lines)+"\n", encoding="utf-8")

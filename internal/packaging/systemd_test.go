@@ -517,8 +517,8 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 
 func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	root := t.TempDir()
-	for _, directory := range []string{"runtime", "port-guard", "signing", "executor"} {
-		if err := os.Mkdir(filepath.Join(root, directory), 0700); err != nil {
+	for _, directory := range []string{"runtime", "port-guard", "signing", "executor", "secrets/metadata"} {
+		if err := os.MkdirAll(filepath.Join(root, directory), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -529,7 +529,7 @@ func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	listeners := []net.Listener{}
-	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "signing/agent.sock", "executor/control.sock"} {
+	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "signing/agent.sock", "executor/control.sock", "secrets/metadata/control.sock"} {
 		listener, err := net.Listen("unix", filepath.Join(root, socket))
 		if err != nil {
 			t.Fatal(err)

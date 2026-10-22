@@ -17,7 +17,7 @@ ROLES = {"service": ["runtime-core"], "gateway": ["runtime-core"],
          "workload": ["runtime-core", "execution"],
          "git-workload": ["runtime-core", "execution", "git"], "browser": ["runtime-core"]}
 OWNERS = {"service": "runtime-core", "gateway": "runtime-core", "workload": "execution", "git-workload": "git", "browser": "browser"}
-GO_PROGRAMS = {"runtime-core": ["./cmd/loki"], "execution": ["./cmd/launcher", "./cmd/executor"]}
+GO_PROGRAMS = {"runtime-core": ["./cmd/loki"], "execution": ["./cmd/launcher", "./cmd/executor", "./cmd/loki-job-bootstrap"], "secrets": ["./cmd/secret-broker"]}
 SCRIPTS = "scripts/maintainer/tools/"
 
 

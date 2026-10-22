@@ -13,7 +13,7 @@ import tempfile
 from urllib.request import urlopen
 import zipfile
 
-from plan_release import TARGETS, ROLES, OWNERS, plan as make_plan
+from plan_release import TARGETS, ROLES, OWNERS, GO_PROGRAMS, plan as make_plan
 from release_config import ROOT, CONTRACT, CONFIG, version
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -133,7 +133,7 @@ def environment(plan, mode):
 def source_check(plan, unit):
     if unit.get("closure"):
         from plan_release import go_closure
-        packages = ["./cmd/loki-manager"] if unit["kind"]=="manager" else ["./cmd/loki"] if unit["owner"]=="runtime-core" else ["./cmd/launcher","./cmd/executor"]
+        packages = ["./cmd/loki-manager"] if unit["kind"]=="manager" else list(GO_PROGRAMS[unit["owner"]])
         if unit["kind"] == "manager" and unit["target"]["os"] == "windows":
             packages.append("./cmd/loki-keepalive")
         if go_closure(packages,unit["target"]["os"],unit["target"]["arch"]) != unit["closure"]:
