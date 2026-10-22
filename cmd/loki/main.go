@@ -40,7 +40,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return runHost(args[1:], stdout, stderr)
 		case "secret-process":
 			return runSecretProcess(args[1:], stdout, stderr)
-		case "secret", "github":
+		case "secret":
+			if len(args) > 1 && args[1] == "app" {
+				return runApplicationAdministration(args[2:], os.Stdin, stdout, stderr)
+			}
+			return runAdministration(args, stdout, stderr)
+		case "github":
 			return runAdministration(args, stdout, stderr)
 		case "runner-exec":
 			return runRunnerExec(args[1:], stderr)
