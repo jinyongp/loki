@@ -69,7 +69,7 @@ def main():
         (work / "network-config").write_text('version: 2\nethernets:\n  fixture:\n    match:\n      macaddress: "52:54:00:12:34:56"\n    dhcp4: false\n    dhcp6: false\n    addresses: [10.77.0.2/24]\n')
         run("cloud-localds", "--network-config=" + str(work / "network-config"), work / "seed.iso", work / "user-data", work / "meta-data")
         kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
-        command = ["qemu-system-x86_64" if arch == "amd64" else "qemu-system-aarch64", "-machine", "q35" if arch == "amd64" else "virt", "-accel", "kvm" if kvm else "tcg,thread=multi", "-cpu", "host" if kvm else ("max" if arch == "amd64" else "cortex-a72"), "-m", "2048", "-smp", "2", "-nographic", "-monitor", "none", "-netdev", "hubport,id=fixture,hubid=0", "-device", "virtio-net-pci,netdev=fixture,mac=52:54:00:12:34:56", "-object", "rng-random,filename=/dev/urandom,id=rng0", "-device", "virtio-rng-pci,rng=rng0"]
+        command = ["qemu-system-x86_64" if arch == "amd64" else "qemu-system-aarch64", "-machine", "q35" if arch == "amd64" else "virt", "-accel", "kvm" if kvm else "tcg,thread=multi", "-cpu", "host" if kvm else ("max" if arch == "amd64" else "cortex-a72"), "-m", "2048", "-smp", "2", "-nographic", "-monitor", "none", "-netdev", "hubport,id=fixture,hubid=0", "-device", "virtio-net-pci,netdev=fixture,mac=52:54:00:12:34:56,romfile=", "-object", "rng-random,filename=/dev/urandom,id=rng0", "-device", "virtio-rng-pci,rng=rng0"]
         if arch == "arm64":
             firmware = Path("/usr/share/AAVMF/AAVMF_CODE.fd")
             variables = Path("/usr/share/AAVMF/AAVMF_VARS.fd")
