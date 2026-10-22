@@ -87,7 +87,7 @@ func (b *DockerFullBackend) copySecretSourceArchive(ctx context.Context, candida
 	}
 	waitErr := command.Wait()
 	if copyErr != nil {
-		return copyErr
+		return fmt.Errorf("encrypted source copy did not produce its complete archive: %w", copyErr)
 	}
 	if waitErr != nil {
 		return fmt.Errorf("encrypted source copy did not complete")

@@ -126,7 +126,13 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 	}
 	projection := filepath.Join("/dev/shm", b.Store.FullOwner()+"-migration-"+operation.ID, "secrets")
 	mounts := []FullMount{sourceVolume}
-	if !backup {
+	if backup {
+		cipher := storeSourceCipherVolume(b.Store, operation.ID)
+		if err := b.ownedVolume(ctx, cipher); err != nil {
+			return err
+		}
+		mounts = append(mounts, cipher)
+	} else {
 		mounts = append(mounts, FullMount{Kind: "bind", Source: filepath.Join(projection, "admin"), Target: "/run/loki/secrets/admin", ReadOnly: true})
 	}
 	workerBound := false
@@ -159,7 +165,7 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 	}
 	args := []string{"run", "--rm", "--interactive", "--name", b.containerName(candidate, "prepare"), "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "1073741824", "--pids-limit", "64", "--log-driver", "none", "--entrypoint", record.Worker}
 	if backup {
-		args = append(args, "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--memory", "2147483648", "--tmpfs", "/work:rw,nosuid,nodev,noexec,size=136314880,uid=0,gid=0,mode=0700")
+		args = append(args, "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--memory", "2147483648")
 	}
 	for _, label := range b.labels(candidate, "prepare") {
 		args = append(args, "--label", label)
@@ -200,7 +206,8 @@ func (b *DockerFullBackend) exchangeSecretSourceHelper(ctx context.Context, args
 	}
 	command.Env = append(environment, "DOCKER_API_VERSION=1.47")
 	command.WaitDelay = 2 * time.Second
-	command.Stderr = &boundedDockerOutput{limit: 64 << 10}
+	diagnostic := &boundedDockerOutput{limit: 64 << 10}
+	command.Stderr = diagnostic
 	input, err := command.StdinPipe()
 	if err != nil {
 		return err
@@ -231,6 +238,11 @@ func (b *DockerFullBackend) exchangeSecretSourceHelper(ctx context.Context, args
 	}
 	waitErr := command.Wait()
 	if transferErr != nil {
+		for _, stage := range []string{"freeze", "freeze_ack", "archive", "archive_ack", "complete_ack", "transfer"} {
+			if strings.Contains(diagnostic.String(), "source transfer did not complete at "+stage+";") {
+				return fmt.Errorf("owned source helper stopped at %s: %w", stage, transferErr)
+			}
+		}
 		return transferErr
 	}
 	if waitErr != nil {
@@ -258,4 +270,8 @@ func (b *DockerFullBackend) verifiedSecretSourceVolume(ctx context.Context) (Ful
 
 func storeSourceVolume(store Store) FullMount {
 	return FullMount{Kind: "volume", Source: store.FullOwner() + "-data-runtime-audit", Target: "/var/lib/loki/runtime"}
+}
+
+func storeSourceCipherVolume(store Store, operation string) FullMount {
+	return FullMount{Kind: "volume", Source: store.FullOwner() + "-migration-" + operation + "-source-cipher", Target: "/work"}
 }

@@ -40,8 +40,8 @@ func runHostSecretSource(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if hostmigration.ServeSourceTransferManifest(ctx, sourceHelperStdio{Reader: os.Stdin, Writer: stdout}) != nil {
-		fmt.Fprintln(stderr, "source transfer did not complete; resume the original host operation")
+	if err := hostmigration.ServeSourceTransferManifest(ctx, sourceHelperStdio{Reader: os.Stdin, Writer: stdout}); err != nil {
+		fmt.Fprintf(stderr, "source transfer did not complete at %s; resume the original host operation\n", hostmigration.SourceFailureStage(err))
 		return 1
 	}
 	return 0

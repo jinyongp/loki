@@ -5,6 +5,7 @@ package management
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -115,6 +116,10 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 					_, _ = b.command(cleanup, "cleaning owned candidate fixture", nil, "rm", "--force", id)
 				}
 			}
+			cipher := storeSourceCipherVolume(store, strings.TrimPrefix(candidate.ID, "deployment-"))
+			if err := b.ownedVolume(cleanup, cipher); err == nil {
+				_, _ = b.command(cleanup, "removing original fixture ciphertext volume", nil, "volume", "rm", cipher.Source)
+			}
 		}
 		if projection != "" {
 			mount, _ := dockerMountArgument(FullMount{Kind: "bind", Source: filepath.Dir(projection), Target: "/fixture-runtime"})
@@ -206,7 +211,7 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			}
 			candidate = preparedCandidate
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
-				return err
+				return fmt.Errorf("original source backup: %w", err)
 			}
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
 				return err
@@ -241,7 +246,7 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 				return err
 			}
 			if err := b.TransferSecretMigrationSource(scoped, candidate); err != nil {
-				return err
+				return fmt.Errorf("original source transfer: %w", err)
 			}
 			ready, found, err := j.Active()
 			if err != nil || !found || ready.ID != operation.ID || ready.Phase != lifecycle.PhaseSwitch || ready.SecretMigration.Archive == nil || !ready.SecretMigration.Archive.Published {
