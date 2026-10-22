@@ -57,6 +57,36 @@ func TestCompileShippedPolicyAndDiff(t *testing.T) {
 	}
 }
 
+func TestCompileApplicationGrantsIntoPolicyGeneration(t *testing.T) {
+	c, contract := shippedInputs(t)
+	r := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "example", Repository: "repo:example", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Execute: true}}, Environments: []string{"production", "common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none"}
+	before, err := Compile(c, contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := CompileApplications(c, contract, []controlpolicy.ApplicationResource{r})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Digest() == first.Digest() {
+		t.Fatal("resource grants absent from policy identity")
+	}
+	slices.Reverse(r.Environments)
+	reordered, err := CompileApplications(c, contract, []controlpolicy.ApplicationResource{r})
+	if err != nil || first.Digest() != reordered.Digest() {
+		t.Fatal("order changed policy identity", err)
+	}
+	r.Principals[0].Write = true
+	changed, err := CompileApplications(c, contract, []controlpolicy.ApplicationResource{r})
+	if err != nil || changed.Digest() == first.Digest() {
+		t.Fatal("permission change retained policy identity", err)
+	}
+	r.Keys["GOCACHE"] = "secret"
+	if _, err = CompileApplications(c, contract, []controlpolicy.ApplicationResource{r}); err == nil {
+		t.Fatal("execution environment override published")
+	}
+}
+
 func TestCompileCanonicalizesSetsAndMaps(t *testing.T) {
 	c, contract := shippedInputs(t)
 	c.PublicHosts = []string{"z.example.test", "a.example.test"}

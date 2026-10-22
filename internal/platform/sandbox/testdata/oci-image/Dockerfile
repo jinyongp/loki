@@ -8,18 +8,23 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY modules ./modules
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
-    go build -trimpath -ldflags="-s -w" -o /out/loki ./cmd/loki
+    go build -trimpath -ldflags="-s -w" -o /out/loki ./cmd/loki \
+    && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+    go build -trimpath -ldflags="-s -w" -o /out/loki-job-bootstrap ./cmd/loki-job-bootstrap
 
 FROM alpine/git:2.54.0@sha256:832b1cd1a271509f3d5272a1a62d4cb2ab1a53426ebde1f6c2cb7349f907dc6f AS git-root
 
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 COPY --from=git-root / /
 COPY --from=build /out/loki /opt/loki/bin/loki
+COPY --from=build /out/loki-job-bootstrap /opt/loki/bin/loki-job-bootstrap
 COPY config/gitconfig /usr/share/doc/loki/gitconfig
-COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/
+COPY packaging/native/execution-contract.json /usr/share/doc/loki/
+COPY --chmod=0644 internal/platform/sandbox/testdata/oci-image/egress-policy.json /usr/share/doc/loki/egress-policy.json
 ENV PATH=/opt/loki/bin:/usr/local/bin:/usr/bin:/bin
 WORKDIR /workspace
 CMD ["/bin/sh"]

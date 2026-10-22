@@ -24,11 +24,13 @@ var (
 )
 
 var (
-	requestIDPattern     = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	sha256Pattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	endpointNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	toolchainNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
-	leaseIDPattern       = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	requestIDPattern      = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	sha256Pattern         = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	endpointNamePattern   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	toolchainNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	leaseIDPattern        = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	protectedAliasPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	protectedEnvPattern   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`)
 )
 
 type NetworkProfile string
@@ -36,10 +38,11 @@ type NetworkProfile string
 const (
 	NetworkNone              NetworkProfile = "none"
 	NetworkDependencyInstall NetworkProfile = "dependency-install"
+	NetworkApplication       NetworkProfile = "application"
 )
 
 func (p NetworkProfile) Valid() bool {
-	return p == NetworkNone || p == NetworkDependencyInstall
+	return p == NetworkNone || p == NetworkDependencyInstall || p == NetworkApplication
 }
 
 type EndpointRequest struct {
@@ -76,6 +79,8 @@ type EndpointLease struct {
 }
 
 type StartRequest struct {
+	Resource       string            `json:"resource,omitempty"`
+	Environment    string            `json:"env,omitempty"`
 	RequestID      string            `json:"request_id"`
 	CWD            string            `json:"cwd,omitempty"`
 	Argv           []string          `json:"argv"`
@@ -290,6 +295,8 @@ func startFingerprint(request StartRequest) (string, error) {
 		return "", err
 	}
 	payload := struct {
+		Resource       string            `json:"resource,omitempty"`
+		Environment    string            `json:"env,omitempty"`
 		CWD            string            `json:"cwd"`
 		Argv           []string          `json:"argv"`
 		TimeoutSeconds int               `json:"timeout_seconds"`
@@ -297,6 +304,7 @@ func startFingerprint(request StartRequest) (string, error) {
 		Endpoints      []EndpointRequest `json:"endpoints"`
 		Toolchains     []ToolchainRef    `json:"toolchains"`
 	}{
+		Resource: request.Resource, Environment: request.Environment,
 		CWD: request.CWD, Argv: request.Argv, TimeoutSeconds: request.TimeoutSeconds,
 		Network: network, Endpoints: endpoints, Toolchains: toolchains,
 	}
@@ -338,6 +346,19 @@ func NormalizeStartRequest(request StartRequest) (StartRequest, string, error) {
 }
 
 func normalizeStartRequest(request StartRequest) (StartRequest, string, error) {
+	if request.Resource != "" {
+		if !protectedAliasPattern.MatchString(request.Resource) || request.RequestID != strings.ToLower(request.RequestID) || strings.TrimSpace(request.RequestID) != request.RequestID || request.Network == NetworkDependencyInstall {
+			return StartRequest{}, "", errors.New("protected Job selection is invalid")
+		}
+		if request.Environment == "" {
+			request.Environment = "common"
+		}
+		if !protectedEnvPattern.MatchString(request.Environment) {
+			return StartRequest{}, "", errors.New("protected Job environment is invalid")
+		}
+	} else if request.Environment != "" || request.Network == NetworkApplication {
+		return StartRequest{}, "", errors.New("Job environment requires an application resource")
+	}
 	requestID, err := NormalizeRequestID(request.RequestID)
 	if err != nil {
 		return StartRequest{}, "", err
@@ -429,6 +450,13 @@ func OutputFromRecord(record Record) (OutputSnapshot, error) {
 	if record.Result != nil {
 		snapshot.Output = record.Result.Output.Text
 		snapshot.Truncated = record.Result.Output.Truncated
+	}
+	if record.Protected != nil {
+		output, err := NormalizeOutput(record.Protected.Output, MaxOutputBytes, record.Protected.Truncated)
+		if err != nil {
+			return OutputSnapshot{}, err
+		}
+		snapshot.Output, snapshot.Truncated, snapshot.Complete = output.Text, output.Truncated, record.Protected.Complete
 	}
 	return snapshot, nil
 }

@@ -10,16 +10,16 @@ import (
 )
 
 // ProtocolVersion describes command schemas independently of EnvelopeVersion.
-const ProtocolVersion = 6
+const ProtocolVersion = 10
 
 const (
-	reviewedDevtoolsVersion = "0.23.0"
-	reviewedDevtoolsCommit  = "b66fcfc024c5b4f1b8ce49a21e7a4e0e1fd75b11"
+	reviewedDevtoolsVersion = "0.30.1"
+	reviewedDevtoolsCommit  = "ebf18cfb922c14e8a0b3200284f596fd56d13f20"
 )
 
 // This reviewed consumer subset is not a captured full release catalog.
 //
-//go:embed testdata/catalog-protocol-v6.json
+//go:embed testdata/catalog-protocol-v10.json
 var embeddedCatalog []byte
 
 type Envelope struct {
@@ -47,8 +47,6 @@ type Command struct {
 var approvedNames = []string{
 	"command inspect",
 	"command list",
-	"process restart",
-	"process start",
 	"project inspect",
 	"task checkpoint",
 	"task checkpoint list",

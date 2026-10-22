@@ -54,7 +54,7 @@ func instanceMatches(containerID, reference string) bool {
 }
 
 func (e *Engine) StartJob(ctx context.Context, plan Plan) (StartResult, error) {
-	if e == nil || !plan.Valid() {
+	if e == nil || !plan.Valid() || plan.protected {
 		return StartResult{}, errors.New("sandbox workload plan is invalid")
 	}
 	resource := plan.Resource()
@@ -147,6 +147,9 @@ func (e *Engine) OutputJobLimit(
 	}
 	if !owned.state.Exists {
 		return nil, false, errors.New("sandbox workload output is unavailable")
+	}
+	if owned.logType == "none" {
+		return nil, false, errors.New("protected workload output requires its private collector")
 	}
 	return e.readLogsLimit(version, owned.id, maximum)
 }
@@ -249,7 +252,12 @@ func (e *Engine) resultFromTerminal(version string, inspected inspectedResource)
 	if !inspected.state.Exists || !inspected.state.Terminal || inspected.state.Running {
 		return Result{Outcome: OutcomeUnknown, Cleanup: CleanupPending}, errors.New("sandbox resource is not terminal")
 	}
-	output, truncated, err := e.readLogs(version, inspected.id)
+	var output []byte
+	var truncated bool
+	var err error
+	if inspected.logType != "none" {
+		output, truncated, err = e.readLogs(version, inspected.id)
+	}
 	if err != nil {
 		return Result{
 			ExitCode:        inspected.state.ExitCode,

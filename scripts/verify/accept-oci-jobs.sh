@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Private runtime fixtures require owner-only files regardless of the caller's
+# login-shell defaults. Container build caches stay owned by their builder.
+umask 077
+
 if test "$#" -ne 0; then
   echo "usage: accept-oci-jobs.sh" >&2
   exit 2
@@ -128,6 +132,8 @@ else
     fail "temporary registry did not publish an IPv4 loopback port"
 
   image_tag="$registry_endpoint/loki-oci-job-fixture:$run_id"
+  # Own the tag before building so a later push/digest failure also removes it.
+  fixture_image_owned=1
   docker_cmd buildx build \
     --load \
     --file "$SOURCE_DIR/internal/platform/sandbox/testdata/oci-image/Dockerfile" \
@@ -145,7 +151,6 @@ else
   printf '%s\n' "$image_digest" |
     grep -Eq '^127\.0\.0\.1:[0-9]+/loki-oci-job-fixture@sha256:[0-9a-f]{64}$' ||
     fail "fixture image did not resolve to an immutable repository digest"
-  fixture_image_owned=1
 fi
 
 printf 'loki OCI Job acceptance: socket=%s image=%s authority=%s workload=%s:%s\n' \

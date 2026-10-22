@@ -1,5 +1,18 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/platform/sandbox","to":"loki/internal/platform/privateio"},
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/app/secretbroker"},
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/control/policy"},
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/daemon"},
+    {"from":"loki/cmd/secret-broker","to":"loki/modules/secrets/devtools"},
+    {"from":"loki/internal/app/launcher","to":"loki/internal/platform/privateio"},
+    {"from":"loki/modules/execution/jobs","to":"loki/internal/platform/privateio"},
+    {"from":"loki/internal/app/secretbroker","to":"loki/internal/control/policy"},
+    {"from":"loki/internal/app/secretbroker","to":"loki/modules/secrets/devtools"},
+    {"from":"loki/cmd/loki-job-bootstrap","to":"loki/internal/app/jobbootstrap"},
+    {"from":"loki/internal/app/jobbootstrap","to":"loki/internal/platform/privateio"},
+    {"from":"loki/internal/app/secretbroker","to":"loki/internal/platform/privateio"},
+    {"from":"loki/internal/app/secretbroker","to":"loki/internal/secretoutput"},
     {"from":"loki/cmd/loki-manager","to":"loki/internal/host/connect"},
     {"from":"loki/cmd/loki-manager","to":"loki/internal/host/windows"},
     {"from":"loki/cmd/loki-manager","to":"loki/internal/progress"},
@@ -956,6 +969,11 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/internal/platform/repository": {"kind":"platform","owner":"platform","tags":[],"target":"internal/platform/repository"},
+    "loki/cmd/secret-broker": {"kind":"role","owner":"secrets","tags":[],"target":"cmd/secret-broker"},
+    "loki/modules/secrets/devtools": {"kind":"integration","owner":"secrets","tags":["devtools"],"target":"modules/secrets/devtools"},
+    "loki/cmd/loki-job-bootstrap": {"kind":"role","owner":"job-bootstrap","tags":[],"target":"cmd/loki-job-bootstrap"},
+    "loki/internal/app/jobbootstrap": {"kind":"app","owner":"job-bootstrap","tags":["project-execution-local"],"target":"internal/app/jobbootstrap"},
     "loki/cmd/bootstrap": {
       "kind": "role",
       "owner": "bootstrap",
@@ -1125,6 +1143,24 @@
       "owner": "policy",
       "tags": [],
       "target": "control/policy"
+    },
+    "loki/internal/app/secretbroker": {
+      "kind": "app",
+      "owner": "secrets",
+      "tags": [],
+      "target": "internal/app/secretbroker"
+    },
+    "loki/internal/platform/privateio": {
+      "kind": "platform",
+      "owner": "platform",
+      "tags": [],
+      "target": "internal/platform/privateio"
+    },
+    "loki/internal/secretoutput": {
+      "kind": "integration",
+      "owner": "secrets",
+      "tags": [],
+      "target": "internal/secretoutput"
     },
     "loki/internal/daemon": {
       "kind": "legacy-platform",
@@ -1606,6 +1642,8 @@
     }
   },
   "roles": [
+    {"name":"job-bootstrap","root":"loki/cmd/loki-job-bootstrap","optional":true,"forbidden_tags":["launcher-implementation","platform-credential-store","provider-private-key","mcp-wire","browser-worker","devtools"]},
+    {"name":"secret-broker","root":"loki/cmd/secret-broker","optional":true,"forbidden_tags":["launcher-implementation","platform-credential-store","project-execution-local","provider-private-key","mcp-wire","browser-worker"]},
     {
       "forbidden_tags": [
         "launcher-implementation",

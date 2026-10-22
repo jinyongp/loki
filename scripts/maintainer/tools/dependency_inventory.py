@@ -51,7 +51,7 @@ def inventory(root=ROOT):
             add(name, kind, asset['version'], source, path)
     owners = root/'scripts/maintainer/tools/build_go_vendor.py'
     for owner, value in literals(owners)['OWNERS'].items():
-        repository = {'github': 'cli/cli', 'coordination': 'jinyongp/devtools'}[owner]
+        repository = {'github': 'cli/cli', 'runtime-core': 'jinyongp/devtools'}[owner]
         add('tool:'+value['program'], 'github', value['version'], repository, owners)
     for path in sorted((root/'packaging/tools/inputs').glob('workspace-linux-*.json')):
         for value in read(path).get('inputs', []):

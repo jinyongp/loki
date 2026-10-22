@@ -1,0 +1,20 @@
+{
+  "upstream": "https://github.com/jinyongp/devtools",
+  "commit": "ee1e460261720b50b9e186241abb9b0d6e24e174",
+  "license": "MIT",
+  "adaptation": "Package name and package comment only; no matching algorithm changes.",
+  "files": {
+    "internal/redact/matcher.go": {
+      "sha256": "eb0ceae11f350c769ce25684f06f453d9fe126cb5d8b3e7f1924f92fbc49da58"
+    },
+    "internal/redact/writer.go": {
+      "sha256": "b6577261d668d2993f1f64755ed77301e071b15b422fdb3aa0e9ff221e409913"
+    },
+    "internal/redact/matcher_test.go": {
+      "sha256": "fa48408f41eefb636f4e3fd970008b300b30bb244397ee2c0f0d2e686e5e2a07"
+    },
+    "LICENSE": {
+      "sha256": "836463c932d74d407a4d9509c322cbe5688dfe2292ac02920d0845a3613b12bc"
+    }
+  }
+}

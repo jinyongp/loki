@@ -105,7 +105,7 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 			result.Runtime["PersonalProjects"] = slices.Contains(choice.Capabilities, "personal-projects")
 		}
 		if _, ok := selected["coordination"]; ok {
-			program, err := r.ServiceProgram("coordination", "devtools")
+			program, err := r.ServiceProgram("runtime-core", "devtools")
 			if err != nil {
 				return result, err
 			}

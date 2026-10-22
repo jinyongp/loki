@@ -1,7 +1,6 @@
 package devtools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,16 +50,16 @@ func GenerateCatalog(ctx context.Context, binary string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("run devtools schema --all: %w", err)
 	}
-	if _, err = ParseCatalog(raw); err != nil {
+	commands, err := ParseCatalog(raw)
+	if err != nil {
 		return nil, err
 	}
-	var document any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err = decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("normalize devtools catalog: %w", err)
-	}
-	normalized, err := json.Marshal(document)
+	// Store only the reviewed consumer contract, never unrelated CLI authority.
+	normalized, err := json.MarshalIndent(struct {
+		SchemaVersion int     `json:"schema_version"`
+		OK            bool    `json:"ok"`
+		Data          Catalog `json:"data"`
+	}{EnvelopeVersion, true, Catalog{ProtocolVersion: ProtocolVersion, Commands: commands}}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("normalize devtools catalog: %w", err)
 	}

@@ -202,16 +202,6 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	}
 	devtoolsBroker := devtools.Broker{
 		Client: devtoolsClient,
-		ResolveSecrets: func(ctx context.Context, profile string, names []string) ([]string, []string, error) {
-			if !selected["secrets"] {
-				return nil, nil, errors.New("application-secret delivery is unavailable; select secrets explicitly")
-			}
-			plan, resolveErr := controller.ResolveEnvironment(ctx, profile, names)
-			if resolveErr != nil {
-				return nil, nil, resolveErr
-			}
-			return plan.Entries(), plan.RedactionValues(), nil
-		},
 	}
 	var issueFields IssueFieldsClient
 	var githubProvider GitHubProvider

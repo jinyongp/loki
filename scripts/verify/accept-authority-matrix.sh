@@ -68,12 +68,12 @@ cd "$repo"
 section "dedicated secret tool positive/negative boundary"
 LOKI_DEVTOOLS_BINARY="$devtools" go test ./internal/app/mcp   -run '^(TestSecretMCPRejectsManagedProfile|TestSecretAndWorkflowMCP|TestRuntimeTypedRejectsUnknownFieldsBeforeMutation)$'   -v -count=1
 
-section "direct broker and generic managed-process boundary"
+section "coordination contract and denied process secret boundary"
 broker_log=$root/devtools-broker.log
-LOKI_DEVTOOLS_BINARY="$devtools" go test ./modules/coordination   -run '^(TestBrokerRejectsManagedCredentialInjection|TestBrokerRejectsPrivateOutputAndUnapprovedInjection|TestBrokerRejectsProcessWithoutEncryptedSecrets|TestRealProcessInheritsBrokerSecrets)$'   -v -count=1 | tee "$broker_log"
-grep -F -- '--- PASS: TestRealProcessInheritsBrokerSecrets' "$broker_log" >/dev/null ||
+LOKI_DEVTOOLS_BINARY="$devtools" go test ./modules/coordination   -run '^(TestBrokerRejectsProcessSecretDelivery|TestClientRejectsGenericExecutionBeforeLaunching|TestRealCoordinationCandidate)$'   -v -count=1 | tee "$broker_log"
+grep -F -- '--- PASS: TestRealCoordinationCandidate' "$broker_log" >/dev/null ||
   fail "real release-image devtools broker fixture did not pass"
-if grep -F -- '--- SKIP: TestRealProcessInheritsBrokerSecrets' "$broker_log" >/dev/null; then
+if grep -F -- '--- SKIP: TestRealCoordinationCandidate' "$broker_log" >/dev/null; then
   fail "real release-image devtools broker fixture was skipped"
 fi
 

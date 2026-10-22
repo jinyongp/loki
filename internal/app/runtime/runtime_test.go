@@ -68,7 +68,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "modules", "coordination", "testdata", "catalog-protocol-v6.json"))
+	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "modules", "coordination", "testdata", "catalog-protocol-v10.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

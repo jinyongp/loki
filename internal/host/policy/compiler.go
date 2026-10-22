@@ -17,15 +17,16 @@ import (
 const DocumentVersion = 1
 
 type Document struct {
-	Version       int       `json:"version"`
-	WorkspaceRoot string    `json:"workspace_root"`
-	AuditLog      string    `json:"audit_log"`
-	Listener      Listener  `json:"listener"`
-	Sharing       Sharing   `json:"sharing"`
-	Access        Access    `json:"access"`
-	Limits        Limits    `json:"limits"`
-	Execution     Execution `json:"execution"`
-	GitHub        GitHub    `json:"github"`
+	Version              int                                 `json:"version"`
+	WorkspaceRoot        string                              `json:"workspace_root"`
+	AuditLog             string                              `json:"audit_log"`
+	Listener             Listener                            `json:"listener"`
+	Sharing              Sharing                             `json:"sharing"`
+	Access               Access                              `json:"access"`
+	Limits               Limits                              `json:"limits"`
+	Execution            Execution                           `json:"execution"`
+	GitHub               GitHub                              `json:"github"`
+	ApplicationResources []controlpolicy.ApplicationResource `json:"application_resources,omitempty"`
 }
 
 type Listener struct {
@@ -107,7 +108,17 @@ type GitHubTarget struct {
 }
 
 func Compile(c config.Config, contract execution.Contract) (controlpolicy.Generation, error) {
+	return CompileApplications(c, contract, nil)
+}
+
+// CompileApplications binds administrator-owned grants into the same policy
+// generation as the actual execution environment. No project file supplies it.
+func CompileApplications(c config.Config, contract execution.Contract, resources []controlpolicy.ApplicationResource) (controlpolicy.Generation, error) {
 	document, err := compileDocument(c, contract)
+	if err != nil {
+		return controlpolicy.Generation{}, err
+	}
+	document.ApplicationResources, err = controlpolicy.CanonicalApplications(resources, contract.Environment)
 	if err != nil {
 		return controlpolicy.Generation{}, err
 	}

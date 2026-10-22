@@ -51,7 +51,7 @@ def prepare(recipe_path, output, selected=None, reused_payloads=None, image_role
     native_sources = recipe.get("native_sources", {})
     if native_sources and target["mode"] != "full":
         raise ValueError("native source closures belong to Linux full candidates")
-    if set(native_sources) - {"git", "github", "coordination", "browser_libraries", "trust_store"}:
+    if set(native_sources) - {"git", "github", "runtime-core", "browser_libraries", "trust_store"}:
         raise ValueError("unknown native source closure owner")
     native_receipts = {}
     for owner, specification in sorted(native_sources.items()):
@@ -62,7 +62,7 @@ def prepare(recipe_path, output, selected=None, reused_payloads=None, image_role
             raise ValueError("native source recipe differs from candidate owner/target")
         acquired = output / "native-inputs" / owner
         vendor = output / "native-closures" / owner
-        if owner in ("github", "coordination"):
+        if owner in ("github", "runtime-core"):
             run("acquire_go_vendor_inputs.py", "--trust", source, "--output", acquired)
             run("build_go_vendor.py", "--inputs", acquired / "vendor-inputs.json", "--output", vendor)
             receipt_file = vendor / "vendor-receipt.json"
@@ -81,7 +81,7 @@ def prepare(recipe_path, output, selected=None, reused_payloads=None, image_role
         raise ValueError("project-host candidate contains only its standalone browser module")
     if set(modules) - set(REQUIRED_PROGRAMS):
         raise ValueError("full candidate has an unknown module owner")
-    if (set(native_receipts) & {"git", "github", "coordination"}) - set(modules):
+    if (set(native_receipts) & {"git", "github", "runtime-core"}) - set(modules):
         raise ValueError("native source programs require their selected candidate module")
     prepared = {owner: Path(directory) for owner, directory in (reused_payloads or {}).items()}
     for owner, module in sorted(modules.items()):

@@ -25,9 +25,9 @@ from build_browser_bundle import contained, digest, materialize, relative, unpac
 from build_manager_bundle import go_notices
 
 REQUIRED_PROGRAMS = {
-    "runtime-core": {"loki"}, "execution": {"launcher", "executor"},
+    "runtime-core": {"loki", "devtools"}, "execution": {"launcher", "executor"},
     "git": {"git", "ssh-agent", "ssh-add", "ssh-keygen"},
-    "github": {"gh"}, "coordination": {"devtools"}, "workspace": {"rg"},
+    "github": {"gh"}, "coordination": set(), "workspace": {"rg"},
     "secrets": set(), "sharing": set(),
 }
 OWNED_IMAGES = {"runtime-core": {"service", "gateway"}, "execution": {"workload"}, "git": {"git-workload"}}

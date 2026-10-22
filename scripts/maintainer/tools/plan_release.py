@@ -120,7 +120,7 @@ def fingerprints(release):
             closure = go_closure(GO_PROGRAMS[owner], system, arch) if owner in GO_PROGRAMS else None
             if closure:
                 paths += closure["files"]
-            if owner in ("github", "coordination"):
+            if owner in ("github", "runtime-core"):
                 source = "gh" if owner == "github" else "devtools"
                 paths += [f"packaging/tools/inputs/{source}-source-linux-{arch}.json"]+[SCRIPTS+n for n in ("acquire_go_vendor_inputs.py", "build_go_vendor.py")]
             if owner == "git":

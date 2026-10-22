@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -262,11 +263,24 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 		"FROM alpine:3.24.2@sha256:",
 		"COPY --from=build /out/loki /opt/loki/bin/loki",
 		"COPY config/gitconfig /usr/share/doc/loki/gitconfig",
-		"COPY packaging/native/execution-contract.json packaging/native/egress-policy.json /usr/share/doc/loki/",
+		"COPY --from=build /out/loki-job-bootstrap /opt/loki/bin/loki-job-bootstrap",
+		"COPY packaging/native/execution-contract.json /usr/share/doc/loki/",
+		"COPY --chmod=0644 internal/platform/sandbox/testdata/oci-image/egress-policy.json /usr/share/doc/loki/egress-policy.json",
 		"CMD [\"/bin/sh\"]",
 	} {
 		if !strings.Contains(body, required) {
 			t.Errorf("OCI fixture Dockerfile missing %q", required)
+		}
+	}
+	var shipping, fixture struct {
+		Profiles map[string]any `json:"profiles"`
+	}
+	if json.Unmarshal([]byte(mustRead(t, filepath.Join(root, "packaging/native/egress-policy.json"))), &shipping) != nil || json.Unmarshal([]byte(mustRead(t, filepath.Join(root, "internal/platform/sandbox/testdata/oci-image/egress-policy.json"))), &fixture) != nil {
+		t.Fatal("invalid fixture egress policies")
+	}
+	for name, profile := range shipping.Profiles {
+		if !reflect.DeepEqual(profile, fixture.Profiles[name]) {
+			t.Fatal("OCI fixture changed a generic host egress profile", name)
 		}
 	}
 }

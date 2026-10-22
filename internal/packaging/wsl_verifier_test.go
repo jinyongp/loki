@@ -76,6 +76,9 @@ func TestWSLVerifierAcceptsSyntheticContractArchive(t *testing.T) {
 	write("usr/lib/loki-appliance/provision", 0755, "#!/bin/sh\nmcp_port=19000\nhost install --system --workspace \"$workspace\" --mcp-port \"$mcp_port\"\nhost doctor --system\n")
 	write("usr/lib/systemd/system/loki-appliance-provision.service", 0644, "[Unit]\nConditionPathExists=/var/lib/loki-appliance/mcp-port\n[Service]\nType=oneshot\n")
 	mkdir("home/ubuntu/workspace", 0750)
+	// MkdirAll's requested mode is filtered by the invoking shell's umask.
+	// This public appliance directory has an exact shipped mode in the verifier.
+	mkdir("usr/lib/loki-appliance", 0755)
 
 	mkdir("etc/systemd/system/multi-user.target.wants", 0755)
 	for _, link := range []struct{ path, target string }{

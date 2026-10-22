@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -35,6 +36,7 @@ const (
 )
 
 var (
+	applicationHostLabel       = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 	digestPattern              = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	imageDigestPattern         = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$`)
 	jobIDPattern               = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -54,10 +56,11 @@ type NetworkProfile string
 const (
 	NetworkNone              NetworkProfile = "none"
 	NetworkDependencyInstall NetworkProfile = "dependency-install"
+	NetworkApplication       NetworkProfile = "application"
 )
 
 func (p NetworkProfile) Valid() bool {
-	return p == NetworkNone || p == NetworkDependencyInstall
+	return p == NetworkNone || p == NetworkDependencyInstall || p == NetworkApplication
 }
 
 type EndpointSpec struct {
@@ -161,36 +164,43 @@ type ToolchainMount struct {
 }
 
 type WorkloadSpec struct {
-	ID             string           `json:"id"`
-	PolicySHA256   string           `json:"policy_sha256"`
-	CWD            string           `json:"cwd"`
-	Argv           []string         `json:"argv"`
-	Network        NetworkProfile   `json:"network"`
-	Endpoints      []EndpointSpec   `json:"endpoints,omitempty"`
-	Toolchains     []ToolchainMount `json:"-"`
-	InputPath      string           `json:"input_path,omitempty"`
-	MaxOutputBytes int              `json:"max_output_bytes,omitempty"`
+	ApplicationDestinations []string         `json:"-"`
+	ID                      string           `json:"id"`
+	PolicySHA256            string           `json:"policy_sha256"`
+	CWD                     string           `json:"cwd"`
+	Argv                    []string         `json:"argv"`
+	Network                 NetworkProfile   `json:"network"`
+	Endpoints               []EndpointSpec   `json:"endpoints,omitempty"`
+	Toolchains              []ToolchainMount `json:"-"`
+	InputPath               string           `json:"input_path,omitempty"`
+	MaxOutputBytes          int              `json:"max_output_bytes,omitempty"`
 }
 
 type Plan struct {
-	valid              bool
-	name               string
-	policySHA256       string
-	sandboxSHA256      string
-	resource           Resource
-	network            NetworkProfile
-	endpoints          []EndpointSpec
-	toolchains         []ToolchainMount
-	gateway            GatewayPolicy
-	signing            signingPolicy
-	inputDirectory     string
-	toolchainDirectory string
-	inputPath          string
-	maxOutputBytes     int
-	create             dockerCreateRequest
+	applicationDestinations []string
+	protected               bool
+	valid                   bool
+	name                    string
+	policySHA256            string
+	sandboxSHA256           string
+	resource                Resource
+	network                 NetworkProfile
+	endpoints               []EndpointSpec
+	toolchains              []ToolchainMount
+	gateway                 GatewayPolicy
+	signing                 signingPolicy
+	inputDirectory          string
+	toolchainDirectory      string
+	inputPath               string
+	maxOutputBytes          int
+	create                  dockerCreateRequest
 }
 
 type dockerCreateRequest struct {
+	OpenStdin        bool                    `json:"OpenStdin"`
+	StdinOnce        bool                    `json:"StdinOnce"`
+	AttachStdin      bool                    `json:"AttachStdin"`
+	TTY              bool                    `json:"Tty"`
 	Image            string                  `json:"Image"`
 	Entrypoint       []string                `json:"Entrypoint"`
 	Cmd              []string                `json:"Cmd"`
@@ -208,6 +218,7 @@ type dockerCreateRequest struct {
 }
 
 type dockerHostConfig struct {
+	Ulimits         []dockerUlimit                 `json:"Ulimits,omitempty"`
 	ReadonlyRootfs  bool                           `json:"ReadonlyRootfs"`
 	CapDrop         []string                       `json:"CapDrop"`
 	SecurityOpt     []string                       `json:"SecurityOpt"`
@@ -220,6 +231,12 @@ type dockerHostConfig struct {
 	PortBindings    map[string][]dockerPortBinding `json:"PortBindings"`
 	PublishAllPorts bool                           `json:"PublishAllPorts"`
 	Init            bool                           `json:"Init"`
+}
+
+type dockerUlimit struct {
+	Name string `json:"Name"`
+	Soft int64  `json:"Soft"`
+	Hard int64  `json:"Hard"`
 }
 
 type dockerPortBinding struct {
@@ -630,6 +647,31 @@ func normalizeToolchainMounts(values []ToolchainMount, directory string) ([]Tool
 }
 
 func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
+	return p.plan(spec, false)
+}
+
+func (p Policy) plan(spec WorkloadSpec, protected bool) (Plan, error) {
+	if spec.Network == NetworkApplication && !protected || !protected && len(spec.ApplicationDestinations) > 0 {
+		return Plan{}, errors.New("application network requires a protected resource")
+	}
+	if spec.Network == NetworkApplication {
+		if len(spec.ApplicationDestinations) == 0 {
+			return Plan{}, errors.New("application egress grant is empty")
+		}
+		for i, destination := range spec.ApplicationDestinations {
+			host, port, err := net.SplitHostPort(destination)
+			if err != nil || port != "443" || host == "" || len(host) > 253 || host != strings.ToLower(host) || net.ParseIP(host) != nil || i > 0 && destination <= spec.ApplicationDestinations[i-1] {
+				return Plan{}, errors.New("invalid application egress grant")
+			}
+			for _, label := range strings.Split(host, ".") {
+				if !applicationHostLabel.MatchString(label) {
+					return Plan{}, errors.New("invalid application egress host")
+				}
+			}
+		}
+	} else if len(spec.ApplicationDestinations) > 0 {
+		return Plan{}, errors.New("application egress grant requires its network profile")
+	}
 	if !p.Valid() || spec.PolicySHA256 != p.generationSHA256 {
 		return Plan{}, errors.New("workload policy generation does not match the launcher")
 	}
@@ -678,7 +720,7 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	needsGateway := network == NetworkDependencyInstall || len(endpoints) > 0
+	needsGateway := network == NetworkDependencyInstall || network == NetworkApplication || len(endpoints) > 0
 	create := dockerCreateRequest{
 		Image:           p.image,
 		Entrypoint:      []string{""},
@@ -737,12 +779,38 @@ func (p Policy) Plan(spec WorkloadSpec) (Plan, error) {
 		create.HostConfig.Mounts[index] = p.volumeMount(mount)
 	}
 	return Plan{
-		valid: true, name: resource.Name(), policySHA256: p.generationSHA256,
+		applicationDestinations: append([]string(nil), spec.ApplicationDestinations...),
+		valid:                   true, name: resource.Name(), policySHA256: p.generationSHA256,
 		sandboxSHA256: p.sandboxSHA256, resource: resource, network: network,
 		endpoints: endpoints, toolchains: toolchains, gateway: p.gateway, signing: p.signing,
 		inputDirectory: p.inputDirectory, toolchainDirectory: p.toolchainDirectory, inputPath: spec.InputPath,
 		maxOutputBytes: spec.MaxOutputBytes, create: create,
 	}, nil
+}
+
+// ProtectedPlan contains no application values. Only the private attach stream
+// can supply bootstrap input; generic StartJob and Run refuse this plan.
+func (p Policy) ProtectedPlan(spec WorkloadSpec) (Plan, error) {
+	if spec.InputPath != "" || spec.Network == NetworkDependencyInstall || spec.MaxOutputBytes != 0 {
+		return Plan{}, errors.New("protected workload input or network is invalid")
+	}
+	plan, err := p.plan(spec, true)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan.protected = true
+	plan.create.Entrypoint = []string{"/opt/loki/bin/loki-job-bootstrap"}
+	plan.create.OpenStdin, plan.create.StdinOnce, plan.create.AttachStdin = true, true, true
+	plan.create.HostConfig.LogConfig = dockerLogConfig{Type: "none"}
+	plan.create.HostConfig.Ulimits = []dockerUlimit{{Name: "stack", Soft: 8 << 20, Hard: 8 << 20}}
+	return plan, nil
+}
+
+func (p Plan) BootstrapEnvironment() []string {
+	if !p.Valid() || !p.protected {
+		return nil
+	}
+	return append([]string(nil), p.create.Env...)
 }
 
 func workloadCWD(value string) (string, error) {
@@ -850,7 +918,7 @@ func (p Plan) Endpoints() []EndpointSpec {
 }
 
 func (p Plan) NeedsGateway() bool {
-	return p.Valid() && (p.network == NetworkDependencyInstall || len(p.endpoints) > 0)
+	return p.Valid() && (p.network == NetworkDependencyInstall || p.network == NetworkApplication || len(p.endpoints) > 0)
 }
 
 func (p Plan) NeedsOutboundNetwork() bool {

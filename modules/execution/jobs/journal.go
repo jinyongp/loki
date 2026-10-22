@@ -401,6 +401,13 @@ func (j *Journal) MarkTerminal(id string, result Result, now time.Time) (Record,
 	if record.State != StateAdmitted && record.State != StateRunning {
 		return Record{}, errors.New("job terminal transition requires an active record")
 	}
+	if record.Protected != nil {
+		var err error
+		result.Output, err = NormalizeOutput(record.Protected.Output, j.limits.MaxOutputBytes, record.Protected.Truncated)
+		if err != nil {
+			return Record{}, err
+		}
+	}
 	if !result.Valid(j.limits.MaxOutputBytes) {
 		return Record{}, errors.New("job terminal result is invalid")
 	}
@@ -704,6 +711,26 @@ func loadJournalRecord(path string, limits JournalLimits) (Record, error) {
 
 func cloneRecord(record Record) Record {
 	copy := record
+	if record.Protected != nil {
+		p := *record.Protected
+		p.Output = append([]byte(nil), p.Output...)
+		p.Reports = append([]ProtectedReport(nil), p.Reports...)
+		for i := range p.Reports {
+			if p.Reports[i].Result != nil {
+				result := *p.Reports[i].Result
+				p.Reports[i].Result = &result
+			}
+			if p.Reports[i].Intent.Fact.ExitCode != nil {
+				exit := *p.Reports[i].Intent.Fact.ExitCode
+				p.Reports[i].Intent.Fact.ExitCode = &exit
+			}
+		}
+		if p.Prepared != nil {
+			prepared := *p.Prepared
+			p.Prepared = &prepared
+		}
+		copy.Protected = &p
+	}
 	copy.EndpointRequests = append([]EndpointRequest(nil), record.EndpointRequests...)
 	copy.EndpointLeases = append([]EndpointLease(nil), record.EndpointLeases...)
 	if record.Result != nil {

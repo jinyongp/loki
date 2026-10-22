@@ -5,6 +5,8 @@
 !cmd/**
 !internal/
 !internal/**
+!modules/
+!modules/**
 !bundled_skills/
 !bundled_skills/**
 !config/

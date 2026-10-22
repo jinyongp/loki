@@ -30,6 +30,8 @@ type RunRequest struct {
 }
 
 type Workload struct {
+	Resource       string
+	Environment    string
 	ID             string
 	RequestID      string
 	RequestSHA256  string
@@ -123,6 +125,7 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (StartResult,
 		return StartResult{}, err
 	}
 	result, err := s.launcher.Start(ctx, Workload{
+		Resource: normalized.Resource, Environment: normalized.Environment,
 		ID: id, RequestID: normalized.RequestID, RequestSHA256: fingerprint, CWD: normalized.CWD,
 		Argv: append([]string(nil), normalized.Argv...), TimeoutSeconds: normalized.TimeoutSeconds,
 		Network: normalized.Network, Endpoints: append([]EndpointRequest(nil), normalized.Endpoints...),

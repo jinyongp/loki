@@ -91,6 +91,7 @@ func (r Result) Valid(maxOutputBytes int) bool {
 }
 
 type Record struct {
+	Protected        *ProtectedRecord  `json:"protected,omitempty"`
 	ID               string            `json:"id"`
 	BackendRef       string            `json:"backend_ref"`
 	RequestID        string            `json:"request_id,omitempty"`
@@ -109,6 +110,24 @@ type Record struct {
 }
 
 func (r Record) valid(maxOutputBytes int) bool {
+	if p := r.Protected; p != nil {
+		if !p.validReports(r.InstanceRef, r.ID) {
+			return false
+		}
+		if r.RequestID == "" || !protectedAliasPattern.MatchString(p.Resource) || !protectedEnvPattern.MatchString(p.Environment) || len(p.Output) > maxOutputBytes {
+			return false
+		}
+		if input := p.Prepared; input != nil {
+			if input.Stage != "prepared" && input.Stage != "approved" {
+				return false
+			}
+			if !jobIDPattern.MatchString(input.ExecutionID) || !jobIDPattern.MatchString(input.InputID) || !requestIDPattern.MatchString(input.RunnerID) || !requestIDPattern.MatchString(input.RunnerInstanceID) || input.Revision == 0 || !requestIDPattern.MatchString(input.PrepareRequestID) || !requestIDPattern.MatchString(input.ApproveRequestID) || !requestIDPattern.MatchString(input.DeliverRequestID) || r.InstanceRef == "" {
+				return false
+			}
+		} else if len(p.Output) > 0 || p.Complete {
+			return false
+		}
+	}
 	if !jobIDPattern.MatchString(r.ID) || !validBackendRef(r.BackendRef) ||
 		!validReplayIdentity(r.RequestID, r.RequestSHA256) ||
 		!r.Network.Valid() || !validEndpointRequests(r.EndpointRequests) || !validToolchainRefs(r.Toolchains) ||

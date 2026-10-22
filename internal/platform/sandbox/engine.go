@@ -152,7 +152,7 @@ func (e *Engine) dialContext(ctx context.Context, _, _ string) (net.Conn, error)
 }
 
 func (e *Engine) Run(ctx context.Context, plan Plan) (Result, error) {
-	if e == nil || !plan.Valid() {
+	if e == nil || !plan.Valid() || plan.protected {
 		return Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}, errors.New("sandbox workload plan is invalid")
 	}
 	if plan.NeedsGateway() {
@@ -267,6 +267,10 @@ func (e *Engine) Inspect(ctx context.Context, resource Resource) (ResourceState,
 }
 
 type inspectedResource struct {
+	configuredNetwork     string
+	logType               string
+	logPath               string
+	environment           []string
 	id                    string
 	state                 ResourceState
 	publishedPorts        map[string][]dockerPortBinding
@@ -329,12 +333,16 @@ func (e *Engine) inspectComponentRef(
 		return inspectedResource{}, err
 	}
 	var decoded struct {
-		ID     string `json:"Id"`
-		Config struct {
+		ID      string `json:"Id"`
+		LogPath string `json:"LogPath"`
+		Config  struct {
+			Environment  []string            `json:"Env"`
 			Labels       map[string]string   `json:"Labels"`
 			ExposedPorts map[string]struct{} `json:"ExposedPorts"`
 		} `json:"Config"`
 		HostConfig struct {
+			NetworkMode     string                         `json:"NetworkMode"`
+			LogConfig       dockerLogConfig                `json:"LogConfig"`
 			PortBindings    map[string][]dockerPortBinding `json:"PortBindings"`
 			PublishAllPorts bool                           `json:"PublishAllPorts"`
 		} `json:"HostConfig"`
@@ -412,7 +420,10 @@ func (e *Engine) inspectComponentRef(
 		}
 	}
 	return inspectedResource{
-		id: decoded.ID, state: state, publishedPorts: ports,
+		configuredNetwork: decoded.HostConfig.NetworkMode,
+		logType:           decoded.HostConfig.LogConfig.Type, logPath: decoded.LogPath,
+		environment: append([]string(nil), decoded.Config.Environment...),
+		id:          decoded.ID, state: state, publishedPorts: ports,
 		networkPortKeys:       len(decoded.NetworkSettings.Ports),
 		exposedPortKeys:       len(decoded.Config.ExposedPorts),
 		requestedPortBindings: requestedBindings,
@@ -471,13 +482,15 @@ func (e *Engine) createContainer(
 	}
 	controlCtx, cancel := context.WithTimeout(ctx, e.controlTimeout)
 	defer cancel()
-	logBytes := max(e.outputBytes, request.outputBytes, 64<<10)
-	request.HostConfig.LogConfig = dockerLogConfig{
-		Type: "local",
-		Config: map[string]string{
-			"max-size": strconv.Itoa(logBytes),
-			"max-file": "2",
-		},
+	if request.HostConfig.LogConfig.Type != "none" {
+		logBytes := max(e.outputBytes, request.outputBytes, 64<<10)
+		request.HostConfig.LogConfig = dockerLogConfig{
+			Type: "local",
+			Config: map[string]string{
+				"max-size": strconv.Itoa(logBytes),
+				"max-file": "2",
+			},
+		}
 	}
 	endpoint := "/v" + version + "/containers/create?name=" + url.QueryEscape(name)
 	response, err := e.call(controlCtx, http.MethodPost, endpoint, request)

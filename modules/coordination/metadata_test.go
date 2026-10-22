@@ -6,8 +6,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+func TestConcurrentTypedMetadataCallsShareVerifiedContract(t *testing.T) {
+	client, _ := metadataClient(t)
+	var wg sync.WaitGroup
+	errors := make(chan error, 16)
+	for range 16 {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, err := client.InspectProject(t.Context(), "."); errors <- err }()
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func metadataClient(t *testing.T) (*Client, map[string]string) {
 	t.Helper()
@@ -61,7 +79,7 @@ func metadataClient(t *testing.T) (*Client, map[string]string) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":6}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":10}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + files["catalog"] + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + files["log"] + "\"\n" +
 		"case \"$1 $2\" in\n" +

@@ -34,6 +34,7 @@ type domainReference struct {
 }
 
 type inspectedNetwork struct {
+	name     string
 	id       string
 	exists   bool
 	internal bool
@@ -207,6 +208,17 @@ func networkMembersAllowed(members map[string]bool, ids ...string) bool {
 }
 
 func (r domainReference) completenessError(snapshot domainSnapshot) error {
+	return r.completenessErrorFor(snapshot, false)
+}
+
+func (r domainReference) preparedCompletenessError(snapshot domainSnapshot) error {
+	if !r.matches(snapshot.workload.id, snapshot.gateway.id, snapshot.publisher.id, snapshot.internal.id, snapshot.outbound.id) {
+		return ErrInstanceMismatch
+	}
+	return r.completenessErrorFor(snapshot, true)
+}
+
+func (r domainReference) completenessErrorFor(snapshot domainSnapshot, prepared bool) error {
 	if !snapshot.workload.state.Exists {
 		return errors.New("sandbox resource domain is missing workload")
 	}
@@ -222,7 +234,8 @@ func (r domainReference) completenessError(snapshot domainSnapshot) error {
 	if r.expectsOutbound() != snapshot.outbound.exists {
 		return errors.New("sandbox resource domain outbound network presence changed")
 	}
-	if !exactNetworkIDs(snapshot.workload.networkIDs, snapshot.internal.id) {
+	stoppedConfigured := prepared && !snapshot.workload.state.Running && !snapshot.workload.state.Terminal && len(snapshot.workload.networkIDs) == 0 && snapshot.internal.name != "" && snapshot.workload.configuredNetwork == snapshot.internal.name
+	if !exactNetworkIDs(snapshot.workload.networkIDs, snapshot.internal.id) && !stoppedConfigured {
 		return errors.New(
 			"sandbox workload network set mismatch: count=" + strconv.Itoa(len(snapshot.workload.networkIDs)) +
 				" internal=" + strconv.FormatBool(snapshot.workload.networkIDs[snapshot.internal.id]),
@@ -445,6 +458,17 @@ func (p Plan) gatewayCreateRequest(authToken string) dockerCreateRequest {
 		"--audit", "/tmp/egress-audit.jsonl",
 		"--auth-token-env", "LOKI_JOB_PROXY_TOKEN",
 	}
+	if p.network == NetworkApplication {
+		for i := range command {
+			if command[i] == "--profile" {
+				command[i+1] = "application"
+			}
+		}
+		for _, destination := range p.applicationDestinations {
+			host, _, _ := net.SplitHostPort(destination)
+			command = append(command, "--allow-host", host)
+		}
+	}
 	if len(p.endpoints) > 0 {
 		command = append(command, "--forward-host", "0.0.0.0")
 		for _, endpoint := range p.endpoints {
@@ -529,7 +553,7 @@ func (p Plan) workloadCreateRequest(authToken, gatewayIPv4 string) dockerCreateR
 			},
 		}
 	}
-	if p.network == NetworkDependencyInstall {
+	if p.network == NetworkDependencyInstall || p.network == NetworkApplication {
 		proxyURL := "http://loki:" + authToken + "@" + net.JoinHostPort(gatewayIPv4, strconv.Itoa(p.gateway.proxyPort))
 		request.Env = append(request.Env,
 			"HTTPS_PROXY="+proxyURL,
@@ -627,7 +651,7 @@ func (e *Engine) inspectNetwork(
 		}
 		members[id] = true
 	}
-	return inspectedNetwork{id: decoded.ID, exists: true, internal: decoded.Internal, members: members}, nil
+	return inspectedNetwork{name: decoded.Name, id: decoded.ID, exists: true, internal: decoded.Internal, members: members}, nil
 }
 
 func (e *Engine) connectNetwork(
@@ -810,6 +834,9 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 			if ref := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID); ref != "" {
 				result.InstanceRef = ref
 			}
+		} else {
+			result.Created = false
+			result.InstanceRef = ""
 		}
 		return result, errors.Join(primary, cleanupErr)
 	}
@@ -941,8 +968,10 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		}
 	}
 
-	if err = e.startRef(ctx, version, workloadID, resource); err != nil {
-		return fail(fmt.Errorf("sandbox workload start: %w", err))
+	if !plan.protected {
+		if err = e.startRef(ctx, version, workloadID, resource); err != nil {
+			return fail(fmt.Errorf("sandbox workload start: %w", err))
+		}
 	}
 	instanceRef := domainInstanceReference(workloadID, gatewayID, publisherID, internalID, outboundID)
 	if instanceRef == "" {
@@ -953,7 +982,11 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 		return fail(err)
 	}
 	reference, _ := parseDomainReference(instanceRef)
-	if completeErr := reference.completenessError(snapshot); completeErr != nil {
+	completeErr := reference.completenessError(snapshot)
+	if plan.protected {
+		completeErr = reference.preparedCompletenessError(snapshot)
+	}
+	if completeErr != nil {
 		return fail(completeErr)
 	}
 	bindings, err := endpointBindingsFromSnapshot(snapshot, plan.endpoints)
@@ -963,7 +996,7 @@ func (e *Engine) startDomainJob(ctx context.Context, version string, plan Plan) 
 	result.InstanceRef = instanceRef
 	result.EndpointBindings = bindings
 	result.Created = true
-	result.Started = true
+	result.Started = !plan.protected
 	return result, nil
 }
 

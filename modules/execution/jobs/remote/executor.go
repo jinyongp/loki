@@ -80,6 +80,8 @@ func (e *Executor) Start(ctx context.Context, request jobs.StartRequest) (jobs.S
 		return jobs.StartResult{}, err
 	}
 	raw, err := e.client.Call(ctx, struct {
+		Resource       string                 `json:"resource,omitempty"`
+		Environment    string                 `json:"env,omitempty"`
 		Operation      string                 `json:"operation"`
 		RequestID      string                 `json:"request_id"`
 		CWD            string                 `json:"cwd,omitempty"`
@@ -89,6 +91,7 @@ func (e *Executor) Start(ctx context.Context, request jobs.StartRequest) (jobs.S
 		Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
 		Toolchains     []jobs.ToolchainRef    `json:"toolchains,omitempty"`
 	}{
+		Resource: request.Resource, Environment: request.Environment,
 		Operation:      "start",
 		RequestID:      request.RequestID,
 		CWD:            request.CWD,

@@ -108,6 +108,8 @@ func (l *Launcher) Start(ctx context.Context, workload jobs.Workload) (jobs.Star
 		return jobs.StartResult{}, errors.New("remote launcher is not configured")
 	}
 	request := struct {
+		Resource       string                 `json:"resource,omitempty"`
+		Environment    string                 `json:"env,omitempty"`
 		Operation      string                 `json:"operation"`
 		ID             string                 `json:"id"`
 		RequestID      string                 `json:"request_id,omitempty"`
@@ -120,6 +122,7 @@ func (l *Launcher) Start(ctx context.Context, workload jobs.Workload) (jobs.Star
 		Endpoints      []jobs.EndpointRequest `json:"endpoints,omitempty"`
 		Toolchains     []jobs.ToolchainRef    `json:"toolchains,omitempty"`
 	}{
+		Resource: workload.Resource, Environment: workload.Environment,
 		Operation:      "start",
 		ID:             workload.ID,
 		RequestID:      workload.RequestID,

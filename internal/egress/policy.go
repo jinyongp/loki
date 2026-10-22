@@ -44,8 +44,14 @@ func (p Policy) Validate() error {
 	if p.Version != PolicyVersion {
 		return fmt.Errorf("unsupported egress policy version %d", p.Version)
 	}
-	if len(p.Profiles) != 2 {
+	if len(p.Profiles) != 2 && len(p.Profiles) != 3 {
 		return errors.New("egress policy must define dependency-install and github-api")
+	}
+	if len(p.Profiles) == 3 {
+		application, ok := p.Profiles["application"]
+		if !ok || len(application.AllowedHosts) == 0 || !slices.Equal(application.AllowedPorts, []int{443}) {
+			return errors.New("application egress profile is incomplete")
+		}
 	}
 	dependency, ok := p.Profiles["dependency-install"]
 	if !ok || len(dependency.AllowedHosts) == 0 || !slices.Equal(dependency.AllowedPorts, []int{443}) {
@@ -68,6 +74,34 @@ func (p Policy) Validate() error {
 		}
 	}
 	return nil
+}
+
+// RestrictApplication intersects a host-owned application allowlist with the
+// selected resource grant. It never borrows dependency-install authority.
+func (p Policy) RestrictApplication(hosts []string) (Policy, error) {
+	if p.Validate() != nil || len(hosts) == 0 {
+		return Policy{}, errors.New("application egress grant is unavailable")
+	}
+	host, ok := p.Profiles["application"]
+	if !ok {
+		return Policy{}, errors.New("application egress allowlist is unavailable")
+	}
+	selected := []string{}
+	for _, name := range hosts {
+		if slices.Contains(host.AllowedHosts, name) && !slices.Contains(selected, name) {
+			selected = append(selected, name)
+		}
+	}
+	slices.Sort(selected)
+	if len(selected) == 0 {
+		return Policy{}, errors.New("application egress intersection is empty")
+	}
+	copy := Policy{Version: p.Version, Profiles: map[string]Profile{}}
+	for name, profile := range p.Profiles {
+		copy.Profiles[name] = Profile{AllowedHosts: slices.Clone(profile.AllowedHosts), AllowedPorts: slices.Clone(profile.AllowedPorts)}
+	}
+	copy.Profiles["application"] = Profile{AllowedHosts: selected, AllowedPorts: []int{443}}
+	return copy, nil
 }
 
 func validHostname(host string) bool {

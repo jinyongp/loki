@@ -57,7 +57,7 @@ func TestEnvelopeContract(t *testing.T) {
 }
 
 func TestVersionRequiresIndependentProtocol(t *testing.T) {
-	for _, protocol := range []string{"0", "1", "2", "3", "4", "null", `"5"`} {
+	for _, protocol := range []string{"0", "1", "2", "3", "4", "6", "9", "null", `"10"`} {
 		t.Run(protocol, func(t *testing.T) {
 			raw := []byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":` + protocol + `}}`)
 			if _, err := ParseVersion(raw); err == nil {
@@ -67,15 +67,15 @@ func TestVersionRequiresIndependentProtocol(t *testing.T) {
 	}
 	for _, raw := range []string{
 		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test"}}`,
-		`{"schema_version":3,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":6}}`,
-		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":1,"protocol_version":6}}`,
+		`{"schema_version":3,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":10}}`,
+		`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":1,"protocol_version":10}}`,
 	} {
 		if _, err := ParseVersion([]byte(raw)); err == nil {
 			t.Fatal("invalid version contract accepted")
 		}
 	}
-	got, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":6}}`))
-	if err != nil || got.ProtocolVersion != 6 || got.Version != "0.17.0" {
+	got, err := ParseVersion([]byte(`{"schema_version":1,"ok":true,"data":{"version":"0.17.0","commit":"test","protocol_version":10}}`))
+	if err != nil || got.ProtocolVersion != 10 || got.Version != "0.17.0" {
 		t.Fatalf("version = %+v, error = %v", got, err)
 	}
 }
@@ -178,7 +178,7 @@ func TestClientChecksFailureEnvelopeBeforeCLIError(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := "#!/bin/sh\n" +
-				"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":6}}'; exit 0; fi\n" +
+				"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":10}}'; exit 0; fi\n" +
 				"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + filepath.Join(client.CWD, "catalog.json") + "\"; exit 0; fi\n"
 			redirect := ""
 			if test.exit != 0 {
@@ -188,7 +188,7 @@ func TestClientChecksFailureEnvelopeBeforeCLIError(t *testing.T) {
 			if err := os.WriteFile(client.Binary, []byte(body), 0700); err != nil {
 				t.Fatal(err)
 			}
-			_, err := client.Call(context.Background(), "process start", json.RawMessage(`{"args":["web"],"request-id":"00000000-0000-0000-0000-000000000000"}`))
+			_, err := client.call(context.Background(), "command list", json.RawMessage(`{}`), client.Env)
 			if err == nil {
 				t.Fatal("invalid or failed command accepted")
 			}

@@ -22,6 +22,8 @@ const websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 func main() {
 	port := flag.Int("port", 0, "development endpoint port")
 	allowedAuthority := flag.String("allowed-authority", "", "allowlisted HTTPS CONNECT authority")
+	deniedAuthority := flag.String("denied-authority", "not-allowlisted.invalid:443", "authority excluded by the selected grant")
+	checkOnly := flag.Bool("check-only", false, "verify egress and exit without serving endpoints")
 	flag.Parse()
 	if *port < 1024 || *port > 65535 || *allowedAuthority == "" {
 		fatal("invalid fixture arguments")
@@ -40,7 +42,7 @@ func main() {
 	}
 	fmt.Println("egress-auth=ok")
 
-	if status, err := proxyConnectStatus(proxyURL, "not-allowlisted.invalid:443", true); err != nil || status != http.StatusForbidden {
+	if status, err := proxyConnectStatus(proxyURL, *deniedAuthority, true); err != nil || status != http.StatusForbidden {
 		fatal(fmt.Sprintf("disallowed proxy access status=%d err=%v", status, err))
 	}
 	fmt.Println("egress-denied=ok")
@@ -55,6 +57,9 @@ func main() {
 		fatal("direct egress unexpectedly succeeded")
 	}
 	fmt.Println("egress-direct-denied=ok")
+	if *checkOnly {
+		return
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", websocketEcho)

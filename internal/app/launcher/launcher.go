@@ -16,6 +16,7 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/fault"
+	"loki/internal/platform/privateio"
 	"loki/internal/platform/sandbox"
 	"loki/internal/rpc"
 	"loki/modules/execution/jobs"
@@ -54,6 +55,7 @@ type ToolchainResolver interface {
 }
 
 type Options struct {
+	Protected         *ProtectedOptions
 	Socket            string
 	SocketGID         int
 	ExecutorUID       uint32
@@ -67,6 +69,7 @@ type Options struct {
 }
 
 type lifecycle struct {
+	protected         *ProtectedOptions
 	ctx               context.Context
 	cancel            context.CancelFunc
 	policy            sandbox.Policy
@@ -86,6 +89,7 @@ type lifecycle struct {
 }
 
 type ownedJob struct {
+	protected       *privateio.JobOpen
 	cancel          context.CancelFunc
 	done            chan struct{}
 	err             error
@@ -105,6 +109,8 @@ type runRequest struct {
 }
 
 type startRequest struct {
+	Resource       string                 `json:"resource,omitempty"`
+	Environment    string                 `json:"env,omitempty"`
 	ID             string                 `json:"id"`
 	RequestID      string                 `json:"request_id,omitempty"`
 	RequestSHA256  string                 `json:"request_sha256,omitempty"`
@@ -195,6 +201,7 @@ func (l *lifecycle) operations() map[string]rpc.Operation {
 					return nil, err
 				}
 				return l.startWorkload(ctx, jobs.Workload{
+					Resource: request.Resource, Environment: request.Environment,
 					ID: request.ID, RequestID: request.RequestID, RequestSHA256: request.RequestSHA256,
 					CWD: request.CWD, Argv: request.Argv, TimeoutSeconds: request.TimeoutSeconds,
 					Network: request.Network, Endpoints: append([]jobs.EndpointRequest(nil), request.Endpoints...),
@@ -376,6 +383,8 @@ func sandboxNetworkProfile(value jobs.NetworkProfile) (sandbox.NetworkProfile, e
 		return sandbox.NetworkNone, nil
 	case jobs.NetworkDependencyInstall:
 		return sandbox.NetworkDependencyInstall, nil
+	case jobs.NetworkApplication:
+		return sandbox.NetworkApplication, nil
 	default:
 		return "", errors.New("workload network profile is invalid")
 	}
@@ -442,6 +451,7 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 			return jobs.StartResult{}, fault.Error("workload request replay identity is invalid")
 		}
 		normalized, fingerprint, normalizeErr := jobs.NormalizeStartRequest(jobs.StartRequest{
+			Resource: workload.Resource, Environment: workload.Environment,
 			RequestID: workload.RequestID, CWD: workload.CWD,
 			Argv: append([]string(nil), workload.Argv...), TimeoutSeconds: workload.TimeoutSeconds,
 			Network: workload.Network, Endpoints: append([]jobs.EndpointRequest(nil), workload.Endpoints...),
@@ -455,6 +465,7 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 			return jobs.StartResult{}, fault.Error("workload request replay identity is invalid")
 		}
 		workload.RequestID = normalized.RequestID
+		workload.Resource, workload.Environment = normalized.Resource, normalized.Environment
 		workload.RequestSHA256 = fingerprint
 		workload.CWD = normalized.CWD
 		workload.Argv = normalized.Argv
@@ -463,12 +474,19 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 		workload.Endpoints = normalized.Endpoints
 		workload.Toolchains = normalized.Toolchains
 	} else {
+		if workload.Resource != "" || workload.Environment != "" {
+			return jobs.StartResult{}, fault.Error("protected Jobs require a request UUID")
+		}
 		workload.Network, err = jobs.NormalizeNetworkProfile(workload.Network)
 		if err != nil || workload.Network != jobs.NetworkNone || len(workload.Endpoints) != 0 || len(workload.Toolchains) != 0 {
 			return jobs.StartResult{}, fault.Error("legacy workload requests cannot carry network, endpoint, or toolchain intent")
 		}
 	}
 
+	protected, err := l.protectedSelection(ctx, workload, policySHA256)
+	if err != nil {
+		return jobs.StartResult{}, fault.Error("application resource is not authorized")
+	}
 	resolvedToolchains, err := l.resolveToolchains(ctx, workload.ID, workload.Toolchains)
 	if err != nil {
 		return jobs.StartResult{}, fault.Error("workload toolchain selection is unavailable")
@@ -485,8 +503,17 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 		return jobs.StartResult{}, fault.Error("workload request is not allowed")
 	}
 	endpoints := sandboxEndpointSpecs(workload.Endpoints)
-	plan, err := l.policy.Plan(sandbox.WorkloadSpec{
-		ID: workload.ID, PolicySHA256: policySHA256, CWD: workload.CWD,
+	buildPlan := l.policy.Plan
+	if protected != nil {
+		buildPlan = l.policy.ProtectedPlan
+	}
+	var applicationDestinations []string
+	if protected != nil {
+		applicationDestinations = protected.Destinations
+	}
+	plan, err := buildPlan(sandbox.WorkloadSpec{
+		ApplicationDestinations: applicationDestinations,
+		ID:                      workload.ID, PolicySHA256: policySHA256, CWD: workload.CWD,
 		Argv: append([]string(nil), workload.Argv...), Network: network, Endpoints: endpoints,
 		Toolchains: append([]sandbox.ToolchainMount(nil), resolvedToolchains.Mounts...),
 		InputPath:  workload.InputPath, MaxOutputBytes: workload.MaxOutputBytes,
@@ -522,6 +549,17 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 			true,
 			"wait for an active job to finish or cancel one before retrying",
 		)
+	}
+	if protected != nil && !retained {
+		count := 0
+		for _, active := range l.active {
+			if active.protected != nil {
+				count++
+			}
+		}
+		if count >= 8 {
+			return jobs.StartResult{}, fault.Error("protected Job capacity is full")
+		}
 	}
 	deadline := now.Add(lifetime)
 	var record jobs.Record
@@ -560,13 +598,24 @@ func (l *lifecycle) startWorkload(ctx context.Context, workload jobs.Workload, p
 	if replayed {
 		return startResultFromRecord(record, true), nil
 	}
+	if protected != nil {
+		if _, err = l.journal.BindProtectedJob(workload.ID, protected.DeploymentID, workload.Resource, workload.Environment, l.now()); err != nil {
+			return jobs.StartResult{}, fault.Error("protected Job admission failed")
+		}
+		protected.BaseEnvironment = []privateio.EnvironmentEntry{}
+		for _, entry := range plan.BootstrapEnvironment() {
+			name, value, _ := strings.Cut(entry, "=")
+			protected.BaseEnvironment = append(protected.BaseEnvironment, privateio.EnvironmentEntry{Name: name, Value: value})
+		}
+	}
 	if _, active := l.active[workload.ID]; active {
 		return jobs.StartResult{}, errors.New("launcher job registry conflicts with durable admission")
 	}
 
 	jobCtx, cancel := context.WithDeadline(l.ctx, deadline)
 	job := &ownedJob{
-		cancel: cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes,
+		protected: protected,
+		cancel:    cancel, done: make(chan struct{}), rawOutputLimit: workload.MaxOutputBytes,
 		closeToolchains: resolvedToolchains.Close,
 		toolchains:      append([]jobs.ToolchainRef(nil), workload.Toolchains...),
 	}
@@ -593,6 +642,10 @@ func startResultFromRecord(record jobs.Record, replayed bool) jobs.StartResult {
 
 func (l *lifecycle) runNew(id string, plan sandbox.Plan, ctx context.Context, job *ownedJob) {
 	defer l.finish(id, job)
+	if job.protected != nil {
+		l.runProtected(id, plan, ctx, job)
+		return
+	}
 	started, startErr := l.runner.StartJob(ctx, plan)
 
 	instanceBound := false
@@ -963,6 +1016,9 @@ func (l *lifecycle) reconcile() error {
 			}
 			cleanup := jobs.CleanupComplete
 			if state.Exists {
+				if record.Protected != nil {
+					return errors.New("protected Job recovery requires reconciliation of an unbound instance")
+				}
 				cleanup = jobs.CleanupFailed
 			}
 			if _, err = l.journal.MarkTerminal(record.ID, jobs.Result{
@@ -971,6 +1027,19 @@ func (l *lifecycle) reconcile() error {
 				return err
 			}
 			l.removeRunInput(record.ID)
+			continue
+		}
+		if record.Protected != nil {
+			// A replacement launcher never resumes raw collection with lost
+			// matcher state or re-delivers values. Clean only the exact instance.
+			cleanup, cleanupErr := l.runner.CleanupJob(context.Background(), resource, record.InstanceRef)
+			status := terminalCleanup(cleanup, cleanupErr)
+			if _, err = l.journal.MarkTerminal(record.ID, jobs.Result{Outcome: jobs.OutcomeUnknown, Cleanup: status}, l.now()); err != nil {
+				return err
+			}
+			if cleanupErr != nil || status == jobs.CleanupFailed {
+				return errors.New("protected Job recovery cleanup is incomplete")
+			}
 			continue
 		}
 
@@ -1164,7 +1233,7 @@ func (l *lifecycle) output(ctx context.Context, id string) (jobs.OutputSnapshot,
 	if err != nil {
 		return jobs.OutputSnapshot{}, err
 	}
-	if record.State == jobs.StateTerminal || record.InstanceRef == "" {
+	if record.Protected != nil || record.State == jobs.StateTerminal || record.InstanceRef == "" {
 		return snapshot, nil
 	}
 	resource, err := resourceFromRecord(record)
@@ -1356,6 +1425,9 @@ func Run(ctx context.Context, options Options) error {
 		return err
 	}
 	lifecycle.maxConcurrentJobs = maxConcurrentJobs
+	if err = lifecycle.configureProtected(options.Protected); err != nil {
+		return err
+	}
 	defer lifecycle.close()
 	if err = lifecycle.reconcile(); err != nil {
 		return err

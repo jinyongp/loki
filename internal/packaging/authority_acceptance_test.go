@@ -19,8 +19,9 @@ func TestA14AuthorityAcceptanceCoversCrossPathRoutes(t *testing.T) {
 		"io.loki.devtools.$arch.sha256",
 		"TestSecretMCPRejectsManagedProfile",
 		"TestSecretAndWorkflowMCP",
-		"TestRealProcessInheritsBrokerSecrets",
-		"TestBrokerRejectsManagedCredentialInjection",
+		"TestRealCoordinationCandidate",
+		"TestBrokerRejectsProcessSecretDelivery",
+		"TestClientRejectsGenericExecutionBeforeLaunching",
 		"TestGitInspectionDisablesRepositoryExecutables",
 		"TestGitRejectsExecutableFiltersBeforeWorktreeOperations",
 		"TestExecutorToLauncherTrustedAuthorityBoundary",
@@ -31,8 +32,8 @@ func TestA14AuthorityAcceptanceCoversCrossPathRoutes(t *testing.T) {
 		"TestInstallZipRejectsChainedSymlinkEscape",
 		"TestManagerApplyRejectsStalePreparedPlanBeforeJobInspection",
 		"TestUnknownToolArgumentsNeverReachHandlers",
-		"--- PASS: TestRealProcessInheritsBrokerSecrets",
-		"--- SKIP: TestRealProcessInheritsBrokerSecrets",
+		"--- PASS: TestRealCoordinationCandidate",
+		"--- SKIP: TestRealCoordinationCandidate",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("A14 cross-path authority runner lacks %q", required)

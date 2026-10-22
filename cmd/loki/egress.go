@@ -110,6 +110,8 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 	forwardPort := flags.Int("forward-port", 0, "legacy single TCP forward listen port")
 	forwardTarget := flags.String("forward-target", "", "legacy single TCP forward target")
 	var forwardValues repeatedFlag
+	var applicationHosts repeatedFlag
+	flags.Var(&applicationHosts, "allow-host", "host-owned resource application egress restriction")
 	flags.Var(&forwardValues, "forward", "repeatable LISTEN_PORT=TARGET_HOST:PORT TCP forward")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -122,7 +124,11 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "egress-proxy requires port, execution contract, policy, profile, and audit path")
 		return 2
 	}
-	_, contractPort, err := loadExecutionProxy(*contractPath, *profile)
+	contractProfile := *profile
+	if contractProfile == "application" {
+		contractProfile = "runtime-profile"
+	}
+	_, contractPort, err := loadExecutionProxy(*contractPath, contractProfile)
 	if err != nil || contractPort != *port {
 		fmt.Fprintln(stderr, "egress-proxy port does not match execution contract")
 		return 2
@@ -193,6 +199,21 @@ func runEgressProxy(args []string, stderr io.Writer) int {
 	}
 	if err := policy.Validate(); err != nil {
 		fmt.Fprintf(stderr, "invalid egress policy: %v\n", err)
+		return 2
+	}
+	if *profile == "application" {
+		if authToken == "" {
+			fmt.Fprintln(stderr, "application egress requires authenticated resource routing")
+			return 2
+		}
+		var err error
+		policy, err = policy.RestrictApplication(applicationHosts)
+		if err != nil {
+			fmt.Fprintln(stderr, "application egress grant is unavailable")
+			return 2
+		}
+	} else if len(applicationHosts) > 0 {
+		fmt.Fprintln(stderr, "resource routing requires the application profile")
 		return 2
 	}
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: listenIP, Port: *port})

@@ -254,10 +254,7 @@ func (c *Client) verify(ctx context.Context) error {
 }
 
 func (c *Client) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-	if isMetadataCommand(name) || isCoordinationCommand(name) || isCoordinationMutation(name) {
-		return nil, errors.New("devtools typed command requires the typed adapter")
-	}
-	return c.call(ctx, name, raw, c.Env)
+	return nil, errors.New("devtools commands require a typed adapter; process execution is unavailable")
 }
 
 func isMetadataCommand(name string) bool {
@@ -270,12 +267,17 @@ func isMetadataCommand(name string) bool {
 }
 
 func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, environment []string) (json.RawMessage, error) {
+	// Check the immutable allowlist before any subprocess. The compiled table
+	// is published by Verify and must not be read before that synchronization.
+	if !slices.Contains(approvedNames, name) {
+		return nil, errors.New("devtools command is not approved")
+	}
 	if err := c.verify(ctx); err != nil {
 		return nil, err
 	}
 	command, ok := c.commands[name]
 	if !ok {
-		return nil, errors.New("devtools command is not approved")
+		return nil, errors.New("devtools approved command is unavailable")
 	}
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
@@ -287,15 +289,12 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 	if err := command.input.Validate(input); err != nil {
 		return nil, errors.New("devtools command input does not match its schema")
 	}
-	if (name == "process start" || name == "process restart") && input["capture-logs"] == true {
-		return nil, errors.New("devtools raw process logs are disabled")
-	}
 	if name == "project inspect" {
 		if profile, _ := input["profile"].(string); profile != "" {
 			return nil, errors.New("devtools explicit profile lookup is unavailable through Loki")
 		}
 	}
-	if name == "process start" || isMetadataCommand(name) {
+	if isMetadataCommand(name) {
 		requested, _ := input["dir"].(string)
 		if requested == "" {
 			requested = "."
