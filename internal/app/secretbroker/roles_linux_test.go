@@ -373,7 +373,12 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if err := sourceSession.Transfer(ctx); !errors.Is(err, checkpointError) {
 		t.Fatal("synthetic lost write acknowledgement not exercised", err)
 	}
-	reopened, err := lifecycle.OpenOperationJournal(journalRoot, journalLock, lifecycle.OperationJournalOptions{})
+	reopened, err := lifecycle.OpenOperationJournal(journalRoot, journalLock, lifecycle.OperationJournalOptions{Failpoint: func(name string) error {
+		if name == "after_publish:applying:switch" {
+			return checkpointError
+		}
+		return nil
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,22 +388,19 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal("lost original host source operation", err)
 	}
 	sourceOwner.Journal = journal
-	sourceSession, err = sourceOwner.Session(client, nil)
+	expired = pending()
+	if err := sourceOwner.Transfer(ctx, client, nil); !errors.Is(err, checkpointError) {
+		t.Fatal("sealed candidate ready checkpoint loss not exercised", err)
+	}
+	journal, err = lifecycle.OpenOperationJournal(journalRoot, journalLock, lifecycle.OperationJournalOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sourceSession.Transfer(ctx); err != nil {
-		t.Fatal("source-owner exact transfer/replay/private comparison failed", err)
-	}
-	if _, err := journal.AdvanceSecretMigration(migrationRecord.ID, lifecycle.PhaseSwitch, time.Now()); err != nil {
+	if current, found, err := journal.Active(); err != nil || !found || current.Phase != lifecycle.PhaseSwitch {
 		t.Fatal("source/private delivery did not cover every mapped slot", err)
 	}
 	if _, err := legacy.PrepareApplicationMigration(ctx, nil, plan.Resources, nil); !errors.Is(err, secret.ErrApplicationMigration) {
 		t.Fatal("prepared a second migration over the fenced source", err)
-	}
-	expired = pending()
-	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_begin", RequestID: migrationOperation}, nil); err != nil {
-		t.Fatal("private application maintenance admission", err)
 	}
 	write("fenced")
 	stopAfterRestart(true)

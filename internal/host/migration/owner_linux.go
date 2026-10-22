@@ -130,3 +130,22 @@ func (o SourceOwner) Session(target admin.ApplicationClient, base map[string]str
 	i := r.SecretMigration.Intent
 	return SourceSession{Source: secret.Controller{StateDirectory: i.SourceRoot}, Target: target, Operation: lifecycle.MigrationOperationUUID(o.ID), Policy: i.Policy, Plan: i.Plan, BaseEnvironment: base, Writes: r.SecretMigration.Writes, Checkpoint: o.Checkpoint}, nil
 }
+
+// Transfer seals the target before marking it ready for selection. If this
+// process loses that checkpoint, recovery can reread/compare the same values
+// while the durable gate continues to reject all app mutations. No writable
+// interval exists between successful equality and the selectable checkpoint.
+func (o SourceOwner) Transfer(ctx context.Context, target admin.ApplicationClient, base map[string]string) error {
+	session, err := o.Session(target, base)
+	if err != nil {
+		return err
+	}
+	if err := session.Transfer(ctx); err != nil {
+		return err
+	}
+	if err := target.FenceApplicationWrites(ctx, session.Operation, true); err != nil {
+		return err
+	}
+	_, err = o.Journal.AdvanceSecretMigration(o.ID, lifecycle.PhaseSwitch, time.Now())
+	return err
+}
