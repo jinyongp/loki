@@ -20,6 +20,14 @@ import (
 
 var errMigrationComparison = errors.New("private migration comparison did not complete")
 
+type migrationComparisonFailure struct{ stage string }
+
+func (e *migrationComparisonFailure) Error() string {
+	return "private migration comparison failed at " + e.stage
+}
+func (e *migrationComparisonFailure) Unwrap() error { return errMigrationComparison }
+func migrationFailure(stage string) error           { return &migrationComparisonFailure{stage: stage} }
+
 // MigrationExpected is private borrowed input supplied by the root host
 // migration channel. It is never part of an operation record or public result.
 type MigrationExpected struct {
@@ -59,11 +67,11 @@ type MigrationComparisonResult struct {
 // their separate stable slot request IDs in the original host operation.
 func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (result MigrationComparisonResult, resultErr error) {
 	if options.Provider == nil || !uuidPattern.MatchString(options.Operation) || !uuidPattern.MatchString(options.Attempt) || !uuidPattern.MatchString(options.Runner) || !uuidPattern.MatchString(options.Instance) || !digestPattern.MatchString(options.Policy) || options.Persist == nil || len(options.Expected) == 0 || len(options.Expected) > controlpolicy.MaxApplicationKeys {
-		return result, errMigrationComparison
+		return result, migrationFailure("input")
 	}
 	resources, err := controlpolicy.CanonicalApplications([]controlpolicy.ApplicationResource{options.Resource}, nil)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("policy")
 	}
 	resource := resources[0]
 	if options.Environment == "" {
@@ -74,13 +82,13 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 		allowed = allowed || env == options.Environment
 	}
 	if !allowed {
-		return result, errMigrationComparison
+		return result, migrationFailure("environment")
 	}
 	expected := make(map[string]MigrationExpected, len(options.Expected))
 	keys := make([]string, 0, len(options.Expected))
 	for _, v := range options.Expected {
 		if _, duplicate := expected[v.Name]; duplicate || (v.Kind != "secret" && v.Kind != "variable") || resource.Keys[v.Name] != v.Kind || len(v.Value) > 65536 || !utf8.Valid(v.Value) || strings.ContainsRune(string(v.Value), 0) {
-			return result, errMigrationComparison
+			return result, migrationFailure("values")
 		}
 		expected[v.Name] = v
 		keys = append(keys, v.Name)
@@ -94,11 +102,11 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	correlation := strings.ReplaceAll(op("correlation"), "-", "")
 	a, err := options.Provider.Address(ctx, options.Runner, options.Instance)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("address")
 	}
 	execution, err := options.Provider.Prepare(ctx, resource.Profile(), options.Environment, correlation, op("prepare"), "", keys)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("prepare")
 	}
 	delivered := false
 	defer func() {
@@ -117,7 +125,7 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	address := Address(a)
 	listener, err := Listen(address)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("listener")
 	}
 	received := make(chan struct{}, 1)
 	r := Receiver{Address: address,
@@ -157,20 +165,20 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 		cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
 		defer stop()
 		if err := options.Provider.Unregister(cleanup, options.Runner, options.Instance, op("unregister")); err != nil && resultErr == nil {
-			result, resultErr = MigrationComparisonResult{}, errMigrationComparison
+			result, resultErr = MigrationComparisonResult{}, migrationFailure("unregister")
 		}
 	}()
 	if options.Provider.Register(ctx, options.Runner, options.Instance, op("register")) != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("register")
 	}
 	next, err := options.Provider.Approve(ctx, resource.Profile(), options.Runner, options.Instance, op("approve"), execution)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("approve")
 	}
 	execution = next
 	next, err = options.Provider.Deliver(ctx, resource.Profile(), op("deliver"), execution)
 	if err != nil {
-		return result, errMigrationComparison
+		return result, migrationFailure("deliver")
 	}
 	execution = next
 	delivered = true
@@ -178,6 +186,6 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	case <-received:
 		return MigrationComparisonResult{Matched: true, Count: len(expected)}, nil
 	case <-ctx.Done():
-		return result, errMigrationComparison
+		return result, migrationFailure("receipt")
 	}
 }

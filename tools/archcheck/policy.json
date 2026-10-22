@@ -1,5 +1,11 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/host/migration","to":"loki/internal/admin"},
+    {"from":"loki/internal/host/migration","to":"loki/internal/control/appvalues"},
+    {"from":"loki/internal/host/migration","to":"loki/internal/control/policy"},
+    {"from":"loki/internal/host/migration","to":"loki/internal/host/lifecycle"},
+    {"from":"loki/internal/host/migration","to":"loki/internal/platform/privateio"},
+    {"from":"loki/internal/host/migration","to":"loki/modules/secrets"},
     {"from":"loki/internal/management","to":"loki/internal/host/lifecycle"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/control/policy"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/platform/privateio"},
@@ -1018,6 +1024,7 @@
   ],
   "module": "loki",
   "packages": {
+    "loki/internal/host/migration": {"kind":"host","owner":"host-migration","tags":["host-config"],"target":"internal/host/migration"},
     "loki/internal/host/application": {"kind":"host","owner":"host-application","tags":["host-config"],"target":"internal/host/application"},
     "loki/internal/platform/repository": {"kind":"platform","owner":"platform","tags":[],"target":"internal/platform/repository"},
     "loki/cmd/secret-broker": {"kind":"role","owner":"secrets","tags":[],"target":"cmd/secret-broker"},

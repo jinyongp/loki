@@ -4,6 +4,8 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net"
 	"path/filepath"
 	"slices"
@@ -51,19 +53,64 @@ func (c ApplicationClient) CompareMigration(ctx context.Context, operation strin
 		return result, privateio.ErrInvalid
 	}
 	var prepared appvalues.MigrationPrepared
-	if privateio.ReadControl(conn, &prepared) != nil {
+	first, err := privateio.ReadBytes(conn, privateio.MaxControlFrame)
+	if err != nil {
 		return result, privateio.ErrInvalid
 	}
-	b := prepared.Binding
-	if prepared.Stage != "prepared" || b.Operation != operation || b.Attempt != request.RequestID || b.Policy != request.Revision || !slices.Equal(b.Names, request.Members) {
+	defer clear(first)
+	var stage struct {
+		Stage string `json:"stage"`
+	}
+	if json.Unmarshal(first, &stage) != nil {
 		return result, privateio.ErrInvalid
+	}
+	if stage.Stage == "failed" {
+		var failure appvalues.MigrationComparisonResult
+		if privateio.Decode(first, &failure) != nil {
+			return result, privateio.ErrInvalid
+		}
+		return result, migrationFailureError(failure.Reason)
+	}
+	if privateio.Decode(first, &prepared) != nil {
+		return result, fmt.Errorf("%w: migration prepared schema", privateio.ErrInvalid)
+	}
+	b := prepared.Binding
+	if prepared.Stage != "prepared" {
+		return result, fmt.Errorf("%w: migration prepared stage", privateio.ErrInvalid)
+	}
+	if b.Operation != operation {
+		return result, fmt.Errorf("%w: migration operation binding", privateio.ErrInvalid)
+	}
+	if b.Attempt != request.RequestID {
+		return result, fmt.Errorf("%w: migration attempt binding", privateio.ErrInvalid)
+	}
+	if b.Policy != request.Revision {
+		return result, fmt.Errorf("%w: migration policy binding", privateio.ErrInvalid)
+	}
+	if !slices.Equal(b.Names, request.Members) {
+		return result, fmt.Errorf("%w: migration selection binding", privateio.ErrInvalid)
 	}
 	if err := persist(b); err != nil {
 		return result, err
 	}
 	ack := appvalues.MigrationApproval{Stage: "approve", Attempt: b.Attempt, Execution: b.Execution, Input: b.Input, Revision: b.Revision}
-	if privateio.WriteControl(conn, ack) != nil || privateio.ReadControl(conn, &result) != nil || result.Stage != "matched" || !result.Matched || result.Count != len(expected) {
+	if privateio.WriteControl(conn, ack) != nil || privateio.ReadControl(conn, &result) != nil {
+		return appvalues.MigrationComparisonResult{}, fmt.Errorf("%w: migration result frame", privateio.ErrInvalid)
+	}
+	if result.Stage == "failed" {
+		return appvalues.MigrationComparisonResult{}, migrationFailureError(result.Reason)
+	}
+	if result.Stage != "matched" || !result.Matched || result.Count != len(expected) {
 		return appvalues.MigrationComparisonResult{}, privateio.ErrInvalid
 	}
 	return result, nil
+}
+
+func migrationFailureError(reason string) error {
+	switch reason {
+	case "input", "policy", "environment", "values", "address", "prepare", "listener", "register", "approve", "deliver", "receipt", "unregister", "checkpoint":
+		return fmt.Errorf("%w: migration %s", privateio.ErrInvalid, reason)
+	default:
+		return privateio.ErrInvalid
+	}
 }

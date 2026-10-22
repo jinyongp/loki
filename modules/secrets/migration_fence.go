@@ -82,6 +82,18 @@ func (c Controller) checkApplicationMigrationWrite(managed bool) error {
 	return nil
 }
 
+// ApplicationMigrationState returns only the durable original operation's
+// disposition under the source lock. It never exposes source values or keys.
+func (c Controller) ApplicationMigrationState(ctx context.Context) (*ApplicationMigrationFence, error) {
+	var result *ApplicationMigrationFence
+	err := c.backend().WithSnapshot(ctx, nil, func(state.Snapshot) error {
+		var err error
+		result, err = c.readApplicationMigrationFence()
+		return err
+	})
+	return result, err
+}
+
 func (c Controller) publishApplicationMigrationFence(fence ApplicationMigrationFence) error {
 	if !fence.valid() {
 		return ErrApplicationMigration

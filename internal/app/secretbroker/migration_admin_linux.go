@@ -4,6 +4,7 @@ package secretbroker
 
 import (
 	"context"
+	"errors"
 	"net"
 	"slices"
 
@@ -22,7 +23,7 @@ type MigrationAdminOptions struct {
 }
 
 func serveMigrationComparison(ctx context.Context, conn *net.UnixConn, options *MigrationAdminOptions, request appvalues.AdminRequest, body []byte) {
-	result := appvalues.MigrationComparisonResult{Stage: "failed"}
+	result := appvalues.MigrationComparisonResult{Stage: "failed", Reason: "input"}
 	defer func() { _ = privateio.WriteControl(conn, result) }()
 	if options == nil || !uuidPattern.MatchString(options.Operation) || request.Revision != options.Policy || !uuidPattern.MatchString(request.RequestID) || request.Name != "" || request.Principal != "" || request.Variables != nil || request.Empty || request.Replace || len(request.Members) == 0 {
 		return
@@ -70,5 +71,11 @@ func serveMigrationComparison(ctx context.Context, conn *net.UnixConn, options *
 	})
 	if err == nil && comparison.Matched {
 		result = appvalues.MigrationComparisonResult{Stage: "matched", Matched: true, Count: comparison.Count}
+	} else {
+		result.Reason = "checkpoint"
+		var failure *migrationComparisonFailure
+		if errors.As(err, &failure) {
+			result.Reason = failure.stage
+		}
 	}
 }

@@ -199,8 +199,14 @@ func planMigration(snapshot state.Snapshot, mappings []MigrationProfileMapping, 
 func (c Controller) PrepareApplicationMigration(ctx context.Context, mappings []MigrationProfileMapping, resources []policy.ApplicationResource, base map[string]string) (ApplicationMigrationPlan, error) {
 	var plan ApplicationMigrationPlan
 	err := c.backend().WithSnapshot(ctx, nil, func(s state.Snapshot) error {
+		fence, err := c.readApplicationMigrationFence()
+		if err != nil {
+			return err
+		}
+		if fence != nil {
+			return ErrApplicationMigration
+		}
 		var values []MigrationValue
-		var err error
 		plan, values, err = planMigration(s, mappings, resources, base)
 		clearMigrationValues(values)
 		return err

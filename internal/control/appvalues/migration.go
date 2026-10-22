@@ -77,4 +77,5 @@ type MigrationComparisonResult struct {
 	Stage   string `json:"stage"`
 	Matched bool   `json:"matched"`
 	Count   int    `json:"count"`
+	Reason  string `json:"reason,omitempty"`
 }

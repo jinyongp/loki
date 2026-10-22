@@ -56,7 +56,9 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 				if env == "" {
 					env = "common"
 				}
-				allowed := false
+				// Root administrators need the common revision for profile-wide
+				// env/bundle mutations even when execution grants name only envs.
+				allowed := env == "common"
 				for _, e := range r.Environments {
 					if env == e {
 						allowed = true
