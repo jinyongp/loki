@@ -6,18 +6,26 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
+	"loki/internal/config"
+	"loki/internal/control/appvalues"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/host/lifecycle"
+	hostpolicy "loki/internal/host/policy"
+	"loki/internal/platform/safeio"
 	"loki/modules/execution/jobs"
 	"loki/modules/execution/jobs/remote"
 )
@@ -39,9 +47,10 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 	operation := flags.String("operation-id", "", "original operation UUID")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly interrupt owned Jobs")
 	restored := flags.Bool("restored", false, "original release passed recovery health")
+	applicationPlan := flags.String("application-plan", "", "prepared public resource policy for this switch")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || !filepath.IsAbs(*root) || filepath.Clean(*root) != *root ||
-		(args[0] != "begin" && args[0] != "finish") || (args[0] == "begin") != (*target != "") ||
-		(args[0] == "finish") != (*operation != "") || args[0] == "begin" && *restored || args[0] == "finish" && *interrupt {
+		(args[0] != "begin" && args[0] != "finish" && args[0] != "verify" && args[0] != "catalog") || (args[0] == "begin") != (*target != "") ||
+		(args[0] != "begin") != (*operation != "") || args[0] == "begin" && *restored || args[0] != "begin" && (*interrupt || *applicationPlan != "") {
 		return 2
 	}
 	rootPath := func(p string) string { return filepath.Join(*root, p) }
@@ -72,6 +81,9 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 		}
 		if e == nil {
 			intent.TargetReceipt, e = nativeReleaseReceipt(*root, *target)
+		}
+		if e == nil && *applicationPlan != "" {
+			intent.Application, e = prepareNativeApplicationChange(*root, journal, *applicationPlan)
 		}
 		if e != nil || !intent.Valid() {
 			fmt.Fprintln(stderr, "native release receipt or current selection is invalid")
@@ -123,6 +135,40 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 		if r.ID != id || r.NativeSwitch == nil {
 			continue
 		}
+		if args[0] == "catalog" {
+			if r.State.Terminal() || r.NativeSwitch.Application == nil {
+				fmt.Fprintln(stderr, "no active native application policy change")
+				return 1
+			}
+			if e := channel.begin(ctx, r); e != nil {
+				fmt.Fprintln(stderr, "native application policy remains fenced by unresolved cleanup")
+				return 1
+			}
+			resources := r.NativeSwitch.Application.Plan.Resources
+			if *restored {
+				resources = r.NativeSwitch.Application.Before
+			}
+			if resources == nil {
+				resources = []controlpolicy.ApplicationResource{}
+			}
+			path := rootPath("etc/loki-go/application-resources.json")
+			st, e := os.Lstat(path)
+			if e != nil || !st.Mode().IsRegular() {
+				return 1
+			}
+			stat, ok := st.Sys().(*syscall.Stat_t)
+			if !ok || stat.Uid != 0 || st.Mode().Perm()&0022 != 0 {
+				return 1
+			}
+			raw, _ := json.Marshal(struct {
+				Resources []controlpolicy.ApplicationResource `json:"resources"`
+			}{resources})
+			if safeio.PublishPrivate(path, raw, true) != nil || os.Chown(path, 0, int(stat.Gid)) != nil || os.Chmod(path, st.Mode().Perm()) != nil {
+				fmt.Fprintln(stderr, "native application catalog publication remains incomplete")
+				return 1
+			}
+			return 0
+		}
 		selected, e := nativeCurrentRelease(*root)
 		want := r.NativeSwitch.TargetRelease
 		wantReceipt := r.NativeSwitch.TargetReceipt
@@ -137,6 +183,20 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 		if e != nil || selected != want || receipt != wantReceipt {
 			fmt.Fprintln(stderr, "native release selection does not match its health checkpoint")
 			return 1
+		}
+		if change := r.NativeSwitch.Application; change != nil {
+			var layout appvalues.BrokerLayout
+			wantPolicy := change.Plan.Policy
+			if *restored {
+				wantPolicy = change.Plan.ExpectedPolicy
+			}
+			if daemon.ReadJSON(rootPath("run/loki-go/secrets/layout.json"), &layout) != nil || layout.PolicySHA256 != wantPolicy {
+				fmt.Fprintln(stderr, "native role policy does not match its health checkpoint")
+				return 1
+			}
+		}
+		if args[0] == "verify" {
+			return 0
 		}
 		r, e = journal.CompleteNativeSwitch(id, *restored, time.Now())
 		if e == nil {
@@ -154,6 +214,43 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stderr, "original native release operation is unavailable")
 	return 1
+}
+
+func prepareNativeApplicationChange(root string, journal *lifecycle.OperationJournal, path string) (*lifecycle.NativeApplicationChange, error) {
+	var plan hostpolicy.ApplicationPlan
+	if err := daemon.ReadJSON(path, &plan); err != nil {
+		return nil, err
+	}
+	current, err := hostpolicy.LoadApplications(filepath.Join(root, "etc/loki-go/application-resources.json"))
+	if err != nil {
+		return nil, err
+	}
+	before := current
+	items, err := journal.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range items {
+		if r.NativeSwitch != nil && r.NativeSwitch.Application != nil && (!r.State.Terminal() || !r.Maintenance.Released) {
+			original := r.NativeSwitch.Application
+			if !reflect.DeepEqual(plan, original.Plan) || !reflect.DeepEqual(current, original.Before) && !reflect.DeepEqual(current, original.Plan.Resources) {
+				return nil, errors.New("resume the original native application plan")
+			}
+			before = original.Before
+		}
+	}
+	c, err := config.Load(filepath.Join(root, "etc/loki-go/config.toml"))
+	if err != nil {
+		return nil, err
+	}
+	contract, err := loadExecutionContract(filepath.Join(root, "usr/share/doc/loki/execution-contract.json"))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := hostpolicy.ValidateApplicationPlan(c, contract, before, plan); err != nil {
+		return nil, err
+	}
+	return &lifecycle.NativeApplicationChange{Before: before, Plan: plan}, nil
 }
 
 func nativeCurrentRelease(root string) (string, error) {

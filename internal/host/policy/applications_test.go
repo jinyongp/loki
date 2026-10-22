@@ -13,6 +13,17 @@ func TestResourceChangePreservesIdentityAndValidatesBeforePlan(t *testing.T) {
 	if err != nil || len(plan.Resources) != 1 || plan.ExpectedPolicy == plan.Policy {
 		t.Fatalf("registration plan: %+v %v", plan, err)
 	}
+	if _, err := ValidateApplicationPlan(c, contract, nil, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateApplicationPlan(c, contract, plan.Resources, plan); err == nil {
+		t.Fatal("stale plan was accepted against a changed policy")
+	}
+	tampered := plan
+	tampered.Changes = nil
+	if _, err := ValidateApplicationPlan(c, contract, nil, tampered); err == nil {
+		t.Fatal("misleading change summary was accepted")
+	}
 	changed := r
 	changed.ID = "e9ce977e-b3fe-489e-a74f-311911859fd6"
 	if _, err := PrepareApplicationChange(c, contract, plan.Resources, ApplicationChange{Action: "set", Alias: r.Alias, Resource: &changed}); err == nil {

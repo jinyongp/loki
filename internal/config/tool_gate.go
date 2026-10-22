@@ -64,6 +64,9 @@ func activationSnapshot(data []byte) (tools.Config, error) {
 			Artifact tools.Artifact `json:"artifact"`
 			Manifest tools.Manifest `json:"manifest"`
 		} `json:"installed"`
+		// Public policy is compiled by role startup. This selection gate only
+		// validates tools; it must not interpret app grants or acquire values.
+		ApplicationResources json.RawMessage `json:"application_resources,omitempty"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()

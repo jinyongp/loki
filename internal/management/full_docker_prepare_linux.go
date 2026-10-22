@@ -238,11 +238,19 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 		if err := realDirectories(runtimeRoot); err != nil {
 			return err
 		}
-		catalog := json.RawMessage(`{"resources":[]}`)
-		if err := readOwnedJSON(filepath.Join(b.Store.Root, "application-resources.json"), tools.MaxManifestBytes, &catalog); err != nil && !errors.Is(err, os.ErrNotExist) {
+		state, err := b.Store.Load()
+		if err != nil {
 			return err
 		}
-		if err := writeFullFile(filepath.Join(layoutDirectory, "application-resources.json"), catalog); err != nil {
+		catalog := map[string]any{"resources": state.ApplicationResources}
+		if state.ApplicationResources == nil {
+			catalog["resources"] = []any{}
+		}
+		catalogBody, err := json.Marshal(catalog)
+		if err != nil {
+			return err
+		}
+		if err := writeFullFile(filepath.Join(layoutDirectory, "application-resources.json"), catalogBody); err != nil {
 			return err
 		}
 	}
@@ -285,7 +293,7 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 		return err
 	}
 	record := fullDockerRecord{Schema: 1, Reservation: r, Worker: worker, Specs: []fullContainerSpec{}, Order: order}
-	config := []byte("root = \"/workspace\"\nhost = \"127.0.0.1\"\nport = 18765\naudit_log = \"/var/lib/loki/mcp/audit.jsonl\"\n")
+	config := fullRuntimeConfiguration()
 	if err := writeFullFile(filepath.Join(layoutDirectory, "loki.toml"), config); err != nil {
 		return err
 	}

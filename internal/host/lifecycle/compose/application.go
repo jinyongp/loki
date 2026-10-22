@@ -153,5 +153,24 @@ exec /opt/loki/bin/loki host prepare-secrets --uid 10006 --gid 10006 --agent-uid
 	}
 	state.ApplicationStateSource = filepath.Join(volumes[0].Mountpoint, "generations", prepared.Generation)
 	state.ApplicationRuntimeRoot = runtimeRoot
+	state.ApplicationPolicySHA256 = prepared.Policy
+	return nil
+}
+
+// ApplicationPolicy identifies the actual frozen role preparation, rather than
+// trusting a caller-supplied copy of the runtime configuration.
+func (b *Backend) ApplicationPolicy() (string, error) {
+	state, found, err := b.loadRuntime()
+	if err != nil || !found || !validSHA256(state.ApplicationPolicySHA256) {
+		return "", errors.New("installed application policy is unavailable; reconcile the deployment first")
+	}
+	return state.ApplicationPolicySHA256, nil
+}
+
+func (b *Backend) ValidateApplicationPolicy(context.Context) error {
+	digest, err := b.ApplicationPolicy()
+	if err != nil || b.ExpectedApplicationPolicy == "" || digest != b.ExpectedApplicationPolicy {
+		return errors.New("prepared application policy differs from the admitted plan")
+	}
 	return nil
 }

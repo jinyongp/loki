@@ -5,24 +5,54 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"regexp"
 	"time"
+
+	controlpolicy "loki/internal/control/policy"
+	hostpolicy "loki/internal/host/policy"
 )
 
 // NativeSwitchIntent describes an immutable, already installed release. This
 // operation changes service links/layouts only; it must never claim a volume
 // snapshot or a data migration. Data-changing operations use the snapshot engine.
 type NativeSwitchIntent struct {
-	SourceRelease string `json:"source_release,omitempty"`
-	TargetRelease string `json:"target_release"`
-	SourceReceipt string `json:"source_receipt,omitempty"`
-	TargetReceipt string `json:"target_receipt"`
-	Interrupt     bool   `json:"interrupt"`
+	SourceRelease string                   `json:"source_release,omitempty"`
+	TargetRelease string                   `json:"target_release"`
+	SourceReceipt string                   `json:"source_receipt,omitempty"`
+	TargetReceipt string                   `json:"target_receipt"`
+	Interrupt     bool                     `json:"interrupt"`
+	Application   *NativeApplicationChange `json:"application,omitempty"`
+}
+
+// Both catalogs are public host metadata. They are retained in the same
+// operation as the link change so a failed health check restores exact grants.
+type NativeApplicationChange struct {
+	Before []controlpolicy.ApplicationResource `json:"before"`
+	Plan   hostpolicy.ApplicationPlan          `json:"plan"`
 }
 
 var nativeReleasePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func (n NativeSwitchIntent) Valid() bool {
+	if n.Application != nil {
+		change := n.Application
+		if change.Plan.Version != 1 || change.Plan.Resources == nil || len(change.Plan.Policy) != 64 || len(change.Plan.ExpectedPolicy) != 64 {
+			return false
+		}
+		if _, err := hex.DecodeString(change.Plan.Policy); err != nil {
+			return false
+		}
+		if _, err := hex.DecodeString(change.Plan.ExpectedPolicy); err != nil {
+			return false
+		}
+		if _, err := controlpolicy.CanonicalApplications(change.Before, nil); err != nil {
+			return false
+		}
+		if _, err := controlpolicy.CanonicalApplications(change.Plan.Resources, nil); err != nil {
+			return false
+		}
+	}
 	return nativeReleasePattern.MatchString(n.TargetRelease) && n.TargetRelease != "." && n.TargetRelease != ".." &&
 		digestPattern.MatchString(n.TargetReceipt) && (n.SourceRelease == "" && n.SourceReceipt == "" ||
 		nativeReleasePattern.MatchString(n.SourceRelease) && n.SourceRelease != "." && n.SourceRelease != ".." && digestPattern.MatchString(n.SourceReceipt))
@@ -73,7 +103,7 @@ func (j *OperationJournal) BeginNativeSwitch(intent NativeSwitchIntent, now time
 		if !pending {
 			continue
 		}
-		if r.Kind != OperationNativeSwitch || r.NativeSwitch.TargetRelease != intent.TargetRelease || r.NativeSwitch.TargetReceipt != intent.TargetReceipt || r.NativeSwitch.Interrupt != intent.Interrupt ||
+		if r.Kind != OperationNativeSwitch || r.NativeSwitch.TargetRelease != intent.TargetRelease || r.NativeSwitch.TargetReceipt != intent.TargetReceipt || r.NativeSwitch.Interrupt != intent.Interrupt || !reflect.DeepEqual(r.NativeSwitch.Application, intent.Application) ||
 			!(intent.SourceRelease == r.NativeSwitch.SourceRelease && intent.SourceReceipt == r.NativeSwitch.SourceReceipt ||
 				intent.SourceRelease == r.NativeSwitch.TargetRelease && intent.SourceReceipt == r.NativeSwitch.TargetReceipt) {
 			return OperationRecord{}, errors.New("resume the original native release operation and interruption choice")

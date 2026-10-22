@@ -28,7 +28,7 @@ type transaction struct {
 }
 
 func (t transaction) validate() error {
-	if t.Schema != 1 || (t.Action != "install" && t.Action != "update" && t.Action != "promote" && t.Action != "rollback") {
+	if t.Schema != 1 || (t.Action != "install" && t.Action != "update" && t.Action != "promote" && t.Action != "rollback" && t.Action != "resource_policy") {
 		return fmt.Errorf("invalid tool transaction schema or action")
 	}
 	check := tools.Operation{Schema: 1, ID: t.ID, Module: "transaction", Action: "install", Phase: t.Phase, Candidate: snapshotDigest(t.Candidate)}
@@ -57,6 +57,18 @@ func (t transaction) validate() error {
 	b, _ := json.Marshal(after)
 	if !bytes.Equal(a, b) {
 		return fmt.Errorf("tool transaction cannot change host, mode or activation")
+	}
+	a, _ = json.Marshal(t.Previous.ApplicationResources)
+	b, _ = json.Marshal(t.Candidate.ApplicationResources)
+	if t.Action != "resource_policy" && t.Action != "rollback" && !bytes.Equal(a, b) {
+		return fmt.Errorf("tool acquisition cannot change application policy")
+	}
+	if t.Action == "resource_policy" {
+		a, _ = json.Marshal(t.Previous.Installed)
+		b, _ = json.Marshal(t.Candidate.Installed)
+		if !bytes.Equal(a, b) {
+			return fmt.Errorf("application policy cannot change installed tools")
+		}
 	}
 	for id := range t.Previous.Installed {
 		if _, exists := t.Candidate.Installed[id]; !exists && t.Action != "rollback" {

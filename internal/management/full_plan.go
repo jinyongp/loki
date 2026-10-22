@@ -1,6 +1,8 @@
 package management
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -12,11 +14,12 @@ import (
 // private service prerequisites are separate; an executor needed by Git does
 // not expose the job tool. Installed-but-disabled modules start no services.
 type FullPlan struct {
-	Schema   int               `json:"schema"`
-	Release  string            `json:"release"`
-	Enabled  []tools.Selection `json:"enabled"`
-	Programs []FullProgram     `json:"programs"`
-	Services []FullService     `json:"services"`
+	ApplicationResourcesDigest string            `json:"application_resources_digest,omitempty"`
+	Schema                     int               `json:"schema"`
+	Release                    string            `json:"release"`
+	Enabled                    []tools.Selection `json:"enabled"`
+	Programs                   []FullProgram     `json:"programs"`
+	Services                   []FullService     `json:"services"`
 }
 
 type FullProgram struct {
@@ -42,6 +45,10 @@ func (s Store) PlanFull() (FullPlan, error) {
 		return FullPlan{}, fmt.Errorf("full deployment requires a Linux host configured for full mode")
 	}
 	plan := FullPlan{Schema: 1, Release: state.Config.Release, Enabled: []tools.Selection{}, Programs: []FullProgram{}, Services: []FullService{}}
+	if len(state.ApplicationResources) != 0 {
+		raw, _ := json.Marshal(state.ApplicationResources)
+		plan.ApplicationResourcesDigest = fmt.Sprintf("%x", sha256.Sum256(raw))
+	}
 	var manifests []tools.Manifest
 	for _, installed := range state.Installed {
 		manifests = append(manifests, installed.Manifest)

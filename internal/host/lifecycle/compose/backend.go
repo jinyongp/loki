@@ -107,28 +107,32 @@ type Config struct {
 }
 
 type Backend struct {
-	maintenance       *hostMaintenance
-	Progress          progress.Reporter
-	root              string
-	runtimeRoot       string
-	snapshotRoot      string
-	project           string
-	coreRepository    string
-	browserRepository string
-	runner            Runner
+	// A policy mutation must verify the real prepared role digest before its
+	// host journal can commit/release admission. This is never persisted authority.
+	ExpectedApplicationPolicy string
+	maintenance               *hostMaintenance
+	Progress                  progress.Reporter
+	root                      string
+	runtimeRoot               string
+	snapshotRoot              string
+	project                   string
+	coreRepository            string
+	browserRepository         string
+	runner                    Runner
 }
 
 type runtimeState struct {
-	Version                int      `json:"version"`
-	GenerationID           string   `json:"generation_id"`
-	CoreImage              string   `json:"core_image"`
-	BrowserImage           string   `json:"browser_image,omitempty"`
-	Workspace              string   `json:"workspace"`
-	MCPPort                int      `json:"mcp_port,omitempty"`
-	Profiles               []string `json:"profiles,omitempty"`
-	IngressHosts           []string `json:"ingress_hosts,omitempty"`
-	ApplicationStateSource string   `json:"application_state_source,omitempty"`
-	ApplicationRuntimeRoot string   `json:"application_runtime_root,omitempty"`
+	Version                 int      `json:"version"`
+	GenerationID            string   `json:"generation_id"`
+	CoreImage               string   `json:"core_image"`
+	BrowserImage            string   `json:"browser_image,omitempty"`
+	Workspace               string   `json:"workspace"`
+	MCPPort                 int      `json:"mcp_port,omitempty"`
+	Profiles                []string `json:"profiles,omitempty"`
+	IngressHosts            []string `json:"ingress_hosts,omitempty"`
+	ApplicationStateSource  string   `json:"application_state_source,omitempty"`
+	ApplicationRuntimeRoot  string   `json:"application_runtime_root,omitempty"`
+	ApplicationPolicySHA256 string   `json:"application_policy_sha256,omitempty"`
 }
 
 func (s runtimeState) effectiveMCPPort() int {
@@ -821,6 +825,9 @@ func (s runtimeState) validate() error {
 	}
 	if (s.ApplicationStateSource == "") != (s.ApplicationRuntimeRoot == "") {
 		return errors.New("application role binding is incomplete")
+	}
+	if s.ApplicationPolicySHA256 != "" && !validSHA256(s.ApplicationPolicySHA256) {
+		return errors.New("application role policy digest is invalid")
 	}
 	if s.MCPPort != 0 && (s.MCPPort < 1024 || s.MCPPort > 65535) {
 		return errors.New("compose lifecycle MCP port is invalid")

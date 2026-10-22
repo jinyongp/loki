@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/tools"
 	"os"
 	"path/filepath"
@@ -27,9 +28,10 @@ type Installation struct {
 }
 
 type Snapshot struct {
-	Schema    int                       `json:"schema"`
-	Config    tools.Config              `json:"config"`
-	Installed map[tools.ID]Installation `json:"installed"`
+	Schema               int                                 `json:"schema"`
+	Config               tools.Config                        `json:"config"`
+	Installed            map[tools.ID]Installation           `json:"installed"`
+	ApplicationResources []controlpolicy.ApplicationResource `json:"application_resources,omitempty"`
 }
 
 type Store struct {
@@ -108,6 +110,9 @@ func (s Snapshot) Validate() error {
 		return fmt.Errorf("invalid management state schema")
 	}
 	if err := s.Config.Validate(); err != nil {
+		return err
+	}
+	if _, err := controlpolicy.CanonicalApplications(s.ApplicationResources, nil); err != nil {
 		return err
 	}
 	for id, installation := range s.Installed {

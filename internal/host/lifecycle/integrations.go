@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	managedIntegrationStateVersion = 1
-	maxManagedIntegrationFileBytes = 1 << 20
+	managedIntegrationStateVersion    = 1
+	managedIntegrationSnapshotVersion = 2
+	maxManagedIntegrationFileBytes    = 1 << 20
 
 	ManagedIntegrationStateFile      = "integrations/state.json"
 	ManagedGitHubConfigFile          = "integrations/github.toml"
@@ -31,10 +32,12 @@ const (
 	ManagedSigningGitConfigFile      = "integrations/signing.gitconfig"
 	ManagedSigningAllowedSignersFile = "integrations/signing-allowed-signers"
 	ManagedGitHubCredentialFile      = "credentials/github-app.pem"
+	ManagedApplicationResourcesFile  = "application-resources.json"
 	ManagedSigningCredentialFile     = "credentials/signing-key"
 )
 
 var managedIntegrationFiles = []string{
+	ManagedApplicationResourcesFile,
 	ManagedIntegrationStateFile,
 	ManagedGitHubConfigFile,
 	ManagedSigningPublicInfoFile,
@@ -449,7 +452,7 @@ func (s *FileStore) CaptureManagedIntegrationSnapshot(ctx context.Context) (ref 
 		}()
 
 		manifest := managedIntegrationSnapshotManifest{
-			Version: managedIntegrationStateVersion,
+			Version: managedIntegrationSnapshotVersion,
 			Files:   make(map[string]managedIntegrationSnapshotFile, len(managedIntegrationFiles)),
 		}
 		for _, relative := range managedIntegrationFiles {
@@ -530,8 +533,14 @@ func (s *FileStore) loadManagedIntegrationSnapshot(ref string) (managedIntegrati
 		return managedIntegrationSnapshotManifest{}, "", err
 	}
 	var manifest managedIntegrationSnapshotManifest
-	if err = decodeManagedJSON(raw, &manifest); err != nil || manifest.Version != managedIntegrationStateVersion {
+	if err = decodeManagedJSON(raw, &manifest); err != nil || manifest.Version != 1 && manifest.Version != managedIntegrationSnapshotVersion {
 		return managedIntegrationSnapshotManifest{}, "", errors.New("managed integration snapshot manifest is invalid")
+	}
+	if manifest.Version == 1 && len(manifest.Files) == len(managedIntegrationFiles)-1 {
+		if _, exists := manifest.Files[ManagedApplicationResourcesFile]; exists {
+			return managedIntegrationSnapshotManifest{}, "", errors.New("legacy snapshot contains application policy")
+		}
+		manifest.Files[ManagedApplicationResourcesFile] = managedIntegrationSnapshotFile{}
 	}
 	if len(manifest.Files) != len(managedIntegrationFiles) {
 		return managedIntegrationSnapshotManifest{}, "", errors.New("managed integration snapshot manifest is incomplete")

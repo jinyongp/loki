@@ -26,7 +26,10 @@ const (
 	operationJournalVersion = 1
 	maxOperationRecords     = 1024
 	maxOperationRecordBytes = 128 << 10
-	maxOperationErrorBytes  = 4096
+	// Native catalog changes retain two public, at-most-1MiB catalogs plus
+	// intent/envelope overhead. Other lifecycle records retain their old bound.
+	maxNativeOperationRecordBytes = 3 << 20
+	maxOperationErrorBytes        = 4096
 )
 
 type OperationKind string
@@ -662,7 +665,11 @@ func (j *OperationJournal) persist(record OperationRecord, overwrite bool) error
 		return err
 	}
 	envelope = append(envelope, '\n')
-	if len(envelope) > maxOperationRecordBytes {
+	limit := maxOperationRecordBytes
+	if record.Kind == OperationNativeSwitch {
+		limit = maxNativeOperationRecordBytes
+	}
+	if len(envelope) > limit {
 		return errors.New("host lifecycle operation record exceeds size limit")
 	}
 	if err = j.runFailpoint("before_publish:" + string(record.State) + ":" + string(record.Phase)); err != nil {
@@ -758,11 +765,11 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return OperationRecord{}, errors.New("host lifecycle operation record must be a private regular file")
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, maxOperationRecordBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, maxNativeOperationRecordBytes+1))
 	if err != nil {
 		return OperationRecord{}, err
 	}
-	if len(raw) > maxOperationRecordBytes {
+	if len(raw) > maxNativeOperationRecordBytes {
 		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	var envelope operationEnvelope
@@ -784,6 +791,9 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	recordDecoder.DisallowUnknownFields()
 	if err = recordDecoder.Decode(&record); err != nil {
 		return OperationRecord{}, errors.New("host lifecycle operation record is invalid")
+	}
+	if record.Kind != OperationNativeSwitch && len(raw) > maxOperationRecordBytes {
+		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.Valid() {
 		return OperationRecord{}, errors.New("host lifecycle operation record is invalid")

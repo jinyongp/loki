@@ -533,9 +533,17 @@ func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name s
 	}
 	name = strings.TrimSpace(name)
 	switch name {
-	case "browser", "signing", "github":
+	case "browser", "signing", "github", "application":
 	default:
 		return errors.New("managed integration name is invalid")
+	}
+	var policyValidator interface{ ValidateApplicationPolicy(context.Context) error }
+	if name == "application" {
+		var ok bool
+		policyValidator, ok = e.Backend.(interface{ ValidateApplicationPolicy(context.Context) error })
+		if !ok {
+			return errors.New("deployment cannot verify the prepared application policy")
+		}
 	}
 	lock, journal, err := e.openJournal(ctx)
 	if err != nil {
@@ -582,6 +590,11 @@ func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name s
 	}
 	if err = e.Backend.Health(ctx); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+	}
+	if policyValidator != nil {
+		if err = policyValidator.ValidateApplicationPolicy(ctx); err != nil {
+			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
+		}
 	}
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)

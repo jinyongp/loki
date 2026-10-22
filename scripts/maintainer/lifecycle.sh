@@ -8,6 +8,7 @@ HEALTH_INTERVAL=${LOKI_HEALTH_INTERVAL:-0.2}
 SUITE=loki-go.target
 INTERRUPT_ACTIVE_JOBS=false
 MAINTENANCE_OPERATION=
+APPLICATION_PLAN=
 SERVICES="loki-go-signing-agent.service loki-go-port-guard.service loki-go-egress-proxy.service loki-go-runtime.service loki-go-secrets.service loki-go-browser-proxy.service loki-go-browser.service loki-go-launcher.service loki-go-executor.service loki-go-mcp.service"
 
 case "$ROOT" in /*) ;; *) echo "LOKI_INSTALL_ROOT must be absolute" >&2; exit 2 ;; esac
@@ -277,15 +278,21 @@ switch_to() {
   # The original intent is durable before any link/layout/service mutation.
   # On retry, the journal returns the original source even if the link already
   # points at the candidate after a process/power failure.
+  set --
+  if test -n "$APPLICATION_PLAN"; then set -- --application-plan "$APPLICATION_PLAN"; fi
   admission=$("$release/opt/loki/bin/loki" host native-switch begin --root "$ROOT" \
-    --target "$release_id" --interrupt-active-jobs="$INTERRUPT_ACTIVE_JOBS") || return 1
+    --target "$release_id" --interrupt-active-jobs="$INTERRUPT_ACTIVE_JOBS" "$@") || return 1
   set -- $admission
   test "$#" -eq 2 || fail "invalid native maintenance response"
   MAINTENANCE_OPERATION=$1
   old=
   test "$2" = - || old="releases/$2"
+  run_systemctl stop "$SUITE"
+  if test -n "$APPLICATION_PLAN"; then
+    "$release/opt/loki/bin/loki" host native-switch catalog --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION"
+  fi
   atomic_link "releases/$release_id" "$current"
-  if (activate_release "$release"); then
+  if (activate_release "$release" && "$release/opt/loki/bin/loki" host native-switch verify --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION"); then
     if test -n "$old" -a "$old" != "releases/$release_id"; then
       atomic_link "$old" "$(rooted /opt/loki-go/previous)"
     fi
@@ -294,9 +301,13 @@ switch_to() {
   fi
   echo "release $release_id failed health check; restoring previous release" >&2
   if test -n "$old"; then
+    run_systemctl stop "$SUITE"
+    if test -n "$APPLICATION_PLAN"; then
+      "$release/opt/loki/bin/loki" host native-switch catalog --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION" --restored
+    fi
     atomic_link "$old" "$current"
     restored="$(rooted /opt/loki-go)/$old"
-    (activate_release "$restored") || fail "previous release also failed health check"
+    (activate_release "$restored" && "$release/opt/loki/bin/loki" host native-switch verify --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION" --restored) || fail "previous release also failed health check"
     "$release/opt/loki/bin/loki" host native-switch finish --root "$ROOT" --operation-id "$MAINTENANCE_OPERATION" --restored
   else
     rm -f "$current"
@@ -369,6 +380,14 @@ case "$command" in
   install) acquire_lock; shift; install_release "$@" ;;
   activate) test "$#" -eq 2 || fail "usage: $0 activate RELEASE"; acquire_lock; switch_to "$2" ;;
   rollback) test "$#" -eq 1 || fail "usage: $0 rollback"; acquire_lock; rollback ;;
+  apply-resources)
+    test "$#" -eq 2 || fail "usage: $0 apply-resources PLAN"
+    APPLICATION_PLAN=$2
+    acquire_lock
+    selected=$(read_link "$(rooted /opt/loki-go/current)")
+    case "$selected" in releases/*) ;; *) fail "native release is not installed" ;; esac
+    switch_to "${selected#releases/}"
+    ;;
   health) test "$#" -eq 1 || fail "usage: $0 health"; health ;;
   *) fail "usage: $0 install|activate|rollback|health" ;;
 esac

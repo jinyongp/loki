@@ -1,5 +1,12 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/loki","to":"loki/internal/management"},
+    {"from":"loki/internal/host/lifecycle","to":"loki/internal/control/policy"},
+    {"from":"loki/internal/host/lifecycle","to":"loki/internal/host/policy"},
+    {"from":"loki/internal/management","to":"loki/internal/config"},
+    {"from":"loki/internal/management","to":"loki/internal/control/policy"},
+    {"from":"loki/internal/management","to":"loki/internal/execution"},
+    {"from":"loki/internal/management","to":"loki/internal/host/policy"},
     {"from":"loki/cmd/loki","to":"loki/internal/host/application"},
     {"from":"loki/internal/host/application","to":"loki/internal/config"},
     {"from":"loki/internal/host/application","to":"loki/internal/control/appvalues"},

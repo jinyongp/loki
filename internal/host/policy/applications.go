@@ -2,6 +2,7 @@ package policy
 
 import (
 	"errors"
+	"reflect"
 
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
@@ -54,6 +55,39 @@ type ApplicationPlan struct {
 	Policy         string                              `json:"policy"`
 	Resources      []controlpolicy.ApplicationResource `json:"resources"`
 	Changes        []controlpolicy.Change              `json:"changes"`
+}
+
+// ValidateApplicationPlan rederives both policy generations under the actual
+// deployment configuration. A saved plan is public intent, not an authority to
+// bypass stale revisions, reserved environment names or immutable resource IDs.
+func ValidateApplicationPlan(c config.Config, contract execution.Contract, current []controlpolicy.ApplicationResource, plan ApplicationPlan) ([]controlpolicy.ApplicationResource, error) {
+	if plan.Version != 1 || plan.Resources == nil {
+		return nil, errors.New("invalid application policy plan")
+	}
+	before, err := CompileApplications(c, contract, current)
+	if err != nil || before.Digest() != plan.ExpectedPolicy {
+		return nil, errors.New("application policy plan is stale")
+	}
+	next, err := controlpolicy.CanonicalApplications(plan.Resources, contract.Environment)
+	if err != nil {
+		return nil, err
+	}
+	for _, old := range current {
+		for _, proposed := range next {
+			if old.Alias == proposed.Alias && old.ID != proposed.ID {
+				return nil, errors.New("existing resource UUID is immutable")
+			}
+		}
+	}
+	after, err := CompileApplications(c, contract, next)
+	if err != nil || after.Digest() != plan.Policy {
+		return nil, errors.New("application policy plan does not match deployment inputs")
+	}
+	diff, err := controlpolicy.Diff(before, after)
+	if err != nil || !reflect.DeepEqual(diff, plan.Changes) {
+		return nil, errors.New("application policy change summary does not match its resources")
+	}
+	return next, nil
 }
 
 func PrepareApplicationChange(c config.Config, contract execution.Contract, current []controlpolicy.ApplicationResource, change ApplicationChange) (ApplicationPlan, error) {
