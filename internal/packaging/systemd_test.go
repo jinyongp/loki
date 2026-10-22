@@ -517,7 +517,9 @@ func TestStageNormalizesArtifactOwnership(t *testing.T) {
 
 func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	root := t.TempDir()
-	for _, directory := range []string{"runtime", "port-guard", "signing", "executor", "secrets/metadata"} {
+	// App-secret failure must not prevent the independent public services from
+	// becoming ready. Deliberately provide no secret metadata directory/socket.
+	for _, directory := range []string{"runtime", "port-guard", "signing", "executor"} {
 		if err := os.MkdirAll(filepath.Join(root, directory), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -529,7 +531,7 @@ func TestSocketWaitHandlesDelayedDependencies(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	listeners := []net.Listener{}
-	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "signing/agent.sock", "executor/control.sock", "secrets/metadata/control.sock"} {
+	for _, socket := range []string{"runtime/control.sock", "port-guard/control.sock", "signing/agent.sock", "executor/control.sock"} {
 		listener, err := net.Listen("unix", filepath.Join(root, socket))
 		if err != nil {
 			t.Fatal(err)
@@ -555,5 +557,28 @@ func TestSocketWaitIsBounded(t *testing.T) {
 	}
 	if time.Since(started) > time.Second {
 		t.Fatal("wait helper exceeded its bounded retry interval")
+	}
+}
+
+func TestSecretServiceFailureDoesNotStopIndependentRoles(t *testing.T) {
+	for _, role := range []string{"mcp", "launcher"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "packaging", "native", "systemd", role+".service"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wantsBroker, requiresPreparation bool
+		for _, line := range strings.Split(string(raw), "\n") {
+			key, value, _ := strings.Cut(line, "=")
+			for _, dependency := range strings.Fields(value) {
+				if key == "Requires" && dependency == "loki-go-secrets.service" {
+					t.Fatalf("%s stops when only the broker fails", role)
+				}
+				wantsBroker = wantsBroker || key == "Wants" && dependency == "loki-go-secrets.service"
+				requiresPreparation = requiresPreparation || key == "Requires" && dependency == "loki-go-secrets-prepare.service"
+			}
+		}
+		if !wantsBroker || !requiresPreparation {
+			t.Fatalf("%s lost broker startup or safe namespace preparation", role)
+		}
 	}
 }

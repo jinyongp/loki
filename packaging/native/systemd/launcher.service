@@ -2,7 +2,8 @@
 Description=Loki Go privileged Job launcher
 PartOf=loki-go.target
 After=local-fs.target systemd-tmpfiles-setup.service
-Requires=loki-go-secrets.service
+Requires=loki-go-secrets-prepare.service
+Wants=loki-go-secrets.service
 After=loki-go-secrets.service
 Before=loki-go-executor.service
 ConditionPathExists=/run/docker.sock

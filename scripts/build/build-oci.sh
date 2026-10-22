@@ -61,17 +61,24 @@ test -x "$gh_arm64" && test "$(elf_machine "$gh_arm64")" = 183 || {
   exit 1
 }
 
-devtools_version_json=$($devtools_amd64 version)
+# Read executable contracts on this host's native architecture. Both input
+# architectures above still receive independent static identity checks.
+case "$(uname -m)" in
+  x86_64) native_devtools=$devtools_amd64; native_ripgrep=$ripgrep_amd64; native_gh=$gh_amd64 ;;
+  aarch64|arm64) native_devtools=$devtools_arm64; native_ripgrep=$ripgrep_arm64; native_gh=$gh_arm64 ;;
+  *) echo "OCI contract checks require a native Linux amd64 or arm64 host" >&2; exit 1 ;;
+esac
+devtools_version_json=$("$native_devtools" version)
 devtools_version=$(printf '%s\n' "$devtools_version_json" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 test -n "$devtools_version" || { echo "invalid devtools version response" >&2; exit 1; }
 
 amd64_sha=$(sha256sum "$devtools_amd64" | cut -d' ' -f1)
 arm64_sha=$(sha256sum "$devtools_arm64" | cut -d' ' -f1)
-ripgrep_version=$($ripgrep_amd64 --version | sed -n '1s/^ripgrep \([^ ]*\).*/\1/p')
+ripgrep_version=$("$native_ripgrep" --version | sed -n '1s/^ripgrep \([^ ]*\).*/\1/p')
 test -n "$ripgrep_version" || { echo "invalid ripgrep version response" >&2; exit 1; }
 ripgrep_amd64_sha=$(sha256sum "$ripgrep_amd64" | cut -d' ' -f1)
 ripgrep_arm64_sha=$(sha256sum "$ripgrep_arm64" | cut -d' ' -f1)
-gh_version=$($gh_amd64 version | sed -n '1s/^gh version \([^ ]*\).*/\1/p')
+gh_version=$("$native_gh" version | sed -n '1s/^gh version \([^ ]*\).*/\1/p')
 test -n "$gh_version" || { echo "invalid gh version response" >&2; exit 1; }
 gh_amd64_sha=$(sha256sum "$gh_amd64" | cut -d' ' -f1)
 gh_arm64_sha=$(sha256sum "$gh_arm64" | cut -d' ' -f1)
@@ -90,7 +97,7 @@ install -m 0755 "$ripgrep_amd64" "$artifacts/ripgrep/amd64/rg"
 install -m 0755 "$ripgrep_arm64" "$artifacts/ripgrep/arm64/rg"
 install -m 0755 "$gh_amd64" "$artifacts/gh/amd64/gh"
 install -m 0755 "$gh_arm64" "$artifacts/gh/arm64/gh"
-go run "$source_dir/modules/coordination/cmd/gencatalog" -binary "$devtools_amd64" -output "$artifacts/metadata/devtools-catalog.json"
+go run "$source_dir/modules/coordination/cmd/gencatalog" -binary "$native_devtools" -output "$artifacts/metadata/devtools-catalog.json"
 printf '{"version":1,"loki":{"version":"%s","revision":"%s","date":"%s"},"devtools":%s,"binaries":{"devtools":{"amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"ripgrep":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}},"gh":{"version":"%s","amd64":{"sha256":"%s"},"arm64":{"sha256":"%s"}}}}\n' \
   "$loki_version" "$loki_revision" "$loki_date" "$devtools_version_json" "$amd64_sha" "$arm64_sha" "$ripgrep_version" "$ripgrep_amd64_sha" "$ripgrep_arm64_sha" "$gh_version" "$gh_amd64_sha" "$gh_arm64_sha" \
   > "$artifacts/metadata/provenance.json"
