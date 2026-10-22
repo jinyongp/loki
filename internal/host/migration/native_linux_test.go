@@ -97,6 +97,11 @@ func TestRealNativeCandidateNamespaceAndManualProtection(t *testing.T) {
 		}
 	})
 	if err := candidate.Start(ctx); err != nil {
+		// This first start precedes protection initialization and all value
+		// input. The uniquely owned fixture unit has public startup metadata
+		// only; retain its namespace/setup failure for native runner diagnosis.
+		metadata, _ := nativeCommand(ctx, "/usr/bin/journalctl", "--unit="+candidate.unit(), "--no-pager", "--output=cat", "--lines=20")
+		t.Logf("owned uninitialized native fixture startup: %s", metadata)
 		t.Fatal("native inactive broker start", err)
 	}
 	if state, err := candidate.Status(ctx); err != nil || state != "uninitialized" {

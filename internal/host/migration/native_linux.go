@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,16 @@ type NativeCandidate struct {
 }
 
 var errNativeCandidate = errors.New("owned native migration broker is unavailable; resume its original host operation")
+
+type nativeDiagnostic struct{ bytes.Buffer }
+
+func (w *nativeDiagnostic) Write(p []byte) (int, error) {
+	n := len(p)
+	if available := 4096 - w.Len(); available > 0 {
+		_, _ = w.Buffer.Write(p[:min(available, len(p))])
+	}
+	return n, nil
+}
 
 func (c NativeCandidate) unit() string {
 	return "loki-go-secret-migration-" + c.Preparation.Identity.ActiveGeneration + ".service"
@@ -81,10 +92,17 @@ func nativeCommand(ctx context.Context, binary string, args ...string) ([]byte, 
 	command := exec.CommandContext(ctx, binary, args...)
 	command.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
 	var output bytes.Buffer
+	var diagnostic nativeDiagnostic
 	command.Stdout = &output
+	command.Stderr = &diagnostic
 	// These commands receive deployment metadata only. Do not expose arbitrary
 	// unit logs or child/provider diagnostics through this control boundary.
 	if command.Run() != nil || output.Len() > 128<<10 {
+		if binary == "/usr/bin/systemd-run" {
+			// systemd-run receives public unit properties only and does not
+			// forward service/provider output without --pipe or --pty.
+			return nil, fmt.Errorf("%w: systemd rejected public unit setup: %q", errNativeCandidate, diagnostic.String())
+		}
 		return nil, errNativeCandidate
 	}
 	return output.Bytes(), nil
