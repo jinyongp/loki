@@ -50,6 +50,11 @@ func TestOfflineRestoreHistoryRequiresOriginalFenceAndPreservesSpentJob(t *testi
 		t.Fatal(err)
 	}
 	var output, diagnostic bytes.Buffer
+	if code := runOfflineHostMaintenance("verify", operation, layoutPath, "", &output, &diagnostic); code != 0 {
+		t.Fatal("stopped owner could not reconfirm its exact clean active fence", code, diagnostic.String())
+	}
+	output.Reset()
+	diagnostic.Reset()
 	if code := runOfflinePreserveHostHistory("123e4567-e89b-42d3-a456-426614174593", layoutPath, "", stageRoot, &output, &diagnostic); code != 1 {
 		t.Fatal("unrelated host operation preserved/reopened a restore stage", code)
 	}
@@ -88,6 +93,42 @@ func TestOfflineRestoreHistoryRequiresOriginalFenceAndPreservesSpentJob(t *testi
 	fence, err := current.MaintenanceStatus()
 	if err != nil || fence == nil || !fence.Active || fence.OperationID != operation {
 		t.Fatal("stage disposition altered the current host's fence", err)
+	}
+}
+
+func TestOfflineMaintenanceVerificationDoesNotAuthorizeUnresolvedCleanup(t *testing.T) {
+	root := t.TempDir()
+	layoutPath := filepath.Join(root, "launcher.json")
+	body, _ := json.Marshal(hostLauncherLayout{StateDirectory: root, MaxJobs: 16, MaxOutputBytes: 1024, ResultRetentionSeconds: 3600})
+	if err := os.WriteFile(layoutPath, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(root, "journal")
+	if err := os.Mkdir(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := jobs.OpenJournal(directory, jobs.JournalLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	id := strings.Repeat("a", 32)
+	if _, err := journal.Admit(id, "oci:"+strings.Repeat("b", 64), now.Add(time.Minute), now); err != nil {
+		t.Fatal(err)
+	}
+	operation := "123e4567-e89b-42d3-a456-426614174592"
+	if _, err := journal.BeginMaintenance(operation, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := journal.MarkTerminal(id, jobs.Result{Outcome: jobs.OutcomeCanceled, Cleanup: jobs.CleanupFailed}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var output, diagnostic bytes.Buffer
+	if code := runOfflineHostMaintenance("verify", operation, layoutPath, "", &output, &diagnostic); code != 1 {
+		t.Fatal("offline recovery authorized unresolved Job cleanup", code)
 	}
 }
 

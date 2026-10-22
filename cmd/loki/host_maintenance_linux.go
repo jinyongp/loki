@@ -40,7 +40,7 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	launcherLayout := flags.String("launcher-layout", "", "frozen launcher layout for offline end/status only")
 	stateMount := flags.String("state-mount", "", "fixed isolated helper mount: /var/lib/loki/launcher")
 	restoreStage := flags.String("restore-stage", "", "private offline launcher restore stage; preserve-history only")
-	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" && action != "preserve-history" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
+	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" && action != "verify" && action != "preserve-history" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
 		return 2
 	}
 	if action == "preserve-history" {
@@ -62,7 +62,7 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 		if action == "begin" || *launcherLayout == "" {
 			return 2
 		}
-		if action == "end" {
+		if action == "end" || action == "verify" {
 			if _, err := jobs.JobIDForRequestID(*operation); err != nil {
 				return 2
 			}
@@ -73,6 +73,9 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 		return runOfflineHostMaintenance(action, *operation, *launcherLayout, *stateMount, stdout, stderr)
 	}
 	if *launcherLayout != "" || *stateMount != "" {
+		return 2
+	}
+	if action == "verify" {
 		return 2
 	}
 	client, err := remote.NewHostMaintenance(*socket)
@@ -169,6 +172,23 @@ func runOfflineHostMaintenance(action, operation, path, stateMount string, stdou
 	var result any
 	if action == "end" {
 		result, err = journal.EndMaintenance(operation)
+	} else if action == "verify" {
+		state, e := journal.MaintenanceStatus()
+		if e != nil || state == nil || !state.Active || state.OperationID != operation {
+			fmt.Fprintln(stderr, "original active offline maintenance admission is unavailable")
+			return 1
+		}
+		records, e := journal.List()
+		if e != nil {
+			return 1
+		}
+		for _, record := range records {
+			if record.State != jobs.StateTerminal || record.Result == nil || record.Result.Cleanup != jobs.CleanupComplete && record.Result.Cleanup != jobs.CleanupNotRequired {
+				fmt.Fprintln(stderr, "stopped launcher cleanup remains unresolved")
+				return 1
+			}
+		}
+		result = state
 	} else {
 		result, err = journal.MaintenanceStatus()
 	}

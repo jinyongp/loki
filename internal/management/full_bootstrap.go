@@ -49,6 +49,21 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, 
 			}
 		}
 	}
+	if _, application := unique["/run/loki/secrets"]; application {
+		// Secret metadata preparation references the installed provider and
+		// contract, which live in the immutable core payload namespace.
+		core := false
+		for _, program := range t.Resources.Plan.Programs {
+			if program.Module == "runtime-core" {
+				mount := fullModuleMount(program)
+				unique[mount.Target] = mount
+				core = true
+			}
+		}
+		if !core {
+			return result, fmt.Errorf("secret preparation requires its immutable core payload")
+		}
+	}
 	unique["/loki-layout"] = FullMount{Kind: "bind", Source: layoutDirectory, Target: "/loki-layout"}
 	unique["/loki-auth"] = FullMount{Kind: "bind", Source: authDirectory, Target: "/loki-auth"}
 	for _, mount := range unique {

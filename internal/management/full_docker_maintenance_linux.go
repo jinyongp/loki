@@ -302,7 +302,10 @@ func (b *DockerFullBackend) fullMaintenanceCall(ctx context.Context, record full
 		command = append([]string{"container", "exec", "--user", "0:0", launcher.Name, record.Worker}, args...)
 	} else {
 		if action == "begin" {
-			return nil, fmt.Errorf("recover the original launcher before interrupting retained Jobs")
+			// An interrupted stop may have removed the launcher after its
+			// original gate and cleanup were durable. Verify that exact active
+			// gate offline; never admit/cancel a new operation without an owner.
+			args = []string{"host", "maintenance", "verify", "--socket", "/run/loki/launcher/control.sock", "--operation-id", operation}
 		}
 		command = []string{"run", "--rm", "--network", "none", "--read-only", "--user", "0:0", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--memory", "134217728", "--pids-limit", "32", "--entrypoint", record.Worker}
 		launcherVolume := ""

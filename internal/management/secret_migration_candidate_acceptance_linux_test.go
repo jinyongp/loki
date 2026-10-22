@@ -240,6 +240,42 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 	if err != nil || !reflect.DeepEqual(preparedPlan, intent.Plan) {
 		t.Fatal("isolated full source preflight differs from complete original mapping", err)
 	}
+	if selectCandidate {
+		captureOwnedResources := func() {
+			transaction, err := store.readTransaction()
+			if err == nil && transaction != nil && transaction.SecretMigration != nil {
+				candidate, _ = fullMigrationReservation(*transaction.SecretMigration, transaction.Previous)
+				projection = filepath.Join("/dev/shm", store.FullOwner()+"-migration-"+transaction.SecretMigration.ID, "secrets")
+			}
+			reservations, _ := store.Deployments()
+			for _, reservation := range reservations {
+				if reservation.ID != candidate.ID {
+					copy := reservation
+					serving = &copy
+				}
+			}
+		}
+		pending, err := b.ApplySecretMigration(ctx, &intent, "", nil)
+		captureOwnedResources()
+		if err != nil || pending.Phase != lifecycle.PhaseMigrate || pending.Protection != "uninitialized" || pending.Released {
+			t.Fatal("original migration did not wait for explicit protection initialization", pending, err)
+		}
+		complete, err := b.ApplySecretMigration(ctx, nil, "init", []byte("synthetic-full-candidate-passphrase"))
+		captureOwnedResources()
+		if err != nil || !complete.Released || complete.State != lifecycle.OperationSucceeded || complete.Operation != pending.Operation || serving == nil {
+			t.Fatal("original full migration driver did not complete serving recovery", complete, err)
+		}
+		if replay, err := b.ApplySecretMigration(ctx, &intent, "", nil); err != nil || replay != complete {
+			t.Fatal("completed original plan started another migration", replay, err)
+		}
+		actual, err := b.inspectApplicationIdentity(ctx, false)
+		want := before
+		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, intent.CandidateGeneration, intent.Policy
+		if err != nil || actual != want {
+			t.Fatal("serving driver did not preserve original generation/policy selection", err)
+		}
+		return
+	}
 	err = store.WithSecretMigrationJournal(ctx, lifecycle.OperationJournalOptions{}, func(j *lifecycle.OperationJournal) error {
 		operation, err := j.BeginSecretMigration(intent, time.Now())
 		if err != nil {

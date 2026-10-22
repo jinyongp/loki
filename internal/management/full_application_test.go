@@ -113,6 +113,19 @@ func TestApplicationFullTopologyHasOneIsolatedValueOwner(t *testing.T) {
 	if !strings.Contains(bootstrap.Script, "'prepare-secrets'") || strings.Contains(bootstrap.Script, "'protection'") || strings.Contains(bootstrap.Script, "'unlock'") {
 		t.Fatal("metadata preparation initialized or unlocked cryptography")
 	}
+	coreMounted := false
+	core, err := store.Generation(state.Installed["runtime-core"].Artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mount := range bootstrap.Mounts {
+		if mount.Target == "/opt/loki/modules/runtime-core" {
+			coreMounted = mount.Kind == "bind" && mount.Source == core && mount.ReadOnly
+		}
+	}
+	if !coreMounted {
+		t.Fatal("metadata helper cannot read its referenced immutable provider/contract")
+	}
 	state.Config.Tools[0].Enabled = false
 	if err := store.Save(state); err != nil {
 		t.Fatal(err)
