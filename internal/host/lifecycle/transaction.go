@@ -271,6 +271,9 @@ func (e *TransactionEngine) Apply(ctx context.Context, request ApplyRequest) (Ap
 	if err != nil {
 		return ApplyResult{}, err
 	}
+	if err := e.beginMaintenance(ctx, journal, record, request.Options.InterruptActiveJobs); err != nil {
+		return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, nil, err)
+	}
 	backup, err := e.captureBackup(ctx, journal, record, snapshot)
 	if err != nil {
 		return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, nil, err)
@@ -309,7 +312,7 @@ func (e *TransactionEngine) Apply(ctx context.Context, request ApplyRequest) (Ap
 	if err = e.Store.CommitGeneration(ctx, *snapshot.Available, e.now()); err != nil {
 		return ApplyResult{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	if _, err = journal.MarkSucceeded(record.ID, e.now()); err != nil {
+	if _, err = e.markSucceeded(ctx, journal, record.ID); err != nil {
 		return ApplyResult{}, err
 	}
 	return ApplyResult{PlanID: request.Plan.ID, InterruptedJobs: append([]string(nil), request.ActiveJobs...)}, nil
@@ -410,7 +413,7 @@ func (e *TransactionEngine) SetComponent(ctx context.Context, name string, enabl
 			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 		}
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
@@ -496,7 +499,7 @@ func (e *TransactionEngine) UpdateManagedComponentIntegration(
 			return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 		}
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
@@ -583,7 +586,7 @@ func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name s
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
@@ -649,7 +652,7 @@ func (e *TransactionEngine) SetIngressHosts(ctx context.Context, hosts []string)
 	if err = e.Store.CommitIngressHosts(ctx, target, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
@@ -690,7 +693,7 @@ func (e *TransactionEngine) Backup(ctx context.Context) (BackupRecord, error) {
 	if err = e.Backend.Health(ctx); err != nil {
 		return BackupRecord{}, e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	if _, err = journal.MarkSucceeded(record.ID, e.now()); err != nil {
+	if _, err = e.markSucceeded(ctx, journal, record.ID); err != nil {
 		return BackupRecord{}, err
 	}
 	return backup, nil
@@ -788,7 +791,7 @@ func (e *TransactionEngine) Uninstall(ctx context.Context) error {
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &backup, err)
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
@@ -846,11 +849,22 @@ func (e *TransactionEngine) restoreTo(ctx context.Context, kind OperationKind, t
 	if _, err = journal.Advance(record.ID, PhaseHealth, e.now()); err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, &safety, err)
 	}
-	_, err = journal.MarkSucceeded(record.ID, e.now())
+	_, err = e.markSucceeded(ctx, journal, record.ID)
 	return err
 }
 
 func (e *TransactionEngine) captureBackup(ctx context.Context, journal *OperationJournal, record OperationRecord, snapshot Snapshot) (BackupRecord, error) {
+	latest, err := journal.require(record.ID)
+	if err != nil {
+		return BackupRecord{}, err
+	}
+	interrupt, _ := ctx.Value(maintenanceInterruptionKey{}).(bool)
+	if latest.Maintenance != nil {
+		interrupt = latest.Maintenance.Interrupt
+	}
+	if err := e.beginMaintenance(ctx, journal, latest, interrupt); err != nil {
+		return BackupRecord{}, err
+	}
 	e.report("backup", "Preparing a recovery backup before changing integration state...")
 	if e.ReleaseAssets != nil && snapshot.Installed != nil && releaseAssetsMutate(record.Kind) {
 		if err := e.ReleaseAssets.ValidateCurrent(ctx, *snapshot.Installed); err != nil {
@@ -951,7 +965,25 @@ func (e *TransactionEngine) restoreRecoveryBackup(ctx context.Context, backup Ba
 }
 
 func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *OperationJournal) error {
-	_, found, err := journal.RecoverInterrupted(ctx, func(ctx context.Context, record OperationRecord) error {
+	records, err := journal.List()
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if record.State.Terminal() && record.Maintenance != nil && !record.Maintenance.Released {
+			if err := e.releaseMaintenance(ctx, journal, record); err != nil {
+				return err
+			}
+		}
+	}
+	record, found, err := journal.RecoverInterrupted(ctx, func(ctx context.Context, record OperationRecord) error {
+		interrupt := false
+		if record.Maintenance != nil {
+			interrupt = record.Maintenance.Interrupt
+		}
+		if err := e.beginMaintenance(ctx, journal, record, interrupt); err != nil {
+			return err
+		}
 		if record.RecoveryBackupID == "" {
 			return nil
 		}
@@ -964,7 +996,10 @@ func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *Ope
 	if !found {
 		return err
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return e.releaseMaintenance(ctx, journal, record)
 }
 
 func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *OperationJournal, operationID string, backup *BackupRecord, original error) error {
@@ -984,7 +1019,7 @@ func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *Operati
 		backup = &loaded
 	}
 	if backup == nil {
-		if _, err = journal.MarkRolledBack(operationID, e.now()); err != nil {
+		if _, err = e.markRolledBack(ctx, journal, operationID); err != nil {
 			return errors.Join(original, err)
 		}
 		return original
@@ -998,7 +1033,7 @@ func (e *TransactionEngine) recoverFailure(ctx context.Context, journal *Operati
 		}
 		return &RecoveryFailedError{Original: original.Error(), Recovery: recoveryErr.Error()}
 	}
-	if _, err = journal.MarkRolledBack(operationID, e.now()); err != nil {
+	if _, err = e.markRolledBack(ctx, journal, operationID); err != nil {
 		return errors.Join(original, err)
 	}
 	return original

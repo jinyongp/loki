@@ -99,23 +99,34 @@ func nextApplyPhase(current OperationPhase) OperationPhase {
 }
 
 type OperationRecord struct {
-	ID                    string         `json:"id"`
-	Kind                  OperationKind  `json:"kind"`
-	PlanID                string         `json:"plan_id"`
-	ObservedHostRevision  string         `json:"observed_host_revision"`
-	ActiveGenerationID    string         `json:"active_generation_id,omitempty"`
-	CandidateGenerationID string         `json:"candidate_generation_id"`
-	RecoveryBackupID      string         `json:"recovery_backup_id,omitempty"`
-	State                 OperationState `json:"state"`
-	Phase                 OperationPhase `json:"phase"`
-	OriginalError         string         `json:"original_error,omitempty"`
-	RecoveryError         string         `json:"recovery_error,omitempty"`
-	StartedAt             string         `json:"started_at"`
-	UpdatedAt             string         `json:"updated_at"`
-	CompletedAt           string         `json:"completed_at,omitempty"`
+	ID                    string                `json:"id"`
+	Kind                  OperationKind         `json:"kind"`
+	PlanID                string                `json:"plan_id"`
+	ObservedHostRevision  string                `json:"observed_host_revision"`
+	ActiveGenerationID    string                `json:"active_generation_id,omitempty"`
+	CandidateGenerationID string                `json:"candidate_generation_id"`
+	RecoveryBackupID      string                `json:"recovery_backup_id,omitempty"`
+	State                 OperationState        `json:"state"`
+	Phase                 OperationPhase        `json:"phase"`
+	OriginalError         string                `json:"original_error,omitempty"`
+	RecoveryError         string                `json:"recovery_error,omitempty"`
+	StartedAt             string                `json:"started_at"`
+	UpdatedAt             string                `json:"updated_at"`
+	CompletedAt           string                `json:"completed_at,omitempty"`
+	Maintenance           *OperationMaintenance `json:"maintenance,omitempty"`
+}
+
+// OperationMaintenance retains the exact interruption choice across crashes.
+// Released is acknowledged only after a successful terminal host checkpoint.
+type OperationMaintenance struct {
+	Interrupt bool `json:"interrupt"`
+	Released  bool `json:"released"`
 }
 
 func (r OperationRecord) Valid() bool {
+	if r.Maintenance != nil && r.Maintenance.Released && r.State != OperationSucceeded && r.State != OperationRolledBack {
+		return false
+	}
 	if len(r.ID) != 32 {
 		return false
 	}

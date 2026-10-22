@@ -206,7 +206,7 @@ func (m Manager) Backup(ctx context.Context, options MutationOptions) (BackupRec
 	if m.Maintainer == nil {
 		return BackupRecord{}, errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.Backup(ctx)
+	return m.Maintainer.Backup(maintenanceContext(ctx, options))
 }
 
 func (m Manager) Restore(ctx context.Context, backupID string, options MutationOptions) error {
@@ -216,7 +216,7 @@ func (m Manager) Restore(ctx context.Context, backupID string, options MutationO
 	if m.Maintainer == nil {
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.Restore(ctx, backupID)
+	return m.Maintainer.Restore(maintenanceContext(ctx, options), backupID)
 }
 
 func (m Manager) Rollback(ctx context.Context, options MutationOptions) error {
@@ -226,7 +226,7 @@ func (m Manager) Rollback(ctx context.Context, options MutationOptions) error {
 	if m.Maintainer == nil {
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.Rollback(ctx)
+	return m.Maintainer.Rollback(maintenanceContext(ctx, options))
 }
 
 func (m Manager) Uninstall(ctx context.Context, options MutationOptions) error {
@@ -236,7 +236,7 @@ func (m Manager) Uninstall(ctx context.Context, options MutationOptions) error {
 	if m.Maintainer == nil {
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.Uninstall(ctx)
+	return m.Maintainer.Uninstall(maintenanceContext(ctx, options))
 }
 
 func (m Manager) SetComponent(ctx context.Context, name string, enabled bool, options MutationOptions) error {
@@ -246,7 +246,7 @@ func (m Manager) SetComponent(ctx context.Context, name string, enabled bool, op
 	if m.Maintainer == nil {
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.SetComponent(ctx, name, enabled)
+	return m.Maintainer.SetComponent(maintenanceContext(ctx, options), name, enabled)
 }
 
 type ManagedIntegrationMaintainer interface {
@@ -307,7 +307,7 @@ func (m Manager) UpdateManagedIntegration(
 	if !ok {
 		return errors.New("host lifecycle managed integration engine is not configured")
 	}
-	return maintainer.UpdateManagedIntegration(ctx, name, mutate)
+	return maintainer.UpdateManagedIntegration(maintenanceContext(ctx, options), name, mutate)
 }
 
 func (m Manager) UpdateManagedComponentIntegration(
@@ -324,7 +324,7 @@ func (m Manager) UpdateManagedComponentIntegration(
 	if !ok {
 		return errors.New("host lifecycle managed integration engine is not configured")
 	}
-	return maintainer.UpdateManagedComponentIntegration(ctx, name, enabled, mutate)
+	return maintainer.UpdateManagedComponentIntegration(maintenanceContext(ctx, options), name, enabled, mutate)
 }
 
 func (m Manager) SetIngressHosts(ctx context.Context, hosts []string, options MutationOptions) error {
@@ -334,7 +334,7 @@ func (m Manager) SetIngressHosts(ctx context.Context, hosts []string, options Mu
 	if m.Maintainer == nil {
 		return errors.New("host lifecycle maintenance engine is not configured")
 	}
-	return m.Maintainer.SetIngressHosts(ctx, hosts)
+	return m.Maintainer.SetIngressHosts(maintenanceContext(ctx, options), hosts)
 }
 
 func (m Manager) mutationJobs(ctx context.Context, options MutationOptions) ([]string, error) {
