@@ -27,6 +27,55 @@ func TestRealNativeCandidateNamespaceAndManualProtection(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Second)
 	defer cancel()
+	accountID, err := newAttempt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := "loki-mig-" + strings.ReplaceAll(accountID, "-", "")[:12]
+	if _, err := nativeCommand(ctx, "/usr/sbin/useradd", "--system", "--no-create-home", "--user-group", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", account); err != nil {
+		t.Fatal("create uniquely owned native fixture account", err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if _, err := nativeCommand(cleanup, "/usr/sbin/userdel", account); err != nil {
+			t.Error("remove owned native fixture account", err)
+		}
+		if _, err := nativeCommand(cleanup, "/usr/bin/getent", "group", account); err == nil {
+			if _, err := nativeCommand(cleanup, "/usr/sbin/groupdel", account); err != nil {
+				t.Error("remove owned native fixture group", err)
+			}
+		}
+	})
+	metadataGroup := account + "m"
+	if _, err := nativeCommand(ctx, "/usr/sbin/groupadd", "--system", metadataGroup); err != nil {
+		t.Fatal("create owned metadata fixture group", err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if _, err := nativeCommand(cleanup, "/usr/sbin/groupdel", metadataGroup); err != nil {
+			t.Error("remove owned metadata fixture group", err)
+		}
+	})
+	numericID := func(flag string) uint32 {
+		t.Helper()
+		body, err := nativeCommand(ctx, "/usr/bin/id", flag, account)
+		value, parseErr := strconv.ParseUint(strings.TrimSpace(string(body)), 10, 32)
+		if err != nil || parseErr != nil || value == 0 {
+			t.Fatal("owned fixture account identity", err, parseErr)
+		}
+		return uint32(value)
+	}
+	metadataBody, err := nativeCommand(ctx, "/usr/bin/getent", "group", metadataGroup)
+	metadataFields := strings.Split(strings.TrimSpace(string(metadataBody)), ":")
+	if err != nil || len(metadataFields) != 4 {
+		t.Fatal("owned fixture metadata group identity", err)
+	}
+	metadataGID, err := strconv.ParseUint(metadataFields[2], 10, 32)
+	if err != nil || metadataGID == 0 {
+		t.Fatal("invalid owned fixture metadata GID", err)
+	}
 	root := t.TempDir()
 	copyProgram := func(source, name string) string {
 		t.Helper()
@@ -69,7 +118,7 @@ func TestRealNativeCandidateNamespaceAndManualProtection(t *testing.T) {
 	if err := os.Chmod(emptyRoot, 0755); err != nil {
 		t.Fatal(err)
 	}
-	options := hostapplication.PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "state"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: runtime, Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: configuration, Contract: contract}
+	options := hostapplication.PrepareOptions{UID: numericID("-u"), GID: numericID("-g"), AgentUID: 10000, MetadataGID: uint32(metadataGID), IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "state"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: runtime, Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: configuration, Contract: contract}
 	before, err := hostapplication.PrepareState(options)
 	if err != nil {
 		t.Fatal(err)
