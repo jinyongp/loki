@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -30,12 +31,12 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Skip("native values Actions suite supplies root and exact binaries")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	root, err := os.MkdirTemp("/tmp", "loki-value-roles-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(root)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	if os.Chmod(root, 0755) != nil {
 		t.Fatal("fixture root permissions")
 	}
@@ -70,7 +71,7 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(inbox)
+	t.Cleanup(func() { _ = os.RemoveAll(inbox) })
 	if os.Chown(inbox, 1000, 1000) != nil || os.Chmod(inbox, 0700) != nil {
 		t.Fatal("fixture inbox")
 	}
@@ -81,45 +82,54 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if os.WriteFile(layoutPath, encoded, 0644) != nil || os.Chmod(layoutPath, 0644) != nil {
 		t.Fatal("fixture layout")
 	}
-	cmd := exec.CommandContext(ctx, broker, "--layout", layoutPath)
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1000, Gid: 1000, Groups: []uint32{10000}}}
-	var diagnostics bytes.Buffer
-	cmd.Stdout = &diagnostics
-	cmd.Stderr = &diagnostics
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	defer func() {
-		_ = cmd.Process.Signal(syscall.SIGTERM)
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Errorf("broker shutdown: %v", err)
+	startBroker := func() func() {
+		t.Helper()
+		cmd := exec.CommandContext(ctx, broker, "--layout", layoutPath)
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1000, Gid: 1000, Groups: []uint32{10000}}}
+		var diagnostics bytes.Buffer
+		cmd.Stdout = &diagnostics
+		cmd.Stderr = &diagnostics
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		var once sync.Once
+		stop := func() {
+			once.Do(func() {
+				_ = cmd.Process.Signal(syscall.SIGTERM)
+				select {
+				case err := <-done:
+					if err != nil {
+						t.Errorf("broker shutdown: %v", err)
+					}
+				case <-time.After(3 * time.Second):
+					_ = cmd.Process.Kill()
+					<-done
+					t.Error("broker did not shut down")
+				}
+			})
+		}
+		t.Cleanup(stop)
+		for {
+			_, metaErr := os.Stat(metaSocket)
+			_, adminErr := os.Stat(adminSocket)
+			if metaErr == nil && adminErr == nil {
+				break
 			}
-		case <-time.After(3 * time.Second):
-			_ = cmd.Process.Kill()
-			<-done
-			t.Error("broker did not shut down")
+			select {
+			case err := <-done:
+				done <- err
+				t.Fatalf("role broker did not start: %v %s", err, &diagnostics)
+			case <-ctx.Done():
+				t.Fatal("role broker readiness timed out")
+			case <-time.After(10 * time.Millisecond):
+			}
 		}
-	}()
-	for {
-		_, metaErr := os.Stat(metaSocket)
-		_, adminErr := os.Stat(adminSocket)
-		if metaErr == nil && adminErr == nil {
-			break
-		}
-		select {
-		case err := <-done:
-			done <- err
-			t.Fatalf("role broker did not start: %v %s", err, &diagnostics)
-		case <-ctx.Done():
-			t.Fatal("role broker readiness timed out")
-		case <-time.After(10 * time.Millisecond):
-		}
+		return stop
 	}
+	stopBroker := startBroker()
 	client := admin.ApplicationClient{Socket: adminSocket, ExpectedUID: 1000}
 	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "revision", Resource: "demo"}, nil); err != nil {
 		t.Fatal("root administration was rejected", err)
@@ -151,6 +161,54 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 			t.Fatalf("%s role boundary failed: %v %s", role.mode, err, out)
 		}
 	}
+	// Exercise a real process restart after a successful import consumed its
+	// tmpfs input. Only durable metadata and the original provider receipt remain.
+	providerCall := func(input string, args ...string) {
+		t.Helper()
+		command := exec.CommandContext(ctx, provider, append(args, "--isolated-root", data)...)
+		command.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+		command.Stdin = strings.NewReader(input)
+		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1000, Gid: 1000}}
+		if err := command.Run(); err != nil {
+			t.Fatalf("synthetic provider %s failed: %v", args[0], err)
+		}
+	}
+	providerCall("synthetic-role-fixture-passphrase", "vault", "init", "--backend", "passphrase", "--passphrase-stdin")
+	t.Cleanup(func() { providerCall("", "vault", "lock") })
+	stageRaw, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("TOKEN=synthetic-private-restart-canary\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionRaw, err := client.Call(ctx, appvalues.AdminRequest{Action: "revision", Resource: "demo"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stage struct {
+		ID string `json:"stage_id"`
+	}
+	var revision struct {
+		Revision string `json:"revision"`
+	}
+	if json.Unmarshal(stageRaw, &stage) != nil || json.Unmarshal(revisionRaw, &revision) != nil || stage.ID == "" || len(revision.Revision) != 64 {
+		t.Fatal("private administration metadata was invalid")
+	}
+	request, _ := json.Marshal(map[string]any{"operation": "write", "action": "import_staged", "resource": "demo", "stage_id": stage.ID, "expected_revision": revision.Revision, "request_id": "efb1e1c4-8acb-43c8-9ba6-756b20cc50c3"})
+	write := func(replayed string) {
+		t.Helper()
+		child := exec.CommandContext(ctx, helper, "-test.run=^TestApplicationRoleClient$")
+		child.Env = []string{"PATH=/usr/bin:/bin", "LOKI_ROLE_MODE=agent", "LOKI_ROLE_METADATA=" + metaSocket, "LOKI_ROLE_ADMIN=" + adminSocket, "LOKI_ROLE_JOBS=" + jobs, "LOKI_ROLE_PROVIDER=" + data, "LOKI_ROLE_INBOX=" + inbox, "LOKI_ROLE_WRITE=" + string(request), "LOKI_ROLE_REPLAYED=" + replayed}
+		child.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 10000, Gid: 10000, Groups: []uint32{10000}}}
+		if out, err := child.CombinedOutput(); err != nil {
+			t.Fatalf("agent receipt replay failed: %v %s", err, out)
+		}
+	}
+	write("false")
+	if _, err := os.Stat(filepath.Join(inbox, stage.ID+".data")); !os.IsNotExist(err) {
+		t.Fatal("staged plaintext survived import")
+	}
+	stopBroker()
+	_ = startBroker()
+	write("true")
 }
 
 func TestApplicationRoleClient(t *testing.T) {
@@ -171,6 +229,23 @@ func TestApplicationRoleClient(t *testing.T) {
 	}
 	if err != nil || !bytes.Contains(result, []byte(`"alias":"demo"`)) {
 		t.Fatal("configured agent could not inspect its resource", err)
+	}
+	if raw := os.Getenv("LOKI_ROLE_WRITE"); raw != "" {
+		var request map[string]any
+		if json.Unmarshal([]byte(raw), &request) != nil {
+			t.Fatal("invalid fixture metadata")
+		}
+		out, err := client.Call(ctx, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var response struct {
+			Replayed bool `json:"replayed"`
+			Count    int  `json:"count"`
+		}
+		if json.Unmarshal(out, &response) != nil || response.Replayed != (os.Getenv("LOKI_ROLE_REPLAYED") == "true") || response.Count != 1 || bytes.Contains(out, []byte("synthetic-private-restart-canary")) {
+			t.Fatal("original receipt or value-free response was lost")
+		}
 	}
 	for _, path := range []string{os.Getenv("LOKI_ROLE_PROVIDER"), os.Getenv("LOKI_ROLE_INBOX")} {
 		if entries, err := os.ReadDir(path); err == nil {
