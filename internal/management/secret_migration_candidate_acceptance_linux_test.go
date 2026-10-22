@@ -213,6 +213,9 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
 				return fmt.Errorf("original source backup: %w", err)
 			}
+			if err := b.FinishSecretMigrationSource(scoped, candidate); err == nil {
+				t.Fatal("source writers reopened before a terminal host result")
+			}
 			if err := b.BackupSecretMigrationSource(scoped, candidate); err != nil {
 				return err
 			}
@@ -261,6 +264,22 @@ func TestRealManagedFullMigrationCandidate(t *testing.T) {
 			}
 			if err := b.Stop(scoped, candidate); err != nil {
 				return err
+			}
+			// This component fixture deliberately keeps the original selector.
+			// Supply the host's verified rollback precondition, then exercise the
+			// real source owner's terminal gate disposition and exact retry.
+			inspect := append(append([]string{}, base...), image, "-ec", "/opt/loki/modules/runtime-core/program host prepare-secrets --inspect-identity --identity /var/lib/loki/secrets/deployment.json")
+			original, err := b.command(scoped, "verifying fixture retained its original selector", nil, inspect...)
+			if err != nil || string(original) != string(beforeBytes) {
+				return fmt.Errorf("candidate unexpectedly changed selection")
+			}
+			if _, err := j.CompleteSecretMigration(operation.ID, true, time.Now()); err != nil {
+				return err
+			}
+			for attempt := 0; attempt < 2; attempt++ {
+				if err := b.FinishSecretMigrationSource(scoped, candidate); err != nil {
+					return err
+				}
 			}
 			return nil
 		})

@@ -102,7 +102,7 @@ func CheckpointSourceTransfer(ctx context.Context, channel io.ReadWriteCloser, o
 		if ackErr != nil {
 			return ErrSourceSession
 		}
-		if envelope.Event.Type == "target_sealed" || envelope.Event.Type == "source_backup_complete" {
+		if envelope.Event.Type == "target_sealed" || envelope.Event.Type == "source_backup_complete" || envelope.Event.Type == "source_finished" {
 			return nil
 		}
 	}

@@ -63,26 +63,72 @@ func verifyMigrationArchiveFile(path string, archive *lifecycle.MigrationArchive
 // transaction journal. The helper receives no Docker socket, workspace, task
 // root, target provider files or other generation.
 func (b *DockerFullBackend) TransferSecretMigrationSource(ctx context.Context, candidate DeploymentReservation) error {
-	return b.runSecretMigrationSource(ctx, candidate, false)
+	return b.runSecretMigrationSource(ctx, candidate, "transfer")
 }
 
 func (b *DockerFullBackend) BackupSecretMigrationSource(ctx context.Context, candidate DeploymentReservation) error {
-	return b.runSecretMigrationSource(ctx, candidate, true)
+	return b.runSecretMigrationSource(ctx, candidate, "backup")
 }
 
-func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candidate DeploymentReservation, backup bool) error {
+// FinishSecretMigrationSource acknowledges the actual source gate only after
+// the original host owner has a durable successful/rolled-back result. Job and
+// app admission still require their own ACK before the host release checkpoint.
+func (b *DockerFullBackend) FinishSecretMigrationSource(ctx context.Context, candidate DeploymentReservation) error {
+	r, err := b.migrationRecord(ctx)
+	if err != nil {
+		return err
+	}
+	if r.State == lifecycle.OperationSucceeded {
+		return b.runSecretMigrationSource(ctx, candidate, "commit_source")
+	}
+	if r.State == lifecycle.OperationRolledBack {
+		return b.runSecretMigrationSource(ctx, candidate, "rollback_source")
+	}
+	return fmt.Errorf("source release requires the original terminal host checkpoint")
+}
+
+func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candidate DeploymentReservation, action string) error {
+	backup := action == "backup"
+	finish := action == "commit_source" || action == "rollback_source"
+	if action != "transfer" && !backup && !finish {
+		return fmt.Errorf("unsupported source operation")
+	}
 	operation, err := b.migrationRecord(ctx)
 	if err != nil {
 		return err
 	}
-	if operation.State != lifecycle.OperationApplying || !backup && operation.Phase != lifecycle.PhaseMigrate || backup && operation.Phase != lifecycle.PhaseAdmitted && operation.Phase != lifecycle.PhaseSnapshot && operation.Phase != lifecycle.PhaseMigrate {
-		return fmt.Errorf("source transfer requires the original migration phase")
+	if finish {
+		if action == "commit_source" && operation.State != lifecycle.OperationSucceeded || action == "rollback_source" && operation.State != lifecycle.OperationRolledBack {
+			return fmt.Errorf("source release differs from the original terminal result")
+		}
+	} else {
+		if operation.State != lifecycle.OperationApplying || !backup && operation.Phase != lifecycle.PhaseMigrate {
+			return fmt.Errorf("source transfer requires the original migration phase")
+		}
+		if backup && operation.Phase != lifecycle.PhaseAdmitted && operation.Phase != lifecycle.PhaseSnapshot && operation.Phase != lifecycle.PhaseMigrate {
+			return fmt.Errorf("source backup cannot replace an archive after cutover")
+		}
 	}
-	if !backup {
+	if finish {
+		// Terminal disposition is verified by the source's original UUID and
+		// fence. No ciphertext regeneration or target access occurs here.
+	} else if !backup {
 		if err := verifyPublishedMigrationArchive(operation); err != nil {
 			return err
 		}
 	} else if archive := operation.SecretMigration.Archive; archive != nil && verifyMigrationArchiveFile(operation.SecretMigration.Intent.BackupPath, archive) == nil {
+		directory, err := os.Open(filepath.Dir(operation.SecretMigration.Intent.BackupPath))
+		if err != nil {
+			return err
+		}
+		syncErr := directory.Sync()
+		closeErr := directory.Close()
+		if syncErr != nil {
+			return syncErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
 		if operation.Phase == lifecycle.PhaseMigrate {
 			return nil
 		}
@@ -92,7 +138,7 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 				return err
 			}
 		}
-		_, err := scope.journal.AdvanceSecretMigration(operation.ID, lifecycle.PhaseMigrate, time.Now())
+		_, err = scope.journal.AdvanceSecretMigration(operation.ID, lifecycle.PhaseMigrate, time.Now())
 		return err
 	} else if archive != nil && archive.Published {
 		return fmt.Errorf("published original source archive is unavailable; do not regenerate it")
@@ -117,6 +163,10 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 		return err
 	}
 	manifest := lifecycle.SourceTransferManifest{Version: 1, Operation: lifecycle.MigrationOperationUUID(operation.ID), Policy: intent.Policy, SourceRoot: intent.SourceRoot, TargetSocket: "/run/loki/secrets/admin/control.sock", TargetUID: 10006, Plan: intent.Plan, BaseEnvironment: contract.Environment, Writes: operation.SecretMigration.Writes}
+	if finish {
+		manifest.Action, manifest.TargetSocket, manifest.TargetUID = action, "", 0
+		manifest.Writes = []lifecycle.MigrationWriteCheckpoint{}
+	}
 	if backup {
 		manifest.Action, manifest.Recipient, manifest.TargetSocket, manifest.TargetUID = "backup", intent.Recipient, "", 0
 		manifest.ArchivePath = "/work/source.age"
@@ -132,7 +182,7 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 			return err
 		}
 		mounts = append(mounts, cipher)
-	} else {
+	} else if !finish {
 		mounts = append(mounts, FullMount{Kind: "bind", Source: filepath.Join(projection, "admin"), Target: "/run/loki/secrets/admin", ReadOnly: true})
 	}
 	workerBound := false
@@ -163,9 +213,13 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 			}
 		}
 	}
-	args := []string{"run", "--rm", "--interactive", "--name", b.containerName(candidate, "prepare"), "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "1073741824", "--pids-limit", "64", "--log-driver", "none", "--entrypoint", record.Worker}
-	if backup {
-		args = append(args, "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--memory", "2147483648")
+	memory := "1073741824"
+	if backup || finish {
+		memory = "2147483648"
+	}
+	args := []string{"run", "--rm", "--interactive", "--name", b.containerName(candidate, "prepare"), "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", memory, "--pids-limit", "64", "--log-driver", "none", "--entrypoint", record.Worker}
+	if backup || finish {
+		args = append(args, "--cap-add", "CHOWN", "--cap-add", "FOWNER")
 	}
 	for _, label := range b.labels(candidate, "prepare") {
 		args = append(args, "--label", label)
@@ -184,6 +238,12 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 		}
 		scope := ctx.Value(fullMigrationMaintenanceKey{}).(*fullMigrationMaintenanceScope)
 		return lifecycle.CheckpointSourceTransfer(ctx, channel, manifest.Operation, func(event lifecycle.SourceEvent) error {
+			if finish {
+				if event != (lifecycle.SourceEvent{Operation: manifest.Operation, Type: "source_finished"}) {
+					return lifecycle.ErrSourceSession
+				}
+				return nil
+			}
 			if event.Type == "archive_published" {
 				if err := b.copySecretSourceArchive(ctx, candidate, operation, event); err != nil {
 					return err
@@ -238,7 +298,7 @@ func (b *DockerFullBackend) exchangeSecretSourceHelper(ctx context.Context, args
 	}
 	waitErr := command.Wait()
 	if transferErr != nil {
-		for _, stage := range []string{"freeze", "freeze_ack", "archive", "archive_ack", "complete_ack", "transfer"} {
+		for _, stage := range []string{"freeze", "freeze_ack", "archive", "archive_ack", "complete_ack", "transfer", "source_finish"} {
 			if strings.Contains(diagnostic.String(), "source transfer did not complete at "+stage+";") {
 				return fmt.Errorf("owned source helper stopped at %s: %w", stage, transferErr)
 			}

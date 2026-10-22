@@ -69,6 +69,15 @@ func ServeSourceTransferManifest(ctx context.Context, channel io.ReadWriteCloser
 	if manifest.Action == "backup" {
 		return ServeSourceBackup(ctx, manifest, channel)
 	}
+	if manifest.Action == "commit_source" || manifest.Action == "rollback_source" {
+		defer channel.Close()
+		source := secret.Controller{StateDirectory: manifest.SourceRoot}
+		if err := source.FinishApplicationMigration(ctx, manifest.Plan.Revision, manifest.Operation, manifest.Action == "commit_source"); err != nil {
+			return &sourceFailure{"source_finish", err}
+		}
+		event := SourceEvent{Operation: manifest.Operation, Type: "source_finished"}
+		return lifecycle.ExchangeSourceEvent(ctx, channel, manifest.Operation, 1, event)
+	}
 	session := SourceSession{Source: secret.Controller{StateDirectory: manifest.SourceRoot}, Target: admin.ApplicationClient{Socket: manifest.TargetSocket, ExpectedUID: manifest.TargetUID}, Operation: manifest.Operation, Policy: manifest.Policy, Plan: manifest.Plan, BaseEnvironment: manifest.BaseEnvironment, Writes: manifest.Writes}
 	return ServeSourceTransfer(ctx, session, channel)
 }

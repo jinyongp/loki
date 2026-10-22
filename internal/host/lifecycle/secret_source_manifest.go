@@ -46,7 +46,11 @@ func (m SourceTransferManifest) Valid() bool {
 		return false
 	}
 	paths := []string{m.SourceRoot}
-	if m.Action == "backup" {
+	if m.Action == "commit_source" || m.Action == "rollback_source" {
+		if m.TargetSocket != "" || m.TargetUID != 0 || m.Recipient != "" || m.ArchivePath != "" || m.PreviousBackup != nil || len(m.Writes) != 0 {
+			return false
+		}
+	} else if m.Action == "backup" {
 		recipient, err := age.ParseX25519Recipient(m.Recipient)
 		if err != nil || recipient.String() != m.Recipient || m.TargetSocket != "" || m.TargetUID != 0 {
 			return false
