@@ -296,6 +296,7 @@ type OperationJournal struct {
 	failpoint func(string) error
 	records   map[string]OperationRecord
 	poisoned  bool
+	store     OperationRecordStore
 }
 
 func OpenOperationJournal(root string, lock *OperationLock, options OperationJournalOptions) (*OperationJournal, error) {
@@ -654,7 +655,8 @@ func (j *OperationJournal) require(id string) (OperationRecord, error) {
 }
 
 func (j *OperationJournal) ready() error {
-	if j == nil || j.poisoned || !j.lock.validFor(j.root) {
+	active := j != nil && (j.store != nil && j.store.Locked() || j.store == nil && j.lock.validFor(j.root))
+	if !active || j.poisoned {
 		if j != nil && j.poisoned {
 			return errors.New("host lifecycle operation journal requires reopen after failpoint")
 		}
@@ -691,7 +693,12 @@ func (j *OperationJournal) persist(record OperationRecord, overwrite bool) error
 	if err = j.runFailpoint("before_publish:" + string(record.State) + ":" + string(record.Phase)); err != nil {
 		return err
 	}
-	if err = safeio.PublishPrivate(j.recordPath(record.ID), envelope, overwrite); err != nil {
+	if j.store != nil {
+		err = j.store.Publish(detachedMigrationRecord(record), overwrite)
+	} else {
+		err = safeio.PublishPrivate(j.recordPath(record.ID), envelope, overwrite)
+	}
+	if err != nil {
 		return err
 	}
 	if err = j.runFailpoint("after_publish:" + string(record.State) + ":" + string(record.Phase)); err != nil {

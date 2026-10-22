@@ -57,6 +57,9 @@ func (s Store) ReconcileFull(ctx context.Context, backend FullBackend) (FullLife
 		return result, err
 	}
 	defer unlock()
+	if err := s.requireNoPendingSecretMigration(); err != nil {
+		return result, err
+	}
 	topology, err := s.FullTopology()
 	if err != nil {
 		return result, err
@@ -143,6 +146,9 @@ func (s Store) StopFull(ctx context.Context, backend FullBackend) error {
 		return err
 	}
 	defer unlock()
+	if err := s.requireNoPendingSecretMigration(); err != nil {
+		return err
+	}
 	reservations, err := s.Deployments()
 	if err != nil {
 		return err

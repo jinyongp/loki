@@ -19,16 +19,17 @@ import (
 // transaction journals complete before/after snapshots. Only state.json changes
 // public pointers; acquired immutable generations remain private until commit.
 type transaction struct {
-	Schema    int         `json:"schema"`
-	ID        string      `json:"id"`
-	Action    string      `json:"action"`
-	Phase     tools.Phase `json:"phase"`
-	Previous  Snapshot    `json:"previous"`
-	Candidate Snapshot    `json:"candidate"`
+	Schema          int                        `json:"schema"`
+	ID              string                     `json:"id"`
+	Action          string                     `json:"action"`
+	Phase           tools.Phase                `json:"phase"`
+	Previous        Snapshot                   `json:"previous"`
+	Candidate       Snapshot                   `json:"candidate"`
+	SecretMigration *fullSecretMigrationRecord `json:"secret_migration,omitempty"`
 }
 
 func (t transaction) validate() error {
-	if t.Schema != 1 || (t.Action != "install" && t.Action != "update" && t.Action != "promote" && t.Action != "rollback" && t.Action != "resource_policy") {
+	if t.Schema != 1 || (t.Action != "install" && t.Action != "update" && t.Action != "promote" && t.Action != "rollback" && t.Action != "resource_policy" && t.Action != "secret_migration") {
 		return fmt.Errorf("invalid tool transaction schema or action")
 	}
 	check := tools.Operation{Schema: 1, ID: t.ID, Module: "transaction", Action: "install", Phase: t.Phase, Candidate: snapshotDigest(t.Candidate)}
@@ -40,6 +41,13 @@ func (t transaction) validate() error {
 	}
 	if err := t.Candidate.Validate(); err != nil {
 		return err
+	}
+	if t.Action == "secret_migration" {
+		if err := t.validateSecretMigration(); err != nil {
+			return err
+		}
+	} else if t.SecretMigration != nil {
+		return fmt.Errorf("unexpected secret migration in tool transaction")
 	}
 	before, after := t.Previous.Config, t.Candidate.Config
 	before.Release = after.Release
@@ -60,10 +68,10 @@ func (t transaction) validate() error {
 	}
 	a, _ = json.Marshal(t.Previous.ApplicationResources)
 	b, _ = json.Marshal(t.Candidate.ApplicationResources)
-	if t.Action != "resource_policy" && t.Action != "rollback" && !bytes.Equal(a, b) {
+	if t.Action != "resource_policy" && t.Action != "rollback" && t.Action != "secret_migration" && !bytes.Equal(a, b) {
 		return fmt.Errorf("tool acquisition cannot change application policy")
 	}
-	if t.Action == "resource_policy" {
+	if t.Action == "resource_policy" || t.Action == "secret_migration" {
 		a, _ = json.Marshal(t.Previous.Installed)
 		b, _ = json.Marshal(t.Candidate.Installed)
 		if !bytes.Equal(a, b) {
@@ -82,7 +90,11 @@ func (t transaction) validate() error {
 	if err != nil {
 		return err
 	}
-	if len(encoded)+1 > 3*tools.MaxManifestBytes {
+	limit := 3 * tools.MaxManifestBytes
+	if t.Action == "secret_migration" {
+		limit += maxFullMigrationBytes
+	}
+	if len(encoded)+1 > limit {
 		return fmt.Errorf("tool transaction exceeds size limit")
 	}
 	return nil
@@ -107,14 +119,25 @@ func validateComposition(state Snapshot) error {
 }
 
 func (s Store) readTransaction() (*transaction, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, "transaction.json"))
+	path := filepath.Join(s.Root, "transaction.json")
+	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > 3*tools.MaxManifestBytes {
+	if !info.Mode().IsRegular() || info.Size() > int64(maxFullMigrationBytes+3*tools.MaxManifestBytes) {
+		return nil, fmt.Errorf("tool transaction exceeds size limit or is not regular")
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxFullMigrationBytes+3*tools.MaxManifestBytes {
 		return nil, fmt.Errorf("tool transaction exceeds size limit")
 	}
 	d := json.NewDecoder(bytes.NewReader(data))
@@ -130,12 +153,19 @@ func (s Store) readTransaction() (*transaction, error) {
 	if err := t.validate(); err != nil {
 		return nil, err
 	}
+	if t.Action != "secret_migration" && len(data) > 3*tools.MaxManifestBytes {
+		return nil, fmt.Errorf("tool transaction exceeds size limit")
+	}
 	return &t, nil
 }
 
 // mutable is called under the kernel lock by every public mutation. Activation
 // and removal cannot change the recovery basis of an interrupted acquisition.
 func (s Store) mutable() error {
+	return s.mutableMigration(false)
+}
+
+func (s Store) mutableMigration(allowOriginalMigration bool) error {
 	if err := s.requireSystemMutable(); err != nil {
 		return err
 	}
@@ -165,7 +195,13 @@ func (s Store) mutable() error {
 		return fmt.Errorf("invalid tool transaction; inspect doctor: %w", err)
 	}
 	if t != nil && t.Phase != tools.Committed && t.Phase != tools.Aborted {
-		return fmt.Errorf("interrupted transaction %s requires loki tools recover", t.ID)
+		if t.Action == "secret_migration" {
+			if !allowOriginalMigration {
+				return fmt.Errorf("secret migration %s requires loki host secret-migration recover", t.SecretMigration.ID)
+			}
+		} else {
+			return fmt.Errorf("interrupted transaction %s requires loki tools recover", t.ID)
+		}
 	}
 	data, err := os.ReadFile(filepath.Join(s.Root, "operation.json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -366,6 +402,9 @@ func (s Store) recoverTransaction() error {
 	}
 	if t == nil || t.Phase == tools.Committed || t.Phase == tools.Aborted {
 		return nil
+	}
+	if t.Action == "secret_migration" {
+		return fmt.Errorf("secret migration %s requires loki host secret-migration recover", t.SecretMigration.ID)
 	}
 	state, err := s.Load()
 	if err != nil {
