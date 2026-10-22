@@ -118,6 +118,12 @@ install -d -o 0 -g 0 -m 0755 /run/loki/secrets
 install -d -o 0 -g 10001 -m 0750 /run/loki/secrets/roles
 install -m 0600 /input/application-resources.json /run/preparation/application-resources.json
 exec /opt/loki/bin/loki host prepare-secrets --uid 10006 --gid 10006 --agent-uid 10000 --metadata-gid 10001 --identity /var/lib/loki/app-store/deployment.json --state /var/lib/loki/app-store --service-state /var/lib/loki/secrets --runtime /run/loki/secrets --config /etc/loki/loki.toml --github-config /input/github.toml --catalog /run/preparation/application-resources.json --service-catalog /etc/loki/application-resources.json --execution-contract /usr/share/doc/loki/container-execution-contract.json --unit-directory= --overlay-directory=/run/loki/secrets/roles --role-source=/etc/loki --owner ` + owner
+	if b.maintenance != nil {
+		script += " --maintenance-operation " + b.maintenance.OperationID
+		if b.maintenance.Interrupt {
+			script += " --interrupt-jobs"
+		}
+	}
 	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--entrypoint", "/bin/sh", "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,volume-nocopy", "--mount", applicationBind(runtimeRoot, "/run/loki/secrets", false), "--mount", applicationBind(input, "/input/application-resources.json", true), "--mount", applicationBind(github, "/input/github.toml", true), state.CoreImage, "-ec", script}
 	args = append(args[:1], append([]string{"--tmpfs", "/run/preparation:rw,nosuid,nodev,size=2097152,mode=0700"}, args[1:]...)...)
 	if _, err := b.runner.Run(ctx, nil, "image", "inspect", state.CoreImage); err != nil {

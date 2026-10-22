@@ -23,6 +23,7 @@ type runnerCall struct {
 }
 
 type fakeRunner struct {
+	maintenance       *hostMaintenance
 	mu                sync.Mutex
 	calls             []runnerCall
 	outputs           map[string][]byte
@@ -42,6 +43,31 @@ func (r *fakeRunner) Run(_ context.Context, env []string, args ...string) ([]byt
 	}
 	if value, exists := r.outputs[key]; exists {
 		return append([]byte(nil), value...), nil
+	}
+	if len(args) >= 5 && slices.Equal(args[len(args)-5:], []string{"ps", "--quiet", "--status", "running", "launcher"}) {
+		return []byte("fixture-launcher\n"), nil
+	}
+	for index, value := range args {
+		if value != "maintenance" || index == 0 || args[index-1] != "host" || index+1 >= len(args) {
+			continue
+		}
+		action := args[index+1]
+		id, interrupt := "", false
+		for at := index + 2; at < len(args); at++ {
+			if args[at] == "--operation-id" && at+1 < len(args) {
+				id = args[at+1]
+			}
+			if args[at] == "--interrupt" {
+				interrupt = true
+			}
+		}
+		if action == "begin" {
+			r.maintenance = &hostMaintenance{Version: 1, OperationID: id, Interrupt: interrupt, Active: true}
+		}
+		if action == "end" && r.maintenance != nil {
+			r.maintenance.Active = false
+		}
+		return json.Marshal(r.maintenance)
 	}
 	if slices.Equal(args, []string{"volume", "inspect", "loki_application-state"}) {
 		return append([]byte(nil), r.applicationVolume...), nil

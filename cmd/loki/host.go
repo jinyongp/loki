@@ -15,7 +15,6 @@ import (
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
 	"loki/internal/host/lifecycle"
-	"loki/internal/platform/sandbox"
 	"loki/internal/progress"
 	"loki/modules/execution/jobs"
 )
@@ -32,14 +31,17 @@ type hostLifecycle interface {
 }
 
 type hostLauncherLayout struct {
-	InitialMaintenanceOperation   string
-	InitialMaintenanceInterrupt   bool
-	ApplicationCatalog            string
-	ApplicationResources          []controlpolicy.ApplicationResource
-	SecretSocket                  string
-	SecretBrokerUID               uint32
-	SecretPrincipal               string
-	Volumes                       []sandbox.VolumeBinding
+	InitialMaintenanceOperation string
+	InitialMaintenanceInterrupt bool
+	ApplicationCatalog          string
+	ApplicationResources        []controlpolicy.ApplicationResource
+	SecretSocket                string
+	SecretBrokerUID             uint32
+	SecretPrincipal             string
+	Volumes                     []struct {
+		Path string `json:"path"`
+		Name string `json:"name"`
+	}
 	DeploymentOwner, DeploymentID string
 	Socket                        string
 	SocketGID                     int

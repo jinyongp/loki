@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"loki/internal/daemon"
+	"loki/modules/execution/jobs"
 )
 
 // Exercise the shipped installer entry point with the shipped container role
@@ -123,5 +125,55 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHostOfflineMaintenanceJournalLock(t *testing.T) {
+	if os.Geteuid() != 0 {
+		if os.Getenv("LOKI_REQUIRE_HOST_APP_LAYOUT") == "1" {
+			t.Fatal("root offline maintenance fixture is required")
+		}
+		t.Skip("native values suite executes this owned fixture as root")
+	}
+	root := t.TempDir()
+	state := filepath.Join(root, "launcher")
+	if err := os.MkdirAll(filepath.Join(state, "journal"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	layout := hostLauncherLayout{StateDirectory: state, MaxJobs: 8, MaxOutputBytes: 4096, ResultRetentionSeconds: 60}
+	raw, _ := json.Marshal(layout)
+	path := filepath.Join(root, "launcher.json")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := jobs.OpenJournal(filepath.Join(state, "journal"), jobs.JournalLimits{MaxRecords: 8, MaxRecordBytes: jobs.JournalRecordBudget(4096), MaxOutputBytes: 4096, Retention: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	id := "123e4567-e89b-12d3-a456-426614174399"
+	if _, err := journal.BeginMaintenance(id, true); err != nil {
+		t.Fatal(err)
+	}
+	var out, diagnostic bytes.Buffer
+	if code := runHostAdmission([]string{"status", "--offline", "--launcher-layout", path}, &out, &diagnostic); code != 1 {
+		t.Fatal("offline helper raced a live journal owner", code)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := runHostAdmission([]string{"end", "--offline", "--launcher-layout", path, "--operation-id", "123e4567-e89b-12d3-a456-426614174388"}, &out, &diagnostic); code != 1 {
+		t.Fatal("offline helper cleared a different operation", code)
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := runHostAdmission([]string{"end", "--offline", "--launcher-layout", path, "--operation-id", id}, &out, &diagnostic); code != 0 {
+		t.Fatalf("offline release failed: %s", diagnostic.String())
+	}
+	var result jobs.Maintenance
+	if json.Unmarshal(out.Bytes(), &result) != nil || result.OperationID != id || result.Active {
+		t.Fatal("incorrect offline release metadata")
 	}
 }

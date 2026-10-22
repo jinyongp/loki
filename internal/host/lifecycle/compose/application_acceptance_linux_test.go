@@ -26,7 +26,7 @@ func TestRealComposeApplicationService(t *testing.T) {
 	if !strings.Contains(image, "@sha256:") {
 		t.Fatal("an immutable fixture image is required")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Second)
 	defer cancel()
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
@@ -41,7 +41,7 @@ func TestRealComposeApplicationService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := runtimeState{Version: 1, CoreImage: image, Workspace: workspace}
+	state := runtimeState{Version: 1, GenerationID: "sha256:" + strings.Repeat("a", 64), CoreImage: image, Workspace: workspace}
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
@@ -63,7 +63,14 @@ func TestRealComposeApplicationService(t *testing.T) {
 			}
 		}
 	})
+	operation := "123e4567-e89b-12d3-a456-426614174399"
+	if err := b.BeginJobMaintenance(ctx, operation, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := b.prepareApplicationValues(ctx, &state); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.saveRuntime(state); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "45", "application-values"); err != nil {
@@ -136,5 +143,31 @@ func TestRealComposeApplicationService(t *testing.T) {
 	status = admin("status", nil)
 	if status["state"] != "locked" {
 		t.Fatal("restart retained an unlocked session")
+	}
+	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "40", "launcher"); err != nil {
+		t.Fatal(err)
+	}
+	fence, err := b.maintenanceCall(ctx, state, "status", "", false, false)
+	if err != nil || fence == nil || !fence.Active || fence.OperationID != operation || !fence.Interrupt {
+		t.Fatal("fresh launcher did not inherit the host operation", err)
+	}
+	if err := b.BeginJobMaintenance(ctx, operation, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.EndJobMaintenance(ctx, operation); err != nil {
+		t.Fatal(err)
+	}
+	operation = "123e4567-e89b-12d3-a456-426614174388"
+	if err := b.BeginJobMaintenance(ctx, operation, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.compose(ctx, state, "stop", "--timeout", "5", "launcher"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.EndJobMaintenance(ctx, operation); err != nil {
+		t.Fatal("offline host fence release failed", err)
+	}
+	if live, err := b.launcherRunning(ctx, state); err != nil || live {
+		t.Fatal("offline helper restarted the launcher", err)
 	}
 }

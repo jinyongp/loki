@@ -107,6 +107,7 @@ type Config struct {
 }
 
 type Backend struct {
+	maintenance       *hostMaintenance
 	Progress          progress.Reporter
 	root              string
 	runtimeRoot       string

@@ -10,9 +10,13 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
+	"loki/internal/daemon"
 	"loki/internal/fault"
+	"loki/modules/execution/jobs"
 	"loki/modules/execution/jobs/remote"
 )
 
@@ -32,7 +36,23 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	socket := flags.String("socket", "/run/loki-go/launcher/control.sock", "root-owned launcher channel")
 	operation := flags.String("operation-id", "", "original host transaction UUID")
 	interrupt := flags.Bool("interrupt", false, "explicitly cancel and verify owned Job cleanup")
+	offline := flags.Bool("offline", false, "acknowledge completed cleanup while holding the stopped launcher's journal lock")
+	launcherLayout := flags.String("launcher-layout", "", "frozen launcher layout for offline end/status only")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
+		return 2
+	}
+	if *offline {
+		if action == "begin" || *launcherLayout == "" {
+			return 2
+		}
+		if action == "end" {
+			if _, err := jobs.JobIDForRequestID(*operation); err != nil {
+				return 2
+			}
+		}
+		return runOfflineHostMaintenance(action, *operation, *launcherLayout, stdout, stderr)
+	}
+	if *launcherLayout != "" {
 		return 2
 	}
 	client, err := remote.NewHostMaintenance(*socket)
@@ -52,6 +72,36 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "loki:", fault.Public(err))
+		return 1
+	}
+	if json.NewEncoder(stdout).Encode(result) != nil {
+		return 1
+	}
+	return 0
+}
+
+// The exclusive canonical journal lock prevents an offline helper racing a
+// live launcher. EndMaintenance also refuses retained, unverified Job cleanup.
+func runOfflineHostMaintenance(action, operation, path string, stdout, stderr io.Writer) int {
+	var layout hostLauncherLayout
+	if daemon.ReadJSON(path, &layout) != nil || !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory || layout.StateDirectory == "/" {
+		fmt.Fprintln(stderr, "stopped launcher layout is unavailable")
+		return 1
+	}
+	journal, err := jobs.OpenJournal(filepath.Join(layout.StateDirectory, "journal"), jobs.JournalLimits{MaxRecords: layout.MaxJobs, MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes), MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second})
+	if err != nil {
+		fmt.Fprintln(stderr, "canonical launcher journal is unavailable or still owned")
+		return 1
+	}
+	defer journal.Close()
+	var result any
+	if action == "end" {
+		result, err = journal.EndMaintenance(operation)
+	} else {
+		result, err = journal.MaintenanceStatus()
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "stopped launcher cleanup remains unresolved")
 		return 1
 	}
 	if json.NewEncoder(stdout).Encode(result) != nil {
