@@ -25,7 +25,7 @@ type MigrationAdminOptions struct {
 func serveMigrationComparison(ctx context.Context, conn *net.UnixConn, options *MigrationAdminOptions, request appvalues.AdminRequest, body []byte) {
 	result := appvalues.MigrationComparisonResult{Stage: "failed", Reason: "input"}
 	defer func() { _ = privateio.WriteControl(conn, result) }()
-	if options == nil || !uuidPattern.MatchString(options.Operation) || request.Revision != options.Policy || !uuidPattern.MatchString(request.RequestID) || request.Name != "" || request.Principal != "" || request.Variables != nil || request.Empty || request.Replace || len(request.Members) == 0 {
+	if options == nil || !uuidPattern.MatchString(options.Operation) || request.Revision != options.Policy || !uuidPattern.MatchString(request.RequestID) || request.Name != "" || request.Principal != "" || request.Variables != nil || request.Empty || request.Replace || request.Recipient != "" || len(request.Members) == 0 {
 		return
 	}
 	var resource controlpolicy.ApplicationResource

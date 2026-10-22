@@ -43,6 +43,12 @@ func (s *Service) LockOnStart(ctx context.Context) error {
 }
 
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if q.Action == "backup_export" {
+		return s.exportApplication(ctx, q, body)
+	}
+	if q.Recipient != "" {
+		return nil, invalid()
+	}
 	if strings.HasPrefix(q.Action, "maintenance_") {
 		return s.maintenance(q, body)
 	}

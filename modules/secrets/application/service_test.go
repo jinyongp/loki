@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"github.com/google/jsonschema-go/jsonschema"
 	"loki/internal/contract"
 	"loki/internal/control/appvalues"
@@ -315,6 +316,57 @@ func TestRealApplicationValues(t *testing.T) {
 	}
 	if revision("common") != fencedRevision {
 		t.Fatal("fenced application mutation reached the provider")
+	}
+	backupIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupRequest := AdminRequest{Action: "backup_export", Resource: "demo", RequestID: maintenanceID, Revision: fencedRevision, Recipient: backupIdentity.Recipient().String()}
+	exported, err := s.Admin(ctx, backupRequest, nil)
+	if err != nil {
+		t.Fatal("warm application-only encrypted export", err)
+	}
+	exportPath := filepath.Join(root, "exports", strings.ReplaceAll(maintenanceID, "-", ""), strings.ReplaceAll(r.ID, "-", ""), "application.age")
+	ciphertext, err := os.ReadFile(exportPath)
+	if err != nil || bytes.Contains(ciphertext, []byte("operator-public-migration")) || bytes.Contains(ciphertext, []byte("synthetic-private-passphrase")) {
+		t.Fatal("logical application artifact was missing or exposed plaintext", err)
+	}
+	identityPath := filepath.Join(t.TempDir(), "operator-identity")
+	if err := os.WriteFile(identityPath, []byte(backupIdentity.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.PreviewApplicationImport(ctx, r.Profile(), exportPath, identityPath); err != nil {
+		t.Fatal("actual provider could not authenticate application-only export", err)
+	}
+	pendingPath := filepath.Join(filepath.Dir(exportPath), "pending.age")
+	if err := os.Rename(exportPath, pendingPath); err != nil {
+		t.Fatal(err)
+	}
+	replayedExport, err := s.Admin(ctx, backupRequest, nil)
+	originalMetadata, _ := json.Marshal(exported)
+	replayedMetadata, _ := json.Marshal(replayedExport)
+	if err != nil || !bytes.Equal(originalMetadata, replayedMetadata) {
+		t.Fatal("lost encrypted artifact publication acknowledgement changed original proof", err)
+	}
+	republished, err := os.ReadFile(exportPath)
+	if err != nil || !bytes.Equal(ciphertext, republished) {
+		t.Fatal("export replay regenerated original ciphertext", err)
+	}
+	otherIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedBackup := backupRequest
+	changedBackup.Recipient = otherIdentity.Recipient().String()
+	if _, err := s.Admin(ctx, changedBackup, nil); err == nil {
+		t.Fatal("same backup operation changed its original recipient")
+	}
+	ciphertext[len(ciphertext)-1] ^= 1
+	if err := os.WriteFile(exportPath, ciphertext, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Admin(ctx, backupRequest, nil); err == nil {
+		t.Fatal("corrupt published encrypted artifact was accepted or overwritten")
 	}
 	s, err = New(options)
 	if err != nil {

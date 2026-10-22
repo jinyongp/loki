@@ -14,6 +14,7 @@ type AdminRequest struct {
 	Name        string   `json:"name,omitempty"`
 	Empty       bool     `json:"empty,omitempty"`
 	Replace     bool     `json:"replace,omitempty"`
+	Recipient   string   `json:"recipient,omitempty"`
 }
 
 // InputLimit describes only the private byte frame, never a public JSON value.

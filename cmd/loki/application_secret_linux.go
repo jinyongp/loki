@@ -47,11 +47,14 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 		fmt.Fprintln(stderr, "application administration requires the host administrator")
 		return 1
 	}
+	if len(args) > 0 && args[0] == "maintenance" {
+		return runApplicationMaintenance(args[1:], stdout, stderr)
+	}
 	if len(args) < 2 {
-		fmt.Fprintln(stderr, "usage: loki secret app revision|stage|set|env-create|env-remove|bundle-set RESOURCE [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki secret app revision|stage|set|env-create|env-remove|bundle-set|backup-export RESOURCE [OPTIONS]; maintenance begin|end|status [OPTIONS]")
 		return 2
 	}
-	actions := map[string]string{"revision": "revision", "stage": "stage", "set": "set_secret", "env-create": "env_create", "env-remove": "env_remove", "bundle-set": "bundle_set"}
+	actions := map[string]string{"revision": "revision", "stage": "stage", "set": "set_secret", "env-create": "env_create", "env-remove": "env_remove", "bundle-set": "bundle_set", "backup-export": "backup_export"}
 	action, ok := actions[args[0]]
 	if !ok {
 		fmt.Fprintln(stderr, "unknown application administration action")
@@ -64,6 +67,7 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 	flags.StringVar(&q.Environment, "env", "", "resource environment; omission selects common")
 	flags.StringVar(&q.Revision, "revision", "", "expected opaque edit revision")
 	flags.StringVar(&q.RequestID, "request-id", "", "original operation UUID")
+	flags.StringVar(&q.Recipient, "recipient", "", "operator X25519 public recipient for a logical app export")
 	flags.StringVar(&q.Principal, "principal", "", "principal allowed to consume this stage")
 	flags.StringVar(&q.Name, "name", "", "resource secret name")
 	flags.BoolVar(&q.Replace, "replace", false, "explicitly replace an existing secret layer")
@@ -132,6 +136,34 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 		return 1
 	}
 	if json.NewEncoder(stdout).Encode(metadata) != nil {
+		return 1
+	}
+	return 0
+}
+
+func runApplicationMaintenance(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "status" && args[0] != "begin" && args[0] != "end" {
+		return 2
+	}
+	flags := flag.NewFlagSet("secret app maintenance", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	layoutPath := flags.String("layout", "/etc/loki-go/secrets-admin.json", "installed private administrator layout")
+	operation := flags.String("operation-id", "", "original canonical host operation UUID")
+	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || args[0] == "status" && *operation != "" || args[0] != "status" && !controlpolicy.ApplicationUUID.MatchString(*operation) {
+		return 2
+	}
+	var layout applicationClientLayout
+	if daemon.ReadJSON(*layoutPath, &layout) != nil || layout.UID == 0 {
+		fmt.Fprintln(stderr, "installed application administration layout is unavailable")
+		return 1
+	}
+	result, err := (admin.ApplicationClient{Socket: layout.Socket, ExpectedUID: layout.UID}).Call(context.Background(), appvalues.AdminRequest{Action: "maintenance_" + args[0], RequestID: *operation}, nil)
+	if err != nil {
+		fmt.Fprintln(stderr, "loki:", fault.Public(err))
+		return 1
+	}
+	var metadata map[string]any
+	if json.Unmarshal(result, &metadata) != nil || metadata == nil || json.NewEncoder(stdout).Encode(metadata) != nil {
 		return 1
 	}
 	return 0
