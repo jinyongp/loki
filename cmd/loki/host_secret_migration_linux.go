@@ -50,11 +50,11 @@ func readSecretMigrationDocument(path string, target any) error {
 
 func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: loki host secret-migration prepare|apply|status|recover --manager-root ROOT [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host secret-migration prepare|apply|status|recover|rollback --manager-root ROOT [OPTIONS]")
 		return 2
 	}
 	action := args[0]
-	if action != "prepare" && action != "apply" && action != "status" && action != "recover" {
+	if action != "prepare" && action != "apply" && action != "status" && action != "recover" && action != "rollback" {
 		return 2
 	}
 	flags := flag.NewFlagSet("host secret-migration "+action, flag.ContinueOnError)
@@ -76,14 +76,14 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 		if *mapping == "" || *recipient == "" || *backup == "" || *planPath != "" || *approve || *protection != "" || *privateInput {
 			return 2
 		}
-	} else if *mapping != "" || *recipient != "" || *backup != "" || *interrupt || action != "apply" && (*planPath != "" || *approve) {
+	} else if *mapping != "" || *recipient != "" || *backup != "" || *interrupt || action != "apply" && *planPath != "" || action != "apply" && action != "rollback" && *approve {
 		return 2
 	}
 	if action == "apply" && (*planPath == "" || !*approve) {
 		fmt.Fprintln(stderr, "apply requires the exact --plan and --approve")
 		return 2
 	}
-	if action == "status" && (*protection != "" || *privateInput) || *protection != "" && *protection != "init" && *protection != "unlock" || (*protection != "") != *privateInput {
+	if (action == "status" || action == "rollback") && (*protection != "" || *privateInput) || action == "rollback" && !*approve || *protection != "" && *protection != "init" && *protection != "unlock" || (*protection != "") != *privateInput {
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -104,6 +104,17 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if action == "rollback" {
+		status, err := backend.RollbackSecretMigration(ctx)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if json.NewEncoder(stdout).Encode(status) != nil {
+			return 1
+		}
+		return 0
 	}
 	if action == "prepare" {
 		var input struct {

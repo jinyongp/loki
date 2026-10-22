@@ -417,7 +417,15 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 			return err
 		}
 	}
-	bootstrap, err := t.Bootstrap(uint32(os.Geteuid()), layoutDirectory, authDirectory, r.ID)
+	maintenance, err := b.migrationMaintenance(ctx)
+	if err != nil {
+		return err
+	}
+	gate := []string{}
+	if maintenance != nil {
+		gate = append(gate, maintenance.OperationID)
+	}
+	bootstrap, err := t.Bootstrap(uint32(os.Geteuid()), layoutDirectory, authDirectory, r.ID, gate...)
 	if err != nil {
 		return err
 	}

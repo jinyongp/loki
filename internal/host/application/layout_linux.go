@@ -33,6 +33,7 @@ type PrepareOptions struct {
 	Principal                                                      string
 	JobDeploymentID                                                string
 	MigrationOperation                                             string
+	InitialMaintenanceOperation                                    string
 	Configuration                                                  config.Config
 	Contract                                                       execution.Contract
 	Resources                                                      []controlpolicy.ApplicationResource
@@ -117,6 +118,9 @@ func ValidateMetadata(options PrepareOptions) error {
 }
 
 func brokerMetadata(options PrepareOptions) (appvalues.BrokerLayout, error) {
+	if options.InitialMaintenanceOperation != "" && !controlpolicy.ApplicationUUID.MatchString(options.InitialMaintenanceOperation) {
+		return appvalues.BrokerLayout{}, invalid
+	}
 	if options.MigrationOperation != "" && !controlpolicy.ApplicationUUID.MatchString(options.MigrationOperation) {
 		return appvalues.BrokerLayout{}, invalid
 	}
@@ -146,6 +150,7 @@ func brokerMetadata(options PrepareOptions) (appvalues.BrokerLayout, error) {
 	layout := appvalues.BrokerLayout{UID: options.UID, LauncherUID: 0, Binary: options.Binary, Root: filepath.Join(options.ServiceStateRoot, "dvt"), ApplicationRoot: filepath.Join(options.ServiceStateRoot, "metadata"), Socket: filepath.Join(options.RuntimeRoot, "jobs", "control.sock"), MetadataSocket: filepath.Join(options.RuntimeRoot, "metadata", "control.sock"), AdminSocket: filepath.Join(options.RuntimeRoot, "admin", "control.sock"), RuntimeRoot: filepath.Join(options.RuntimeRoot, "private"), Inbox: filepath.Join(options.RuntimeRoot, "inbox"), AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, Principal: options.Principal, Resources: resources, BaseEnvironment: base, PolicySHA256: policy.Digest()}
 	layout.JobDeploymentID = options.JobDeploymentID
 	layout.MigrationOperation = options.MigrationOperation
+	layout.InitialMaintenanceOperation = options.InitialMaintenanceOperation
 	for _, path := range []string{layout.Socket, layout.MetadataSocket, layout.AdminSocket} {
 		if len(path) >= 108 {
 			return appvalues.BrokerLayout{}, invalid

@@ -2,6 +2,7 @@ package management
 
 import (
 	"fmt"
+	controlpolicy "loki/internal/control/policy"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,8 +17,11 @@ type FullBootstrap struct {
 	Script string      `json:"script"`
 }
 
-func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, deployment string) (FullBootstrap, error) {
+func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, deployment string, maintenance ...string) (FullBootstrap, error) {
 	result := FullBootstrap{Mounts: []FullMount{}}
+	if len(maintenance) > 1 || len(maintenance) == 1 && !controlpolicy.ApplicationUUID.MatchString(maintenance[0]) {
+		return result, fmt.Errorf("invalid original application maintenance operation")
+	}
 	if len(t.Services) == 0 {
 		return result, nil
 	}
@@ -165,6 +169,9 @@ func (t FullTopology) Bootstrap(hostUID uint32, layoutDirectory, authDirectory, 
 		// by the same deployment metadata owner as native systemd.
 		fmt.Fprintf(&script, "test ! -L /run/loki/secrets\nif test \"$(stat -c %%u /run/loki/secrets)\" != 0; then test \"$(stat -c %%u /run/loki/secrets)\" = %d; test -z \"$(ls -A /run/loki/secrets)\"; fi\ninstall -d -o 0 -g 0 -m 0755 /run/loki/secrets\n", hostUID)
 		args := []string{"/opt/loki/bin/loki", "host", "prepare-secrets", "--uid", "10006", "--gid", "10006", "--agent-uid", "10000", "--metadata-gid", "10001", "--identity", "/var/lib/loki/secrets/deployment.json", "--state", "/var/lib/loki/secrets", "--service-state", "/var/lib/loki/secrets", "--runtime", "/run/loki/secrets", "--devtools", program, "--config", "/loki-layout/loki.toml", "--github-config", "/loki-layout/github.toml", "--execution-contract", contract, "--catalog", "/loki-layout/application-resources.json", "--unit-directory=", "--overlay-directory=", "--job-deployment", deployment}
+		if len(maintenance) == 1 {
+			args = append(args, "--maintenance-operation", maintenance[0])
+		}
 		for i, arg := range args {
 			if i > 0 {
 				script.WriteByte(' ')

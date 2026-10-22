@@ -47,6 +47,8 @@ func TestHostMigrationRequiresExactPlanApprovalAndPrivateProtectionInput(t *test
 		{"recover", "--manager-root", root, "--stdin"},
 		{"recover", "--manager-root", root, "--protection", "automatic", "--stdin"},
 		{"status", "--manager-root", root, "--protection", "init", "--stdin"},
+		{"rollback", "--manager-root", root},
+		{"rollback", "--manager-root", root, "--approve", "--stdin"},
 	} {
 		var output, diagnostic bytes.Buffer
 		if code := runHostSecretMigration(args, &output, &diagnostic); code != 2 || output.Len() != 0 {

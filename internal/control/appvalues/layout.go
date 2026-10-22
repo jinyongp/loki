@@ -13,19 +13,20 @@ type BrokerLayout struct {
 	DeploymentID string `json:"deployment_id"`
 	// JobDeploymentID binds the current OCI reservation. DeploymentID above
 	// is the stable app-root lifetime used by mutation attribution/replay.
-	JobDeploymentID    string                              `json:"job_deployment_id,omitempty"`
-	PolicySHA256       string                              `json:"policy_sha256"`
-	RunnerID           string                              `json:"runner_id"`
-	InstanceID         string                              `json:"instance_id,omitempty"`
-	Resources          []controlpolicy.ApplicationResource `json:"resources"`
-	BaseEnvironment    map[string]string                   `json:"base_environment"`
-	MetadataSocket     string                              `json:"metadata_socket,omitempty"`
-	MetadataGID        uint32                              `json:"metadata_gid,omitempty"`
-	AgentUID           uint32                              `json:"agent_uid,omitempty"`
-	Principal          string                              `json:"principal,omitempty"`
-	AdminSocket        string                              `json:"admin_socket,omitempty"`
-	ApplicationRoot    string                              `json:"application_root,omitempty"`
-	Inbox              string                              `json:"inbox,omitempty"`
-	RuntimeRoot        string                              `json:"runtime_root,omitempty"`
-	MigrationOperation string                              `json:"migration_operation,omitempty"`
+	JobDeploymentID             string                              `json:"job_deployment_id,omitempty"`
+	PolicySHA256                string                              `json:"policy_sha256"`
+	RunnerID                    string                              `json:"runner_id"`
+	InstanceID                  string                              `json:"instance_id,omitempty"`
+	Resources                   []controlpolicy.ApplicationResource `json:"resources"`
+	BaseEnvironment             map[string]string                   `json:"base_environment"`
+	MetadataSocket              string                              `json:"metadata_socket,omitempty"`
+	MetadataGID                 uint32                              `json:"metadata_gid,omitempty"`
+	AgentUID                    uint32                              `json:"agent_uid,omitempty"`
+	Principal                   string                              `json:"principal,omitempty"`
+	AdminSocket                 string                              `json:"admin_socket,omitempty"`
+	ApplicationRoot             string                              `json:"application_root,omitempty"`
+	Inbox                       string                              `json:"inbox,omitempty"`
+	RuntimeRoot                 string                              `json:"runtime_root,omitempty"`
+	MigrationOperation          string                              `json:"migration_operation,omitempty"`
+	InitialMaintenanceOperation string                              `json:"initial_maintenance_operation,omitempty"`
 }

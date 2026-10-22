@@ -107,7 +107,7 @@ func runFullProbe(args []string, stderr io.Writer) int {
 			_, err = hex.DecodeString(result.Revision)
 			return err
 		case "module":
-			if *module != "git" && *module != "workspace" && *module != "sharing" {
+			if *module != "git" && *module != "workspace" && *module != "sharing" && *module != "secrets" {
 				return errors.New("unsupported native module readiness probe")
 			}
 			var layout mcpLayout

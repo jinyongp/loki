@@ -43,6 +43,9 @@ func run(args []string) int {
 	if config.MigrationOperation != "" && (!fullRoles || !controlpolicy.ApplicationUUID.MatchString(config.MigrationOperation)) {
 		return 2
 	}
+	if config.InitialMaintenanceOperation != "" && (!fullRoles || !controlpolicy.ApplicationUUID.MatchString(config.InitialMaintenanceOperation)) {
+		return 2
+	}
 	if fullRoles && (config.MetadataSocket == "" || config.AdminSocket == "" || config.ApplicationRoot == "" || config.Inbox == "" || config.RuntimeRoot == "" || config.AgentUID == 0 || config.AgentUID == config.UID || config.Principal == "") {
 		return 2
 	}
@@ -101,6 +104,11 @@ func run(args []string) int {
 		}
 		if values.LockOnStart(ctx) != nil {
 			return 2
+		}
+		if config.InitialMaintenanceOperation != "" {
+			if _, err := values.Admin(ctx, application.AdminRequest{Action: "maintenance_begin", RequestID: config.InitialMaintenanceOperation}, nil); err != nil {
+				return 2
+			}
 		}
 		results := make(chan error, 3)
 		var serving atomic.Bool

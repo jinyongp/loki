@@ -140,10 +140,11 @@ type MigrationComparisonCheckpoint struct {
 }
 
 type SecretMigrationOperation struct {
-	Intent      SecretMigrationIntent           `json:"intent"`
-	Archive     *MigrationArchiveCheckpoint     `json:"archive,omitempty"`
-	Writes      []MigrationWriteCheckpoint      `json:"writes"`
-	Comparisons []MigrationComparisonCheckpoint `json:"comparisons"`
+	Intent            SecretMigrationIntent           `json:"intent"`
+	Archive           *MigrationArchiveCheckpoint     `json:"archive,omitempty"`
+	Writes            []MigrationWriteCheckpoint      `json:"writes"`
+	Comparisons       []MigrationComparisonCheckpoint `json:"comparisons"`
+	RollbackRequested bool                            `json:"rollback_requested,omitempty"`
 }
 
 func MigrationOperationUUID(id string) string {
@@ -183,6 +184,9 @@ func (r OperationRecord) validSecretMigration() bool {
 		return false
 	}
 	rank := migrationPhase(r.Phase)
+	if p.RollbackRequested && (r.State == OperationSucceeded || r.State == OperationApplying && rank >= migrationPhase(PhaseRestart)) {
+		return false
+	}
 	if rank < 0 || rank >= migrationPhase(PhaseMigrate) && r.State != OperationRolledBack && (p.Archive == nil || !p.Archive.Published) {
 		return false
 	}
@@ -368,6 +372,9 @@ func (j *OperationJournal) updateSecretMigration(id string, now time.Time, chang
 // code supplies the actual source fence, archive, selector and health evidence.
 func (j *OperationJournal) AdvanceSecretMigration(id string, phase OperationPhase, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State == OperationApplying && phase == r.Phase {
 			return nil
 		}
@@ -384,6 +391,9 @@ func (j *OperationJournal) AdvanceSecretMigration(id string, phase OperationPhas
 
 func (j *OperationJournal) CheckpointMigrationArchive(id, cipher string, size int64, published bool, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State != OperationApplying || r.Phase != PhaseSnapshot || !migrationHex(cipher, 32) || size <= 0 || size > 129<<20 {
 			return errSecretMigration
 		}
@@ -404,6 +414,9 @@ func (j *OperationJournal) CheckpointMigrationArchive(id, cipher string, size in
 // the first provider write. Retry it unchanged instead of rebasing to live state.
 func (j *OperationJournal) CheckpointMigrationWrite(id string, write MigrationWriteCheckpoint, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State != OperationApplying || r.Phase != PhaseMigrate || write.Complete {
 			return errSecretMigration
 		}
@@ -423,6 +436,9 @@ func (j *OperationJournal) CheckpointMigrationWrite(id string, write MigrationWr
 
 func (j *OperationJournal) CompleteMigrationWrite(id, request string, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State != OperationApplying || r.Phase != PhaseMigrate {
 			return errSecretMigration
 		}
@@ -438,6 +454,9 @@ func (j *OperationJournal) CompleteMigrationWrite(id, request string, now time.T
 
 func (j *OperationJournal) CheckpointMigrationComparison(id string, binding appvalues.MigrationComparisonBinding, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State != OperationApplying || r.Phase != PhaseMigrate || !r.SecretMigration.writesComplete() {
 			return errSecretMigration
 		}
@@ -456,6 +475,9 @@ func (j *OperationJournal) CheckpointMigrationComparison(id string, binding appv
 
 func (j *OperationJournal) CompleteMigrationComparison(id, attempt string, count int, now time.Time) (OperationRecord, error) {
 	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.SecretMigration.RollbackRequested {
+			return errSecretMigration
+		}
 		if r.State != OperationApplying || r.Phase != PhaseMigrate {
 			return errSecretMigration
 		}
@@ -466,6 +488,21 @@ func (j *OperationJournal) CompleteMigrationComparison(id, attempt string, count
 			}
 		}
 		return errSecretMigration
+	})
+}
+
+// RequestSecretMigrationRollback durably fixes the direction before any
+// recovery effects. It cannot undo selection, or create another operation.
+func (j *OperationJournal) RequestSecretMigrationRollback(id string, now time.Time) (OperationRecord, error) {
+	return j.updateSecretMigration(id, now, func(r *OperationRecord) error {
+		if r.State == OperationRolledBack {
+			return nil
+		}
+		if r.State != OperationApplying || migrationPhase(r.Phase) >= migrationPhase(PhaseRestart) {
+			return errSecretMigration
+		}
+		r.SecretMigration.RollbackRequested = true
+		return nil
 	})
 }
 
@@ -486,7 +523,7 @@ func (j *OperationJournal) CompleteSecretMigration(id string, restored bool, now
 				return errSecretMigration
 			}
 			r.OriginalError = "candidate was not selected; original source and service verified"
-		} else if r.Phase != PhaseHealth {
+		} else if r.Phase != PhaseHealth || r.SecretMigration.RollbackRequested {
 			return errSecretMigration
 		}
 		r.State, r.Phase = want, PhaseComplete

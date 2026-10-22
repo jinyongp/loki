@@ -126,6 +126,11 @@ func TestApplicationFullTopologyHasOneIsolatedValueOwner(t *testing.T) {
 	if !coreMounted {
 		t.Fatal("metadata helper cannot read its referenced immutable provider/contract")
 	}
+	operation := "123e4567-e89b-42d3-a456-426614174481"
+	fenced, err := topology.Bootstrap(uint32(os.Geteuid()), layoutDir, authDir, reservation.ID, operation)
+	if err != nil || !strings.Contains(fenced.Script, "'--maintenance-operation' '"+operation+"'") {
+		t.Fatal("replacement app service can start before the original write gate", err)
+	}
 	state.Config.Tools[0].Enabled = false
 	if err := store.Save(state); err != nil {
 		t.Fatal(err)

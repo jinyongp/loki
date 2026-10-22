@@ -23,7 +23,7 @@ func (b *DockerFullBackend) candidateProtection(ctx context.Context, r Deploymen
 	if err != nil {
 		return nil, err
 	}
-	if !candidatePreparationPhase(operation) && !(action == "status" && operation.State == lifecycle.OperationApplying && operation.Phase == lifecycle.PhaseSwitch) {
+	if operation.SecretMigration.RollbackRequested || !candidatePreparationPhase(operation) && !(action == "status" && operation.State == lifecycle.OperationApplying && operation.Phase == lifecycle.PhaseSwitch) {
 		return nil, fmt.Errorf("selected or terminal migrations cannot reopen candidate protection")
 	}
 	record, err := b.record(r)

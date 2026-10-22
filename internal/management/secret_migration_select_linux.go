@@ -24,7 +24,7 @@ func (b *DockerFullBackend) CommitSecretMigrationCandidate(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if operation.State != lifecycle.OperationApplying || operation.Phase != lifecycle.PhaseSwitch && operation.Phase != lifecycle.PhaseRestart {
+	if operation.SecretMigration.RollbackRequested || operation.State != lifecycle.OperationApplying || operation.Phase != lifecycle.PhaseSwitch && operation.Phase != lifecycle.PhaseRestart {
 		return fmt.Errorf("candidate selection requires the original verified switch checkpoint")
 	}
 	if err := verifyPublishedMigrationArchive(operation); err != nil {

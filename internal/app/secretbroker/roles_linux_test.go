@@ -112,6 +112,8 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	layout := map[string]any{"uid": 1000, "launcher_uid": 0, "binary": provider, "root": data, "socket": jobs, "deployment_id": "1bbf75ed-1b51-46bd-8255-31536e945564", "policy_sha256": strings.Repeat("a", 64), "runner_id": "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", "instance_id": "a203906e-1c9c-4cc5-acb7-a68d118c54da", "resources": []controlpolicy.ApplicationResource{resource}, "metadata_socket": metaSocket, "metadata_gid": 10000, "agent_uid": 10000, "principal": "agent", "admin_socket": adminSocket, "application_root": metadata, "inbox": inbox}
 	layout["runtime_root"] = runtimeRoot
 	layout["resources"] = []controlpolicy.ApplicationResource{resource, migratedResource}
+	initialGate := "123e4567-e89b-42d3-a456-426614174489"
+	layout["initial_maintenance_operation"] = initialGate
 	encoded, _ := json.Marshal(layout)
 	layoutPath := filepath.Join(root, "layout.json")
 	if os.WriteFile(layoutPath, encoded, 0644) != nil || os.Chmod(layoutPath, 0644) != nil {
@@ -223,6 +225,16 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal("private manual initialization failed", err)
 	}
 	t.Cleanup(func() { providerCall("", "vault", "lock") })
+	gate, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_status"}, nil)
+	if err != nil || !bytes.Contains(gate, []byte(initialGate)) || !bytes.Contains(gate, []byte(`"active":true`)) {
+		t.Fatal("broker opened role sockets without its original initial write gate", err)
+	}
+	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("TOKEN=synthetic-fenced-value\n")); err == nil {
+		t.Fatal("initial maintenance admitted a write after explicit protection init")
+	}
+	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_end", RequestID: initialGate}, nil); err != nil {
+		t.Fatal("original initial maintenance gate could not be released", err)
+	}
 	stageRaw, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("TOKEN=synthetic-private-restart-canary\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -422,6 +434,7 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	expired := pending()
 	stopBroker(false)
 	layout["migration_operation"] = migrationOperation
+	delete(layout, "initial_maintenance_operation")
 	encoded, _ = json.Marshal(layout)
 	if err := os.WriteFile(layoutPath, encoded, 0644); err != nil {
 		t.Fatal(err)

@@ -115,6 +115,14 @@ func (b *DockerFullBackend) probeService(ctx context.Context, record fullDockerR
 		role = "signing"
 		args = []string{"--socket", "/run/loki/signing/agent.sock", "--expected-uid", "0"}
 	case "mcp":
+		if slices.Contains(record.Reservation.Services, "secrets") {
+			// Verify the metadata peer from the actual agent namespace too.
+			// Probing it inside the broker alone cannot detect a missing or
+			// inaccessible role mount in the serving MCP container.
+			if _, err := b.command(ctx, "probing MCP application metadata peer", nil, "container", "exec", "--user", user, spec.Name, record.Worker, "full-probe", "--role", "module", "--module", "secrets"); err != nil {
+				return err
+			}
+		}
 		args = []string{"--address", "http://127.0.0.1:18765/mcp", "--token-file", "/etc/loki/auth/token"}
 		if module == "git" || module == "workspace" || module == "sharing" {
 			role = "module"

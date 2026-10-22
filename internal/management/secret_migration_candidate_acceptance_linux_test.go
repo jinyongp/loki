@@ -20,17 +20,20 @@ import (
 	legacyfixture "loki/internal/state"
 )
 
-// This exercises actual candidate/source/selector effects. Required service
-// restart, health and whole paired recovery have separate acceptance gates.
+// This exercises actual candidate/source/selector effects and the application
+// serving stack. Protected Jobs and whole paired recovery have separate gates.
 func TestRealManagedFullMigrationCandidate(t *testing.T) {
 	for _, selectCandidate := range []bool{false, true} {
 		t.Run(map[bool]string{false: "retain_original", true: "select_candidate"}[selectCandidate], func(t *testing.T) {
-			runRealManagedFullMigrationCandidate(t, selectCandidate)
+			runRealManagedFullMigrationCandidate(t, selectCandidate, false)
 		})
 	}
+	t.Run("rollback_driver", func(t *testing.T) {
+		runRealManagedFullMigrationCandidate(t, false, true)
+	})
 }
 
-func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
+func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate, rollbackDriver bool) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
 	if image == "" {
 		if os.Getenv("LOKI_REQUIRE_NATIVE_SECRET_COMPOSE") == "1" {
@@ -240,7 +243,7 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 	if err != nil || !reflect.DeepEqual(preparedPlan, intent.Plan) {
 		t.Fatal("isolated full source preflight differs from complete original mapping", err)
 	}
-	if selectCandidate {
+	if selectCandidate || rollbackDriver {
 		captureOwnedResources := func() {
 			transaction, err := store.readTransaction()
 			if err == nil && transaction != nil && transaction.SecretMigration != nil {
@@ -260,9 +263,18 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 		if err != nil || pending.Phase != lifecycle.PhaseMigrate || pending.Protection != "uninitialized" || pending.Released {
 			t.Fatal("original migration did not wait for explicit protection initialization", pending, err)
 		}
-		complete, err := b.ApplySecretMigration(ctx, nil, "init", []byte("synthetic-full-candidate-passphrase"))
+		var complete SecretMigrationStatus
+		if rollbackDriver {
+			complete, err = b.RollbackSecretMigration(ctx)
+		} else {
+			complete, err = b.ApplySecretMigration(ctx, nil, "init", []byte("synthetic-full-candidate-passphrase"))
+		}
 		captureOwnedResources()
-		if err != nil || !complete.Released || complete.State != lifecycle.OperationSucceeded || complete.Operation != pending.Operation || serving == nil {
+		wantState := lifecycle.OperationSucceeded
+		if rollbackDriver {
+			wantState = lifecycle.OperationRolledBack
+		}
+		if err != nil || !complete.Released || complete.State != wantState || complete.Operation != pending.Operation || serving == nil {
 			t.Fatal("original full migration driver did not complete serving recovery", complete, err)
 		}
 		if replay, err := b.ApplySecretMigration(ctx, &intent, "", nil); err != nil || replay != complete {
@@ -271,6 +283,9 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 		actual, err := b.inspectApplicationIdentity(ctx, false)
 		want := before
 		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, intent.CandidateGeneration, intent.Policy
+		if rollbackDriver {
+			want.ActiveGeneration, want.PolicySHA256 = before.ActiveGeneration, intent.ExpectedPolicy
+		}
 		if err != nil || actual != want {
 			t.Fatal("serving driver did not preserve original generation/policy selection", err)
 		}
@@ -374,32 +389,6 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate bool) {
 			original, err := b.command(scoped, "verifying fixture retained its original selector", nil, inspect...)
 			if err != nil || string(original) != string(beforeBytes) {
 				return fmt.Errorf("candidate unexpectedly changed selection")
-			}
-			if selectCandidate {
-				for attempt := 0; attempt < 2; attempt++ {
-					if err := b.CommitSecretMigrationCandidate(scoped, candidate); err != nil {
-						return err
-					}
-				}
-				selected, found, err := j.Active()
-				if err != nil || !found || selected.Phase != lifecycle.PhaseRestart || selected.State != lifecycle.OperationApplying {
-					t.Fatal("selection bypassed restart/health checkpoints", err)
-				}
-				if err := b.FinishSecretMigrationSource(scoped, candidate); err == nil {
-					t.Fatal("source writers reopened before actual restart/health")
-				}
-				restarted, err := b.RestartSecretMigration(scoped)
-				serving = restarted.Deployment
-				if err != nil || serving == nil || !restarted.Observation.Ready {
-					return fmt.Errorf("selected serving restart/health: %w", err)
-				}
-				if err := b.FinalizeSecretMigration(scoped, candidate, *serving); err != nil {
-					return err
-				}
-				if _, found, err := j.Active(); err != nil || found {
-					t.Fatal("completed serving stack retained an unacknowledged host release", err)
-				}
-				return nil
 			}
 			if _, err := j.CompleteSecretMigration(operation.ID, true, time.Now()); err != nil {
 				return err

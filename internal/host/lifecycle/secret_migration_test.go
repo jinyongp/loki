@@ -139,6 +139,9 @@ func TestSecretMigrationOriginalCheckpointsAndTerminalFence(t *testing.T) {
 			t.Fatal(phase, err)
 		}
 	}
+	if _, err := j.RequestSecretMigrationRollback(first.ID, now); err == nil {
+		t.Fatal("accepted rollback intent after selection")
+	}
 	if _, err := j.CompleteSecretMigration(first.ID, true, now); err == nil {
 		t.Fatal("silently rolled a selected generation back to its old authority")
 	}
@@ -204,6 +207,23 @@ func TestSecretMigrationAdmissionPublicationLossAndRollback(t *testing.T) {
 	}
 	if _, err := j.CompleteSecretMigration(r.ID, false, now); err == nil {
 		t.Fatal("completed without target selection/health")
+	}
+	if _, err := j.RequestSecretMigrationRollback(r.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	j, err = OpenOperationJournal(root, lock, OperationJournalOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollback, found, err := j.Active()
+	if err != nil || !found || !rollback.SecretMigration.RollbackRequested || rollback.ID != r.ID {
+		t.Fatal("rollback direction did not survive reopen", err)
+	}
+	if _, err := j.AdvanceSecretMigration(r.ID, PhaseSnapshot, now); err == nil {
+		t.Fatal("resumed forward effects after durable rollback choice")
+	}
+	if _, err := j.RequestSecretMigrationRollback(r.ID, now); err != nil {
+		t.Fatal("lost rollback-choice acknowledgement was not retryable", err)
 	}
 	if _, err := j.CompleteSecretMigration(r.ID, true, now); err != nil {
 		t.Fatal(err)

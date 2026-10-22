@@ -102,6 +102,9 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 			return fmt.Errorf("source release differs from the original terminal result")
 		}
 	} else {
+		if operation.SecretMigration.RollbackRequested {
+			return fmt.Errorf("original migration is committed to rollback recovery")
+		}
 		if operation.State != lifecycle.OperationApplying || !backup && operation.Phase != lifecycle.PhaseMigrate {
 			return fmt.Errorf("source transfer requires the original migration phase")
 		}
@@ -147,12 +150,38 @@ func (b *DockerFullBackend) runSecretMigrationSource(ctx context.Context, candid
 	if intent.SourceRoot != "/var/lib/loki/runtime" {
 		return fmt.Errorf("source root differs from the installed legacy runtime volume")
 	}
-	record, err := b.record(candidate)
-	if err != nil {
-		return err
-	}
-	if record.MigrationCandidate == nil || record.Preparing {
-		return fmt.Errorf("original private candidate is unavailable")
+	var record fullDockerRecord
+	if finish {
+		// A failed preparation may leave no candidate service record. Terminal
+		// source disposition needs only the original immutable core payload,
+		// never the candidate's projection or target generation.
+		resources, err := b.Store.FullResources()
+		if err != nil {
+			return err
+		}
+		record.Worker, err = resources.ServiceProgram("runtime-core", "loki")
+		if err != nil {
+			return err
+		}
+		image, err := resources.Image("runtime-core", "service")
+		if err != nil {
+			return err
+		}
+		spec := fullContainerSpec{Image: image}
+		for _, program := range resources.Plan.Programs {
+			if program.Module == "runtime-core" {
+				spec.Mounts = append(spec.Mounts, fullModuleMount(program))
+			}
+		}
+		record.Specs = []fullContainerSpec{spec}
+	} else {
+		record, err = b.record(candidate)
+		if err != nil {
+			return err
+		}
+		if record.MigrationCandidate == nil || record.Preparing {
+			return fmt.Errorf("original private candidate is unavailable")
+		}
 	}
 	sourceVolume, err := b.verifiedSecretSourceVolume(ctx)
 	if err != nil {

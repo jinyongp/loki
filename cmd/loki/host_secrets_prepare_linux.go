@@ -164,6 +164,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
+	options.InitialMaintenanceOperation = *maintenance
 	if *commitCandidate {
 		policy, err := hostpolicy.CompileApplications(c, contract, resources)
 		if err != nil || policy.Digest() != *candidatePolicy {

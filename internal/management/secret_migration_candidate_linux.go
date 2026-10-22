@@ -322,7 +322,7 @@ func (b *DockerFullBackend) ReserveSecretMigrationCandidate(ctx context.Context)
 }
 
 func candidatePreparationPhase(record lifecycle.OperationRecord) bool {
-	return record.State == lifecycle.OperationApplying && (record.Phase == lifecycle.PhaseAdmitted || record.Phase == lifecycle.PhaseSnapshot || record.Phase == lifecycle.PhaseMigrate)
+	return record.SecretMigration != nil && !record.SecretMigration.RollbackRequested && record.State == lifecycle.OperationApplying && (record.Phase == lifecycle.PhaseAdmitted || record.Phase == lifecycle.PhaseSnapshot || record.Phase == lifecycle.PhaseMigrate)
 }
 
 func (b *DockerFullBackend) validMigrationCandidate(record fullDockerRecord) bool {

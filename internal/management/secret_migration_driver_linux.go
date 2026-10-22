@@ -31,10 +31,11 @@ type SecretMigrationStatus struct {
 	Revision   uint64                   `json:"source_revision"`
 	Protection string                   `json:"protection,omitempty"`
 	Released   bool                     `json:"released"`
+	Rollback   bool                     `json:"rollback_requested"`
 }
 
 func migrationStatus(record lifecycle.OperationRecord) SecretMigrationStatus {
-	return SecretMigrationStatus{Operation: lifecycle.MigrationOperationUUID(record.ID), State: record.State, Phase: record.Phase, Generation: record.SecretMigration.Intent.CandidateGeneration, Policy: record.SecretMigration.Intent.Policy, Revision: record.SecretMigration.Intent.Plan.Revision, Released: record.Maintenance.Released}
+	return SecretMigrationStatus{Operation: lifecycle.MigrationOperationUUID(record.ID), State: record.State, Phase: record.Phase, Generation: record.SecretMigration.Intent.CandidateGeneration, Policy: record.SecretMigration.Intent.Policy, Revision: record.SecretMigration.Intent.Plan.Revision, Released: record.Maintenance.Released, Rollback: record.SecretMigration.RollbackRequested}
 }
 
 func (s Store) SecretMigrationStatus(ctx context.Context) (SecretMigrationStatus, error) {
@@ -188,7 +189,7 @@ func (b *DockerFullBackend) ApplySecretMigration(ctx context.Context, intent *li
 				}
 				status = migrationStatus(current)
 				if current.State.Terminal() {
-					if current.State != lifecycle.OperationSucceeded {
+					if current.State != lifecycle.OperationSucceeded && current.State != lifecycle.OperationRolledBack {
 						return fmt.Errorf("rolled-back migration requires its original restored serving identity")
 					}
 					digest := sha256.Sum256([]byte("loki-secret-migration-serving\x00" + current.PlanID))
@@ -207,6 +208,12 @@ func (b *DockerFullBackend) ApplySecretMigration(ctx context.Context, intent *li
 					}
 					return fmt.Errorf("original serving reservation is unavailable")
 				}
+				if current.SecretMigration.RollbackRequested {
+					if err := b.restartOriginalSecretMigration(scoped, current, candidate); err != nil {
+						return err
+					}
+					continue
+				}
 				switch current.Phase {
 				case lifecycle.PhaseAdmitted, lifecycle.PhaseSnapshot:
 					reservations, err := b.Store.Deployments()
@@ -217,25 +224,7 @@ func (b *DockerFullBackend) ApplySecretMigration(ctx context.Context, intent *li
 						if previous.ID == candidate.ID || b.ConfirmAbsent(scoped, previous) == nil {
 							continue
 						}
-						ids, err := b.containerIDs(scoped, previous)
-						if err != nil {
-							return err
-						}
-						for _, id := range ids {
-							container, err := b.inspectContainer(scoped, id)
-							if err != nil {
-								return err
-							}
-							if err := b.requireParent(previous, container); err != nil {
-								return err
-							}
-							if container.State.Running && container.Config.Labels[fullServiceLabel] == "secrets" {
-								if err := b.FenceSecretMigrationApplication(scoped, previous, true); err != nil {
-									return err
-								}
-							}
-						}
-						if err := b.Stop(scoped, previous); err != nil {
+						if err := b.fenceAndStopSecretMigrationPredecessor(scoped, previous); err != nil {
 							return err
 						}
 					}
