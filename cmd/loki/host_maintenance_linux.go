@@ -39,7 +39,23 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	offline := flags.Bool("offline", false, "acknowledge completed cleanup while holding the stopped launcher's journal lock")
 	launcherLayout := flags.String("launcher-layout", "", "frozen launcher layout for offline end/status only")
 	stateMount := flags.String("state-mount", "", "fixed isolated helper mount: /var/lib/loki/launcher")
-	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
+	restoreStage := flags.String("restore-stage", "", "private offline launcher restore stage; preserve-history only")
+	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" && action != "preserve-history" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
+		return 2
+	}
+	if action == "preserve-history" {
+		if !*offline || *launcherLayout == "" || *restoreStage == "" || !filepath.IsAbs(*restoreStage) || filepath.Clean(*restoreStage) != *restoreStage || *restoreStage == "/" || *interrupt {
+			return 2
+		}
+		if *stateMount != "" && *stateMount != "/var/lib/loki/launcher" {
+			return 2
+		}
+		if _, err := jobs.JobIDForRequestID(*operation); err != nil {
+			return 2
+		}
+		return runOfflinePreserveHostHistory(*operation, *launcherLayout, *stateMount, *restoreStage, stdout, stderr)
+	}
+	if *restoreStage != "" {
 		return 2
 	}
 	if *offline {
@@ -79,6 +95,55 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if json.NewEncoder(stdout).Encode(result) != nil {
+		return 1
+	}
+	return 0
+}
+
+// This bridge merges request history into an unpublished restore stage while the current
+// journal retains the exact original maintenance admission. No history-only
+// command grants permission to replace or reactivate the serving launcher.
+func runOfflinePreserveHostHistory(operation, layoutPath, stateMount, restoreStage string, stdout, stderr io.Writer) int {
+	var layout hostLauncherLayout
+	if daemon.ReadJSON(layoutPath, &layout) != nil || !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory || layout.StateDirectory == "/" {
+		fmt.Fprintln(stderr, "current launcher layout is unavailable")
+		return 1
+	}
+	if stateMount != "" {
+		layout.StateDirectory = stateMount
+	}
+	// Opening a missing current history would silently manufacture a new root
+	// incarnation. Disaster recovery requires new deployment/auth identities.
+	currentRoot := filepath.Join(layout.StateDirectory, "journal")
+	for _, path := range []string{filepath.Join(currentRoot, "requests"), filepath.Join(currentRoot, "maintenance.json")} {
+		if _, err := os.Lstat(path); err != nil {
+			fmt.Fprintln(stderr, "current request history is missing; isolated disaster recovery is required")
+			return 1
+		}
+	}
+	limits := jobs.JournalLimits{MaxRecords: layout.MaxJobs, MaxRecordBytes: jobs.JournalRecordBudget(layout.MaxOutputBytes), MaxOutputBytes: layout.MaxOutputBytes, Retention: time.Duration(layout.ResultRetentionSeconds) * time.Second}
+	current, err := jobs.OpenJournal(currentRoot, limits)
+	if err != nil {
+		fmt.Fprintln(stderr, "current launcher journal is unavailable or still owned")
+		return 1
+	}
+	defer current.Close()
+	maintenance, err := current.MaintenanceStatus()
+	if err != nil || maintenance == nil || !maintenance.Active || maintenance.OperationID != operation {
+		fmt.Fprintln(stderr, "original active restore maintenance admission is required")
+		return 1
+	}
+	stage, err := jobs.OpenJournal(filepath.Join(restoreStage, "journal"), limits)
+	if err != nil {
+		fmt.Fprintln(stderr, "private launcher restore stage is unavailable or still owned")
+		return 1
+	}
+	defer stage.Close()
+	if err := stage.PreserveRequestHistory(current); err != nil {
+		fmt.Fprintln(stderr, "request history conflicts, exceeds its budget, or has unresolved cleanup")
+		return 1
+	}
+	if json.NewEncoder(stdout).Encode(map[string]any{"operation_id": operation, "preserved": true}) != nil {
 		return 1
 	}
 	return 0
