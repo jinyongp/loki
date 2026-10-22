@@ -78,6 +78,7 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	}
 	broker = copyExecutable(broker, "broker-bin")
 	provider = copyExecutable(provider, "provider-bin")
+	worker = copyExecutable(worker, "worker-bin")
 	makeDir := func(name string, mode os.FileMode, gid int) string {
 		t.Helper()
 		path := filepath.Join(root, name)
@@ -235,6 +236,7 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if _, err := client.Call(ctx, appvalues.AdminRequest{Action: "maintenance_end", RequestID: initialGate}, nil); err != nil {
 		t.Fatal("original initial maintenance gate could not be released", err)
 	}
+	verifyBrokerMCPDiscovery(t, ctx, root, worker, metaSocket, []controlpolicy.ApplicationResource{resource, migratedResource})
 	stageRaw, err := client.Call(ctx, appvalues.AdminRequest{Action: "stage", Resource: "demo", Principal: "agent"}, []byte("TOKEN=synthetic-private-restart-canary\n"))
 	if err != nil {
 		t.Fatal(err)

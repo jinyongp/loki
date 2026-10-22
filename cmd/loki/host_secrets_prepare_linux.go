@@ -36,6 +36,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	agent := flags.Uint64("agent-uid", 0, "installed agent UID")
 	metadataGroup := flags.Uint64("metadata-gid", 0, "installed metadata socket group")
 	jobDeployment := flags.String("job-deployment", "", "current owned OCI reservation; app identity remains stable")
+	initialMaintenance := flags.String("initial-maintenance-operation", "", "original application write gate established before role sockets open")
 	maintenance := flags.String("maintenance-operation", "", "original host operation inherited before launcher admission")
 	interrupt := flags.Bool("interrupt-jobs", false, "persist the original explicit host interruption choice")
 	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
@@ -64,7 +65,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *inspectIdentity {
-		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *interrupt {
+		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *initialMaintenance != "" || *interrupt {
 			return 2
 		}
 		existing, err := hostapplication.ReadIdentity(*identity)
@@ -102,7 +103,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate
 	var before hostapplication.Identity
 	if isCandidate {
-		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
+		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || *initialMaintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
 			return 2
 		}
 		canonical, _ := json.Marshal(before)
@@ -164,7 +165,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
-	options.InitialMaintenanceOperation = *maintenance
+	options.InitialMaintenanceOperation = *initialMaintenance
 	if *commitCandidate {
 		policy, err := hostpolicy.CompileApplications(c, contract, resources)
 		if err != nil || policy.Digest() != *candidatePolicy {
