@@ -134,7 +134,7 @@ func run(ctx context.Context, action string) error {
 			return errors.New("coordination did not return the independent fixture profile")
 		}
 		return nil
-	case "start", "check":
+	case "start", "check", "generic":
 		if os.Geteuid() != 21004 {
 			return errors.New("Job fixture must use the real executor UID")
 		}
@@ -149,7 +149,11 @@ func run(ctx context.Context, action string) error {
 		if err != nil {
 			return err
 		}
-		req, fingerprint, err := jobs.NormalizeStartRequest(jobs.StartRequest{RequestID: requestID, CWD: ".", Argv: []string{"/bin/sh", "-c", "printf '%s' \"$TOKEN\"; sleep 300"}, Resource: "fixture", Environment: "common", TimeoutSeconds: 600})
+		input := jobs.StartRequest{RequestID: requestID, CWD: ".", Argv: []string{"/bin/sh", "-c", "printf '%s' \"$TOKEN\"; sleep 300"}, Resource: "fixture", Environment: "common", TimeoutSeconds: 600}
+		if action == "generic" {
+			input = jobs.StartRequest{RequestID: "123e4567-e89b-42d3-a456-426614174393", CWD: ".", Argv: []string{"/bin/sh", "-c", "test -z \"${TOKEN+x}\" && printf native-generic-ready"}, TimeoutSeconds: 60}
+		}
+		req, fingerprint, err := jobs.NormalizeStartRequest(input)
 		if err != nil {
 			return err
 		}
@@ -158,7 +162,7 @@ func run(ctx context.Context, action string) error {
 			return err
 		}
 		result, err := client.Start(ctx, jobs.Workload{ID: id, RequestID: req.RequestID, RequestSHA256: fingerprint, CWD: req.CWD, Argv: req.Argv, Network: req.Network, TimeoutSeconds: req.TimeoutSeconds, Resource: req.Resource, Environment: req.Environment})
-		if err != nil || action == "check" && !result.Replayed || action == "start" && result.Replayed {
+		if err != nil || action == "check" && !result.Replayed || action != "check" && result.Replayed {
 			return fmt.Errorf("unexpected replay state: %v", err)
 		}
 		for {
@@ -170,6 +174,13 @@ func run(ctx context.Context, action string) error {
 				return nil
 			}
 			if action == "check" && status.State == jobs.StateTerminal && (status.Cleanup == jobs.CleanupComplete || status.Cleanup == jobs.CleanupNotRequired) {
+				return nil
+			}
+			if action == "generic" && status.State == jobs.StateTerminal {
+				output, err := client.Output(ctx, id)
+				if err != nil || status.Outcome != jobs.OutcomeExited || status.ExitCode == nil || *status.ExitCode != 0 || status.Cleanup != jobs.CleanupComplete || output.Output != "native-generic-ready" || !output.Complete || output.Truncated || output.OutputGap != nil {
+					return errors.New("generic Job did not complete independently without injected app values")
+				}
 				return nil
 			}
 			select {

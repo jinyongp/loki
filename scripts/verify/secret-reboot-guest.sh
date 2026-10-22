@@ -186,7 +186,11 @@ else
   runuser -u loki-executor -- /opt/loki/bin/native-reboot-peer check
   /opt/loki/bin/native-reboot-peer journal
   test -z "$(docker ps -aq --filter label=io.loki.job.id)"
+  systemctl stop loki-go-secrets.service
   coordination
+  phase=generic-job-without-broker
+  runuser -u loki-executor -- /opt/loki/bin/native-reboot-peer generic
+  test -z "$(docker ps -aq --filter label=io.loki.job.id)"
   echo LOKI_SECRET_REBOOT_PASS
   systemctl poweroff --no-block
 fi
