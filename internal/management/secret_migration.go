@@ -47,6 +47,10 @@ type fullMigrationRecordStore struct {
 	held  *bool
 }
 
+func (s *fullMigrationRecordStore) Identity() string {
+	return filepath.Join(s.store.Root, "transaction.json")
+}
+
 func (s *fullMigrationRecordStore) Locked() bool { return s != nil && s.held != nil && *s.held }
 func (s *fullMigrationRecordStore) Load() ([]lifecycle.OperationRecord, error) {
 	if !s.Locked() {

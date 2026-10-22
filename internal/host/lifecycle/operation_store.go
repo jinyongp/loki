@@ -7,9 +7,23 @@ import "errors"
 // existing transaction.json under Store.Lock; it must not write a second
 // lifecycle journal or duplicate migration progress/operation identity.
 type OperationRecordStore interface {
+	Identity() string
 	Locked() bool
 	Load() ([]OperationRecord, error)
 	Publish(OperationRecord, bool) error
+}
+
+// StoreIdentity identifies the existing canonical owner while its lock is
+// held. It lets mode-specific service effects reject a journal from another
+// store even when a copied transaction contains the same public operation ID.
+func (j *OperationJournal) StoreIdentity() (string, error) {
+	if err := j.ready(); err != nil {
+		return "", err
+	}
+	if j.store == nil {
+		return "", errors.New("operation journal has no external owner")
+	}
+	return j.store.Identity(), nil
 }
 
 // OpenOperationJournalStore is for a deployment owner that already has a

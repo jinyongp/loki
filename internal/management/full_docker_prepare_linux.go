@@ -61,7 +61,7 @@ func (b *DockerFullBackend) record(r DeploymentReservation) (fullDockerRecord, e
 	if record.Schema != 1 || !reflect.DeepEqual(record.Reservation, r) || len(record.Specs) != len(r.Services) || !filepath.IsAbs(record.Worker) {
 		return record, fmt.Errorf("deployment service record has incompatible ownership")
 	}
-	if record.StopMaintenance != nil && record.StopMaintenance.OperationID != deploymentStopUUID(r) {
+	if !b.validStopMaintenance(r, record.StopMaintenance) {
 		return record, fmt.Errorf("saved stop intent differs from its deployment")
 	}
 	seen := map[string]bool{}
