@@ -58,7 +58,7 @@ func TestRealApplicationValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := controlpolicy.ApplicationResource{ID: "c199846b-43ad-468c-9229-11976d4e5b3a", Alias: "demo", Repository: "github.com/fixture/app", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Write: true, Execute: true}}, Environments: []string{"common", "test"}, Keys: map[string]string{"TOKEN": "secret", "STAGED": "secret", "GONE": "secret", "PUB": "variable"}, Network: "none"}
+	r := controlpolicy.ApplicationResource{ID: "c199846b-43ad-468c-9229-11976d4e5b3a", Alias: "demo", Repository: "github.com/fixture/app", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Write: true, Execute: true}}, Environments: []string{"common", "test"}, Keys: map[string]string{"TOKEN": "secret", "STAGED": "secret", "GONE": "secret", "KIND": "secret", "PUB": "variable"}, Network: "none"}
 	options := Options{Provider: p, Root: root, Inbox: inbox, DeploymentID: "1bbf75ed-1b51-46bd-8255-31536e945564", PolicySHA256: strings.Repeat("a", 64), Resources: []controlpolicy.ApplicationResource{r}}
 	s, err := New(options)
 	if err != nil {
@@ -184,6 +184,15 @@ func TestRealApplicationValues(t *testing.T) {
 	}
 	code("write", write("generate", "TOKEN"), fault.CodeValueExists)
 	code("write", write("generate", "PUB"), fault.CodeNotAuthorized)
+	// An inconsistent existing provider kind is a conflict, never an implicit
+	// conversion into the kind declared by the host resource ceiling.
+	if _, err := p.SetPublic(ctx, r.Profile(), "common", "KIND", "kind-fixture-public", revision("common"), id()); err != nil {
+		t.Fatal(err)
+	}
+	code("write", write("generate", "KIND"), fault.CodeConflict)
+	if _, err := p.Unset(ctx, r.Profile(), "common", "variable", "KIND", revision("common"), id()); err != nil {
+		t.Fatal(err)
+	}
 	code("write", write("generate", "LOKI_TOKEN"), fault.CodeNotAuthorized)
 	if _, e := s.Handle(ctx, "other-agent", "inspect", appvalues.Request{Action: "values", Resource: ptr("demo")}); fault.Describe(e).Code != fault.CodeNotAuthorized {
 		t.Fatal("foreign principal admitted")
