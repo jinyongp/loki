@@ -25,16 +25,7 @@ import (
 	"loki/internal/platform/safeio"
 )
 
-type Identity struct {
-	Version          int    `json:"version"`
-	UID              uint32 `json:"uid"`
-	GID              uint32 `json:"gid"`
-	AgentUID         uint32 `json:"agent_uid"`
-	MetadataGID      uint32 `json:"metadata_gid"`
-	DeploymentID     string `json:"deployment_id"`
-	RunnerID         string `json:"runner_id"`
-	ActiveGeneration string `json:"active_generation"`
-}
+type Identity = appvalues.ApplicationIdentity
 
 type PrepareOptions struct {
 	UID, GID, AgentUID, MetadataGID                                uint32
@@ -56,6 +47,7 @@ type Preparation struct {
 
 var generationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var deploymentID = regexp.MustCompile(`^deployment-[0-9a-f]{32}$`)
+var policyDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var invalid = errors.New("application service deployment metadata is invalid")
 
 func newID() (string, error) {
@@ -85,6 +77,26 @@ func PrepareState(options PrepareOptions) (Preparation, error) {
 }
 
 func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
+	return prepareGeneration(options, runtimeFiles, nil)
+}
+
+type candidateSelection struct {
+	expected   Identity
+	generation string
+}
+
+// PrepareCandidate creates only an inactive generation and private runtime role
+// files. Its logical service root is identical to the active broker's root;
+// provider addressing must not depend on a temporary host mount path. The host
+// migration operation owns the candidate ID/runtime and holds its Job fence.
+func PrepareCandidate(options PrepareOptions, expected Identity, generation string) (Preparation, error) {
+	if !generationID.MatchString(generation) || generation == expected.ActiveGeneration {
+		return Preparation{}, invalid
+	}
+	return prepareGeneration(options, true, &candidateSelection{expected: expected, generation: generation})
+}
+
+func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *candidateSelection) (Preparation, error) {
 	if options.UID == 0 || options.GID == 0 || options.AgentUID == 0 || options.MetadataGID == 0 || options.UID == options.AgentUID || options.GID == options.MetadataGID || !controlpolicy.ApplicationAlias.MatchString(options.Principal) {
 		return Preparation{}, invalid
 	}
@@ -122,9 +134,24 @@ func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 	if err := ownedDirectory(parent, 0, 0, 0700, false); err != nil {
 		return Preparation{}, err
 	}
+	if candidate != nil {
+		if _, err := os.Lstat(options.IdentityFile); err != nil {
+			return Preparation{}, invalid
+		}
+	}
 	identity, err := loadIdentity(options)
 	if err != nil {
 		return Preparation{}, err
+	}
+	if candidate != nil {
+		if identity != candidate.expected {
+			return Preparation{}, invalid
+		}
+		identity.Version, identity.ActiveGeneration, identity.PolicySHA256 = 2, candidate.generation, layout.PolicySHA256
+	} else if identity.Version == 2 && identity.PolicySHA256 != layout.PolicySHA256 {
+		// Never silently bind a selected generation to changed public policy.
+		// Host policy transactions must explicitly checkpoint that change.
+		return Preparation{}, invalid
 	}
 	layout.DeploymentID, layout.RunnerID = identity.DeploymentID, identity.RunnerID
 	generation := filepath.Join(parent, identity.ActiveGeneration)
@@ -139,7 +166,13 @@ func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 	if !runtimeFiles {
 		return Preparation{Identity: identity, Layout: layout, HostGeneration: generation}, nil
 	}
-	if err := ownedDirectory(options.RuntimeRoot, 0, 0, 0755, true); err != nil {
+	runtimeUID, runtimeGID, runtimeMode := uint32(0), uint32(0), uint32(0755)
+	if candidate != nil {
+		// Agents cannot traverse a candidate's runtime, including its metadata
+		// role. Only the staged broker and the host administrator can reach it.
+		runtimeUID, runtimeGID, runtimeMode = options.UID, options.GID, 0700
+	}
+	if err := ownedDirectory(options.RuntimeRoot, runtimeUID, runtimeGID, runtimeMode, true); err != nil {
 		return Preparation{}, err
 	}
 	for _, name := range []string{"private", "jobs", "admin", "inbox"} {
@@ -159,6 +192,9 @@ func prepare(options PrepareOptions, runtimeFiles bool) (Preparation, error) {
 		return Preparation{}, invalid
 	}
 	adminFile := filepath.Join(filepath.Dir(options.IdentityFile), "secrets-admin.json")
+	if candidate != nil {
+		adminFile = filepath.Join(options.RuntimeRoot, "admin-layout.json")
+	}
 	raw, _ = json.Marshal(struct {
 		Socket string `json:"socket"`
 		UID    uint32 `json:"uid"`
@@ -173,7 +209,8 @@ func loadIdentity(options PrepareOptions) (Identity, error) {
 	var identity Identity
 	err := daemon.ReadJSON(options.IdentityFile, &identity)
 	if err == nil {
-		if identity.Version != 1 || identity.UID != options.UID || identity.GID != options.GID || identity.AgentUID != options.AgentUID || identity.MetadataGID != options.MetadataGID || !deploymentID.MatchString(identity.DeploymentID) || !controlpolicy.ApplicationUUID.MatchString(identity.RunnerID) || !generationID.MatchString(identity.ActiveGeneration) {
+		versionValid := identity.Version == 1 && identity.PolicySHA256 == "" || identity.Version == 2 && policyDigest.MatchString(identity.PolicySHA256)
+		if !versionValid || identity.UID != options.UID || identity.GID != options.GID || identity.AgentUID != options.AgentUID || identity.MetadataGID != options.MetadataGID || !deploymentID.MatchString(identity.DeploymentID) || !controlpolicy.ApplicationUUID.MatchString(identity.RunnerID) || !generationID.MatchString(identity.ActiveGeneration) {
 			return Identity{}, invalid
 		}
 		return identity, nil

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
@@ -73,7 +74,7 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 		}
 		return nil, denied()
 	}
-	if q.Empty && (q.Action != "set_secret" || len(body) != 0) {
+	if q.Empty && (q.Action != "set_secret" && q.Action != "set_public" || len(body) != 0) {
 		return nil, invalid()
 	}
 	if q.Replace && q.Action != "set_secret" {
@@ -156,8 +157,12 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 			}
 		}
 		result, err = s.options.Provider.Bundle(ctx, r.Profile(), r.Bundle, q.Revision, q.RequestID, q.Members)
-	case "set_secret":
-		if q.Members != nil || len(body) > 65536 || r.Keys[q.Name] != "secret" || controlpolicy.ReservedApplicationKey(q.Name, s.options.BaseEnvironment) {
+	case "set_secret", "set_public":
+		kind := "secret"
+		if q.Action == "set_public" {
+			kind = "variable"
+		}
+		if q.Members != nil || len(body) > 65536 || !utf8.Valid(body) || strings.ContainsRune(string(body), 0) || r.Keys[q.Name] != kind || controlpolicy.ReservedApplicationKey(q.Name, s.options.BaseEnvironment) {
 			return nil, denied()
 		}
 		env := q.Environment
@@ -173,7 +178,11 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 		if !allowed {
 			return nil, denied()
 		}
-		result, err = s.options.Provider.SetSecret(ctx, r.Profile(), env, q.Name, body, q.Revision, q.RequestID, q.Replace)
+		if kind == "secret" {
+			result, err = s.options.Provider.SetSecret(ctx, r.Profile(), env, q.Name, body, q.Revision, q.RequestID, q.Replace)
+		} else {
+			result, err = s.options.Provider.SetPublic(ctx, r.Profile(), env, q.Name, string(body), q.Revision, q.RequestID)
+		}
 	default:
 		return nil, invalid()
 	}

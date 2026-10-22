@@ -1,5 +1,8 @@
 {
   "allowed_edges": [
+    {"from":"loki/internal/host/lifecycle","to":"loki/internal/control/appvalues"},
+    {"from":"loki/internal/host/lifecycle","to":"loki/internal/platform/privateio"},
+    {"from":"loki/modules/secrets","to":"loki/internal/control/appvalues"},
     {"from":"loki/modules/secrets","to":"loki/internal/control/policy"},
     {"from":"loki/modules/secrets","to":"loki/internal/platform/privateio"},
     {"from":"loki/modules/secrets","to":"loki/internal/secretoutput"},

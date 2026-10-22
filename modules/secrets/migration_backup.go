@@ -197,6 +197,9 @@ func RestoreMigrationSource(ctx context.Context, archive, destination string, id
 	if err := migrationPrivateDestination(destination); err != nil {
 		return err
 	}
+	if err := migrationPrivateDestination(archive); err != nil {
+		return err
+	}
 	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
 		return errMigrationBackup
 	}

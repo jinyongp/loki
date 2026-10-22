@@ -4,6 +4,7 @@ package application
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/config"
 	"loki/internal/execution"
+	hostpolicy "loki/internal/host/policy"
 )
 
 func TestHostApplicationGenerationPreparation(t *testing.T) {
@@ -109,6 +111,67 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if json.Unmarshal(identityBytes, &identity) != nil || identity != first.Identity {
 		t.Fatal("failed identity change rewrote the selector")
 	}
+	t.Run("inactive candidate and atomic policy selection", func(t *testing.T) {
+		stageRuntime, err := os.MkdirTemp("/dev/shm", "loki-host-candidate-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(stageRuntime)
+		stageOptions := options
+		stageOptions.RuntimeRoot = stageRuntime
+		activeAdmin, err := os.ReadFile(first.AdminLayoutFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		generation := strings.Repeat("a", 32)
+		candidate, err := PrepareCandidate(stageOptions, first.Identity, generation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if candidate.Identity.Version != 2 || candidate.Identity.PolicySHA256 != candidate.Layout.PolicySHA256 || candidate.Identity.ActiveGeneration != generation || candidate.HostGeneration == first.HostGeneration || candidate.Layout.Root != first.Layout.Root || candidate.AdminLayoutFile == first.AdminLayoutFile {
+			t.Fatal("candidate changed the logical root, original selector or active role projection")
+		}
+		current, err := loadIdentity(options)
+		if err != nil || current != first.Identity {
+			t.Fatal("inactive candidate selected before verification", err)
+		}
+		adminAfter, err := os.ReadFile(first.AdminLayoutFile)
+		if err != nil || string(adminAfter) != string(activeAdmin) {
+			t.Fatal("candidate overwrote active administrator projection", err)
+		}
+		var st unix.Stat_t
+		if unix.Lstat(stageRuntime, &st) != nil || st.Uid != options.UID || st.Gid != options.GID || st.Mode&07777 != 0700 {
+			t.Fatal("candidate runtime is traversable by the agent")
+		}
+		selected, err := CommitCandidate(stageOptions, first.Identity, generation)
+		if err != nil || selected != candidate.Identity {
+			t.Fatal("selector/policy publication failed", err)
+		}
+		if replay, err := CommitCandidate(stageOptions, first.Identity, generation); err != nil || replay != selected {
+			t.Fatal("lost selector ACK changed generation or policy", err)
+		}
+		if _, err := CommitCandidate(stageOptions, first.Identity, strings.Repeat("b", 32)); err == nil {
+			t.Fatal("stale expected selector overwrote committed generation")
+		}
+		if active, err := PrepareState(options); err != nil || active.Identity != selected || active.HostGeneration != candidate.HostGeneration {
+			t.Fatal("restart did not select the verified generation", err)
+		}
+		stalePolicy := options
+		stalePolicy.Contract.Environment = maps.Clone(options.Contract.Environment)
+		stalePolicy.Contract.Environment["PATH"] = "/different-policy:/usr/bin:/bin"
+		compiled, err := hostpolicy.CompileApplications(stalePolicy.Configuration, stalePolicy.Contract, stalePolicy.Resources)
+		if err != nil || compiled.Digest() == selected.PolicySHA256 {
+			t.Fatal("changed-policy fixture is invalid", err)
+		}
+		if _, err := PrepareState(stalePolicy); err == nil {
+			t.Fatal("restart silently rebound a selected generation to changed policy")
+		}
+		// Restore the fixture's original public selector for the unrelated
+		// existing foreign-directory rejection checks below. No values exist.
+		if err := os.WriteFile(options.IdentityFile, identityBytes, 0600); err != nil {
+			t.Fatal(err)
+		}
+	})
 	if os.Chown(first.HostGeneration, 0, 0) != nil {
 		t.Fatal("foreign-owner fixture")
 	}

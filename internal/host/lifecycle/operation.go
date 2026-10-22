@@ -29,7 +29,10 @@ const (
 	// Native catalog changes retain two public, at-most-1MiB catalogs plus
 	// intent/envelope overhead. Other lifecycle records retain their old bound.
 	maxNativeOperationRecordBytes = 3 << 20
-	maxOperationErrorBytes        = 4096
+	// An offline migration may map all 128*512 legacy slots and retain their
+	// immutable write/delivery checkpoints. Values are never stored here.
+	maxMigrationOperationRecordBytes = 128 << 20
+	maxOperationErrorBytes           = 4096
 )
 
 type OperationKind string
@@ -46,12 +49,13 @@ const (
 	OperationSetIngressHosts   OperationKind = "set_ingress_hosts"
 	OperationUpdateIntegration OperationKind = "update_integration"
 	OperationNativeSwitch      OperationKind = "native_switch"
+	OperationSecretMigration   OperationKind = "secret_migration"
 )
 
 func (k OperationKind) Valid() bool {
 	switch k {
 	case OperationApply, OperationBackup, OperationInstall, OperationRollback, OperationRestore, OperationUninstall,
-		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration, OperationNativeSwitch:
+		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration, OperationNativeSwitch, OperationSecretMigration:
 		return true
 	default:
 		return false
@@ -103,22 +107,23 @@ func nextApplyPhase(current OperationPhase) OperationPhase {
 }
 
 type OperationRecord struct {
-	ID                    string                `json:"id"`
-	Kind                  OperationKind         `json:"kind"`
-	PlanID                string                `json:"plan_id"`
-	ObservedHostRevision  string                `json:"observed_host_revision"`
-	ActiveGenerationID    string                `json:"active_generation_id,omitempty"`
-	CandidateGenerationID string                `json:"candidate_generation_id"`
-	RecoveryBackupID      string                `json:"recovery_backup_id,omitempty"`
-	State                 OperationState        `json:"state"`
-	Phase                 OperationPhase        `json:"phase"`
-	OriginalError         string                `json:"original_error,omitempty"`
-	RecoveryError         string                `json:"recovery_error,omitempty"`
-	StartedAt             string                `json:"started_at"`
-	UpdatedAt             string                `json:"updated_at"`
-	CompletedAt           string                `json:"completed_at,omitempty"`
-	Maintenance           *OperationMaintenance `json:"maintenance,omitempty"`
-	NativeSwitch          *NativeSwitchIntent   `json:"native_switch,omitempty"`
+	ID                    string                    `json:"id"`
+	Kind                  OperationKind             `json:"kind"`
+	PlanID                string                    `json:"plan_id"`
+	ObservedHostRevision  string                    `json:"observed_host_revision"`
+	ActiveGenerationID    string                    `json:"active_generation_id,omitempty"`
+	CandidateGenerationID string                    `json:"candidate_generation_id"`
+	RecoveryBackupID      string                    `json:"recovery_backup_id,omitempty"`
+	State                 OperationState            `json:"state"`
+	Phase                 OperationPhase            `json:"phase"`
+	OriginalError         string                    `json:"original_error,omitempty"`
+	RecoveryError         string                    `json:"recovery_error,omitempty"`
+	StartedAt             string                    `json:"started_at"`
+	UpdatedAt             string                    `json:"updated_at"`
+	CompletedAt           string                    `json:"completed_at,omitempty"`
+	Maintenance           *OperationMaintenance     `json:"maintenance,omitempty"`
+	NativeSwitch          *NativeSwitchIntent       `json:"native_switch,omitempty"`
+	SecretMigration       *SecretMigrationOperation `json:"secret_migration,omitempty"`
 }
 
 // OperationMaintenance retains the exact interruption choice across crashes.
@@ -148,6 +153,12 @@ func (r OperationRecord) Valid() bool {
 		return false
 	}
 	if !validOperationError(r.OriginalError) || !validOperationError(r.RecoveryError) {
+		return false
+	}
+	if r.Kind == OperationSecretMigration {
+		return r.NativeSwitch == nil && r.validSecretMigration()
+	}
+	if r.SecretMigration != nil {
 		return false
 	}
 	if r.Kind == OperationNativeSwitch {
@@ -360,7 +371,7 @@ func ReadOperationSnapshot(root string) ([]OperationRecord, error) {
 	})
 	active := 0
 	for _, record := range result {
-		if !record.State.Terminal() {
+		if !record.State.Terminal() || record.Kind == OperationSecretMigration && record.Maintenance != nil && !record.Maintenance.Released {
 			active++
 		}
 	}
@@ -377,7 +388,7 @@ func (j *OperationJournal) Active() (OperationRecord, bool, error) {
 	var active OperationRecord
 	found := false
 	for _, record := range j.records {
-		if record.State.Terminal() {
+		if record.State.Terminal() && (record.Kind != OperationSecretMigration || record.Maintenance == nil || record.Maintenance.Released) {
 			continue
 		}
 		if found {
@@ -599,6 +610,9 @@ func (j *OperationJournal) RecoverInterrupted(
 	if err != nil || !found {
 		return record, found, err
 	}
+	if record.Kind == OperationSecretMigration {
+		return OperationRecord{}, true, errSecretMigration
+	}
 	if recover == nil {
 		return OperationRecord{}, true, errors.New("host lifecycle recovery handler is not configured")
 	}
@@ -668,6 +682,8 @@ func (j *OperationJournal) persist(record OperationRecord, overwrite bool) error
 	limit := maxOperationRecordBytes
 	if record.Kind == OperationNativeSwitch {
 		limit = maxNativeOperationRecordBytes
+	} else if record.Kind == OperationSecretMigration {
+		limit = maxMigrationOperationRecordBytes
 	}
 	if len(envelope) > limit {
 		return errors.New("host lifecycle operation record exceeds size limit")
@@ -765,11 +781,11 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return OperationRecord{}, errors.New("host lifecycle operation record must be a private regular file")
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, maxNativeOperationRecordBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, maxMigrationOperationRecordBytes+1))
 	if err != nil {
 		return OperationRecord{}, err
 	}
-	if len(raw) > maxNativeOperationRecordBytes {
+	if len(raw) > maxMigrationOperationRecordBytes {
 		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	var envelope operationEnvelope
@@ -792,7 +808,7 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	if err = recordDecoder.Decode(&record); err != nil {
 		return OperationRecord{}, errors.New("host lifecycle operation record is invalid")
 	}
-	if record.Kind != OperationNativeSwitch && len(raw) > maxOperationRecordBytes {
+	if record.Kind == OperationNativeSwitch && len(raw) > maxNativeOperationRecordBytes || record.Kind != OperationNativeSwitch && record.Kind != OperationSecretMigration && len(raw) > maxOperationRecordBytes {
 		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.Valid() {

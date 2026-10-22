@@ -983,6 +983,9 @@ func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *Ope
 		return err
 	}
 	for _, record := range records {
+		if record.Kind == OperationSecretMigration && (!record.State.Terminal() || record.Maintenance != nil && !record.Maintenance.Released) {
+			return errSecretMigration
+		}
 		if record.State.Terminal() && record.Maintenance != nil && !record.Maintenance.Released {
 			if err := e.releaseMaintenance(ctx, journal, record); err != nil {
 				return err

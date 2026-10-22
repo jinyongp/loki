@@ -21,7 +21,7 @@ func (r AdminRequest) InputLimit() int {
 	switch r.Action {
 	case "stage":
 		return 500000
-	case "set_secret":
+	case "set_secret", "set_public":
 		if !r.Empty {
 			return 65536
 		}

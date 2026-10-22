@@ -124,6 +124,26 @@ func (p *Provider) Register(ctx context.Context, runner, instance, request strin
 	return p.invoke(ctx, []string{"values", "runner", "register", "--request-id", request, "--stdin"}, body, &result)
 }
 
+func (p *Provider) Unregister(ctx context.Context, runner, instance, request string) error {
+	if !uuid.MatchString(runner) || !uuid.MatchString(instance) || !uuid.MatchString(request) {
+		return ErrUnavailable
+	}
+	var result struct {
+		Item struct {
+			Runner   string `json:"runner_id"`
+			Instance string `json:"instance_id"`
+			Enabled  bool   `json:"enabled"`
+		} `json:"item"`
+	}
+	if err := p.invoke(ctx, []string{"values", "runner", "unregister", runner, "--instance", instance, "--request-id", request}, nil, &result); err != nil {
+		return err
+	}
+	if result.Item.Runner != runner || result.Item.Instance != instance || result.Item.Enabled {
+		return ErrUnavailable
+	}
+	return nil
+}
+
 type Execution struct {
 	ID             string `json:"execution_id"`
 	InputID        string `json:"input_id"`
@@ -181,7 +201,10 @@ func (p *Provider) execution(ctx context.Context, operation, app, execution, req
 }
 
 func (p *Provider) Prepare(ctx context.Context, app, env, job, request, bundle string, keys []string) (Execution, error) {
-	if !id.MatchString(job) || len(keys) == 0 || len(keys) > 256 {
+	if env == "common" {
+		env = ""
+	}
+	if !id.MatchString(job) || len(keys) == 0 || len(keys) > 256 || env != "" && !environment.MatchString(env) {
 		return Execution{}, ErrUnavailable
 	}
 	names := append([]string(nil), keys...)

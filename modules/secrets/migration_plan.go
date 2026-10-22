@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"loki/internal/control/appvalues"
 	"loki/internal/control/policy"
 	"loki/internal/platform/privateio"
 	"loki/internal/secretoutput"
@@ -19,31 +20,13 @@ import (
 
 var errMigrationMapping = errors.New("invalid or incomplete application migration mapping")
 
-// MigrationKeyMapping requires an explicit public kind. Omitted Kind means
-// secret; omitted Name preserves the source key, without guessing a rename.
-type MigrationKeyMapping struct {
-	Source string `json:"source"`
-	Name   string `json:"name,omitempty"`
-	Kind   string `json:"kind,omitempty"`
-}
-
-type MigrationProfileMapping struct {
-	Profile     string                `json:"profile"`
-	Resource    string                `json:"resource"`
-	Environment string                `json:"environment"`
-	Keys        []MigrationKeyMapping `json:"keys"`
-}
+type MigrationKeyMapping = appvalues.MigrationKeyMapping
+type MigrationProfileMapping = appvalues.MigrationProfileMapping
 
 // ApplicationMigrationPlan is public metadata only. Every source key must be
 // mapped exactly once, including explicitly mapping an empty source profile.
 // The existing platform credential registry excludes all managed profiles.
-type ApplicationMigrationPlan struct {
-	Version   int                          `json:"version"`
-	Revision  uint64                       `json:"source_revision"`
-	Mappings  []MigrationProfileMapping    `json:"mappings"`
-	Resources []policy.ApplicationResource `json:"resources"`
-	Values    int                          `json:"value_count"`
-}
+type ApplicationMigrationPlan = appvalues.MigrationPlan
 
 type MigrationValue struct {
 	Resource    string

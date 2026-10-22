@@ -271,9 +271,36 @@ func TestRealApplicationValues(t *testing.T) {
 	later.Value = ptr("invalidate-page")
 	call("write", later)
 	code("inspect", appvalues.Request{Action: "values", Resource: ptr("demo"), Cursor: &cursor}, fault.CodeConflict)
+	publicAdmin := AdminRequest{Action: "set_public", Resource: "demo", Name: "PUB", Revision: revision("common"), RequestID: id()}
+	publicBody := []byte("operator-public-migration\nexact second line")
+	if _, err := s.Admin(ctx, publicAdmin, publicBody); err != nil {
+		t.Fatal("explicit public migration input rejected", err)
+	}
+	if result, err := s.Admin(ctx, publicAdmin, publicBody); err != nil || result["replayed"] != true {
+		t.Fatal("public migration lost-ACK replay failed", err)
+	}
+	publicAdmin.Revision, publicAdmin.RequestID, publicAdmin.Empty = revision("common"), id(), true
+	if publicAdmin.InputLimit() != 0 {
+		t.Fatal("intentional empty public input required a payload byte")
+	}
+	if _, err := s.Admin(ctx, publicAdmin, nil); err != nil {
+		t.Fatal("empty public migration input rejected", err)
+	}
+	for _, invalidAdmin := range []struct {
+		action, name string
+		body         []byte
+	}{{"set_public", "TOKEN", []byte("cannot-publish-secret")}, {"set_public", "PUB", []byte("invalid\x00value")}, {"set_secret", "STAGED", []byte{0xff}}} {
+		q := AdminRequest{Action: invalidAdmin.action, Resource: "demo", Name: invalidAdmin.name, Revision: revision("common"), RequestID: id()}
+		if _, err := s.Admin(ctx, q, invalidAdmin.body); err == nil {
+			t.Fatal("invalid private administrator input admitted")
+		}
+		if after := revision("common"); after != q.Revision {
+			t.Fatal("rejected private administrator input changed values")
+		}
+	}
 	audit := call("inspect", appvalues.Request{Action: "audit", Resource: ptr("demo")})
 	encoded, _ := json.Marshal(audit)
-	for _, forbidden := range []string{"synthetic-staged-canary", "synthetic-disappearing-canary", "after-unset", "fingerprint", ".data", "passphrase"} {
+	for _, forbidden := range []string{"synthetic-staged-canary", "synthetic-disappearing-canary", "after-unset", "operator-public-migration", "fingerprint", ".data", "passphrase"} {
 		if bytes.Contains(encoded, []byte(forbidden)) {
 			t.Fatalf("private input appeared in public audit: %s", forbidden)
 		}
