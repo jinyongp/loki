@@ -322,23 +322,8 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal(err)
 	}
 	migrationOperation = lifecycle.MigrationOperationUUID(migrationRecord.ID)
-	if err := legacy.BeginApplicationMigration(ctx, plan.Revision, migrationOperation); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := journal.AdvanceSecretMigration(migrationRecord.ID, lifecycle.PhaseSnapshot, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	archiveProof, err := legacy.BackupApplicationMigration(ctx, plan.Revision, migrationOperation, intent.Recipient, intent.BackupPath, nil, func(proof secret.MigrationBackupProof) error {
-		_, err := journal.CheckpointMigrationArchive(migrationRecord.ID, proof.CipherSHA256, proof.Bytes, false, time.Now())
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := journal.CheckpointMigrationArchive(migrationRecord.ID, archiveProof.CipherSHA256, archiveProof.Bytes, true, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := journal.AdvanceSecretMigration(migrationRecord.ID, lifecycle.PhaseMigrate, time.Now()); err != nil {
+	sourceOwner := hostmigration.SourceOwner{Journal: journal, ID: migrationRecord.ID}
+	if err := sourceOwner.Backup(ctx); err != nil {
 		t.Fatal(err)
 	}
 	expired := pending()
@@ -369,29 +354,20 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		t.Fatal("failed host checkpoint authorized comparison delivery", err)
 	}
 	lostWriteAck := true
-	sourceSession := hostmigration.SourceSession{Source: legacy, Target: client, Operation: migrationOperation, Policy: intent.Policy, Plan: plan}
+	sourceSession, err := sourceOwner.Session(client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	sourceSession.Checkpoint = func(event hostmigration.SourceEvent) error {
 		encoded, err := json.Marshal(event)
 		if err != nil || bytes.Contains(encoded, []byte("source-session-canary")) || bytes.Contains(encoded, []byte("public-migration.example")) || bytes.Contains(encoded, []byte("synthetic-platform-owner")) {
 			t.Fatal("source values entered host journal metadata", err)
 		}
-		switch event.Type {
-		case "write_prepared":
-			_, err = journal.CheckpointMigrationWrite(migrationRecord.ID, *event.Write, time.Now())
-		case "write_completed":
-			if event.Write.Name == "TOKEN" && lostWriteAck {
-				lostWriteAck = false
-				return checkpointError
-			}
-			_, err = journal.CompleteMigrationWrite(migrationRecord.ID, event.Write.Request, time.Now())
-		case "comparison_prepared":
-			_, err = journal.CheckpointMigrationComparison(migrationRecord.ID, *event.Binding, time.Now())
-		case "comparison_completed":
-			_, err = journal.CompleteMigrationComparison(migrationRecord.ID, event.Attempt, event.Count, time.Now())
-		default:
-			return errors.New("unexpected source-owner metadata event")
+		if event.Type == "write_completed" && event.Write.Name == "TOKEN" && lostWriteAck {
+			lostWriteAck = false
+			return checkpointError
 		}
-		return err
+		return sourceOwner.Checkpoint(event)
 	}
 	if err := sourceSession.Transfer(ctx); !errors.Is(err, checkpointError) {
 		t.Fatal("synthetic lost write acknowledgement not exercised", err)
@@ -405,7 +381,11 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	if err != nil || !found || current.ID != migrationRecord.ID {
 		t.Fatal("lost original host source operation", err)
 	}
-	sourceSession.Writes = current.SecretMigration.Writes
+	sourceOwner.Journal = journal
+	sourceSession, err = sourceOwner.Session(client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := sourceSession.Transfer(ctx); err != nil {
 		t.Fatal("source-owner exact transfer/replay/private comparison failed", err)
 	}
