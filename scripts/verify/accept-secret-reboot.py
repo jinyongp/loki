@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +25,41 @@ def run(*args):
     subprocess.run([str(a) for a in args], check=True)
 
 
+def copy_native_runtime(payload):
+    """Copy the runner's native engine and its exact ELF dependencies."""
+    output = payload / "docker-runtime"
+    for name in ["docker", "dockerd", "containerd", "containerd-shim-runc-v2", "runc", "docker-init", "apparmor_parser"]:
+        source = shutil.which(name)
+        if source is None and name == "docker-init":
+            source = next((str(p) for p in [Path("/usr/libexec/docker/docker-init"), Path("/usr/lib/docker/docker-init")] if p.is_file()), None)
+        if source is None:
+            raise ValueError("missing native Docker prerequisite: " + name)
+        destination = output / "usr/bin" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        destination.chmod(0o555)
+        dependencies = subprocess.run(["ldd", source], text=True, capture_output=True)
+        if dependencies.returncode and "not a dynamic executable" not in dependencies.stdout + dependencies.stderr and "statically linked" not in dependencies.stdout + dependencies.stderr:
+            raise ValueError("cannot resolve native engine dependencies: " + name)
+        for match in re.findall(r"(/[^\s()]+)", dependencies.stdout):
+            library = Path(match)
+            if not library.is_file():
+                raise ValueError("missing native engine ELF dependency")
+            target = output / library.relative_to("/")
+            if target.exists():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(library, target)
+            target.chmod(0o555)
+    # Stock parser includes are public policy, not a host profile/database.
+    # Keep Docker's default AppArmor confinement active inside the guest.
+    for name in ["abi", "abstractions", "tunables"]:
+        source = Path("/etc/apparmor.d") / name
+        if not source.is_dir():
+            raise ValueError("missing native AppArmor parser includes")
+        shutil.copytree(source, output / "etc/apparmor.d" / name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devtools", required=True, type=Path)
@@ -39,13 +75,30 @@ def main():
         payload = work / "payload"
         payload.mkdir()
         env = dict(os.environ, CGO_ENABLED="0")
-        for package, name in [("./cmd/loki", "loki"), ("./cmd/secret-broker", "loki-secret-broker")]:
+        for package, name in [("./cmd/loki", "loki"), ("./cmd/secret-broker", "loki-secret-broker"), ("./cmd/launcher", "loki-launcher"), ("./internal/host/lifecycle/testdata/native-reboot", "native-reboot-peer")]:
             subprocess.run(["go", "build", "-trimpath", "-o", str(payload / name), package], cwd=ROOT, env=env, check=True)
         shutil.copyfile(args.devtools, payload / "devtools")
-        for name in ["secrets.service", "secrets-prepare.service"]:
+        for name in ["secrets.service", "secrets-prepare.service", "launcher.service", "runtime.service"]:
             shutil.copyfile(ROOT / "packaging/native/systemd" / name, payload / name)
         shutil.copyfile(ROOT / "packaging/native/execution-contract.json", payload / "execution-contract.json")
         shutil.copyfile(ROOT / "config/runtime.toml", payload / "config.toml")
+        shutil.copyfile(ROOT / "config/gitconfig", payload / "gitconfig")
+        for name in ["launcher.json.in", "runtime.json.in", "mcp.json.in", "executor.json.in"]:
+            shutil.copyfile(ROOT / "packaging/native" / name, payload / name)
+        shutil.copyfile(ROOT / "scripts/maintainer/render-layouts.sh", payload / "render-layouts")
+        copy_native_runtime(payload)
+        registry = "registry:3.1.1@sha256:fd374bae807c225661adfe2c0c1f9970a0b8fab1761fd7dfb91e0fd9a8748f9b"
+        run("docker", "pull", registry)
+        tag = "loki-secret-verification:reboot-" + work.name
+        registry_tag = tag + "-registry"
+        try:
+            run("docker", "buildx", "build", "--load", "--file", ROOT / "internal/platform/sandbox/testdata/oci-image/Dockerfile", "--tag", tag, ROOT)
+            run("docker", "tag", registry, registry_tag)
+            run("docker", "save", "--output", payload / "images.tar", tag, registry_tag)
+            (payload / "workload-tag").write_text(tag + "\n")
+            (payload / "registry-tag").write_text(registry_tag + "\n")
+        finally:
+            subprocess.run(["docker", "image", "rm", tag, registry_tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         run("xorriso", "-as", "mkisofs", "-quiet", "-r", "-J", "-V", "LOKIPAYLOAD", "-o", work / "payload.iso", payload)
         image = work / "base.img"
         name = f"ubuntu-24.04-minimal-cloudimg-{arch}.img"
@@ -91,7 +144,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     elapsed = time.monotonic() - started
                     print(f"VM {arch}: {elapsed:.0f}s elapsed", flush=True)
-                    if elapsed >= 900:
+                    if elapsed >= 1200:
                         process.kill()
                         process.wait()
                         result = -1
