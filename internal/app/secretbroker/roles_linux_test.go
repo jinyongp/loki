@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -19,6 +20,7 @@ import (
 	"loki/internal/admin"
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/platform/privateio"
 	"loki/internal/rpc"
 )
 
@@ -225,6 +227,16 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 		}
 	}
 	write("false")
+	const migrationOperation = "123e4567-e89b-42d3-a456-426614174491"
+	comparisonRequest := appvalues.AdminRequest{Action: "migration_compare", Resource: "demo", Revision: strings.Repeat("a", 64), RequestID: "123e4567-e89b-42d3-a456-426614174492"}
+	expectedValues := []privateio.MigrationExpectedValue{{Name: "TOKEN", Value: []byte("synthetic-private-restart-canary")}}
+	defer privateio.ClearMigrationExpected(expectedValues)
+	if _, err := client.CompareMigration(ctx, migrationOperation, comparisonRequest, expectedValues, func(appvalues.MigrationComparisonBinding) error {
+		t.Fatal("ordinary active broker exposed migration capability")
+		return nil
+	}); err == nil {
+		t.Fatal("ordinary active broker admitted migration comparison")
+	}
 	if _, err := os.Stat(filepath.Join(inbox, stage.ID+".data")); !os.IsNotExist(err) {
 		t.Fatal("staged plaintext survived import")
 	}
@@ -257,9 +269,31 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	}
 	expired := pending()
 	stopBroker(false)
+	layout["migration_operation"] = migrationOperation
+	encoded, _ = json.Marshal(layout)
+	if err := os.WriteFile(layoutPath, encoded, 0644); err != nil {
+		t.Fatal(err)
+	}
 	stopAfterRestart := startBroker()
 	unlockAfterRestart(expired)
 	write("true")
+	checkpointed := false
+	comparisonRequest.RequestID = "123e4567-e89b-42d3-a456-426614174493"
+	comparison, err := client.CompareMigration(ctx, migrationOperation, comparisonRequest, expectedValues, func(binding appvalues.MigrationComparisonBinding) error {
+		if binding.Resource != resource.ID || binding.Operation != migrationOperation || binding.Attempt != comparisonRequest.RequestID {
+			t.Fatal("private IPC returned a foreign binding")
+		}
+		checkpointed = true
+		return nil
+	})
+	if err != nil || !comparison.Matched || comparison.Count != 1 || !checkpointed {
+		t.Fatal("staged two-phase private comparison", err)
+	}
+	checkpointError := errors.New("synthetic host checkpoint failure")
+	comparisonRequest.RequestID = "123e4567-e89b-42d3-a456-426614174494"
+	if result, err := client.CompareMigration(ctx, migrationOperation, comparisonRequest, expectedValues, func(appvalues.MigrationComparisonBinding) error { return checkpointError }); !errors.Is(err, checkpointError) || result.Matched {
+		t.Fatal("failed host checkpoint authorized comparison delivery", err)
+	}
 	expired = pending()
 	stopAfterRestart(true)
 	_ = startBroker()

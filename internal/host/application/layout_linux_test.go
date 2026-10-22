@@ -4,7 +4,6 @@ package application
 
 import (
 	"encoding/json"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"loki/internal/config"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/execution"
 	hostpolicy "loki/internal/host/policy"
 )
@@ -112,6 +112,13 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		t.Fatal("failed identity change rewrote the selector")
 	}
 	t.Run("inactive candidate and atomic policy selection", func(t *testing.T) {
+		t.Cleanup(func() {
+			// Restore this public-only fixture even if a negative assertion
+			// fails, so later foreign-owner checks retain their original source.
+			if err := os.WriteFile(options.IdentityFile, identityBytes, 0600); err != nil {
+				t.Error(err)
+			}
+		})
 		stageRuntime, err := os.MkdirTemp("/dev/shm", "loki-host-candidate-")
 		if err != nil {
 			t.Fatal(err)
@@ -119,6 +126,7 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		defer os.RemoveAll(stageRuntime)
 		stageOptions := options
 		stageOptions.RuntimeRoot = stageRuntime
+		stageOptions.MigrationOperation = "123e4567-e89b-42d3-a456-426614174481"
 		activeAdmin, err := os.ReadFile(first.AdminLayoutFile)
 		if err != nil {
 			t.Fatal(err)
@@ -157,19 +165,13 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 			t.Fatal("restart did not select the verified generation", err)
 		}
 		stalePolicy := options
-		stalePolicy.Contract.Environment = maps.Clone(options.Contract.Environment)
-		stalePolicy.Contract.Environment["PATH"] = "/different-policy:/usr/bin:/bin"
+		stalePolicy.Resources = []controlpolicy.ApplicationResource{{ID: "123e4567-e89b-42d3-a456-426614174482", Alias: "policy-drift", Repository: "owner/policy-drift", Network: "none", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Execute: true}}, Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}}}
 		compiled, err := hostpolicy.CompileApplications(stalePolicy.Configuration, stalePolicy.Contract, stalePolicy.Resources)
 		if err != nil || compiled.Digest() == selected.PolicySHA256 {
 			t.Fatal("changed-policy fixture is invalid", err)
 		}
 		if _, err := PrepareState(stalePolicy); err == nil {
 			t.Fatal("restart silently rebound a selected generation to changed policy")
-		}
-		// Restore the fixture's original public selector for the unrelated
-		// existing foreign-directory rejection checks below. No values exist.
-		if err := os.WriteFile(options.IdentityFile, identityBytes, 0600); err != nil {
-			t.Fatal(err)
 		}
 	})
 	if os.Chown(first.HostGeneration, 0, 0) != nil {

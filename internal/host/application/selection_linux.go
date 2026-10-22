@@ -48,7 +48,9 @@ func CommitCandidate(options PrepareOptions, expected Identity, generation strin
 	if current.Version == 2 && current.ActiveGeneration == generation {
 		// A lost selector acknowledgement reuses the installed identity. Check
 		// the actual config/catalog digest again rather than rebinding on boot.
-		active, err := PrepareState(options)
+		activeOptions := options
+		activeOptions.MigrationOperation = ""
+		active, err := PrepareState(activeOptions)
 		want := expected
 		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, generation, active.Layout.PolicySHA256
 		if err != nil || active.Identity != want {

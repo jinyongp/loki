@@ -32,6 +32,7 @@ type PrepareOptions struct {
 	IdentityFile, StateRoot, ServiceStateRoot, RuntimeRoot, Binary string
 	Principal                                                      string
 	JobDeploymentID                                                string
+	MigrationOperation                                             string
 	Configuration                                                  config.Config
 	Contract                                                       execution.Contract
 	Resources                                                      []controlpolicy.ApplicationResource
@@ -97,6 +98,9 @@ func PrepareCandidate(options PrepareOptions, expected Identity, generation stri
 }
 
 func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *candidateSelection) (Preparation, error) {
+	if options.MigrationOperation != "" && (candidate == nil || !controlpolicy.ApplicationUUID.MatchString(options.MigrationOperation)) {
+		return Preparation{}, invalid
+	}
 	if options.UID == 0 || options.GID == 0 || options.AgentUID == 0 || options.MetadataGID == 0 || options.UID == options.AgentUID || options.GID == options.MetadataGID || !controlpolicy.ApplicationAlias.MatchString(options.Principal) {
 		return Preparation{}, invalid
 	}
@@ -122,6 +126,9 @@ func prepareGeneration(options PrepareOptions, runtimeFiles bool, candidate *can
 	}
 	layout := appvalues.BrokerLayout{UID: options.UID, LauncherUID: 0, Binary: options.Binary, Root: filepath.Join(options.ServiceStateRoot, "dvt"), ApplicationRoot: filepath.Join(options.ServiceStateRoot, "metadata"), Socket: filepath.Join(options.RuntimeRoot, "jobs", "control.sock"), MetadataSocket: filepath.Join(options.RuntimeRoot, "metadata", "control.sock"), AdminSocket: filepath.Join(options.RuntimeRoot, "admin", "control.sock"), RuntimeRoot: filepath.Join(options.RuntimeRoot, "private"), Inbox: filepath.Join(options.RuntimeRoot, "inbox"), AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, Principal: options.Principal, Resources: resources, BaseEnvironment: base, PolicySHA256: policy.Digest()}
 	layout.JobDeploymentID = options.JobDeploymentID
+	if candidate != nil {
+		layout.MigrationOperation = options.MigrationOperation
+	}
 	for _, path := range []string{layout.Socket, layout.MetadataSocket, layout.AdminSocket} {
 		if len(path) >= 108 {
 			return Preparation{}, invalid

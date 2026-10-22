@@ -1,5 +1,7 @@
 {
   "allowed_edges": [
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/control/policy"},
+    {"from":"loki/cmd/secret-broker","to":"loki/internal/platform/privateio"},
     {"from":"loki/internal/host/lifecycle","to":"loki/internal/control/appvalues"},
     {"from":"loki/internal/host/lifecycle","to":"loki/internal/platform/privateio"},
     {"from":"loki/modules/secrets","to":"loki/internal/control/appvalues"},

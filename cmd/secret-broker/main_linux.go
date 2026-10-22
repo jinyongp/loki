@@ -15,7 +15,9 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/app/secretbroker"
 	"loki/internal/control/appvalues"
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
+	"loki/internal/platform/privateio"
 	"loki/modules/secrets/application"
 	provider "loki/modules/secrets/devtools"
 )
@@ -38,6 +40,9 @@ func run(args []string) int {
 		return 1
 	}
 	fullRoles := config.MetadataSocket != "" || config.AdminSocket != "" || config.ApplicationRoot != "" || config.Inbox != ""
+	if config.MigrationOperation != "" && (!fullRoles || !controlpolicy.ApplicationUUID.MatchString(config.MigrationOperation)) {
+		return 2
+	}
 	if fullRoles && (config.MetadataSocket == "" || config.AdminSocket == "" || config.ApplicationRoot == "" || config.Inbox == "" || config.RuntimeRoot == "" || config.AgentUID == 0 || config.AgentUID == config.UID || config.Principal == "") {
 		return 2
 	}
@@ -114,7 +119,11 @@ func run(args []string) int {
 			results <- err
 		}()
 		go func() {
-			err := secretbroker.ServeAdmin(ctx, secretbroker.AdminOptions{Ready: roleReady, Socket: config.AdminSocket, Values: values})
+			adminOptions := secretbroker.AdminOptions{Ready: roleReady, Socket: config.AdminSocket, Values: values}
+			if config.MigrationOperation != "" {
+				adminOptions.Migration = &secretbroker.MigrationAdminOptions{Provider: p, Operation: config.MigrationOperation, Policy: config.PolicySHA256, Runner: privateio.OperationID(config.MigrationOperation, config.RunnerID, "migration-runner"), Instance: config.InstanceID, Resources: config.Resources}
+			}
+			err := secretbroker.ServeAdmin(ctx, adminOptions)
 			if err != nil && ctx.Err() == nil {
 				fmt.Fprintln(os.Stderr, "secret broker administrator role unavailable")
 			}

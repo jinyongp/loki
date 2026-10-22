@@ -20,9 +20,10 @@ type adminResponse struct {
 }
 
 type AdminOptions struct {
-	Socket string
-	Values *application.Service
-	Ready  func() error
+	Socket    string
+	Values    *application.Service
+	Ready     func() error
+	Migration *MigrationAdminOptions
 }
 
 // ServeAdmin authenticates the kernel UID before accepting either frame. The
@@ -65,11 +66,11 @@ func ServeAdmin(ctx context.Context, options AdminOptions) error {
 			conn.Close()
 			continue
 		}
-		wg.Go(func() { defer func() { <-slots }(); defer conn.Close(); serveAdmin(ctx, conn, values) })
+		wg.Go(func() { defer func() { <-slots }(); defer conn.Close(); serveAdmin(ctx, conn, options) })
 	}
 }
 
-func serveAdmin(ctx context.Context, conn *net.UnixConn, values *application.Service) {
+func serveAdmin(ctx context.Context, conn *net.UnixConn, options AdminOptions) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	deadline, _ := ctx.Deadline()
@@ -91,7 +92,11 @@ func serveAdmin(ctx context.Context, conn *net.UnixConn, values *application.Ser
 		}
 		defer clear(body)
 	}
-	out, err := values.Admin(ctx, request, body)
+	if request.Action == "migration_compare" {
+		serveMigrationComparison(ctx, conn, options.Migration, request, body)
+		return
+	}
+	out, err := options.Values.Admin(ctx, request, body)
 	r := adminResponse{OK: err == nil, Result: out}
 	if err != nil {
 		d := fault.Describe(err)

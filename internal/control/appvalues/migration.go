@@ -59,3 +59,22 @@ type MigrationComparisonBinding struct {
 	CorrelationID string   `json:"correlation_id"`
 	Revision      uint64   `json:"revision"`
 }
+
+type MigrationPrepared struct {
+	Stage   string                     `json:"stage"`
+	Binding MigrationComparisonBinding `json:"binding"`
+}
+
+type MigrationApproval struct {
+	Stage     string `json:"stage"`
+	Attempt   string `json:"attempt"`
+	Execution string `json:"execution"`
+	Input     string `json:"input"`
+	Revision  uint64 `json:"revision"`
+}
+
+type MigrationComparisonResult struct {
+	Stage   string `json:"stage"`
+	Matched bool   `json:"matched"`
+	Count   int    `json:"count"`
+}
