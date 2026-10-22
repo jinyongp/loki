@@ -27,6 +27,19 @@ type Maintenance struct {
 
 const maintenanceFile = "maintenance.json"
 
+func (j *Journal) MaintenanceStatus() (*Maintenance, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if err := j.ready(); err != nil {
+		return nil, err
+	}
+	if j.maintenance == nil {
+		return nil, nil
+	}
+	value := *j.maintenance
+	return &value, nil
+}
+
 func loadMaintenance(dir string) (*Maintenance, error) {
 	fd, err := unix.Open(filepath.Join(dir, maintenanceFile), unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if errors.Is(err, os.ErrNotExist) {

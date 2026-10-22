@@ -136,6 +136,8 @@ func runHost(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "prepare-secrets":
 		return runHostPrepareSecrets(args[1:], stdout, stderr)
+	case "maintenance":
+		return runHostAdmission(args[1:], stdout, stderr)
 	case "install":
 		return runHostInstall(args[1:], stdout, stderr)
 	case "status":

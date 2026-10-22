@@ -369,7 +369,7 @@ func TestPrepareRunInputUsesLauncherOwnedReadOnlyFile(t *testing.T) {
 func TestLifecycleOperationsExposeOnlyExecutorJobLifecycle(t *testing.T) {
 	l := lifecycleFixture(t, &fakeRunner{}, time.Second, time.Second, 8)
 	operations := l.operations()
-	if len(operations) != 10 {
+	if len(operations) != 11 {
 		t.Fatalf("operations = %#v", operations)
 	}
 	for _, name := range []string{"run", "start", "inspect", "output", "wait", "cancel"} {
@@ -382,7 +382,7 @@ func TestLifecycleOperationsExposeOnlyExecutorJobLifecycle(t *testing.T) {
 		t.Fatalf("run/wait timeouts = %v/%v", operations["run"].Timeout, operations["wait"].Timeout)
 	}
 	server := rpc.Server{Principals: identity.FixedUIDResolver{UID: 1001, Kind: identity.Executor}}
-	for _, name := range []string{"maintenance_begin", "maintenance_end"} {
+	for _, name := range []string{"maintenance_begin", "maintenance_end", "maintenance_status"} {
 		operation := operations[name]
 		if operation.Grant != controlpolicy.HostAdministration || server.Authorized(rpc.Peer{UID: 1001}, operation.Grant) || !server.Authorized(rpc.Peer{UID: 0}, operation.Grant) {
 			t.Fatalf("maintenance grant is not host-only: %s", name)

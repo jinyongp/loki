@@ -40,6 +40,13 @@ func (l *lifecycle) beginMaintenance(ctx context.Context, request maintenanceReq
 		return jobs.Maintenance{}, err
 	}
 	defer l.admission.Unlock()
+	previous, err := l.journal.MaintenanceStatus()
+	if err != nil {
+		return jobs.Maintenance{}, err
+	}
+	if previous != nil && previous.OperationID == request.OperationID && !previous.Active {
+		return l.journal.BeginMaintenance(request.OperationID, request.Interrupt)
+	}
 	if !request.Interrupt {
 		l.mu.Lock()
 		busy := len(l.active) != 0

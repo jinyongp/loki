@@ -83,7 +83,9 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 		// The generation selector stays host-only; the broker receives precisely
 		// this generation at its fixed logical state path, without a symlink.
-		body := []byte("[Service]\nBindPaths=" + strconv.Quote(prepared.HostGeneration+":"+*serviceState) + "\n")
+		// systemd parses ':' outside each quoted path. Quoting the entire
+		// source:destination pair instead makes ':' part of one literal path.
+		body := []byte("[Service]\nBindPaths=" + strconv.Quote(prepared.HostGeneration) + ":" + strconv.Quote(*serviceState) + "\n")
 		path := filepath.Join(*unitDirectory, "20-generation.conf")
 		if safeio.PublishPrivate(path, body, true) != nil || os.Chmod(path, 0644) != nil {
 			fmt.Fprintln(stderr, "native generation binding could not be prepared")

@@ -169,6 +169,19 @@ func normalizeMaxConcurrentJobs(value int) (int, error) {
 
 func (l *lifecycle) operations() map[string]rpc.Operation {
 	return map[string]rpc.Operation{
+		"maintenance_status": {Grant: controlpolicy.HostAdministration, Handle: func(_ context.Context, raw json.RawMessage) (any, error) {
+			var request struct {
+				Operation string `json:"operation"`
+			}
+			if err := privateio.Decode(raw, &request); err != nil {
+				return nil, err
+			}
+			if request.Operation != "maintenance_status" {
+				return nil, privateio.ErrInvalid
+			}
+			state, err := l.journal.MaintenanceStatus()
+			return map[string]any{"maintenance": state}, err
+		}},
 		"maintenance_begin": {Grant: controlpolicy.HostAdministration, Timeout: launcherStopTimeout, Handle: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var request maintenanceRequest
 			if err := privateio.Decode(raw, &request); err != nil {

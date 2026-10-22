@@ -159,3 +159,35 @@ func TestMaintenanceCanceledWriterEventuallyReleases(t *testing.T) {
 		t.Fatal("canceled writer kept admission blocked")
 	}
 }
+
+func TestCompletedDefaultMaintenanceRetryDoesNotTouchNewJob(t *testing.T) {
+	runner := &fakeRunner{blockObserve: true, observing: make(chan struct{}), canceled: make(chan struct{})}
+	l := lifecycleFixture(t, runner, 5*time.Second, time.Minute, 8)
+	op := "11111111-1111-4111-8111-111111111111"
+	if _, err := l.beginMaintenance(t.Context(), maintenanceRequest{OperationID: op}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.journal.EndMaintenance(op); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.startWorkload(t.Context(), jobs.Workload{ID: strings.Repeat("d", 32), CWD: ".", Argv: []string{"/bin/true"}}, strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-runner.observing:
+	case <-time.After(time.Second):
+		t.Fatal("Job did not start")
+	}
+	state, err := l.beginMaintenance(t.Context(), maintenanceRequest{OperationID: op})
+	if err != nil || state.Active {
+		t.Fatalf("completed retry: %+v %v", state, err)
+	}
+	select {
+	case <-runner.canceled:
+		t.Fatal("completed retry canceled a later Job")
+	default:
+	}
+	if err := l.journal.AdmissionAllowed(); err != nil {
+		t.Fatal("completed retry fenced later admission", err)
+	}
+}
