@@ -1,0 +1,152 @@
+{
+  "product_source_sha": "4f1d66fe202e125d2354250d10a655462bd3d66c",
+  "workstream": "9c553662-2eec-4b99-93c0-0c00b4ee5300",
+  "files": [
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/R01-baseline.md",
+      "bytes": 1947,
+      "sha256": "ca07156b8a4281edcf370691959547936b30ea30a2ce060819efd80713e3359a"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/R02-validation-review.md",
+      "bytes": 1925,
+      "sha256": "a6be3e7731b5028f5bf10aa991d79722bcb23837a7b3a6a37ef031d5b307c188"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/R03-selection-review.md",
+      "bytes": 1819,
+      "sha256": "2c06a34de77429a35cf2d16ec7c80a8125937799f69a9dc5b6d5ec89f20075c7"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/R04-transfer-review.md",
+      "bytes": 5907,
+      "sha256": "e2387b4b992b78010e75c79a855deabf645a0e3d5f97198977616716d1a62bc9"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/R05-review.md",
+      "bytes": 2183,
+      "sha256": "a5cb6f8841c49d81a2dea5ed73aa78c515d4611e5dbe8827e4a7567399cd9d24"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/collect_history.py",
+      "bytes": 4964,
+      "sha256": "7b57e362384763592dec66280418895ca413b6abe4ca383c33a01d5cc53beaaf"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/contract-experiment-results.json",
+      "bytes": 1185,
+      "sha256": "a40cc502cb98ed18d969fb6925f6fcc2b1dda4a72a14957f8a2fbe81fd8ef890"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/contract_experiments.py",
+      "bytes": 10431,
+      "sha256": "e6fc6f96ab5b9fe6aab93b705bf3fb0dbc99fc3ee2e26207b37dc2bd869315ee"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/decision-rules.json",
+      "bytes": 2617,
+      "sha256": "b542e53d25f1d90cf3155a7b44ec829d631ec54cb60ac6edbc52c47644a6a6c3"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/dispatch-input-observation.json",
+      "bytes": 274,
+      "sha256": "ca1b5e07ac64d22cf14225eae9afce33136849a69680413578ccdafbfdaacf14"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/history-summary.json",
+      "bytes": 25359,
+      "sha256": "83de98b27a394e83ef32cf6585cdc1b7c6a4af505d995001491d11c8fe7cbe04"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/investigation.md",
+      "bytes": 10072,
+      "sha256": "c8b3743b422c436e57b563d2a7b80143f04c672dbf522177a90f22c4d0493f9c"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/pinned-upstream-sources.json",
+      "bytes": 35304,
+      "sha256": "4e7b6a291950a387c9a2509df0ed228f09f6175afbfe8f2a3ff29d08948a559c"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/releaseway-execution-sources.json",
+      "bytes": 58623,
+      "sha256": "d66951d5c41fc75fe4e85b0a24e0445baeb3b3a364f8082c586e95bc41931603"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/releaseway-source-index.json",
+      "bytes": 540,
+      "sha256": "b20d2706947dc2f9fb293ce1925b73e40af6404e55a739ce4f52908c44ecf98b"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-38777137633.json",
+      "bytes": 192025,
+      "sha256": "ccc05b81c82a7f2cdc1e0cdebad08ac534db331cf028cfd0c94fe94b75bb9f3d"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-38851251342.json",
+      "bytes": 376863,
+      "sha256": "21e63ae228c7bc3ba0f95f3b57081f713141d01cedd4ee4e49d8f622c73c27e5"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-38996724241.json",
+      "bytes": 173123,
+      "sha256": "9161526cf307f631ac6953bc9b00a30ab620e1cc58b264d350eec089fd116a95"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-39977174119.json",
+      "bytes": 193055,
+      "sha256": "1183ba6f48b40c88399089c10e856cf39628f686194aced46a536f794a741a9c"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-39981008103.json",
+      "bytes": 193078,
+      "sha256": "826c26d413d8358b941c8ea28b74cf40f205080e8f5c144f16ea4615b7783ec7"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/run-39984988033.json",
+      "bytes": 567652,
+      "sha256": "c6c316d3483f710705f380c2c776da89f804b31d7d83d678209e96de2c9467c4"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/selection-experiment-results.json",
+      "bytes": 1325,
+      "sha256": "b3be2d9f98c2c38d61aa957fa7da5fec47c0de78da3864b0ff5dc95530bcc44c"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/selection-observation.json",
+      "bytes": 14452,
+      "sha256": "27d58134a1013f25532bdf125c601f3a866c687ae9ab3b42c9f6beb6597b2265"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/selection_experiments.py",
+      "bytes": 2945,
+      "sha256": "594da23f5b1aad304f98144218cdd93eed52c82449728f4f04f6cb7aaaa4a83a"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/transfer-model-results.json",
+      "bytes": 885,
+      "sha256": "1d9b32be6d1255911c39c34b5da0636014392dbb60e72c9e44b8c3f34b0681fe"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/transfer-projection.json",
+      "bytes": 2714,
+      "sha256": "eb52b3a0d9d645c6bcf7a95f9c09ffe2a79d1cf0be9fda3fe2e969fa15f09b4a"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/transfer_model.py",
+      "bytes": 3894,
+      "sha256": "a322f35651540c178ca498ebf669a4fadbbe7d519f08ea8820f6b03c9b9c0bd9"
+    },
+    {
+      "path": "docs/tools/evidence/release-validation-optimization/20261023T174151Z-9c553662/upstream-licenses.json",
+      "bytes": 4002,
+      "sha256": "71e138cdcf861967c0dd64f357b06815bf25049ce26b20577e643e6c94a85314"
+    },
+    {
+      "path": "docs/tools/release-validation-optimization-strategy.md",
+      "bytes": 15254,
+      "sha256": "58c5447243446cf7d3b72824f1726b51d3d803969a8a221c58189d105037abc6"
+    }
+  ],
+  "limits": "No product implementation, native CI, matched end-to-end timing or public release acceptance performed"
+}
