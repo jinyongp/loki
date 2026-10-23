@@ -28,6 +28,9 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("isolated root fixture supplies the actual native metadata owner")
 	}
+	if os.Getenv("LOKI_REQUIRE_NATIVE_MIGRATION") == "1" {
+		prepareNativeOwnerFixtureAccounts(t)
+	}
 	c, err := config.Parse(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -265,4 +268,47 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 	if _, err := os.Lstat(options.SourceRoot); !os.IsNotExist(err) {
 		t.Fatal("invalid public input initialized source state", err)
 	}
+}
+
+func prepareNativeOwnerFixtureAccounts(t *testing.T) {
+	t.Helper()
+	for _, identity := range [][2]string{{"passwd", "10006"}, {"group", "10006"}, {"group", "10001"}} {
+		if _, err := nativeCommand(t.Context(), "/usr/bin/getent", identity[0], identity[1]); err == nil {
+			t.Fatal("preserving an existing service identity; use a disposable native runner")
+		}
+	}
+	id, err := newAttempt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "loki-migo-" + strings.ReplaceAll(id, "-", "")[:12]
+	var groups []string
+	created := false
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if created {
+			if _, err := nativeCommand(ctx, "/usr/sbin/userdel", name); err != nil {
+				t.Error("owned preparation account cleanup", err)
+			}
+		}
+		for _, group := range groups {
+			if _, err := nativeCommand(ctx, "/usr/bin/getent", "group", group); err != nil {
+				continue // userdel may already collect its empty private group.
+			}
+			if _, err := nativeCommand(ctx, "/usr/sbin/groupdel", group); err != nil {
+				t.Error("owned preparation group cleanup", err)
+			}
+		}
+	})
+	for _, group := range [][2]string{{name, "10006"}, {name + "m", "10001"}} {
+		if _, err := nativeCommand(t.Context(), "/usr/sbin/groupadd", "--gid", group[1], group[0]); err != nil {
+			t.Fatal(err)
+		}
+		groups = append(groups, group[0])
+	}
+	if _, err := nativeCommand(t.Context(), "/usr/sbin/useradd", "--uid", "10006", "--gid", "10006", "--no-user-group", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", name); err != nil {
+		t.Fatal(err)
+	}
+	created = true
 }

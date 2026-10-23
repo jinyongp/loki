@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -38,6 +39,14 @@ func nativeMigrationOptions() (hostapplication.PrepareOptions, error) {
 	identity, err := hostapplication.ReadIdentity("/etc/loki-go/secrets-deployment.json")
 	if err != nil {
 		return options, err
+	}
+	if _, err := user.LookupId(strconv.FormatUint(uint64(identity.UID), 10)); err != nil {
+		return options, errors.New("installed native broker account is unavailable")
+	}
+	for _, id := range []uint32{identity.GID, identity.MetadataGID} {
+		if _, err := user.LookupGroupId(strconv.FormatUint(uint64(id), 10)); err != nil {
+			return options, errors.New("installed native broker groups are unavailable")
+		}
 	}
 	c, err := config.Load("/etc/loki-go/config.toml")
 	if err != nil {
@@ -303,10 +312,11 @@ func (n nativeMigrationServices) PrepareServing(ctx context.Context, r lifecycle
 		return errNativeMigration
 	}
 	current, err := hostpolicy.LoadApplications("/etc/loki-go/application-resources.json")
+	beforeResources, beforeErr := controlpolicy.CanonicalApplications(i.BeforeResources, n.options.Contract.Environment)
 	if err == nil {
 		current, err = controlpolicy.CanonicalApplications(current, n.options.Contract.Environment)
 	}
-	if err != nil || !reflect.DeepEqual(current, i.BeforeResources) && !reflect.DeepEqual(current, i.Plan.Resources) {
+	if err != nil || beforeErr != nil || !reflect.DeepEqual(current, beforeResources) && !reflect.DeepEqual(current, i.Plan.Resources) {
 		return errNativeMigration
 	}
 	if resources == nil {

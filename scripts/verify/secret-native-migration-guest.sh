@@ -97,7 +97,7 @@ else
     attempt=$((attempt + 1)); test "$attempt" -lt 100; sleep 0.2
   done
   # Direct starts, as well as the suite target, must obey the original fence.
-  systemctl start loki-go-secrets.service
+  systemctl start loki-go-secrets.service || true
   test "$(systemctl show loki-go-secrets.service --property ConditionResult --value)" = no
   test "$(systemctl show loki-go-secrets.service --property MainPID --value)" = 0
   test ! -S /run/loki-go/secrets/metadata/control.sock
