@@ -51,6 +51,21 @@ func TestLayoutsKeepPrivateGitExecutionOutOfPublicTools(t *testing.T) {
 	}
 }
 
+func TestFullExecutionRolesShareApplicationPolicyCatalog(t *testing.T) {
+	resources := layoutResources([]tools.Selection{{ID: "git", Enabled: true}, {ID: "secrets", Enabled: true}})
+	resources.Plan.Services = append(resources.Plan.Services, FullService{Name: "executor"}, FullService{Name: "launcher"}, FullService{Name: "secrets"})
+	resources.Plan.Programs = append(resources.Plan.Programs, FullProgram{Module: "execution"}, FullProgram{Module: "git"}, FullProgram{Module: "secrets"})
+	layout, err := resources.Layouts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, role := range map[string]map[string]any{"mcp": layout.MCP, "runtime": layout.Runtime, "executor": layout.Executor, "launcher": layout.Launcher} {
+		if role["ApplicationCatalog"] != "/etc/loki/layout/application-resources.json" {
+			t.Fatalf("%s does not bind the same selected resource policy", name)
+		}
+	}
+}
+
 func TestLayoutsPersonalAuthorizationIsExplicitAndSecretsHaveSeparateOwner(t *testing.T) {
 	resources := layoutResources([]tools.Selection{{ID: "github", Enabled: true}, {ID: "secrets", Enabled: true}})
 	resources.Plan.Programs = append(resources.Plan.Programs, FullProgram{Module: "github"}, FullProgram{Module: "secrets"})
