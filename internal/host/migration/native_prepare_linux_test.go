@@ -4,6 +4,7 @@ package migration
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -80,6 +81,24 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 		}
 		providerHost, brokerHost = copyProgram(providerHost, "devtools"), copyProgram(brokerHost, "loki-secret-broker")
 		binary = providerHost
+		if os.Getenv("LOKI_REQUIRE_NATIVE_MIGRATION") == "1" {
+			// This mandatory test runs on a disposable runner. Use the installed
+			// logical binary path: a provider below /tmp is hidden by PrivateTmp.
+			if _, err := os.Lstat("/opt/loki"); !os.IsNotExist(err) {
+				t.Fatal("preserving an existing /opt/loki; use an isolated native runner", err)
+			}
+			if err := os.Symlink(root, "/opt/loki"); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if target, err := os.Readlink("/opt/loki"); err != nil || target != root {
+					t.Error("fixture installation identity changed; preserving it", err)
+				} else if err := os.Remove("/opt/loki"); err != nil {
+					t.Error(err)
+				}
+			})
+			binary = "/opt/loki/bin/devtools"
+		}
 	}
 	application := hostapplication.PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, Principal: "agent", IdentityFile: filepath.Join(root, "identity.json"), StateRoot: filepath.Join(root, "app-state"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: "/run/loki-go/secrets", Binary: "/opt/loki/bin/devtools", Configuration: c, Contract: contract}
 	application.Binary, application.RuntimeRoot = binary, filepath.Join(runtimeParent, "secrets")
@@ -169,7 +188,16 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 				t.Fatal("native preparation initialized cryptographic state", err)
 			}
 			if attempt == 0 && os.Getenv("LOKI_REQUIRE_NATIVE_MIGRATION") == "1" {
+				t.Cleanup(func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					if err := candidate.Stop(ctx); err != nil {
+						t.Error("owned preparation fixture cleanup", err)
+					}
+				})
 				if err := candidate.Start(t.Context()); err != nil {
+					metadata, _ := nativeCommand(t.Context(), "/usr/bin/journalctl", "--unit="+candidate.unit(), "--no-pager", "--output=cat", "--lines=20")
+					t.Logf("owned uninitialized candidate startup: %s", metadata)
 					t.Fatal("original owner's prepared chroot could not start the real broker", err)
 				}
 				if state, err := candidate.Status(t.Context()); err != nil || state != "uninitialized" {

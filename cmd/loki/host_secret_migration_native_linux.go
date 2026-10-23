@@ -303,6 +303,9 @@ func (n nativeMigrationServices) PrepareServing(ctx context.Context, r lifecycle
 		return errNativeMigration
 	}
 	current, err := hostpolicy.LoadApplications("/etc/loki-go/application-resources.json")
+	if err == nil {
+		current, err = controlpolicy.CanonicalApplications(current, n.options.Contract.Environment)
+	}
 	if err != nil || !reflect.DeepEqual(current, i.BeforeResources) && !reflect.DeepEqual(current, i.Plan.Resources) {
 		return errNativeMigration
 	}
