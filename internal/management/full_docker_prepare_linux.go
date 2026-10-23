@@ -405,7 +405,12 @@ func (b *DockerFullBackend) Prepare(ctx context.Context, r DeploymentReservation
 	}
 	for name, value := range map[string]map[string]any{"mcp.json": l.MCP, "runtime.json": l.Runtime, "launcher.json": l.Launcher, "executor.json": l.Executor} {
 		if value == nil {
-			continue
+			if name != "launcher.json" && name != "executor.json" {
+				continue
+			}
+			// Replace any stale execution layouts with explicit selected-role
+			// absence. Root preparation can distinguish no Jobs from lost state.
+			value = map[string]any{"NoJobs": true}
 		}
 		if err := atomicJSON(filepath.Join(layoutDirectory, name), value); err != nil {
 			return err

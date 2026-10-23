@@ -113,6 +113,9 @@ func TestApplicationFullTopologyHasOneIsolatedValueOwner(t *testing.T) {
 	if !strings.Contains(bootstrap.Script, "'prepare-secrets'") || strings.Contains(bootstrap.Script, "'protection'") || strings.Contains(bootstrap.Script, "'unlock'") {
 		t.Fatal("metadata preparation initialized or unlocked cryptography")
 	}
+	if !strings.Contains(bootstrap.Script, "'--policy-startup'") || !strings.Contains(bootstrap.Script, "'--policy-no-jobs'") || strings.Contains(bootstrap.Script, "'--policy-launcher-state'") {
+		t.Fatal("composition without execution requires explicit selected role absence")
+	}
 	coreMounted := false
 	core, err := store.Generation(state.Installed["runtime-core"].Artifact)
 	if err != nil {

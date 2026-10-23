@@ -262,7 +262,12 @@ func verifyRealComposeAuthenticatedJobs(t *testing.T, ctx context.Context, b *Ba
 		rejected.Destroy()
 		t.Fatal("one-state-over payload accepted")
 	}
-	setFixtureApplicationToken(t, ctx, b, state, []byte("PRIVATE"), privateio.OperationID(b.root, "capacity-value", "TOKEN"))
+	// Staged imports also preserve existing values. Explicitly remove the
+	// three fixture layers before importing the new maximum-capacity set.
+	for _, name := range []string{"TOKEN", "API_URL", "MAXA"} {
+		revision := must("secret_inspect", map[string]any{"action": "values", "resource": "fixture", "limit": 1})["revision"]
+		must("secret_delete", map[string]any{"action": "unset", "resource": "fixture", "name": name, "kind": maximumCapacityKeyKinds()[name], "expected_revision": revision, "request_id": privateio.OperationID(b.root, "capacity-unset", name)})
+	}
 	for offset, batch := 0, 0; offset < len(capacityValues); batch++ {
 		var input bytes.Buffer
 		var variables []string

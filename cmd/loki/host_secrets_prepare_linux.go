@@ -68,11 +68,12 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	policyLauncher := flags.String("policy-launcher-layout", "", "stopped original launcher layout for policy replacement")
 	policyState := flags.String("policy-launcher-state", "", "original launcher state mount for policy replacement")
 	policyStartup := flags.Bool("policy-startup", false, "bind policy only while the selected full reservation owns an idle stopped launcher journal")
+	policyNoJobs := flags.Bool("policy-no-jobs", false, "selected stopped full reservation has no launcher or executor layout")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	if *inspectIdentity {
-		if *policyBefore != "" || *policyLauncher != "" || *policyState != "" || *policyStartup {
+		if *policyBefore != "" || *policyLauncher != "" || *policyState != "" || *policyStartup || *policyNoJobs {
 			return 2
 		}
 		if *metadataOnly || *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *restoreCandidate || *maintenance != "" || *initialMaintenance != "" || *interrupt {
@@ -183,8 +184,25 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
 	options.InitialMaintenanceOperation = *initialMaintenance
 	if *policyStartup {
-		if isCandidate || *metadataOnly || *stateOnly || *policyBefore != "" || *maintenance != "" || *jobDeployment == "" || *policyLauncher == "" || *policyState == "" {
+		if isCandidate || *metadataOnly || *stateOnly || *policyBefore != "" || *maintenance != "" || *jobDeployment == "" || *policyLauncher == "" || (*policyState == "") != *policyNoJobs {
 			return 2
+		}
+		if *policyNoJobs {
+			// The original full owner holds its store lock and has verified all
+			// previous services stopped. A composition without execution has no
+			// launcher journal to lock; verify its selected public layouts rather
+			// than creating a second or synthetic Job journal.
+			var launcher, executor struct{ NoJobs bool }
+			var mcp map[string]json.RawMessage
+			if daemon.ReadJSON(*policyLauncher, &launcher) != nil || !launcher.NoJobs || daemon.ReadJSON(filepath.Join(filepath.Dir(*policyLauncher), "executor.json"), &executor) != nil || !executor.NoJobs || daemon.ReadJSON(filepath.Join(filepath.Dir(*policyLauncher), "mcp.json"), &mcp) != nil {
+				return 1
+			}
+			if socket, exists := mcp["ExecutorSocket"]; exists {
+				var value string
+				if json.Unmarshal(socket, &value) != nil || value != "" {
+					return 1
+				}
+			}
 		}
 		existing, err := hostapplication.ReadIdentity(*identity)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -196,20 +214,22 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 				return 1
 			}
 			if existing.PolicySHA256 != policy {
-				journal, err := openApplicationPolicyJournal(*policyLauncher, *policyState, "")
-				if err != nil {
-					fmt.Fprintln(stderr, "selected full policy requires the idle original stopped launcher journal")
-					return 1
+				if !*policyNoJobs {
+					journal, err := openApplicationPolicyJournal(*policyLauncher, *policyState, "")
+					if err != nil {
+						fmt.Fprintln(stderr, "selected full policy requires the idle original stopped launcher journal")
+						return 1
+					}
+					defer journal.Close()
 				}
-				defer journal.Close()
 				if _, err := hostapplication.CommitPolicy(options, existing); err != nil {
 					return 1
 				}
 			}
 		}
-	} else if *policyBefore != "" || *policyLauncher != "" || *policyState != "" {
+	} else if *policyBefore != "" || *policyLauncher != "" || *policyState != "" || *policyNoJobs {
 		var expected hostapplication.Identity
-		if isCandidate || *metadataOnly || *inspectIdentity || *stateOnly || *maintenance == "" || *policyBefore == "" || *policyLauncher == "" || *policyState == "" || len(*policyBefore) > 4096 || json.Unmarshal([]byte(*policyBefore), &expected) != nil {
+		if *policyNoJobs || isCandidate || *metadataOnly || *inspectIdentity || *stateOnly || *maintenance == "" || *policyBefore == "" || *policyLauncher == "" || *policyState == "" || len(*policyBefore) > 4096 || json.Unmarshal([]byte(*policyBefore), &expected) != nil {
 			return 2
 		}
 		journal, err := openApplicationPolicyJournal(*policyLauncher, *policyState, *maintenance)
