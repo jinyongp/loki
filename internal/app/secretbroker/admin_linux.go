@@ -101,6 +101,13 @@ func serveAdmin(ctx context.Context, conn *net.UnixConn, options AdminOptions) {
 		serveMigrationComparison(ctx, conn, options.Migration, request, body)
 		return
 	}
+	if request.Action == "backup_import_preview" || request.Action == "backup_import" {
+		deadline = time.Now().Add(2 * time.Minute)
+		if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
+			deadline = parent
+		}
+		conn.SetDeadline(deadline)
+	}
 	ctx, cancel := context.WithTimeout(ctx, time.Until(deadline))
 	defer cancel()
 	out, err := options.Values.Admin(ctx, request, body)

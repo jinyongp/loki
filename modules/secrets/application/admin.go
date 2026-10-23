@@ -43,6 +43,12 @@ func (s *Service) LockOnStart(ctx context.Context) error {
 }
 
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if q.Action == "backup_import_preview" || q.Action == "backup_import" {
+		return s.importApplication(ctx, q, body)
+	}
+	if q.Operation != "" || q.ArchiveSHA256 != "" {
+		return nil, invalid()
+	}
 	if q.Action == "backup_export" {
 		return s.exportApplication(ctx, q, body)
 	}

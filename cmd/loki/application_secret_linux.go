@@ -54,7 +54,7 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 		fmt.Fprintln(stderr, "usage: loki secret app revision|stage|set|env-create|env-remove|bundle-set|backup-export RESOURCE [OPTIONS]; maintenance begin|end|status [OPTIONS]")
 		return 2
 	}
-	actions := map[string]string{"revision": "revision", "stage": "stage", "set": "set_secret", "env-create": "env_create", "env-remove": "env_remove", "bundle-set": "bundle_set", "backup-export": "backup_export"}
+	actions := map[string]string{"revision": "revision", "stage": "stage", "set": "set_secret", "env-create": "env_create", "env-remove": "env_remove", "bundle-set": "bundle_set", "backup-export": "backup_export", "restore-preview": "backup_import_preview", "restore-import": "backup_import"}
 	action, ok := actions[args[0]]
 	if !ok {
 		fmt.Fprintln(stderr, "unknown application administration action")
@@ -68,6 +68,8 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 	flags.StringVar(&q.Revision, "revision", "", "expected opaque edit revision")
 	flags.StringVar(&q.RequestID, "request-id", "", "original operation UUID")
 	flags.StringVar(&q.Recipient, "recipient", "", "operator X25519 public recipient for a logical app export")
+	flags.StringVar(&q.Operation, "operation-id", "", "original candidate restore operation UUID")
+	flags.StringVar(&q.ArchiveSHA256, "archive-sha256", "", "expected encrypted logical archive digest")
 	flags.StringVar(&q.Principal, "principal", "", "principal allowed to consume this stage")
 	flags.StringVar(&q.Name, "name", "", "resource secret name")
 	flags.BoolVar(&q.Replace, "replace", false, "explicitly replace an existing secret layer")
@@ -84,7 +86,8 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 	if *members != "" {
 		q.Members = strings.Split(*members, ",")
 	}
-	needsBody := action == "stage" || action == "set_secret"
+	restore := action == "backup_import_preview" || action == "backup_import"
+	needsBody := action == "stage" || action == "set_secret" || restore
 	if needsBody && (*file != "") == *fromStdin || !needsBody && (*file != "" || *fromStdin) {
 		fmt.Fprintln(stderr, "choose exactly one private input source for stage/set")
 		return 2
@@ -115,6 +118,9 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 		maximum := 500000
 		if action == "set_secret" {
 			maximum = 65536
+		}
+		if restore {
+			maximum = appvalues.MaxApplicationRestoreInput
 		}
 		var err error
 		body, err = io.ReadAll(io.LimitReader(reader, int64(maximum)+1))

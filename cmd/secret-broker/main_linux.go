@@ -106,7 +106,7 @@ func run(args []string) int {
 			fmt.Fprintln(os.Stderr, "secret broker private inbox unavailable")
 			return 2
 		}
-		values, err := application.New(application.Options{Provider: p, Root: config.ApplicationRoot, Inbox: config.Inbox, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
+		values, err := application.New(application.Options{Provider: p, Root: config.ApplicationRoot, Inbox: config.Inbox, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment, RestoreOperation: config.MigrationOperation})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "secret broker application metadata unavailable")
 			return 2

@@ -22,10 +22,18 @@ type ApplicationClient struct {
 }
 
 func (c ApplicationClient) Call(ctx context.Context, q appvalues.AdminRequest, body []byte) (json.RawMessage, error) {
-	if !filepath.IsAbs(c.Socket) || filepath.Clean(c.Socket) != c.Socket || c.ExpectedUID == 0 || len(body) > 500000 {
+	limit := 500000
+	if q.Action == "backup_import_preview" || q.Action == "backup_import" {
+		limit = appvalues.MaxApplicationRestoreInput
+	}
+	if !filepath.IsAbs(c.Socket) || filepath.Clean(c.Socket) != c.Socket || c.ExpectedUID == 0 || len(body) > limit {
 		return nil, privateio.ErrInvalid
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	timeout := 30 * time.Second
+	if q.Action == "backup_import_preview" || q.Action == "backup_import" {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", c.Socket)
 	if err != nil {

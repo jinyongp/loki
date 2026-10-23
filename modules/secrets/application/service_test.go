@@ -338,6 +338,7 @@ func TestRealApplicationValues(t *testing.T) {
 	if _, err := p.PreviewApplicationImport(ctx, r.Profile(), exportPath, identityPath); err != nil {
 		t.Fatal("actual provider could not authenticate application-only export", err)
 	}
+	verifyApplicationRestore(t, ctx, binary, s, r, []byte(backupIdentity.String()), ciphertext)
 	pendingPath := filepath.Join(filepath.Dir(exportPath), "pending.age")
 	if err := os.Rename(exportPath, pendingPath); err != nil {
 		t.Fatal(err)

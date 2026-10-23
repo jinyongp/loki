@@ -30,6 +30,8 @@ type Options struct {
 	PolicySHA256    string
 	Resources       []controlpolicy.ApplicationResource
 	BaseEnvironment map[string]string
+	// Set only by an original host candidate's root-owned broker layout.
+	RestoreOperation string
 }
 
 type Service struct {
@@ -41,6 +43,9 @@ type Service struct {
 func New(options Options) (*Service, error) {
 	if options.Provider == nil || !revisionPattern.MatchString(options.PolicySHA256) || options.DeploymentID == "" || len(options.DeploymentID) > 128 || strings.ContainsAny(options.DeploymentID, "\x00\r\n ") {
 		return nil, unavailable()
+	}
+	if options.RestoreOperation != "" && !adminUUID.MatchString(options.RestoreOperation) {
+		return nil, invalid()
 	}
 	resources, err := controlpolicy.CanonicalApplications(options.Resources, options.BaseEnvironment)
 	if err != nil {
