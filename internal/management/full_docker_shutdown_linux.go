@@ -66,7 +66,7 @@ func (b *DockerFullBackend) Stop(ctx context.Context, r DeploymentReservation) e
 	// A reservation is durable before image acquisition or service metadata.
 	// Only an actual absence proof can retire a never-created deployment.
 	if _, err := b.record(r); errors.Is(err, os.ErrNotExist) {
-		return b.ConfirmAbsent(ctx, r)
+		return b.stopUnrecordedPreparation(ctx, r)
 	} else if err != nil {
 		return err
 	}
@@ -130,6 +130,44 @@ func (b *DockerFullBackend) Stop(ctx context.Context, r DeploymentReservation) e
 		return err
 	}
 	return b.endStopMaintenance(ctx, r)
+}
+
+// Integration setup reserves generations before creating its single preparation
+// container, without a serving-service record. Recover only that exact owned
+// helper; missing metadata must never authorize deleting services or Jobs.
+func (b *DockerFullBackend) stopUnrecordedPreparation(ctx context.Context, r DeploymentReservation) error {
+	ids, err := b.containerIDs(ctx, r)
+	if err != nil {
+		return err
+	}
+	networks, err := b.childNetworks(ctx, r)
+	if err != nil {
+		return err
+	}
+	if len(networks) != 0 {
+		return fmt.Errorf("unrecorded deployment retains job networks; generation remains reserved")
+	}
+	for _, id := range ids {
+		c, err := b.inspectContainer(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := b.requireParent(r, c); err != nil {
+			return err
+		}
+		if c.Config.Labels[fullServiceLabel] != "prepare" {
+			return fmt.Errorf("unrecorded deployment retains services or Jobs; generation remains reserved")
+		}
+	}
+	for _, id := range ids {
+		if _, err := b.command(ctx, "stopping owned integration preparation", nil, "container", "stop", "--time", "10", id); err != nil {
+			return err
+		}
+		if _, err := b.command(ctx, "removing owned integration preparation", nil, "container", "rm", "--force", id); err != nil {
+			return err
+		}
+	}
+	return b.ConfirmAbsent(ctx, r)
 }
 
 func (b *DockerFullBackend) ConfirmAbsent(ctx context.Context, r DeploymentReservation) error {

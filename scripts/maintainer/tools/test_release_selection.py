@@ -89,6 +89,12 @@ class RealClosureSelectionTests(unittest.TestCase):
             self.assertEqual(plan["matrices"][key], [], key)
         self.assertEqual({row["arch"] for row in plan["matrices"]["full-checks"]}, {"amd64", "arm64"})
 
+    def test_full_administrator_fixture_change_rechecks_without_rebuilding(self):
+        plan=self.changed("internal/management/testdata/full-acceptance/main.go")
+        for key in ("manager", "browser", "full", "browser-checks"):
+            self.assertEqual(plan["matrices"][key], [], key)
+        self.assertEqual({row["arch"] for row in plan["matrices"]["full-checks"]}, {"amd64", "arm64"})
+
 
 if __name__=="__main__":
     unittest.main()

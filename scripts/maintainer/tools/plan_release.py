@@ -151,7 +151,7 @@ def fingerprints(release):
                 paths += [SCRIPTS+"build_browser_bundle.py", SCRIPTS+"acquire_browser_inputs.py", "package.json", "package-lock.json", "modules/browser/package.json", f"packaging/tools/inputs/browser-linux-{arch}-full.json"]
             owned_images = {role:value for role,value in images.items() if OWNERS[role] == owner}
             value = inputs.digest(paths, {"payload":payload, "images":owned_images, "contract":contracts})
-            units[f"module:{owner}:linux:{arch}:full"] = {"fingerprint":value,"validation":inputs.digest([SCRIPTS+name for name in ("accept_full_workspace_candidate.py", "accept_full_composition_candidate.py", "accept_browser_candidate.py", "mcp_probe.py")]), "payload":payload, "kind":"module","owner":owner,"target":target,"runner":runner}
+            units[f"module:{owner}:linux:{arch}:full"] = {"fingerprint":value,"validation":inputs.digest([SCRIPTS+name for name in ("accept_full_workspace_candidate.py", "accept_full_composition_candidate.py", "accept_browser_candidate.py", "mcp_probe.py")]+["internal/management/testdata/full-acceptance"]), "payload":payload, "kind":"module","owner":owner,"target":target,"runner":runner}
     return units, inputs
 
 
