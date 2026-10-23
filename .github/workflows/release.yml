@@ -518,7 +518,6 @@ jobs:
           sudo apparmor_parser --replace "$RUNNER_TEMP/loki-browser-acceptance"
       - name: Accept both packaged engines, capabilities, installation and connection
         run: |
-          python3 scripts/maintainer/tools/accept_browser_candidate.py --candidate acceptance-candidate
           go test ./modules/browser ./internal/transport/toolproxy
           python3 scripts/maintainer/tools/accept_browser_capabilities.py --candidate acceptance-candidate
           python3 scripts/maintainer/tools/accept_public_installer.py --candidate acceptance-candidate --browser
