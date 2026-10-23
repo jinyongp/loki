@@ -19,8 +19,8 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 			Needs yaml.Node
 			If    string
 			Steps []struct {
-				Uses, Run string
-				With      map[string]string
+				Uses, Run, If string
+				With          map[string]string
 			}
 		}
 	}
@@ -120,8 +120,8 @@ func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
 	var workflow struct {
 		Jobs map[string]struct {
 			Steps []struct {
-				Uses, Run string
-				With      map[string]any
+				Uses, Run, If string
+				With          map[string]any
 			}
 		}
 	}
@@ -143,8 +143,14 @@ func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
 		t.Fatal("release assets and installer pages must have separate transfer payloads")
 	}
 	for _, name := range []string{"gate", "publish", "verify-public"} {
-		var assets, pages, sealedMetadata bool
+		var assets, pages, sealedMetadata, inventory, verifier bool
 		for _, step := range workflow.Jobs[name].Steps {
+			if strings.Contains(step.Run, "release_inventory.py --publication publication") {
+				verifier = true
+				if name == "gate" && step.If != "${{ !inputs.publish }}" {
+					t.Fatal("validation-only gate must verify actual bytes")
+				}
+			}
 			if !strings.HasPrefix(step.Uses, "actions/download-artifact@") {
 				continue
 			}
@@ -152,6 +158,11 @@ func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
 			switch artifact {
 			case "publication-assets":
 				assets = step.With["path"] == "publication/assets"
+				if name == "gate" && step.If != "${{ !inputs.publish }}" {
+					t.Fatal("publishing gate must avoid downloading all asset bytes")
+				}
+			case "publication-metadata":
+				inventory = step.With["path"] == "publication"
 			case "publication-pages":
 				pages = step.With["path"] == "publication/pages"
 			case "accepted-publication-metadata":
@@ -163,10 +174,10 @@ func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
 		if name == "verify-public" && (assets || !pages) {
 			t.Fatal("public installer comparison must receive only pages")
 		}
-		if name == "gate" && (!assets || !pages) {
-			t.Fatal("final gate must retain exact assets and installer pages")
+		if name == "gate" && (!assets || !pages || !inventory || !verifier) {
+			t.Fatal("gate must seal inventory and verify validation-only bytes")
 		}
-		if name == "publish" && (!assets || pages || !sealedMetadata) {
+		if name == "publish" && (!assets || pages || !sealedMetadata || !verifier) {
 			t.Fatal("publisher must receive assets and final sealed metadata")
 		}
 	}

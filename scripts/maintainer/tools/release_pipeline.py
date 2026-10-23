@@ -23,7 +23,14 @@ SHA = re.compile(r"[a-f0-9]{64}")
 def read(path):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 8 << 20:
         raise ValueError("release metadata must be a bounded regular file")
-    return json.loads(path.read_text())
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("release metadata has duplicate JSON keys")
+            result[key] = value
+        return result
+    return json.loads(path.read_text(), object_pairs_hook=unique)
 
 
 def write(path, value):
@@ -419,6 +426,8 @@ def main():
             full(p,args.output)
         elif args.action=="assemble":
             assemble(p,args.built,args.output)
+            from release_inventory import create
+            create(p,args.output)
         elif args.action=="materialize":
             materialize(p,args.built,args.output,args.mode)
 

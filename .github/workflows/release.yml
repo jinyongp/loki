@@ -305,6 +305,8 @@ jobs:
         run: |
           mkdir -p metadata/assets
           cp publication/assets/*.json publication/assets/*.md publication/assets/loki-install.* metadata/assets/
+          cp publication/release-inventory.json metadata/
+          if test -f publication/assets/SHA256SUMS; then cp publication/assets/SHA256SUMS metadata/assets/; fi
           python3 - <<'PY'
           import json, os
           from pathlib import Path
@@ -655,11 +657,11 @@ jobs:
           Path('results.json').write_text(json.dumps({k:v['result'] for k,v in json.loads(os.environ['JOB_RESULTS']).items()}))
           PY
           python3 scripts/maintainer/tools/release_gate.py results --plan plan/plan.json --output publication --results results.json
-      - name: Download exact release assets for final sealing
+      - name: Download assembly inventory and small lock metadata
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: publication-assets
-          path: publication/assets
+          name: publication-metadata
+          path: publication
       - name: Download installer pages for Pages deployment
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -674,6 +676,18 @@ jobs:
           python3 scripts/maintainer/tools/release_gate.py gate --plan plan/plan.json --output publication --checks checks --results results.json
           mkdir -p accepted/assets
           cp publication/assets/loki-release-lock.json publication/assets/SHA256SUMS accepted/assets/
+          cp publication/release-inventory.json accepted/
+      - name: Download exact release bytes for validation-only acceptance
+        if: ${{ !inputs.publish }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: publication-assets
+          path: publication/assets
+      - name: Verify validation-only bytes with the publication verifier
+        if: ${{ !inputs.publish }}
+        run: |
+          cp accepted/assets/* publication/assets/
+          python3 scripts/maintainer/tools/release_inventory.py --publication publication --source "$GITHUB_SHA" --release '${{ needs.plan.outputs.version }}'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: accepted-publication-metadata
@@ -711,7 +725,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE: ${{ needs.plan.outputs.version }}
         run: |
-          (cd publication/assets && sha256sum --check --strict SHA256SUMS)
+          python3 scripts/maintainer/tools/release_inventory.py --publication publication --source "$GITHUB_SHA" --release "$RELEASE"
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
           sh scripts/maintainer/publish-tag.sh "v$RELEASE" "$GITHUB_SHA"
       - id: release

@@ -30,7 +30,7 @@ def require_results(plan, results):
     return required
 
 
-def gate(plan, publication, checks, results):
+def gate(plan, publication, checks, results, asset_records=None):
     required = require_results(plan, results)
     lock_path = publication/"assets/loki-release-lock.json"
     lock = read(lock_path)
@@ -69,8 +69,24 @@ def gate(plan, publication, checks, results):
             raise ValueError("unit has no successful native acceptance")
     write(lock_path, lock)
     assets = publication/"assets"
-    (assets/"SHA256SUMS").write_text("".join(digest(path)+"  "+path.name+"\n" for path in sorted(assets.iterdir()) if path.is_file() and path.name != "SHA256SUMS"))
+    if asset_records is None:
+        asset_records = {path.name: {"sha256": digest(path)} for path in assets.iterdir() if path.is_file() and path.name != "SHA256SUMS"}
+    hashes = {name: item["sha256"] for name, item in asset_records.items()}
+    hashes["loki-release-lock.json"] = digest(lock_path)
+    (assets/"SHA256SUMS").write_text("".join(hashes[name]+"  "+name+"\n" for name in sorted(hashes)))
     return lock
+
+
+def seal_publication(plan, publication, checks, results, verify_bytes):
+    from release_inventory import validate, seal, verify
+    require_results(plan, results)
+    inventory = read(publication/"release-inventory.json")
+    validate(plan, publication, inventory)
+    gate(plan, publication, checks, results, inventory["assets"])
+    final = seal(inventory, publication)
+    if verify_bytes:
+        verify(publication, final, plan["source_commit"], plan["release"])
+    return final
 
 
 if __name__ == "__main__":
@@ -82,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--results", type=Path)
     parser.add_argument("--mode")
     parser.add_argument("--publication", type=Path)
+    parser.add_argument("--verify-bytes", action="store_true")
     args = parser.parse_args()
     plan = read(args.plan)
     if args.action == "evidence":
@@ -91,4 +108,4 @@ if __name__ == "__main__":
     elif args.action == "results":
         require_results(plan, read(args.results))
     else:
-        gate(plan, args.output, args.checks, read(args.results))
+        seal_publication(plan, args.output, args.checks, read(args.results), args.verify_bytes)
