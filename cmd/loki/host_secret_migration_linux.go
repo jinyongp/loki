@@ -49,6 +49,9 @@ func readSecretMigrationDocument(path string, target any) error {
 }
 
 func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "native" {
+		return runHostNativeSecretMigration(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: loki host secret-migration prepare|apply|status|recover|rollback --manager-root ROOT [OPTIONS]")
 		return 2

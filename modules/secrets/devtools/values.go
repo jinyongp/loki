@@ -171,7 +171,9 @@ func (p *Provider) SetPublic(ctx context.Context, app, env, name, value, revisio
 		return ChangeResult{}, ErrUnavailable
 	}
 	var result ChangeResult
-	err = p.valueMutation(ctx, app, append([]string{"var", "set", name, "--value", value}, args...), nil, &result)
+	input := []byte(value)
+	defer clear(input)
+	err = p.valueMutation(ctx, app, append([]string{"var", "set", name, "--stdin"}, args...), input, &result)
 	return result, err
 }
 

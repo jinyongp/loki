@@ -3,9 +3,9 @@ package devtools
 // The private broker adapter consumes a separate reviewed CLI surface from the
 // coordination module. These constants never permit a generic CLI operation.
 const (
-	DevtoolsVersion        = "0.30.1"
-	DevtoolsCommit         = "ebf18cfb922c14e8a0b3200284f596fd56d13f20"
-	DevtoolsProtocol       = 10
+	DevtoolsVersion        = "0.32.0"
+	DevtoolsCommit         = "b95bc47ad4600d2a180495a79c7fd5cf9f559b9d"
+	DevtoolsProtocol       = 12
 	RunnerWireProtocol     = 1
 	RedactionProtocol      = 1
 	MaxPrivateControlFrame = 128 << 10

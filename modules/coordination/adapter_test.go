@@ -21,7 +21,7 @@ func fakeClient(t *testing.T) (*Client, string) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\",\"protocol_version\":10}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\",\"protocol_version\":12}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + catalog + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + log + "\"\n" +
 		"printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"item\":{},\"changed\":true,\"replayed\":false}}'\n"
@@ -56,7 +56,7 @@ func TestClientRejectsGenericExecutionBeforeLaunching(t *testing.T) {
 
 func TestClientRejectsInvalidVersionAndTimeout(t *testing.T) {
 	client, _ := fakeClient(t)
-	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"latest\",\"commit\":\"test\",\"protocol_version\":10}}'\n"), 0700); err != nil {
+	if err := os.WriteFile(client.Binary, []byte("#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"latest\",\"commit\":\"test\",\"protocol_version\":12}}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := client.Verify(t.Context()); err == nil {
@@ -90,7 +90,7 @@ func TestClientVerifyCachesAcceptedCandidate(t *testing.T) {
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
 		"printf '%s %s\\n' \"$1\" \"$2\" >> \"" + calls + "\"\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"candidate-test\",\"protocol_version\":10}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"candidate-test\",\"protocol_version\":12}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalog + "\"; exit 0; fi\n" +
 		"exit 2\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
@@ -193,7 +193,7 @@ func TestClientVerifyRejectsApprovedContractDrift(t *testing.T) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"drift-test\",\"protocol_version\":10}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"drift-test\",\"protocol_version\":12}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalogPath + "\"; exit 0; fi\n" +
 		"exit 2\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {

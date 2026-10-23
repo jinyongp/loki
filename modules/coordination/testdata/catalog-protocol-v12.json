@@ -2,7 +2,7 @@
   "schema_version": 1,
   "ok": true,
   "data": {
-    "protocol_version": 10,
+    "protocol_version": 12,
     "commands": [
       {
         "name": "command inspect",

@@ -10,16 +10,16 @@ import (
 )
 
 // ProtocolVersion describes command schemas independently of EnvelopeVersion.
-const ProtocolVersion = 10
+const ProtocolVersion = 12
 
 const (
-	reviewedDevtoolsVersion = "0.30.1"
-	reviewedDevtoolsCommit  = "ebf18cfb922c14e8a0b3200284f596fd56d13f20"
+	reviewedDevtoolsVersion = "0.32.0"
+	reviewedDevtoolsCommit  = "b95bc47ad4600d2a180495a79c7fd5cf9f559b9d"
 )
 
 // This reviewed consumer subset is not a captured full release catalog.
 //
-//go:embed testdata/catalog-protocol-v10.json
+//go:embed testdata/catalog-protocol-v12.json
 var embeddedCatalog []byte
 
 type Envelope struct {

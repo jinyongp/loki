@@ -7,17 +7,17 @@
     "mode": "full"
   },
   "source": {
-    "url": "https://codeload.github.com/jinyongp/devtools/tar.gz/ebf18cfb922c14e8a0b3200284f596fd56d13f20",
-    "commit": "ebf18cfb922c14e8a0b3200284f596fd56d13f20",
-    "bytes": 1493754,
-    "sha256": "6f17eaeef05f0427862fa8a12db22d53fa53a9a10933af032c5c84ddfb41aa80",
-    "root": "devtools-ebf18cfb922c14e8a0b3200284f596fd56d13f20",
+    "url": "https://codeload.github.com/jinyongp/devtools/tar.gz/b95bc47ad4600d2a180495a79c7fd5cf9f559b9d",
+    "commit": "b95bc47ad4600d2a180495a79c7fd5cf9f559b9d",
+    "bytes": 1687663,
+    "sha256": "3ef95c5c9a5981df3165a138796eae66d942c2aacd6deded3a0a34b28c524a70",
+    "root": "devtools-b95bc47ad4600d2a180495a79c7fd5cf9f559b9d",
     "notices": [
       "LICENSE"
     ],
     "digest_provenance": "Maintainer measurement of exact commit archive over primary HTTPS; no detached signature claimed",
-    "archive": "devtools-ebf18cfb922c14e8a0b3200284f596fd56d13f20.tar.gz",
-    "version": "0.30.1"
+    "archive": "devtools-b95bc47ad4600d2a180495a79c7fd5cf9f559b9d.tar.gz",
+    "version": "0.32.0"
   },
-  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.3/devtools-0.30.1-linux-amd64.tar.gz"
+  "url": "https://github.com/jinyongp/loki/releases/download/v0.2.3/devtools-0.32.0-linux-amd64.tar.gz"
 }

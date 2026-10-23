@@ -11,6 +11,7 @@
     {"from":"loki/internal/host/migration","to":"loki/internal/control/policy"},
     {"from":"loki/internal/host/migration","to":"loki/internal/host/lifecycle"},
     {"from":"loki/internal/host/migration","to":"loki/internal/platform/privateio"},
+    {"from":"loki/internal/host/migration","to":"loki/internal/platform/safeio"},
     {"from":"loki/internal/host/migration","to":"loki/modules/secrets"},
     {"from":"loki/internal/management","to":"loki/internal/host/lifecycle"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/control/policy"},

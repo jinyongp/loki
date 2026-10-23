@@ -3,8 +3,8 @@
 FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS go-tools
 ARG TARGETOS
 ARG TARGETARCH
-ARG DEVTOOLS_VERSION=0.30.1
-ARG DEVTOOLS_COMMIT=ebf18cfb922c14e8a0b3200284f596fd56d13f20
+ARG DEVTOOLS_VERSION=0.32.0
+ARG DEVTOOLS_COMMIT=b95bc47ad4600d2a180495a79c7fd5cf9f559b9d
 ARG GH_VERSION=2.102.0
 ARG GH_COMMIT=fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd
 ARG GH_DATE=2026-09-30
@@ -16,7 +16,7 @@ RUN cd /src/devtools \
     go build -trimpath -buildvcs=false \
       -ldflags "-s -w -X main.version=$DEVTOOLS_VERSION -X main.commit=$DEVTOOLS_COMMIT" \
       -o /out/devtools ./cmd/devtools \
- && if test "$(go env GOHOSTARCH)" = "$TARGETARCH"; then /out/devtools version | grep -q '"version":"0.30.1"'; fi
+ && if test "$(go env GOHOSTARCH)" = "$TARGETARCH"; then /out/devtools version | grep -q '"version":"0.32.0"'; fi
 
 RUN git clone --depth 1 --branch "v$GH_VERSION" https://github.com/cli/cli.git /src/gh \
  && test "$(git -C /src/gh rev-parse HEAD)" = "$GH_COMMIT"
