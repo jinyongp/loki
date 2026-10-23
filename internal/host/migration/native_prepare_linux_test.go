@@ -168,6 +168,25 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 			if entries, err := os.ReadDir(filepath.Join(candidate.Preparation.HostGeneration, "dvt")); err != nil || len(entries) != 0 {
 				t.Fatal("native preparation initialized cryptographic state", err)
 			}
+			if attempt == 0 && os.Getenv("LOKI_REQUIRE_NATIVE_MIGRATION") == "1" {
+				if err := candidate.Start(t.Context()); err != nil {
+					t.Fatal("original owner's prepared chroot could not start the real broker", err)
+				}
+				if state, err := candidate.Status(t.Context()); err != nil || state != "uninitialized" {
+					t.Fatal("owner preparation implicitly initialized protection", state, err)
+				}
+				if err := owner.StopNativeCandidate(t.Context()); err != nil {
+					t.Fatal("original owner could not stop its prepared broker", err)
+				}
+				if err := os.Chmod(candidate.RootDirectory, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if attempt == 1 {
+				if info, err := os.Stat(candidate.RootDirectory); err != nil || info.Mode().Perm() != 0755 {
+					t.Fatal("original-operation recovery did not restore a searchable chroot", err)
+				}
+			}
 		}
 		if actual, err := hostapplication.ReadIdentity(application.IdentityFile); err != nil || actual != before.Identity {
 			t.Fatal("inactive native preparation changed the selector", err)

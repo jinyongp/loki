@@ -159,7 +159,14 @@ func (c NativeCandidate) Start(ctx context.Context) error {
 		return err
 	}
 	if properties["LoadState"] != "not-found" {
-		if !c.owned(properties) || properties["ActiveState"] != "active" {
+		if !c.owned(properties) {
+			return errNativeCandidate
+		}
+		if properties["ActiveState"] == "inactive" || properties["ActiveState"] == "failed" {
+			if _, err := nativeCommand(ctx, "/usr/bin/systemctl", "start", c.unit()); err != nil {
+				return err
+			}
+		} else if properties["ActiveState"] != "active" {
 			return errNativeCandidate
 		}
 		_, err := c.Status(ctx)

@@ -14,6 +14,7 @@ diagnose() {
     systemctl status loki-go-mcp.service loki-go-runtime.service loki-go-launcher.service loki-go-executor.service loki-go-secrets.service loki-go-secrets-prepare.service --no-pager || true
     # Services have not run project commands or printed application values.
     journalctl -b -u loki-go-mcp.service -u loki-go-secrets.service -u loki-go-secrets-prepare.service --no-pager -n 30 || true
+    journalctl -b -u 'loki-go-secret-migration-*.service' --no-pager -n 20 || true
     systemctl poweroff --no-block || true
   fi
 }

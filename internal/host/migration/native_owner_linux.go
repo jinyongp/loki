@@ -58,16 +58,30 @@ func (o SourceOwner) PrepareNativeCandidate(current hostapplication.PrepareOptio
 		return candidate, err
 	}
 	jail := filepath.Join(i.StateRoot, ".migration-root-"+strings.ReplaceAll(current.MigrationOperation, "-", ""))
-	if err := os.Mkdir(jail, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+	if err := os.Mkdir(jail, 0755); err != nil && !errors.Is(err, os.ErrExist) {
 		return candidate, err
 	}
 	info, err := os.Lstat(jail)
-	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 && info.Mode().Perm() != 0755 {
 		return candidate, ErrSourceSession
 	}
 	owner, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || owner.Uid != 0 || owner.Gid != 0 {
 		return candidate, ErrSourceSession
+	}
+	// The host store ancestor stays root-private. Inside the service's chroot,
+	// this empty directory becomes / and must be searchable by the broker UID.
+	// Repair the earlier private leaf on original-operation recovery only.
+	if info.Mode().Perm() != 0755 {
+		if err := os.Chmod(jail, 0755); err != nil {
+			return candidate, err
+		}
+	}
+	if err := syncNativeDirectory(jail); err != nil {
+		return candidate, err
+	}
+	if err := syncNativeDirectory(i.StateRoot); err != nil {
+		return candidate, err
 	}
 	candidate = NativeCandidate{Operation: current.MigrationOperation, Preparation: preparation, RootDirectory: jail, BrokerHost: brokerHost, ProviderHost: providerHost}
 	if !candidate.valid() {
