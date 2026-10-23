@@ -11,7 +11,7 @@ from unittest.mock import patch
 import input_cache
 from plan_release import select, CONTRACT
 from release_pipeline import combine, download, write, validate_source, native, source_check
-from release_gate import gate, evidence
+from release_gate import gate, evidence, require_results
 
 
 def fixture():
@@ -205,6 +205,19 @@ class CacheTests(unittest.TestCase):
 
 
 class GateTests(unittest.TestCase):
+    def test_early_result_check_preserves_required_and_empty_matrix_rules(self):
+        current, old = fixture()
+        plan = select("0.2.5", current, old)
+        results = {name: "success" for name in ("plan", "source-checks", "assemble", "manager-build", "manager-checks")}
+        results.update({name: "skipped" for name in ("browser-build", "full-build", "browser-checks", "full-checks")})
+        require_results(plan, results)
+        for name in results:
+            for state in ("failure", "cancelled", None):
+                with self.subTest(name=name, state=state), self.assertRaises(ValueError):
+                    require_results(plan, dict(results, **{name: state}))
+        with self.assertRaises(ValueError):
+            require_results(plan, dict(results, **{"manager-checks": "skipped"}))
+
     def test_same_run_previous_attempt_proofs_bind_exact_lock(self):
         current,old=fixture();p=select("0.2.5",current,old)
         p["installer_fingerprint"]="fixture"

@@ -67,6 +67,21 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	}
 	needs = nil
 	gate := jobs["gate"]
+	if jobs["source-checks"].Needs.Kind != 0 {
+		t.Fatal("source checks must start without waiting for release assembly")
+	}
+	checkedResults := false
+	for _, step := range gate.Steps {
+		if strings.Contains(step.Run, "release_gate.py results ") {
+			checkedResults = true
+		}
+		if step.With["name"] == "publication-assets" && !checkedResults {
+			t.Fatal("required job results must be checked before asset download")
+		}
+	}
+	if !checkedResults {
+		t.Fatal("missing early required result check")
+	}
 	if err := gate.Needs.Decode(&needs); err != nil {
 		t.Fatal(err)
 	}

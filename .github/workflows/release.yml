@@ -333,8 +333,6 @@ jobs:
           retention-days: 7
 
   source-checks:
-    needs: assemble
-    if: ${{ !cancelled() && (needs.assemble.result == 'success' || github.event_name != 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -647,6 +645,16 @@ jobs:
         with:
           name: release-plan
           path: plan
+      - name: Reject failed required jobs before downloading publication payloads
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results.json').write_text(json.dumps({k:v['result'] for k,v in json.loads(os.environ['JOB_RESULTS']).items()}))
+          PY
+          python3 scripts/maintainer/tools/release_gate.py results --plan plan/plan.json --output publication --results results.json
       - name: Download exact release assets for final sealing
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -662,14 +670,7 @@ jobs:
           pattern: checks-*
           path: checks
       - name: Require the exact selected cohort and seal publication checksums
-        env:
-          JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          Path('results.json').write_text(json.dumps({k:v['result'] for k,v in json.loads(os.environ['JOB_RESULTS']).items()}))
-          PY
           python3 scripts/maintainer/tools/release_gate.py gate --plan plan/plan.json --output publication --checks checks --results results.json
           mkdir -p accepted/assets
           cp publication/assets/loki-release-lock.json publication/assets/SHA256SUMS accepted/assets/

@@ -16,7 +16,7 @@ def evidence(plan, mode, system, arch, lock_sha256):
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"), "passed": True}
 
 
-def gate(plan, publication, checks, results):
+def require_results(plan, results):
     required = {"plan", "source-checks", "assemble"}
     counts = {"manager-build": "manager", "browser-build": "browser", "full-build": "full",
               "manager-checks": "manager-checks", "browser-checks": "browser-checks", "full-checks": "full-checks"}
@@ -27,6 +27,11 @@ def gate(plan, publication, checks, results):
             raise ValueError("unselected job failed or was cancelled: "+name)
     if any(results.get(name) != "success" for name in required):
         raise ValueError("selected release jobs did not all succeed")
+    return required
+
+
+def gate(plan, publication, checks, results):
+    required = require_results(plan, results)
     lock_path = publication/"assets/loki-release-lock.json"
     lock = read(lock_path)
     if plan.get("publication_recovery"):
@@ -70,7 +75,7 @@ def gate(plan, publication, checks, results):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["evidence", "gate"])
+    parser.add_argument("action", choices=["evidence", "results", "gate"])
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--checks", type=Path)
@@ -83,5 +88,7 @@ if __name__ == "__main__":
         from release_pipeline import native
         system, arch = native()
         write(args.output, evidence(plan, args.mode, system, arch, digest(args.publication/"assets/loki-release-lock.json")))
+    elif args.action == "results":
+        require_results(plan, read(args.results))
     else:
         gate(plan, args.output, args.checks, read(args.results))
