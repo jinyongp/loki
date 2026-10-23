@@ -344,7 +344,9 @@ func verifyRealComposeAuthenticatedJobs(t *testing.T, ctx context.Context, b *Ba
 	for range 8 {
 		select {
 		case result := <-startedJobs:
-			if result.err != nil || result.id != ids[result.index] {
+			if result.err != nil {
+				admissionError = fmt.Errorf("parallel maximum-payload admission failed: %w", result.err)
+			} else if result.id != ids[result.index] {
 				admissionError = errors.New("parallel maximum-payload admission failed")
 			}
 		case <-ctx.Done():
