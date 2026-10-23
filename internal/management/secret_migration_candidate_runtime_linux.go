@@ -90,20 +90,47 @@ func (b *DockerFullBackend) candidateProtection(ctx context.Context, r Deploymen
 	if err != nil {
 		return nil, err
 	}
-	var metadata struct {
-		Action  string `json:"action"`
-		State   string `json:"state"`
-		Changed bool   `json:"changed"`
+	if err := validateCandidateProtectionMetadata(result, action); err != nil {
+		return nil, err
 	}
-	if privateio.Decode(result, &metadata) != nil || metadata.Action != action {
-		return nil, fmt.Errorf("invalid candidate protection metadata")
+	return json.RawMessage(result), nil
+}
+
+// Candidate migration consumes only reviewed protection metadata. Pending
+// rewrap belongs to its original administrator operation and blocks migration.
+func validateCandidateProtectionMetadata(result []byte, action string) error {
+	var metadata struct {
+		Action        string `json:"action"`
+		State         string `json:"state"`
+		Changed       bool   `json:"changed"`
+		Backend       string `json:"backend,omitempty"`
+		IdleExpiresAt string `json:"idle_expires_at,omitempty"`
+		Rewrap        *struct {
+			RequestID         string `json:"request_id"`
+			FromBackend       string `json:"from_backend"`
+			Backend           string `json:"backend"`
+			SlotPublished     bool   `json:"slot_published"`
+			Completed         bool   `json:"completed"`
+			IntegrityVerified bool   `json:"integrity_verified"`
+		} `json:"rewrap,omitempty"`
+	}
+	if privateio.Decode(result, &metadata) != nil || metadata.Action != action || metadata.Backend != "" && metadata.Backend != "passphrase" {
+		return fmt.Errorf("invalid candidate protection metadata")
+	}
+	if metadata.IdleExpiresAt != "" {
+		if _, err := time.Parse(time.RFC3339Nano, metadata.IdleExpiresAt); err != nil {
+			return fmt.Errorf("invalid candidate protection expiry")
+		}
+	}
+	if metadata.Rewrap != nil {
+		return fmt.Errorf("candidate protection change requires original administrator rewrap recovery")
 	}
 	switch metadata.State {
 	case "uninitialized", "unlocked", "locked", "locked_manual", "locking", "recovery_required":
 	default:
-		return nil, fmt.Errorf("unknown candidate protection state")
+		return fmt.Errorf("unknown candidate protection state")
 	}
-	return json.RawMessage(result), nil
+	return nil
 }
 
 // MigrationCandidateProtection never discovers, saves or reuses a passphrase.
