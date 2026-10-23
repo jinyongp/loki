@@ -96,6 +96,13 @@ func (s Store) RestoreBackup(ctx context.Context, id string, backend RestoreData
 	if err != nil {
 		return err
 	}
+	// This legacy physical restore replaces whole data and authentication
+	// trees. It cannot preserve the application's current spent requests or
+	// invalidate old delivery authority. Require the explicit logical recovery
+	// transaction instead of allowing a second route around its fences.
+	if err := s.requirePhysicalApplicationRestoreSafe(ctx, current, record, backend); err != nil {
+		return err
+	}
 	var releases []func()
 	defer func() {
 		for _, release := range releases {
@@ -221,6 +228,45 @@ func (s Store) RestoreBackup(ctx context.Context, id string, backend RestoreData
 	// recognizes already published trees and resumes the remaining cleanup.
 	journal.Phase = "committed"
 	return atomicJSON(filepath.Join(s.Root, "restore.json"), journal)
+}
+
+func (s Store) requirePhysicalApplicationRestoreSafe(ctx context.Context, current Snapshot, record BackupRecord, backend DataBackupBackend) error {
+	blocked := func() error {
+		return fmt.Errorf("physical restore cannot rewind application authority or protected request history; use an explicit application program/data recovery plan")
+	}
+	for _, snapshot := range []Snapshot{current, record.Snapshot} {
+		if _, installed := snapshot.Installed["secrets"]; installed {
+			return blocked()
+		}
+		for _, selection := range snapshot.Config.Tools {
+			if selection.ID == "secrets" && selection.Enabled {
+				return blocked()
+			}
+		}
+	}
+	name := s.FullOwner() + "-data-secrets"
+	if _, retained := record.Volumes[name]; retained {
+		return blocked()
+	}
+	if backend != nil {
+		paths, err := backend.OwnedDataPaths(ctx)
+		if err != nil {
+			return err
+		}
+		if _, retained := paths[name]; retained {
+			return blocked()
+		}
+	}
+	for _, root := range []string{s.Root, filepath.Join(s.Root, "backups", record.ID)} {
+		_, err := os.Lstat(filepath.Join(root, "data", "secrets"))
+		if err == nil {
+			return blocked()
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s Store) RemoveBackup(id string) error {

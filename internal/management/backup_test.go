@@ -6,8 +6,77 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+func TestPhysicalRestoreCannotEraseRetainedApplicationAuthority(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := s.Backup(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Even a disabled/uninstalled module's retained data prevents a raw
+	// snapshot from replacing authentication and erasing spent requests.
+	root := filepath.Join(s.Root, "data", "secrets")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(root, "spent-request")
+	if err := os.WriteFile(marker, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err = s.RestoreBackup(t.Context(), backup.ID, nil)
+	if err == nil || !strings.Contains(err.Error(), "protected request history") {
+		t.Fatal("physical restore bypassed application recovery", err)
+	}
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "retained" {
+		t.Fatal("refused restore changed retained authority", err)
+	}
+	if _, err := os.Lstat(filepath.Join(s.Root, "restore.json")); !os.IsNotExist(err) {
+		t.Fatal("refused restore published a journal", err)
+	}
+}
+
+type retainedApplicationBackupBackend struct {
+	name    string
+	ensured bool
+}
+
+func (b *retainedApplicationBackupBackend) OwnedDataPaths(context.Context) (map[string]string, error) {
+	return map[string]string{b.name: "/unused"}, nil
+}
+
+func (b *retainedApplicationBackupBackend) EnsureDataPaths(context.Context, []string) (map[string]string, error) {
+	b.ensured = true
+	return nil, nil
+}
+
+func TestPhysicalRestoreRefusesRetainedApplicationVolumeBeforeAllocation(t *testing.T) {
+	s := Store{Root: t.TempDir()}
+	state, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(state); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := s.Backup(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &retainedApplicationBackupBackend{name: s.FullOwner() + "-data-secrets"}
+	if err := s.RestoreBackup(t.Context(), backup.ID, backend); err == nil || backend.ensured {
+		t.Fatal("retained application volume reached physical restore effects", err)
+	}
+}
 
 func TestBackupRestorePreservesDataAndEmptyComponents(t *testing.T) {
 	s := Store{Root: t.TempDir()}
