@@ -7,8 +7,11 @@ Run with the administrator identity used for the protected full host.
 """
 import argparse
 import asyncio
+import functools
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import time
 import uuid
 
@@ -17,7 +20,15 @@ from accept_full_workspace_candidate import accept
 from mcp_probe import Client, result
 
 
+def prepare(control_helper, binary, root, workspace, invoke):
+    helper = workspace / "fixture-control"
+    shutil.copyfile(control_helper, helper)
+    helper.chmod(0o700)
+    subprocess.run([str(helper), "grant", str(root)], check=True, timeout=60)
+
+
 async def protocol(binary, root, workspace, invoke):
+    subprocess.run([str(workspace / "fixture-control"), "init", str(root)], check=True, timeout=60)
     command = [str(binary), "--host", "local", "--root", str(root), "tools", "serve"]
     client = Client(command, workspace)
     await client.start()
@@ -61,12 +72,10 @@ async def protocol(binary, root, workspace, invoke):
         staged = await call("git_stage", {"action":"patch", "cwd":"repo", "patch":patch, "expected_index_sha256":index["index_sha256"]})
         if staged.get("index_sha256") == index["index_sha256"]:
             raise ValueError("full partial staging did not consume its isolated stdin")
-        state = await call("secret_inspect", {"action":"status"})
-        await call("secret_write", {"action":"create_profile", "profile":"fixture", "request_id":str(uuid.uuid4()), "expected_revision":state["revision"]})
-        state = await call("secret_inspect", {"action":"status"})
-        await call("secret_write", {"action":"generate", "profile":"fixture", "secret":"FIXTURE_TOKEN", "bytes":32, "request_id":str(uuid.uuid4()), "expected_revision":state["revision"]})
-        metadata = await call("secret_inspect", {"action":"profile", "profile":"fixture"})
-        if metadata.get("secret_names") != ["FIXTURE_TOKEN"] or metadata.get("configured_secret_count") != 1:
+        state = await call("secret_inspect", {"action":"values", "resource":"fixture", "env":"common"})
+        await call("secret_write", {"action":"generate", "resource":"fixture", "env":"common", "name":"FIXTURE_TOKEN", "request_id":str(uuid.uuid4()), "expected_revision":state["revision"]})
+        metadata = await call("secret_inspect", {"action":"values", "resource":"fixture", "env":"common"})
+        if metadata.get("items") != [{"name":"FIXTURE_TOKEN", "kind":"secret", "source":"common", "present":True}]:
             raise ValueError("synthetic secret metadata differs")
         await call("workspace_edit", {"action":"create", "path":"devtools.toml", "content":'profile = "fixture"\n'})
         coordination = await call("project_coordination", {"action":"current", "cwd":"."})
@@ -85,4 +94,6 @@ async def protocol(binary, root, workspace, invoke):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", required=True, type=Path)
-    accept(parser.parse_args().candidate.resolve(), modules=("workspace", "execution", "git", "secrets", "coordination", "browser"), protocol_check=protocol)
+    parser.add_argument("--control-helper", required=True, type=Path)
+    arguments = parser.parse_args()
+    accept(arguments.candidate.resolve(), modules=("workspace", "execution", "git", "secrets", "coordination", "browser"), protocol_check=protocol, prepare=functools.partial(prepare, arguments.control_helper.resolve()))

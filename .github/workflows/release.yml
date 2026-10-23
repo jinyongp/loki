@@ -611,7 +611,8 @@ jobs:
         run: |
           go test ./internal/config ./internal/tools ./internal/management ./modules/workspace
           python3 scripts/maintainer/tools/accept_full_workspace_candidate.py --candidate acceptance-candidate
-          sudo --preserve-env=LOKI_RELEASE python3 scripts/maintainer/tools/accept_full_composition_candidate.py --candidate acceptance-candidate
+          go build -o full-acceptance-control ./internal/management/testdata/full-acceptance
+          sudo --preserve-env=LOKI_RELEASE python3 scripts/maintainer/tools/accept_full_composition_candidate.py --candidate acceptance-candidate --control-helper "$PWD/full-acceptance-control"
       - run: python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

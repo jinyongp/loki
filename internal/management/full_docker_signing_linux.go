@@ -59,7 +59,7 @@ func (b *DockerFullBackend) SetupGitSigning(ctx context.Context, name, email str
 	if err := b.ownedVolume(ctx, volume); err != nil {
 		return nil, err
 	}
-	r, err := b.Store.ReserveDeployment(resources.Plan)
+	r, err := b.Store.reserveDeploymentLocked(resources.Plan)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (b *DockerFullBackend) SetupGitSigning(ctx context.Context, name, email str
 	if err := b.Stop(ctx, r); err != nil {
 		return nil, err
 	}
-	if err := b.Store.ReleaseDeployment(ctx, r.ID, b); err != nil {
+	if err := b.Store.releaseDeploymentLocked(ctx, r.ID, b); err != nil {
 		return nil, err
 	}
 	return json.RawMessage(result), nil

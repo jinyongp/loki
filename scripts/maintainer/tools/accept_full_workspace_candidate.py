@@ -45,7 +45,7 @@ async def protocol(binary, root, workspace, invoke):
         await client.close()
 
 
-def accept(candidate, modules=("workspace",), protocol_check=protocol):
+def accept(candidate, modules=("workspace",), protocol_check=protocol, prepare=None):
     document = json.loads((candidate / "candidate.json").read_text(encoding="utf-8"))
     target = document.get("target", {})
     native_arch = {"x86_64":"amd64", "aarch64":"arm64", "amd64":"amd64", "arm64":"arm64"}.get(platform.machine().lower())
@@ -103,6 +103,8 @@ def accept(candidate, modules=("workspace",), protocol_check=protocol):
         invoke("tools", "install", *modules, "--catalog", str(candidate / "release" / "catalog.json"), "--archives", str(candidate / "release" / "archives"))
         for module in modules:
             invoke("tools", "enable", module, "--no-start")
+        if prepare is not None:
+            prepare(binary, root, scratch, invoke)
         started = True
         print("Full acceptance: preparing selected services", flush=True)
         if len(modules) > 1 and "git" in modules:

@@ -121,7 +121,7 @@ func (b *DockerFullBackend) ImportGitHub(ctx context.Context, configuration, key
 	if err := b.ownedVolume(ctx, volume); err != nil {
 		return err
 	}
-	r, err := b.Store.ReserveDeployment(resources.Plan)
+	r, err := b.Store.reserveDeploymentLocked(resources.Plan)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (b *DockerFullBackend) ImportGitHub(ctx context.Context, configuration, key
 	if err := b.Stop(ctx, r); err != nil {
 		return err
 	}
-	return b.Store.ReleaseDeployment(ctx, r.ID, b)
+	return b.Store.releaseDeploymentLocked(ctx, r.ID, b)
 }
 
 var _ IntegrationBackend = (*DockerFullBackend)(nil)
