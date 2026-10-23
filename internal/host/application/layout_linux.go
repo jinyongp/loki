@@ -295,7 +295,20 @@ func loadIdentity(options PrepareOptions) (Identity, error) {
 		return Identity{}, err
 	}
 	generation := strings.ReplaceAll(deployment, "-", "")
-	identity = Identity{Version: 1, UID: options.UID, GID: options.GID, AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, DeploymentID: "deployment-" + generation, RunnerID: runner, ActiveGeneration: generation}
+	policy, err := PolicyDigest(options)
+	if err != nil {
+		return Identity{}, err
+	}
+	identity = Identity{Version: 2, UID: options.UID, GID: options.GID, AgentUID: options.AgentUID, MetadataGID: options.MetadataGID, DeploymentID: "deployment-" + generation, RunnerID: runner, ActiveGeneration: generation, PolicySHA256: policy}
+	// A fresh selector is immediately governed by the same policy and backup
+	// contract as a migrated one. Prepare its empty generation before publishing
+	// it so no selected v2 identity points at absent persistent data.
+	root := filepath.Join(options.StateRoot, "generations", generation)
+	for _, path := range []string{root, filepath.Join(root, "dvt"), filepath.Join(root, "metadata")} {
+		if err := ownedDirectory(path, options.UID, options.GID, 0700, false); err != nil {
+			return Identity{}, err
+		}
+	}
 	raw, _ := json.Marshal(identity)
 	if err := safeio.PublishPrivate(options.IdentityFile, raw, false); err != nil {
 		return Identity{}, err

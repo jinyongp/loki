@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "execution",
-  "release": "0.2.3",
+  "release": "0.3.0",
   "targets": [
     {
       "os": "linux",

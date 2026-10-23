@@ -34,10 +34,8 @@ func TestDotenvStagingAndSourceOwnership(t *testing.T) {
 			if err != nil || info.Mode().Perm() != 0600 {
 				t.Fatalf("staged permissions %v %v", info, err)
 			}
-			controller := secret.Controller{InboxDirectory: inbox}
-			imports, err := controller.ListImports()
-			if err != nil || imports == nil {
-				t.Fatalf("runtime inbox %v %v", imports, err)
+			if stagedBody, err := os.ReadFile(staged); err != nil || len(stagedBody) == 0 {
+				t.Fatal("private staged copy missing", err)
 			}
 			switch change {
 			case "replacement":

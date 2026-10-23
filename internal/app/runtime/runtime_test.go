@@ -18,7 +18,6 @@ import (
 	"loki/internal/rpc"
 	"loki/modules/coordination"
 	githubapp "loki/modules/github"
-	"loki/modules/secrets"
 )
 
 func TestRuntimeRoleSocketLifecycle(t *testing.T) {
@@ -153,10 +152,6 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	controller := secret.Controller{StateDirectory: o.StateDirectory}
-	if _, err := controller.Initialize(t.Context()); err != nil {
-		t.Fatal(err)
-	}
 	credentials := githubapp.Credentials{StateDirectory: filepath.Join(o.StateDirectory, "providers", "github")}
 	if _, err := credentials.Set(t.Context(), githubapp.AppPrivateKey, githubTestKey(t)); err != nil {
 		t.Fatal(err)
@@ -266,15 +261,10 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	if ports["in_use"] != false {
 		t.Fatal(ports)
 	}
-	beforeProfiles := call(map[string]any{"operation": "list_profiles"})
-	call(map[string]any{
-		"operation": "profile_create_request", "profile": "fixture",
-		"expected_revision": beforeProfiles["revision"],
-		"request_id":        "85000000-0000-4000-8000-000000000001",
-	})
-	profiles := call(map[string]any{"operation": "list_profiles"})
-	if len(profiles["profiles"].([]any)) != 1 {
-		t.Fatal(profiles)
+	for _, operation := range []string{"list_profiles", "profile_create_request", "secret_set", "import_env"} {
+		if _, err := client.Call(t.Context(), map[string]any{"operation": operation}); err == nil {
+			t.Fatalf("retired application operation reached runtime: %s", operation)
+		}
 	}
 	log := call(map[string]any{"operation": "audit"})
 	if len(log["records"].([]any)) < 3 {

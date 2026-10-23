@@ -11,7 +11,7 @@ func TestAdministrativeRequests(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"secret", "generate", "profile", "NAME", "--bytes", "48"}, `{"operation":"secret_generate","profile":"profile","secret":"NAME","bytes":48}`},
+		{[]string{"github", "fields", "list", "organization/repository"}, `{"operation":"github_fields_list","target":"organization/repository"}`},
 	} {
 		got, err := Request(test.args)
 		if err != nil {

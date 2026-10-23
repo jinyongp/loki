@@ -88,6 +88,9 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if stateOnly.Identity.Version != 2 || stateOnly.Identity.PolicySHA256 != stateOnly.Layout.PolicySHA256 {
+		t.Fatal("fresh installation did not bind the canonical application contract")
+	}
 	entries, err := os.ReadDir(runtimeRoot)
 	if err != nil || len(entries) != 0 || stateOnly.LayoutFile != "" || stateOnly.Identity.DeploymentID == options.JobDeploymentID || stateOnly.Layout.JobDeploymentID != options.JobDeploymentID {
 		t.Fatal("persistent preparation mixed app identity, runtime or OCI reservation", err)

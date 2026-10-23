@@ -66,8 +66,8 @@ func SecretV2OutputSchema(tool string) map[string]any {
 	return removed
 }
 
-// SecretV2InputSchema is kept separate until the broker and typed transport
-// become available together. Unknown and action-irrelevant fields are rejected.
+// SecretV2InputSchema is shared by the active broker transport and catalog.
+// Unknown and action-irrelevant fields are rejected.
 func SecretV2InputSchema(tool string) (map[string]any, error) {
 	field := func(pattern, description string) map[string]any {
 		return map[string]any{"type": "string", "pattern": pattern, "description": description}
@@ -82,7 +82,7 @@ func SecretV2InputSchema(tool string) (map[string]any, error) {
 		{Name: "kind", Schema: map[string]any{"type": "string", "enum": []string{"variable", "secret"}, "description": "Exact value layer to unset; common fallback may remain."}},
 		{Name: "value", Schema: map[string]any{"type": "string", "maxLength": 65536, "description": "Explicitly public configuration; credentials must use private staging or generation."}},
 		{Name: "cursor", Schema: map[string]any{"type": "string", "minLength": 1, "maxLength": 4096, "description": "Opaque revision-bound metadata page cursor."}},
-		{Name: "limit", Schema: map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "default": 50, "description": "Maximum metadata entries in this page."}},
+		{Name: "limit", Schema: map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "description": "Maximum metadata entries in this page; omission selects 50 for paginated actions."}},
 	}
 	var variants []ActionVariant
 	switch tool {

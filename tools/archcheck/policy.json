@@ -579,10 +579,6 @@
       "to": "loki/modules/github"
     },
     {
-      "from": "loki/internal/app/runtime",
-      "to": "loki/modules/secrets"
-    },
-    {
       "from": "loki/internal/config",
       "to": "loki/internal/tools"
     },

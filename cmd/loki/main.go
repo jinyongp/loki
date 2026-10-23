@@ -39,7 +39,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case "host":
 			return runHost(args[1:], stdout, stderr)
 		case "secret-process":
-			return runSecretProcess(args[1:], stdout, stderr)
+			fmt.Fprintln(stderr, "secret-process is retired; use a resource-scoped protected Job")
+			return 2
 		case "secret":
 			if len(args) > 1 && args[1] == "protection" {
 				return runSecretProtection(args[2:], os.Stdin, stdout, stderr)
@@ -47,7 +48,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			if len(args) > 1 && args[1] == "app" {
 				return runApplicationAdministration(args[2:], os.Stdin, stdout, stderr)
 			}
-			return runAdministration(args, stdout, stderr)
+			fmt.Fprintln(stderr, "legacy secret administration is retired; use secret app or secret protection")
+			return 2
 		case "github":
 			return runAdministration(args, stdout, stderr)
 		case "runner-exec":
@@ -93,6 +95,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintln(stderr, "usage: loki [--verbose] version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key|user ... | migrate-vault import|restore [OPTIONS] | secret-process start|restart [OPTIONS] TARGET")
+	fmt.Fprintln(stderr, "usage: loki [--verbose] version | host install|status|connection|doctor|ingress|backup|restore|rollback|enable|disable|uninstall|import-legacy-vault|secret-migration|application-restore ... | host update status|prepare|apply [OPTIONS] | github fields|values|app-key|user ... | migrate-vault import|restore [OPTIONS] | secret app|protection ...")
 	return 2
 }

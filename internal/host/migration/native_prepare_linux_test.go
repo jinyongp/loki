@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	legacyfixture "loki/internal/state"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,14 +118,8 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := secret.Controller{StateDirectory: filepath.Join(root, "source")}
-	if _, err := source.Initialize(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := source.CreateProfile(t.Context(), "web"); err != nil {
-		t.Fatal(err)
-	}
 	canary := "synthetic-native-prepare-value\nexact second line"
-	if _, err := source.SetSecret(t.Context(), "web", "TOKEN", canary, false); err != nil {
+	if _, err := (legacyfixture.Store{Dir: source.StateDirectory, Validate: secret.Validate}).Initialize(t.Context(), json.RawMessage(`{"version":1,"profiles":{"web":{"secrets":{"TOKEN":"synthetic-native-prepare-value\nexact second line"}}}}`)); err != nil {
 		t.Fatal(err)
 	}
 	resource := controlpolicy.ApplicationResource{ID: "123e4567-e89b-42d3-a456-426614174591", Alias: "web", Repository: "owner/repo", Network: "none", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Execute: true}}}
@@ -242,9 +237,7 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 		if _, err := owner.SelectNativeCandidate(t.Context(), current); err == nil {
 			t.Fatal("native selection bypassed actual private value comparison")
 		}
-		if _, err := source.SetSecret(t.Context(), "web", "TOKEN", "must-remain-fenced", true); err == nil {
-			t.Fatal("native source writer escaped the original pending gate")
-		}
+
 		if _, err := journal.RequestSecretMigrationRollback(record.ID, time.Now()); err != nil {
 			t.Fatal(err)
 		}

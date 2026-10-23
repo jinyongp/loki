@@ -182,7 +182,7 @@ func (b *Backend) importNewDeploymentArchive(ctx context.Context, sourceRoot, ba
 	}
 	before, err := b.migrationMetadata(ctx, current, resources, true)
 	old := backup.ApplicationBackup.Intent.Identity
-	if err != nil || before.Identity.Version != 1 || before.Identity.DeploymentID == old.DeploymentID || before.Identity.RunnerID == old.RunnerID {
+	if err != nil || before.Identity.Version != 1 && before.Identity.Version != 2 || before.Identity.DeploymentID == old.DeploymentID || before.Identity.RunnerID == old.RunnerID {
 		return a, lifecycle.ErrApplicationBackup
 	}
 	directory, err := b.recoveryArchiveDirectory(backup.ID)

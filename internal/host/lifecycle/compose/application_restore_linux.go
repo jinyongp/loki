@@ -141,7 +141,7 @@ func (b *Backend) prepareApplicationRestore(ctx context.Context, backupID string
 		return intent, err
 	}
 	before, err := b.migrationMetadata(ctx, state, resources, recovery != nil)
-	if err != nil || recovery == nil && before.Identity.Version != 2 || recovery != nil && before.Identity.Version != 1 || before.Policy != state.ApplicationPolicySHA256 {
+	if err != nil || recovery == nil && before.Identity.Version != 2 || recovery != nil && before.Identity.Version != 1 && before.Identity.Version != 2 || before.Policy != state.ApplicationPolicySHA256 {
 		return intent, lifecycle.ErrApplicationBackup
 	}
 	resources, err = controlpolicy.CanonicalApplications(resources, before.BaseEnvironment)

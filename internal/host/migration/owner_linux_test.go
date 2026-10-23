@@ -4,6 +4,7 @@ package migration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
+	legacyfixture "loki/internal/state"
 	secret "loki/modules/secrets"
 )
 
@@ -23,13 +25,7 @@ func TestSourceOwnerBackupRecoversOriginalPublicationAndRejectsMissingAcknowledg
 	ctx := context.Background()
 	root := t.TempDir()
 	source := secret.Controller{StateDirectory: filepath.Join(root, "source")}
-	if _, err := source.Initialize(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := source.CreateProfile(ctx, "app"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := source.SetSecret(ctx, "app", "TOKEN", "synthetic-owner-newline\nvalue", false); err != nil {
+	if _, err := (legacyfixture.Store{Dir: source.StateDirectory, Validate: secret.Validate}).Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{"app":{"secrets":{"TOKEN":"synthetic-owner-newline\nvalue"}}}}`)); err != nil {
 		t.Fatal(err)
 	}
 	resource := controlpolicy.ApplicationResource{ID: "123e4567-e89b-42d3-a456-426614174531", Alias: "app", Repository: "owner/repo", Network: "none", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Execute: true}}}
@@ -101,9 +97,7 @@ func TestSourceOwnerBackupRecoversOriginalPublicationAndRejectsMissingAcknowledg
 	if err := owner.Checkpoint(SourceEvent{Operation: lifecycle.MigrationOperationUUID(r.ID), Type: "write_completed"}); err == nil {
 		t.Fatal("malformed helper completion accepted")
 	}
-	if _, err := source.SetSecret(ctx, "app", "TOKEN", "changed", true); err == nil {
-		t.Fatal("source writer escaped pending migration")
-	}
+
 	if err := os.Remove(intent.BackupPath); err != nil {
 		t.Fatal(err)
 	}

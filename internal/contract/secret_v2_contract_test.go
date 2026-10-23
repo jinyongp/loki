@@ -14,6 +14,16 @@ func TestSecretV2RejectsLegacyAndCrossActionInputs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		definitions, err := CurrentDefinitions()
+		if err != nil {
+			t.Fatal(err)
+		}
+		active := seenDefinition(definitions, tool)
+		candidateJSON, _ := json.Marshal(input)
+		activeJSON, _ := json.Marshal(active.InputSchema)
+		if string(candidateJSON) != string(activeJSON) {
+			t.Fatal("active MCP contract differs from the resource contract", tool)
+		}
 		raw, _ := json.Marshal(input)
 		var schema jsonschema.Schema
 		if err = json.Unmarshal(raw, &schema); err != nil {

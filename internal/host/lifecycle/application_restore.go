@@ -58,7 +58,8 @@ func (i ApplicationRestoreIntent) Valid() bool {
 	// lost history root needs explicit isolated disaster recovery instead.
 	before.ActiveGeneration, before.PolicySHA256 = archive.ActiveGeneration, archive.PolicySHA256
 	if i.NewDeployment {
-		if i.Before.Version != 1 || i.Before.PolicySHA256 != "" || len(i.BeforeResources) != 0 || i.Before.DeploymentID == archive.DeploymentID || i.Before.RunnerID == archive.RunnerID || i.BeforeProgram != i.TargetProgram || i.BeforeImage != i.TargetImage || before.UID != archive.UID || before.GID != archive.GID || before.AgentUID != archive.AgentUID || before.MetadataGID != archive.MetadataGID {
+		freshVersion := i.Before.Version == 1 && i.Before.PolicySHA256 == "" || i.Before.Version == 2 && i.Before.PolicySHA256 == i.ExpectedPolicy
+		if !freshVersion || len(i.BeforeResources) != 0 || i.Before.DeploymentID == archive.DeploymentID || i.Before.RunnerID == archive.RunnerID || i.BeforeProgram != i.TargetProgram || i.BeforeImage != i.TargetImage || before.UID != archive.UID || before.GID != archive.GID || before.AgentUID != archive.AgentUID || before.MetadataGID != archive.MetadataGID {
 			return false
 		}
 	} else {

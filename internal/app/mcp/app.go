@@ -84,7 +84,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 	if len(options.Token) < 43 || strings.ContainsAny(options.Token, "\r\n") {
 		return nil, errors.New("MCP requires a valid bearer token")
 	}
-	if (selected["secrets"] && options.ApplicationSecrets == nil || selected["github"] || selected["coordination"]) && options.Runtime == nil {
+	if (selected["github"] || selected["coordination"]) && options.Runtime == nil {
 		return nil, errors.New("selected tools require the runtime service client")
 	}
 	if selected["execution"] && (options.Jobs == nil || options.PortGuard == nil || options.Runtime == nil) {
@@ -238,7 +238,7 @@ func NewMCP(c config.Config, options MCPOptions) (app *MCPApp, err error) {
 		addGroups("git", workspacemcp.GitHandlers(repository))
 	}
 	if selected["secrets"] {
-		addGroups("secrets", mcptransport.SecretHandlers(options.Runtime))
+		addGroups("secrets", mcptransport.ApplicationSecretHandlers(options.ApplicationSecrets))
 	}
 	if selected["coordination"] {
 		addGroups("coordination", mcptransport.ProjectCoordinationHandlers(options.Runtime, coordination))

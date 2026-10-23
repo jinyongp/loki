@@ -73,7 +73,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	generation := policyGenerationFixture(t)
-	app, err := NewMCP(c, MCPOptions{Runtime: runtime, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, IngressHosts: []string{"operator.example.test"}, ExternalAuth: accessFixture("mcp-access"), PreviewExternalAuth: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
+	app, err := NewMCP(c, MCPOptions{Runtime: runtime, ApplicationSecrets: &applicationMetadataCaller{}, PortGuard: guard, Browser: browser, Jobs: jobControllerFixture(), GitJobs: gitJobsFixture(t, c, nil), JobToolchains: emptyJobToolchainResolver{}, Ports: ports, Policy: generation, Token: token, IngressHosts: []string{"operator.example.test"}, ExternalAuth: accessFixture("mcp-access"), PreviewExternalAuth: accessFixture("preview-access"), Environment: map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestAssembledMCPHTTPAndShutdown(t *testing.T) {
 	}
 
 	call("browser_session", map[string]any{"action": "start"})
-	call("secret_inspect", map[string]any{"action": "status"})
+	call("secret_inspect", map[string]any{"action": "status", "resource": "example"})
 	shared := call("artifact_publish", map[string]any{
 		"action": "file", "path": "hello.txt",
 		"request_id": "79000000-0000-4000-8000-000000000010",

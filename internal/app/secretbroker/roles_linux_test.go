@@ -27,6 +27,7 @@ import (
 	hostmigration "loki/internal/host/migration"
 	"loki/internal/platform/privateio"
 	"loki/internal/rpc"
+	legacyfixture "loki/internal/state"
 	secret "loki/modules/secrets"
 )
 
@@ -309,16 +310,8 @@ func TestRealApplicationRoleSockets(t *testing.T) {
 	// Its actual host journal checkpoints the encrypted backup and every write
 	// before this private helper can send bytes or approve equality delivery.
 	legacy := secret.Controller{StateDirectory: filepath.Join(root, "migration-source")}
-	if _, err := legacy.Initialize(ctx); err != nil {
+	if _, err := (legacyfixture.Store{Dir: legacy.StateDirectory, Validate: secret.Validate}).Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{"legacy-app":{"secrets":{"TOKEN":"source-session-canary\n'\"<&>","EMPTY":"","URL":"https://public-migration.example"}}}}`)); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := legacy.CreateProfile(ctx, "legacy-app"); err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range []struct{ name, value string }{{"TOKEN", "source-session-canary\n'\"<&>"}, {"EMPTY", ""}, {"URL", "https://public-migration.example"}} {
-		if _, err := legacy.SetSecret(ctx, "legacy-app", item.name, item.value, false); err != nil {
-			t.Fatal(err)
-		}
 	}
 	if _, err := legacy.ManagedCredentials().Set(ctx, secret.ManagedGitHubAppPrivateKey, "synthetic-platform-owner"); err != nil {
 		t.Fatal(err)

@@ -20,18 +20,6 @@ type command struct {
 }
 
 var commands = map[string]command{
-	"secret init":           {"init", nil, nil},
-	"secret status":         {"status", nil, nil},
-	"secret list":           {"list_profiles", nil, nil},
-	"secret profile create": {"profile_create", []string{"profile"}, nil},
-	"secret profile remove": {"profile_remove", []string{"profile"}, nil},
-	"secret profile show":   {"get_profile", []string{"profile"}, nil},
-	"secret remove":         {"secret_remove", []string{"profile", "secret"}, nil},
-	"secret generate":       {"secret_generate", []string{"profile", "secret"}, map[string]option{"bytes": {"bytes", "integer", 32}}},
-	"secret audit":          {"audit", nil, map[string]option{"limit": {"limit", "integer", 50}}},
-	"secret set":            {"secret_set", []string{"profile", "secret"}, nil},
-	"secret import-env":     {"import_env", []string{"profile", "file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
-	"secret stage-env":      {"stage_env", []string{"file"}, map[string]option{"delete-source": {"delete_source", "bool", false}}},
 	"github app-key set":    {"github_app_key_set", nil, nil},
 	"github refresh":        {"github_refresh", nil, githubUserOptions},
 	"github user begin":     {"github_user_begin", []string{"account"}, githubUserOptions},

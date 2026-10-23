@@ -24,7 +24,6 @@ import (
 	"loki/internal/rpc"
 	"loki/modules/coordination"
 	"loki/modules/github"
-	"loki/modules/secrets"
 )
 
 // RuntimeOptions is administrator-owned role configuration, never tool input.
@@ -52,9 +51,9 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	if err != nil {
 		return err
 	}
-	if o.ApplicationValuesExternal {
-		selected["secrets"] = false
-	}
+	// Application values always belong to the dedicated broker. The runtime
+	// must never initialize or expose a fallback AES application vault.
+	selected["secrets"] = false
 	if o.PortInspectorUID != nil && (*o.PortInspectorUID == 0 || *o.PortInspectorUID == o.AgentUID || !selected["browser"]) {
 		return errors.New("port inspector requires the browser resource and a distinct non-root UID")
 	}
@@ -164,13 +163,7 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 	if err != nil {
 		return err
 	}
-	secretState, githubState, coordinationState := runtimeDataDirectories(o)
-	controller := secret.Controller{StateDirectory: secretState, InboxDirectory: o.InboxDirectory}
-	if selected["secrets"] {
-		if _, err := controller.Initialize(ctx); err != nil {
-			return fmt.Errorf("initialize selected application-secret owner: %w", err)
-		}
-	}
+	_, githubState, coordinationState := runtimeDataDirectories(o)
 	githubCredentials := githubapp.Credentials{StateDirectory: githubState}
 	if selected["github"] {
 		if err := githubCredentials.ResumeInitialization(ctx); err != nil {
@@ -334,21 +327,6 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		}
 		count := 0
 		var revision uint64
-		if currentSelected["secrets"] {
-			profiles, err := controller.Profiles(ctx)
-			if err != nil {
-				return nil, err
-			}
-			items, ok := profiles["profiles"].([]map[string]any)
-			if !ok {
-				return nil, errors.New("invalid vault profile response")
-			}
-			count = len(items)
-			revision, ok = profiles["revision"].(uint64)
-			if !ok {
-				return nil, errors.New("invalid vault revision response")
-			}
-		}
 		credentialSource := "disabled"
 		credentialAvailable := false
 		if currentSelected["github"] && c.GitHubAppID != 0 {
@@ -381,9 +359,6 @@ func RunRuntime(ctx context.Context, o RuntimeOptions, c config.Config, contract
 		for _, group := range groups {
 			operationGroups = append(operationGroups, gateOperations(o.ToolGate, module, group))
 		}
-	}
-	if selected["secrets"] {
-		addOperations("secrets", SecretOperations(controller))
 	}
 	if selected["coordination"] {
 		addOperations("coordination",

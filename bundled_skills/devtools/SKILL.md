@@ -21,10 +21,13 @@ Help and `skill` return text; `run` forwards the child's output and exit code.
 
 Use `doctor COMMAND` before a configured command when setup is uncertain.
 A successful diagnosis can still have `data.ready: false`; inspect checks and remedies.
-Variables are readable and may use devtools storage. Loki keeps active secret
-values in its AES-GCM vault, so leave the devtools active secret store empty.
-Manage those values with Loki secret commands. Keep secret values out of
-arguments, conversation, logs, devtools state, and workspace files.
+Loki keeps active application values in the isolated devtools-backed secrets
+service, separate from coordination task/workstream storage. Use the resource
+aliases and environments granted by the host administrator. `secret_inspect`
+returns metadata and opaque revisions; `secret_write` supports public
+configuration, fixed 32-byte generation and private staged imports. Keep secret
+plaintext, patterns, private handles and recovery identities out of arguments,
+conversation, logs, coordination state and workspace files.
 
 Use `run NAME` for foreground work and `process start NAME` for a persistent server.
 Save the returned execution ID. `process status` reports lifetime; a configured
@@ -32,19 +35,14 @@ Save the returned execution ID. `process status` reports lifetime; a configured
 can exit successfully with `readiness.ready: false`.
 Restart applies current config and values.
 
-For a configured process that needs encrypted Loki secrets, replace only its
-start or restart command with the brokered form below. Put all options before
-the final command name or execution ID. Repeat `--secret` for each selected name.
-
-```sh
-loki secret-process start --profile VAULT_PROFILE --secret TOKEN --request-id UUID --dir /workspace/PROJECT COMMAND
-loki secret-process restart --profile VAULT_PROFILE --secret TOKEN --request-id UUID EXECUTION_ID
-```
-
-The broker resolves values inside the root-owned vault and passes them to the
-managed process environment. The agent, argv, devtools state, response, and
-audit records receive names only. Continue with ordinary `devtools process
-status`, `check`, `wait`, and `stop` commands using the returned execution ID.
+Project execution inside Loki uses the unified `job` tool. For protected
+delivery, choose its granted application resource/environment and reuse the same
+request UUID with identical input after an uncertain response. The private
+broker freezes only the authorized values and binds them to that exact Job;
+the launcher owns workload execution and masked output. `secret-process` and
+profile-based application mutation are retired. Use administrator `loki secret
+app` and `loki secret protection` channels for private staging and manual
+init/unlock; never auto-initialize or unlock a vault from an agent workflow.
 
 Ports belong to execution locations. Inspect `port` and `instance` before changing
 assignments. Commands declare `serve` for servers and `bind` for injected values.

@@ -1,5 +1,6 @@
-// Package secret owns the encrypted runtime vault. Secret values never cross
-// the runtime boundary; callers receive metadata or a private EnvironmentPlan.
+// Package secret reads retained legacy app vaults for offline migration and
+// preserves closed platform credential ownership. Active application values
+// belong exclusively to the dedicated devtools-backed service.
 package secret
 
 import (

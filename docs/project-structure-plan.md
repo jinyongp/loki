@@ -210,7 +210,7 @@ The shared encrypted persistence implementation may live in `platform/securestor
 
 S02 status: trusted-parent private atomic publication now lives in `internal/platform/safeio`. `internal/state` consumes that primitive for encrypted-state and migration files, while Git checkpoints and workspace revisions consume it directly and no longer import `internal/state`. The state package still owns encrypted-store semantics and file locking; `policy.Workspace.AtomicWrite` remains separate because it pins untrusted workspace parents and supports caller-selected modes. Further safeio extraction from `daemon`/`policy` should preserve those distinct guarantees rather than collapsing them.
 
-Provider-specific key use belongs to its protected integration adapter. Application-secret delivery lives in `work/secrets`. No devtools adapter depends directly on either store; approved secret delivery is performed through the job boundary. The `control/credentials` path is not proof of protection unless the role's actual mount/identity and APIs enforce it.
+Provider-specific key use belongs to its protected integration adapter. Active application values are owned by `modules/secrets/application` and its closed `modules/secrets/devtools` provider; only the isolated broker imports them. The coordination adapter has no vault or process-secret authority. Approved delivery crosses the private broker/launcher Job boundary. `modules/secrets` retains the offline legacy decoder/source fencing and closed platform credential API; its old application AES mutation and environment injection APIs are removed. The `control/credentials` path is not proof of protection unless the role's actual mount/identity and APIs enforce it.
 
 ## 5. Migration map for every current Go package
 

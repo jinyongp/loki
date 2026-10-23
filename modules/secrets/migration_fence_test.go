@@ -41,9 +41,6 @@ func TestApplicationMigrationFenceSurvivesOwnerRestartAndRetainsPlatformOwner(t 
 	if _, err := c.SetSecret(t.Context(), "web", "TOKEN", "changed", false); !errors.Is(err, ErrApplicationMigration) {
 		t.Fatal("application writer crossed migration fence", err)
 	}
-	if _, err := c.SetPublicRequest(t.Context(), "web", "TOKEN", "changed", "123e4567-e89b-42d3-a456-426614174402", snapshot.Revision); !errors.Is(err, ErrApplicationMigration) {
-		t.Fatal("request writer crossed migration fence", err)
-	}
 	if _, err := c.ManagedCredentials().Set(t.Context(), ManagedGitHubAppPrivateKey, "changed"); !errors.Is(err, ErrApplicationMigration) {
 		t.Fatal("platform writer changed frozen source", err)
 	}
