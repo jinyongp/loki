@@ -33,6 +33,10 @@ func TestRealComposeNewDeploymentRecovery(t *testing.T) {
 	runRealComposeMigrationLifecycle(t, "new-deployment")
 }
 
+func TestRealComposePairedApplicationRestore(t *testing.T) {
+	runRealComposeMigrationLifecycle(t, "paired")
+}
+
 func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
 	if image == "" {
@@ -232,6 +236,9 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, bytes.NewReader(passphrase), unlockArgs...); err != nil {
 		t.Fatal("manual warm-vault backup prerequisite", err)
 	}
+	if journey == "paired" {
+		setFixtureApplicationToken(t, ctx, b, current, []byte("synthetic-paired-backup-value-A"), "123e4567-e89b-42d3-a456-426614174491")
+	}
 	store, err := lifecycle.EnsureFileStore(b.root)
 	if err != nil {
 		t.Fatal(err)
@@ -282,6 +289,9 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	}
 	if journey == "new-deployment" {
 		verifyRealComposeNewDeployment(t, ctx, b, binary, backup, backupIdentity)
+	}
+	if journey == "paired" {
+		verifyRealComposePairedApplicationRestore(t, ctx, b, binary, backup, backupIdentity, passphrase)
 	}
 }
 

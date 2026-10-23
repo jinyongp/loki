@@ -1,15 +1,17 @@
 #!/bin/sh
 set -eu
 umask 077
-test "$#" -ge 1 && test "$#" -le 2 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore|recovery]' >&2; exit 2; }
+test "$#" -ge 1 && test "$#" -le 3 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore|recovery|paired] [PAIRED_IMAGE]' >&2; exit 2; }
 image=$1
 suite=${2:-normal}
-case "$suite" in normal|restore|recovery) ;; *) exit 2 ;; esac
+case "$suite" in normal|restore|recovery) test "$#" -le 2 ;; paired) test "$#" -eq 3 ;; *) exit 2 ;; esac
 registry=
 tag=
 test_binary=
 source_builder=
 host_cli=
+paired_tag=
+value_probe=
 cleanup() {
   result=$?
   trap - EXIT HUP INT TERM
@@ -18,6 +20,8 @@ cleanup() {
   if test -n "$test_binary"; then rm -f "$test_binary"; fi
   if test -n "$source_builder"; then rm -f "$source_builder"; fi
   if test -n "$host_cli"; then rm -f "$host_cli"; fi
+  if test -n "$paired_tag"; then docker image rm "$paired_tag" >/dev/null 2>&1 || true; fi
+  if test -n "$value_probe"; then rm -f "$value_probe"; fi
   exit "$result"
 }
 trap cleanup EXIT HUP INT TERM
@@ -33,6 +37,20 @@ LOKI_TEST_NATIVE_SECRET_IMAGE=$(docker image inspect --format '{{range .RepoDige
 done)
 test -n "$LOKI_TEST_NATIVE_SECRET_IMAGE"
 export LOKI_TEST_NATIVE_SECRET_IMAGE
+if test "$suite" = paired; then
+  paired_tag="$endpoint/loki-native-secret-paired:fixture"
+  docker tag "$3" "$paired_tag"
+  docker push "$paired_tag"
+  LOKI_TEST_PAIRED_NATIVE_SECRET_IMAGE=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$paired_tag" | while IFS= read -r reference; do
+    case "$reference" in "$endpoint/loki-native-secret-paired@sha256:"*) printf '%s\n' "$reference" ;; esac
+  done)
+  test -n "$LOKI_TEST_PAIRED_NATIVE_SECRET_IMAGE"
+  export LOKI_TEST_PAIRED_NATIVE_SECRET_IMAGE
+  value_probe=$(mktemp /tmp/loki-private-value-probe.XXXXXXXX)
+  CGO_ENABLED=0 go build -o "$value_probe" ./internal/host/lifecycle/testdata/private-value-probe
+  chmod 0555 "$value_probe"
+  export LOKI_TEST_PRIVATE_VALUE_PROBE="$value_probe"
+fi
 export LOKI_REQUIRE_NATIVE_SECRET_COMPOSE=1
 source_builder=$(mktemp /tmp/loki-secret-source-builder.XXXXXXXX)
 CGO_ENABLED=0 go build -o "$source_builder" ./internal/host/lifecycle/testdata/native-migration
@@ -48,6 +66,10 @@ if test "$suite" = restore; then
 fi
 if test "$suite" = recovery; then
   go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposeNewDeploymentRecovery$'
+  exit 0
+fi
+if test "$suite" = paired; then
+  go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposePairedApplicationRestore$'
   exit 0
 fi
 go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices|MigrationPublicLifecycle)$'

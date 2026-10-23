@@ -18,7 +18,7 @@ def output(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
-def build(inputs, tag):
+def build(inputs, tag, loki_version="0.49.0-dev"):
     arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
     if platform.system() != "Linux" or arch is None or output("go", "env", "GOARCH") != arch:
         raise ValueError("native Linux runner is required")
@@ -49,13 +49,13 @@ def build(inputs, tag):
         metadata = artifacts / "metadata"
         metadata.mkdir()
         subprocess.run(["go", "run", "./modules/coordination/cmd/gencatalog", "-binary", str(paths["devtools"]), "-output", str(metadata / "devtools-catalog.json")], cwd=root, check=True)
-        provenance = {"version": 1, "loki": {"version": "0.49.0-dev", "revision": revision, "date": date},
+        provenance = {"version": 1, "loki": {"version": loki_version, "revision": revision, "date": date},
                       "devtools": version, "binaries": {name: {arch: {"sha256": digest}} for name, digest in digests.items()}}
         (metadata / "provenance.json").write_text(json.dumps(provenance) + "\n", encoding="utf-8")
         args = ["docker", "buildx", "build", str(root), "--file", str(root / "packaging/images/Dockerfile"),
                 "--platform", "linux/" + arch, "--build-context", "artifacts=" + str(artifacts),
                 "--tag", tag, "--load", "--provenance=false"]
-        values = {"LOKI_VERSION": "0.49.0-dev", "LOKI_REVISION": revision, "LOKI_DATE": date,
+        values = {"LOKI_VERSION": loki_version, "LOKI_REVISION": revision, "LOKI_DATE": date,
                   "DEVTOOLS_VERSION": "0.33.0", "RIPGREP_VERSION": "15.2.0", "GH_VERSION": "2.102.0"}
         for name, digest in digests.items():
             values[name.upper() + "_" + arch.upper() + "_SHA256"] = digest
@@ -68,5 +68,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--version", choices=["0.49.0-dev", "0.49.1-dev"], default="0.49.0-dev")
     args = parser.parse_args()
-    build(args.inputs.resolve(), args.tag)
+    build(args.inputs.resolve(), args.tag, args.version)
