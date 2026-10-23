@@ -74,7 +74,7 @@ func (e *TransactionEngine) beginMaintenance(ctx context.Context, journal *Opera
 	if err != nil {
 		return err
 	}
-	return guard.BeginJobMaintenance(ctx, id, record.Maintenance.Interrupt)
+	return guard.BeginJobMaintenance(hostOperationContext(ctx, journal, record.ID), id, record.Maintenance.Interrupt)
 }
 
 func (e *TransactionEngine) releaseMaintenance(ctx context.Context, journal *OperationJournal, record OperationRecord) error {
@@ -92,7 +92,7 @@ func (e *TransactionEngine) releaseMaintenance(ctx context.Context, journal *Ope
 	if err != nil {
 		return err
 	}
-	if err := guard.EndJobMaintenance(ctx, id); err != nil {
+	if err := guard.EndJobMaintenance(hostOperationContext(ctx, journal, record.ID), id); err != nil {
 		return err
 	}
 	maintenance := *record.Maintenance

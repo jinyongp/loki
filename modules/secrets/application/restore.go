@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
@@ -48,8 +50,9 @@ func (s *Service) importApplication(ctx context.Context, q AdminRequest, body []
 		return nil, conflict()
 	}
 	// Identity and ciphertext exist only under the candidate's private tmpfs.
-	// A crash loses them and requires the operator's private input again.
-	directory, err := os.MkdirTemp(s.options.Inbox, ".restore-")
+	// Startup removes orphan staging before admitting a fresh candidate.
+	// The operator must supply private input again after process loss.
+	directory, err := os.MkdirTemp(s.options.Inbox, ".restore-"+strings.ReplaceAll(q.Operation, "-", "")+"-")
 	if err != nil {
 		return nil, unavailable()
 	}
@@ -76,4 +79,49 @@ func (s *Service) importApplication(ctx context.Context, q AdminRequest, body []
 		return nil, err
 	}
 	return map[string]any{"action": q.Action, "resource_id": resource.ID, "digest": result.Digest, "changed": result.Changed, "replayed": result.Replayed}, nil
+}
+
+func cleanupRestoreStaging(options Options) error {
+	if options.RestoreOperation == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(options.Inbox)
+	if err != nil {
+		return err
+	}
+	prefix := ".restore-" + strings.ReplaceAll(options.RestoreOperation, "-", "") + "-"
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".restore-") {
+			continue
+		}
+		directory := filepath.Join(options.Inbox, entry.Name())
+		if !strings.HasPrefix(entry.Name(), prefix) || privateDirectory(directory, true) != nil {
+			return unavailable()
+		}
+		files, err := os.ReadDir(directory)
+		if err != nil || len(files) > 2 {
+			return unavailable()
+		}
+		for _, file := range files {
+			if file.Name() != "identity" && file.Name() != "application.age" {
+				return unavailable()
+			}
+			path := filepath.Join(directory, file.Name())
+			info, err := os.Lstat(path)
+			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+				return unavailable()
+			}
+			owner, ok := info.Sys().(*syscall.Stat_t)
+			if !ok || owner.Uid != uint32(os.Geteuid()) || owner.Nlink != 1 {
+				return unavailable()
+			}
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(directory); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -5,6 +5,8 @@ package compose
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -97,6 +99,27 @@ func (b *Backend) freezeMigration(ctx context.Context, r lifecycle.OperationReco
 			return err
 		}
 	} else {
+		if _, err := os.Lstat(filepath.Join(state.ApplicationRuntimeRoot, "roles", "launcher.json")); os.IsNotExist(err) {
+			// A host reboot erases tmpfs roles but preserves the original Job
+			// journal. Only this locked operation may rebuild its pre-cutover
+			// projection; this never starts services or initializes protection.
+			before, err := b.migrationMetadata(ctx, state, r.SecretMigration.Intent.BeforeResources, true)
+			if err != nil || before.Identity != r.SecretMigration.Intent.Before || before.Policy != r.SecretMigration.Intent.ExpectedPolicy {
+				return errComposeMigration
+			}
+			b.maintenance = &hostMaintenance{Version: 1, OperationID: op, Interrupt: r.SecretMigration.Intent.Interrupt, Active: true}
+			b.initialApplicationMaintenance = op
+			err = b.prepareApplicationValues(ctx, &state)
+			b.initialApplicationMaintenance = ""
+			if err != nil {
+				return err
+			}
+			if err := b.saveRuntime(state); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
 		gate, err := b.maintenanceCall(ctx, state, "verify", op, false, true)
 		if err != nil || gate == nil || !gate.Active || gate.OperationID != op || gate.Interrupt != r.SecretMigration.Intent.Interrupt {
 			return errComposeMigration
@@ -187,6 +210,11 @@ func (b *Backend) ApplySecretMigration(ctx context.Context, intent *lifecycle.Se
 				}
 				if err := b.runMigrationSource(ctx, action); err != nil {
 					return err
+				}
+				if r.State == lifecycle.OperationSucceeded {
+					if err := b.publishApplicationBackupRecipient(i.Recipient, false); err != nil {
+						return err
+					}
 				}
 				if err := b.fenceMigrationApplication(ctx, r, false); err != nil {
 					return err
@@ -293,6 +321,9 @@ func (b *Backend) ApplySecretMigration(ctx context.Context, intent *lifecycle.Se
 		}
 		return errComposeMigration
 	})
+	if err != nil && result.Operation != "" {
+		err = fmt.Errorf("Compose secret migration %s requires original recovery: %w", result.Phase, err)
+	}
 	return result, err
 }
 

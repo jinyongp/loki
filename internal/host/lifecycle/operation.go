@@ -107,23 +107,24 @@ func nextApplyPhase(current OperationPhase) OperationPhase {
 }
 
 type OperationRecord struct {
-	ID                    string                    `json:"id"`
-	Kind                  OperationKind             `json:"kind"`
-	PlanID                string                    `json:"plan_id"`
-	ObservedHostRevision  string                    `json:"observed_host_revision"`
-	ActiveGenerationID    string                    `json:"active_generation_id,omitempty"`
-	CandidateGenerationID string                    `json:"candidate_generation_id"`
-	RecoveryBackupID      string                    `json:"recovery_backup_id,omitempty"`
-	State                 OperationState            `json:"state"`
-	Phase                 OperationPhase            `json:"phase"`
-	OriginalError         string                    `json:"original_error,omitempty"`
-	RecoveryError         string                    `json:"recovery_error,omitempty"`
-	StartedAt             string                    `json:"started_at"`
-	UpdatedAt             string                    `json:"updated_at"`
-	CompletedAt           string                    `json:"completed_at,omitempty"`
-	Maintenance           *OperationMaintenance     `json:"maintenance,omitempty"`
-	NativeSwitch          *NativeSwitchIntent       `json:"native_switch,omitempty"`
-	SecretMigration       *SecretMigrationOperation `json:"secret_migration,omitempty"`
+	ID                    string                       `json:"id"`
+	Kind                  OperationKind                `json:"kind"`
+	PlanID                string                       `json:"plan_id"`
+	ObservedHostRevision  string                       `json:"observed_host_revision"`
+	ActiveGenerationID    string                       `json:"active_generation_id,omitempty"`
+	CandidateGenerationID string                       `json:"candidate_generation_id"`
+	RecoveryBackupID      string                       `json:"recovery_backup_id,omitempty"`
+	State                 OperationState               `json:"state"`
+	Phase                 OperationPhase               `json:"phase"`
+	OriginalError         string                       `json:"original_error,omitempty"`
+	RecoveryError         string                       `json:"recovery_error,omitempty"`
+	StartedAt             string                       `json:"started_at"`
+	UpdatedAt             string                       `json:"updated_at"`
+	CompletedAt           string                       `json:"completed_at,omitempty"`
+	Maintenance           *OperationMaintenance        `json:"maintenance,omitempty"`
+	NativeSwitch          *NativeSwitchIntent          `json:"native_switch,omitempty"`
+	SecretMigration       *SecretMigrationOperation    `json:"secret_migration,omitempty"`
+	ApplicationBackup     *ApplicationBackupCheckpoint `json:"application_backup,omitempty"`
 }
 
 // OperationMaintenance retains the exact interruption choice across crashes.
@@ -134,6 +135,12 @@ type OperationMaintenance struct {
 }
 
 func (r OperationRecord) Valid() bool {
+	if r.ApplicationBackup != nil && (!r.ApplicationBackup.Valid() || r.ApplicationBackup.Intent.Operation != MigrationOperationUUID(r.ID) || r.Kind == OperationSecretMigration || r.Kind == OperationNativeSwitch || r.Maintenance == nil) {
+		return false
+	}
+	if r.ApplicationBackup != nil && (r.State == OperationSucceeded || r.State == OperationApplying && r.Phase != PhaseAdmitted) && !r.ApplicationBackup.Complete() {
+		return false
+	}
 	if r.Maintenance != nil && r.Maintenance.Released && r.State != OperationSucceeded && r.State != OperationRolledBack {
 		return false
 	}
@@ -682,7 +689,7 @@ func (j *OperationJournal) persist(record OperationRecord, overwrite bool) error
 	}
 	envelope = append(envelope, '\n')
 	limit := maxOperationRecordBytes
-	if record.Kind == OperationNativeSwitch {
+	if record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil {
 		limit = maxNativeOperationRecordBytes
 	} else if record.Kind == OperationSecretMigration {
 		limit = maxMigrationOperationRecordBytes
@@ -815,7 +822,7 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	if err = recordDecoder.Decode(&record); err != nil {
 		return OperationRecord{}, errors.New("host lifecycle operation record is invalid")
 	}
-	if record.Kind == OperationNativeSwitch && len(raw) > maxNativeOperationRecordBytes || record.Kind != OperationNativeSwitch && record.Kind != OperationSecretMigration && len(raw) > maxOperationRecordBytes {
+	if (record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil) && len(raw) > maxNativeOperationRecordBytes || record.Kind != OperationNativeSwitch && record.Kind != OperationSecretMigration && record.ApplicationBackup == nil && len(raw) > maxOperationRecordBytes {
 		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.Valid() {

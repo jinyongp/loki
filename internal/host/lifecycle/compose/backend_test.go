@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,6 +30,13 @@ type fakeRunner struct {
 	outputs           map[string][]byte
 	errs              map[string]error
 	applicationVolume []byte
+}
+
+func (r *fakeRunner) RunPrivate(ctx context.Context, env []string, _ io.Reader, args ...string) ([]byte, error) {
+	if len(args) > 0 && strings.Contains(args[len(args)-1], "--metadata-only") {
+		return []byte(`{"identity":{"version":1,"uid":10006,"gid":10006,"agent_uid":10000,"metadata_gid":10001,"deployment_id":"deployment-11111111111111111111111111111111","runner_id":"33333333-3333-4333-8333-333333333333","active_generation":"22222222222222222222222222222222"},"policy":"4444444444444444444444444444444444444444444444444444444444444444","base_environment":{}}`), nil
+	}
+	return r.Run(ctx, env, args...)
 }
 
 func (r *fakeRunner) Run(_ context.Context, env []string, args ...string) ([]byte, error) {

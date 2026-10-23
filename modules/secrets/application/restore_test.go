@@ -43,7 +43,8 @@ func verifyApplicationRestore(t *testing.T, ctx context.Context, binary string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(Options{Provider: p, Root: root, Inbox: inbox, DeploymentID: "restore-candidate", PolicySHA256: strings.Repeat("b", 64), Resources: []controlpolicy.ApplicationResource{resource}, RestoreOperation: operation})
+	options := Options{Provider: p, Root: root, Inbox: inbox, DeploymentID: "restore-candidate", PolicySHA256: strings.Repeat("b", 64), Resources: []controlpolicy.ApplicationResource{resource}, RestoreOperation: operation}
+	s, err := New(options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +101,20 @@ func verifyApplicationRestore(t *testing.T, ctx context.Context, binary string, 
 	entries, err := os.ReadDir(inbox)
 	if err != nil || len(entries) != 0 {
 		t.Fatal("logical restore left private identity or ciphertext staging", err)
+	}
+	orphan, err := os.MkdirTemp(inbox, ".restore-"+strings.ReplaceAll(operation, "-", "")+"-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(orphan, "identity"), identity, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err = New(options)
+	if err != nil {
+		t.Fatal("candidate restart orphan cleanup", err)
+	}
+	if _, err := os.Lstat(orphan); !os.IsNotExist(err) {
+		t.Fatal("restart retained private backup identity", err)
 	}
 	if err := s.LockOnStart(ctx); err != nil {
 		t.Fatal(err)

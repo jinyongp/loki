@@ -314,12 +314,13 @@ var lifecycleTimeNow = func() time.Time {
 }
 
 type hostMaintenanceOptions struct {
-	System          bool
-	StateRoot       string
-	LauncherLayout  string
-	InterruptJobs   bool
-	RestoreBackupID string
-	Component       string
+	System                     bool
+	StateRoot                  string
+	LauncherLayout             string
+	InterruptJobs              bool
+	RestoreBackupID            string
+	Component                  string
+	ApplicationBackupRecipient string
 }
 
 func parseHostMaintenanceOptions(action string, args []string, stderr io.Writer) (hostMaintenanceOptions, error) {
@@ -329,12 +330,17 @@ func parseHostMaintenanceOptions(action string, args []string, stderr io.Writer)
 	stateRoot := flags.String("state-root", "", "host lifecycle state root")
 	launcherLayout := flags.String("launcher-layout", "", "launcher service layout")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "explicitly approve interrupting active jobs")
+	applicationRecipient := flags.String("application-backup-recipient", "", "operator X25519 public recipient for logical application backups")
 	if err := flags.Parse(args); err != nil {
 		return hostMaintenanceOptions{}, err
 	}
 	result := hostMaintenanceOptions{
 		System: *system, StateRoot: strings.TrimSpace(*stateRoot),
 		LauncherLayout: strings.TrimSpace(*launcherLayout), InterruptJobs: *interrupt,
+		ApplicationBackupRecipient: *applicationRecipient,
+	}
+	if action != "backup" && *applicationRecipient != "" {
+		return hostMaintenanceOptions{}, errors.New("application backup recipient can be configured by backup only")
 	}
 	switch action {
 	case "restore":
@@ -403,6 +409,12 @@ func runHostMaintenance(action string, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if options.ApplicationBackupRecipient != "" {
+		if err := backend.ConfigureApplicationBackup(context.Background(), options.ApplicationBackupRecipient); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 	}
 	engine := &lifecycle.TransactionEngine{Store: store, Backend: backend, Now: lifecycleTimeNow}
 	if action == "restore" || action == "rollback" {

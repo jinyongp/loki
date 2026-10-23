@@ -55,6 +55,9 @@ func (b *Backend) EndJobMaintenance(ctx context.Context, operation string) error
 		b.maintenance = nil
 		return nil
 	}
+	if err := b.releaseApplicationBackup(ctx, state, operation); err != nil {
+		return err
+	}
 	status, err := b.maintenanceCall(ctx, state, "status", "", false, true)
 	if err != nil {
 		return err

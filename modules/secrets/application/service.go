@@ -63,6 +63,9 @@ func New(options Options) (*Service, error) {
 	if err := privateDirectory(options.Inbox, true); err != nil {
 		return nil, unavailable()
 	}
+	if err := cleanupRestoreStaging(options); err != nil {
+		return nil, unavailable()
+	}
 	requests := filepath.Join(options.Root, "requests")
 	if err := os.Mkdir(requests, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, unavailable()

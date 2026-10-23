@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"filippo.io/age"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -109,7 +111,7 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "45", "application-values", "launcher"); err != nil {
 		t.Fatal("actual original services", err)
 	}
-	intent := verifyRealComposeMigrationPreparation(t, ctx, b, state, image)
+	intent, backupIdentity := verifyRealComposeMigrationPreparation(t, ctx, b, state, image)
 	invoke := func(action string, input []byte, extra ...string) SecretMigrationStatus {
 		t.Helper()
 		args := []string{"host", "secret-migration", "compose", action, "--state-root", b.root, "--project", b.project}
@@ -165,6 +167,26 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal("explicit candidate initialization/process loss", err)
 	}
+	var candidateRuntime string
+	if err := b.withMigration(ctx, nil, func(_ context.Context, _ *lifecycle.OperationJournal, r lifecycle.OperationRecord) error {
+		candidateRuntime = filepath.Join("/dev/shm", "loki-tools-"+applicationOwnerID(b.root)+"-migration-"+r.ID, "secrets")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate erased host tmpfs without calling a process restart a reboot.
+	// Persistent source/target data and the original host/Job journals survive.
+	for _, projection := range []string{state.ApplicationRuntimeRoot, candidateRuntime} {
+		if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, nil, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--user", "0:0", "--log-driver", "none", "--mount", applicationBind(projection, "/owned-runtime", false), "--entrypoint", "/bin/sh", image, "-ec", "find /owned-runtime -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +"); err != nil {
+			t.Fatal("erase only owned stopped tmpfs projection", err)
+		}
+		if err := os.Remove(projection); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Dir(projection)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	locked := invoke("recover", nil)
 	if locked.Released || locked.Protection != "locked" && locked.Protection != "locked_manual" || locked.Operation != pending.Operation {
 		t.Fatal("lost process retained protection session", locked)
@@ -189,5 +211,58 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	ids, err := b.runner.Run(ctx, nil, "container", "ls", "--all", "--filter", "label=io.loki.migration.owner="+applicationOwnerID(b.root), "--format", "{{.ID}}")
 	if err != nil || strings.TrimSpace(string(ids)) != "" {
 		t.Fatal("completed migration left private helpers", err)
+	}
+	// Exercise the actual installed host engine after cutover. Its warm logical
+	// export must precede stopping services and remain bound to the same kernel
+	// lock/journal that owns the ordinary offline volume snapshot and release.
+	layout := filepath.Join(filepath.Dir(filepath.Dir(current.ApplicationStateSource)), "secrets-admin.json")
+	unlockArgs := []string{"run", "--rm", "--interactive", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--log-driver", "none", "--entrypoint", "/opt/loki/bin/loki", "--mount", applicationBind(filepath.Join(current.ApplicationRuntimeRoot, "admin"), "/run/loki/secrets/admin", true), "--mount", applicationBind(layout, "/etc/loki/secret-admin.json", true), image, "secret", "protection", "unlock", "--layout", "/etc/loki/secret-admin.json", "--stdin"}
+	if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, bytes.NewReader(passphrase), unlockArgs...); err != nil {
+		t.Fatal("manual warm-vault backup prerequisite", err)
+	}
+	store, err := lifecycle.EnsureFileStore(b.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := composeGeneration(t, "0.49.0", "a").Spec
+	_, spec.CoreImageDigest, _ = strings.Cut(image, "@")
+	generation, err := lifecycle.NewGeneration(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InitializeInstall(ctx, generation, lifecycle.InstallationState{Scope: "system", Workspace: workspace, MCPPort: port}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CommitGeneration(ctx, generation, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	current.GenerationID = generation.ID
+	if err := b.saveRuntime(current); err != nil {
+		t.Fatal(err)
+	}
+	engine := lifecycle.TransactionEngine{Store: store, Backend: b}
+	backup, err := engine.Backup(ctx)
+	if err != nil || !backup.Valid() || backup.ApplicationBackup == nil || !backup.ApplicationBackup.Complete() || len(backup.ApplicationBackup.Exports) != 1 {
+		t.Fatal("actual original-owner logical+offline host backup", err)
+	}
+	proof := backup.ApplicationBackup.Exports[0]
+	artifact := filepath.Join(backup.ApplicationBackup.Intent.Directory, strings.ReplaceAll(proof.Resource, "-", "")+".age")
+	if err := verifyApplicationCipher(artifact, proof); err != nil {
+		t.Fatal("published logical archive integrity", err)
+	}
+	ciphertext, err := os.Open(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ciphertext.Close()
+	plaintext, err := age.Decrypt(ciphertext, backupIdentity)
+	if err != nil {
+		t.Fatal("operator identity could not authenticate host archive", err)
+	}
+	if _, err := io.Copy(io.Discard, plaintext); err != nil {
+		t.Fatal("host archive authentication failed", err)
+	}
+	if gate, err := b.maintenanceCall(ctx, current, "status", "", false, false); err != nil || gate == nil || gate.Active {
+		t.Fatal("successful backup retained Job gate", err)
 	}
 }

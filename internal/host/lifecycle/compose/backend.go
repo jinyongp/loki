@@ -151,9 +151,10 @@ type snapshotVolume struct {
 }
 
 type snapshotManifest struct {
-	Version int                       `json:"version"`
-	Runtime *runtimeState             `json:"runtime,omitempty"`
-	Volumes map[string]snapshotVolume `json:"volumes"`
+	Version           int                                    `json:"version"`
+	Runtime           *runtimeState                          `json:"runtime,omitempty"`
+	Volumes           map[string]snapshotVolume              `json:"volumes"`
+	ApplicationBackup *lifecycle.ApplicationBackupCheckpoint `json:"application_backup,omitempty"`
 }
 
 func New(config Config) (*Backend, error) {
@@ -238,15 +239,32 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 	if err != nil {
 		return lifecycle.RuntimeSnapshot{}, err
 	}
-	stopped := false
-	if found {
-		b.report("snapshot-stop", "Stopping services to create a consistent recovery backup (shutdown grace: 30s)...")
-		if _, err = b.compose(ctx, current, "stop", "--timeout", "30"); err != nil {
+	dir, err := os.MkdirTemp(b.snapshotRoot, ".snapshot-")
+	if err != nil {
+		return lifecycle.RuntimeSnapshot{}, err
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		_ = os.RemoveAll(dir)
+		return lifecycle.RuntimeSnapshot{}, err
+	}
+	var applicationBackup *lifecycle.ApplicationBackupCheckpoint
+	if found && current.ApplicationRuntimeRoot != "" {
+		applicationDirectory := filepath.Join(dir, "applications")
+		if err = os.Mkdir(applicationDirectory, 0700); err != nil {
+			_ = os.RemoveAll(dir)
 			return lifecycle.RuntimeSnapshot{}, err
 		}
-		stopped = true
+		applicationBackup, err = b.captureApplicationBackup(ctx, current, applicationDirectory)
+		if err != nil {
+			_ = os.RemoveAll(dir)
+			return lifecycle.RuntimeSnapshot{}, err
+		}
 	}
+	stopped := false
 	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(dir)
+		}
 		if !stopped || err == nil {
 			return
 		}
@@ -259,16 +277,16 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 		result = lifecycle.RuntimeSnapshot{}
 		err = errors.Join(err, fmt.Errorf("resume compose runtime after snapshot failure: %w", restartErr))
 	}()
+	if found {
+		b.report("snapshot-stop", "Stopping services to create a consistent recovery backup (shutdown grace: 30s)...")
+		// A failed stop can already have stopped the broker or launcher.
+		stopped = true
+		if _, err = b.compose(ctx, current, "stop", "--timeout", "30"); err != nil {
+			return lifecycle.RuntimeSnapshot{}, err
+		}
+	}
 
-	dir, err := os.MkdirTemp(b.snapshotRoot, ".snapshot-")
-	if err != nil {
-		return lifecycle.RuntimeSnapshot{}, err
-	}
-	if err = os.Chmod(dir, 0700); err != nil {
-		_ = os.RemoveAll(dir)
-		return lifecycle.RuntimeSnapshot{}, err
-	}
-	manifest := snapshotManifest{Version: snapshotManifestVersion, Volumes: map[string]snapshotVolume{}}
+	manifest := snapshotManifest{Version: snapshotManifestVersion, Volumes: map[string]snapshotVolume{}, ApplicationBackup: applicationBackup}
 	if found {
 		copy := current
 		copy.Profiles = append([]string(nil), current.Profiles...)
@@ -306,7 +324,8 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 		return lifecycle.RuntimeSnapshot{}, err
 	}
 	result = lifecycle.RuntimeSnapshot{
-		Ref: dir,
+		Ref:               dir,
+		ApplicationBackup: applicationBackup,
 		Coverage: lifecycle.BackupCoverage{
 			RuntimeState: true, ConfigState: true, HostState: true, WorkspacePreserved: true,
 			OptionalComponentState: append([]string(nil), snapshot.Host.EnabledComponents...),
@@ -728,11 +747,19 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 	if manifest.Version != snapshotManifestVersion || manifest.Volumes == nil {
 		return errors.New("compose lifecycle snapshot manifest is invalid")
 	}
+	if manifest.ApplicationBackup != nil && (!manifest.ApplicationBackup.Complete() || manifest.Runtime == nil || manifest.Runtime.ApplicationRuntimeRoot == "" || manifest.ApplicationBackup.Intent.Directory != filepath.Join(dir, "applications")) {
+		return lifecycle.ErrApplicationBackup
+	}
 	var currentRuntime *runtimeState
 	if current, found, loadErr := b.loadRuntime(); loadErr != nil {
 		return loadErr
 	} else if found {
 		currentRuntime = &current
+		if manifest.ApplicationBackup != nil {
+			if err := b.validateApplicationSafetyRestore(ctx, current, manifest.ApplicationBackup); err != nil {
+				return err
+			}
+		}
 		if _, err = b.compose(ctx, current, "down", "--remove-orphans"); err != nil {
 			return err
 		}
@@ -748,6 +775,11 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 		}
 	}
 	for _, name := range persistentVolumes {
+		if manifest.ApplicationBackup != nil && (name == "application-state" || name == "runner-state" || name == "runtime-state") {
+			// Never replay historical value/task/session roots or current
+			// platform credentials during binary/configuration recovery.
+			continue
+		}
 		entry, ok := manifest.Volumes[name]
 		if !ok {
 			entry = snapshotVolume{}
