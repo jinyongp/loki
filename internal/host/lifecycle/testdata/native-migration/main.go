@@ -144,7 +144,7 @@ func run(ctx context.Context, action string) error {
 		defer clear(pass)
 		_, err = (admin.ApplicationClient{Socket: filepath.Join(r.SecretMigration.Intent.RuntimeRoot, "admin/control.sock"), ExpectedUID: r.SecretMigration.Intent.Before.UID}).Call(ctx, appvalues.AdminRequest{Action: "protection_init"}, pass)
 		return err
-	case "verify":
+	case "verify", "verify-rollback":
 		lock, err := lifecycle.AcquireOperationLock("/var/lib/loki-go/native-lifecycle")
 		if err != nil {
 			return err
@@ -158,10 +158,13 @@ func run(ctx context.Context, action string) error {
 			return errors.New("native migration still requires release recovery")
 		}
 		records, err := j.List()
-		if err != nil || len(records) != 2 {
+		if err != nil || len(records) != 1 {
 			return errors.New("native original-operation history was not retained")
 		}
-		seen := map[lifecycle.OperationState]bool{}
+		want := lifecycle.OperationSucceeded
+		if action == "verify-rollback" {
+			want = lifecycle.OperationRolledBack
+		}
 		for _, r := range records {
 			if r.SecretMigration == nil || !r.Maintenance.Released || r.SecretMigration.Archive == nil || !r.SecretMigration.Archive.Published {
 				return errors.New("native source archive or release proof is missing")
@@ -169,10 +172,9 @@ func run(ctx context.Context, action string) error {
 			if err := lifecycle.VerifyMigrationSourceArchive(r.SecretMigration.Intent.BackupPath, r.SecretMigration.Archive); err != nil {
 				return err
 			}
-			seen[r.State] = true
-		}
-		if !seen[lifecycle.OperationSucceeded] || !seen[lifecycle.OperationRolledBack] {
-			return errors.New("native rollback and forward completion were not both observed")
+			if r.State != want {
+				return errors.New("native original operation did not retain the scenario completion")
+			}
 		}
 		return nil
 	default:

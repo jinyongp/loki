@@ -75,6 +75,7 @@ PY
   # A completed plan is its original saved result, never another operation.
   /opt/loki/bin/loki host secret-migration native apply --plan "$operator/rollback-plan.json" --approve > "$operator/rollback-replay.json"
   cmp "$operator/rollback-replay.json" "$operator/rolled-back.json"
+  /opt/loki/bin/native-migration-peer verify-rollback
   echo LOKI_SECRET_NATIVE_ROLLBACK_PASS
   systemctl poweroff --no-block
   exit 0
