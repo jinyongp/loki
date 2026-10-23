@@ -224,7 +224,9 @@ func verifyRealComposeAuthenticatedJobs(t *testing.T, ctx context.Context, b *Ba
 		t.Fatal("ungranted application resource accepted")
 	}
 	values := must("secret_inspect", map[string]any{"action": "values", "resource": "fixture"})
-	generate := map[string]any{"action": "generate", "resource": "fixture", "name": "TOKEN", "expected_revision": values["revision"], "request_id": privateio.OperationID(b.root, "mcp", "generate")}
+	// Migration already populated TOKEN. Generation deliberately creates an
+	// absent granted key; replacing an existing secret is an admin operation.
+	generate := map[string]any{"action": "generate", "resource": "fixture", "name": "MAXA", "expected_revision": values["revision"], "request_id": privateio.OperationID(b.root, "mcp", "generate")}
 	generated := must("secret_write", generate)
 	if generated["bytes"] != float64(32) {
 		t.Fatal("MCP generation length changed")
