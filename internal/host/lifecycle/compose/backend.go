@@ -46,6 +46,8 @@ var persistentVolumes = []string{
 	"signing-state",
 }
 
+var errApplicationRestorePlatform = errors.New("application history restoration requires the original Linux host owner")
+
 type Runner interface {
 	Run(context.Context, []string, ...string) ([]byte, error)
 }
@@ -726,20 +728,36 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 	if manifest.Version != snapshotManifestVersion || manifest.Volumes == nil {
 		return errors.New("compose lifecycle snapshot manifest is invalid")
 	}
+	var currentRuntime *runtimeState
 	if current, found, loadErr := b.loadRuntime(); loadErr != nil {
 		return loadErr
 	} else if found {
+		currentRuntime = &current
 		if _, err = b.compose(ctx, current, "down", "--remove-orphans"); err != nil {
 			return err
 		}
 	}
 	helper := manifest.Runtime
+	if helper != nil && helper.ApplicationRuntimeRoot != "" {
+		if currentRuntime == nil || currentRuntime.ApplicationRuntimeRoot == "" || b.maintenance == nil {
+			return errApplicationRestorePlatform
+		}
+		gate, err := b.maintenanceCall(ctx, *currentRuntime, "verify", b.maintenance.OperationID, false, true)
+		if err != nil || gate == nil || !gate.Active || gate.OperationID != b.maintenance.OperationID {
+			return errApplicationRestorePlatform
+		}
+	}
 	for _, name := range persistentVolumes {
 		entry, ok := manifest.Volumes[name]
 		if !ok {
 			entry = snapshotVolume{}
 		}
 		volume := b.volumeName(name)
+		if name == "launcher-state" && helper != nil && helper.ApplicationRuntimeRoot != "" && !entry.Present {
+			// An older snapshot can predate launcher creation. Its absence
+			// cannot authorize deleting the current, verified request ledger.
+			continue
+		}
 		if !entry.Present {
 			if _, err = b.runner.Run(ctx, nil, "volume", "rm", "-f", volume); err != nil {
 				return err
@@ -753,6 +771,12 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 		sum, hashErr := fileSHA256(archive)
 		if hashErr != nil || sum != entry.SHA256 {
 			return errors.New("compose lifecycle snapshot volume integrity check failed")
+		}
+		if name == "launcher-state" && helper.ApplicationRuntimeRoot != "" {
+			if err := b.restoreLauncherHistory(ctx, *currentRuntime, dir, name+".tar"); err != nil {
+				return err
+			}
+			continue
 		}
 		if _, err = b.runner.Run(ctx, nil, "volume", "create", volume); err != nil {
 			return err

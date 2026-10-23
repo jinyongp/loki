@@ -132,3 +132,34 @@ func TestRestoreHistoryPreservesCurrentFenceAndRejectsUnrelatedPendingBackup(t *
 		})
 	}
 }
+
+func TestMergeOlderHistoryRetainsCurrentJournalAndOriginalAdmission(t *testing.T) {
+	current := testJournal(t, privateJournalDir(t))
+	older := testJournal(t, privateJournalDir(t))
+	now := time.Now().UTC()
+	r := admitProtectedFixture(t, older, now)
+	if _, err := older.MarkTerminal(r.ID, Result{Outcome: OutcomeLaunchFailed, Cleanup: CleanupNotRequired}, now); err != nil {
+		t.Fatal(err)
+	}
+	op := "22222222-2222-4222-8222-222222222222"
+	if _, err := current.BeginMaintenance(op, false); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := current.MergeHistoricalRequestHistory(older); err != nil {
+			t.Fatal(err)
+		}
+		if maintenance, err := current.MaintenanceStatus(); err != nil || maintenance == nil || !maintenance.Active || maintenance.OperationID != op {
+			t.Fatal("older history replaced current admission", err)
+		}
+	}
+	if _, err := os.Lstat(current.recordPath(r.ID)); !os.IsNotExist(err) {
+		t.Fatal("historical execution record restored", err)
+	}
+	if _, err := current.EndMaintenance(op); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := current.AdmitProtectedRequest(r.ID, r.BackendRef, r.RequestID, r.RequestSHA256, r.Network, nil, nil, r.Protected.DeploymentID, "fixture", "common", now.Add(time.Minute), now); !errors.Is(err, ErrDeliveryUnknown) {
+		t.Fatal("historical request became executable", err)
+	}
+}

@@ -40,6 +40,7 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 	launcherLayout := flags.String("launcher-layout", "", "frozen launcher layout for offline end/status only")
 	stateMount := flags.String("state-mount", "", "fixed isolated helper mount: /var/lib/loki/launcher")
 	restoreStage := flags.String("restore-stage", "", "private offline launcher restore stage; preserve-history only")
+	retainCurrent := flags.Bool("retain-current", false, "merge historical tombstones into the retained current journal")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || action != "begin" && action != "end" && action != "status" && action != "verify" && action != "preserve-history" || action != "begin" && *interrupt || (action == "status") != (*operation == "") {
 		return 2
 	}
@@ -53,9 +54,9 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 		if _, err := jobs.JobIDForRequestID(*operation); err != nil {
 			return 2
 		}
-		return runOfflinePreserveHostHistory(*operation, *launcherLayout, *stateMount, *restoreStage, stdout, stderr)
+		return runOfflinePreserveHostHistoryInto(*operation, *launcherLayout, *stateMount, *restoreStage, *retainCurrent, stdout, stderr)
 	}
-	if *restoreStage != "" {
+	if *restoreStage != "" || *retainCurrent {
 		return 2
 	}
 	if *offline {
@@ -107,6 +108,10 @@ func runHostAdmission(args []string, stdout, stderr io.Writer) int {
 // journal retains the exact original maintenance admission. No history-only
 // command grants permission to replace or reactivate the serving launcher.
 func runOfflinePreserveHostHistory(operation, layoutPath, stateMount, restoreStage string, stdout, stderr io.Writer) int {
+	return runOfflinePreserveHostHistoryInto(operation, layoutPath, stateMount, restoreStage, false, stdout, stderr)
+}
+
+func runOfflinePreserveHostHistoryInto(operation, layoutPath, stateMount, restoreStage string, retainCurrent bool, stdout, stderr io.Writer) int {
 	var layout hostLauncherLayout
 	if daemon.ReadJSON(layoutPath, &layout) != nil || !filepath.IsAbs(layout.StateDirectory) || filepath.Clean(layout.StateDirectory) != layout.StateDirectory || layout.StateDirectory == "/" {
 		fmt.Fprintln(stderr, "current launcher layout is unavailable")
@@ -142,7 +147,12 @@ func runOfflinePreserveHostHistory(operation, layoutPath, stateMount, restoreSta
 		return 1
 	}
 	defer stage.Close()
-	if err := stage.PreserveRequestHistory(current); err != nil {
+	if retainCurrent {
+		err = current.MergeHistoricalRequestHistory(stage)
+	} else {
+		err = stage.PreserveRequestHistory(current)
+	}
+	if err != nil {
 		fmt.Fprintln(stderr, "request history conflicts, exceeds its budget, or has unresolved cleanup")
 		return 1
 	}

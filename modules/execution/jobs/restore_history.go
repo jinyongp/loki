@@ -16,6 +16,17 @@ import (
 // protected input, receiver/session or output. Publish the stage only after
 // success; an interrupted merge must be retried before activation.
 func (j *Journal) PreserveRequestHistory(latest *Journal) error {
+	return j.mergeRequestHistory(latest, true)
+}
+
+// MergeHistoricalRequestHistory imports only missing monotonic request
+// tombstones into the retained current journal. The current maintenance owner
+// stays authoritative; no historical execution record is activated or copied.
+func (j *Journal) MergeHistoricalRequestHistory(older *Journal) error {
+	return j.mergeRequestHistory(older, false)
+}
+
+func (j *Journal) mergeRequestHistory(latest *Journal, adoptMaintenance bool) error {
 	if j == nil || latest == nil || j == latest || j.dir == latest.dir {
 		return errors.New("history preservation requires separate current and staged journals")
 	}
@@ -75,7 +86,7 @@ func (j *Journal) PreserveRequestHistory(latest *Journal) error {
 	}
 	// Reconcile before any stage write, including multiple pending operations.
 	check := &Journal{maintenance: j.maintenance, maintenanceRequests: maintenance}
-	if latest.maintenance != nil {
+	if adoptMaintenance && latest.maintenance != nil {
 		copy := *latest.maintenance
 		check.maintenance = &copy
 	}

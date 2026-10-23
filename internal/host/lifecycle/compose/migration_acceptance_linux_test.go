@@ -56,6 +56,13 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 		if current, exists, _ := b.loadRuntime(); exists {
 			state = current
 		}
+		if t.Failed() {
+			// This owned fixture runs no project command and contains only
+			// synthetic data. Capture bounded startup diagnostics before cleanup.
+			if body, err := b.compose(cleanup, state, "logs", "--no-color", "--tail", "20", "runtime", "launcher", "executor", "application-values"); err == nil {
+				t.Log("finite owned service startup diagnostics:\n" + string(body))
+			}
+		}
 		if _, err := b.compose(cleanup, state, "down", "--volumes", "--remove-orphans"); err != nil {
 			t.Error("owned services cleanup", err)
 		}

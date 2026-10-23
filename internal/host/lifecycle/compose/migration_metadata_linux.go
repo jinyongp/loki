@@ -33,7 +33,7 @@ type migrationMetadata struct {
 }
 
 func (b *Backend) migrationVolume(ctx context.Context, kind string) (string, error) {
-	if kind != "application-state" && kind != "runtime-state" {
+	if kind != "application-state" && kind != "runtime-state" && kind != "launcher-state" {
 		return "", errComposeMigration
 	}
 	name := b.volumeName(kind)
