@@ -27,7 +27,9 @@ func openApplicationPolicyJournal(layoutPath, stateRoot, operation string) (*job
 		}
 	}()
 	fence, err := j.MaintenanceStatus()
-	if err != nil || fence == nil || !fence.Active || fence.OperationID != operation {
+	activeMatches := operation != "" && fence != nil && fence.Active && fence.OperationID == operation
+	idleMatches := operation == "" && (fence == nil || !fence.Active)
+	if err != nil || !activeMatches && !idleMatches {
 		return nil, errors.New("foreign original operation")
 	}
 	records, err := j.List()

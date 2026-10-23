@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -192,6 +193,11 @@ func run(args []string) int {
 }
 
 func main() {
+	// The service has a fixed 64-PID budget even on many-core hosts. Keep GC
+	// workers bounded alongside the provider's finite process concurrency.
+	if runtime.GOMAXPROCS(0) > 4 {
+		runtime.GOMAXPROCS(4)
+	}
 	code := run(os.Args[1:])
 	if code != 0 {
 		fmt.Fprintln(os.Stderr, "secret broker unavailable")

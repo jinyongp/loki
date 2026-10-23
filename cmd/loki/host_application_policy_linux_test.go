@@ -50,4 +50,25 @@ func TestApplicationPolicyRequiresOriginalStoppedJournal(t *testing.T) {
 	if _, err := jobs.OpenJournal(filepath.Join(root, "journal"), limits); err == nil {
 		t.Fatal("policy publication did not retain original journal lock")
 	}
+	if err := owned.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openApplicationPolicyJournal(path, root, ""); err == nil {
+		t.Fatal("full startup crossed another operation's active gate")
+	}
+	current, err := jobs.OpenJournal(filepath.Join(root, "journal"), limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := current.EndMaintenance(operation); err != nil {
+		t.Fatal(err)
+	}
+	if err := current.Close(); err != nil {
+		t.Fatal(err)
+	}
+	idle, err := openApplicationPolicyJournal(path, root, "")
+	if err != nil {
+		t.Fatal("selected full startup could not hold idle original journal", err)
+	}
+	defer idle.Close()
 }

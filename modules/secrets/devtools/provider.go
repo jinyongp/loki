@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 var ErrUnavailable = errors.New("application value provider unavailable")
@@ -20,7 +21,11 @@ var id = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var profile = regexp.MustCompile(`^app-[0-9a-f]{32}$`)
 var key = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 
-type Provider struct{ binary, root string }
+type Provider struct {
+	binary, root string
+	processOnce  sync.Once
+	processes    chan struct{}
+}
 
 type boundedBuffer struct {
 	bytes.Buffer
@@ -60,8 +65,18 @@ func (p *Provider) invoke(ctx context.Context, args []string, input []byte, targ
 	if p == nil {
 		return ErrUnavailable
 	}
+	// Eight protected Jobs share this provider inside one 64-PID service.
+	// Bound short-lived Go CLI processes independently of live Job capacity;
+	// waiting for a slot remains cancellable and creates no external effect.
+	p.processOnce.Do(func() { p.processes = make(chan struct{}, 2) })
+	select {
+	case p.processes <- struct{}{}:
+		defer func() { <-p.processes }()
+	case <-ctx.Done():
+		return ErrUnavailable
+	}
 	cmd := exec.CommandContext(ctx, p.binary, append(args, "--isolated-root", p.root)...)
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent"}
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "GOMAXPROCS=2"}
 	cmd.Stdin = bytes.NewReader(input)
 	output := &boundedBuffer{limit: MaxPrivatePayloadFrame}
 	cmd.Stdout = output

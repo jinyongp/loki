@@ -17,6 +17,7 @@ import (
 	"loki/internal/config"
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	hostapplication "loki/internal/host/application"
 	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
 	"loki/modules/execution/jobs"
@@ -105,6 +106,14 @@ func TestHostNativeResourcePolicyReplayAndRollback(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "var/lib/loki-go/launcher/journal"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	prepared, err := hostapplication.PrepareState(hostapplication.PrepareOptions{UID: 10006, GID: 10006, AgentUID: 10000, MetadataGID: 10001, IdentityFile: filepath.Join(root, "etc/loki-go/secrets-deployment.json"), StateRoot: filepath.Join(root, "var/lib/loki-go/secrets"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: "/run/loki-go/secrets", Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: c, Contract: contract, Resources: []controlpolicy.ApplicationResource{}})
+	if err != nil {
+		t.Fatal("current native app identity", err)
+	}
+	retained := filepath.Join(prepared.HostGeneration, "metadata", "retained-request-marker")
+	if err := os.WriteFile(retained, []byte("synthetic-spent-request"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	resource := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "example", Repository: "repo:example", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true}}, Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none"}
 	plan, err := hostpolicy.PrepareApplicationChange(c, contract, nil, hostpolicy.ApplicationChange{Action: "set", Alias: resource.Alias, Resource: &resource})
 	if err != nil {
@@ -131,6 +140,10 @@ func TestHostNativeResourcePolicyReplayAndRollback(t *testing.T) {
 		first := run(0, args...)
 		id := strings.Fields(first)[0]
 		run(0, "catalog", "--root", root, "--operation-id", id)
+		selected, err := hostapplication.ReadIdentity(filepath.Join(root, "etc/loki-go/secrets-deployment.json"))
+		if err != nil || selected.PolicySHA256 != plan.Policy || selected.ActiveGeneration != prepared.Identity.ActiveGeneration || selected.DeploymentID != prepared.Identity.DeploymentID {
+			t.Fatal("native policy did not bind retained generation", err)
+		}
 		if again := run(0, args...); again != first {
 			t.Fatal("catalog publication changed the original retry identity")
 		}
@@ -145,6 +158,13 @@ func TestHostNativeResourcePolicyReplayAndRollback(t *testing.T) {
 		layout, _ := json.Marshal(appvalues.BrokerLayout{PolicySHA256: policy})
 		put("run/loki-go/secrets/layout.json", layout)
 		run(0, finishArgs...)
+		selected, err = hostapplication.ReadIdentity(filepath.Join(root, "etc/loki-go/secrets-deployment.json"))
+		if err != nil || selected.PolicySHA256 != policy || selected.ActiveGeneration != prepared.Identity.ActiveGeneration {
+			t.Fatal("native original policy recovery changed data identity", err)
+		}
+		if body, err := os.ReadFile(retained); err != nil || string(body) != "synthetic-spent-request" {
+			t.Fatal("native policy rewind erased retained requests", err)
+		}
 		resources, err := hostpolicy.LoadApplications(filepath.Join(root, "etc/loki-go/application-resources.json"))
 		if err != nil || len(resources) != 1 || resources[0].ID != resource.ID {
 			t.Fatalf("policy application/recovery changed profile identity: %+v %v", resources, err)

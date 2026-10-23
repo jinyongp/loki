@@ -23,6 +23,7 @@ import (
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/daemon"
+	hostapplication "loki/internal/host/application"
 	"loki/internal/host/lifecycle"
 	hostpolicy "loki/internal/host/policy"
 	"loki/internal/platform/safeio"
@@ -151,6 +152,10 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 			if resources == nil {
 				resources = []controlpolicy.ApplicationResource{}
 			}
+			if err := selectNativeApplicationPolicy(*root, r, resources, *restored); err != nil {
+				fmt.Fprintln(stderr, "original native application policy selection remains incomplete")
+				return 1
+			}
 			path := rootPath("etc/loki-go/application-resources.json")
 			st, e := os.Lstat(path)
 			if e != nil || !st.Mode().IsRegular() {
@@ -214,6 +219,45 @@ func runNativeSwitch(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stderr, "original native release operation is unavailable")
 	return 1
+}
+
+func selectNativeApplicationPolicy(root string, record lifecycle.OperationRecord, resources []controlpolicy.ApplicationResource, restored bool) error {
+	identityPath := filepath.Join(root, "etc/loki-go/secrets-deployment.json")
+	identity, err := hostapplication.ReadIdentity(identityPath)
+	if errors.Is(err, os.ErrNotExist) || err == nil && identity.Version == 1 {
+		return nil
+	}
+	if err != nil || record.NativeSwitch == nil || record.NativeSwitch.Application == nil {
+		return errors.New("invalid original app identity")
+	}
+	change := record.NativeSwitch.Application
+	if identity.PolicySHA256 != change.Plan.Policy && identity.PolicySHA256 != change.Plan.ExpectedPolicy {
+		return errors.New("foreign original app policy")
+	}
+	c, err := config.Load(filepath.Join(root, "etc/loki-go/config.toml"))
+	if err != nil {
+		return err
+	}
+	contract, err := loadExecutionContract(filepath.Join(root, "usr/share/doc/loki/execution-contract.json"))
+	if err != nil {
+		return err
+	}
+	options := hostapplication.PrepareOptions{UID: identity.UID, GID: identity.GID, AgentUID: identity.AgentUID, MetadataGID: identity.MetadataGID, IdentityFile: identityPath, StateRoot: filepath.Join(root, "var/lib/loki-go/secrets"), ServiceStateRoot: "/var/lib/loki-go/secrets", RuntimeRoot: "/run/loki-go/secrets", Binary: "/opt/loki/bin/devtools", Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
+	policy, err := hostapplication.PolicyDigest(options)
+	want := change.Plan.Policy
+	if restored {
+		want = change.Plan.ExpectedPolicy
+	}
+	if err != nil || policy != want {
+		return errors.New("original native target policy changed")
+	}
+	journal, err := openApplicationPolicyJournal(filepath.Join(root, "etc/loki-go/launcher.json"), filepath.Join(root, "var/lib/loki-go/launcher"), lifecycle.MigrationOperationUUID(record.ID))
+	if err != nil {
+		return err
+	}
+	defer journal.Close()
+	_, err = hostapplication.CommitPolicy(options, identity)
+	return err
 }
 
 func prepareNativeApplicationChange(root string, journal *lifecycle.OperationJournal, path string) (*lifecycle.NativeApplicationChange, error) {
