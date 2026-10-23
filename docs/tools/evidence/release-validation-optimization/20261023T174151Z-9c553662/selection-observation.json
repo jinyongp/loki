@@ -1,0 +1,409 @@
+{
+  "plan_source": "4f1d66fe202e125d2354250d10a655462bd3d66c",
+  "baseline_source": "be8cd5489f6dc18e2efa394ad8a56f0ee1264ccc",
+  "release": "0.2.21",
+  "baseline": "0.2.20",
+  "reasons": {
+    "forced": 39
+  },
+  "matrices": {
+    "browser": [
+      {
+        "arch": "amd64",
+        "os": "linux",
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "os": "linux",
+        "runner": "ubuntu-24.04-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "windows",
+        "runner": "windows-2025"
+      },
+      {
+        "arch": "amd64",
+        "os": "darwin",
+        "runner": "macos-15-intel"
+      },
+      {
+        "arch": "arm64",
+        "os": "darwin",
+        "runner": "macos-15"
+      }
+    ],
+    "browser-checks": [
+      {
+        "arch": "amd64",
+        "os": "linux",
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "os": "linux",
+        "runner": "ubuntu-24.04-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "windows",
+        "runner": "windows-2025"
+      },
+      {
+        "arch": "amd64",
+        "os": "darwin",
+        "runner": "macos-15-intel"
+      },
+      {
+        "arch": "arm64",
+        "os": "darwin",
+        "runner": "macos-15"
+      }
+    ],
+    "full": [
+      {
+        "arch": "amd64",
+        "modules": [
+          "runtime-core",
+          "browser",
+          "workspace",
+          "git",
+          "github",
+          "secrets",
+          "execution",
+          "sharing",
+          "coordination"
+        ],
+        "os": "linux",
+        "roles": [
+          "service",
+          "gateway",
+          "workload",
+          "git-workload",
+          "browser"
+        ],
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "modules": [
+          "runtime-core",
+          "browser",
+          "workspace",
+          "git",
+          "github",
+          "secrets",
+          "execution",
+          "sharing",
+          "coordination"
+        ],
+        "os": "linux",
+        "roles": [
+          "service",
+          "gateway",
+          "workload",
+          "git-workload",
+          "browser"
+        ],
+        "runner": "ubuntu-24.04-arm"
+      }
+    ],
+    "full-checks": [
+      {
+        "arch": "amd64",
+        "os": "linux",
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "os": "linux",
+        "runner": "ubuntu-24.04-arm"
+      }
+    ],
+    "manager": [
+      {
+        "arch": "amd64",
+        "os": "linux",
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "os": "linux",
+        "runner": "ubuntu-24.04-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "windows",
+        "runner": "windows-2025"
+      },
+      {
+        "arch": "arm64",
+        "os": "windows",
+        "runner": "windows-11-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "darwin",
+        "runner": "macos-15-intel"
+      },
+      {
+        "arch": "arm64",
+        "os": "darwin",
+        "runner": "macos-15"
+      }
+    ],
+    "manager-checks": [
+      {
+        "arch": "amd64",
+        "os": "linux",
+        "runner": "ubuntu-24.04"
+      },
+      {
+        "arch": "arm64",
+        "os": "linux",
+        "runner": "ubuntu-24.04-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "windows",
+        "runner": "windows-2025"
+      },
+      {
+        "arch": "arm64",
+        "os": "windows",
+        "runner": "windows-11-arm"
+      },
+      {
+        "arch": "amd64",
+        "os": "darwin",
+        "runner": "macos-15-intel"
+      },
+      {
+        "arch": "arm64",
+        "os": "darwin",
+        "runner": "macos-15"
+      }
+    ]
+  },
+  "unmapped": [
+    ".dockerignore",
+    "cmd/bootstrap/main.go",
+    "cmd/loki-windows/appliance_advisory.go",
+    "cmd/loki-windows/bootstrap_mode.go",
+    "cmd/loki-windows/connection_command_windows.go",
+    "cmd/loki-windows/connection_errors.go",
+    "cmd/loki-windows/connection_help.go",
+    "cmd/loki-windows/connection_output.go",
+    "cmd/loki-windows/connection_setup_compatibility.go",
+    "cmd/loki-windows/console_output.go",
+    "cmd/loki-windows/install_errors.go",
+    "cmd/loki-windows/integration_args.go",
+    "cmd/loki-windows/integration_github_browser_transport.go",
+    "cmd/loki-windows/integration_github_browser_windows.go",
+    "cmd/loki-windows/integration_github_refresh_windows.go",
+    "cmd/loki-windows/integration_github_user_transport.go",
+    "cmd/loki-windows/integration_github_user_windows.go",
+    "cmd/loki-windows/integration_help.go",
+    "cmd/loki-windows/integration_output.go",
+    "cmd/loki-windows/integration_progress.go",
+    "cmd/loki-windows/integration_windows.go",
+    "cmd/loki-windows/main.go",
+    "cmd/loki-windows/native_output.go",
+    "cmd/loki-windows/output.go",
+    "cmd/loki-windows/product_update.go",
+    "cmd/loki-windows/runtime_other.go",
+    "cmd/loki-windows/runtime_windows.go",
+    "cmd/loki-windows/self_update_windows.go",
+    "cmd/loki-windows/update_all.go",
+    "cmd/loki-windows/update_apply.go",
+    "cmd/loki-windows/update_help.go",
+    "compose.yaml",
+    "config/gitconfig",
+    "config/github.compose.toml",
+    "config/ingress.compose.toml",
+    "config/runtime.toml",
+    "internal/config/testdata/python-v047.toml",
+    "internal/deployment/contract.go",
+    "internal/e2e/testdata/project/hold.mjs",
+    "internal/e2e/testdata/project/package.json",
+    "internal/e2e/testdata/project/playwright.config.mjs",
+    "internal/e2e/testdata/project/pnpm-lock.yaml",
+    "internal/e2e/testdata/project/tests/candidate.spec.mjs",
+    "internal/host/bootstrap/install.go",
+    "internal/host/bootstrap/release_binding.go",
+    "internal/host/bootstrap/resolver.go",
+    "internal/host/lifecycle/testdata/native-migration/main.go",
+    "internal/host/lifecycle/testdata/native-reboot/main.go",
+    "internal/host/lifecycle/testdata/private-value-probe/main.go",
+    "internal/packaging/testdata/fake-derived-docker",
+    "internal/packaging/testdata/fake-docker",
+    "internal/platform/sandbox/testdata/oci-detached-probe/main.go",
+    "internal/platform/sandbox/testdata/oci-fixture-server/main.go",
+    "internal/platform/sandbox/testdata/oci-image/Dockerfile",
+    "internal/platform/sandbox/testdata/oci-image/egress-policy.json",
+    "internal/secretoutput/LICENSE",
+    "internal/secretoutput/provenance.json",
+    "internal/state/testdata/python-v1.json",
+    "legacy/python/browser_sidecar/pyproject.toml",
+    "legacy/python/browser_sidecar/src/loki_browser_sidecar/__init__.py",
+    "legacy/python/browser_sidecar/src/loki_browser_sidecar/debug.py",
+    "legacy/python/browser_sidecar/src/loki_browser_sidecar/server.py",
+    "legacy/python/config/loki-mcp.toml",
+    "legacy/python/pyproject.toml",
+    "legacy/python/scripts/backup-python-deployment.sh",
+    "legacy/python/scripts/configure-cloudflared-token",
+    "legacy/python/scripts/configure-preview-routes.py",
+    "legacy/python/scripts/install-cloudflared.sh",
+    "legacy/python/scripts/install-loki-mcp.sh",
+    "legacy/python/scripts/loki-action-runner.py",
+    "legacy/python/scripts/loki-browser-launch",
+    "legacy/python/scripts/loki-checkpoint",
+    "legacy/python/scripts/loki-cloudflare-jwks-refresh",
+    "legacy/python/scripts/loki-docker-action-runner.py",
+    "legacy/python/scripts/loki-egress-proxy",
+    "legacy/python/scripts/loki-environment.sh",
+    "legacy/python/scripts/loki-mcp-launch",
+    "legacy/python/scripts/loki-policy",
+    "legacy/python/scripts/loki-project-bootstrap.py",
+    "legacy/python/scripts/loki-signing-agent-launch",
+    "legacy/python/scripts/loki-signing-agent-proxy.py",
+    "legacy/python/scripts/loki-task",
+    "legacy/python/scripts/loki.py",
+    "legacy/python/scripts/repair-task-metadata.py",
+    "legacy/python/scripts/verify-agent-skills.py",
+    "legacy/python/scripts/verify-and-deploy-loki.sh",
+    "legacy/python/scripts/verify-artifact-viewers.py",
+    "legacy/python/scripts/verify-browser-local-bridge.py",
+    "legacy/python/scripts/verify-git-signing.py",
+    "legacy/python/scripts/verify-image-widget.py",
+    "legacy/python/scripts/verify-live-preview.py",
+    "legacy/python/scripts/verify-preview-server.mjs",
+    "legacy/python/scripts/verify-progress-guidance.py",
+    "legacy/python/scripts/verify-public-artifact.py",
+    "legacy/python/scripts/verify-runtime.py",
+    "legacy/python/src/loki_mcp/__init__.py",
+    "legacy/python/src/loki_mcp/artifacts.py",
+    "legacy/python/src/loki_mcp/browser_proxy.py",
+    "legacy/python/src/loki_mcp/catalog.py",
+    "legacy/python/src/loki_mcp/config.py",
+    "legacy/python/src/loki_mcp/developer_widget.py",
+    "legacy/python/src/loki_mcp/errors.py",
+    "legacy/python/src/loki_mcp/image_widget.py",
+    "legacy/python/src/loki_mcp/local_callback_proxy.py",
+    "legacy/python/src/loki_mcp/policy.py",
+    "legacy/python/src/loki_mcp/port_guard_service.py",
+    "legacy/python/src/loki_mcp/preview_widget.py",
+    "legacy/python/src/loki_mcp/previews.py",
+    "legacy/python/src/loki_mcp/processes.py",
+    "legacy/python/src/loki_mcp/project_state.py",
+    "legacy/python/src/loki_mcp/runtime.py",
+    "legacy/python/src/loki_mcp/runtime_settings.py",
+    "legacy/python/src/loki_mcp/server.py",
+    "legacy/python/src/loki_mcp/skills.py",
+    "legacy/python/src/loki_mcp/tasks.py",
+    "legacy/python/src/loki_mcp/tools.py",
+    "legacy/python/systemd/loki-browser-proxy.service",
+    "legacy/python/systemd/loki-browser.service",
+    "legacy/python/systemd/loki-cloudflare-jwks.service",
+    "legacy/python/systemd/loki-cloudflare-jwks.timer",
+    "legacy/python/systemd/loki-cloudflared.service",
+    "legacy/python/systemd/loki-egress-proxy.service",
+    "legacy/python/systemd/loki-mcp.service",
+    "legacy/python/systemd/loki-port-guard.service",
+    "legacy/python/systemd/loki-runtime.service",
+    "legacy/python/systemd/loki-signing-agent.service",
+    "legacy/python/tests/reference/python_reference.py",
+    "legacy/python/tests/test_action_runner.py",
+    "legacy/python/tests/test_artifacts.py",
+    "legacy/python/tests/test_backup_recovery.py",
+    "legacy/python/tests/test_browser_debug.py",
+    "legacy/python/tests/test_browser_proxy.py",
+    "legacy/python/tests/test_catalog.py",
+    "legacy/python/tests/test_config.py",
+    "legacy/python/tests/test_errors.py",
+    "legacy/python/tests/test_layout.py",
+    "legacy/python/tests/test_local_callback_proxy.py",
+    "legacy/python/tests/test_loki_cli.py",
+    "legacy/python/tests/test_mcp_startup.py",
+    "legacy/python/tests/test_policy.py",
+    "legacy/python/tests/test_port_guard_service.py",
+    "legacy/python/tests/test_previews.py",
+    "legacy/python/tests/test_process_limits.py",
+    "legacy/python/tests/test_process_oom.py",
+    "legacy/python/tests/test_project_state.py",
+    "legacy/python/tests/test_runtime.py",
+    "legacy/python/tests/test_runtime_settings.py",
+    "legacy/python/tests/test_server.py",
+    "legacy/python/tests/test_task_mcp.py",
+    "legacy/python/tests/test_tools.py",
+    "modules/browser/module.full.json",
+    "modules/browser/testdata/recording.cjs",
+    "modules/coordination/cmd/gencatalog/main.go",
+    "modules/coordination/testdata/catalog-protocol-v6.json",
+    "modules/secrets/application/testdata/provider-expired/main.go",
+    "packaging/images/Dockerfile",
+    "packaging/images/browser.Dockerfile",
+    "packaging/images/config/execution-contract.json",
+    "packaging/images/config/executor.json",
+    "packaging/images/config/launcher.json",
+    "packaging/images/config/loki.toml",
+    "packaging/images/config/mcp.json",
+    "packaging/images/config/runtime.json",
+    "packaging/images/derived-image-contract.json",
+    "packaging/images/derived/Dockerfile",
+    "packaging/tools/inputs/candidate-linux-amd64-full.json",
+    "packaging/tools/inputs/candidate-linux-arm64-full.json",
+    "packaging/tools/inputs/images-linux-amd64.json",
+    "packaging/tools/inputs/images-linux-arm64.json",
+    "packaging/windows/connect-helpers.json",
+    "packaging/wsl/Dockerfile",
+    "packaging/wsl/apt-delta.lock",
+    "packaging/wsl/configure-install.sh",
+    "packaging/wsl/loki-appliance-provision.service",
+    "packaging/wsl/provision.sh",
+    "packaging/wsl/wsl-distribution.conf",
+    "packaging/wsl/wsl.conf",
+    "scripts/maintainer/devtools-launch",
+    "scripts/maintainer/install-toolchain.sh",
+    "scripts/maintainer/lifecycle.sh",
+    "scripts/maintainer/publish-tag.sh",
+    "scripts/maintainer/release.sh",
+    "scripts/maintainer/render-layouts.sh",
+    "scripts/maintainer/stage-candidate.sh",
+    "scripts/maintainer/tools/accept_browser_interactions.py",
+    "scripts/maintainer/tools/accept_browser_regressions.py",
+    "scripts/maintainer/tools/acquire_full_inputs.py",
+    "scripts/maintainer/tools/browser_pause_fixture.cjs",
+    "scripts/maintainer/tools/cleanup_publication.py",
+    "scripts/maintainer/tools/inspect_browser_rendering.py",
+    "scripts/maintainer/tools/inspect_macos_browser_input.py",
+    "scripts/maintainer/tools/prepare_bootstrap.py",
+    "scripts/maintainer/tools/prepare_native_ci.py",
+    "scripts/maintainer/tools/prepare_plugin.py",
+    "scripts/maintainer/tools/prepare_release.py",
+    "scripts/maintainer/tools/prepare_reviewed_browser_inputs.py",
+    "scripts/maintainer/tools/prepare_reviewed_full_inputs.py",
+    "scripts/maintainer/tools/registry_images.py",
+    "scripts/maintainer/tools/verify_public_release.py",
+    "scripts/maintainer/wait-for-sockets.sh"
+  ],
+  "changed_unmapped": [
+    ".dockerignore",
+    "compose.yaml",
+    "internal/host/lifecycle/testdata/native-migration/main.go",
+    "internal/host/lifecycle/testdata/native-reboot/main.go",
+    "internal/host/lifecycle/testdata/private-value-probe/main.go",
+    "internal/platform/sandbox/testdata/oci-fixture-server/main.go",
+    "internal/platform/sandbox/testdata/oci-image/Dockerfile",
+    "internal/platform/sandbox/testdata/oci-image/egress-policy.json",
+    "internal/secretoutput/LICENSE",
+    "internal/secretoutput/provenance.json",
+    "modules/secrets/application/testdata/provider-expired/main.go",
+    "packaging/images/Dockerfile",
+    "packaging/tools/inputs/candidate-linux-amd64-full.json",
+    "packaging/tools/inputs/candidate-linux-arm64-full.json",
+    "scripts/maintainer/lifecycle.sh"
+  ],
+  "baseline_lock_sha256": "1e894fed50a4a838e5c8c9791eaa655643792d7a9be8ab5e38018b2eecd6b1bd"
+}

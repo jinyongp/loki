@@ -1,0 +1,58 @@
+{
+  "tests": 5,
+  "all_passed": true,
+  "go_runtime": "go version go1.27.3 linux/amd64",
+  "scope": "Real target closures; changed paths are mocked, no source/product mutation",
+  "cases": [
+    {
+      "case": "test-only",
+      "changed_path": "scripts/maintainer/tools/test_release_pipeline.py",
+      "all_forced": false,
+      "build_counts": {
+        "manager": 0,
+        "browser": 0,
+        "full": 0
+      }
+    },
+    {
+      "case": "fixture-unknown",
+      "changed_path": "internal/host/lifecycle/testdata/native-migration/main.go",
+      "all_forced": true,
+      "build_counts": {
+        "manager": 6,
+        "browser": 5,
+        "full": 2
+      }
+    },
+    {
+      "case": "recipe-unknown",
+      "changed_path": "packaging/tools/inputs/candidate-linux-amd64-full.json",
+      "all_forced": true,
+      "build_counts": {
+        "manager": 6,
+        "browser": 5,
+        "full": 2
+      }
+    },
+    {
+      "case": "deleted-baseline-unknown",
+      "changed_path": "removed.fixture",
+      "all_forced": true,
+      "build_counts": {
+        "manager": 6,
+        "browser": 5,
+        "full": 2
+      }
+    },
+    {
+      "case": "bridge-checks-without-build-artifacts",
+      "build_counts": [
+        0,
+        0,
+        0
+      ],
+      "browser_checks": 1,
+      "full_checks": 1
+    }
+  ]
+}
