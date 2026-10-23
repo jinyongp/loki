@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 umask 077
-test "$#" -ge 1 && test "$#" -le 3 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore|recovery|paired] [PAIRED_IMAGE]' >&2; exit 2; }
+test "$#" -ge 1 && test "$#" -le 3 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore|recovery|paired|authenticated] [PAIRED_IMAGE]' >&2; exit 2; }
 image=$1
 suite=${2:-normal}
-case "$suite" in normal|restore|recovery) test "$#" -le 2 ;; paired) test "$#" -eq 3 ;; *) exit 2 ;; esac
+case "$suite" in normal|restore|recovery|authenticated) test "$#" -le 2 ;; paired) test "$#" -eq 3 ;; *) exit 2 ;; esac
 registry=
 tag=
 test_binary=
@@ -70,6 +70,10 @@ if test "$suite" = recovery; then
 fi
 if test "$suite" = paired; then
   go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposePairedApplicationRestore$'
+  exit 0
+fi
+if test "$suite" = authenticated; then
+  go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposeAuthenticatedProtectedJobs$'
   exit 0
 fi
 go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices|MigrationPublicLifecycle)$'

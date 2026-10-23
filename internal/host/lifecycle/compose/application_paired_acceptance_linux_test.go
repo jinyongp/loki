@@ -37,12 +37,16 @@ func fixtureApplicationAdmin(t *testing.T, ctx context.Context, b *Backend, stat
 }
 
 func setFixtureApplicationToken(t *testing.T, ctx context.Context, b *Backend, state runtimeState, value []byte, request string) {
+	setFixtureApplicationSecret(t, ctx, b, state, "TOKEN", value, request)
+}
+
+func setFixtureApplicationSecret(t *testing.T, ctx context.Context, b *Backend, state runtimeState, name string, value []byte, request string) {
 	t.Helper()
 	revision := fixtureApplicationAdmin(t, ctx, b, state, nil, "app", "revision", "fixture")["revision"]
 	if revision == nil || revision == "" {
 		t.Fatal("missing opaque edit revision")
 	}
-	result := fixtureApplicationAdmin(t, ctx, b, state, value, "app", "set", "fixture", "--name", "TOKEN", "--replace", "--revision", revision.(string), "--request-id", request, "--stdin")
+	result := fixtureApplicationAdmin(t, ctx, b, state, value, "app", "set", "fixture", "--name", name, "--replace", "--revision", revision.(string), "--request-id", request, "--stdin")
 	if result["changed"] != true {
 		t.Fatal("private fixture value was not changed")
 	}

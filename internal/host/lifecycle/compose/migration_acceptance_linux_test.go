@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
 )
 
@@ -35,6 +36,10 @@ func TestRealComposeNewDeploymentRecovery(t *testing.T) {
 
 func TestRealComposePairedApplicationRestore(t *testing.T) {
 	runRealComposeMigrationLifecycle(t, "paired")
+}
+
+func TestRealComposeAuthenticatedProtectedJobs(t *testing.T) {
+	runRealComposeMigrationLifecycle(t, "authenticated")
 }
 
 func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
@@ -127,7 +132,18 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "45", "application-values", "launcher"); err != nil {
 		t.Fatal("actual original services", err)
 	}
-	intent, backupIdentity := verifyRealComposeMigrationPreparation(t, ctx, b, state, image)
+	var configure []func(*controlpolicy.ApplicationResource)
+	if journey == "authenticated" {
+		repository := prepareAuthenticatedJobWorkspace(t, workspace)
+		configure = append(configure, func(resource *controlpolicy.ApplicationResource) {
+			resource.Repository = repository
+			resource.Principals[0].Write = true
+			for name, kind := range maximumCapacityKeyKinds() {
+				resource.Keys[name] = kind
+			}
+		})
+	}
+	intent, backupIdentity := verifyRealComposeMigrationPreparation(t, ctx, b, state, image, configure...)
 	invoke := func(action string, input []byte, extra ...string) SecretMigrationStatus {
 		t.Helper()
 		args := []string{"host", "secret-migration", "compose", action, "--state-root", b.root, "--project", b.project}
@@ -292,6 +308,9 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	}
 	if journey == "paired" {
 		verifyRealComposePairedApplicationRestore(t, ctx, b, binary, backup, backupIdentity, passphrase)
+	}
+	if journey == "authenticated" {
+		verifyRealComposeAuthenticatedJobs(t, ctx, b, current, passphrase)
 	}
 }
 

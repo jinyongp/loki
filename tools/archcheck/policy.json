@@ -1644,6 +1644,12 @@
       ],
       "target": "tools/archcheck"
     },
+    "loki/tools/acceptance/mcpclient": {
+      "kind": "tooling",
+      "owner": "acceptance",
+      "tags": ["tooling", "diagnostic"],
+      "target": "tools/acceptance/mcpclient"
+    },
     "loki/tools/readinessprobe": {
       "kind": "tooling",
       "owner": "readiness",

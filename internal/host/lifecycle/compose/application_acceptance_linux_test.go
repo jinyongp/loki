@@ -21,7 +21,7 @@ import (
 	"loki/internal/host/lifecycle"
 )
 
-func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string) (lifecycle.SecretMigrationIntent, *age.X25519Identity) {
+func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string, configure ...func(*controlpolicy.ApplicationResource)) (lifecycle.SecretMigrationIntent, *age.X25519Identity) {
 	t.Helper()
 	runner := ExecRunner{}
 	builder := os.Getenv("LOKI_TEST_MIGRATION_SOURCE_BUILDER")
@@ -41,6 +41,9 @@ func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b 
 		t.Fatal(err)
 	}
 	resource := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "fixture", Repository: "repo:fixture", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret", "API_URL": "variable"}, Network: "none", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Execute: true}}}
+	for _, apply := range configure {
+		apply(&resource)
+	}
 	mappings := []appvalues.MigrationProfileMapping{{Profile: "legacy-app", Resource: resource.ID, Environment: "common", Keys: []appvalues.MigrationKeyMapping{{Source: "TOKEN", Name: "TOKEN", Kind: "secret"}, {Source: "API_URL", Name: "API_URL", Kind: "variable"}}}}
 	archive := filepath.Join(b.root, "synthetic-source.age")
 	intent, err := b.PrepareSecretMigration(ctx, mappings, []controlpolicy.ApplicationResource{resource}, key.Recipient().String(), archive, false)
@@ -140,7 +143,10 @@ func TestRealComposeApplicationService(t *testing.T) {
 	defer cancel()
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
-	if err := os.Mkdir(workspace, 0700); err != nil {
+	if err := os.Mkdir(workspace, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(workspace, 0755); err != nil {
 		t.Fatal(err)
 	}
 	stateRoot := filepath.Join(root, "operator")
@@ -155,6 +161,11 @@ func TestRealComposeApplicationService(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
+		if t.Failed() {
+			if body, err := b.compose(cleanup, state, "logs", "--no-color", "--tail", "20", "runtime", "launcher", "application-values", "mcp"); err == nil {
+				t.Log("owned synthetic service startup diagnostics:\n" + string(body))
+			}
+		}
 		if _, err := b.compose(cleanup, state, "down", "--volumes", "--remove-orphans"); err != nil {
 			t.Error("fixture Compose cleanup failed", err)
 		}
