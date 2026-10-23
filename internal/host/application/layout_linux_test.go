@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sys/unix"
 	"loki/internal/config"
+	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/execution"
 	hostpolicy "loki/internal/host/policy"
@@ -167,6 +168,7 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		stageOptions := options
 		stageOptions.RuntimeRoot = stageRuntime
 		stageOptions.MigrationOperation = "123e4567-e89b-42d3-a456-426614174481"
+		stageOptions.InitialMaintenanceOperation = stageOptions.MigrationOperation
 		activeAdmin, err := os.ReadFile(first.AdminLayoutFile)
 		if err != nil {
 			t.Fatal(err)
@@ -207,6 +209,9 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		if err := os.Rename(stageRuntime, stageRuntime+".retained"); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := CommitRestoredCandidate(stageOptions, first.Identity, generation); err == nil {
+			t.Fatal("logical selector accepted a candidate without a broker restore seal")
+		}
 		selected, err := CommitCandidate(stageOptions, first.Identity, generation)
 		if err != nil || selected != candidate.Identity {
 			t.Fatal("selector/policy publication failed", err)
@@ -216,6 +221,21 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		}
 		if replay, err := CommitCandidate(stageOptions, first.Identity, generation); err != nil || replay != selected {
 			t.Fatal("lost selector ACK changed generation or policy", err)
+		}
+		seal := appvalues.ApplicationRestoreSeal{Version: 1, Operation: stageOptions.MigrationOperation, Deployment: selected.DeploymentID, Policy: selected.PolicySHA256, Imports: []appvalues.ApplicationImportProof{}}
+		sealPath := filepath.Join(candidate.HostGeneration, "metadata", "restore-seal.json")
+		sealBody, err := json.Marshal(seal)
+		if err != nil || os.WriteFile(sealPath, sealBody, 0600) != nil {
+			t.Fatal("private restore seal fixture", err)
+		}
+		if _, err := CommitRestoredCandidate(stageOptions, first.Identity, generation); err == nil {
+			t.Fatal("logical selector accepted a seal owned by another UID")
+		}
+		if err := os.Chown(sealPath, int(options.UID), int(options.GID)); err != nil {
+			t.Fatal(err)
+		}
+		if replay, err := CommitRestoredCandidate(stageOptions, first.Identity, generation); err != nil || replay != selected {
+			t.Fatal("sealed logical selector could not replay without a runtime projection", err)
 		}
 		if _, err := CommitCandidate(stageOptions, first.Identity, strings.Repeat("b", 32)); err == nil {
 			t.Fatal("stale expected selector overwrote committed generation")

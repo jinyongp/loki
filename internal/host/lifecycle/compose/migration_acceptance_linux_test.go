@@ -346,7 +346,9 @@ func verifyRealComposeApplicationRestore(t *testing.T, ctx context.Context, b *B
 	if err != nil || !found || filepath.Base(current.ApplicationStateSource) != intent.CandidateGeneration {
 		t.Fatal("restore did not select fresh generation", err)
 	}
-	status, err := b.applicationAdministrator(ctx, current, []string{"protection", "status"}, nil)
+	statusArgs := append([]string{}, unlockArgs[:len(unlockArgs)-1]...)
+	statusArgs[len(unlockArgs)-4] = "status"
+	status, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, nil, statusArgs...)
 	var protection struct {
 		State string `json:"state"`
 	}

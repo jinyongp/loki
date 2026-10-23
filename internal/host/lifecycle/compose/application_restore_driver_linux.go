@@ -293,14 +293,14 @@ func (b *Backend) ApplyApplicationRestore(ctx context.Context, intent *lifecycle
 				}
 				projection, generation, err := b.prepareApplicationRestoreCandidate(ctx)
 				if err != nil {
-					return err
+					return fmt.Errorf("prepare private restore candidate: %w", err)
 				}
 				if err := b.startApplicationCandidate(ctx, applicationRestoreBinding(r), projection, generation); err != nil {
-					return err
+					return fmt.Errorf("start private restore candidate: %w", err)
 				}
 				state, err := b.applicationRestoreProtection(ctx, "status", nil)
 				if err != nil {
-					return err
+					return fmt.Errorf("inspect private restore protection: %w", err)
 				}
 				if protection != "" {
 					state, err = b.applicationRestoreProtection(ctx, protection, input)
@@ -318,7 +318,7 @@ func (b *Backend) ApplyApplicationRestore(ctx context.Context, intent *lifecycle
 					return nil
 				}
 				if err := b.importApplicationRestore(ctx, identity); err != nil {
-					return err
+					return fmt.Errorf("import and seal private restore candidate: %w", err)
 				}
 				if _, err := j.AdvanceApplicationRestore(r.ID, lifecycle.PhaseSwitch, time.Now()); err != nil {
 					return err

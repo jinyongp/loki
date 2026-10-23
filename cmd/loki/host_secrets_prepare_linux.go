@@ -108,7 +108,10 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	}
 	var before hostapplication.Identity
 	if isCandidate {
-		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || *initialMaintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
+		// A restore candidate establishes this same original operation's app
+		// gate before opening its private role sockets. It cannot inherit a
+		// different operation or change the gate during selector publication.
+		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || *initialMaintenance != "" && (*commitCandidate || *initialMaintenance != *candidateOperation) || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
 			return 2
 		}
 		canonical, _ := json.Marshal(before)
