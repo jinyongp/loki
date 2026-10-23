@@ -159,6 +159,9 @@ func runSecretRewrap(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 }
 
 func readProtectionInput(ctx context.Context, stdin io.Reader, prompt io.Writer, path string, fromStdin bool) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if path == "" && !fromStdin {
 		value, err := admin.ReadSecret(ctx, prompt)
 		if err != nil || len(value) == 0 || len(value) > 65536 {
@@ -167,6 +170,19 @@ func readProtectionInput(ctx context.Context, stdin io.Reader, prompt io.Writer,
 		return []byte(value), nil
 	}
 	reader := stdin
+	if path == "" {
+		if f, ok := stdin.(*os.File); ok {
+			info, err := f.Stat()
+			if err != nil {
+				return nil, unix.EINVAL
+			}
+			if info.Mode()&os.ModeCharDevice != 0 {
+				// Explicit stdin is for a pipe or redirect. Terminal input must
+				// use the hidden prompt rather than echoing the passphrase.
+				return nil, unix.ENOTTY
+			}
+		}
+	}
 	if path != "" {
 		fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_NONBLOCK | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
 		if err != nil {
@@ -180,10 +196,30 @@ func readProtectionInput(ctx context.Context, stdin io.Reader, prompt io.Writer,
 		}
 		reader = f
 	}
-	body, err := io.ReadAll(io.LimitReader(reader, 65537))
-	if err != nil || len(body) == 0 || len(body) > 65536 {
-		clear(body)
-		return nil, unix.EINVAL
+	type inputResult struct {
+		body []byte
+		err  error
 	}
-	return body, nil
+	result := make(chan inputResult)
+	go func() {
+		body, err := io.ReadAll(io.LimitReader(reader, 65537))
+		select {
+		case result <- inputResult{body, err}:
+		case <-ctx.Done():
+			clear(body)
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		if closer, ok := reader.(io.Closer); ok {
+			_ = closer.Close()
+		}
+		return nil, ctx.Err()
+	case read := <-result:
+		if ctx.Err() != nil || read.err != nil || len(read.body) == 0 || len(read.body) > 65536 {
+			clear(read.body)
+			return nil, unix.EINVAL
+		}
+		return read.body, nil
+	}
 }

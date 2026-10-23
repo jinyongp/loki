@@ -20,6 +20,8 @@ sudo loki secret protection unlock --file /private/new-passphrase
 `UUID`는 새 변경에 한 번 생성한 UUID다. 입력 파일은 관리자 소유의 mode 0600
 일반 파일이며 symlink·hard link를 허용하지 않는다. 파일은 자동 삭제하지 않는다.
 파일 대신 한 쪽에만 `--current-stdin` 또는 `--new-stdin`을 쓸 수 있다.
+명시적 stdin은 pipe나 파일 redirect만 허용하며 터미널은 거절한다.
+입력을 기다리는 중 취소하면 provider를 호출하지 않고 입력 읽기를 종료한다.
 입력 옵션을 생략하면 숨김 terminal 입력을 받으며 새 암호는 두 번 확인한다.
 각 입력은 최대 65536 bytes의 비어 있지 않은 UTF-8 한 줄이다.
 관리자 소켓에는 별도 binary frame으로 전달하며 provider는 익명 memfd를 사용한다.
