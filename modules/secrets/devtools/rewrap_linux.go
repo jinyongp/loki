@@ -22,13 +22,22 @@ func (p *Provider) Rewrap(ctx context.Context, request string, current, next []b
 	}
 	f := os.NewFile(uintptr(fd), "private-protection")
 	defer f.Close()
-	if n, err := f.Write(next); err != nil || n != len(next) {
+	if err := f.Truncate(int64(len(next))); err != nil {
 		return ProtectionResult{}, ErrUnavailable
 	}
-	if _, err := f.Seek(0, 0); err != nil {
+	mapping, err := unix.Mmap(fd, 0, len(next), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	if err != nil {
 		return ProtectionResult{}, ErrUnavailable
 	}
-	if _, err := unix.FcntlInt(f.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_SEAL|unix.F_SEAL_SHRINK|unix.F_SEAL_GROW|unix.F_SEAL_WRITE); err != nil {
+	copy(mapping, next)
+	defer func() {
+		// A cold CLI can pass FD3 to its new session daemon. Clearing the
+		// existing shared mapping erases those references before any result
+		// returns, including errors/cancellation. Future writers are sealed out.
+		clear(mapping)
+		_ = unix.Munmap(mapping)
+	}()
+	if _, err := unix.FcntlInt(f.Fd(), unix.F_ADD_SEALS, unix.F_SEAL_SEAL|unix.F_SEAL_SHRINK|unix.F_SEAL_GROW|unix.F_SEAL_FUTURE_WRITE); err != nil {
 		return ProtectionResult{}, ErrUnavailable
 	}
 	args := []string{"vault", "rewrap", "--from-backend", "passphrase", "--backend", "passphrase", "--request-id", request, "--new-passphrase-file", "/proc/self/fd/3"}
