@@ -19,6 +19,9 @@ import (
 )
 
 func (b *Backend) applicationRestoreBackup(ctx context.Context, intent lifecycle.ApplicationRestoreIntent) (lifecycle.BackupRecord, runtimeState, error) {
+	if intent.NewDeployment {
+		return b.newDeploymentRestoreArchive(ctx, intent)
+	}
 	var target runtimeState
 	store, err := lifecycle.OpenFileStore(b.root)
 	if err != nil {
@@ -87,6 +90,10 @@ func (b *Backend) currentApplicationCatalog() ([]controlpolicy.ApplicationResour
 // admission. It checks the actual archived/current program metadata and all
 // encrypted artifacts before an operator approves the paired restore intent.
 func (b *Backend) PrepareApplicationRestore(ctx context.Context, backupID string, interrupt bool) (lifecycle.ApplicationRestoreIntent, error) {
+	return b.prepareApplicationRestore(ctx, backupID, interrupt, nil)
+}
+
+func (b *Backend) prepareApplicationRestore(ctx context.Context, backupID string, interrupt bool, recovery *newDeploymentApplicationArchive) (lifecycle.ApplicationRestoreIntent, error) {
 	var intent lifecycle.ApplicationRestoreIntent
 	lock, err := lifecycle.AcquireOperationLock(b.root)
 	if err != nil {
@@ -108,24 +115,33 @@ func (b *Backend) PrepareApplicationRestore(ctx context.Context, backupID string
 	if err != nil {
 		return intent, err
 	}
-	backup, err := store.LoadBackup(ctx, backupID)
+	var backup lifecycle.BackupRecord
+	if recovery == nil {
+		backup, err = store.LoadBackup(ctx, backupID)
+	} else {
+		backup = recovery.Source
+	}
 	if err != nil || backup.ApplicationBackup == nil {
 		return intent, lifecycle.ErrApplicationBackup
 	}
 	var manifest snapshotManifest
-	directory, err := b.snapshotDirectory(backup.RuntimeRef)
-	if err != nil {
-		return intent, err
-	}
-	if readPrivateJSON(filepath.Join(directory, "manifest.json"), &manifest) != nil || manifest.Runtime == nil {
-		return intent, lifecycle.ErrApplicationBackup
+	if recovery == nil {
+		directory, err := b.snapshotDirectory(backup.RuntimeRef)
+		if err != nil {
+			return intent, err
+		}
+		if readPrivateJSON(filepath.Join(directory, "manifest.json"), &manifest) != nil || manifest.Runtime == nil {
+			return intent, lifecycle.ErrApplicationBackup
+		}
+	} else {
+		manifest.Runtime = &recovery.Runtime
 	}
 	resources, err := b.currentApplicationCatalog()
 	if err != nil {
 		return intent, err
 	}
-	before, err := b.migrationMetadata(ctx, state, resources, false)
-	if err != nil || before.Identity.Version != 2 || before.Policy != state.ApplicationPolicySHA256 {
+	before, err := b.migrationMetadata(ctx, state, resources, recovery != nil)
+	if err != nil || recovery == nil && before.Identity.Version != 2 || recovery != nil && before.Identity.Version != 1 || before.Policy != state.ApplicationPolicySHA256 {
 		return intent, lifecycle.ErrApplicationBackup
 	}
 	resources, err = controlpolicy.CanonicalApplications(resources, before.BaseEnvironment)
@@ -141,6 +157,11 @@ func (b *Backend) PrepareApplicationRestore(ctx context.Context, backupID string
 		return intent, err
 	}
 	intent = lifecycle.ApplicationRestoreIntent{Version: 1, Mode: "compose", BackupID: backup.ID, RuntimeRef: backup.RuntimeRef, Backup: *backup.ApplicationBackup, Before: before.Identity, BeforeResources: resources, ExpectedPolicy: before.Policy, Policy: target.Policy, CandidateGeneration: hex.EncodeToString(nonce[:]), BeforeImage: state.CoreImage, TargetImage: manifest.Runtime.CoreImage, BeforeProgram: state.GenerationID, TargetProgram: manifest.Runtime.GenerationID, Interrupt: interrupt}
+	if recovery != nil {
+		intent.NewDeployment = true
+		intent.BackupID, intent.RuntimeRef = recovery.ID(), recovery.directory
+		intent.Backup.Intent.Directory = filepath.Join(recovery.directory, "applications")
+	}
 	if !intent.Valid() {
 		return lifecycle.ApplicationRestoreIntent{}, lifecycle.ErrApplicationBackup
 	}
@@ -186,7 +207,7 @@ func (b *Backend) withApplicationRestore(ctx context.Context, intent *lifecycle.
 			if err != nil || !found || state.CoreImage != intent.BeforeImage || state.GenerationID != intent.BeforeProgram {
 				return lifecycle.ErrApplicationBackup
 			}
-			actual, err := b.migrationMetadata(ctx, state, intent.BeforeResources, false)
+			actual, err := b.migrationMetadata(ctx, state, intent.BeforeResources, intent.NewDeployment)
 			if err != nil || actual.Identity != intent.Before || actual.Policy != intent.ExpectedPolicy {
 				return lifecycle.ErrApplicationBackup
 			}
@@ -241,7 +262,7 @@ func (b *Backend) prepareApplicationRestoreCandidate(ctx context.Context) (strin
 	if err != nil {
 		return "", "", err
 	}
-	before, err := b.migrationMetadata(ctx, current, i.BeforeResources, false)
+	before, err := b.migrationMetadata(ctx, current, i.BeforeResources, i.NewDeployment)
 	if err != nil || before.Identity != i.Before || before.Policy != i.ExpectedPolicy {
 		return "", "", lifecycle.ErrApplicationBackup
 	}

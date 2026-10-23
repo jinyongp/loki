@@ -22,14 +22,18 @@ import (
 )
 
 func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
-	runRealComposeMigrationLifecycle(t, false)
+	runRealComposeMigrationLifecycle(t, "migration")
 }
 
 func TestRealComposeApplicationRestore(t *testing.T) {
-	runRealComposeMigrationLifecycle(t, true)
+	runRealComposeMigrationLifecycle(t, "restore")
 }
 
-func runRealComposeMigrationLifecycle(t *testing.T, restore bool) {
+func TestRealComposeNewDeploymentRecovery(t *testing.T) {
+	runRealComposeMigrationLifecycle(t, "new-deployment")
+}
+
+func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
 	if image == "" {
 		if os.Getenv("LOKI_REQUIRE_NATIVE_SECRET_COMPOSE") == "1" {
@@ -273,8 +277,11 @@ func runRealComposeMigrationLifecycle(t *testing.T, restore bool) {
 	if gate, err := b.maintenanceCall(ctx, current, "status", "", false, false); err != nil || gate == nil || gate.Active {
 		t.Fatal("successful backup retained Job gate", err)
 	}
-	if restore {
+	if journey == "restore" {
 		verifyRealComposeApplicationRestore(t, ctx, b, binary, backup, backupIdentity, passphrase, unlockArgs)
+	}
+	if journey == "new-deployment" {
+		verifyRealComposeNewDeployment(t, ctx, b, binary, backup, backupIdentity)
 	}
 }
 

@@ -138,3 +138,34 @@ func TestApplicationRestoreRollbackDirectionCannotResumeImports(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNewDeploymentRestoreRequiresFreshIdentityEmptyScopeAndExactProgram(t *testing.T) {
+	i := applicationRestoreFixture(t, t.TempDir())
+	i.NewDeployment = true
+	if i.Valid() {
+		t.Fatal("retained deployment was accepted as disaster recovery")
+	}
+	i.Before.Version, i.Before.PolicySHA256 = 1, ""
+	i.Before.DeploymentID = "deployment-" + strings.Repeat("3", 32)
+	i.Before.RunnerID = "123e4567-e89b-42d3-a456-426614174499"
+	i.BeforeResources = i.BeforeResources[:0]
+	i.TargetImage, i.TargetProgram = i.BeforeImage, i.BeforeProgram
+	if !i.Valid() {
+		t.Fatal("fresh exact-program recovery was rejected")
+	}
+	changed := i
+	changed.Before.DeploymentID = i.Backup.Intent.Identity.DeploymentID
+	if changed.Valid() {
+		t.Fatal("recovery reused historical deployment namespace")
+	}
+	changed = i
+	changed.Before.RunnerID = i.Backup.Intent.Identity.RunnerID
+	if changed.Valid() {
+		t.Fatal("recovery reused historical runner identity")
+	}
+	changed = i
+	changed.TargetProgram = "sha256:" + strings.Repeat("5", 64)
+	if changed.Valid() {
+		t.Fatal("new deployment silently changed the paired program")
+	}
+}

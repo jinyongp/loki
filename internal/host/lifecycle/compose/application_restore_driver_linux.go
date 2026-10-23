@@ -331,8 +331,10 @@ func (b *Backend) ApplyApplicationRestore(ctx context.Context, intent *lifecycle
 				if err := b.stopApplicationRestoreCandidate(ctx, r); err != nil {
 					return err
 				}
-				if err := b.restoreSnapshot(ctx, i.RuntimeRef, true); err != nil {
-					return err
+				if !i.NewDeployment {
+					if err := b.restoreSnapshot(ctx, i.RuntimeRef, true); err != nil {
+						return err
+					}
 				}
 				request := &applicationCandidateLayout{Before: i.Before, CandidateGeneration: i.CandidateGeneration, Policy: i.Policy, Operation: lifecycle.MigrationOperationUUID(r.ID), Restore: true}
 				if _, err := b.applicationLayout(ctx, target, i.Backup.Intent.Resources, false, request, "", true); err != nil {
@@ -345,8 +347,10 @@ func (b *Backend) ApplyApplicationRestore(ctx context.Context, intent *lifecycle
 				if err != nil {
 					return err
 				}
-				if err := store.RestoreBackup(ctx, backup); err != nil {
-					return err
+				if !i.NewDeployment {
+					if err := store.RestoreBackup(ctx, backup); err != nil {
+						return err
+					}
 				}
 				if _, err := j.AdvanceApplicationRestore(r.ID, lifecycle.PhaseRestart, time.Now()); err != nil {
 					return err

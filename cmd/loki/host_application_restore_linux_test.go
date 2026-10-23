@@ -56,6 +56,8 @@ func TestApplicationRestoreRequiresExplicitPlanAndProtectionInput(t *testing.T) 
 		{"compose", "status", "--state-root", "/tmp/owner", "--identity-file", "/tmp/owner/key"},
 		{"compose", "rollback", "--state-root", "/tmp/owner"},
 		{"compose", "prepare", "--state-root", "/tmp/owner", "--backup-id", "backup", "--stdin"},
+		{"compose", "prepare-new-deployment", "--state-root", "/tmp/owner", "--backup-id", "backup"},
+		{"compose", "prepare", "--state-root", "/tmp/owner", "--backup-id", "backup", "--source-state-root", "/tmp/old-owner"},
 	} {
 		var out, errout bytes.Buffer
 		if code := runHostApplicationRestore(args, &out, &errout); code != 2 {

@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 umask 077
-test "$#" -ge 1 && test "$#" -le 2 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore]' >&2; exit 2; }
+test "$#" -ge 1 && test "$#" -le 2 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore|recovery]' >&2; exit 2; }
 image=$1
 suite=${2:-normal}
-case "$suite" in normal|restore) ;; *) exit 2 ;; esac
+case "$suite" in normal|restore|recovery) ;; *) exit 2 ;; esac
 registry=
 tag=
 test_binary=
@@ -44,6 +44,10 @@ chmod 0555 "$host_cli"
 export LOKI_TEST_HOST_MIGRATION_CLI="$host_cli"
 if test "$suite" = restore; then
   go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposeApplicationRestore$'
+  exit 0
+fi
+if test "$suite" = recovery; then
+  go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposeNewDeploymentRecovery$'
   exit 0
 fi
 go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices|MigrationPublicLifecycle)$'

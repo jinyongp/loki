@@ -47,11 +47,11 @@ func readApplicationRestoreIdentity(root, path string) ([]byte, error) {
 
 func runHostApplicationRestore(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 || args[0] != "compose" {
-		fmt.Fprintln(stderr, "usage: loki host application-restore compose prepare|apply|recover|status|rollback --state-root ROOT [OPTIONS]")
+		fmt.Fprintln(stderr, "usage: loki host application-restore compose prepare|prepare-new-deployment|apply|recover|status|rollback --state-root ROOT [OPTIONS]")
 		return 2
 	}
 	action := args[1]
-	if action != "prepare" && action != "apply" && action != "recover" && action != "status" && action != "rollback" {
+	if action != "prepare" && action != "prepare-new-deployment" && action != "apply" && action != "recover" && action != "status" && action != "rollback" {
 		return 2
 	}
 	flags := flag.NewFlagSet("host application-restore compose "+action, flag.ContinueOnError)
@@ -60,6 +60,7 @@ func runHostApplicationRestore(args []string, stdout, stderr io.Writer) int {
 	project := flags.String("project", "loki", "installed Compose project")
 	socket := flags.String("docker-socket", "/var/run/docker.sock", "administrator-owned Docker socket")
 	backup := flags.String("backup-id", "", "exact paired binary/data backup; prepare only")
+	sourceRoot := flags.String("source-state-root", "", "private archived owner; prepare-new-deployment only")
 	plan := flags.String("plan", "", "exact prepared restore intent; apply only")
 	interrupt := flags.Bool("interrupt-active-jobs", false, "freeze explicit Job interruption choice; prepare only")
 	approve := flags.Bool("approve", false, "approve the exact apply plan or pre-cutover rollback")
@@ -69,11 +70,14 @@ func runHostApplicationRestore(args []string, stdout, stderr io.Writer) int {
 	if flags.Parse(args[2:]) != nil || flags.NArg() != 0 || !filepath.IsAbs(*root) || filepath.Clean(*root) != *root || *root == "/" {
 		return 2
 	}
-	if action == "prepare" {
+	if action == "prepare" || action == "prepare-new-deployment" {
 		if *backup == "" || *plan != "" || *approve || *identityPath != "" || *protection != "" || *stdin {
 			return 2
 		}
 	} else if *backup != "" || *interrupt || action != "apply" && *plan != "" || (action == "apply" || action == "rollback") != *approve {
+		return 2
+	}
+	if (action == "prepare-new-deployment") != (*sourceRoot != "") {
 		return 2
 	}
 	if action == "apply" && *plan == "" || (action == "status" || action == "rollback") && (*identityPath != "" || *protection != "" || *stdin) || *protection != "" && *protection != "init" && *protection != "unlock" || (*protection != "") != *stdin {
@@ -90,6 +94,8 @@ func runHostApplicationRestore(args []string, stdout, stderr io.Writer) int {
 	switch action {
 	case "prepare":
 		result, err = b.PrepareApplicationRestore(ctx, *backup, *interrupt)
+	case "prepare-new-deployment":
+		result, err = b.PrepareNewDeploymentRestore(ctx, *sourceRoot, *backup, *interrupt)
 	case "status":
 		result, err = b.ApplicationRestoreStatus(ctx)
 	case "rollback":

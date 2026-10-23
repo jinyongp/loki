@@ -33,6 +33,7 @@ type ApplicationRestoreIntent struct {
 	BeforeProgram       string                              `json:"before_program"`
 	TargetProgram       string                              `json:"target_program"`
 	Interrupt           bool                                `json:"interrupt"`
+	NewDeployment       bool                                `json:"new_deployment,omitempty"`
 }
 
 func pinnedRestoreImage(image string) bool {
@@ -56,7 +57,16 @@ func (i ApplicationRestoreIntent) Valid() bool {
 	// Retained history restoration stays in one deployment incarnation. A
 	// lost history root needs explicit isolated disaster recovery instead.
 	before.ActiveGeneration, before.PolicySHA256 = archive.ActiveGeneration, archive.PolicySHA256
-	if before != archive || i.Before.PolicySHA256 != i.ExpectedPolicy || i.Before.Version != 2 || !migrationHex(i.Before.ActiveGeneration, 16) {
+	if i.NewDeployment {
+		if i.Before.Version != 1 || i.Before.PolicySHA256 != "" || len(i.BeforeResources) != 0 || i.Before.DeploymentID == archive.DeploymentID || i.Before.RunnerID == archive.RunnerID || i.BeforeProgram != i.TargetProgram || i.BeforeImage != i.TargetImage || before.UID != archive.UID || before.GID != archive.GID || before.AgentUID != archive.AgentUID || before.MetadataGID != archive.MetadataGID {
+			return false
+		}
+	} else {
+		if before != archive || i.Before.PolicySHA256 != i.ExpectedPolicy || i.Before.Version != 2 {
+			return false
+		}
+	}
+	if !migrationHex(i.Before.ActiveGeneration, 16) || !controlpolicy.ApplicationUUID.MatchString(i.Before.RunnerID) || !strings.HasPrefix(i.Before.DeploymentID, "deployment-") || !migrationHex(strings.TrimPrefix(i.Before.DeploymentID, "deployment-"), 16) {
 		return false
 	}
 	canonical, err := controlpolicy.CanonicalApplications(i.BeforeResources, nil)
