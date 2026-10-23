@@ -21,7 +21,13 @@ func reportProviderFailure(operation, correlation string, err error) {
 	// This journal belongs to the operator. Keep the public Job wire closed,
 	// and use only validated correlation metadata plus the shared safe policy.
 	d := application.ProviderDiagnostic(err)
-	if d.Code == fault.CodeDeliveryUnknown {
+	switch d.Code {
+	case fault.CodeVaultLocked, fault.CodeRecoveryRequired, fault.CodeLimitExceeded, fault.CodeDenied:
+		// These remedies concern protection or bounded input, not replay.
+	default:
+		// An unstructured transport failure can also hide committed delivery.
+		// Administrative mutation retry guidance must not reach Job operators.
+		d.NextAction = "inspect the original Job and execution/delivery record; do not prepare or send another execution"
 		switch operation {
 		case "migration_prepare", "migration_approve", "migration_deliver":
 			// Comparison attempts have a durable binding, not an OCI Job.

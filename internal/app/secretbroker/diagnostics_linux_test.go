@@ -35,6 +35,7 @@ func TestProviderDiagnosticsRetainOnlySafeRecovery(t *testing.T) {
 	job := strings.Repeat("b", 32)
 	for _, err := range []error{
 		&provider.Failure{Code: "delivery_outcome_unknown"},
+		&provider.Failure{Code: "revision_conflict"},
 		&provider.Failure{Code: "redaction_unavailable", Limit: &secretoutput.LimitError{Kind: "states", Observed: 262145, Limit: 262144}},
 		errors.New("synthetic-private-error /private/provider/root"),
 	} {
@@ -47,6 +48,9 @@ func TestProviderDiagnosticsRetainOnlySafeRecovery(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "synthetic-private") || strings.Contains(out.String(), "/private/") {
 		t.Fatal("provider error text escaped into the journal")
+	}
+	if strings.Contains(out.String(), "retry the original request") || strings.Contains(out.String(), "before a new edit") {
+		t.Fatal("administrative mutation retry guidance reached Job operators")
 	}
 	before := out.Len()
 	reportProviderFailure("private-operation", job, errors.New("private"))
