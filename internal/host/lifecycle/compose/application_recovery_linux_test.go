@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,5 +70,20 @@ func TestInterruptedRecoveryCopyCleansOnlyItsDeclaredCipherArtifacts(t *testing.
 	}
 	if _, err := os.Lstat(stage); !os.IsNotExist(err) {
 		t.Fatal("interrupted ciphertext staging remained", err)
+	}
+}
+
+func TestRecoveryMetadataPreservesApplicationKeyNames(t *testing.T) {
+	type metadata struct {
+		Keys map[string]string `json:"keys"`
+	}
+	path := filepath.Join(t.TempDir(), "archive.json")
+	body, err := json.Marshal(metadata{Keys: map[string]string{"TOKEN": "secret", "API_URL": "variable"}})
+	if err != nil || os.WriteFile(path, body, 0600) != nil {
+		t.Fatal(err)
+	}
+	var got metadata
+	if err := readRecoveryMetadata(path, &got); err != nil || got.Keys["TOKEN"] != "secret" || got.Keys["API_URL"] != "variable" {
+		t.Fatal("domain metadata used private wire field-name restrictions", err)
 	}
 }

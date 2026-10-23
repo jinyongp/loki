@@ -3,11 +3,13 @@
 package compose
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,7 +19,6 @@ import (
 	"golang.org/x/sys/unix"
 	"loki/internal/control/appvalues"
 	"loki/internal/host/lifecycle"
-	"loki/internal/platform/privateio"
 )
 
 // This is an immutable encrypted input artifact, not a recovery journal. Only
@@ -70,7 +71,15 @@ func readRecoveryMetadata(path string, target any) error {
 		return lifecycle.ErrApplicationBackup
 	}
 	body, err := io.ReadAll(io.LimitReader(file, bound+1))
-	if err != nil || len(body) > bound || privateio.Decode(body, target) != nil {
+	if err != nil || len(body) > bound {
+		return lifecycle.ErrApplicationBackup
+	}
+	// Host metadata contains application key maps and JSON schemas whose
+	// names legitimately contain uppercase letters. The private wire's
+	// lowercase-only field grammar is not this document's format contract.
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(target) != nil || decoder.Decode(new(any)) != io.EOF {
 		return lifecycle.ErrApplicationBackup
 	}
 	return nil
@@ -108,9 +117,13 @@ func (b *Backend) newDeploymentRestoreArchive(ctx context.Context, i lifecycle.A
 func (b *Backend) PrepareNewDeploymentRestore(ctx context.Context, sourceRoot, backupID string, interrupt bool) (lifecycle.ApplicationRestoreIntent, error) {
 	a, err := b.importNewDeploymentArchive(ctx, sourceRoot, backupID)
 	if err != nil {
-		return lifecycle.ApplicationRestoreIntent{}, err
+		return lifecycle.ApplicationRestoreIntent{}, fmt.Errorf("import encrypted recovery artifact: %w", err)
 	}
-	return b.prepareApplicationRestore(ctx, a.ID(), interrupt, &a)
+	intent, err := b.prepareApplicationRestore(ctx, a.ID(), interrupt, &a)
+	if err != nil {
+		return intent, fmt.Errorf("bind fresh deployment recovery: %w", err)
+	}
+	return intent, nil
 }
 
 func (b *Backend) importNewDeploymentArchive(ctx context.Context, sourceRoot, backupID string) (newDeploymentApplicationArchive, error) {
