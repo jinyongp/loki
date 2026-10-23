@@ -344,11 +344,25 @@ func testReceiverRealProvider(t *testing.T, privateDirectoryControl, restore boo
 		t.Fatal("delivery receipt did not replay")
 	}
 	call("", "vault", "lock")
+	p, err := provider.New(ctx, binary, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldProtection := []byte("synthetic-private-passphrase")
+	if restore {
+		oldProtection = []byte("different-restored-protection-passphrase")
+	}
+	defer clear(oldProtection)
+	nextProtection := []byte("synthetic-delivery-rewrapped-passphrase")
+	defer clear(nextProtection)
+	if _, err := p.Rewrap(ctx, "e10516fa-f8ed-4189-9ec9-7d7515799f40", oldProtection, nextProtection); err != nil {
+		t.Fatal("rewrap during retained output", err)
+	}
 	close(finish)
 	select {
 	case output := <-handled:
 		if output != "before [REDACTED] after" {
-			t.Fatal("provider input was not masked across lock")
+			t.Fatal("provider input was not masked across lock and rewrap")
 		}
 	case <-ctx.Done():
 		t.Fatal("handler did not finish")

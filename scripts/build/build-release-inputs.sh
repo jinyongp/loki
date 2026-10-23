@@ -86,7 +86,7 @@ install -m 0755 "$inputs_dir/gh" "$tmp/output/gh/$arch/gh"
 
 printf '%s\n' \
   "arch=$arch" \
-  "devtools=0.33.0" \
+  "devtools=0.34.0" \
   "ripgrep=15.2.0" \
   "gh=2.102.0" \
   >"$tmp/output/VERSIONS-$arch"

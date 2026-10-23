@@ -5,8 +5,22 @@ import (
 )
 
 type ProtectionResult struct {
-	Changed bool             `json:"changed"`
-	Item    ProtectionStatus `json:"item"`
+	Changed   bool             `json:"changed"`
+	Item      ProtectionStatus `json:"item"`
+	RequestID string           `json:"request_id,omitempty"`
+	Replayed  bool             `json:"replayed"`
+}
+
+func validProtectionStatus(s ProtectionStatus) bool {
+	switch s.State {
+	case "uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required":
+	default:
+		return false
+	}
+	if s.Backend != "" && s.Backend != "passphrase" {
+		return false
+	}
+	return s.Rewrap == nil || uuid.MatchString(s.Rewrap.RequestID) && s.Rewrap.FromBackend == "passphrase" && s.Rewrap.Backend == "passphrase" && !s.Rewrap.IntegrityVerified
 }
 
 // Protection permits only explicit passphrase-backed administration. No path
@@ -31,12 +45,8 @@ func (p *Provider) Protection(ctx context.Context, action string, input []byte) 
 	}
 	var result ProtectionResult
 	err := p.invoke(ctx, args, input, &result)
-	if err == nil {
-		switch result.Item.State {
-		case "uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required":
-		default:
-			return ProtectionResult{}, ErrUnavailable
-		}
+	if err == nil && !validProtectionStatus(result.Item) {
+		return ProtectionResult{}, ErrUnavailable
 	}
 	return result, err
 }

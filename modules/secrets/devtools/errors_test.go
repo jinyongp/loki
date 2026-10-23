@@ -21,3 +21,17 @@ func TestProviderErrorsKeepOnlyReviewedIdentifiers(t *testing.T) {
 		t.Fatal("unreviewed failure identifier escaped")
 	}
 }
+
+func TestProviderDiagnosticsAcceptOnlyClosedFacts(t *testing.T) {
+	err := providerFailure([]byte(`{"error":{"code":"redaction_unavailable","message":"private","details":{"retry":"after_input_change","effects":"none","facts":{"limit_kind":"states","observed":262145,"limit":262144},"target":{"request_id":"c1587d89-9336-4af5-95ab-f386f9080e04","path":"private"},"remedies":[{"argv":["private"]}]}}}`))
+	f := err.(*Failure)
+	if f.Limit == nil || !f.Limit.Valid() || f.Retry != "after_input_change" || f.Effects != "none" || f.RequestID == "" {
+		t.Fatal("reviewed diagnostics lost")
+	}
+	for _, facts := range []string{`{"limit_kind":"private","observed":262145,"limit":262144}`, `{"limit_kind":"states","observed":262144,"limit":262144}`, `{"limit_kind":"states","observed":262145,"limit":1}`, `{"limit_kind":"states","observed":9007199254740992,"limit":262144}`} {
+		e := providerFailure([]byte(`{"error":{"code":"redaction_unavailable","details":{"facts":` + facts + `,"retry":"private","effects":"private","target":{"request_id":"private"}}}}`)).(*Failure)
+		if e.Limit != nil || e.Retry != "" || e.Effects != "" || e.RequestID != "" {
+			t.Fatal("unreviewed diagnostic escaped")
+		}
+	}
+}

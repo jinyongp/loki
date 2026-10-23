@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -62,6 +63,12 @@ func New(ctx context.Context, binary, root string) (*Provider, error) {
 // invoke is deliberately private; every caller supplies a compiled operation.
 // Neither stderr nor error.details crosses this boundary.
 func (p *Provider) invoke(ctx context.Context, args []string, input []byte, target any) error {
+	return p.invokeFiles(ctx, args, input, target, nil)
+}
+
+// Inherited files are supplied only by typed operations; callers cannot choose
+// child descriptors, paths, environment or a generic command.
+func (p *Provider) invokeFiles(ctx context.Context, args []string, input []byte, target any, files []*os.File) error {
 	if p == nil {
 		return ErrUnavailable
 	}
@@ -78,6 +85,7 @@ func (p *Provider) invoke(ctx context.Context, args []string, input []byte, targ
 	cmd := exec.CommandContext(ctx, p.binary, append(args, "--isolated-root", p.root)...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "GOMAXPROCS=2"}
 	cmd.Stdin = bytes.NewReader(input)
+	cmd.ExtraFiles = files
 	output := &boundedBuffer{limit: MaxPrivatePayloadFrame}
 	cmd.Stdout = output
 	stderr := &boundedBuffer{limit: MaxPrivateControlFrame}
@@ -209,7 +217,10 @@ func (p *Provider) execution(ctx context.Context, operation, app, execution, req
 		Profile string    `json:"profile"`
 		Item    Execution `json:"item"`
 	}
-	if p.invoke(ctx, args, body, &result) != nil || result.Profile != app || !id.MatchString(result.Item.ID) || !id.MatchString(result.Item.InputID) || !id.MatchString(result.Item.JobID) || result.Item.Revision == 0 || execution != "" && result.Item.ID != execution {
+	if err := p.invoke(ctx, args, body, &result); err != nil {
+		return Execution{}, err
+	}
+	if result.Profile != app || !id.MatchString(result.Item.ID) || !id.MatchString(result.Item.InputID) || !id.MatchString(result.Item.JobID) || result.Item.Revision == 0 || execution != "" && result.Item.ID != execution {
 		return Execution{}, ErrUnavailable
 	}
 	return result.Item, nil

@@ -21,7 +21,7 @@ from build_manager_bundle import go_notices
 
 OWNERS = {
     "github":{"program":"gh", "version":"2.102.0", "commit":"fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd", "module":"github.com/cli/cli/v2", "source":"https://codeload.github.com/cli/cli/tar.gz/fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd", "package":"./cmd/gh", "flags":"-X github.com/cli/cli/v2/internal/build.Version=2.102.0 -X github.com/cli/cli/v2/internal/build.Date=2026-09-30"},
-    "runtime-core":{"program":"devtools", "version":"0.33.0", "commit":"276a78e91479321ba751c5555769a39e6ad05e07", "module":"github.com/jinyongp/devtools", "source":"https://codeload.github.com/jinyongp/devtools/tar.gz/276a78e91479321ba751c5555769a39e6ad05e07", "package":"./cmd/devtools", "flags":"-X main.version=0.33.0 -X main.commit=276a78e91479321ba751c5555769a39e6ad05e07"},
+    "runtime-core":{"program":"devtools", "version":"0.34.0", "commit":"ff8edcca1ba5bae4fdd7981779bc4f0c5e557438", "module":"github.com/jinyongp/devtools", "source":"https://codeload.github.com/jinyongp/devtools/tar.gz/ff8edcca1ba5bae4fdd7981779bc4f0c5e557438", "package":"./cmd/devtools", "flags":"-X main.version=0.34.0 -X main.commit=ff8edcca1ba5bae4fdd7981779bc4f0c5e557438"},
 }
 
 

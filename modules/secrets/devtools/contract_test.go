@@ -13,7 +13,7 @@ func TestDevtoolsRoleAllowlistCannotExecuteOrReadValues(t *testing.T) {
 	for _, test := range []struct {
 		role    DevtoolsAuthority
 		command string
-	}{{DevtoolsMetadata, "values revision"}, {DevtoolsAdmin, "secret generate"}, {DevtoolsJobs, "values execution deliver"}} {
+	}{{DevtoolsMetadata, "values revision"}, {DevtoolsAdmin, "secret generate"}, {DevtoolsAdmin, "vault rewrap"}, {DevtoolsJobs, "values execution deliver"}} {
 		if !AllowsDevtoolsCommand(test.role, test.command) {
 			t.Fatal("required typed command denied", test)
 		}

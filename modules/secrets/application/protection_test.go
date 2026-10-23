@@ -93,6 +93,70 @@ func TestRealManualProtectionDoesNotInitializeOrExtendOnStatus(t *testing.T) {
 	}
 	call("unlock", pass)
 	call("recover", nil)
+	app := "app-" + strings.Repeat("a", 32)
+	rev, err := p.Revision(ctx, app, "common")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := p.SetSecret(ctx, app, "common", "TOKEN", []byte("synthetic-preserved-value"), rev, "186e2541-dcc8-47cc-815d-e736ad47b6ff", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := []byte("synthetic-replacement-private-passphrase")
+	defer clear(next)
+	request := "2e66c180-f0b6-40ab-b09c-18f9df44b8c8"
+	rewrap := func(action string, old, target []byte) (map[string]any, error) {
+		body, err := appvalues.ProtectionInput(old, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer clear(body)
+		return s.Admin(ctx, AdminRequest{Action: action, RequestID: request}, body)
+	}
+	// An unlocked session cannot replace authentication of the old protector.
+	if _, err := rewrap("protection_rewrap", []byte("wrong-original"), next); err == nil {
+		t.Fatal("warm session bypassed protector authentication")
+	}
+	operation := "b5820025-7cc2-433a-9e4f-a879a0429b28"
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_begin", RequestID: operation}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rewrap("protection_rewrap", pass, next); err == nil {
+		t.Fatal("host maintenance admitted protection mutation")
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_end", RequestID: operation}, nil); err != nil {
+		t.Fatal(err)
+	}
+	call("lock", nil)
+	out, err := rewrap("protection_rewrap", pass, next)
+	if err != nil || out["changed"] != true || out["replayed"] != false || out["request_id"] != request || out["state"] != "locked_manual" {
+		t.Fatalf("explicit rewrap failed or cleared manual lock: %v %v", out, err)
+	}
+	// Treat the first response as lost. Reconstruct the consumer and retry only
+	// the target credential with the same request; the provider owns deduplication.
+	s, err = New(s.options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = rewrap("protection_rewrap_resume", nil, next)
+	if err != nil || out["changed"] != true || out["replayed"] != true || out["state"] != "locked_manual" {
+		t.Fatal("lost-response replay failed", err)
+	}
+	if _, err := rewrap("protection_rewrap_resume", nil, []byte("different-target")); err == nil {
+		t.Fatal("replay accepted different credentials")
+	}
+	if _, err := s.Admin(ctx, AdminRequest{Action: "protection_unlock"}, pass); err == nil {
+		t.Fatal("retired passphrase unlocked vault")
+	}
+	call("unlock", next)
+	if after, err := p.Revision(ctx, app, "common"); err != nil || after != stored.Revision {
+		t.Fatal("rewrap changed logical value revision", err)
+	}
+	if metadata, err := p.Metadata(ctx, app, "common", "secret"); err != nil || len(metadata.Items) != 1 || metadata.Items[0].Name != "TOKEN" {
+		t.Fatal("rewrap lost protected values", err)
+	}
+	oldPass := pass
+	pass = next
 	// A new broker application object cannot implicitly create a new session.
 	call("lock", nil)
 	call("unlock", pass)
@@ -113,7 +177,7 @@ func TestRealManualProtectionDoesNotInitializeOrExtendOnStatus(t *testing.T) {
 	if !bytes.Contains(audit, []byte(`"principal":"service"`)) {
 		t.Fatal("restart lock omitted service attribution")
 	}
-	for _, secret := range [][]byte{pass, []byte("wrong-before-init"), []byte("wrong-after-init")} {
+	for _, secret := range [][]byte{pass, oldPass, []byte("wrong-original"), []byte("wrong-before-init"), []byte("wrong-after-init")} {
 		if bytes.Contains(audit, secret) {
 			t.Fatal("passphrase appeared in protection audit")
 		}

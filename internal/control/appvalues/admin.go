@@ -22,6 +22,8 @@ type AdminRequest struct {
 // InputLimit describes only the private byte frame, never a public JSON value.
 func (r AdminRequest) InputLimit() int {
 	switch r.Action {
+	case "protection_rewrap", "protection_rewrap_resume":
+		return MaxProtectionInput
 	case "backup_import_preview", "backup_import":
 		return MaxApplicationRestoreInput
 	case "stage":

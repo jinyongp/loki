@@ -25,7 +25,7 @@ func TestVendoredSourceMatchesReviewedUpstream(t *testing.T) {
 	if err = json.Unmarshal(raw, &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Commit != "ee1e460261720b50b9e186241abb9b0d6e24e174" || receipt.License != "MIT" || len(receipt.Files) != 4 {
+	if receipt.Commit != "ff8edcca1ba5bae4fdd7981779bc4f0c5e557438" || receipt.License != "MIT" || len(receipt.Files) != 5 {
 		t.Fatal("unreviewed source provenance")
 	}
 	for source, expected := range receipt.Files {

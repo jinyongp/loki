@@ -23,7 +23,7 @@ func TestRealCoordinationCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candidate.ProtocolVersion != 12 || candidate.ApprovedCommands != 19 {
+	if candidate.ProtocolVersion != 14 || candidate.ApprovedCommands != 19 {
 		t.Fatalf("candidate: %#v", candidate)
 	}
 	for _, name := range []string{"process start", "process restart", "run"} {

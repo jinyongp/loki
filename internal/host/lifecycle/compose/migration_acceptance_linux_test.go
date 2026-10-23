@@ -252,6 +252,12 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, bytes.NewReader(passphrase), unlockArgs...); err != nil {
 		t.Fatal("manual warm-vault backup prerequisite", err)
 	}
+	if journey == "migration" {
+		next := []byte("synthetic-compose-rewrapped-private-passphrase")
+		defer clear(next)
+		verifyComposeProtectionRewrap(t, ctx, b, current, image, layout, passphrase, next)
+		passphrase = next
+	}
 	if journey == "paired" {
 		setFixtureApplicationToken(t, ctx, b, current, []byte("synthetic-paired-backup-value-A"), "123e4567-e89b-42d3-a456-426614174491")
 	}
@@ -311,6 +317,48 @@ func runRealComposeMigrationLifecycle(t *testing.T, journey string) {
 	}
 	if journey == "authenticated" {
 		verifyRealComposeAuthenticatedJobs(t, ctx, b, current, passphrase)
+	}
+}
+
+// Both credentials enter through private stdin. Root-only temporary files live
+// in a disposable tmpfs inside the operator container, never the workspace or
+// Docker metadata/logs. The broker itself uses an inherited anonymous memfd.
+func verifyComposeProtectionRewrap(t *testing.T, ctx context.Context, b *Backend, current runtimeState, image, layout string, old, next []byte) {
+	t.Helper()
+	body := append(append(append([]byte{}, old...), '\n'), next...)
+	body = append(body, '\n')
+	defer clear(body)
+	script := `umask 077
+IFS= read -r credential
+printf '%s' "$credential" > /private/current
+unset credential
+IFS= read -r credential
+printf '%s' "$credential" > /private/next
+unset credential
+/opt/loki/bin/loki secret protection rewrap --layout /etc/loki/secret-admin.json --request-id 82bbc329-202b-4fbd-9371-389e7e994aba --current-file /private/current --new-file /private/next
+/opt/loki/bin/loki secret protection rewrap --layout /etc/loki/secret-admin.json --request-id 82bbc329-202b-4fbd-9371-389e7e994aba --resume --new-file /private/next
+if /opt/loki/bin/loki secret protection unlock --layout /etc/loki/secret-admin.json --file /private/current >/dev/null 2>&1; then exit 1; fi
+/opt/loki/bin/loki secret protection unlock --layout /etc/loki/secret-admin.json --file /private/next
+`
+	args := []string{"run", "--rm", "--interactive", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--log-driver", "none", "--tmpfs", "/private:rw,noexec,nosuid,nodev,mode=0700", "--entrypoint", "/bin/sh", "--mount", applicationBind(filepath.Join(current.ApplicationRuntimeRoot, "admin"), "/run/loki/secrets/admin", true), "--mount", applicationBind(layout, "/etc/loki/secret-admin.json", true), image, "-ec", script}
+	out, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, bytes.NewReader(body), args...)
+	if err != nil {
+		t.Fatal("actual Compose administrator rewrap failed", err)
+	}
+	defer clear(out)
+	if bytes.Contains(out, old) || bytes.Contains(out, next) {
+		t.Fatal("credential escaped administrator output")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(out))
+	for index := 0; index < 3; index++ {
+		var result struct {
+			Changed  bool   `json:"changed"`
+			Replayed bool   `json:"replayed"`
+			State    string `json:"state"`
+		}
+		if decoder.Decode(&result) != nil || index < 2 && (!result.Changed || result.Replayed != (index == 1)) || index == 2 && result.State != "unlocked" {
+			t.Fatal("actual Compose rewrap/replay/unlock metadata mismatch")
+		}
 	}
 }
 

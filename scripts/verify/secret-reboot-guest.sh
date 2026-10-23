@@ -146,6 +146,20 @@ PY
   head -c 48 /dev/urandom | base64 > /run/loki-fixture.pass
   /opt/loki/bin/loki secret protection init --file /run/loki-fixture.pass
   test "$(status)" = unlocked
+  phase=administrator-protection-rewrap
+  head -c 48 /dev/urandom | base64 > /run/loki-next.pass
+  /opt/loki/bin/loki secret protection rewrap \
+    --request-id 5d3d0471-02af-4fe8-93a2-3773db54fe16 \
+    --current-file /run/loki-fixture.pass --new-file /run/loki-next.pass |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["changed"] and not d["replayed"] and d["state"]=="locked"'
+  /opt/loki/bin/loki secret protection rewrap --resume \
+    --request-id 5d3d0471-02af-4fe8-93a2-3773db54fe16 --new-file /run/loki-next.pass |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["changed"] and d["replayed"]'
+  if /opt/loki/bin/loki secret protection unlock --file /run/loki-fixture.pass; then exit 1; fi
+  /opt/loki/bin/loki secret protection unlock --file /run/loki-next.pass
+  install -m 0600 /run/loki-next.pass /run/loki-fixture.pass
+  rm /run/loki-next.pass
+  test "$(status)" = unlocked
   pid=$(systemctl show loki-go-secrets.service --property MainPID --value)
   test "$pid" -gt 1
   test "$(awk '/^Uid:/{print $2}' "/proc/$pid/status")" = 21006

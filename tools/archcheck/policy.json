@@ -68,6 +68,7 @@
     {"from":"loki/modules/secrets/application","to":"loki/internal/platform/privateio"},
     {"from":"loki/modules/secrets/application","to":"loki/internal/platform/safeio"},
     {"from":"loki/modules/secrets/application","to":"loki/modules/secrets/devtools"},
+    {"from":"loki/modules/secrets/devtools","to":"loki/internal/secretoutput"},
     {"from":"loki/internal/platform/sandbox","to":"loki/internal/platform/privateio"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/app/secretbroker"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/daemon"},

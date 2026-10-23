@@ -57,8 +57,20 @@ type InputInspection struct {
 }
 
 type ProtectionStatus struct {
-	State         string     `json:"state"`
-	IdleExpiresAt *time.Time `json:"idle_expires_at,omitempty"`
+	State         string      `json:"state"`
+	IdleExpiresAt *time.Time  `json:"idle_expires_at,omitempty"`
+	Backend       string      `json:"backend,omitempty"`
+	Rewrap        *RewrapInfo `json:"rewrap,omitempty"`
+}
+
+// RewrapInfo is unverified routing metadata, never authenticated intent.
+type RewrapInfo struct {
+	RequestID         string `json:"request_id"`
+	FromBackend       string `json:"from_backend"`
+	Backend           string `json:"backend"`
+	SlotPublished     bool   `json:"slot_published"`
+	Completed         bool   `json:"completed"`
+	IntegrityVerified bool   `json:"integrity_verified"`
 }
 
 func scopeArgs(app, env string) ([]string, error) {
@@ -140,12 +152,8 @@ func (p *Provider) ProtectionStatus(ctx context.Context) (ProtectionStatus, erro
 		Item ProtectionStatus `json:"item"`
 	}
 	err := p.invoke(ctx, []string{"vault", "status"}, nil, &result)
-	if err == nil {
-		switch result.Item.State {
-		case "uninitialized", "locked", "unlocked", "locking", "locked_manual", "recovery_required":
-		default:
-			return ProtectionStatus{}, ErrUnavailable
-		}
+	if err == nil && !validProtectionStatus(result.Item) {
+		return ProtectionStatus{}, ErrUnavailable
 	}
 	return result.Item, err
 }

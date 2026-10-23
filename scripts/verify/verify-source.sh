@@ -1,10 +1,12 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 0; then
-  echo "usage: verify-source.sh" >&2
+if test "$#" -gt 1; then
+  echo "usage: verify-source.sh [all|tests|build|contracts]" >&2
   exit 2
 fi
+phase=${1:-all}
+case "$phase" in all|tests|build|contracts) ;; *) exit 2 ;; esac
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo"
@@ -50,11 +52,17 @@ check_tidy() {
   }
 }
 
-run_check tests go test -vet=off ./...
-run_check vet go vet ./...
-run_check build go build ./cmd/...
-run_check architecture go run ./tools/archcheck
-run_check module-tidiness check_tidy
+if test "$phase" = all || test "$phase" = tests; then
+  run_check tests go test -vet=off ./...
+fi
+if test "$phase" = all || test "$phase" = build; then
+  run_check vet go vet ./...
+  run_check build go build ./cmd/...
+fi
+if test "$phase" = all || test "$phase" = contracts; then
+  run_check architecture go run ./tools/archcheck
+  run_check module-tidiness check_tidy
+fi
 run_check diff-hygiene git diff --check
 
 if test "$failures" -ne 0; then

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -153,7 +154,8 @@ func decodePayload(body []byte, b bindFrame) (*ReceivedInput, error) {
 	var err error
 	p.matcher, err = secretoutput.New(w.Redaction.Patterns)
 	if err != nil {
-		return invalid()
+		p.destroy()
+		return nil, err
 	}
 	return p, nil
 }
@@ -205,7 +207,13 @@ func (r Receiver) Serve(ctx context.Context, listener *Listener) error {
 					cancel()
 				}
 			}()
-			_ = r.receive(ctx, conn)
+			if err := r.receive(ctx, conn); err != nil {
+				var limit *secretoutput.LimitError
+				if errors.As(err, &limit) && limit.Valid() {
+					// Closed identifiers and counts only; never payloads or bindings.
+					log.Printf("application output protection rejected: kind=%s observed=%d limit=%d; reduce selected keys or bundle; keep output protection enabled", limit.Kind, limit.Observed, limit.Limit)
+				}
+			}
 		}()
 	}
 }
@@ -254,7 +262,7 @@ func (r Receiver) receive(ctx context.Context, conn *net.UnixConn) error {
 	defer clear(body)
 	p, err := decodePayload(body, b)
 	if err != nil {
-		return errWire
+		return err
 	}
 	defer p.destroy()
 	if err = r.Accept(ctx, p); err != nil {

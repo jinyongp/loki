@@ -82,14 +82,17 @@ func New(patterns [][]byte) (*Matcher, error) {
 			return nil
 		}
 		if len(pattern) > MaxPatternBytes {
-			return ErrLimit
+			return &LimitError{Kind: "pattern_bytes", Observed: len(pattern), Limit: MaxPatternBytes}
 		}
 		key := string(pattern)
 		if _, ok := unique[key]; ok {
 			return nil
 		}
-		if len(unique) >= MaxPatterns || len(pattern) > MaxTotalPatternBytes-total {
-			return ErrLimit
+		if len(unique) >= MaxPatterns {
+			return &LimitError{Kind: "patterns", Observed: len(unique) + 1, Limit: MaxPatterns}
+		}
+		if len(pattern) > MaxTotalPatternBytes-total {
+			return &LimitError{Kind: "total_pattern_bytes", Observed: total + len(pattern), Limit: MaxTotalPatternBytes}
 		}
 		unique[key] = struct{}{}
 		total += len(pattern)
@@ -135,7 +138,7 @@ func New(patterns [][]byte) (*Matcher, error) {
 			next, ok := nodes[at].edges[pattern[i]]
 			if !ok {
 				if len(nodes) >= MaxStates {
-					return nil, ErrLimit
+					return nil, &LimitError{Kind: "states", Observed: len(nodes) + 1, Limit: MaxStates}
 				}
 				next = uint32(len(nodes))
 				nodes = append(nodes, buildState{depth: nodes[at].depth + 1, edges: map[byte]uint32{}})
@@ -164,7 +167,7 @@ func New(patterns [][]byte) (*Matcher, error) {
 			nodes[at].outputs++
 		}
 		if nodes[at].outputs > MaxOutputsPerState {
-			return nil, ErrLimit
+			return nil, &LimitError{Kind: "outputs_per_state", Observed: nodes[at].outputs, Limit: MaxOutputsPerState}
 		}
 		for value, child := range nodes[at].edges {
 			fallback := failure

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "ok": true,
   "data": {
-    "protocol_version": 12,
+    "protocol_version": 14,
     "commands": [
       {
         "name": "command inspect",
@@ -6410,6 +6410,12 @@
             },
             "completion": {
               "description": "Completion status: none, current, stale, or all.",
+              "enum": [
+                "none",
+                "current",
+                "stale",
+                "all"
+              ],
               "pattern": "^(none|current|stale|all)$",
               "type": "string"
             },
@@ -6435,6 +6441,13 @@
             },
             "state": {
               "description": "Filter by lifecycle state: draft, active, done, canceled, or all.",
+              "enum": [
+                "draft",
+                "active",
+                "done",
+                "canceled",
+                "all"
+              ],
               "pattern": "^(draft|active|done|canceled|all)$",
               "type": "string"
             }

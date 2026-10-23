@@ -226,12 +226,16 @@ func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[s
 }
 
 func (s *Service) protection(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
-	if q.Resource != "" || q.Environment != "" || q.Principal != "" || q.Variables != nil || q.Members != nil || q.Revision != "" || q.RequestID != "" || q.Name != "" || q.Empty || q.Replace {
+	if q.Resource != "" || q.Environment != "" || q.Principal != "" || q.Variables != nil || q.Members != nil || q.Revision != "" || q.Name != "" || q.Empty || q.Replace {
 		return nil, invalid()
 	}
 	action := strings.TrimPrefix(q.Action, "protection_")
+	rewrap := action == "rewrap" || action == "rewrap_resume"
+	if rewrap && !adminUUID.MatchString(q.RequestID) || !rewrap && q.RequestID != "" {
+		return nil, invalid()
+	}
 	switch action {
-	case "status", "init", "unlock", "lock", "recover":
+	case "status", "init", "unlock", "lock", "recover", "rewrap", "rewrap_resume":
 	default:
 		return nil, invalid()
 	}
@@ -243,20 +247,63 @@ func (s *Service) protection(ctx context.Context, q AdminRequest, body []byte) (
 		if err != nil {
 			return nil, safeError(err)
 		}
-		return map[string]any{"action": "status", "state": result.State}, nil
+		return protectionMetadata("status", result), nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result, err := s.options.Provider.Protection(ctx, action, body)
+	var result provider.ProtectionResult
+	var err error
+	if rewrap {
+		current, next, e := appvalues.ProtectionPassphrases(body)
+		if e != nil || (len(current) == 0) != (action == "rewrap_resume") {
+			return nil, invalid()
+		}
+		if err := s.requireWritable(); err != nil {
+			return nil, err
+		}
+		result, err = s.options.Provider.Rewrap(ctx, q.RequestID, current, next)
+	} else {
+		result, err = s.options.Provider.Protection(ctx, action, body)
+	}
 	code := "success"
 	if err != nil {
 		code = string(fault.Describe(safeError(err)).Code)
 	}
-	if s.audit.Append(map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "principal": "host-admin", "scope": "protection", "action": q.Action, "result": code}) != nil {
+	event := map[string]any{"at": time.Now().UTC().Format(time.RFC3339Nano), "principal": "host-admin", "scope": "protection", "action": q.Action, "result": code}
+	if rewrap {
+		event["request_id"] = q.RequestID
+		if err == nil {
+			event["replayed"] = result.Replayed
+		}
+	}
+	if s.audit.Append(event) != nil {
 		return nil, unavailable()
 	}
 	if err != nil {
+		var failure *provider.Failure
+		if rewrap && errors.As(err, &failure) && failure.Effects == "unknown" && failure.RequestID == q.RequestID {
+			return nil, fault.New(fault.CodeOutcomeUnknown, "application protection operation outcome is unknown", false, "inspect protection status before retrying original request "+q.RequestID+" with identical target credentials")
+		}
 		return nil, safeError(err)
 	}
-	return map[string]any{"action": action, "state": result.Item.State, "changed": result.Changed}, nil
+	out := protectionMetadata(action, result.Item)
+	out["changed"] = result.Changed
+	if rewrap {
+		out["request_id"], out["replayed"] = result.RequestID, result.Replayed
+	}
+	return out, nil
+}
+
+func protectionMetadata(action string, status provider.ProtectionStatus) map[string]any {
+	out := map[string]any{"action": action, "state": status.State}
+	if status.Backend != "" {
+		out["backend"] = status.Backend
+	}
+	if status.IdleExpiresAt != nil {
+		out["idle_expires_at"] = status.IdleExpiresAt
+	}
+	if status.Rewrap != nil {
+		out["rewrap"] = status.Rewrap
+	}
+	return out
 }

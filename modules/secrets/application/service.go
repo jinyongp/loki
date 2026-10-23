@@ -7,6 +7,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -124,6 +125,10 @@ func safeError(err error) error {
 	if !errors.As(err, &p) {
 		return unavailable()
 	}
+	// Unverified routing identifiers explain recovery but authorize no retry.
+	if p.Code == "vault_recovery_required" && p.Retry == "same_request" && p.RequestID != "" {
+		return fault.New(fault.CodeRecoveryRequired, "application vault protection change requires recovery", false, "ask the host administrator to inspect protection status and resume rewrap with original request "+p.RequestID+" and target passphrase; do not initialize or delete protection")
+	}
 	switch p.Code {
 	case "revision_conflict", "request_conflict", "kind_conflict", "input_changed", "vault_already_initialized":
 		return conflict()
@@ -133,12 +138,22 @@ func safeError(err error) error {
 		return fault.New(fault.CodeValueExists, "the selected layer already contains a value", false, "unset the exact layer or use the administrator replacement operation")
 	case "request_expired":
 		return fault.New(fault.CodeRequestExpired, "application value request has expired", false, "inspect the saved operation history")
-	case "vault_locked", "lock_pending":
+	case "vault_locked", "lock_pending", "key_interaction_required", "key_backend_locked":
 		return fault.New(fault.CodeVaultLocked, "application vault is locked", true, "ask the host administrator to unlock the existing vault")
 	case "vault_recovery_required", "key_missing", "integrity_failed", "key_session_protocol_mismatch":
 		return fault.New(fault.CodeRecoveryRequired, "application vault requires recovery", false, "inspect protection; do not initialize over existing state")
 	case "vault_input_too_large", "limit_exceeded":
 		return fault.New(fault.CodeLimitExceeded, "application value limit exceeded", false, "reduce the bounded input")
+	case "redaction_unavailable":
+		next := "reduce the selected application keys or bundle while keeping output protection enabled"
+		if p.Limit != nil && p.Limit.Valid() {
+			next = fmt.Sprintf("%s; %s observed=%d limit=%d", next, p.Limit.Kind, p.Limit.Observed, p.Limit.Limit)
+		}
+		return fault.New(fault.CodeLimitExceeded, "application output protection limit exceeded", false, next)
+	case "delivery_outcome_unknown", "delivery_pending":
+		return fault.New(fault.CodeDeliveryUnknown, "application delivery outcome requires inspection", false, "inspect the original Job and delivery record; do not prepare or send another execution")
+	case "passphrase_required", "passphrase_mismatch":
+		return fault.New(fault.CodeInvalidInput, "application protection passphrase input is required or inconsistent", false, "provide the original operation credentials through private input")
 	case "value_expired":
 		return fault.New(fault.CodeInputExpired, "the selected application input has expired", false, "inspect the exact layer before an administrator edit")
 	case "invalid_argument", "env_not_found", "key_not_found":
