@@ -75,7 +75,10 @@ func CommitCandidate(options PrepareOptions, expected Identity, generation strin
 	if err := RequireExistingGeneration(options.StateRoot, target); err != nil {
 		return Identity{}, err
 	}
-	prepared, err := PrepareCandidate(options, expected, generation)
+	// Selector publication owns persistent metadata only. Runtime projections
+	// belong to explicit candidate/serving preparation and may be absent or
+	// outside this finite helper's mount namespace during a cold cutover.
+	prepared, err := prepareGeneration(options, false, &candidateSelection{expected: expected, generation: generation})
 	if err != nil {
 		return Identity{}, err
 	}

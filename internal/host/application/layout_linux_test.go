@@ -204,9 +204,15 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 		if err := os.Rename(missing, candidate.HostGeneration); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Rename(stageRuntime, stageRuntime+".retained"); err != nil {
+			t.Fatal(err)
+		}
 		selected, err := CommitCandidate(stageOptions, first.Identity, generation)
 		if err != nil || selected != candidate.Identity {
 			t.Fatal("selector/policy publication failed", err)
+		}
+		if _, err := os.Lstat(stageRuntime); !os.IsNotExist(err) {
+			t.Fatal("selector publication recreated a runtime projection", err)
 		}
 		if replay, err := CommitCandidate(stageOptions, first.Identity, generation); err != nil || replay != selected {
 			t.Fatal("lost selector ACK changed generation or policy", err)
