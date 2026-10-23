@@ -38,6 +38,11 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	if err := os.Mkdir(workspace, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// Acceptance runs with umask 077. Bind the actual public workspace leaf
+	// with explicit traversal for the configured unprivileged runtime UID.
+	if err := os.Chmod(workspace, 0755); err != nil {
+		t.Fatal(err)
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
