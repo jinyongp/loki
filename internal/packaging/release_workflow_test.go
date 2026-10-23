@@ -92,10 +92,13 @@ func TestSelectiveReleasePublicationNeedsExactFinalGate(t *testing.T) {
 	}
 	var lifecycle bool
 	for _, step := range jobs["publish"].Steps {
-		if strings.HasPrefix(step.Uses, "releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d") {
+		if strings.HasPrefix(step.Uses, "releaseway/actions@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3") {
 			lifecycle = true
 			if step.With["upload-concurrency"] != "4" {
 				t.Fatal("publisher must use four bounded simultaneous uploads")
+			}
+			if step.With["notes"] != "standard" || step.With["notes-file"] != "" || step.With["notes-existing"] != "auto" {
+				t.Fatal("use Releaseway standard notes and preserve existing immutable release bodies")
 			}
 		}
 		if strings.Contains(step.Run, "gh release create") || strings.Contains(step.Run, "skopeo copy") {

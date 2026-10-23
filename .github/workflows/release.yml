@@ -729,16 +729,15 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA"
           sh scripts/maintainer/publish-tag.sh "v$RELEASE" "$GITHUB_SHA"
       - id: release
-        uses: releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d # v0.4.1
+        uses: releaseway/actions@b6f17f2ffe2c8fd92bdf6be4729e1e56d151bef3 # v0.8.0
         with:
           tag: v${{ needs.plan.outputs.version }}
           commit: ${{ github.sha }}
           assets: publication/assets/*
           upload-concurrency: '4'
           title: Loki ${{ needs.plan.outputs.version }}
-          notes: file
-          notes-file: publication/assets/loki-release-notes.md
-          notes-existing: verify
+          notes: standard
+          notes-existing: auto
           prerelease: 'false'
           latest: 'true'
       - name: Retain publication diagnostics
