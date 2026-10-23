@@ -41,7 +41,7 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate, rollbac
 		}
 		t.Skip("native package suite supplies the immutable image")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
 	store := migrationCandidateStore(t)
 	b, err := NewDockerFullBackend(store, "", io.Discard)
@@ -289,6 +289,9 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate, rollbac
 		if err != nil || actual != want {
 			t.Fatal("serving driver did not preserve original generation/policy selection", err)
 		}
+		if selectCandidate {
+			verifyManagedFullPolicyReplacement(t, ctx, store, b, actual, &serving)
+		}
 		return
 	}
 	err = store.WithSecretMigrationJournal(ctx, lifecycle.OperationJournalOptions{}, func(j *lifecycle.OperationJournal) error {
@@ -413,6 +416,46 @@ func runRealManagedFullMigrationCandidate(t *testing.T, selectCandidate, rollbac
 	var actualIdentity hostapplication.Identity
 	if err != nil || json.Unmarshal(stillBefore, &actualIdentity) != nil || actualIdentity != wantIdentity {
 		t.Fatal("actual selector differs from the original host checkpoint", err)
+	}
+}
+
+func verifyManagedFullPolicyReplacement(t *testing.T, ctx context.Context, store Store, b *DockerFullBackend, before hostapplication.Identity, serving **DeploymentReservation) {
+	t.Helper()
+	state, err := store.Load()
+	if err != nil || len(state.ApplicationResources) != 1 {
+		t.Fatal("selected full resource unavailable", err)
+	}
+	resource := state.ApplicationResources[0]
+	keys := make(map[string]string, len(resource.Keys)+1)
+	for name, kind := range resource.Keys {
+		keys[name] = kind
+	}
+	keys["PUBLIC_EXTRA"] = "variable"
+	resource.Keys = keys
+	plan, err := store.PrepareApplicationResources(hostpolicy.ApplicationChange{Action: "set", Alias: resource.Alias, Resource: &resource})
+	if err != nil {
+		t.Fatal("prepare actual full policy replacement", err)
+	}
+	store.MaintenanceBackend = b
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := store.ApplyApplicationResources(ctx, plan); err != nil {
+			t.Fatal("apply/replay actual full policy replacement", err)
+		}
+		ready, err := store.ReconcileFull(ctx, b)
+		if ready.Deployment != nil {
+			*serving = ready.Deployment
+		}
+		if err != nil || !ready.Observation.Ready {
+			t.Fatal("changed full policy did not recover real service readiness", err)
+		}
+		actual, err := b.inspectApplicationIdentity(ctx, false)
+		if err != nil || actual.PolicySHA256 == before.PolicySHA256 {
+			t.Fatal("selected full policy was not committed", err)
+		}
+		actual.PolicySHA256 = before.PolicySHA256
+		if actual != before {
+			t.Fatal("full policy replacement changed retained application authority")
+		}
 	}
 }
 
