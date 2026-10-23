@@ -71,9 +71,10 @@ func ServeAdmin(ctx context.Context, options AdminOptions) error {
 }
 
 func serveAdmin(ctx context.Context, conn *net.UnixConn, options AdminOptions) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	deadline, _ := ctx.Deadline()
+	deadline := time.Now().Add(30 * time.Second)
+	if parent, ok := ctx.Deadline(); ok && parent.Before(deadline) {
+		deadline = parent
+	}
 	conn.SetDeadline(deadline)
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
@@ -93,9 +94,15 @@ func serveAdmin(ctx context.Context, conn *net.UnixConn, options AdminOptions) {
 		defer clear(body)
 	}
 	if request.Action == "migration_compare" {
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		deadline, _ := ctx.Deadline()
+		conn.SetDeadline(deadline)
 		serveMigrationComparison(ctx, conn, options.Migration, request, body)
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, time.Until(deadline))
+	defer cancel()
 	out, err := options.Values.Admin(ctx, request, body)
 	r := adminResponse{OK: err == nil, Result: out}
 	if err != nil {

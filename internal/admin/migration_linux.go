@@ -32,7 +32,7 @@ func (c ApplicationClient) CompareMigration(ctx context.Context, operation strin
 	for _, value := range expected {
 		request.Members = append(request.Members, value.Name)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	connection, err := (&net.Dialer{}).DialContext(ctx, "unix", c.Socket)
 	if err != nil {

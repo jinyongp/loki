@@ -94,7 +94,10 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 		keys = append(keys, v.Name)
 	}
 	sort.Strings(keys)
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Offline host comparison performs several durable provider operations.
+	// Its cleanup must also complete on a CPU-emulated recovery host; the
+	// ordinary Job execution/admission budgets do not apply to this channel.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	op := func(action string) string {
 		return privateio.OperationID(options.Operation, options.Attempt, "migration-compare/"+action)
@@ -111,7 +114,7 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	delivered := false
 	defer func() {
 		if !delivered {
-			cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
+			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			defer stop()
 			_, _ = options.Provider.Cancel(cleanup, resource.Profile(), op("cancel"), execution)
 		}
@@ -162,7 +165,7 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	go func() { defer close(receiverDone); _ = r.Serve(receiverCtx, listener) }()
 	defer func() { stopReceiver(); listener.Close(); <-receiverDone }()
 	defer func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
+		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
 		if err := options.Provider.Unregister(cleanup, options.Runner, options.Instance, op("unregister")); err != nil && resultErr == nil {
 			result, resultErr = MigrationComparisonResult{}, migrationFailure("unregister")
