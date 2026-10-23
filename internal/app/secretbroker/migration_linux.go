@@ -109,6 +109,7 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	}
 	execution, err := options.Provider.Prepare(ctx, resource.Profile(), options.Environment, correlation, op("prepare"), "", keys)
 	if err != nil {
+		reportProviderFailure("migration_prepare", correlation, err)
 		return result, migrationFailure("prepare")
 	}
 	delivered := false
@@ -176,11 +177,13 @@ func CompareMigration(ctx context.Context, options MigrationComparisonOptions) (
 	}
 	next, err := options.Provider.Approve(ctx, resource.Profile(), options.Runner, options.Instance, op("approve"), execution)
 	if err != nil {
+		reportProviderFailure("migration_approve", correlation, err)
 		return result, migrationFailure("approve")
 	}
 	execution = next
 	next, err = options.Provider.Deliver(ctx, resource.Profile(), op("deliver"), execution)
 	if err != nil {
+		reportProviderFailure("migration_deliver", correlation, err)
 		return result, migrationFailure("deliver")
 	}
 	execution = next

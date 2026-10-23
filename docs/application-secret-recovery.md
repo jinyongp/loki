@@ -48,6 +48,9 @@ devtools가 대상 자격과 원래 작업을 인증한다. pending rewrap은 in
 `kind/observed/limit`는 정규화된 matcher의 거절 시점 수치이며 원래 secret 개수와
 같다고 가정하지 않는다. raw 출력으로 우회하지 않는다. delivery 결과 불명은 원래
 Job·전달 기록을 조회하며 새 실행을 준비하거나 다시 전달하지 않는다.
+Job 준비·승인·전달과 이관 비교의 provider 실패는 broker journal에 단계,
+Job 또는 비교 correlation ID, 안전한 오류 코드와 복구 안내를 남긴다.
+provider의 원문 오류·경로·실행 가능한 remedy는 기록하지 않는다.
 
 ## 준비
 

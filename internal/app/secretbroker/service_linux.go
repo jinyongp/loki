@@ -252,7 +252,11 @@ func (s *Service) serveJob(serviceCtx context.Context, conn *net.UnixConn) {
 	}
 	op := func(name string) string { return privateio.OperationID(open.DeploymentID, open.JobID, name) }
 	execution, err := s.options.Provider.Prepare(ctx, resource.Profile(), env, open.JobID, op("prepare"), resource.Bundle, keys)
-	if err != nil || execution.JobID != open.JobID {
+	if err != nil {
+		reportProviderFailure("prepare", open.JobID, err)
+		return
+	}
+	if execution.JobID != open.JobID {
 		return
 	}
 	s.mu.Lock()
@@ -267,6 +271,7 @@ func (s *Service) serveJob(serviceCtx context.Context, conn *net.UnixConn) {
 	}
 	execution, err = s.options.Provider.Approve(ctx, resource.Profile(), s.options.RunnerID, s.options.InstanceID, op("approve"), execution)
 	if err != nil {
+		reportProviderFailure("approve", open.JobID, err)
 		return
 	}
 	s.mu.Lock()
@@ -288,6 +293,7 @@ func (s *Service) serveJob(serviceCtx context.Context, conn *net.UnixConn) {
 	job.execution = execution
 	close(job.delivered)
 	if err != nil {
+		reportProviderFailure("deliver", open.JobID, err)
 		return
 	}
 	_ = conn.SetDeadline(time.Time{})
