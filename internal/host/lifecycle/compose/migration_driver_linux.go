@@ -99,7 +99,7 @@ func (b *Backend) freezeMigration(ctx context.Context, r lifecycle.OperationReco
 			return err
 		}
 	} else {
-		if _, err := os.Lstat(filepath.Join(state.ApplicationRuntimeRoot, "roles", "launcher.json")); os.IsNotExist(err) {
+		if _, err := os.Lstat(state.ApplicationRuntimeRoot); os.IsNotExist(err) {
 			// A host reboot erases tmpfs roles but preserves the original Job
 			// journal. Only this locked operation may rebuild its pre-cutover
 			// projection; this never starts services or initializes protection.
