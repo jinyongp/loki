@@ -65,26 +65,24 @@ build_target() {
   fi
 }
 
-go_dir="$tmp/go-$arch"
-ripgrep_dir="$tmp/ripgrep-$arch"
-build_target go-export "$go_dir"
-build_target ripgrep-export "$ripgrep_dir"
+inputs_dir="$tmp/inputs-$arch"
+build_target inputs-export "$inputs_dir"
 
 for binary in devtools gh; do
-  test -x "$go_dir/$binary" || {
-    echo "::error title=release input go-export linux/$arch::missing $binary output" >&2
+  test -x "$inputs_dir/$binary" || {
+    echo "::error title=release input inputs-export linux/$arch::missing $binary output" >&2
     exit 1
   }
 done
-test -x "$ripgrep_dir/rg" || {
-  echo "::error title=release input ripgrep-export linux/$arch::missing rg output" >&2
+test -x "$inputs_dir/rg" || {
+  echo "::error title=release input inputs-export linux/$arch::missing rg output" >&2
   exit 1
 }
 
 install -d "$tmp/output/devtools/$arch" "$tmp/output/ripgrep/$arch" "$tmp/output/gh/$arch"
-install -m 0755 "$go_dir/devtools" "$tmp/output/devtools/$arch/devtools"
-install -m 0755 "$ripgrep_dir/rg" "$tmp/output/ripgrep/$arch/rg"
-install -m 0755 "$go_dir/gh" "$tmp/output/gh/$arch/gh"
+install -m 0755 "$inputs_dir/devtools" "$tmp/output/devtools/$arch/devtools"
+install -m 0755 "$inputs_dir/rg" "$tmp/output/ripgrep/$arch/rg"
+install -m 0755 "$inputs_dir/gh" "$tmp/output/gh/$arch/gh"
 
 printf '%s\n' \
   "arch=$arch" \

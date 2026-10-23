@@ -44,3 +44,10 @@ COPY --from=go-tools /out/gh /gh
 
 FROM scratch AS ripgrep-export
 COPY --from=ripgrep /src/ripgrep/target/release-lto/rg /rg
+
+# A single BuildKit graph schedules independent Go and Rust inputs together.
+# Keep the individual export targets for callers that need only one family.
+FROM scratch AS inputs-export
+COPY --from=go-tools /out/devtools /devtools
+COPY --from=go-tools /out/gh /gh
+COPY --from=ripgrep /src/ripgrep/target/release-lto/rg /rg
