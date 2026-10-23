@@ -1,0 +1,5040 @@
+{
+  "id": 39981008103,
+  "name": "Loki release",
+  "event": "workflow_dispatch",
+  "status": "completed",
+  "conclusion": "cancelled",
+  "head_sha": "239e8b956f3d6b879742720ad9abea4c5d9fbdbe",
+  "created_at": "2026-10-23T15:45:28Z",
+  "run_started_at": "2026-10-23T15:45:28Z",
+  "updated_at": "2026-10-23T16:13:40Z",
+  "run_attempt": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "jobs": [
+        {
+          "id": 120507963015,
+          "name": "plan",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:45:30Z",
+          "started_at": "2026-10-23T15:45:32Z",
+          "completed_at": "2026-10-23T15:46:04Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015440",
+          "seconds": 32.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:33Z",
+              "completed_at": "2026-10-23T15:45:35Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:35Z",
+              "completed_at": "2026-10-23T15:45:37Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:37Z",
+              "completed_at": "2026-10-23T15:45:47Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:47Z",
+              "completed_at": "2026-10-23T15:45:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:47Z",
+              "completed_at": "2026-10-23T15:45:50Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 6,
+              "name": "Run test \"$GITHUB_REF\" = refs/heads/main",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:50Z",
+              "completed_at": "2026-10-23T15:45:56Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:56Z",
+              "completed_at": "2026-10-23T15:45:57Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 12,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:45:57Z",
+              "completed_at": "2026-10-23T15:46:01Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 13,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:01Z",
+              "completed_at": "2026-10-23T15:46:01Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:01Z",
+              "completed_at": "2026-10-23T15:46:01Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 15,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:01Z",
+              "completed_at": "2026-10-23T15:46:01Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120507965151,
+          "name": "setup-checks",
+          "status": "completed",
+          "conclusion": "skipped",
+          "created_at": "2026-10-23T15:45:30Z",
+          "started_at": "2026-10-23T15:45:30Z",
+          "completed_at": "2026-10-23T15:45:30Z",
+          "run_attempt": 1,
+          "runner_name": null,
+          "seconds": null,
+          "queue_seconds": 0.0,
+          "steps": []
+        },
+        {
+          "id": 120508248652,
+          "name": "full-build (linux, amd64, ubuntu-24.04, runtime-core, browser, workspace, git, github, secrets, e...",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:06Z",
+          "completed_at": "2026-10-23T15:54:49Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015442",
+          "seconds": 523.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:07Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:12Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:12Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:29Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:29Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:34Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 8,
+              "name": "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:34Z",
+              "completed_at": "2026-10-23T15:46:42Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 9,
+              "name": "Install registry client and authenticated native package tooling",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:42Z",
+              "completed_at": "2026-10-23T15:46:47Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 10,
+              "name": "Build selected native full units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:47Z",
+              "completed_at": "2026-10-23T15:54:27Z",
+              "seconds": 460.0
+            },
+            {
+              "number": 11,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:27Z",
+              "completed_at": "2026-10-23T15:54:39Z",
+              "seconds": 12.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:39Z",
+              "completed_at": "2026-10-23T15:54:39Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 19,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:39Z",
+              "completed_at": "2026-10-23T15:54:40Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 20,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:40Z",
+              "completed_at": "2026-10-23T15:54:46Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 21,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:46Z",
+              "completed_at": "2026-10-23T15:54:46Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 22,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:46Z",
+              "completed_at": "2026-10-23T15:54:46Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 23,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:54:46Z",
+              "completed_at": "2026-10-23T15:54:46Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248727,
+          "name": "full-build (linux, arm64, ubuntu-24.04-arm, runtime-core, browser, workspace, git, github, secret...",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:07Z",
+          "completed_at": "2026-10-23T15:53:33Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015446",
+          "seconds": 446.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:08Z",
+              "completed_at": "2026-10-23T15:46:11Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:11Z",
+              "completed_at": "2026-10-23T15:46:13Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:13Z",
+              "completed_at": "2026-10-23T15:46:22Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:22Z",
+              "completed_at": "2026-10-23T15:46:22Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:22Z",
+              "completed_at": "2026-10-23T15:46:31Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:31Z",
+              "completed_at": "2026-10-23T15:46:33Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:33Z",
+              "completed_at": "2026-10-23T15:46:40Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 8,
+              "name": "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:40Z",
+              "completed_at": "2026-10-23T15:47:02Z",
+              "seconds": 22.0
+            },
+            {
+              "number": 9,
+              "name": "Install registry client and authenticated native package tooling",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:02Z",
+              "completed_at": "2026-10-23T15:47:23Z",
+              "seconds": 21.0
+            },
+            {
+              "number": 10,
+              "name": "Build selected native full units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:23Z",
+              "completed_at": "2026-10-23T15:53:06Z",
+              "seconds": 343.0
+            },
+            {
+              "number": 11,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:06Z",
+              "completed_at": "2026-10-23T15:53:23Z",
+              "seconds": 17.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:23Z",
+              "completed_at": "2026-10-23T15:53:24Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 19,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:24Z",
+              "completed_at": "2026-10-23T15:53:24Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 20,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:24Z",
+              "completed_at": "2026-10-23T15:53:30Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 21,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:30Z",
+              "completed_at": "2026-10-23T15:53:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 22,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:30Z",
+              "completed_at": "2026-10-23T15:53:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 23,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:53:30Z",
+              "completed_at": "2026-10-23T15:53:30Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248894,
+          "name": "manager-build (linux, arm64, ubuntu-24.04-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:07Z",
+          "completed_at": "2026-10-23T15:46:32Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015445",
+          "seconds": 25.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:08Z",
+              "completed_at": "2026-10-23T15:46:09Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:09Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:19Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:19Z",
+              "completed_at": "2026-10-23T15:46:19Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:19Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:22Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:22Z",
+              "completed_at": "2026-10-23T15:46:25Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:25Z",
+              "completed_at": "2026-10-23T15:46:26Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:26Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248903,
+          "name": "manager-build (darwin, amd64, macos-15-intel)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:08Z",
+          "completed_at": "2026-10-23T15:47:46Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015441",
+          "seconds": 98.0,
+          "queue_seconds": 4.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:14Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:14Z",
+              "completed_at": "2026-10-23T15:46:18Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:18Z",
+              "completed_at": "2026-10-23T15:47:07Z",
+              "seconds": 49.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:07Z",
+              "completed_at": "2026-10-23T15:47:07Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:07Z",
+              "completed_at": "2026-10-23T15:47:21Z",
+              "seconds": 14.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:21Z",
+              "completed_at": "2026-10-23T15:47:23Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:23Z",
+              "completed_at": "2026-10-23T15:47:28Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:28Z",
+              "completed_at": "2026-10-23T15:47:30Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:30Z",
+              "completed_at": "2026-10-23T15:47:39Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:39Z",
+              "completed_at": "2026-10-23T15:47:40Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:40Z",
+              "completed_at": "2026-10-23T15:47:41Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:41Z",
+              "completed_at": "2026-10-23T15:47:41Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248934,
+          "name": "browser-build (windows, amd64, windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:07Z",
+          "completed_at": "2026-10-23T15:48:02Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015443",
+          "seconds": 115.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:08Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:17Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:17Z",
+              "completed_at": "2026-10-23T15:46:39Z",
+              "seconds": 22.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:39Z",
+              "completed_at": "2026-10-23T15:46:40Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:40Z",
+              "completed_at": "2026-10-23T15:46:42Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:42Z",
+              "completed_at": "2026-10-23T15:46:43Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:43Z",
+              "completed_at": "2026-10-23T15:46:45Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Build selected native browser units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:45Z",
+              "completed_at": "2026-10-23T15:47:51Z",
+              "seconds": 66.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:51Z",
+              "completed_at": "2026-10-23T15:47:54Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:54Z",
+              "completed_at": "2026-10-23T15:47:55Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:55Z",
+              "completed_at": "2026-10-23T15:47:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 17,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:57Z",
+              "completed_at": "2026-10-23T15:47:57Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:57Z",
+              "completed_at": "2026-10-23T15:47:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:59Z",
+              "completed_at": "2026-10-23T15:47:59Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248938,
+          "name": "manager-build (windows, arm64, windows-11-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:07Z",
+          "completed_at": "2026-10-23T15:47:49Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015450",
+          "seconds": 102.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:08Z",
+              "completed_at": "2026-10-23T15:46:11Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:11Z",
+              "completed_at": "2026-10-23T15:46:22Z",
+              "seconds": 11.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:22Z",
+              "completed_at": "2026-10-23T15:47:10Z",
+              "seconds": 48.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:10Z",
+              "completed_at": "2026-10-23T15:47:11Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:11Z",
+              "completed_at": "2026-10-23T15:47:24Z",
+              "seconds": 13.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:24Z",
+              "completed_at": "2026-10-23T15:47:25Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:25Z",
+              "completed_at": "2026-10-23T15:47:30Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:30Z",
+              "completed_at": "2026-10-23T15:47:33Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:33Z",
+              "completed_at": "2026-10-23T15:47:40Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:40Z",
+              "completed_at": "2026-10-23T15:47:40Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:40Z",
+              "completed_at": "2026-10-23T15:47:45Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:45Z",
+              "completed_at": "2026-10-23T15:47:45Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248943,
+          "name": "manager-build (linux, amd64, ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:06Z",
+          "completed_at": "2026-10-23T15:46:33Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015447",
+          "seconds": 27.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:07Z",
+              "completed_at": "2026-10-23T15:46:09Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:09Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:18Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:18Z",
+              "completed_at": "2026-10-23T15:46:18Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:18Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:22Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:22Z",
+              "completed_at": "2026-10-23T15:46:24Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:24Z",
+              "completed_at": "2026-10-23T15:46:26Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:26Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:30Z",
+              "completed_at": "2026-10-23T15:46:30Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248963,
+          "name": "browser-build (darwin, arm64, macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:56:15Z",
+          "completed_at": "2026-10-23T15:57:35Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015458",
+          "seconds": 80.0,
+          "queue_seconds": 611.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:15Z",
+              "completed_at": "2026-10-23T15:56:17Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:17Z",
+              "completed_at": "2026-10-23T15:56:19Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:19Z",
+              "completed_at": "2026-10-23T15:56:34Z",
+              "seconds": 15.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:34Z",
+              "completed_at": "2026-10-23T15:56:34Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:34Z",
+              "completed_at": "2026-10-23T15:56:36Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:36Z",
+              "completed_at": "2026-10-23T15:56:37Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:37Z",
+              "completed_at": "2026-10-23T15:56:42Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 8,
+              "name": "Build selected native browser units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:42Z",
+              "completed_at": "2026-10-23T15:57:22Z",
+              "seconds": 40.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:22Z",
+              "completed_at": "2026-10-23T15:57:29Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:29Z",
+              "completed_at": "2026-10-23T15:57:29Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:29Z",
+              "completed_at": "2026-10-23T15:57:31Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 17,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:31Z",
+              "completed_at": "2026-10-23T15:57:31Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:31Z",
+              "completed_at": "2026-10-23T15:57:32Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:32Z",
+              "completed_at": "2026-10-23T15:57:32Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508248988,
+          "name": "manager-build (darwin, arm64, macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:56:11Z",
+          "completed_at": "2026-10-23T15:57:09Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015457",
+          "seconds": 58.0,
+          "queue_seconds": 607.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:12Z",
+              "completed_at": "2026-10-23T15:56:14Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:14Z",
+              "completed_at": "2026-10-23T15:56:18Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:18Z",
+              "completed_at": "2026-10-23T15:56:40Z",
+              "seconds": 22.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:40Z",
+              "completed_at": "2026-10-23T15:56:40Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:40Z",
+              "completed_at": "2026-10-23T15:56:45Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:45Z",
+              "completed_at": "2026-10-23T15:56:46Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:46Z",
+              "completed_at": "2026-10-23T15:56:49Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:49Z",
+              "completed_at": "2026-10-23T15:56:50Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:56:50Z",
+              "completed_at": "2026-10-23T15:57:03Z",
+              "seconds": 13.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:03Z",
+              "completed_at": "2026-10-23T15:57:03Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:03Z",
+              "completed_at": "2026-10-23T15:57:04Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:04Z",
+              "completed_at": "2026-10-23T15:57:04Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508249028,
+          "name": "browser-build (linux, amd64, ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:07Z",
+          "completed_at": "2026-10-23T15:47:17Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015448",
+          "seconds": 70.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:08Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:11Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:11Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:23Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:23Z",
+              "completed_at": "2026-10-23T15:46:24Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:24Z",
+              "completed_at": "2026-10-23T15:46:29Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 8,
+              "name": "Build selected native browser units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:29Z",
+              "completed_at": "2026-10-23T15:47:06Z",
+              "seconds": 37.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:06Z",
+              "completed_at": "2026-10-23T15:47:12Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:12Z",
+              "completed_at": "2026-10-23T15:47:12Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:12Z",
+              "completed_at": "2026-10-23T15:47:14Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 17,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:14Z",
+              "completed_at": "2026-10-23T15:47:14Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:14Z",
+              "completed_at": "2026-10-23T15:47:14Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:14Z",
+              "completed_at": "2026-10-23T15:47:14Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508249044,
+          "name": "manager-build (windows, amd64, windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:08Z",
+          "completed_at": "2026-10-23T15:47:18Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015451",
+          "seconds": 70.0,
+          "queue_seconds": 4.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:09Z",
+              "completed_at": "2026-10-23T15:46:11Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:11Z",
+              "completed_at": "2026-10-23T15:46:18Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:18Z",
+              "completed_at": "2026-10-23T15:46:42Z",
+              "seconds": 24.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:42Z",
+              "completed_at": "2026-10-23T15:46:44Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:44Z",
+              "completed_at": "2026-10-23T15:46:59Z",
+              "seconds": 15.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:59Z",
+              "completed_at": "2026-10-23T15:47:00Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Build selected native manager units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:00Z",
+              "completed_at": "2026-10-23T15:47:05Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:05Z",
+              "completed_at": "2026-10-23T15:47:07Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:07Z",
+              "completed_at": "2026-10-23T15:47:13Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:13Z",
+              "completed_at": "2026-10-23T15:47:14Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:14Z",
+              "completed_at": "2026-10-23T15:47:16Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 17,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:16Z",
+              "completed_at": "2026-10-23T15:47:16Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508249051,
+          "name": "browser-build (linux, arm64, ubuntu-24.04-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:04Z",
+          "started_at": "2026-10-23T15:46:06Z",
+          "completed_at": "2026-10-23T15:46:58Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015452",
+          "seconds": 52.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:07Z",
+              "completed_at": "2026-10-23T15:46:09Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:09Z",
+              "completed_at": "2026-10-23T15:46:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:10Z",
+              "completed_at": "2026-10-23T15:46:19Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:19Z",
+              "completed_at": "2026-10-23T15:46:19Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:19Z",
+              "completed_at": "2026-10-23T15:46:20Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:20Z",
+              "completed_at": "2026-10-23T15:46:21Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:21Z",
+              "completed_at": "2026-10-23T15:46:23Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Build selected native browser units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:23Z",
+              "completed_at": "2026-10-23T15:46:50Z",
+              "seconds": 27.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:50Z",
+              "completed_at": "2026-10-23T15:46:54Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:54Z",
+              "completed_at": "2026-10-23T15:46:54Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:54Z",
+              "completed_at": "2026-10-23T15:46:56Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 17,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:56Z",
+              "completed_at": "2026-10-23T15:46:56Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:56Z",
+              "completed_at": "2026-10-23T15:46:56Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:56Z",
+              "completed_at": "2026-10-23T15:46:56Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120508249614,
+          "name": "browser-build (darwin, amd64, macos-15-intel)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:46:05Z",
+          "started_at": "2026-10-23T15:46:08Z",
+          "completed_at": "2026-10-23T15:48:30Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015453",
+          "seconds": 142.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:09Z",
+              "completed_at": "2026-10-23T15:46:12Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:12Z",
+              "completed_at": "2026-10-23T15:46:16Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:16Z",
+              "completed_at": "2026-10-23T15:46:51Z",
+              "seconds": 35.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:51Z",
+              "completed_at": "2026-10-23T15:46:51Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:51Z",
+              "completed_at": "2026-10-23T15:46:54Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:54Z",
+              "completed_at": "2026-10-23T15:46:55Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:46:55Z",
+              "completed_at": "2026-10-23T15:47:05Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 8,
+              "name": "Build selected native browser units",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:47:05Z",
+              "completed_at": "2026-10-23T15:48:12Z",
+              "seconds": 67.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:12Z",
+              "completed_at": "2026-10-23T15:48:18Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 15,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:18Z",
+              "completed_at": "2026-10-23T15:48:19Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 16,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:19Z",
+              "completed_at": "2026-10-23T15:48:24Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 17,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:24Z",
+              "completed_at": "2026-10-23T15:48:24Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:24Z",
+              "completed_at": "2026-10-23T15:48:25Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:48:25Z",
+              "completed_at": "2026-10-23T15:48:26Z",
+              "seconds": 1.0
+            }
+          ]
+        },
+        {
+          "id": 120513884033,
+          "name": "assemble",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T15:57:36Z",
+          "started_at": "2026-10-23T15:57:38Z",
+          "completed_at": "2026-10-23T16:03:51Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015459",
+          "seconds": 373.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:38Z",
+              "completed_at": "2026-10-23T15:57:41Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:41Z",
+              "completed_at": "2026-10-23T15:57:43Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:43Z",
+              "completed_at": "2026-10-23T15:57:44Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 4,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T15:57:44Z",
+              "completed_at": "2026-10-23T16:03:01Z",
+              "seconds": 317.0
+            },
+            {
+              "number": 5,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py assemble --plan plan/plan.json --built built --output publication",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:01Z",
+              "completed_at": "2026-10-23T16:03:09Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:09Z",
+              "completed_at": "2026-10-23T16:03:45Z",
+              "seconds": 36.0
+            },
+            {
+              "number": 7,
+              "name": "Retain installer pages for deployment and public verification",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:45Z",
+              "completed_at": "2026-10-23T16:03:47Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Retain small acceptance metadata",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:47Z",
+              "completed_at": "2026-10-23T16:03:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:47Z",
+              "completed_at": "2026-10-23T16:03:49Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:49Z",
+              "completed_at": "2026-10-23T16:03:49Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:49Z",
+              "completed_at": "2026-10-23T16:03:49Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971109,
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:54Z",
+          "completed_at": "2026-10-23T16:11:01Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015460",
+          "seconds": 427.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:58Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:58Z",
+              "completed_at": "2026-10-23T16:04:07Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:07Z",
+              "completed_at": "2026-10-23T16:04:07Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:07Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:10Z",
+              "completed_at": "2026-10-23T16:04:12Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:12Z",
+              "completed_at": "2026-10-23T16:09:22Z",
+              "seconds": 310.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:22Z",
+              "completed_at": "2026-10-23T16:09:23Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:23Z",
+              "completed_at": "2026-10-23T16:09:23Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Prepare disposable Docker acceptance runtime",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:23Z",
+              "completed_at": "2026-10-23T16:09:29Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 12,
+              "name": "Accept confined workspace service, revocation and every exact registry digest",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:29Z",
+              "completed_at": "2026-10-23T16:09:29Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 13,
+              "name": "Run full source and product acceptance",
+              "status": "completed",
+              "conclusion": "failure",
+              "started_at": "2026-10-23T16:09:29Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": 88.0
+            },
+            {
+              "number": 14,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": null
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": null
+            },
+            {
+              "number": 29,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": null
+            },
+            {
+              "number": 30,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 31,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:57Z",
+              "completed_at": "2026-10-23T16:10:57Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971116,
+          "name": "source-checks",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:54Z",
+          "completed_at": "2026-10-23T16:04:56Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015463",
+          "seconds": 62.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:58Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:58Z",
+              "completed_at": "2026-10-23T16:04:06Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:06Z",
+              "completed_at": "2026-10-23T16:04:06Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:06Z",
+              "completed_at": "2026-10-23T16:04:10Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 6,
+              "name": "Prepare the pinned native search test prerequisite",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:10Z",
+              "completed_at": "2026-10-23T16:04:11Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Final source contracts and release selection fixtures",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:11Z",
+              "completed_at": "2026-10-23T16:04:52Z",
+              "seconds": 41.0
+            },
+            {
+              "number": 12,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:52Z",
+              "completed_at": "2026-10-23T16:04:52Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 13,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:52Z",
+              "completed_at": "2026-10-23T16:04:52Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:52Z",
+              "completed_at": "2026-10-23T16:04:53Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 15,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:53Z",
+              "completed_at": "2026-10-23T16:04:53Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971254,
+          "name": "manager-checks (windows, arm64, windows-11-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:54Z",
+          "completed_at": "2026-10-23T16:07:56Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015461",
+          "seconds": 242.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:04:07Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:07Z",
+              "completed_at": "2026-10-23T16:04:54Z",
+              "seconds": 47.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:54Z",
+              "completed_at": "2026-10-23T16:04:56Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:56Z",
+              "completed_at": "2026-10-23T16:05:13Z",
+              "seconds": 17.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:13Z",
+              "completed_at": "2026-10-23T16:05:14Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:14Z",
+              "completed_at": "2026-10-23T16:05:15Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:15Z",
+              "completed_at": "2026-10-23T16:05:16Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:16Z",
+              "completed_at": "2026-10-23T16:05:17Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:17Z",
+              "completed_at": "2026-10-23T16:05:18Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:18Z",
+              "completed_at": "2026-10-23T16:07:38Z",
+              "seconds": 140.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:07:38Z",
+              "completed_at": "2026-10-23T16:07:38Z",
+              "seconds": null
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:38Z",
+              "completed_at": "2026-10-23T16:07:39Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:39Z",
+              "completed_at": "2026-10-23T16:07:40Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:40Z",
+              "completed_at": "2026-10-23T16:07:47Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:47Z",
+              "completed_at": "2026-10-23T16:07:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:47Z",
+              "completed_at": "2026-10-23T16:07:52Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:52Z",
+              "completed_at": "2026-10-23T16:07:52Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971257,
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:59Z",
+          "completed_at": "2026-10-23T16:07:50Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015464",
+          "seconds": 231.0,
+          "queue_seconds": 7.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:01Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:01Z",
+              "completed_at": "2026-10-23T16:04:04Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:04Z",
+              "completed_at": "2026-10-23T16:04:25Z",
+              "seconds": 21.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:25Z",
+              "completed_at": "2026-10-23T16:04:26Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:26Z",
+              "completed_at": "2026-10-23T16:04:31Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:31Z",
+              "completed_at": "2026-10-23T16:04:32Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:32Z",
+              "completed_at": "2026-10-23T16:04:33Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:33Z",
+              "completed_at": "2026-10-23T16:04:50Z",
+              "seconds": 17.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:50Z",
+              "completed_at": "2026-10-23T16:04:51Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:51Z",
+              "completed_at": "2026-10-23T16:04:52Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:04:52Z",
+              "completed_at": "2026-10-23T16:04:52Z",
+              "seconds": null
+            },
+            {
+              "number": 12,
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:52Z",
+              "completed_at": "2026-10-23T16:07:35Z",
+              "seconds": 163.0
+            },
+            {
+              "number": 13,
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:07:35Z",
+              "completed_at": "2026-10-23T16:07:35Z",
+              "seconds": null
+            },
+            {
+              "number": 14,
+              "name": "Retain minimal host acceptance diagnostics",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:07:35Z",
+              "completed_at": "2026-10-23T16:07:35Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Remove owned sandbox profile",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:07:35Z",
+              "completed_at": "2026-10-23T16:07:35Z",
+              "seconds": null
+            },
+            {
+              "number": 16,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:35Z",
+              "completed_at": "2026-10-23T16:07:36Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 17,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:36Z",
+              "completed_at": "2026-10-23T16:07:38Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 32,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:38Z",
+              "completed_at": "2026-10-23T16:07:44Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 33,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:44Z",
+              "completed_at": "2026-10-23T16:07:44Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 34,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:44Z",
+              "completed_at": "2026-10-23T16:07:45Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 35,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:45Z",
+              "completed_at": "2026-10-23T16:07:46Z",
+              "seconds": 1.0
+            }
+          ]
+        },
+        {
+          "id": 120516971307,
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:55Z",
+          "completed_at": "2026-10-23T16:10:59Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015462",
+          "seconds": 424.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:56Z",
+              "completed_at": "2026-10-23T16:04:01Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:01Z",
+              "completed_at": "2026-10-23T16:04:08Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:08Z",
+              "completed_at": "2026-10-23T16:05:07Z",
+              "seconds": 59.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:07Z",
+              "completed_at": "2026-10-23T16:05:08Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:08Z",
+              "completed_at": "2026-10-23T16:05:19Z",
+              "seconds": 11.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:19Z",
+              "completed_at": "2026-10-23T16:05:20Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:20Z",
+              "completed_at": "2026-10-23T16:05:22Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:22Z",
+              "completed_at": "2026-10-23T16:05:30Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:30Z",
+              "completed_at": "2026-10-23T16:05:31Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:31Z",
+              "completed_at": "2026-10-23T16:05:35Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 11,
+              "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:05:35Z",
+              "completed_at": "2026-10-23T16:05:35Z",
+              "seconds": null
+            },
+            {
+              "number": 12,
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:35Z",
+              "completed_at": "2026-10-23T16:10:32Z",
+              "seconds": 297.0
+            },
+            {
+              "number": 13,
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:32Z",
+              "completed_at": "2026-10-23T16:10:32Z",
+              "seconds": null
+            },
+            {
+              "number": 14,
+              "name": "Retain minimal host acceptance diagnostics",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:32Z",
+              "completed_at": "2026-10-23T16:10:32Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Remove owned sandbox profile",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:32Z",
+              "completed_at": "2026-10-23T16:10:32Z",
+              "seconds": null
+            },
+            {
+              "number": 16,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:32Z",
+              "completed_at": "2026-10-23T16:10:32Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 17,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:32Z",
+              "completed_at": "2026-10-23T16:10:35Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 32,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:35Z",
+              "completed_at": "2026-10-23T16:10:50Z",
+              "seconds": 15.0
+            },
+            {
+              "number": 33,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:50Z",
+              "completed_at": "2026-10-23T16:10:50Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 34,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:50Z",
+              "completed_at": "2026-10-23T16:10:52Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 35,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:52Z",
+              "completed_at": "2026-10-23T16:10:53Z",
+              "seconds": 1.0
+            }
+          ]
+        },
+        {
+          "id": 120516971327,
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:56Z",
+          "completed_at": "2026-10-23T16:10:16Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015465",
+          "seconds": 380.0,
+          "queue_seconds": 4.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:04:01Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:01Z",
+              "completed_at": "2026-10-23T16:04:02Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:02Z",
+              "completed_at": "2026-10-23T16:04:10Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:10Z",
+              "completed_at": "2026-10-23T16:04:10Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:10Z",
+              "completed_at": "2026-10-23T16:04:13Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:13Z",
+              "completed_at": "2026-10-23T16:04:14Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:14Z",
+              "completed_at": "2026-10-23T16:04:16Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:16Z",
+              "completed_at": "2026-10-23T16:08:47Z",
+              "seconds": 271.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:47Z",
+              "completed_at": "2026-10-23T16:08:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:47Z",
+              "completed_at": "2026-10-23T16:08:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:47Z",
+              "completed_at": "2026-10-23T16:08:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 12,
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:47Z",
+              "completed_at": "2026-10-23T16:10:08Z",
+              "seconds": 81.0
+            },
+            {
+              "number": 13,
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:08Z",
+              "completed_at": "2026-10-23T16:10:08Z",
+              "seconds": null
+            },
+            {
+              "number": 14,
+              "name": "Retain minimal host acceptance diagnostics",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:10:08Z",
+              "completed_at": "2026-10-23T16:10:08Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Remove owned sandbox profile",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:08Z",
+              "completed_at": "2026-10-23T16:10:08Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:08Z",
+              "completed_at": "2026-10-23T16:10:08Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 17,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:08Z",
+              "completed_at": "2026-10-23T16:10:09Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 32,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:09Z",
+              "completed_at": "2026-10-23T16:10:13Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 33,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:13Z",
+              "completed_at": "2026-10-23T16:10:13Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 34,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:13Z",
+              "completed_at": "2026-10-23T16:10:13Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 35,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:13Z",
+              "completed_at": "2026-10-23T16:10:14Z",
+              "seconds": 1.0
+            }
+          ]
+        },
+        {
+          "id": 120516971347,
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:56Z",
+          "completed_at": "2026-10-23T16:08:19Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015467",
+          "seconds": 263.0,
+          "queue_seconds": 4.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:00Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:00Z",
+              "completed_at": "2026-10-23T16:04:08Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:08Z",
+              "completed_at": "2026-10-23T16:04:08Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:08Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:10Z",
+              "completed_at": "2026-10-23T16:07:09Z",
+              "seconds": 179.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:09Z",
+              "completed_at": "2026-10-23T16:07:09Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:09Z",
+              "completed_at": "2026-10-23T16:07:10Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Prepare disposable Docker acceptance runtime",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:10Z",
+              "completed_at": "2026-10-23T16:07:16Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 12,
+              "name": "Accept confined workspace service, revocation and every exact registry digest",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:07:16Z",
+              "completed_at": "2026-10-23T16:07:16Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 13,
+              "name": "Run full source and product acceptance",
+              "status": "completed",
+              "conclusion": "failure",
+              "started_at": "2026-10-23T16:07:16Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": 61.0
+            },
+            {
+              "number": 14,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode full --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": null
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": null
+            },
+            {
+              "number": 29,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": null
+            },
+            {
+              "number": 30,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 31,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:17Z",
+              "completed_at": "2026-10-23T16:08:17Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971375,
+          "name": "manager-checks (windows, amd64, windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:54Z",
+          "completed_at": "2026-10-23T16:05:42Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015470",
+          "seconds": 108.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:04:04Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:04Z",
+              "completed_at": "2026-10-23T16:04:31Z",
+              "seconds": 27.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:31Z",
+              "completed_at": "2026-10-23T16:04:32Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:32Z",
+              "completed_at": "2026-10-23T16:04:47Z",
+              "seconds": 15.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:47Z",
+              "completed_at": "2026-10-23T16:04:48Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:48Z",
+              "completed_at": "2026-10-23T16:04:49Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:49Z",
+              "completed_at": "2026-10-23T16:05:11Z",
+              "seconds": 22.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:11Z",
+              "completed_at": "2026-10-23T16:05:12Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:12Z",
+              "completed_at": "2026-10-23T16:05:13Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:13Z",
+              "completed_at": "2026-10-23T16:05:30Z",
+              "seconds": 17.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:05:30Z",
+              "completed_at": "2026-10-23T16:05:30Z",
+              "seconds": null
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:30Z",
+              "completed_at": "2026-10-23T16:05:30Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:30Z",
+              "completed_at": "2026-10-23T16:05:32Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:32Z",
+              "completed_at": "2026-10-23T16:05:37Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:37Z",
+              "completed_at": "2026-10-23T16:05:37Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:37Z",
+              "completed_at": "2026-10-23T16:05:40Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:40Z",
+              "completed_at": "2026-10-23T16:05:40Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971411,
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:55Z",
+          "completed_at": "2026-10-23T16:08:32Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015472",
+          "seconds": 277.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:56Z",
+              "completed_at": "2026-10-23T16:03:58Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:58Z",
+              "completed_at": "2026-10-23T16:04:05Z",
+              "seconds": 7.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:05Z",
+              "completed_at": "2026-10-23T16:04:35Z",
+              "seconds": 30.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:35Z",
+              "completed_at": "2026-10-23T16:04:36Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:36Z",
+              "completed_at": "2026-10-23T16:04:47Z",
+              "seconds": 11.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:47Z",
+              "completed_at": "2026-10-23T16:04:48Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:48Z",
+              "completed_at": "2026-10-23T16:04:49Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:49Z",
+              "completed_at": "2026-10-23T16:05:30Z",
+              "seconds": 41.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:30Z",
+              "completed_at": "2026-10-23T16:05:31Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:31Z",
+              "completed_at": "2026-10-23T16:05:32Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:05:32Z",
+              "completed_at": "2026-10-23T16:05:32Z",
+              "seconds": null
+            },
+            {
+              "number": 12,
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:32Z",
+              "completed_at": "2026-10-23T16:08:19Z",
+              "seconds": 167.0
+            },
+            {
+              "number": 13,
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:19Z",
+              "completed_at": "2026-10-23T16:08:19Z",
+              "seconds": null
+            },
+            {
+              "number": 14,
+              "name": "Retain minimal host acceptance diagnostics",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:19Z",
+              "completed_at": "2026-10-23T16:08:19Z",
+              "seconds": null
+            },
+            {
+              "number": 15,
+              "name": "Remove owned sandbox profile",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:08:19Z",
+              "completed_at": "2026-10-23T16:08:19Z",
+              "seconds": null
+            },
+            {
+              "number": 16,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:19Z",
+              "completed_at": "2026-10-23T16:08:19Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 17,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:19Z",
+              "completed_at": "2026-10-23T16:08:20Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 32,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:20Z",
+              "completed_at": "2026-10-23T16:08:26Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 33,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:26Z",
+              "completed_at": "2026-10-23T16:08:26Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 34,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:26Z",
+              "completed_at": "2026-10-23T16:08:28Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 35,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:28Z",
+              "completed_at": "2026-10-23T16:08:28Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971413,
+          "name": "manager-checks (linux, amd64, ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:54Z",
+          "completed_at": "2026-10-23T16:09:52Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015471",
+          "seconds": 358.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:14Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:14Z",
+              "completed_at": "2026-10-23T16:04:16Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:16Z",
+              "completed_at": "2026-10-23T16:04:18Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:18Z",
+              "completed_at": "2026-10-23T16:09:28Z",
+              "seconds": 310.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:28Z",
+              "completed_at": "2026-10-23T16:09:28Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:28Z",
+              "completed_at": "2026-10-23T16:09:28Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:28Z",
+              "completed_at": "2026-10-23T16:09:40Z",
+              "seconds": 12.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:40Z",
+              "completed_at": "2026-10-23T16:09:42Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:42Z",
+              "completed_at": "2026-10-23T16:09:42Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:42Z",
+              "completed_at": "2026-10-23T16:09:44Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:44Z",
+              "completed_at": "2026-10-23T16:09:49Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:49Z",
+              "completed_at": "2026-10-23T16:09:49Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:49Z",
+              "completed_at": "2026-10-23T16:09:49Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:49Z",
+              "completed_at": "2026-10-23T16:09:49Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971436,
+          "name": "manager-checks (darwin, arm64, macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:59Z",
+          "completed_at": "2026-10-23T16:05:15Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015466",
+          "seconds": 76.0,
+          "queue_seconds": 7.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:01Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:01Z",
+              "completed_at": "2026-10-23T16:04:03Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:03Z",
+              "completed_at": "2026-10-23T16:04:18Z",
+              "seconds": 15.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:18Z",
+              "completed_at": "2026-10-23T16:04:18Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:18Z",
+              "completed_at": "2026-10-23T16:04:22Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:22Z",
+              "completed_at": "2026-10-23T16:04:23Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:23Z",
+              "completed_at": "2026-10-23T16:04:26Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:26Z",
+              "completed_at": "2026-10-23T16:04:55Z",
+              "seconds": 29.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:55Z",
+              "completed_at": "2026-10-23T16:04:55Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:55Z",
+              "completed_at": "2026-10-23T16:04:55Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:55Z",
+              "completed_at": "2026-10-23T16:05:00Z",
+              "seconds": 5.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:05:00Z",
+              "completed_at": "2026-10-23T16:05:00Z",
+              "seconds": null
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:00Z",
+              "completed_at": "2026-10-23T16:05:00Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:00Z",
+              "completed_at": "2026-10-23T16:05:01Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:01Z",
+              "completed_at": "2026-10-23T16:05:07Z",
+              "seconds": 6.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:07Z",
+              "completed_at": "2026-10-23T16:05:07Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:07Z",
+              "completed_at": "2026-10-23T16:05:08Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:08Z",
+              "completed_at": "2026-10-23T16:05:08Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971483,
+          "name": "manager-checks (linux, arm64, ubuntu-24.04-arm)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:56Z",
+          "completed_at": "2026-10-23T16:08:46Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015468",
+          "seconds": 290.0,
+          "queue_seconds": 4.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:01Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:01Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:13Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:13Z",
+              "completed_at": "2026-10-23T16:04:14Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:14Z",
+              "completed_at": "2026-10-23T16:04:15Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:15Z",
+              "completed_at": "2026-10-23T16:08:25Z",
+              "seconds": 250.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:25Z",
+              "completed_at": "2026-10-23T16:08:25Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:25Z",
+              "completed_at": "2026-10-23T16:08:25Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:25Z",
+              "completed_at": "2026-10-23T16:08:36Z",
+              "seconds": 11.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:36Z",
+              "completed_at": "2026-10-23T16:08:37Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:37Z",
+              "completed_at": "2026-10-23T16:08:37Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:37Z",
+              "completed_at": "2026-10-23T16:08:39Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:39Z",
+              "completed_at": "2026-10-23T16:08:43Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:43Z",
+              "completed_at": "2026-10-23T16:08:43Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:43Z",
+              "completed_at": "2026-10-23T16:08:43Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:08:43Z",
+              "completed_at": "2026-10-23T16:08:43Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971495,
+          "name": "manager-checks (darwin, amd64, macos-15-intel)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:58Z",
+          "completed_at": "2026-10-23T16:07:04Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015469",
+          "seconds": 186.0,
+          "queue_seconds": 6.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:02Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:02Z",
+              "completed_at": "2026-10-23T16:04:06Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:06Z",
+              "completed_at": "2026-10-23T16:05:01Z",
+              "seconds": 55.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:01Z",
+              "completed_at": "2026-10-23T16:05:02Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:02Z",
+              "completed_at": "2026-10-23T16:05:15Z",
+              "seconds": 13.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:15Z",
+              "completed_at": "2026-10-23T16:05:17Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:17Z",
+              "completed_at": "2026-10-23T16:05:20Z",
+              "seconds": 3.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:05:20Z",
+              "completed_at": "2026-10-23T16:06:38Z",
+              "seconds": 78.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:38Z",
+              "completed_at": "2026-10-23T16:06:38Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:38Z",
+              "completed_at": "2026-10-23T16:06:38Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 11,
+              "name": "Accept native CLI, upgrade selection, installer and retained user data",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:38Z",
+              "completed_at": "2026-10-23T16:06:47Z",
+              "seconds": 9.0
+            },
+            {
+              "number": 12,
+              "name": "Accept Linux administrator socket, remembered routing and owned cleanup",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:06:47Z",
+              "completed_at": "2026-10-23T16:06:47Z",
+              "seconds": null
+            },
+            {
+              "number": 13,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode manager --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:47Z",
+              "completed_at": "2026-10-23T16:06:47Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 14,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:47Z",
+              "completed_at": "2026-10-23T16:06:49Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:49Z",
+              "completed_at": "2026-10-23T16:06:57Z",
+              "seconds": 8.0
+            },
+            {
+              "number": 27,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:57Z",
+              "completed_at": "2026-10-23T16:06:57Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 28,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:57Z",
+              "completed_at": "2026-10-23T16:06:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 29,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:06:59Z",
+              "completed_at": "2026-10-23T16:06:59Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120516971527,
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-23T16:03:52Z",
+          "started_at": "2026-10-23T16:03:55Z",
+          "completed_at": "2026-10-23T16:12:14Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015473",
+          "seconds": 499.0,
+          "queue_seconds": 3.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:55Z",
+              "completed_at": "2026-10-23T16:03:57Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:57Z",
+              "completed_at": "2026-10-23T16:03:59Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:03:59Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 10.0
+            },
+            {
+              "number": 4,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:09Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 5,
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:09Z",
+              "completed_at": "2026-10-23T16:04:13Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:13Z",
+              "completed_at": "2026-10-23T16:04:15Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 7,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:15Z",
+              "completed_at": "2026-10-23T16:04:17Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 8,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:04:17Z",
+              "completed_at": "2026-10-23T16:09:26Z",
+              "seconds": 309.0
+            },
+            {
+              "number": 9,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:26Z",
+              "completed_at": "2026-10-23T16:09:26Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 10,
+              "name": "Run python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:26Z",
+              "completed_at": "2026-10-23T16:09:27Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 11,
+              "name": "Allow owned Chrome sandbox on the disposable Linux acceptance runner",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:27Z",
+              "completed_at": "2026-10-23T16:09:27Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 12,
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:09:27Z",
+              "completed_at": "2026-10-23T16:10:36Z",
+              "seconds": 69.0
+            },
+            {
+              "number": 13,
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:10:36Z",
+              "completed_at": "2026-10-23T16:12:03Z",
+              "seconds": 87.0
+            },
+            {
+              "number": 14,
+              "name": "Retain minimal host acceptance diagnostics",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:03Z",
+              "completed_at": "2026-10-23T16:12:04Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 15,
+              "name": "Remove owned sandbox profile",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:04Z",
+              "completed_at": "2026-10-23T16:12:04Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 16,
+              "name": "Run python3 scripts/maintainer/tools/release_gate.py evidence --plan plan/plan.json --publication publication --mode project-host --output checks/acceptance.json",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:04Z",
+              "completed_at": "2026-10-23T16:12:05Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 17,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:05Z",
+              "completed_at": "2026-10-23T16:12:06Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 32,
+              "name": "Post Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:06Z",
+              "completed_at": "2026-10-23T16:12:10Z",
+              "seconds": 4.0
+            },
+            {
+              "number": 33,
+              "name": "Post Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:10Z",
+              "completed_at": "2026-10-23T16:12:11Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 34,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:11Z",
+              "completed_at": "2026-10-23T16:12:11Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 35,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:11Z",
+              "completed_at": "2026-10-23T16:12:11Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120521093458,
+          "name": "gate",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "created_at": "2026-10-23T16:12:15Z",
+          "started_at": "2026-10-23T16:12:17Z",
+          "completed_at": "2026-10-23T16:13:34Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015474",
+          "seconds": 77.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:18Z",
+              "completed_at": "2026-10-23T16:12:20Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:20Z",
+              "completed_at": "2026-10-23T16:12:22Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 3,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:12:22Z",
+              "completed_at": "2026-10-23T16:12:24Z",
+              "seconds": 2.0
+            },
+            {
+              "number": 4,
+              "name": "Download exact release assets for final sealing",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-23T16:12:24Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": 68.0
+            },
+            {
+              "number": 5,
+              "name": "Download installer pages for Pages deployment",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": null
+            },
+            {
+              "number": 6,
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": null
+            },
+            {
+              "number": 7,
+              "name": "Require the exact selected cohort and seal publication checksums",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": null
+            },
+            {
+              "number": 8,
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": null
+            },
+            {
+              "number": 9,
+              "name": "Run actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:32Z",
+              "seconds": null
+            },
+            {
+              "number": 18,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:13:32Z",
+              "completed_at": "2026-10-23T16:13:33Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 19,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:13:33Z",
+              "completed_at": "2026-10-23T16:13:33Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120521738909,
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "created_at": "2026-10-23T16:13:35Z",
+          "started_at": "2026-10-23T16:13:35Z",
+          "completed_at": "2026-10-23T16:13:34Z",
+          "run_attempt": 1,
+          "runner_name": null,
+          "seconds": null,
+          "queue_seconds": 0.0,
+          "steps": []
+        },
+        {
+          "id": 120521740258,
+          "name": "summary",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-23T16:13:35Z",
+          "started_at": "2026-10-23T16:13:37Z",
+          "completed_at": "2026-10-23T16:13:40Z",
+          "run_attempt": 1,
+          "runner_name": "GitHub Actions 1000015480",
+          "seconds": 3.0,
+          "queue_seconds": 2.0,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:13:37Z",
+              "completed_at": "2026-10-23T16:13:37Z",
+              "seconds": 0.0
+            },
+            {
+              "number": 2,
+              "name": "Run python3 - <<'PY'",
+              "status": "completed",
+              "conclusion": "failure",
+              "started_at": "2026-10-23T16:13:37Z",
+              "completed_at": "2026-10-23T16:13:38Z",
+              "seconds": 1.0
+            },
+            {
+              "number": 3,
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-23T16:13:38Z",
+              "completed_at": "2026-10-23T16:13:38Z",
+              "seconds": 0.0
+            }
+          ]
+        },
+        {
+          "id": 120521740628,
+          "name": "pages",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "created_at": "2026-10-23T16:13:35Z",
+          "started_at": "2026-10-23T16:13:35Z",
+          "completed_at": "2026-10-23T16:13:34Z",
+          "run_attempt": 1,
+          "runner_name": null,
+          "seconds": null,
+          "queue_seconds": 0.0,
+          "steps": []
+        },
+        {
+          "id": 120521741849,
+          "name": "verify-public",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "created_at": "2026-10-23T16:13:35Z",
+          "started_at": "2026-10-23T16:13:35Z",
+          "completed_at": "2026-10-23T16:13:35Z",
+          "run_attempt": 1,
+          "runner_name": null,
+          "seconds": 0.0,
+          "queue_seconds": 0.0,
+          "steps": []
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 12515515517,
+      "name": "checks-darwin-arm64-project-host",
+      "size_in_bytes": 463,
+      "digest": "sha256:b66f5fe40ad38bed10b5e4130de9f9958c65701fbec1fbdf1df3f4b165cdc97a",
+      "expired": false,
+      "created_at": "2026-10-23T16:07:39Z"
+    },
+    {
+      "id": 12515510673,
+      "name": "checks-linux-arm64-project-host",
+      "size_in_bytes": 462,
+      "digest": "sha256:5a0213e906e5696ee459ae0cdfac4a9bf01958cdb939cd5704628368cc82855f",
+      "expired": false,
+      "created_at": "2026-10-23T16:10:09Z"
+    },
+    {
+      "id": 12515510418,
+      "name": "checks-linux-arm64-manager",
+      "size_in_bytes": 457,
+      "digest": "sha256:647efc50482c5e71966ef94ed5edd58ecc707365fcce06c26d347702f029ed5b",
+      "expired": false,
+      "created_at": "2026-10-23T16:08:38Z"
+    },
+    {
+      "id": 12515500123,
+      "name": "checks-darwin-amd64-manager",
+      "size_in_bytes": 458,
+      "digest": "sha256:130fa634e709a69133a62e528e17a32ee61b0d3fda18768e2a54a376a38f16d9",
+      "expired": false,
+      "created_at": "2026-10-23T16:06:49Z"
+    },
+    {
+      "id": 12515350692,
+      "name": "checks-windows-arm64-manager",
+      "size_in_bytes": 471,
+      "digest": "sha256:01ebf1a81e70d06d33c326ec560c704213f87a1d83299f4a12d296e3620e2308",
+      "expired": false,
+      "created_at": "2026-10-23T16:07:40Z"
+    },
+    {
+      "id": 12515011496,
+      "name": "checks-windows-amd64-project-host",
+      "size_in_bytes": 476,
+      "digest": "sha256:ca0e618c062d5811443a60a0d6559fa2036b144d60ccbbc06251435918483353",
+      "expired": false,
+      "created_at": "2026-10-23T16:08:20Z"
+    },
+    {
+      "id": 12514975609,
+      "name": "publication-metadata",
+      "size_in_bytes": 3672766,
+      "digest": "sha256:764e58ef1cc33807c66470573e9b6100eaf01865d2063c1fa59942db7726c500",
+      "expired": false,
+      "created_at": "2026-10-23T16:03:48Z"
+    },
+    {
+      "id": 12514602369,
+      "name": "checks-windows-amd64-manager",
+      "size_in_bytes": 471,
+      "digest": "sha256:503e408b349d30513adc6a18c5efd075810b5f613b10a7696a025bc05e5a70fb",
+      "expired": false,
+      "created_at": "2026-10-23T16:05:31Z"
+    },
+    {
+      "id": 12514547959,
+      "name": "checks-darwin-amd64-project-host",
+      "size_in_bytes": 463,
+      "digest": "sha256:7aa3d840768a52b3370c05d2714c3c9e5afff54740e4670cfa86f4859a5ca2c1",
+      "expired": false,
+      "created_at": "2026-10-23T16:10:35Z"
+    },
+    {
+      "id": 12514491710,
+      "name": "publication-pages",
+      "size_in_bytes": 8439,
+      "digest": "sha256:0fe69d16da15c8329c9dd7ef9cd5e279467bafce84425fb6a9171341dbac1eac",
+      "expired": false,
+      "created_at": "2026-10-23T16:03:46Z"
+    },
+    {
+      "id": 12514460521,
+      "name": "built-linux-amd64-full",
+      "size_in_bytes": 1210293613,
+      "digest": "sha256:5b78f72a44a34af76d9a31f812c940a7cb7d6fcb08f0a9c469377ecf87736511",
+      "expired": false,
+      "created_at": "2026-10-23T15:54:39Z"
+    },
+    {
+      "id": 12514433573,
+      "name": "browser-minimal-host-diagnostics",
+      "size_in_bytes": 60050,
+      "digest": "sha256:ab941453b7195e2edfb3bb492958a817f6710a8e788a66db92d36ea98adfca6e",
+      "expired": false,
+      "created_at": "2026-10-23T16:12:04Z"
+    },
+    {
+      "id": 12514304715,
+      "name": "checks-linux-amd64-project-host",
+      "size_in_bytes": 462,
+      "digest": "sha256:e45e1cc8c2dcc5e2611ccccc71adcba8a8ba2658cf8de1bc5f34c6cb3a490bae",
+      "expired": false,
+      "created_at": "2026-10-23T16:12:06Z"
+    },
+    {
+      "id": 12513951161,
+      "name": "built-darwin-amd64-browser",
+      "size_in_bytes": 259938961,
+      "digest": "sha256:95660f59561a6ccb93a1e86f4fea9a49af11bc93556ae423116e256c89a2f2d1",
+      "expired": false,
+      "created_at": "2026-10-23T15:48:18Z"
+    },
+    {
+      "id": 12513932523,
+      "name": "built-darwin-arm64-manager",
+      "size_in_bytes": 6098763,
+      "digest": "sha256:4b7e9e9bf5fa6fee9a0863a8e21c4f9f57c7d2ccb2d5b8bce5e64f316f54726d",
+      "expired": false,
+      "created_at": "2026-10-23T15:56:51Z"
+    },
+    {
+      "id": 12513876540,
+      "name": "built-windows-amd64-browser",
+      "size_in_bytes": 259667065,
+      "digest": "sha256:7446242ad2f4f4d2b4143f92fbe08708b7606292a50c0f431be88ea809f9fccb",
+      "expired": false,
+      "created_at": "2026-10-23T15:47:54Z"
+    },
+    {
+      "id": 12513779792,
+      "name": "checks-linux-amd64-manager",
+      "size_in_bytes": 457,
+      "digest": "sha256:56088d14fb36d87d597bd3325a69161c6741f1ca2e9f93ac57c852551be27a23",
+      "expired": false,
+      "created_at": "2026-10-23T16:09:43Z"
+    },
+    {
+      "id": 12513676998,
+      "name": "built-windows-amd64-manager",
+      "size_in_bytes": 8245877,
+      "digest": "sha256:607d1c39f2f8d30e603c49bcdb6286754e6b1635df140c87fed7a1c1e3853c81",
+      "expired": false,
+      "created_at": "2026-10-23T15:47:07Z"
+    },
+    {
+      "id": 12513564716,
+      "name": "publication-assets",
+      "size_in_bytes": 3734964147,
+      "digest": "sha256:bb8e532ac0abdaed33468c308a7ac2de86f3977cce0692b0799071dca2505e57",
+      "expired": false,
+      "created_at": "2026-10-23T16:03:45Z"
+    },
+    {
+      "id": 12513449895,
+      "name": "checks-darwin-arm64-manager",
+      "size_in_bytes": 458,
+      "digest": "sha256:c320a774cddc549ed92228614bc0f1673ac053ffeb13fdff570c25f99e1cbe3c",
+      "expired": false,
+      "created_at": "2026-10-23T16:05:02Z"
+    },
+    {
+      "id": 12513412614,
+      "name": "built-windows-arm64-manager",
+      "size_in_bytes": 7366820,
+      "digest": "sha256:4d370c3d8cfc1e591e99f181cedd1adccb641eb07faedf86e225aeef7557ebad",
+      "expired": false,
+      "created_at": "2026-10-23T15:47:32Z"
+    },
+    {
+      "id": 12513222886,
+      "name": "built-linux-arm64-manager",
+      "size_in_bytes": 6210764,
+      "digest": "sha256:66fc1f0ba04d7b088e7c9d559804fe33c54b53217c37b8970bfc582444ffb049",
+      "expired": false,
+      "created_at": "2026-10-23T15:46:26Z"
+    },
+    {
+      "id": 12513044532,
+      "name": "built-linux-arm64-full",
+      "size_in_bytes": 1196921866,
+      "digest": "sha256:1a6e1820f18f84ed534746bc978dfa9a40f02a1a4379b1a4cafd3be18f1f3ab8",
+      "expired": false,
+      "created_at": "2026-10-23T15:53:23Z"
+    },
+    {
+      "id": 12513009928,
+      "name": "built-darwin-arm64-browser",
+      "size_in_bytes": 249160580,
+      "digest": "sha256:e12f28368b8917fe69b6b616bf745c57217ddccd027900c7d06370b5d7f336d2",
+      "expired": false,
+      "created_at": "2026-10-23T15:57:29Z"
+    },
+    {
+      "id": 12512993049,
+      "name": "built-linux-amd64-browser",
+      "size_in_bytes": 258291142,
+      "digest": "sha256:8ec7e9ed4986017c68f76104fabca1d3a045b228cd1e21eea70b8d27b90fca43",
+      "expired": false,
+      "created_at": "2026-10-23T15:47:11Z"
+    },
+    {
+      "id": 12512708562,
+      "name": "release-plan",
+      "size_in_bytes": 235953,
+      "digest": "sha256:e915959b4c38d43b590aad05b221688dc76956ce1d031beb812b7f954a23c833",
+      "expired": false,
+      "created_at": "2026-10-23T15:45:57Z"
+    },
+    {
+      "id": 12512694835,
+      "name": "built-darwin-amd64-manager",
+      "size_in_bytes": 6635366,
+      "digest": "sha256:e5745e9ff348919ae49cff26bab7fa4afe1ba6b816b2b0f11b481e0853fd5955",
+      "expired": false,
+      "created_at": "2026-10-23T15:47:30Z"
+    },
+    {
+      "id": 12512668986,
+      "name": "built-linux-arm64-browser",
+      "size_in_bytes": 259110789,
+      "digest": "sha256:14971c148deda5b63d0dc50371e2fb5096492f73cc77fb144e8a0ba3d2dcaf73",
+      "expired": false,
+      "created_at": "2026-10-23T15:46:54Z"
+    },
+    {
+      "id": 12512649812,
+      "name": "built-linux-amd64-manager",
+      "size_in_bytes": 6895572,
+      "digest": "sha256:b2ce90017bf5464a0186168e1d479c61c7e12579f7851e71ff305a2d13dd8ad2",
+      "expired": false,
+      "created_at": "2026-10-23T15:46:26Z"
+    }
+  ]
+}

@@ -1,0 +1,866 @@
+{
+  "as_of_utc": "2026-10-23T17:43:58.428446+00:00",
+  "source_sha": "4f1d66fe202e125d2354250d10a655462bd3d66c",
+  "reducer_tests": 2,
+  "runs": [
+    {
+      "run": 39984988033,
+      "sha": "4f1d66fe202e125d2354250d10a655462bd3d66c",
+      "status": "in_progress",
+      "conclusion": null,
+      "attempts": 3,
+      "observed_runner_seconds": 8822.0,
+      "stages": [
+        {
+          "name": "publish",
+          "seconds": null,
+          "steps": [
+            {
+              "name": "Download only release assets for publication",
+              "seconds": 553.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 159.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 65.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 77.0
+            }
+          ]
+        },
+        {
+          "name": "assemble",
+          "seconds": 329.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 281.0
+            },
+            {
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "seconds": 32.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 252.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 60.0
+            },
+            {
+              "name": "Prepare disposable Docker acceptance runtime",
+              "seconds": 37.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 129.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 688.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 509.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 63.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 85.0
+            }
+          ]
+        },
+        {
+          "name": "source-checks",
+          "seconds": 62.0,
+          "steps": [
+            {
+              "name": "Final source contracts and release selection fixtures",
+              "seconds": 42.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 691.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 523.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 135.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 401.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 50.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 276.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 198.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 148.0
+            }
+          ]
+        },
+        {
+          "name": "gate",
+          "seconds": 1171.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 1154.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 263.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 76.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 136.0
+            }
+          ]
+        }
+      ],
+      "assets_bytes": 3734968434
+    },
+    {
+      "run": 39981008103,
+      "sha": "239e8b956f3d6b879742720ad9abea4c5d9fbdbe",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "attempts": 1,
+      "observed_runner_seconds": 6116.0,
+      "stages": [
+        {
+          "name": "assemble",
+          "seconds": 373.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 317.0
+            },
+            {
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "seconds": 36.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 427.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 310.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 88.0
+            }
+          ]
+        },
+        {
+          "name": "source-checks",
+          "seconds": 62.0,
+          "steps": [
+            {
+              "name": "Final source contracts and release selection fixtures",
+              "seconds": 41.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 231.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 163.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 424.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 59.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 297.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 380.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 271.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 81.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 263.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 179.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 61.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 277.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 30.0
+            },
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 41.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 167.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 499.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 309.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 69.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 87.0
+            }
+          ]
+        },
+        {
+          "name": "gate",
+          "seconds": 77.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 68.0
+            }
+          ]
+        },
+        {
+          "name": "publish",
+          "seconds": null,
+          "steps": []
+        }
+      ],
+      "assets_bytes": 3734964147
+    },
+    {
+      "run": 39977174119,
+      "sha": "f056706ecc4c0cb389cf505533374d4a7f07d947",
+      "status": "completed",
+      "conclusion": "failure",
+      "attempts": 1,
+      "observed_runner_seconds": 5016.0,
+      "stages": [
+        {
+          "name": "assemble",
+          "seconds": 90.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 39.0
+            }
+          ]
+        },
+        {
+          "name": "source-checks",
+          "seconds": 59.0,
+          "steps": [
+            {
+              "name": "Final source contracts and release selection fixtures",
+              "seconds": 38.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 382.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 40.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 289.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 127.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 33.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 65.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 172.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 59.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 74.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 283.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 82.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 79.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 93.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 164.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 50.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 93.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 275.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 219.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 274.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 206.0
+            }
+          ]
+        },
+        {
+          "name": "gate",
+          "seconds": 144.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 136.0
+            }
+          ]
+        },
+        {
+          "name": "publish",
+          "seconds": null,
+          "steps": []
+        }
+      ],
+      "assets_bytes": 3734964100
+    },
+    {
+      "run": 38996724241,
+      "sha": "be8cd5489f6dc18e2efa394ad8a56f0ee1264ccc",
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": 1,
+      "observed_runner_seconds": 3675.0,
+      "stages": [
+        {
+          "name": "assemble",
+          "seconds": 35.0,
+          "steps": []
+        },
+        {
+          "name": "source-checks",
+          "seconds": 75.0,
+          "steps": [
+            {
+              "name": "Final source contracts and release selection fixtures",
+              "seconds": 51.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 140.0,
+          "steps": [
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 92.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 221.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 160.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 164.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 55.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 76.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 152.0,
+          "steps": [
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 100.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 254.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 33.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 170.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 229.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 159.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 217.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 64.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 87.0
+            }
+          ]
+        },
+        {
+          "name": "gate",
+          "seconds": 64.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 49.0
+            }
+          ]
+        },
+        {
+          "name": "publish",
+          "seconds": 157.0,
+          "steps": [
+            {
+              "name": "Download only release assets for publication",
+              "seconds": 50.0
+            },
+            {
+              "name": "Run releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d",
+              "seconds": 92.0
+            }
+          ]
+        }
+      ],
+      "assets_bytes": 2349877225
+    },
+    {
+      "run": 38851251342,
+      "sha": "346a6583df22c8e1f97a732c89c523f7c8e6e1b5",
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": 2,
+      "observed_runner_seconds": 4575.0,
+      "stages": [
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 144.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 38.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 78.0
+            }
+          ]
+        },
+        {
+          "name": "assemble",
+          "seconds": 76.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 33.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 164.0,
+          "steps": [
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 118.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 141.0,
+          "steps": [
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 86.0
+            }
+          ]
+        },
+        {
+          "name": "source-checks",
+          "seconds": 53.0,
+          "steps": [
+            {
+              "name": "Final source contracts and release selection fixtures",
+              "seconds": 33.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 250.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 174.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 259.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 174.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 194.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 66.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 88.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 211.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 156.0
+            }
+          ]
+        },
+        {
+          "name": "gate",
+          "seconds": 47.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 37.0
+            }
+          ]
+        },
+        {
+          "name": "publish",
+          "seconds": 212.0,
+          "steps": [
+            {
+              "name": "Download only release assets for publication",
+              "seconds": 69.0
+            },
+            {
+              "name": "Run releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d",
+              "seconds": 130.0
+            }
+          ]
+        }
+      ],
+      "assets_bytes": null
+    },
+    {
+      "run": 38777137633,
+      "sha": "20f13e21f8c60d9bce56c4be9bdbf319148eeff4",
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": 1,
+      "observed_runner_seconds": 5106.0,
+      "stages": [
+        {
+          "name": "assemble",
+          "seconds": 155.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 103.0
+            },
+            {
+              "name": "Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+              "seconds": 30.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 176.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 36.0
+            },
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 93.0
+            }
+          ]
+        },
+        {
+          "name": "full-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 144.0,
+          "steps": [
+            {
+              "name": "Run full source and product acceptance",
+              "seconds": 99.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, arm64, macos-15)",
+          "seconds": 215.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 162.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, arm64, ubuntu-24.04-arm)",
+          "seconds": 129.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 78.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (darwin, amd64, macos-15-intel)",
+          "seconds": 400.0,
+          "steps": [
+            {
+              "name": "Run actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+              "seconds": 60.0
+            },
+            {
+              "name": "Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+              "seconds": 39.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 227.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (windows, amd64, windows-2025)",
+          "seconds": 259.0,
+          "steps": [
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 178.0
+            }
+          ]
+        },
+        {
+          "name": "browser-checks (linux, amd64, ubuntu-24.04)",
+          "seconds": 220.0,
+          "steps": [
+            {
+              "name": "Run actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+              "seconds": 50.0
+            },
+            {
+              "name": "Accept both packaged engines, capabilities, installation and connection",
+              "seconds": 56.0
+            },
+            {
+              "name": "Accept installation and recovery on minimal Linux hosts",
+              "seconds": 82.0
+            }
+          ]
+        },
+        {
+          "name": "source-checks",
+          "seconds": 53.0,
+          "steps": []
+        },
+        {
+          "name": "gate",
+          "seconds": 44.0,
+          "steps": [
+            {
+              "name": "Download exact release assets for final sealing",
+              "seconds": 33.0
+            }
+          ]
+        },
+        {
+          "name": "publish",
+          "seconds": 275.0,
+          "steps": [
+            {
+              "name": "Download only release assets for publication",
+              "seconds": 134.0
+            },
+            {
+              "name": "Run releaseway/actions@5841e545ff259790a3b2461299e741d62c69a73d",
+              "seconds": 126.0
+            }
+          ]
+        }
+      ],
+      "assets_bytes": null
+    }
+  ],
+  "limits": "Historic runs differ in source/workload/cache. In-progress steps have no completed duration. No causal candidate time comparison."
+}

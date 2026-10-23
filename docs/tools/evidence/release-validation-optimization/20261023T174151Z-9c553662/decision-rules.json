@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "recorded_before_candidate_experiments": true,
+  "source_sha": "4f1d66fe202e125d2354250d10a655462bd3d66c",
+  "workstream": "9c553662-2eec-4b99-93c0-0c00b4ee5300",
+  "definition_revision": 1034,
+  "scope": "Investigation and strategy; no production workflow or runtime source changes",
+  "baseline": "Current release.yml and exact recorded source; historic runs are observational, not matched candidate benchmarks",
+  "conditions": ["Classify full, CLI-only, module-only, validation-only, reuse and recovery separately", "Record actual runner/tool versions and cache observations; unknown stays unknown", "Deduplicate retained successful job executions across attempts", "Separate run waiting, execution, transfer, test commands and publication; never sum parallel jobs as elapsed time"],
+  "structural_adoption": ["No required failure detection removed", "No larger permission scope", "All selected assets retain exact length/digest/target/producer and acceptance binding", "Zero unrelated artifact families downloaded by each native consumer", "No increase in necessary artifact reads for selected/reused/recovery paths", "Rejected alternatives need source-backed rejection, not implementation"],
+  "future_matched_ci": {"minimum_samples_per_variant": 2, "interleave_order": "A B B A", "primary": "Dispatch to gate-ready elapsed excluding initial runner wait", "secondary": ["Transferred bytes by consumer and artifact family", "Total runner execution seconds", "Failure discovery time"], "target_median_elapsed_reduction_percent": 10, "maximum_runner_seconds_regression_percent": 5, "time_claim_rule": "No time-win claim if sample ranges overlap, samples fail, conditions differ, or cache provenance is unknown; increase matched samples or report inconclusive. Two samples do not establish significance or p95.", "cache": "Only add controlled cold/warm comparisons if cache behavior changes"},
+  "stop_rules": ["No paid or production load, release/tag/Pages/GHCR writes or workflow dispatch in this investigation", "Do not download multi-GB assets to reproduce transient network delays", "Reject structurally invalid B/C before prototyping", "Keep or defer a candidate if essential platform or native evidence is unavailable", "After scoped checks pass, repeat only after changes or unresolved evidence"],
+  "measurement_limits": {"historical_run_snapshots_max": 12, "local_fixture_timeout_seconds": 90, "network_request_timeout_seconds": 30},
+  "evidence_policy": "Store allowlisted run/job/step/asset metadata and source digests. No credentials, signed blob URLs, task context or full logs."
+}

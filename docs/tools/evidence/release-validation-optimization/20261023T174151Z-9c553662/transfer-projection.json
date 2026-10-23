@@ -1,0 +1,112 @@
+{
+  "basis": "Compressed Actions artifact byte sizes, current full-build snapshot; not elapsed time or future reuse downloads",
+  "rows": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "manager",
+      "current_bytes": 1475482372,
+      "scoped_bytes": 6896260,
+      "removed_unrelated_bytes": 1468586112
+    },
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "browser",
+      "current_bytes": 1475482372,
+      "scoped_bytes": 265187402,
+      "removed_unrelated_bytes": 1210294970
+    },
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "mode": "full",
+      "current_bytes": 1475482372,
+      "scoped_bytes": 1217191230,
+      "removed_unrelated_bytes": 258291142
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "manager",
+      "current_bytes": 1462245449,
+      "scoped_bytes": 6211750,
+      "removed_unrelated_bytes": 1456033699
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "browser",
+      "current_bytes": 1462245449,
+      "scoped_bytes": 265322539,
+      "removed_unrelated_bytes": 1196922910
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "mode": "full",
+      "current_bytes": 1462245449,
+      "scoped_bytes": 1203134660,
+      "removed_unrelated_bytes": 259110789
+    },
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "mode": "manager",
+      "current_bytes": 267913009,
+      "scoped_bytes": 8245944,
+      "removed_unrelated_bytes": 259667065
+    },
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "mode": "browser",
+      "current_bytes": 267913009,
+      "scoped_bytes": 267913009,
+      "removed_unrelated_bytes": 0
+    },
+    {
+      "os": "windows",
+      "arch": "arm64",
+      "mode": "manager",
+      "current_bytes": 7366887,
+      "scoped_bytes": 7366887,
+      "removed_unrelated_bytes": 0
+    },
+    {
+      "os": "darwin",
+      "arch": "amd64",
+      "mode": "manager",
+      "current_bytes": 266574393,
+      "scoped_bytes": 6635432,
+      "removed_unrelated_bytes": 259938961
+    },
+    {
+      "os": "darwin",
+      "arch": "amd64",
+      "mode": "browser",
+      "current_bytes": 266574393,
+      "scoped_bytes": 266574393,
+      "removed_unrelated_bytes": 0
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "mode": "manager",
+      "current_bytes": 255259409,
+      "scoped_bytes": 6098829,
+      "removed_unrelated_bytes": 249160580
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "mode": "browser",
+      "current_bytes": 255259409,
+      "scoped_bytes": 255259409,
+      "removed_unrelated_bytes": 0
+    }
+  ],
+  "current_total": 10400043972,
+  "scoped_total": 3782037744,
+  "removed_unrelated_bytes": 6618006228
+}
