@@ -237,7 +237,16 @@ func verifyRealComposeAuthenticatedJobs(t *testing.T, ctx context.Context, b *Ba
 	if replayed["replayed"] != true || replayed["revision"] != generated["revision"] {
 		t.Fatal("new MCP session repeated a private mutation")
 	}
-	argv := []string{"/bin/sh", "-c", `printf '%s' "$TOKEN$S000$MAXA$MAXB$MAXC"; printf '%s' "$TOKEN" > /proc/1/fd/1; printf 'capacity-ready\n'; printf '%065536d\n' 0; while :; do sleep 1; done`}
+	names := make([]string, 0, controlpolicy.MaxApplicationKeys)
+	for name := range maximumCapacityKeyKinds() {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	// Check presence and aggregate byte length inside the actual workload,
+	// without printing values, their lengths, or hashes. Missing padding keys
+	// must not turn a nominal maximum-budget test into a smaller delivery.
+	command := `__loki_bytes=0; for __loki_name in ` + strings.Join(names, " ") + `; do eval '__loki_present=${'"$__loki_name"'+x}; __loki_length=${#'"$__loki_name"'}'; test "$__loki_present" = x || exit 17; __loki_bytes=$((__loki_bytes + __loki_length)); done; test "$__loki_bytes" -eq 0000000 || exit 18; printf '%s' "$TOKEN$S000$MAXA$MAXB$MAXC"; printf '%s' "$TOKEN" > /proc/1/fd/1; printf 'capacity-ready\n'; printf '%065536d\n' 0; unset PAD000; while :; do sleep 1; done`
+	argv := []string{"/bin/sh", "-c", command}
 	resources, err := b.currentApplicationCatalog()
 	if err != nil {
 		t.Fatal(err)
@@ -247,6 +256,15 @@ func verifyRealComposeAuthenticatedJobs(t *testing.T, ctx context.Context, b *Ba
 		t.Fatal(err)
 	}
 	capacityValues, patterns := maximumCapacityValues(t, metadata.BaseEnvironment, argv)
+	valueBytes := 0
+	for _, value := range capacityValues {
+		valueBytes += len(value.body)
+	}
+	if len(strconv.Itoa(valueBytes)) != 7 || strings.Count(argv[2], "0000000") != 1 {
+		t.Fatal("invalid public aggregate capacity budget")
+	}
+	// Equal-width replacement preserves the exact exec budget already checked.
+	argv[2] = strings.Replace(argv[2], "0000000", strconv.Itoa(valueBytes), 1)
 	defer func() {
 		for _, value := range capacityValues {
 			clear(value.body)
