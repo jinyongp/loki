@@ -22,7 +22,7 @@ import (
 	"loki/internal/platform/safeio"
 )
 
-func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string) {
+func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string) lifecycle.SecretMigrationIntent {
 	t.Helper()
 	runner := ExecRunner{}
 	builder := os.Getenv("LOKI_TEST_MIGRATION_SOURCE_BUILDER")
@@ -73,6 +73,7 @@ func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b 
 	if _, err := runner.RunPrivate(ctx, nil, nil, args...); err != nil {
 		t.Fatal("prepare materialized an inactive generation", err)
 	}
+	return intent
 }
 
 func TestRealComposeMigrationPreparationWithoutRunningServices(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
+	"loki/internal/host/lifecycle/compose"
 	"loki/internal/management"
 )
 
@@ -52,6 +53,10 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "native" {
 		return runHostNativeSecretMigration(args[1:], stdout, stderr)
 	}
+	composeMode := len(args) > 0 && args[0] == "compose"
+	if composeMode {
+		args = args[1:]
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: loki host secret-migration prepare|apply|status|recover|rollback --manager-root ROOT [OPTIONS]")
 		return 2
@@ -62,7 +67,12 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	}
 	flags := flag.NewFlagSet("host secret-migration "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	root := flags.String("manager-root", "", "installed managed-full owner root")
+	rootFlag := "manager-root"
+	if composeMode {
+		rootFlag = "state-root"
+	}
+	root := flags.String(rootFlag, "", "installed original host owner root")
+	project := flags.String("project", "loki", "installed Compose project name")
 	socket := flags.String("docker-socket", "/var/run/docker.sock", "local administrator-owned Docker socket")
 	mapping := flags.String("mapping", "", "protected public mappings/resources JSON; prepare only")
 	planPath := flags.String("plan", "", "exact prepared public intent; apply only")
@@ -92,8 +102,23 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	store := management.Store{Root: *root}
+	var composeBackend *compose.Backend
+	if composeMode {
+		var err error
+		composeBackend, err = compose.Open(compose.Config{StateRoot: *root, Project: *project, Runner: compose.ExecRunner{Prefix: []string{"--host", "unix://" + *socket}}})
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	if action == "status" {
-		status, err := store.SecretMigrationStatus(ctx)
+		var status any
+		var err error
+		if composeMode {
+			status, err = composeBackend.SecretMigrationStatus(ctx)
+		} else {
+			status, err = store.SecretMigrationStatus(ctx)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -103,13 +128,22 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	backend, err := management.NewDockerFullBackend(store, *socket, stderr)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+	var backend *management.DockerFullBackend
+	var err error
+	if !composeMode {
+		backend, err = management.NewDockerFullBackend(store, *socket, stderr)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 	}
 	if action == "rollback" {
-		status, err := backend.RollbackSecretMigration(ctx)
+		var status any
+		if composeMode {
+			status, err = composeBackend.RollbackSecretMigration(ctx)
+		} else {
+			status, err = backend.RollbackSecretMigration(ctx)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -128,7 +162,12 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		intent, err := backend.PrepareSecretMigration(ctx, input.Mappings, input.Resources, *recipient, *backup, *interrupt)
+		var intent lifecycle.SecretMigrationIntent
+		if composeMode {
+			intent, err = composeBackend.PrepareSecretMigration(ctx, input.Mappings, input.Resources, *recipient, *backup, *interrupt)
+		} else {
+			intent, err = backend.PrepareSecretMigration(ctx, input.Mappings, input.Resources, *recipient, *backup, *interrupt)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -141,8 +180,12 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 	var intent *lifecycle.SecretMigrationIntent
 	if action == "apply" {
 		intent = new(lifecycle.SecretMigrationIntent)
-		if err := readSecretMigrationDocument(*planPath, intent); err != nil || !intent.Valid() || intent.Mode != "managed-full" {
-			fmt.Fprintln(stderr, "exact prepared managed-full migration plan is unavailable or invalid")
+		mode := "managed-full"
+		if composeMode {
+			mode = "compose"
+		}
+		if err := readSecretMigrationDocument(*planPath, intent); err != nil || !intent.Valid() || intent.Mode != mode {
+			fmt.Fprintln(stderr, "exact prepared migration plan is unavailable or invalid")
 			return 1
 		}
 	}
@@ -155,7 +198,12 @@ func runHostSecretMigration(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	status, err := backend.ApplySecretMigration(ctx, intent, *protection, passphrase)
+	var status any
+	if composeMode {
+		status, err = composeBackend.ApplySecretMigration(ctx, intent, *protection, passphrase)
+	} else {
+		status, err = backend.ApplySecretMigration(ctx, intent, *protection, passphrase)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

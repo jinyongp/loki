@@ -109,16 +109,17 @@ type Config struct {
 type Backend struct {
 	// A policy mutation must verify the real prepared role digest before its
 	// host journal can commit/release admission. This is never persisted authority.
-	ExpectedApplicationPolicy string
-	maintenance               *hostMaintenance
-	Progress                  progress.Reporter
-	root                      string
-	runtimeRoot               string
-	snapshotRoot              string
-	project                   string
-	coreRepository            string
-	browserRepository         string
-	runner                    Runner
+	ExpectedApplicationPolicy     string
+	maintenance                   *hostMaintenance
+	initialApplicationMaintenance string
+	Progress                      progress.Reporter
+	root                          string
+	runtimeRoot                   string
+	snapshotRoot                  string
+	project                       string
+	coreRepository                string
+	browserRepository             string
+	runner                        Runner
 }
 
 type runtimeState struct {

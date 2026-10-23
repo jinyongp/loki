@@ -128,6 +128,9 @@ exec /opt/loki/bin/loki host prepare-secrets --uid 10006 --gid 10006 --agent-uid
 			script += " --interrupt-jobs"
 		}
 	}
+	if b.initialApplicationMaintenance != "" {
+		script += " --initial-maintenance-operation " + b.initialApplicationMaintenance
+	}
 	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--entrypoint", "/bin/sh", "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,volume-nocopy", "--mount", applicationBind(runtimeRoot, "/run/loki/secrets", false), "--mount", applicationBind(input, "/input/application-resources.json", true), "--mount", applicationBind(github, "/input/github.toml", true), state.CoreImage, "-ec", script}
 	args = append(args[:1], append([]string{"--tmpfs", "/run/preparation:rw,nosuid,nodev,size=2097152,mode=0700"}, args[1:]...)...)
 	if _, err := b.runner.Run(ctx, nil, "image", "inspect", state.CoreImage); err != nil {

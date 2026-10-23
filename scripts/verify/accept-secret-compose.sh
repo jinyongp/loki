@@ -7,6 +7,7 @@ registry=
 tag=
 test_binary=
 source_builder=
+host_cli=
 cleanup() {
   result=$?
   trap - EXIT HUP INT TERM
@@ -14,6 +15,7 @@ cleanup() {
   if test -n "$tag"; then docker image rm "$tag" >/dev/null 2>&1 || true; fi
   if test -n "$test_binary"; then rm -f "$test_binary"; fi
   if test -n "$source_builder"; then rm -f "$source_builder"; fi
+  if test -n "$host_cli"; then rm -f "$host_cli"; fi
   exit "$result"
 }
 trap cleanup EXIT HUP INT TERM
@@ -34,7 +36,11 @@ source_builder=$(mktemp /tmp/loki-secret-source-builder.XXXXXXXX)
 CGO_ENABLED=0 go build -o "$source_builder" ./internal/host/lifecycle/testdata/native-migration
 chmod 0555 "$source_builder"
 export LOKI_TEST_MIGRATION_SOURCE_BUILDER="$source_builder"
-go test -count=1 -v -timeout=3m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices)$'
+host_cli=$(mktemp /tmp/loki-secret-host-cli.XXXXXXXX)
+CGO_ENABLED=0 go build -o "$host_cli" ./cmd/loki
+chmod 0555 "$host_cli"
+export LOKI_TEST_HOST_MIGRATION_CLI="$host_cli"
+go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices|MigrationPublicLifecycle)$'
 test_binary=$(mktemp /tmp/loki-managed-admission.XXXXXXXX)
 CGO_ENABLED=0 go test -c -o "$test_binary" ./internal/management
 chmod 0555 "$test_binary"

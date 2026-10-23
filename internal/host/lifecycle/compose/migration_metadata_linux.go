@@ -62,6 +62,10 @@ func (b *Backend) migrationVolume(ctx context.Context, kind string) (string, err
 }
 
 func (b *Backend) migrationMetadata(ctx context.Context, state runtimeState, resources []controlpolicy.ApplicationResource, empty bool) (migrationMetadata, error) {
+	return b.migrationLayout(ctx, state, resources, empty, nil, "", false)
+}
+
+func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resources []controlpolicy.ApplicationResource, empty bool, candidate *lifecycle.OperationRecord, projection string, selectCandidate bool) (migrationMetadata, error) {
 	var result migrationMetadata
 	private, ok := b.runner.(PrivateRunner)
 	if !ok || state.validate() != nil {
@@ -125,8 +129,63 @@ func (b *Backend) migrationMetadata(ctx context.Context, state runtimeState, res
 	if empty {
 		script += " --require-empty-generation"
 	}
-	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--log-driver", "none", "--tmpfs", "/run/preparation:rw,nosuid,nodev,size=2097152,mode=0700", "--entrypoint", "/bin/sh", "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,readonly,volume-nocopy", "--mount", applicationBind(file.Name(), "/input/catalog.json", true), "--mount", applicationBind(fragment.Name(), "/input/github.toml", true), state.CoreImage, "-ec", script}
+	appMount := "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,readonly,volume-nocopy"
+	var mounts []string
+	if candidate != nil {
+		original, _, err := b.migrationRecord(ctx)
+		if err != nil || original.ID != candidate.ID || original.SecretMigration.RollbackRequested || selectCandidate && original.Phase != lifecycle.PhaseSwitch || !selectCandidate && (original.Phase != lifecycle.PhaseAdmitted && original.Phase != lifecycle.PhaseSnapshot && original.Phase != lifecycle.PhaseMigrate || !filepath.IsAbs(projection) || filepath.Clean(projection) != projection) {
+			return result, errComposeMigration
+		}
+		// The JSON identity contains only validated public identifiers. Pass it
+		// as a shell positional parameter, never interpolate data into code.
+		script = strings.Replace(script, "--metadata-only", "--candidate-generation \"$1\" --candidate-before \"$2\" --candidate-operation \"$3\" --unit-directory= --overlay-directory=", 1)
+		if selectCandidate {
+			script += " --commit-candidate --candidate-policy \"$4\""
+		} else {
+			script = "set -eu\ntest ! -L /run/loki/secrets\nif test \"$(stat -c %u /run/loki/secrets)\" != 10006; then test -z \"$(ls -A /run/loki/secrets)\"; install -d -o 0 -g 0 -m 0700 /run/loki/secrets; fi\n" + script
+			mounts = []string{"--mount", applicationBind(projection, "/run/loki/secrets", false)}
+		}
+		appMount = "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,volume-nocopy"
+	}
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--log-driver", "none", "--tmpfs", "/run/preparation:rw,nosuid,nodev,size=2097152,mode=0700", "--entrypoint", "/bin/sh", "--mount", appMount, "--mount", applicationBind(file.Name(), "/input/catalog.json", true), "--mount", applicationBind(fragment.Name(), "/input/github.toml", true)}
+	args = append(args, mounts...)
+	args = append(args, state.CoreImage, "-ec", script)
+	if candidate != nil {
+		i := candidate.SecretMigration.Intent
+		before, _ := json.Marshal(i.Before)
+		args = append(args, "host-migration-prepare", i.CandidateGeneration, string(before), lifecycle.MigrationOperationUUID(candidate.ID), i.Policy)
+	}
 	body, err := private.RunPrivate(ctx, nil, nil, args...)
+	if selectCandidate && candidate != nil {
+		i := candidate.SecretMigration.Intent
+		want := i.Before
+		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, i.CandidateGeneration, i.Policy
+		if err != nil || json.Unmarshal(body, &result.Identity) != nil || result.Identity != want {
+			return result, errComposeMigration
+		}
+		result.Policy = i.Policy
+		return result, nil
+	}
+	if candidate != nil {
+		var prepared struct {
+			Prepared   bool   `json:"prepared"`
+			Candidate  bool   `json:"candidate"`
+			Generation string `json:"active_generation"`
+			Policy     string `json:"policy"`
+			UID        uint32 `json:"broker_uid"`
+			GID        uint32 `json:"broker_gid"`
+			Deployment string `json:"deployment_id"`
+			Runner     string `json:"runner_id"`
+		}
+		i := candidate.SecretMigration.Intent
+		if err != nil || json.Unmarshal(body, &prepared) != nil || !prepared.Prepared || !prepared.Candidate || prepared.Generation != i.CandidateGeneration || prepared.Policy != i.Policy || prepared.UID != i.Before.UID || prepared.GID != i.Before.GID || prepared.Deployment != i.Before.DeploymentID || prepared.Runner != i.Before.RunnerID {
+			return result, errComposeMigration
+		}
+		result.Identity = i.Before
+		result.Identity.Version, result.Identity.ActiveGeneration, result.Identity.PolicySHA256 = 2, i.CandidateGeneration, i.Policy
+		result.Policy = i.Policy
+		return result, nil
+	}
 	if err != nil || json.Unmarshal(body, &result) != nil || !validSHA256(result.Policy) || result.Identity.UID != 10006 || result.Identity.GID != 10006 || result.Identity.AgentUID != 10000 || result.Identity.MetadataGID != 10001 || result.BaseEnvironment == nil {
 		return migrationMetadata{}, errComposeMigration
 	}
