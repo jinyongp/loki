@@ -27,20 +27,19 @@ if test "$1" = first; then
   install -m 0644 /mnt/loki-payload/mcp.service /etc/systemd/system/loki-go-mcp.service
   install -m 0644 /mnt/loki-payload/executor.service /etc/systemd/system/loki-go-executor.service
   install -m 0644 /mnt/loki-payload/host.target /etc/systemd/system/loki-go.target
-  install -d -m 0755 /etc/systemd/system/loki-go-mcp.service.d
   # Select the secret journey. Unrelated browser/signing/port modules are not
   # configured in this VM. Keep the actual MCP sandbox and numeric agent UID.
-  cat > /etc/systemd/system/loki-go-mcp.service.d/10-fixture-selection.conf <<'UNIT'
-[Unit]
-Requires=
-Wants=
-After=
-Requires=loki-go-runtime.service loki-go-executor.service loki-go-secrets.service
-After=loki-go-runtime.service loki-go-executor.service loki-go-secrets.service
-[Service]
-User=loki-agent
-ExecStartPre=
-UNIT
+  # systemd dependency directives cannot be reset through a drop-in. Derive
+  # this selected fixture's unit before loading it; retain all sandbox lines.
+  python3 - <<'PY'
+from pathlib import Path
+p=Path('/etc/systemd/system/loki-go-mcp.service')
+lines=p.read_text().splitlines()
+lines=[line for line in lines if not line.startswith(('Requires=','Wants=','After=','ExecStartPre='))]
+lines=['User=loki-agent' if line=='User=runner' else line for line in lines]
+lines+=['[Unit]','Requires=loki-go-runtime.service loki-go-executor.service loki-go-secrets.service','After=loki-go-runtime.service loki-go-executor.service loki-go-secrets.service']
+p.write_text('\n'.join(lines)+'\n')
+PY
   install -d -o 21000 -g 21001 -m 0755 /var/lib/loki-go/runner/agents
   # Reproduce the installer's immutable selected-release topology and receipt.
   release=/opt/loki-go/releases/native-migration-fixture
