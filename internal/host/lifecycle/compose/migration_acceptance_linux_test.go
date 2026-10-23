@@ -22,6 +22,14 @@ import (
 )
 
 func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
+	runRealComposeMigrationLifecycle(t, false)
+}
+
+func TestRealComposeApplicationRestore(t *testing.T) {
+	runRealComposeMigrationLifecycle(t, true)
+}
+
+func runRealComposeMigrationLifecycle(t *testing.T, restore bool) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
 	if image == "" {
 		if os.Getenv("LOKI_REQUIRE_NATIVE_SECRET_COMPOSE") == "1" {
@@ -33,7 +41,7 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	if !filepath.IsAbs(binary) {
 		t.Fatal("actual public host CLI is required")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 	defer cancel()
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
@@ -264,5 +272,89 @@ func TestRealComposeMigrationPublicLifecycle(t *testing.T) {
 	}
 	if gate, err := b.maintenanceCall(ctx, current, "status", "", false, false); err != nil || gate == nil || gate.Active {
 		t.Fatal("successful backup retained Job gate", err)
+	}
+	if restore {
+		verifyRealComposeApplicationRestore(t, ctx, b, binary, backup, backupIdentity, passphrase, unlockArgs)
+	}
+}
+
+func verifyRealComposeApplicationRestore(t *testing.T, ctx context.Context, b *Backend, binary string, backup lifecycle.BackupRecord, identity *age.X25519Identity, passphrase []byte, unlockArgs []string) {
+	t.Helper()
+	unlock := func() {
+		t.Helper()
+		if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, bytes.NewReader(passphrase), unlockArgs...); err != nil {
+			t.Fatal("explicit warm restore safety-backup prerequisite", err)
+		}
+	}
+	invoke := func(action string, input []byte, extra ...string) ApplicationRestoreStatus {
+		t.Helper()
+		args := append([]string{"host", "application-restore", "compose", action, "--state-root", b.root, "--project", b.project}, extra...)
+		cmd := exec.CommandContext(ctx, binary, args...)
+		cmd.Stdin = bytes.NewReader(input)
+		var output, diagnostic bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &output, &diagnostic
+		if err := cmd.Run(); err != nil {
+			t.Fatal("public paired application restore", action, err, diagnostic.String())
+		}
+		var result ApplicationRestoreStatus
+		if json.Unmarshal(output.Bytes(), &result) != nil || result.Operation == "" {
+			t.Fatal("invalid public restore progress")
+		}
+		return result
+	}
+	plan := filepath.Join(b.root, "restore-plan.json")
+	prepare := func() lifecycle.ApplicationRestoreIntent {
+		t.Helper()
+		intent, err := b.PrepareApplicationRestore(ctx, backup.ID, false)
+		if err != nil || !intent.Valid() {
+			t.Fatal("read-only paired restore preparation", err)
+		}
+		if err := writePrivateJSON(plan, intent); err != nil {
+			t.Fatal(err)
+		}
+		return intent
+	}
+	unlock()
+	prepare()
+	pending := invoke("apply", nil, "--plan", plan, "--approve")
+	if pending.Phase != lifecycle.PhaseMigrate || pending.Protection != "uninitialized" || pending.Released {
+		t.Fatal("restore implicitly initialized candidate", pending)
+	}
+	rolledBack := invoke("rollback", nil, "--approve")
+	if rolledBack.State != lifecycle.OperationRolledBack || !rolledBack.Released {
+		t.Fatal("restore pre-cutover rollback", rolledBack)
+	}
+	if replay := invoke("apply", nil, "--plan", plan, "--approve"); replay != rolledBack {
+		t.Fatal("restore rollback replay created another operation")
+	}
+	unlock()
+	intent := prepare()
+	pending = invoke("apply", nil, "--plan", plan, "--approve")
+	key := filepath.Join(b.root, "operator-restore-identity")
+	if err := os.WriteFile(key, []byte(identity.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(key)
+	completed := invoke("recover", passphrase, "--identity-file", key, "--protection", "init", "--stdin")
+	if completed.State != lifecycle.OperationSucceeded || !completed.Released || !completed.Sealed || completed.Imports != 1 || completed.Operation != pending.Operation {
+		t.Fatal("original paired logical restore did not complete", completed)
+	}
+	if replay := invoke("apply", nil, "--plan", plan, "--approve"); replay != completed {
+		t.Fatal("restore completion replay changed original result")
+	}
+	current, found, err := b.loadRuntime()
+	if err != nil || !found || filepath.Base(current.ApplicationStateSource) != intent.CandidateGeneration {
+		t.Fatal("restore did not select fresh generation", err)
+	}
+	status, err := b.applicationAdministrator(ctx, current, []string{"protection", "status"}, nil)
+	var protection struct {
+		State string `json:"state"`
+	}
+	if err != nil || json.Unmarshal(status, &protection) != nil || protection.State != "locked" && protection.State != "locked_manual" {
+		t.Fatal("restore reused candidate key session", err)
+	}
+	ids, err := b.runner.Run(ctx, nil, "container", "ls", "--all", "--filter", "label=io.loki.restore.owner="+applicationOwnerID(b.root), "--format", "{{.ID}}")
+	if err != nil || strings.TrimSpace(string(ids)) != "" {
+		t.Fatal("restore left private helpers", err)
 	}
 }

@@ -303,6 +303,9 @@ func (e *TransactionEngine) collectStorageLocked(
 		return LifecycleStorageGCResult{}, err
 	}
 	for _, record := range records {
+		if record.ApplicationRestore != nil && (!record.State.Terminal() || record.Maintenance != nil && !record.Maintenance.Released) {
+			protected[record.ApplicationRestore.Intent.BackupID] = true
+		}
 		if record.RecoveryBackupID == "" {
 			continue
 		}

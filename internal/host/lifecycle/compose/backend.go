@@ -239,7 +239,21 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 	if err != nil {
 		return lifecycle.RuntimeSnapshot{}, err
 	}
-	dir, err := os.MkdirTemp(b.snapshotRoot, ".snapshot-")
+	var dir string
+	if original, owner, scopeErr := lifecycle.CurrentHostOperation(ctx); scopeErr == nil && original.ApplicationBackup != nil && owner.HoldsOperationRoot(b.root) {
+		dir = filepath.Dir(original.ApplicationBackup.Intent.Directory)
+		if filepath.Dir(dir) != b.snapshotRoot || !strings.HasPrefix(filepath.Base(dir), ".snapshot-") {
+			return lifecycle.RuntimeSnapshot{}, lifecycle.ErrApplicationBackup
+		}
+		if err = os.Mkdir(dir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+			return lifecycle.RuntimeSnapshot{}, err
+		}
+		if _, err = b.snapshotDirectory(dir); err != nil {
+			return lifecycle.RuntimeSnapshot{}, err
+		}
+	} else {
+		dir, err = os.MkdirTemp(b.snapshotRoot, ".snapshot-")
+	}
 	if err != nil {
 		return lifecycle.RuntimeSnapshot{}, err
 	}
@@ -250,7 +264,7 @@ func (b *Backend) Snapshot(ctx context.Context, _ lifecycle.OperationKind, snaps
 	var applicationBackup *lifecycle.ApplicationBackupCheckpoint
 	if found && current.ApplicationRuntimeRoot != "" {
 		applicationDirectory := filepath.Join(dir, "applications")
-		if err = os.Mkdir(applicationDirectory, 0700); err != nil {
+		if err = os.Mkdir(applicationDirectory, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 			_ = os.RemoveAll(dir)
 			return lifecycle.RuntimeSnapshot{}, err
 		}
@@ -736,6 +750,10 @@ func compactRuntimeServices(values []string) []string {
 }
 
 func (b *Backend) Restore(ctx context.Context, ref string) error {
+	return b.restoreSnapshot(ctx, ref, false)
+}
+
+func (b *Backend) restoreSnapshot(ctx context.Context, ref string, logicalRestore bool) error {
 	dir, err := b.snapshotDirectory(ref)
 	if err != nil {
 		return err
@@ -750,12 +768,18 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 	if manifest.ApplicationBackup != nil && (!manifest.ApplicationBackup.Complete() || manifest.Runtime == nil || manifest.Runtime.ApplicationRuntimeRoot == "" || manifest.ApplicationBackup.Intent.Directory != filepath.Join(dir, "applications")) {
 		return lifecycle.ErrApplicationBackup
 	}
+	if logicalRestore {
+		r, _, err := b.applicationRestoreRecord(ctx)
+		if err != nil || r.State != lifecycle.OperationApplying || r.Phase != lifecycle.PhaseSwitch || !r.ApplicationRestore.Sealed || r.ApplicationRestore.Intent.RuntimeRef != ref || manifest.ApplicationBackup == nil {
+			return lifecycle.ErrApplicationBackup
+		}
+	}
 	var currentRuntime *runtimeState
 	if current, found, loadErr := b.loadRuntime(); loadErr != nil {
 		return loadErr
 	} else if found {
 		currentRuntime = &current
-		if manifest.ApplicationBackup != nil {
+		if manifest.ApplicationBackup != nil && !logicalRestore {
 			if err := b.validateApplicationSafetyRestore(ctx, current, manifest.ApplicationBackup); err != nil {
 				return err
 			}
@@ -775,7 +799,7 @@ func (b *Backend) Restore(ctx context.Context, ref string) error {
 		}
 	}
 	for _, name := range persistentVolumes {
-		if manifest.ApplicationBackup != nil && (name == "application-state" || name == "runner-state" || name == "runtime-state") {
+		if manifest.ApplicationBackup != nil && (name == "application-state" || name == "runner-state" || name == "runtime-state" || name == "signing-state") {
 			// Never replay historical value/task/session roots or current
 			// platform credentials during binary/configuration recovery.
 			continue

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/platform/privateio"
+	"loki/internal/platform/safeio"
 )
 
 // importApplication is unavailable in ordinary serving layouts. The original
@@ -75,10 +78,79 @@ func (s *Service) importApplication(ctx context.Context, q AdminRequest, body []
 	if err != nil {
 		return nil, safeError(err)
 	}
+	proof := appvalues.ApplicationImportProof{Version: 1, Operation: q.Operation, Resource: resource.ID, Policy: s.options.PolicySHA256, Request: q.RequestID, Digest: result.Digest, CipherSHA256: q.ArchiveSHA256}
+	if err := s.recordApplicationImport(proof); err != nil {
+		return nil, err
+	}
 	if err := s.record("host-admin", resource, "backup_import", q.RequestID, "success"); err != nil {
 		return nil, err
 	}
 	return map[string]any{"action": q.Action, "resource_id": resource.ID, "digest": result.Digest, "changed": result.Changed, "replayed": result.Replayed}, nil
+}
+
+func (s *Service) recordApplicationImport(proof appvalues.ApplicationImportProof) error {
+	directory := filepath.Join(s.options.Root, "restore-imports")
+	if err := os.Mkdir(directory, 0700); err != nil && !os.IsExist(err) {
+		return unavailable()
+	}
+	if privateDirectory(directory, false) != nil {
+		return unavailable()
+	}
+	path := filepath.Join(directory, strings.ReplaceAll(proof.Resource, "-", "")+".json")
+	if previous, err := readPrivate(path, 4096); err == nil {
+		var old appvalues.ApplicationImportProof
+		if privateio.Decode(previous, &old) != nil || old != proof {
+			return conflict()
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return unavailable()
+	}
+	body, _ := json.Marshal(proof)
+	if safeio.PublishPrivate(path, body, false) != nil {
+		return unavailable()
+	}
+	return nil
+}
+
+func (s *Service) sealApplicationRestore(q AdminRequest, body []byte) (map[string]any, error) {
+	if s.options.RestoreOperation == "" || q.Operation != s.options.RestoreOperation || q.RequestID != q.Operation || q.Revision != s.options.PolicySHA256 || len(body) != 0 || q.Resource != "" || q.Environment != "" || q.Principal != "" || q.Name != "" || q.Variables != nil || q.Members != nil || q.Empty || q.Replace || q.Recipient != "" || q.ArchiveSHA256 != "" {
+		return nil, invalid()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	gate, err := s.maintenanceState()
+	if err != nil || gate == nil || !gate.Active || gate.Operation != q.Operation {
+		return nil, conflict()
+	}
+	seal := appvalues.ApplicationRestoreSeal{Version: 1, Operation: q.Operation, Deployment: s.options.DeploymentID, Policy: s.options.PolicySHA256, Imports: []appvalues.ApplicationImportProof{}}
+	for _, resource := range s.sortedResources() {
+		var proof appvalues.ApplicationImportProof
+		raw, err := readPrivate(filepath.Join(s.options.Root, "restore-imports", strings.ReplaceAll(resource.ID, "-", "")+".json"), 4096)
+		if err != nil || privateio.Decode(raw, &proof) != nil || proof.Version != 1 || proof.Operation != q.Operation || proof.Policy != q.Revision || proof.Resource != resource.ID || !adminUUID.MatchString(proof.Request) || !revisionPattern.MatchString(proof.Digest) || !revisionPattern.MatchString(proof.CipherSHA256) {
+			return nil, conflict()
+		}
+		seal.Imports = append(seal.Imports, proof)
+	}
+	path := filepath.Join(s.options.Root, "restore-seal.json")
+	raw, _ := json.Marshal(seal)
+	if previous, err := readPrivate(path, 1<<20); err == nil {
+		var old appvalues.ApplicationRestoreSeal
+		if privateio.Decode(previous, &old) != nil {
+			return nil, unavailable()
+		}
+		oldBody, _ := json.Marshal(old)
+		if string(oldBody) != string(raw) {
+			return nil, conflict()
+		}
+	} else if os.IsNotExist(err) {
+		if safeio.PublishPrivate(path, raw, false) != nil {
+			return nil, unavailable()
+		}
+	} else {
+		return nil, unavailable()
+	}
+	return map[string]any{"action": q.Action, "operation_id": q.Operation, "policy": q.Revision, "resources": len(seal.Imports), "sealed": true}, nil
 }
 
 func cleanupRestoreStaging(options Options) error {
@@ -112,7 +184,7 @@ func cleanupRestoreStaging(options Options) error {
 				return unavailable()
 			}
 			owner, ok := info.Sys().(*syscall.Stat_t)
-			if !ok || owner.Uid != uint32(os.Geteuid()) || owner.Nlink != 1 {
+			if !ok || owner.Uid != uint32(os.Geteuid()) || owner.Nlink != 1 || owner.Mode&07777 != 0600 {
 				return unavailable()
 			}
 			if err := os.Remove(path); err != nil {

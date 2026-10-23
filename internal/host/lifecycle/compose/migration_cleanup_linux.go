@@ -16,7 +16,14 @@ func (b *Backend) cleanupMigrationProjection(ctx context.Context, r lifecycle.Op
 	if !r.State.Terminal() {
 		return errComposeMigration
 	}
-	parent := filepath.Join("/dev/shm", "loki-tools-"+applicationOwnerID(b.root)+"-migration-"+r.ID)
+	return b.cleanupApplicationProjection(ctx, migrationCandidateBinding(r))
+}
+
+func (b *Backend) cleanupApplicationProjection(ctx context.Context, binding applicationCandidateBinding) error {
+	if binding.kind != "migration" && binding.kind != "restore" || lifecycle.MigrationOperationUUID(binding.operation) == "" || !pinnedRestoreCandidateImage(binding.image) {
+		return errComposeMigration
+	}
+	parent := filepath.Join("/dev/shm", "loki-tools-"+applicationOwnerID(b.root)+"-"+binding.kind+"-"+binding.operation)
 	var operator, st unix.Stat_t
 	if err := unix.Lstat(parent, &st); err == unix.ENOENT {
 		return nil
@@ -36,7 +43,7 @@ func (b *Backend) cleanupMigrationProjection(ctx context.Context, r lifecycle.Op
 		if !ok {
 			return errComposeMigration
 		}
-		args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--log-driver", "none", "--entrypoint", "/bin/sh", "--mount", applicationBind(projection, "/original-runtime", false), r.SecretMigration.Intent.ContainerImage, "-ec", "find /original-runtime -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +"}
+		args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--log-driver", "none", "--entrypoint", "/bin/sh", "--mount", applicationBind(projection, "/original-runtime", false), binding.image, "-ec", "find /original-runtime -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +"}
 		if _, err := private.RunPrivate(ctx, nil, nil, args...); err != nil {
 			return err
 		}

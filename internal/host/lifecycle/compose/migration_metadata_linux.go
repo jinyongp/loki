@@ -66,6 +66,28 @@ func (b *Backend) migrationMetadata(ctx context.Context, state runtimeState, res
 }
 
 func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resources []controlpolicy.ApplicationResource, empty bool, candidate *lifecycle.OperationRecord, projection string, selectCandidate bool) (migrationMetadata, error) {
+	var layout *applicationCandidateLayout
+	if candidate != nil {
+		original, _, err := b.migrationRecord(ctx)
+		if err != nil || original.ID != candidate.ID || original.SecretMigration.RollbackRequested || selectCandidate && original.Phase != lifecycle.PhaseSwitch || !selectCandidate && (original.Phase != lifecycle.PhaseAdmitted && original.Phase != lifecycle.PhaseSnapshot && original.Phase != lifecycle.PhaseMigrate) {
+			return migrationMetadata{}, errComposeMigration
+		}
+		i := original.SecretMigration.Intent
+		layout = &applicationCandidateLayout{Before: i.Before, CandidateGeneration: i.CandidateGeneration, Policy: i.Policy, Operation: lifecycle.MigrationOperationUUID(original.ID)}
+	}
+	return b.applicationLayout(ctx, state, resources, empty, layout, projection, selectCandidate)
+}
+
+type applicationCandidateLayout struct {
+	Before                                 appvalues.ApplicationIdentity
+	CandidateGeneration, Policy, Operation string
+	Restore                                bool
+}
+
+// Both original-operation owners use the same finite metadata helper. Their
+// admission/phase checks stay in their wrappers; no source decoder or progress
+// journal is delegated through this data-only layout request.
+func (b *Backend) applicationLayout(ctx context.Context, state runtimeState, resources []controlpolicy.ApplicationResource, empty bool, candidate *applicationCandidateLayout, projection string, selectCandidate bool) (migrationMetadata, error) {
 	var result migrationMetadata
 	private, ok := b.runner.(PrivateRunner)
 	if !ok || state.validate() != nil {
@@ -132,8 +154,7 @@ func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resou
 	appMount := "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,readonly,volume-nocopy"
 	var mounts []string
 	if candidate != nil {
-		original, _, err := b.migrationRecord(ctx)
-		if err != nil || original.ID != candidate.ID || original.SecretMigration.RollbackRequested || selectCandidate && original.Phase != lifecycle.PhaseSwitch || !selectCandidate && (original.Phase != lifecycle.PhaseAdmitted && original.Phase != lifecycle.PhaseSnapshot && original.Phase != lifecycle.PhaseMigrate || !filepath.IsAbs(projection) || filepath.Clean(projection) != projection) {
+		if !controlpolicy.ApplicationUUID.MatchString(candidate.Operation) || len(candidate.CandidateGeneration) != 32 || lifecycle.MigrationOperationUUID(candidate.CandidateGeneration) == "" || !validSHA256(candidate.Policy) || candidate.Before.UID != 10006 || candidate.Before.GID != 10006 || candidate.Before.AgentUID != 10000 || candidate.Before.MetadataGID != 10001 || !selectCandidate && (!filepath.IsAbs(projection) || filepath.Clean(projection) != projection) {
 			return result, errComposeMigration
 		}
 		// The JSON identity contains only validated public identifiers. Pass it
@@ -141,7 +162,13 @@ func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resou
 		script = strings.Replace(script, "--metadata-only", "--candidate-generation \"$1\" --candidate-before \"$2\" --candidate-operation \"$3\" --unit-directory= --overlay-directory=", 1)
 		if selectCandidate {
 			script += " --commit-candidate --candidate-policy \"$4\""
+			if candidate.Restore {
+				script += " --restore-candidate"
+			}
 		} else {
+			if candidate.Restore {
+				script += " --initial-maintenance-operation \"$3\""
+			}
 			script = "set -eu\ntest ! -L /run/loki/secrets\nif test \"$(stat -c %u /run/loki/secrets)\" != 10006; then test -z \"$(ls -A /run/loki/secrets)\"; install -d -o 0 -g 0 -m 0700 /run/loki/secrets; fi\n" + script
 			mounts = []string{"--mount", applicationBind(projection, "/run/loki/secrets", false)}
 		}
@@ -151,13 +178,13 @@ func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resou
 	args = append(args, mounts...)
 	args = append(args, state.CoreImage, "-ec", script)
 	if candidate != nil {
-		i := candidate.SecretMigration.Intent
+		i := candidate
 		before, _ := json.Marshal(i.Before)
-		args = append(args, "host-migration-prepare", i.CandidateGeneration, string(before), lifecycle.MigrationOperationUUID(candidate.ID), i.Policy)
+		args = append(args, "host-application-prepare", i.CandidateGeneration, string(before), i.Operation, i.Policy)
 	}
 	body, err := private.RunPrivate(ctx, nil, nil, args...)
 	if selectCandidate && candidate != nil {
-		i := candidate.SecretMigration.Intent
+		i := candidate
 		want := i.Before
 		want.Version, want.ActiveGeneration, want.PolicySHA256 = 2, i.CandidateGeneration, i.Policy
 		if err != nil || json.Unmarshal(body, &result.Identity) != nil || result.Identity != want {
@@ -177,7 +204,7 @@ func (b *Backend) migrationLayout(ctx context.Context, state runtimeState, resou
 			Deployment string `json:"deployment_id"`
 			Runner     string `json:"runner_id"`
 		}
-		i := candidate.SecretMigration.Intent
+		i := candidate
 		if err != nil || json.Unmarshal(body, &prepared) != nil || !prepared.Prepared || !prepared.Candidate || prepared.Generation != i.CandidateGeneration || prepared.Policy != i.Policy || prepared.UID != i.Before.UID || prepared.GID != i.Before.GID || prepared.Deployment != i.Before.DeploymentID || prepared.Runner != i.Before.RunnerID {
 			return result, errComposeMigration
 		}

@@ -43,6 +43,9 @@ func (s *Service) LockOnStart(ctx context.Context) error {
 }
 
 func (s *Service) Admin(ctx context.Context, q AdminRequest, body []byte) (map[string]any, error) {
+	if q.Action == "backup_import_seal" {
+		return s.sealApplicationRestore(q, body)
+	}
 	if q.Action == "backup_import_preview" || q.Action == "backup_import" {
 		return s.importApplication(ctx, q, body)
 	}

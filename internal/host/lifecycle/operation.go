@@ -38,24 +38,25 @@ const (
 type OperationKind string
 
 const (
-	OperationApply             OperationKind = "apply"
-	OperationBackup            OperationKind = "backup"
-	OperationInstall           OperationKind = "install"
-	OperationRollback          OperationKind = "rollback"
-	OperationRestore           OperationKind = "restore"
-	OperationUninstall         OperationKind = "uninstall"
-	OperationEnableComponent   OperationKind = "enable_component"
-	OperationDisableComponent  OperationKind = "disable_component"
-	OperationSetIngressHosts   OperationKind = "set_ingress_hosts"
-	OperationUpdateIntegration OperationKind = "update_integration"
-	OperationNativeSwitch      OperationKind = "native_switch"
-	OperationSecretMigration   OperationKind = "secret_migration"
+	OperationApply              OperationKind = "apply"
+	OperationBackup             OperationKind = "backup"
+	OperationInstall            OperationKind = "install"
+	OperationRollback           OperationKind = "rollback"
+	OperationRestore            OperationKind = "restore"
+	OperationUninstall          OperationKind = "uninstall"
+	OperationEnableComponent    OperationKind = "enable_component"
+	OperationDisableComponent   OperationKind = "disable_component"
+	OperationSetIngressHosts    OperationKind = "set_ingress_hosts"
+	OperationUpdateIntegration  OperationKind = "update_integration"
+	OperationNativeSwitch       OperationKind = "native_switch"
+	OperationSecretMigration    OperationKind = "secret_migration"
+	OperationApplicationRestore OperationKind = "application_restore"
 )
 
 func (k OperationKind) Valid() bool {
 	switch k {
 	case OperationApply, OperationBackup, OperationInstall, OperationRollback, OperationRestore, OperationUninstall,
-		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration, OperationNativeSwitch, OperationSecretMigration:
+		OperationEnableComponent, OperationDisableComponent, OperationSetIngressHosts, OperationUpdateIntegration, OperationNativeSwitch, OperationSecretMigration, OperationApplicationRestore:
 		return true
 	default:
 		return false
@@ -125,6 +126,7 @@ type OperationRecord struct {
 	NativeSwitch          *NativeSwitchIntent          `json:"native_switch,omitempty"`
 	SecretMigration       *SecretMigrationOperation    `json:"secret_migration,omitempty"`
 	ApplicationBackup     *ApplicationBackupCheckpoint `json:"application_backup,omitempty"`
+	ApplicationRestore    *ApplicationRestoreOperation `json:"application_restore,omitempty"`
 }
 
 // OperationMaintenance retains the exact interruption choice across crashes.
@@ -163,7 +165,13 @@ func (r OperationRecord) Valid() bool {
 		return false
 	}
 	if r.Kind == OperationSecretMigration {
-		return r.NativeSwitch == nil && r.validSecretMigration()
+		return r.NativeSwitch == nil && r.ApplicationRestore == nil && r.validSecretMigration()
+	}
+	if r.Kind == OperationApplicationRestore {
+		return r.NativeSwitch == nil && r.SecretMigration == nil && r.validApplicationRestore()
+	}
+	if r.ApplicationRestore != nil {
+		return false
 	}
 	if r.SecretMigration != nil {
 		return false
@@ -379,7 +387,7 @@ func ReadOperationSnapshot(root string) ([]OperationRecord, error) {
 	})
 	active := 0
 	for _, record := range result {
-		if !record.State.Terminal() || record.Kind == OperationSecretMigration && record.Maintenance != nil && !record.Maintenance.Released {
+		if !record.State.Terminal() || (record.Kind == OperationSecretMigration || record.Kind == OperationApplicationRestore) && record.Maintenance != nil && !record.Maintenance.Released {
 			active++
 		}
 	}
@@ -396,7 +404,7 @@ func (j *OperationJournal) Active() (OperationRecord, bool, error) {
 	var active OperationRecord
 	found := false
 	for _, record := range j.records {
-		if record.State.Terminal() && (record.Kind != OperationSecretMigration || record.Maintenance == nil || record.Maintenance.Released) {
+		if record.State.Terminal() && (record.Kind != OperationSecretMigration && record.Kind != OperationApplicationRestore || record.Maintenance == nil || record.Maintenance.Released) {
 			continue
 		}
 		if found {
@@ -621,6 +629,9 @@ func (j *OperationJournal) RecoverInterrupted(
 	if record.Kind == OperationSecretMigration {
 		return OperationRecord{}, true, errSecretMigration
 	}
+	if record.Kind == OperationApplicationRestore {
+		return OperationRecord{}, true, ErrApplicationBackup
+	}
 	if recover == nil {
 		return OperationRecord{}, true, errors.New("host lifecycle recovery handler is not configured")
 	}
@@ -689,7 +700,7 @@ func (j *OperationJournal) persist(record OperationRecord, overwrite bool) error
 	}
 	envelope = append(envelope, '\n')
 	limit := maxOperationRecordBytes
-	if record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil {
+	if record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil || record.Kind == OperationApplicationRestore {
 		limit = maxNativeOperationRecordBytes
 	} else if record.Kind == OperationSecretMigration {
 		limit = maxMigrationOperationRecordBytes
@@ -822,7 +833,7 @@ func loadOperationRecord(path string) (OperationRecord, error) {
 	if err = recordDecoder.Decode(&record); err != nil {
 		return OperationRecord{}, errors.New("host lifecycle operation record is invalid")
 	}
-	if (record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil) && len(raw) > maxNativeOperationRecordBytes || record.Kind != OperationNativeSwitch && record.Kind != OperationSecretMigration && record.ApplicationBackup == nil && len(raw) > maxOperationRecordBytes {
+	if (record.Kind == OperationNativeSwitch || record.ApplicationBackup != nil || record.Kind == OperationApplicationRestore) && len(raw) > maxNativeOperationRecordBytes || record.Kind != OperationNativeSwitch && record.Kind != OperationSecretMigration && record.Kind != OperationApplicationRestore && record.ApplicationBackup == nil && len(raw) > maxOperationRecordBytes {
 		return OperationRecord{}, errors.New("host lifecycle operation record exceeds size limit")
 	}
 	if err = recordDecoder.Decode(&trailing); !errors.Is(err, io.EOF) || !record.Valid() {

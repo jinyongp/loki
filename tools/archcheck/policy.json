@@ -42,6 +42,7 @@
     {"from":"loki/internal/host/application","to":"loki/internal/execution"},
     {"from":"loki/internal/host/application","to":"loki/internal/host/policy"},
     {"from":"loki/internal/host/application","to":"loki/internal/platform/safeio"},
+    {"from":"loki/internal/host/application","to":"loki/internal/platform/privateio"},
     {"from":"loki/internal/control/appvalues","to":"loki/internal/control/policy"},
     {"from":"loki/cmd/secret-broker","to":"loki/internal/control/appvalues"},
     {"from":"loki/internal/host/policy","to":"loki/internal/daemon"},

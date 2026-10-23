@@ -62,11 +62,12 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	candidateOperation := flags.String("candidate-operation", "", "original migration operation UUID")
 	commitCandidate := flags.Bool("commit-candidate", false, "publish the original host owner's verified candidate selector")
 	candidatePolicy := flags.String("candidate-policy", "", "frozen target policy digest required for selector publication")
+	restoreCandidate := flags.Bool("restore-candidate", false, "select only an original-operation sealed logical restore")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	if *inspectIdentity {
-		if *metadataOnly || *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *initialMaintenance != "" || *interrupt {
+		if *metadataOnly || *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *restoreCandidate || *maintenance != "" || *initialMaintenance != "" || *interrupt {
 			return 2
 		}
 		existing, err := hostapplication.ReadIdentity(*identity)
@@ -98,7 +99,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	if *stateOnly && (*unitDirectory != "" || *overlayDirectory != "") {
 		return 2
 	}
-	if *commitCandidate != (*candidatePolicy != "") {
+	if *commitCandidate != (*candidatePolicy != "") || *restoreCandidate && !*commitCandidate {
 		return 2
 	}
 	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate
@@ -195,12 +196,16 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "candidate policy changed before selector publication")
 			return 1
 		}
-		if err := hostapplication.RequireEmptyGeneration(*state, before); err != nil {
+		if err := hostapplication.RequireEmptyGeneration(*state, before); err != nil && !*restoreCandidate {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		options.MigrationOperation = *candidateOperation
-		selected, err := hostapplication.CommitCandidate(options, before, *candidateGeneration)
+		selectCandidate := hostapplication.CommitCandidate
+		if *restoreCandidate {
+			selectCandidate = hostapplication.CommitRestoredCandidate
+		}
+		selected, err := selectCandidate(options, before, *candidateGeneration)
 		if err != nil || json.NewEncoder(stdout).Encode(selected) != nil {
 			fmt.Fprintln(stderr, "candidate selector publication requires original host recovery")
 			return 1

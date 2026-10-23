@@ -50,6 +50,30 @@ func runApplicationAdministration(args []string, stdin io.Reader, stdout, stderr
 	if len(args) > 0 && args[0] == "maintenance" {
 		return runApplicationMaintenance(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "restore-seal" {
+		flags := flag.NewFlagSet("secret app restore-seal", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		layout := flags.String("layout", "/etc/loki-go/secrets-admin.json", "private candidate administrator layout")
+		operation := flags.String("operation-id", "", "original restore UUID")
+		policy := flags.String("policy", "", "original candidate policy")
+		if flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
+			return 2
+		}
+		var installed applicationClientLayout
+		if daemon.ReadJSON(*layout, &installed) != nil || installed.UID == 0 {
+			return 1
+		}
+		out, err := (admin.ApplicationClient{Socket: installed.Socket, ExpectedUID: installed.UID}).Call(context.Background(), appvalues.AdminRequest{Action: "backup_import_seal", Operation: *operation, RequestID: *operation, Revision: *policy}, nil)
+		if err != nil {
+			fmt.Fprintln(stderr, "loki:", fault.Public(err))
+			return 1
+		}
+		var metadata map[string]any
+		if json.Unmarshal(out, &metadata) != nil || metadata == nil || json.NewEncoder(stdout).Encode(metadata) != nil {
+			return 1
+		}
+		return 0
+	}
 	if len(args) < 2 {
 		fmt.Fprintln(stderr, "usage: loki secret app revision|stage|set|env-create|env-remove|bundle-set|backup-export RESOURCE [OPTIONS]; maintenance begin|end|status [OPTIONS]")
 		return 2

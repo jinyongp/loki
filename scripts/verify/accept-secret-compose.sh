@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 umask 077
-test "$#" -eq 1 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE' >&2; exit 2; }
+test "$#" -ge 1 && test "$#" -le 2 || { echo 'usage: accept-secret-compose.sh LOCAL_NATIVE_IMAGE [normal|restore]' >&2; exit 2; }
 image=$1
+suite=${2:-normal}
+case "$suite" in normal|restore) ;; *) exit 2 ;; esac
 registry=
 tag=
 test_binary=
@@ -40,6 +42,10 @@ host_cli=$(mktemp /tmp/loki-secret-host-cli.XXXXXXXX)
 CGO_ENABLED=0 go build -o "$host_cli" ./cmd/loki
 chmod 0555 "$host_cli"
 export LOKI_TEST_HOST_MIGRATION_CLI="$host_cli"
+if test "$suite" = restore; then
+  go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealComposeApplicationRestore$'
+  exit 0
+fi
 go test -count=1 -v -timeout=7m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices|MigrationPublicLifecycle)$'
 test_binary=$(mktemp /tmp/loki-managed-admission.XXXXXXXX)
 CGO_ENABLED=0 go test -c -o "$test_binary" ./internal/management

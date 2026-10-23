@@ -4,6 +4,7 @@ package compose
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -264,6 +265,33 @@ func (b *Backend) copyApplicationCipher(ctx context.Context, container, destinat
 }
 
 func (b *Backend) captureApplicationBackup(ctx context.Context, state runtimeState, directory string) (*lifecycle.ApplicationBackupCheckpoint, error) {
+	if r, owner, err := lifecycle.CurrentHostOperation(ctx); err == nil && owner.HoldsOperationRoot(b.root) && r.ApplicationBackup != nil && r.ApplicationBackup.Complete() && r.ApplicationBackup.Intent.Directory == directory {
+		complete := true
+		for _, proof := range r.ApplicationBackup.Exports {
+			if verifyApplicationCipher(filepath.Join(directory, strings.ReplaceAll(proof.Resource, "-", "")+".age"), proof) != nil {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			body, err := lifecycle.MarshalApplicationBackup(*r.ApplicationBackup)
+			if err != nil {
+				return nil, err
+			}
+			if previous, err := os.ReadFile(filepath.Join(directory, "application-backup.json")); err == nil {
+				if !bytes.Equal(previous, body) {
+					return nil, lifecycle.ErrApplicationBackup
+				}
+			} else if errors.Is(err, os.ErrNotExist) {
+				if safeio.PublishPrivate(filepath.Join(directory, "application-backup.json"), body, false) != nil {
+					return nil, lifecycle.ErrApplicationBackup
+				}
+			} else {
+				return nil, err
+			}
+			return r.ApplicationBackup, nil
+		}
+	}
 	var catalog struct {
 		Resources []controlpolicy.ApplicationResource `json:"resources"`
 	}

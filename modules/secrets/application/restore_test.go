@@ -54,6 +54,10 @@ func verifyApplicationRestore(t *testing.T, ctx context.Context, binary string, 
 	if _, err := s.Admin(ctx, AdminRequest{Action: "maintenance_begin", RequestID: operation}, nil); err != nil {
 		t.Fatal(err)
 	}
+	seal := AdminRequest{Action: "backup_import_seal", Operation: operation, RequestID: operation, Revision: options.PolicySHA256}
+	if _, err := s.Admin(ctx, seal, nil); err == nil {
+		t.Fatal("candidate sealed missing logical imports")
+	}
 	beforeInit, err := s.Admin(ctx, q, body)
 	if err != nil {
 		t.Fatal("read-only restore preview before initialization", err)
@@ -87,6 +91,11 @@ func verifyApplicationRestore(t *testing.T, ctx context.Context, binary string, 
 	}
 	if result, err := s.Admin(ctx, q, body); err != nil || result["replayed"] != true {
 		t.Fatal("lost import ACK did not replay original receipt", err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if sealed, err := s.Admin(ctx, seal, nil); err != nil || sealed["sealed"] != true || sealed["resources"] != 1 {
+			t.Fatal("candidate logical restore sealing/replay", err)
+		}
 	}
 	changed := q
 	changed.RequestID = "9861d99c-1a42-4ec0-a49b-7d4290b4f6dc"

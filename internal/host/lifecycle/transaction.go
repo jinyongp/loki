@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -933,10 +934,43 @@ func (e *TransactionEngine) captureBackup(ctx context.Context, journal *Operatio
 			return BackupRecord{}, errors.Join(err, e.discardBackup(ctx, backup))
 		}
 	}
-	if _, err = journal.RecordSnapshot(record.ID, backup.ID, e.now()); err != nil {
+	if record.Kind == OperationApplicationRestore {
+		_, err = journal.CheckpointApplicationRestoreSafety(record.ID, backup.ID, e.now())
+	} else {
+		_, err = journal.RecordSnapshot(record.ID, backup.ID, e.now())
+	}
+	if err != nil {
 		return BackupRecord{}, errors.Join(err, e.discardBackup(ctx, backup))
 	}
 	return backup, nil
+}
+
+// CaptureApplicationRestoreSafety uses the existing host engine's backup,
+// retention and publication path under the caller's ORIGINAL kernel lock.
+func (e *TransactionEngine) CaptureApplicationRestoreSafety(ctx context.Context, j *OperationJournal, id string) (BackupRecord, error) {
+	if e == nil || e.Store == nil || e.Backend == nil || !j.HoldsOperationRoot(e.Store.Root) {
+		return BackupRecord{}, ErrApplicationBackup
+	}
+	r, err := j.require(id)
+	if err != nil || r.Kind != OperationApplicationRestore || r.State != OperationApplying || r.Phase != PhaseAdmitted {
+		return BackupRecord{}, ErrApplicationBackup
+	}
+	if r.ApplicationBackup != nil {
+		backups, err := e.Store.ListBackups(ctx)
+		if err != nil {
+			return BackupRecord{}, err
+		}
+		for _, backup := range backups {
+			if backup.ApplicationBackup != nil && reflect.DeepEqual(*backup.ApplicationBackup, *r.ApplicationBackup) {
+				return backup, nil
+			}
+		}
+	}
+	snapshot, err := e.Store.Snapshot(ctx)
+	if err != nil {
+		return BackupRecord{}, err
+	}
+	return e.captureBackup(ctx, j, r, snapshot)
 }
 
 func (e *TransactionEngine) openJournal(ctx context.Context) (*OperationLock, *OperationJournal, error) {
@@ -993,6 +1027,9 @@ func (e *TransactionEngine) recoverInterrupted(ctx context.Context, journal *Ope
 		return err
 	}
 	for _, record := range records {
+		if record.Kind == OperationApplicationRestore && (!record.State.Terminal() || record.Maintenance != nil && !record.Maintenance.Released) {
+			return ErrApplicationBackup
+		}
 		if record.Kind == OperationSecretMigration && (!record.State.Terminal() || record.Maintenance != nil && !record.Maintenance.Released) {
 			return errSecretMigration
 		}

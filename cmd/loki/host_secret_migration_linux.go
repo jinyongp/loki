@@ -24,6 +24,10 @@ import (
 )
 
 func readSecretMigrationDocument(path string, target any) error {
+	return readHostOperationDocument(path, target, lifecycle.MaxSourceManifestBytes)
+}
+
+func readHostOperationDocument(path string, target any, limit int64) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return errors.New("migration metadata file must have a canonical absolute path")
 	}
@@ -34,11 +38,11 @@ func readSecretMigrationDocument(path string, target any) error {
 	file := os.NewFile(uintptr(fd), "host-migration-metadata")
 	defer file.Close()
 	var info unix.Stat_t
-	if unix.Fstat(fd, &info) != nil || info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&0022 != 0 || info.Uid != 0 && info.Uid != uint32(os.Geteuid()) || info.Nlink != 1 || info.Size > lifecycle.MaxSourceManifestBytes {
+	if unix.Fstat(fd, &info) != nil || info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&0022 != 0 || info.Uid != 0 && info.Uid != uint32(os.Geteuid()) || info.Nlink != 1 || info.Size > limit {
 		return errors.New("migration metadata must be bounded, protected and owned")
 	}
-	body, err := io.ReadAll(io.LimitReader(file, lifecycle.MaxSourceManifestBytes+1))
-	if err != nil || len(body) > lifecycle.MaxSourceManifestBytes {
+	body, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || int64(len(body)) > limit {
 		return errors.New("migration metadata exceeds its bound")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))

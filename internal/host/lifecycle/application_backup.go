@@ -72,10 +72,11 @@ type hostOperationKey struct{}
 type hostOperationScope struct {
 	journal *OperationJournal
 	id      string
+	active  *bool
 }
 
 func hostOperationContext(ctx context.Context, j *OperationJournal, id string) context.Context {
-	return context.WithValue(ctx, hostOperationKey{}, hostOperationScope{j, id})
+	return context.WithValue(ctx, hostOperationKey{}, hostOperationScope{journal: j, id: id})
 }
 
 // CurrentHostOperation exposes only the capability carried by the live
@@ -83,7 +84,7 @@ func hostOperationContext(ctx context.Context, j *OperationJournal, id string) c
 // Journal methods recheck that the original kernel/store lock is still held.
 func CurrentHostOperation(ctx context.Context) (OperationRecord, *OperationJournal, error) {
 	scope, ok := ctx.Value(hostOperationKey{}).(hostOperationScope)
-	if !ok || scope.journal == nil || scope.journal.ready() != nil {
+	if !ok || scope.journal == nil || scope.active != nil && !*scope.active || scope.journal.ready() != nil {
 		return OperationRecord{}, nil, ErrApplicationBackup
 	}
 	r, err := scope.journal.require(scope.id)
@@ -91,6 +92,20 @@ func CurrentHostOperation(ctx context.Context) (OperationRecord, *OperationJourn
 		return OperationRecord{}, nil, err
 	}
 	return detachedMigrationRecord(r), scope.journal, nil
+}
+
+// WithHostOperation lends an already locked journal to a finite host adapter.
+// It never acquires another lock or creates an alternative progress record.
+func WithHostOperation(ctx context.Context, j *OperationJournal, id string, use func(context.Context) error) error {
+	if j == nil || j.ready() != nil || use == nil {
+		return ErrApplicationBackup
+	}
+	if _, err := j.require(id); err != nil {
+		return err
+	}
+	active := true
+	defer func() { active = false }()
+	return use(context.WithValue(ctx, hostOperationKey{}, hostOperationScope{journal: j, id: id, active: &active}))
 }
 
 func (j *OperationJournal) HoldsOperationRoot(root string) bool {

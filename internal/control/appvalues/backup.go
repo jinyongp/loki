@@ -45,3 +45,21 @@ type ApplicationExportProof struct {
 	CipherSHA256 string `json:"cipher_sha256"`
 	Bytes        int    `json:"bytes"`
 }
+
+type ApplicationImportProof struct {
+	Version      int    `json:"version"`
+	Operation    string `json:"operation_id"`
+	Resource     string `json:"resource_id"`
+	Policy       string `json:"policy"`
+	Request      string `json:"request_id"`
+	Digest       string `json:"digest"`
+	CipherSHA256 string `json:"cipher_sha256"`
+}
+
+type ApplicationRestoreSeal struct {
+	Version    int                      `json:"version"`
+	Operation  string                   `json:"operation_id"`
+	Deployment string                   `json:"deployment_id"`
+	Policy     string                   `json:"policy"`
+	Imports    []ApplicationImportProof `json:"imports"`
+}
