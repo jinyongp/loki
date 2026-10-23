@@ -57,6 +57,7 @@ PY
   systemctl daemon-reload
   systemctl start loki-go.target
   recipient=$(cat "$operator/recipient")
+  if test "$(cat /mnt/loki-payload/scenario)" = rollback; then
   phase=native-migration-rollback
   echo "LOKI_SECRET_PHASE=$phase"
   /opt/loki/bin/loki host secret-migration native prepare --mapping "$operator/mapping.json" --recipient "$recipient" --backup "$operator/source-before-rollback.age" > "$operator/rollback-plan.json"
@@ -74,6 +75,10 @@ PY
   # A completed plan is its original saved result, never another operation.
   /opt/loki/bin/loki host secret-migration native apply --plan "$operator/rollback-plan.json" --approve > "$operator/rollback-replay.json"
   cmp "$operator/rollback-replay.json" "$operator/rolled-back.json"
+  echo LOKI_SECRET_NATIVE_ROLLBACK_PASS
+  systemctl poweroff --no-block
+  exit 0
+  fi
   phase=native-migration-pending-reboot
   echo "LOKI_SECRET_PHASE=$phase"
   /opt/loki/bin/loki host secret-migration native prepare --mapping "$operator/mapping.json" --recipient "$recipient" --backup "$operator/source-before-cutover.age" > "$operator/forward-plan.json"

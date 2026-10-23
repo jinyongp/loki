@@ -63,7 +63,7 @@ def copy_native_runtime(payload):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devtools", required=True, type=Path)
-    parser.add_argument("--scenario", choices=["protected", "migration"], default="protected")
+    parser.add_argument("--scenario", choices=["protected", "migration", "rollback"], default="protected")
     args = parser.parse_args()
     arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
     if arch not in IMAGES or platform.system() != "Linux":
@@ -79,7 +79,7 @@ def main():
         for package, name in [("./cmd/loki", "loki"), ("./cmd/secret-broker", "loki-secret-broker"), ("./cmd/launcher", "loki-launcher"), ("./internal/host/lifecycle/testdata/native-reboot", "native-reboot-peer")]:
             subprocess.run(["go", "build", "-trimpath", "-o", str(payload / name), package], cwd=ROOT, env=env, check=True)
         (payload / "scenario").write_text(args.scenario + "\n")
-        if args.scenario == "migration":
+        if args.scenario in ("migration", "rollback"):
             for package, name in [("./cmd/executor", "loki-executor"), ("./internal/host/lifecycle/testdata/native-migration", "native-migration-peer")]:
                 subprocess.run(["go", "build", "-trimpath", "-o", str(payload / name), package], cwd=ROOT, env=env, check=True)
             for name in ["mcp.service", "executor.service", "host.target"]:
@@ -165,12 +165,14 @@ def main():
                         result = -1
                         break
         text = log.read_text(errors="replace")
-        if result != 0 or "LOKI_SECRET_REBOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FIRST_BOOT_PASS" not in text or "LOKI_SECRET_REBOOT_FAIL" in text:
+        required = ["LOKI_SECRET_NATIVE_ROLLBACK_PASS"] if args.scenario == "rollback" else ["LOKI_SECRET_REBOOT_PASS", "LOKI_SECRET_REBOOT_FIRST_BOOT_PASS"]
+        if result != 0 or any(marker not in text for marker in required) or "LOKI_SECRET_REBOOT_FAIL" in text:
             important = [line for line in text.splitlines() if any(marker in line for marker in ["LOKI_SECRET", "native owned fixture", "loki:", "Job for loki", "Failed at step", "Traceback", "validate runner"]) ]
             print("\n".join(important)[-16000:])
             print(text[-24000:])
-            raise RuntimeError("actual VM reboot verification failed")
-        print(f"PASS: new kernel boot ID, fresh broker instance, locked vault, erased tmpfs credential; {arch}, {time.monotonic()-started:.1f}s", flush=True)
+            raise RuntimeError("actual VM verification failed: " + args.scenario)
+        coverage = "native rollback, unchanged selector, released maintenance, saved-plan replay" if args.scenario == "rollback" else "new kernel boot ID, fresh broker instance, locked vault, erased tmpfs credential"
+        print(f"PASS: {coverage}; {arch}, {time.monotonic()-started:.1f}s", flush=True)
 
 
 if __name__ == "__main__":

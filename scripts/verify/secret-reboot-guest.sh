@@ -130,7 +130,7 @@ d=json.load(open(p)); d['Tools']=['coordination']
 with open(p,'w') as f: json.dump(d,f)
 os.chown(p,0,21001); os.chmod(p,0o640)
 PY
-  if test "$(cat /mnt/loki-payload/scenario)" = migration; then
+  if test "$(cat /mnt/loki-payload/scenario)" = migration || test "$(cat /mnt/loki-payload/scenario)" = rollback; then
     install -m 0555 /mnt/loki-payload/loki-executor /mnt/loki-payload/native-migration-peer /opt/loki/bin/
     install -m 0700 /mnt/loki-payload/migration-guest "$state/migration-guest"
     touch "$state/migration-mode"
