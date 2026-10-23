@@ -6,12 +6,14 @@ image=$1
 registry=
 tag=
 test_binary=
+source_builder=
 cleanup() {
   result=$?
   trap - EXIT HUP INT TERM
   if test -n "$registry"; then docker rm -f "$registry" >/dev/null 2>&1 || true; fi
   if test -n "$tag"; then docker image rm "$tag" >/dev/null 2>&1 || true; fi
   if test -n "$test_binary"; then rm -f "$test_binary"; fi
+  if test -n "$source_builder"; then rm -f "$source_builder"; fi
   exit "$result"
 }
 trap cleanup EXIT HUP INT TERM
@@ -28,7 +30,11 @@ done)
 test -n "$LOKI_TEST_NATIVE_SECRET_IMAGE"
 export LOKI_TEST_NATIVE_SECRET_IMAGE
 export LOKI_REQUIRE_NATIVE_SECRET_COMPOSE=1
-go test -count=1 -v -timeout=3m ./internal/host/lifecycle/compose -run '^TestRealComposeApplicationService$'
+source_builder=$(mktemp /tmp/loki-secret-source-builder.XXXXXXXX)
+CGO_ENABLED=0 go build -o "$source_builder" ./internal/host/lifecycle/testdata/native-migration
+chmod 0555 "$source_builder"
+export LOKI_TEST_MIGRATION_SOURCE_BUILDER="$source_builder"
+go test -count=1 -v -timeout=3m ./internal/host/lifecycle/compose -run '^TestRealCompose(ApplicationService|MigrationPreparationWithoutRunningServices)$'
 test_binary=$(mktemp /tmp/loki-managed-admission.XXXXXXXX)
 CGO_ENABLED=0 go test -c -o "$test_binary" ./internal/management
 chmod 0555 "$test_binary"

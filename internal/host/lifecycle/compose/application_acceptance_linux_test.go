@@ -14,9 +14,116 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
+
+	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
+	"loki/internal/host/lifecycle"
 	"loki/internal/platform/safeio"
 )
+
+func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string) {
+	t.Helper()
+	runner := ExecRunner{}
+	builder := os.Getenv("LOKI_TEST_MIGRATION_SOURCE_BUILDER")
+	if !filepath.IsAbs(builder) {
+		t.Fatal("private source fixture builder is required")
+	}
+	volume := b.volumeName("runtime-state")
+	if _, err := runner.Run(ctx, nil, "volume", "create", "--label", "com.docker.compose.project="+b.project, "--label", "com.docker.compose.volume=runtime-state", volume); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--log-driver", "none", "--mount", applicationBind(builder, "/fixture/source-builder", true), "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/runtime,volume-nocopy", "--entrypoint", "/fixture/source-builder", image, "seed-compose"}
+	if _, err := runner.RunPrivate(ctx, nil, nil, args...); err != nil {
+		t.Fatal("actual encrypted source fixture preparation", err)
+	}
+	key, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "fixture", Repository: "repo:fixture", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret", "API_URL": "variable"}, Network: "none", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true, Execute: true}}}
+	mappings := []appvalues.MigrationProfileMapping{{Profile: "legacy-app", Resource: resource.ID, Environment: "common", Keys: []appvalues.MigrationKeyMapping{{Source: "TOKEN", Name: "TOKEN", Kind: "secret"}, {Source: "API_URL", Name: "API_URL", Kind: "variable"}}}}
+	archive := filepath.Join(b.root, "synthetic-source.age")
+	intent, err := b.PrepareSecretMigration(ctx, mappings, []controlpolicy.ApplicationResource{resource}, key.Recipient().String(), archive, false)
+	if err != nil || !intent.Valid() || intent.Plan.Values != 2 || intent.ContainerImage != image || intent.ContainerGeneration != state.GenerationID || state.ApplicationStateSource != "" && intent.Before.ActiveGeneration != filepath.Base(state.ApplicationStateSource) {
+		t.Fatal("real Compose source/mapping metadata preparation", err)
+	}
+	if _, err := os.Lstat(archive); !os.IsNotExist(err) {
+		t.Fatal("prepare created a source backup before maintenance admission", err)
+	}
+	public, _ := json.Marshal(intent)
+	if bytes.Contains(public, []byte("public.example.invalid")) {
+		t.Fatal("source value appeared in public preparation")
+	}
+	lock, err := lifecycle.AcquireOperationLock(b.root)
+	if err != nil {
+		t.Fatal("prepare retained its host lock", err)
+	}
+	j, err := lifecycle.OpenOperationJournal(b.root, lock, lifecycle.OperationJournalOptions{})
+	if err != nil {
+		lock.Close()
+		t.Fatal(err)
+	}
+	items, err := j.List()
+	lock.Close()
+	if err != nil || len(items) != 0 {
+		t.Fatal("prepare admitted a host operation", err)
+	}
+	args = []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--user", "0:0", "--mount", "type=volume,source=" + b.volumeName("application-state") + ",target=/fixture/app,readonly,volume-nocopy", "--entrypoint", "/bin/sh", image, "-ec", "test ! -e /fixture/app/generations/" + intent.CandidateGeneration}
+	if _, err := runner.RunPrivate(ctx, nil, nil, args...); err != nil {
+		t.Fatal("prepare materialized an inactive generation", err)
+	}
+}
+
+func TestRealComposeMigrationPreparationWithoutRunningServices(t *testing.T) {
+	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
+	if image == "" {
+		if os.Getenv("LOKI_REQUIRE_NATIVE_SECRET_COMPOSE") == "1" {
+			t.Fatal("native shipping image is required")
+		}
+		t.Skip("native packaging suite supplies the shipping image")
+	}
+	if !strings.Contains(image, "@sha256:") {
+		t.Fatal("immutable image is required")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	root := t.TempDir()
+	sum := sha256.Sum256([]byte(root))
+	b, err := New(Config{StateRoot: filepath.Join(root, "operator"), Project: "loki-prepare-" + hex.EncodeToString(sum[:6]), Runner: ExecRunner{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := ExecRunner{}
+	volume := b.volumeName("application-state")
+	if _, err := runner.Run(ctx, nil, "volume", "create", "--label", "io.loki.application.owner=loki-tools-"+applicationOwnerID(b.root), volume); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 15*time.Second)
+		defer stop()
+		for _, name := range []string{"runtime-state", "application-state"} {
+			if _, err := runner.Run(cleanup, nil, "volume", "rm", b.volumeName(name)); err != nil {
+				t.Error("owned preparation fixture cleanup", err)
+			}
+		}
+	})
+	script := `set -eu
+umask 077
+printf '{"resources":[]}' > /run/preparation/catalog.json
+exec /opt/loki/bin/loki host prepare-secrets --state-only --uid 10006 --gid 10006 --agent-uid 10000 --metadata-gid 10001 --identity /var/lib/loki/app-store/deployment.json --state /var/lib/loki/app-store --service-state /var/lib/loki/secrets --runtime /run/loki/secrets --config /etc/loki/loki.toml --catalog /run/preparation/catalog.json --execution-contract /usr/share/doc/loki/container-execution-contract.json --unit-directory= --overlay-directory=`
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--log-driver", "none", "--tmpfs", "/run/preparation:rw,nosuid,nodev,mode=0700,size=2097152", "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,volume-nocopy", "--entrypoint", "/bin/sh", image, "-ec", script}
+	body, err := runner.RunPrivate(ctx, nil, nil, args...)
+	var prepared struct{ Policy string }
+	if err != nil || json.Unmarshal(body, &prepared) != nil || !validSHA256(prepared.Policy) {
+		t.Fatal("actual persistent-only preparation failed", err)
+	}
+	state := runtimeState{Version: 1, GenerationID: "sha256:" + strings.Repeat("a", 64), CoreImage: image, Workspace: root, ApplicationPolicySHA256: prepared.Policy}
+	if err := b.saveRuntime(state); err != nil {
+		t.Fatal(err)
+	}
+	verifyRealComposeMigrationPreparation(t, ctx, b, state, image)
+}
 
 func TestRealComposeApplicationService(t *testing.T) {
 	image := os.Getenv("LOKI_TEST_NATIVE_SECRET_IMAGE")
@@ -114,6 +221,9 @@ func TestRealComposeApplicationService(t *testing.T) {
 			t.Fatal("broker acquired foreign authority")
 		}
 	}
+	t.Run("prepare legacy migration through actual private helpers", func(t *testing.T) {
+		verifyRealComposeMigrationPreparation(t, ctx, b, state, image)
+	})
 	admin := func(action string, input []byte) map[string]any {
 		t.Helper()
 		layout := filepath.Join(filepath.Dir(filepath.Dir(state.ApplicationStateSource)), "secrets-admin.json")

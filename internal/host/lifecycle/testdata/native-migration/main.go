@@ -60,6 +60,8 @@ func write(path string, value any, private bool) error {
 
 func run(ctx context.Context, action string) error {
 	switch action {
+	case "seed-compose":
+		return seedLegacy(ctx, "/var/lib/loki/runtime")
 	case "configure":
 		if err := os.Mkdir(operator, 0700); err != nil {
 			return err
@@ -84,30 +86,7 @@ func run(ctx context.Context, action string) error {
 		if err := os.WriteFile(filepath.Join(operator, "passphrase"), pass, 0600); err != nil {
 			return err
 		}
-		if _, err := rand.Read(nonce[:]); err != nil {
-			return err
-		}
-		token := []byte(base64.RawURLEncoding.EncodeToString(nonce[:]))
-		clear(nonce[:])
-		defer clear(token)
-		// Seed only the synthetic legacy encrypted store. No production writer
-		// or public legacy secret API is required to retain this fixture.
-		source := state.Store{Dir: "/var/lib/loki-go/runtime"}
-		if _, err := source.Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{},"requests":{}}`)); err != nil {
-			return err
-		}
-		if _, err := source.Update(ctx, nil, func(raw json.RawMessage) (json.RawMessage, error) {
-			var doc map[string]any
-			if json.Unmarshal(raw, &doc) != nil {
-				return nil, errors.New("legacy fixture document unavailable")
-			}
-			profiles, ok := doc["profiles"].(map[string]any)
-			if !ok {
-				return nil, errors.New("legacy fixture profiles unavailable")
-			}
-			profiles["legacy-app"] = map[string]any{"secrets": map[string]any{"TOKEN": string(token), "API_URL": "  https://public.example.invalid/?a=<value>&b=2\n"}}
-			return json.Marshal(doc)
-		}); err != nil {
+		if err := seedLegacy(ctx, "/var/lib/loki-go/runtime"); err != nil {
 			return err
 		}
 		repo, err := repository.New("/srv/workspace/loki")
@@ -199,4 +178,45 @@ func run(ctx context.Context, action string) error {
 	default:
 		return errors.New("unsupported native migration fixture action")
 	}
+}
+
+// Test-only source construction survives removal of the public legacy writer.
+// Random values stay in memory and the actual encrypted legacy store.
+func seedLegacy(ctx context.Context, directory string) error {
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		if err := os.Chmod(directory, 0700); err != nil {
+			return err
+		}
+	}
+	var nonce [48]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return err
+	}
+	token := []byte(base64.RawURLEncoding.EncodeToString(nonce[:]))
+	clear(nonce[:])
+	defer clear(token)
+	source := state.Store{Dir: directory}
+	if _, err := source.Initialize(ctx, json.RawMessage(`{"version":1,"profiles":{},"requests":{}}`)); err != nil {
+		return err
+	}
+	_, err = source.Update(ctx, nil, func(raw json.RawMessage) (json.RawMessage, error) {
+		var doc map[string]any
+		if json.Unmarshal(raw, &doc) != nil {
+			return nil, errors.New("legacy fixture document unavailable")
+		}
+		profiles, ok := doc["profiles"].(map[string]any)
+		if !ok {
+			return nil, errors.New("legacy fixture profiles unavailable")
+		}
+		profiles["legacy-app"] = map[string]any{"secrets": map[string]any{"TOKEN": string(token), "API_URL": "  https://public.example.invalid/?a=<value>&b=2\n"}}
+		return json.Marshal(doc)
+	})
+	return err
 }

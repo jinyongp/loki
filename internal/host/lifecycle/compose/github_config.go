@@ -13,16 +13,24 @@ import (
 // Local Compose config files are bind mounts: source permissions remain in
 // effect in the container. Project only validated public configuration for
 // runner-owned consumers, never the platform credential itself.
-func (b *Backend) materializeGitHubConfiguration(ctx context.Context, store *lifecycle.FileStore, state lifecycle.ManagedIntegrationToggle) (string, string, error) {
+func publicGitHubConfiguration(ctx context.Context, store *lifecycle.FileStore, state lifecycle.ManagedIntegrationToggle) ([]byte, error) {
 	if !state.Configured || !state.Enabled {
-		return "", "", errors.New("GitHub configuration projection requires an enabled integration")
+		return nil, errors.New("GitHub configuration projection requires an enabled integration")
 	}
 	raw, err := store.ReadManagedIntegrationFile(ctx, lifecycle.ManagedGitHubConfigFile, true)
 	if err != nil {
-		return "", "", errors.New("managed GitHub public configuration is unavailable")
+		return nil, errors.New("managed GitHub public configuration is unavailable")
 	}
 	if lifecycle.ManagedIntegrationDigest(raw) != state.ConfigSHA256 {
-		return "", "", errors.New("managed GitHub public configuration integrity check failed")
+		return nil, errors.New("managed GitHub public configuration integrity check failed")
+	}
+	return raw, nil
+}
+
+func (b *Backend) materializeGitHubConfiguration(ctx context.Context, store *lifecycle.FileStore, state lifecycle.ManagedIntegrationToggle) (string, string, error) {
+	raw, err := publicGitHubConfiguration(ctx, store, state)
+	if err != nil {
+		return "", "", err
 	}
 	private, err := store.ReadManagedIntegrationFile(ctx, lifecycle.ManagedGitHubCredentialFile, true)
 	if err != nil {

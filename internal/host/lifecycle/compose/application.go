@@ -36,14 +36,18 @@ func applicationBind(source, target string, readOnly bool) string {
 	return strings.TrimSuffix(text.String(), "\n")
 }
 
+func applicationOwnerID(root string) string {
+	ownerHash := sha256.Sum256([]byte(filepath.Clean(root)))
+	return hex.EncodeToString(ownerHash[:8])
+}
+
 // prepareApplicationValues creates only owned deployment metadata and an empty
 // app generation. It never initializes, unlocks or imports any vault. Root
 // preparation runs in a networkless capability-limited container; the broker
 // receives only the resulting active generation and its finite role sockets.
 func (b *Backend) prepareApplicationValues(ctx context.Context, state *runtimeState) error {
 	b.report("application-prepare", "Preparing isolated application service metadata without initializing or unlocking values...")
-	ownerHash := sha256.Sum256([]byte(filepath.Clean(b.root)))
-	owner := "loki-tools-" + hex.EncodeToString(ownerHash[:8])
+	owner := "loki-tools-" + applicationOwnerID(b.root)
 	runtimeRoot, err := applicationRuntimeDirectory(b.root, filepath.Join("/dev/shm", owner+"-compose-secrets"))
 	if err != nil {
 		return err

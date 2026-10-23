@@ -169,6 +169,30 @@ func TestSecretMigrationOriginalCheckpointsAndTerminalFence(t *testing.T) {
 	}
 }
 
+func TestComposeMigrationIntentRequiresImmutableImageAndGeneration(t *testing.T) {
+	i := migrationIntentFixture(t, t.TempDir())
+	i.Mode = "compose"
+	if i.Valid() {
+		t.Fatal("Compose migration accepted an unbound image/generation")
+	}
+	i.ContainerImage = "registry.example/loki@sha256:" + strings.Repeat("a", 64)
+	i.ContainerGeneration = "sha256:" + strings.Repeat("b", 64)
+	if !i.Valid() {
+		t.Fatal("pinned Compose intent was refused")
+	}
+	for _, image := range []string{"registry.example/loki:latest", "registry.example/loki@sha256:invalid", "registry.example/loki\nother@sha256:" + strings.Repeat("a", 64)} {
+		changed := i
+		changed.ContainerImage = image
+		if changed.Valid() {
+			t.Fatal("unpinned or injected Compose image was accepted")
+		}
+	}
+	i.Mode = "native"
+	if i.Valid() {
+		t.Fatal("container authority escaped into a native intent")
+	}
+}
+
 func TestSecretMigrationAdmissionPublicationLossAndRollback(t *testing.T) {
 	root := privateLifecycleRoot(t)
 	lock, err := AcquireOperationLock(root)

@@ -32,6 +32,8 @@ type SecretMigrationIntent struct {
 	ExpectedPolicy      string                              `json:"expected_policy"`
 	Policy              string                              `json:"policy"`
 	Mode                string                              `json:"mode"`
+	ContainerImage      string                              `json:"container_image,omitempty"`
+	ContainerGeneration string                              `json:"container_generation,omitempty"`
 	SourceRoot          string                              `json:"source_root"`
 	IdentityFile        string                              `json:"identity_file"`
 	StateRoot           string                              `json:"state_root"`
@@ -49,6 +51,14 @@ func migrationHex(value string, size int) bool {
 }
 
 func (i SecretMigrationIntent) Valid() bool {
+	if i.Mode == "compose" {
+		repository, digest, pinned := strings.Cut(i.ContainerImage, "@")
+		if !pinned || repository == "" || len(repository) > 512 || strings.ContainsAny(repository, " \t\r\n\x00@") || !digestPattern.MatchString(digest) || !digestPattern.MatchString(i.ContainerGeneration) {
+			return false
+		}
+	} else if i.ContainerImage != "" || i.ContainerGeneration != "" {
+		return false
+	}
 	if i.Mode == "managed-full" && len(i.BeforeResources) != 0 {
 		return false
 	}
