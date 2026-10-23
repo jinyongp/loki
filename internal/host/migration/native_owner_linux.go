@@ -53,6 +53,27 @@ func (o SourceOwner) PrepareNativeCandidate(current hostapplication.PrepareOptio
 	if err != nil || next != i.Policy {
 		return candidate, ErrSourceSession
 	}
+	// The ordinary preparation unit is deliberately boot-fenced. Recreate
+	// only its public runtime ancestor here after a reboot, without starting
+	// normal services or weakening the original private candidate projection.
+	parent := filepath.Dir(current.RuntimeRoot)
+	created := false
+	if err := os.Mkdir(parent, 0755); err == nil {
+		created = true
+	} else if !errors.Is(err, os.ErrExist) {
+		return candidate, err
+	}
+	if err := nativeOwnedDirectory(parent, false); err != nil {
+		return candidate, err
+	}
+	if created {
+		if err := syncNativeDirectory(parent); err != nil {
+			return candidate, err
+		}
+		if err := syncNativeDirectory(filepath.Dir(parent)); err != nil {
+			return candidate, err
+		}
+	}
 	preparation, err := hostapplication.PrepareCandidate(current, before, i.CandidateGeneration)
 	if err != nil {
 		return candidate, err

@@ -53,6 +53,11 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Mirror /run/loki-go: the candidate leaf remains broker-private, while
+	// its public service-runtime ancestor is searchable in the service view.
+	if err := os.Chmod(runtimeParent, 0755); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = os.RemoveAll(runtimeParent) })
 	providerHost, brokerHost := os.Getenv("LOKI_SECRET_TEST_DEVTOOLS"), os.Getenv("LOKI_SECRET_TEST_BROKER")
 	if providerHost == "" {
@@ -216,6 +221,11 @@ func TestNativeMigrationPreparationPreservesSourceAndSelection(t *testing.T) {
 			if attempt == 1 {
 				if info, err := os.Stat(candidate.RootDirectory); err != nil || info.Mode().Perm() != 0755 {
 					t.Fatal("original-operation recovery did not restore a searchable chroot", err)
+				}
+			}
+			if attempt == 0 {
+				if err := os.RemoveAll(runtimeParent); err != nil {
+					t.Fatal("erase only this fixture's volatile runtime before recovery", err)
 				}
 			}
 		}

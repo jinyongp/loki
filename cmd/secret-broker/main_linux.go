@@ -31,7 +31,12 @@ func run(args []string) int {
 		return 2
 	}
 	var config layout
-	if daemon.ReadJSON(*path, &config) != nil || config.UID == 0 || config.UID != uint32(os.Geteuid()) || config.LauncherUID == config.UID {
+	if daemon.ReadJSON(*path, &config) != nil {
+		fmt.Fprintln(os.Stderr, "secret broker layout unavailable")
+		return 2
+	}
+	if config.UID == 0 || config.UID != uint32(os.Geteuid()) || config.LauncherUID == config.UID {
+		fmt.Fprintln(os.Stderr, "secret broker role identity unavailable")
 		return 2
 	}
 	unix.Umask(0077)
@@ -50,6 +55,7 @@ func run(args []string) int {
 		return 2
 	}
 	if daemon.PrivateDirectory(config.Root) != nil || daemon.OwnedPrivateDirectory(config.Root, config.UID, uint32(os.Getgid())) != nil {
+		fmt.Fprintln(os.Stderr, "secret broker data directory unavailable")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -92,21 +98,26 @@ func run(args []string) int {
 	}
 	service, err := secretbroker.New(secretbroker.Options{Ready: roleReady, Provider: p, Socket: config.Socket, LauncherUID: config.LauncherUID, DeploymentID: jobDeployment, PolicySHA256: config.PolicySHA256, RunnerID: config.RunnerID, InstanceID: config.InstanceID, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "secret broker jobs contract unavailable")
 		return 2
 	}
 	if fullRoles {
 		if application.ResetInbox(config.Inbox) != nil {
+			fmt.Fprintln(os.Stderr, "secret broker private inbox unavailable")
 			return 2
 		}
 		values, err := application.New(application.Options{Provider: p, Root: config.ApplicationRoot, Inbox: config.Inbox, DeploymentID: config.DeploymentID, PolicySHA256: config.PolicySHA256, Resources: config.Resources, BaseEnvironment: config.BaseEnvironment})
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "secret broker application metadata unavailable")
 			return 2
 		}
 		if values.LockOnStart(ctx) != nil {
+			fmt.Fprintln(os.Stderr, "secret broker initial protection lock unavailable")
 			return 2
 		}
 		if config.InitialMaintenanceOperation != "" {
 			if _, err := values.Admin(ctx, application.AdminRequest{Action: "maintenance_begin", RequestID: config.InitialMaintenanceOperation}, nil); err != nil {
+				fmt.Fprintln(os.Stderr, "secret broker initial maintenance unavailable")
 				return 2
 			}
 		}
