@@ -1,0 +1,26 @@
+{
+  "commit": "5841e545ff259790a3b2461299e741d62c69a73d",
+  "files": [
+    "src/action.ts",
+    "src/classify.ts",
+    "src/config.ts",
+    "src/contract.ts",
+    "src/conventional.ts",
+    "src/engine.ts",
+    "src/errors.ts",
+    "src/git.ts",
+    "src/github.ts",
+    "src/main.ts",
+    "src/model.ts",
+    "src/policy.ts",
+    "src/prepare.ts",
+    "src/provider.ts",
+    "src/range.ts",
+    "src/release-config.ts",
+    "src/release-execution.ts",
+    "src/render.ts",
+    "src/report.ts",
+    "src/series.ts",
+    "src/text.ts"
+  ]
+}

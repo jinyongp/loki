@@ -1,0 +1,7 @@
+{
+  "tests": 4,
+  "failures": 0,
+  "errors": 0,
+  "output": "test_preseal_proof_cannot_authorize_different_lock (__main__.SealingPlacement.test_preseal_proof_cannot_authorize_different_lock) ... ok\ntest_publication_is_after_exact_byte_validation (__main__.SealingPlacement.test_publication_is_after_exact_byte_validation) ... ok\ntest_repeat_and_public_recovery_use_identical_final_bytes (__main__.SealingPlacement.test_repeat_and_public_recovery_use_identical_final_bytes) ... ok\ntest_validation_only_still_checks_bytes_and_has_no_public_effects (__main__.SealingPlacement.test_validation_only_still_checks_bytes_and_has_no_public_effects) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 0.000s\n\nOK\n",
+  "scope": "Pure model; existing gate proof checks tested separately; no actual Actions/Releaseway/native product acceptance"
+}
