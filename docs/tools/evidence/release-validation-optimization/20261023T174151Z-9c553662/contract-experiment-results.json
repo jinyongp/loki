@@ -1,0 +1,7 @@
+{
+  "tests": 6,
+  "failures": 0,
+  "errors": 0,
+  "output": "test_real_retained_callback_detects_same_nine_faults (__main__.BrowserEquivalence.test_real_retained_callback_detects_same_nine_faults) ... ok\ntest_actual_gate_rejects_identity_proof_and_status_faults (__main__.GateCases.test_actual_gate_rejects_identity_proof_and_status_faults) ... ok\ntest_inventory_model_rejects_missing_extra_and_corrupt_bytes (__main__.GateCases.test_inventory_model_rejects_missing_extra_and_corrupt_bytes) ... ok\ntest_recovery_preserves_original_sealed_bytes (__main__.GateCases.test_recovery_preserves_original_sealed_bytes) ... ok\ntest_manager_ignores_other_families_and_reuse_is_verified (__main__.Materialization.test_manager_ignores_other_families_and_reuse_is_verified) ... ok\ntest_present_corrupt_manager_is_not_hidden_by_public_fallback (__main__.Materialization.test_present_corrupt_manager_is_not_hidden_by_public_fallback) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.097s\n\nOK\n",
+  "scope": "Real existing functions with mocked process/network boundaries; inventory verification is a model, not implemented product behavior"
+}
