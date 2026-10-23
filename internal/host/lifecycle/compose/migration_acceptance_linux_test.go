@@ -330,12 +330,36 @@ func verifyRealComposeApplicationRestore(t *testing.T, ctx context.Context, b *B
 	unlock()
 	intent := prepare()
 	pending = invoke("apply", nil, "--plan", plan, "--approve")
+	initialized := invoke("recover", passphrase, "--protection", "init", "--stdin")
+	if initialized.Operation != pending.Operation || initialized.Protection != "archive_identity_required" || initialized.Released {
+		t.Fatal("candidate import did not require the explicit operator archive identity", initialized)
+	}
+	var projection string
+	if err := b.withApplicationRestore(ctx, nil, func(ctx context.Context, _ *lifecycle.OperationJournal, r lifecycle.OperationRecord) error {
+		projection = filepath.Join("/dev/shm", "loki-tools-"+applicationOwnerID(b.root)+"-restore-"+r.ID, "secrets")
+		return b.stopApplicationRestoreCandidate(ctx, r)
+	}); err != nil {
+		t.Fatal("owned restore candidate process loss", err)
+	}
+	if _, err := b.runner.(PrivateRunner).RunPrivate(ctx, nil, nil, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--user", "0:0", "--log-driver", "none", "--mount", applicationBind(projection, "/owned-runtime", false), "--entrypoint", "/bin/sh", intent.TargetImage, "-ec", "find /owned-runtime -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +"); err != nil {
+		t.Fatal("erase owned stopped restore tmpfs", err)
+	}
+	if err := os.Remove(projection); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Dir(projection)); err != nil {
+		t.Fatal(err)
+	}
+	locked := invoke("recover", nil)
+	if locked.Operation != pending.Operation || locked.Released || locked.Protection != "locked" && locked.Protection != "locked_manual" {
+		t.Fatal("restore process/tmpfs loss inherited the key session", locked)
+	}
 	key := filepath.Join(b.root, "operator-restore-identity")
 	if err := os.WriteFile(key, []byte(identity.String()), 0600); err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(key)
-	completed := invoke("recover", passphrase, "--identity-file", key, "--protection", "init", "--stdin")
+	completed := invoke("recover", passphrase, "--identity-file", key, "--protection", "unlock", "--stdin")
 	if completed.State != lifecycle.OperationSucceeded || !completed.Released || !completed.Sealed || completed.Imports != 1 || completed.Operation != pending.Operation {
 		t.Fatal("original paired logical restore did not complete", completed)
 	}

@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"loki/internal/platform/privateio"
+	provider "loki/modules/secrets/devtools"
 )
 
 func testAddress(t *testing.T) Address {
@@ -166,16 +168,20 @@ func TestReceiverPayloadRequiresExactMaskingAndPrivateSerialization(t *testing.T
 // This test runs with the exact pinned CLI in a disposable non-root container.
 // The container's PID namespace guarantees cleanup of its key-session daemon.
 func TestReceiverRealProviderContract(t *testing.T) {
-	testReceiverRealProvider(t, false)
+	testReceiverRealProvider(t, false, false)
+}
+
+func TestReceiverRealRestoredApplication(t *testing.T) {
+	testReceiverRealProvider(t, false, true)
 }
 
 // This deliberately violates the public-only dependency boundary to isolate
 // the provider defect. It is never a substitute for the contract test above.
 func TestReceiverRealProviderPrivateDirectoryControl(t *testing.T) {
-	testReceiverRealProvider(t, true)
+	testReceiverRealProvider(t, true, false)
 }
 
-func testReceiverRealProvider(t *testing.T, privateDirectoryControl bool) {
+func testReceiverRealProvider(t *testing.T, privateDirectoryControl, restore bool) {
 	binary := os.Getenv("LOKI_SECRET_TEST_DEVTOOLS")
 	if binary == "" {
 		if os.Getenv("LOKI_REQUIRE_SECRET_PROVIDER") == "1" {
@@ -210,16 +216,65 @@ func testReceiverRealProvider(t *testing.T, privateDirectoryControl bool) {
 		return envelope.Data
 	}
 	call("synthetic-private-passphrase", "vault", "init", "--backend", "passphrase", "--passphrase-stdin")
+	sourceRoot := root
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
 		defer stop()
-		_ = exec.CommandContext(cleanup, binary, "vault", "lock", "--isolated-root", root).Run()
+		_ = exec.CommandContext(cleanup, binary, "vault", "lock", "--isolated-root", sourceRoot).Run()
 	})
-	revision := call("", "values", "revision", "--profile", "app-fixture")["revision"].(string)
-	call("canary-token", "secret", "set", "TOKEN", "--stdin", "--profile", "app-fixture", "--revision", revision, "--request-id", "06cfc9b1-2bbf-42fb-81a1-0bd6ade00224")
+	const app = "app-123e4567e89b42d3a456426614174441"
+	revision := call("", "values", "revision", "--profile", app)["revision"].(string)
+	call("canary-token", "secret", "set", "TOKEN", "--stdin", "--profile", app, "--revision", revision, "--request-id", "06cfc9b1-2bbf-42fb-81a1-0bd6ade00224")
+	if restore {
+		source, err := provider.New(ctx, binary, sourceRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old, err := source.Prepare(ctx, app, "common", strings.Repeat("a", 32), "123e4567-e89b-42d3-a456-426614174452", "", []string{"TOKEN"})
+		if err != nil {
+			t.Fatal("source frozen input", err)
+		}
+		key, err := age.GenerateX25519Identity()
+		if err != nil {
+			t.Fatal(err)
+		}
+		private := t.TempDir()
+		archive, identity := filepath.Join(private, "app.age"), filepath.Join(private, "identity")
+		if err := os.WriteFile(identity, []byte(key.String()), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := source.ExportApplication(ctx, app, key.Recipient().String(), archive); err != nil {
+			t.Fatal("application-only logical export", err)
+		}
+		targetRoot := filepath.Join(t.TempDir(), "dvt")
+		target, err := provider.New(ctx, binary, targetRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
+			defer stop()
+			_, _ = target.Protection(cleanup, "lock", nil)
+		})
+		if _, err := target.Protection(ctx, "init", []byte("different-restored-protection-passphrase")); err != nil {
+			t.Fatal(err)
+		}
+		preview, err := target.PreviewApplicationImport(ctx, app, archive, identity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := target.ImportApplication(ctx, app, archive, identity, preview.Digest, "123e4567-e89b-42d3-a456-426614174453"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := target.ExecutionStatus(ctx, app, old.ID); err == nil {
+			t.Fatal("logical restore resurrected a historical frozen execution")
+		}
+		call("", "vault", "lock")
+		root = targetRoot
+	}
 	job := strings.Repeat("f", 32)
 	prepBody, _ := json.Marshal(map[string]any{"external_execution_id": job, "selection": map[string]any{"keys": []string{"TOKEN"}}})
-	prepared := call(string(prepBody), "values", "execution", "prepare", "--profile", "app-fixture", "--request-id", "f79c083d-ce81-43ce-b30e-710634ca5a96", "--stdin")["item"].(map[string]any)
+	prepared := call(string(prepBody), "values", "execution", "prepare", "--profile", app, "--request-id", "f79c083d-ce81-43ce-b30e-710634ca5a96", "--stdin")["item"].(map[string]any)
 	runner, instance := "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", "a203906e-1c9c-4cc5-acb7-a68d118c54da"
 	addressData := call("", "values", "runner", "address", runner, "--instance", instance)
 	raw, _ := json.Marshal(addressData)
@@ -276,15 +331,15 @@ func testReceiverRealProvider(t *testing.T, privateDirectoryControl bool) {
 	registration, _ := json.Marshal(map[string]any{"runner_id": runner, "instance_id": instance, "protocol": 1, "redaction_protocol": 1})
 	call(string(registration), "values", "runner", "register", "--request-id", "bcd5460d-ae77-41ce-af38-2880495b9cc1", "--stdin")
 	approval, _ := json.Marshal(map[string]any{"revision": prepared["revision"], "runner_id": runner, "runner_instance_id": instance, "external_execution_id": job, "input_id": prepared["input_id"]})
-	approved := call(string(approval), "values", "execution", "approve", prepared["execution_id"].(string), "--profile", "app-fixture", "--request-id", "a942ee90-8635-4e91-8dd3-95bbe93c89a5", "--stdin")["item"].(map[string]any)
+	approved := call(string(approval), "values", "execution", "approve", prepared["execution_id"].(string), "--profile", app, "--request-id", "a942ee90-8635-4e91-8dd3-95bbe93c89a5", "--stdin")["item"].(map[string]any)
 	delivery, _ := json.Marshal(map[string]any{"revision": approved["revision"]})
-	delivered := call(string(delivery), "values", "execution", "deliver", prepared["execution_id"].(string), "--profile", "app-fixture", "--request-id", "a27d78d7-6f7c-4d81-ac37-4756715e464d", "--stdin")["item"].(map[string]any)
+	delivered := call(string(delivery), "values", "execution", "deliver", prepared["execution_id"].(string), "--profile", app, "--request-id", "a27d78d7-6f7c-4d81-ac37-4756715e464d", "--stdin")["item"].(map[string]any)
 	if delivered["delivery_state"] != "delivered" {
 		t.Fatal("provider did not accept receiver ACK")
 	}
 	// Query the same receipt while the encrypted control store is unlocked.
 	// Lock preserves masking, but does not make encrypted receipts readable.
-	replay := call(string(delivery), "values", "execution", "deliver", prepared["execution_id"].(string), "--profile", "app-fixture", "--request-id", "a27d78d7-6f7c-4d81-ac37-4756715e464d", "--stdin")
+	replay := call(string(delivery), "values", "execution", "deliver", prepared["execution_id"].(string), "--profile", app, "--request-id", "a27d78d7-6f7c-4d81-ac37-4756715e464d", "--stdin")
 	if replay["replayed"] != true {
 		t.Fatal("delivery receipt did not replay")
 	}
