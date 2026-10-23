@@ -103,21 +103,24 @@ func nativeCommand(ctx context.Context, binary string, args ...string) ([]byte, 
 			// forward service/provider output without --pipe or --pty.
 			return nil, fmt.Errorf("%w: systemd rejected public unit setup: %q", errNativeCandidate, diagnostic.String())
 		}
-		return nil, errNativeCandidate
+		return output.Bytes(), errNativeCandidate
 	}
 	return output.Bytes(), nil
 }
 
 func (c NativeCandidate) properties(ctx context.Context) (map[string]string, error) {
 	body, err := nativeCommand(ctx, "/usr/bin/systemctl", "show", c.unit(), "--no-pager", "--property=LoadState,ActiveState,Description,User,Group,RootDirectory,MemoryMax,TasksMax,Transient")
-	if err != nil {
-		return nil, err
-	}
 	values := map[string]string{}
 	for _, line := range strings.Split(string(body), "\n") {
 		if name, value, ok := strings.Cut(line, "="); ok {
 			values[name] = value
 		}
+	}
+	// Collected transient units can disappear while systemctl is inspecting
+	// them. Its nonzero exit is only absence when the returned LoadState says
+	// so; transport failures and incomplete output still refuse authority.
+	if err != nil && values["LoadState"] != "not-found" {
+		return nil, err
 	}
 	return values, nil
 }
@@ -203,15 +206,16 @@ func (c NativeCandidate) stopOwned(ctx context.Context) error {
 	if !c.owned(properties) {
 		return errNativeCandidate
 	}
-	if _, err := nativeCommand(ctx, "/usr/bin/systemctl", "stop", c.unit()); err != nil {
-		return err
-	}
+	_, stopErr := nativeCommand(ctx, "/usr/bin/systemctl", "stop", c.unit())
 	properties, err = c.properties(ctx)
 	if err != nil {
 		return err
 	}
 	if properties["LoadState"] == "not-found" {
 		return nil
+	}
+	if stopErr != nil {
+		return stopErr
 	}
 	if !c.owned(properties) || properties["ActiveState"] != "inactive" {
 		return errNativeCandidate
