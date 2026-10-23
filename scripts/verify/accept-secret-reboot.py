@@ -126,8 +126,10 @@ def main():
         (work / "meta-data").write_text("instance-id: loki-secret-reboot\nlocal-hostname: loki-secret-reboot\n")
         # One unconnected QEMU hub gives networkd a configured local link,
         # without a host bridge, socket, user-mode forwarding, DNS or gateway.
-        # It avoids wait-online's absent-interface timeout on the arm64 image.
-        (work / "network-config").write_text('version: 2\nethernets:\n  fixture:\n    match:\n      macaddress: "52:54:00:12:34:56"\n    dhcp4: false\n    dhcp6: false\n    addresses: [10.77.0.2/24]\n')
+        # The unconnected fixture link is deliberately optional for boot:
+        # waiting for carrier adds 120s on each arm64 cloud-image boot.
+        # No test service requires external networking or a default route.
+        (work / "network-config").write_text('version: 2\nethernets:\n  fixture:\n    match:\n      macaddress: "52:54:00:12:34:56"\n    optional: true\n    dhcp4: false\n    dhcp6: false\n    addresses: [10.77.0.2/24]\n')
         run("cloud-localds", "--network-config=" + str(work / "network-config"), work / "seed.iso", work / "user-data", work / "meta-data")
         kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
         command = ["qemu-system-x86_64" if arch == "amd64" else "qemu-system-aarch64", "-machine", "q35" if arch == "amd64" else "virt", "-accel", "kvm" if kvm else "tcg,thread=multi", "-cpu", "host" if kvm else ("max" if arch == "amd64" else "cortex-a72"), "-m", "2048", "-smp", "2", "-nographic", "-monitor", "none", "-netdev", "hubport,id=fixture,hubid=0", "-device", "virtio-net-pci,netdev=fixture,mac=52:54:00:12:34:56,romfile=", "-object", "rng-random,filename=/dev/urandom,id=rng0", "-device", "virtio-rng-pci,rng=rng0"]
