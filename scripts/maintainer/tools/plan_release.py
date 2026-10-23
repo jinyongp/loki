@@ -193,6 +193,10 @@ def select(release, current, baseline=None, force=False):
                 full.append(dict(target, modules=selected, roles=roles))
             if selected or roles or bridge_changed or any(u["validate"] for u in units.values() if u["kind"]=="module" and u["target"]=={"os":system,"arch":arch,"mode":"full"}):
                 full_checks.append(target)
+    for checks in (manager_checks, browser_checks, full_checks):
+        for index, target in enumerate(checks):
+            built = lambda rows: any((row["os"], row["arch"]) == (target["os"], target["arch"]) for row in rows)
+            checks[index] = dict(target, manager_built=built(manager), browser_built=built(browser), full_built=built(full))
     return {"schema":2,"release":release,"contract":CONTRACT,"source_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),"units":units,
             "matrices":{"manager":manager,"browser":browser,"full":full,"manager-checks":manager_checks,"browser-checks":browser_checks,"full-checks":full_checks},"baseline_release":baseline.get("release") if baseline else None}
 

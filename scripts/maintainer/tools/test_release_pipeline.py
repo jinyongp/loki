@@ -34,6 +34,29 @@ def fixture():
 
 
 class SelectionTests(unittest.TestCase):
+    def test_check_matrices_identify_exact_built_families(self):
+        current, old = fixture()
+        current["manager:linux:amd64"]["bridge"] = "changed"
+        plan = select("0.2.4", current, old)
+        for name in ("browser-checks", "full-checks"):
+            self.assertEqual(len(plan["matrices"][name]), 1)
+            row = plan["matrices"][name][0]
+            self.assertFalse(row["manager_built"] or row["browser_built"] or row["full_built"])
+        plan = select("0.2.5", current, old)
+        self.assertTrue(all(row["manager_built"] for row in plan["matrices"]["manager-checks"]))
+        self.assertTrue(all(not row["browser_built"] and not row["full_built"] for row in plan["matrices"]["manager-checks"]))
+
+    def test_selected_missing_archive_cannot_fall_back_to_public_bytes(self):
+        from release_pipeline import materialize
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            key = "manager:linux:amd64"
+            record = {"url": "https://github.com/jinyongp/loki/releases/download/v0.2.4/manager.zip", "bytes": 7, "sha256": "a"*64, "receipt": {}}
+            write(root/"assets/loki-release-lock.json", {"units": {key: {"artifact": record}}})
+            with patch("release_pipeline.native", return_value=("linux", "amd64")), patch("release_pipeline.download") as download:
+                with self.assertRaisesRegex(ValueError, "selected manager"):
+                    materialize({"units": {key: {"action": "build"}}}, root, root/"output", "manager")
+                download.assert_not_called()
     def test_selected_image_accepts_payload_paths_from_json_request(self):
         import prepare_candidate
         with tempfile.TemporaryDirectory() as temp:

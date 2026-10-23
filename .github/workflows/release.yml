@@ -432,8 +432,9 @@ jobs:
           path: publication
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
-          path: publication/native
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-manager
+          path: publication/native/manager
+        if: matrix.manager_built
       - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host
       - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode manager
       - name: Accept native CLI, upgrade selection, installer and retained user data
@@ -495,8 +496,14 @@ jobs:
           path: publication
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
-          path: publication/native
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-manager
+          path: publication/native/manager
+        if: matrix.manager_built
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: matrix.browser_built
+        with:
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-browser
+          path: publication/native/browser
       - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode project-host
       - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode project-host
       - name: Allow owned Chrome sandbox on the disposable Linux acceptance runner
@@ -587,8 +594,14 @@ jobs:
           path: publication
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: built-${{ matrix.os }}-${{ matrix.arch }}-*
-          path: publication/native
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-manager
+          path: publication/native/manager
+        if: matrix.manager_built
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: matrix.full_built
+        with:
+          name: built-${{ matrix.os }}-${{ matrix.arch }}-full
+          path: publication/native/full
       - run: python3 scripts/maintainer/tools/release_pipeline.py environment --plan plan/plan.json --mode full
       - run: python3 scripts/maintainer/tools/release_pipeline.py materialize --plan plan/plan.json --built publication --output acceptance-candidate --mode full
       - name: Prepare disposable Docker acceptance runtime

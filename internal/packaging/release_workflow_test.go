@@ -157,6 +157,54 @@ func TestReleaseTransferScopesPreserveSealingAndPublicComparison(t *testing.T) {
 	}
 }
 
+func TestNativeChecksDownloadOnlyConsumedBuildFamilies(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses, If string
+				With     map[string]string
+			}
+		}
+	}
+	if err := yaml.Unmarshal(raw, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	for job, families := range map[string][]string{
+		"manager-checks": {"manager"}, "browser-checks": {"manager", "browser"}, "full-checks": {"manager", "full"},
+	} {
+		found := map[string]bool{}
+		for _, step := range workflow.Jobs[job].Steps {
+			if !strings.HasPrefix(step.Uses, "actions/download-artifact@") {
+				continue
+			}
+			if strings.HasPrefix(step.With["pattern"], "built-") {
+				t.Fatal("native checks download unrelated build families:", job)
+			}
+			name := step.With["name"]
+			if !strings.HasPrefix(name, "built-") {
+				continue
+			}
+			family := strings.TrimPrefix(name, "built-${{ matrix.os }}-${{ matrix.arch }}-")
+			if found[family] || step.If != "matrix."+family+"_built" || step.With["path"] != "publication/native/"+family {
+				t.Fatal("build acquisition must be exact, conditional and isolated:", job, family)
+			}
+			found[family] = true
+		}
+		if len(found) != len(families) {
+			t.Fatal("wrong build families:", job, found)
+		}
+		for _, family := range families {
+			if !found[family] {
+				t.Fatal("missing consumed family:", job, family)
+			}
+		}
+	}
+}
+
 func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	root := filepath.Join("..", "..")
 	scriptRaw, err := os.ReadFile(filepath.Join(root, "scripts", "build", "build-release-inputs.sh"))

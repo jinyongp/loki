@@ -351,6 +351,8 @@ def materialize(plan, built, output, mode):
             raise ValueError("assembled manager differs")
         shutil.copyfile(source,out/source.name)
     else:
+        if plan.get("units", {}).get(f"manager:{system}:{arch}", {}).get("action") == "build":
+            raise ValueError("selected manager archive is missing")
         download(record,out/Path(record["url"]).name)
     write(out/"manager-receipt.json",record["receipt"])
     if mode=="manager":
@@ -368,6 +370,9 @@ def materialize(plan, built, output, mode):
                 raise ValueError("assembled module differs")
             shutil.copyfile(source,destination)
         else:
+            key = f"module:{artifact['module']}:{system}:{arch}:{mode}"
+            if plan.get("units", {}).get(key, {}).get("action") == "build":
+                raise ValueError("selected module archive is missing")
             download(artifact,destination)
     if mode=="full":
         images={u["role"]:u["image"] for u in lock["units"].values() if u["kind"]=="image" and u["target"]==target}
