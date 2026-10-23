@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -46,8 +47,21 @@ func (s *Session) Call(ctx context.Context, name string, args map[string]any) (m
 		return nil, errors.New("unsupported fixture tool")
 	}
 	result, err := s.session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
-	if err != nil || result.IsError {
-		return nil, errors.New("authenticated application call refused: " + name)
+	if err != nil {
+		return nil, errors.New("authenticated application transport failed: " + name)
+	}
+	if result.IsError {
+		code := "unknown"
+		if metadata, ok := result.Meta["loki/error"].(map[string]any); ok {
+			if value, ok := metadata["code"].(string); ok && regexp.MustCompile(`^[a-z_]{1,64}$`).MatchString(value) {
+				code = value
+			}
+		}
+		action, _ := args["action"].(string)
+		if !regexp.MustCompile(`^[a-z_]{1,64}$`).MatchString(action) {
+			action = "unknown"
+		}
+		return nil, errors.New("authenticated application call refused: " + name + "/" + action + " (" + code + ")")
 	}
 	body, err := json.Marshal(result.StructuredContent)
 	if err != nil {
