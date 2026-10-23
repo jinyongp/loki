@@ -155,6 +155,26 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if json.Unmarshal(identityBytes, &identity) != nil || identity != first.Identity {
 		t.Fatal("failed identity change rewrote the selector")
 	}
+	t.Run("explicit policy CAS preserves data generation", func(t *testing.T) {
+		changed := options
+		changed.Resources = []controlpolicy.ApplicationResource{{ID: "123e4567-e89b-42d3-a456-426614174483", Alias: "new-grant", Repository: "owner/repo", Network: "none", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true}}}}
+		selected, err := CommitPolicy(changed, first.Identity)
+		if err != nil || selected.ActiveGeneration != first.Identity.ActiveGeneration || selected.DeploymentID != first.Identity.DeploymentID || selected.RunnerID != first.Identity.RunnerID || selected.PolicySHA256 == first.Identity.PolicySHA256 {
+			t.Fatal("policy CAS changed retained identity/data", err)
+		}
+		if _, err := PrepareState(options); err == nil {
+			t.Fatal("ordinary restart rebound selected policy")
+		}
+		if _, err := CommitPolicy(options, first.Identity); err == nil {
+			t.Fatal("stale policy CAS accepted")
+		}
+		if prepared, err := PrepareState(changed); err != nil || prepared.Identity != selected {
+			t.Fatal("explicit policy not prepared", err)
+		}
+		if restored, err := CommitPolicy(options, selected); err != nil || restored != first.Identity {
+			t.Fatal("policy CAS recovery lost original identity", err)
+		}
+	})
 	t.Run("lost selector never allocates a replacement identity", func(t *testing.T) {
 		saved := options.IdentityFile + ".retained"
 		if err := os.Rename(options.IdentityFile, saved); err != nil {

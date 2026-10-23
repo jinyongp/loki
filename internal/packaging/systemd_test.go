@@ -41,8 +41,10 @@ func TestBundledSkillsIncludeGeneralWorkflowAndPinnedDevtools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := fmt.Sprintf("%x", sha256.Sum256(data)), "dd389e167c2109551c918271dc504d60f01a8d0da0500e8af3313b84e213be61"; got != want {
-		t.Fatalf("devtools 0.9.0 skill digest = %s, want %s", got, want)
+	// This Loki-adapted guide retires the historical process-secret path and
+	// describes the isolated application-value contract shipped in this tree.
+	if got, want := fmt.Sprintf("%x", sha256.Sum256(data)), "13b52eeb4b0b1e3e04d6267a2d217279476eb28fb190daf26b82c9c96d996036"; got != want {
+		t.Fatalf("Loki devtools guidance digest = %s, want %s", got, want)
 	}
 }
 

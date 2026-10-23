@@ -63,10 +63,16 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	commitCandidate := flags.Bool("commit-candidate", false, "publish the original host owner's verified candidate selector")
 	candidatePolicy := flags.String("candidate-policy", "", "frozen target policy digest required for selector publication")
 	restoreCandidate := flags.Bool("restore-candidate", false, "select only an original-operation sealed logical restore")
+	policyBefore := flags.String("policy-before", "", "exact retained identity for original-operation policy replacement")
+	policyLauncher := flags.String("policy-launcher-layout", "", "stopped original launcher layout for policy replacement")
+	policyState := flags.String("policy-launcher-state", "", "original launcher state mount for policy replacement")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	if *inspectIdentity {
+		if *policyBefore != "" || *policyLauncher != "" || *policyState != "" {
+			return 2
+		}
 		if *metadataOnly || *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *restoreCandidate || *maintenance != "" || *initialMaintenance != "" || *interrupt {
 			return 2
 		}
@@ -174,6 +180,22 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	}
 	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
 	options.InitialMaintenanceOperation = *initialMaintenance
+	if *policyBefore != "" || *policyLauncher != "" || *policyState != "" {
+		var expected hostapplication.Identity
+		if isCandidate || *metadataOnly || *inspectIdentity || *stateOnly || *maintenance == "" || *policyBefore == "" || *policyLauncher == "" || *policyState == "" || len(*policyBefore) > 4096 || json.Unmarshal([]byte(*policyBefore), &expected) != nil {
+			return 2
+		}
+		journal, err := openApplicationPolicyJournal(*policyLauncher, *policyState, *maintenance)
+		if err != nil {
+			fmt.Fprintln(stderr, "policy replacement requires the original stopped launcher maintenance journal")
+			return 1
+		}
+		defer journal.Close()
+		if _, err := hostapplication.CommitPolicy(options, expected); err != nil {
+			fmt.Fprintln(stderr, "original application policy changed before publication")
+			return 1
+		}
+	}
 	if *metadataOnly {
 		before, err := hostapplication.ReadIdentity(*identity)
 		if err != nil || before.UID != options.UID || before.GID != options.GID || before.AgentUID != options.AgentUID || before.MetadataGID != options.MetadataGID || hostapplication.ValidateMetadata(options) != nil || hostapplication.RequireExistingGeneration(*state, before) != nil {

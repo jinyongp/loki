@@ -14,6 +14,8 @@ import (
 type jobMCPRequest struct {
 	Action         string                 `json:"action"`
 	RequestID      string                 `json:"request_id"`
+	Resource       string                 `json:"resource"`
+	Environment    string                 `json:"env"`
 	CWD            string                 `json:"cwd"`
 	Argv           []string               `json:"argv"`
 	TimeoutSeconds int                    `json:"timeout_seconds"`
@@ -71,6 +73,7 @@ func JobHandlers(controller jobs.Controller, toolchains JobToolchainResolver) ma
 				}
 				normalized, _, err := jobs.NormalizeStartRequest(jobs.StartRequest{
 					RequestID: request.RequestID, CWD: request.CWD,
+					Resource: request.Resource, Environment: request.Environment,
 					Argv: append([]string(nil), request.Argv...), TimeoutSeconds: request.TimeoutSeconds,
 					Network: request.Network, Endpoints: append([]jobs.EndpointRequest(nil), request.Endpoints...),
 					Toolchains: append([]jobs.ToolchainRef(nil), selected...),

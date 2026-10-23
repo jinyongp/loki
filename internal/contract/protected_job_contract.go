@@ -2,8 +2,8 @@ package contract
 
 import "github.com/modelcontextprotocol/go-sdk/mcp"
 
-// ProtectedJobTool is the candidate contract installed with the protected I/O
-// implementation. Merely declaring it does not enable execution capability.
+// ProtectedJobTool is the active unified Job contract. Resource grants and
+// private delivery authority are enforced by the broker/launcher boundary.
 func ProtectedJobTool() (*mcp.Tool, error) {
 	tool, err := jobTool()
 	if err != nil {

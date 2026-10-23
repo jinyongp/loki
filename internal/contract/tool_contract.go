@@ -194,7 +194,7 @@ func generatedStandaloneTools() map[string]toolFactory {
 		"github_write":              githubProviderWriteTool,
 		"github_issue_fields_read":  githubIssueFieldsReadTool,
 		"github_issue_fields_write": githubIssueFieldsWriteTool,
-		"job":                       jobTool,
+		"job":                       ProtectedJobTool,
 	}
 }
 

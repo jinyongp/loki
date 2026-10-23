@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"loki/internal/host/assets"
+	"loki/internal/host/lifecycle"
 	"loki/internal/platform/safeio"
 )
 
@@ -131,7 +132,34 @@ exec /opt/loki/bin/loki host prepare-secrets --uid 10006 --gid 10006 --agent-uid
 	if b.initialApplicationMaintenance != "" {
 		script += " --initial-maintenance-operation " + b.initialApplicationMaintenance
 	}
+	var policyBefore []byte
+	if original, owner, scopeErr := lifecycle.CurrentHostOperation(ctx); scopeErr == nil && owner.HoldsOperationRoot(b.root) && original.Kind == lifecycle.OperationUpdateIntegration && original.ApplicationBackup != nil && original.ApplicationBackup.Complete() && b.maintenance != nil && b.maintenance.OperationID == lifecycle.MigrationOperationUUID(original.ID) {
+		resources, err := b.currentApplicationCatalog()
+		if err != nil {
+			return err
+		}
+		metadata, err := b.migrationMetadata(ctx, *state, resources, false)
+		if err != nil {
+			return err
+		}
+		retained := metadata.Identity
+		retained.PolicySHA256 = original.ApplicationBackup.Intent.Identity.PolicySHA256
+		if retained != original.ApplicationBackup.Intent.Identity {
+			return lifecycle.ErrApplicationBackup
+		}
+		if metadata.Identity.PolicySHA256 != metadata.Policy {
+			policyBefore, _ = json.Marshal(metadata.Identity)
+			script += " --policy-before '" + strings.ReplaceAll(string(policyBefore), "'", "'\"'\"'") + "' --policy-launcher-layout /run/loki/secrets/roles/launcher.json --policy-launcher-state /var/lib/loki/launcher"
+		}
+	}
 	args := []string{"run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER", "--cap-add", "DAC_OVERRIDE", "--security-opt", "no-new-privileges:true", "--user", "0:0", "--memory", "134217728", "--pids-limit", "32", "--entrypoint", "/bin/sh", "--mount", "type=volume,source=" + volume + ",target=/var/lib/loki/app-store,volume-nocopy", "--mount", applicationBind(runtimeRoot, "/run/loki/secrets", false), "--mount", applicationBind(input, "/input/application-resources.json", true), "--mount", applicationBind(github, "/input/github.toml", true), state.CoreImage, "-ec", script}
+	if len(policyBefore) != 0 {
+		launcher, err := b.migrationVolume(ctx, "launcher-state")
+		if err != nil {
+			return err
+		}
+		args = append(args[:1], append([]string{"--mount", "type=volume,source=" + launcher + ",target=/var/lib/loki/launcher,volume-nocopy"}, args[1:]...)...)
+	}
 	args = append(args[:1], append([]string{"--tmpfs", "/run/preparation:rw,nosuid,nodev,size=2097152,mode=0700"}, args[1:]...)...)
 	if _, err := b.runner.Run(ctx, nil, "image", "inspect", state.CoreImage); err != nil {
 		if _, err := b.runner.Run(ctx, nil, "pull", state.CoreImage); err != nil {

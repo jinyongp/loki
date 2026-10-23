@@ -471,6 +471,7 @@ func (e *TransactionEngine) UpdateManagedComponentIntegration(
 	if err != nil {
 		return err
 	}
+	ctx = hostOperationContext(ctx, journal, record.ID)
 	backup, err := e.captureBackup(ctx, journal, record, snapshot)
 	if err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, nil, err)
@@ -577,6 +578,7 @@ func (e *TransactionEngine) UpdateManagedIntegration(ctx context.Context, name s
 	if err != nil {
 		return err
 	}
+	ctx = hostOperationContext(ctx, journal, record.ID)
 	backup, err := e.captureBackup(ctx, journal, record, snapshot)
 	if err != nil {
 		return e.recoverFailure(ctx, journal, record.ID, nil, err)

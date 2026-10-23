@@ -230,6 +230,18 @@ func TestJobHandlersExposeTypedPublicLifecycle(t *testing.T) {
 	}
 }
 
+func TestJobTransportPreservesGrantedApplicationSelection(t *testing.T) {
+	controller := jobControllerFixture()
+	handler := JobHandlers(controller, nil)["job"]
+	_, err := handler(t.Context(), map[string]any{"action": "start", "request_id": "123e4567-e89b-42d3-a456-426614174431", "argv": []any{"/bin/true"}, "resource": "example", "env": "production", "network": "application"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(controller.startRequests) != 1 || controller.startRequests[0].Resource != "example" || controller.startRequests[0].Environment != "production" || controller.startRequests[0].Network != jobs.NetworkApplication {
+		t.Fatal("MCP transport lost the application's resource selection")
+	}
+}
+
 func TestJobHandlerFailsClosedWithoutControllerOrValidAction(t *testing.T) {
 	handler := JobHandlers(nil, nil)["job"]
 	if _, err := handler(t.Context(), map[string]any{"action": "inspect", "job_id": strings.Repeat("a", 32)}); err == nil {

@@ -19,7 +19,6 @@ import (
 	"loki/internal/control/appvalues"
 	controlpolicy "loki/internal/control/policy"
 	"loki/internal/host/lifecycle"
-	"loki/internal/platform/safeio"
 )
 
 func verifyRealComposeMigrationPreparation(t *testing.T, ctx context.Context, b *Backend, state runtimeState, image string) (lifecycle.SecretMigrationIntent, *age.X25519Identity) {
@@ -299,37 +298,65 @@ func TestRealComposeApplicationService(t *testing.T) {
 	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "40", "launcher"); err != nil {
 		t.Fatal(err)
 	}
-	operation = "123e4567-e89b-12d3-a456-426614174377"
-	if err := b.BeginJobMaintenance(ctx, operation, false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.compose(ctx, state, "stop", "--timeout", "5", "application-values", "launcher"); err != nil {
-		t.Fatal(err)
-	}
 	resource := controlpolicy.ApplicationResource{ID: "9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2", Alias: "fixture", Repository: "repo:fixture", Environments: []string{"common"}, Keys: map[string]string{"TOKEN": "secret"}, Network: "none", Principals: []controlpolicy.ApplicationGrant{{Principal: "agent", Metadata: true}}}
 	catalog, _ := json.Marshal(map[string]any{"resources": []controlpolicy.ApplicationResource{resource}})
-	if err := safeio.PublishPrivate(filepath.Join(b.root, "application-resources.json"), catalog, true); err != nil {
-		t.Fatal(err)
-	}
 	previousPolicy, previousGeneration := state.ApplicationPolicySHA256, state.ApplicationStateSource
-	if err := b.prepareApplicationValues(ctx, &state); err != nil {
+	store, err := lifecycle.EnsureFileStore(b.root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ApplicationPolicySHA256 == previousPolicy || state.ApplicationStateSource != previousGeneration {
-		t.Fatal("resource policy change lost the active encrypted generation or kept stale grants")
+	generation := composeGeneration(t, "0.49.0", "a")
+	spec := generation.Spec
+	_, spec.CoreImageDigest, _ = strings.Cut(image, "@")
+	generation, err = lifecycle.NewGeneration(spec)
+	if err != nil {
+		t.Fatal(err)
 	}
+	state.GenerationID = generation.ID
 	if err := b.saveRuntime(state); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.InitializeInstall(ctx, generation, lifecycle.InstallationState{Scope: "system", Workspace: state.Workspace}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CommitGeneration(ctx, generation, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	key, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ConfigureApplicationBackup(ctx, key.Recipient().String()); err != nil {
+		t.Fatal(err)
+	}
+	engine := lifecycle.TransactionEngine{Store: store, Backend: b}
+	if err := engine.UpdateManagedIntegration(ctx, "application", func(scoped context.Context, store *lifecycle.FileStore) error {
+		if _, err := store.WriteManagedIntegrationFile(scoped, lifecycle.ManagedApplicationResourcesFile, catalog); err != nil {
+			return err
+		}
+		metadata, err := b.migrationMetadata(scoped, state, []controlpolicy.ApplicationResource{resource}, false)
+		if err != nil {
+			return err
+		}
+		b.ExpectedApplicationPolicy = metadata.Policy
+		return nil
+	}); err != nil {
+		t.Fatal("original application policy transaction", err)
+	}
+	current, found, err := b.loadRuntime()
+	if err != nil || !found {
+		t.Fatal(err)
+	}
+	state = current
+	if state.ApplicationPolicySHA256 == previousPolicy || state.ApplicationStateSource != previousGeneration {
+		t.Fatal("resource policy transaction lost retained data or kept stale grants")
+	}
 	b.ExpectedApplicationPolicy = previousPolicy
 	if err := b.ValidateApplicationPolicy(ctx); err == nil {
-		t.Fatal("stale prepared role digest passed the commit guard")
+		t.Fatal("stale policy passed commit guard")
 	}
 	b.ExpectedApplicationPolicy = state.ApplicationPolicySHA256
 	if err := b.ValidateApplicationPolicy(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.compose(ctx, state, "up", "--detach", "--wait", "--wait-timeout", "40", "application-values", "launcher"); err != nil {
 		t.Fatal(err)
 	}
 	if admin("status", nil)["state"] != "locked" {
@@ -337,9 +364,9 @@ func TestRealComposeApplicationService(t *testing.T) {
 	}
 	admin("unlock", passphrase)
 	if result := admin("revision", nil); result["resource"] != "fixture" || result["revision"] == "" || result["revision"] == nil {
-		t.Fatal("restarted broker did not load the new resource policy")
+		t.Fatal("restarted broker did not load new policy")
 	}
-	if err := b.EndJobMaintenance(ctx, operation); err != nil {
-		t.Fatal(err)
+	if fence, err := b.maintenanceCall(ctx, state, "status", "", false, false); err != nil || fence == nil || fence.Active {
+		t.Fatal("original policy transaction did not release maintenance", err)
 	}
 }
