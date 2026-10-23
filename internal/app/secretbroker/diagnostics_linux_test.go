@@ -54,6 +54,11 @@ func TestProviderDiagnosticsRetainOnlySafeRecovery(t *testing.T) {
 	if out.Len() != before {
 		t.Fatal("unreviewed routing metadata escaped into the journal")
 	}
+	out.Reset()
+	reportProviderFailure("migration_deliver", job, &provider.Failure{Code: "delivery_outcome_unknown"})
+	if !strings.Contains(out.String(), "original migration operation, comparison binding") || !strings.Contains(out.String(), "do not resend the original delivery") || strings.Contains(out.String(), "original Job") {
+		t.Fatal("comparison recovery was confused with OCI Job recovery")
+	}
 }
 
 func TestRealJobPreparationFailureReportsRecovery(t *testing.T) {

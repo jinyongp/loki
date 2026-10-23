@@ -5,6 +5,7 @@ package secretbroker
 import (
 	"log"
 
+	"loki/internal/fault"
 	"loki/modules/secrets/application"
 )
 
@@ -20,5 +21,14 @@ func reportProviderFailure(operation, correlation string, err error) {
 	// This journal belongs to the operator. Keep the public Job wire closed,
 	// and use only validated correlation metadata plus the shared safe policy.
 	d := application.ProviderDiagnostic(err)
+	if d.Code == fault.CodeDeliveryUnknown {
+		switch operation {
+		case "migration_prepare", "migration_approve", "migration_deliver":
+			// Comparison attempts have a durable binding, not an OCI Job.
+			// Host recovery may start a fresh comparison attempt; this does
+			// not authorize resending the original uncertain delivery.
+			d.NextAction = "inspect the original migration operation, comparison binding and delivery record; do not resend the original delivery"
+		}
+	}
 	log.Printf("application provider operation failed: operation=%s correlation=%s code=%s; %s", operation, correlation, d.Code, d.NextAction)
 }
