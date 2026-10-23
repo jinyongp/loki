@@ -2,7 +2,7 @@
 
 작성일: 2026-10-24 KST. 조사 workstream: `9c553662-2eec-4b99-93c0-0c00b4ee5300`. 기준 제품 소스: `4f1d66fe202e125d2354250d10a655462bd3d66c`.
 
-**조사·계약 실증을 마쳤고, 검증을 유지하면서 전송과 중복 실행을 줄이는 전략을 확정했다. 제품 구현·네이티브 CI·배포 성능 개선·공개 전환은 아직 수행하지 않았다.** devtools의 최초 spec/plan에 있는 미착수 문구는 계획 작성 당시의 기록이며, 실행 결과는 각 task validation과 이 문서를 따른다. 요구사항·수용 기준·기존 완료 이력은 바꾸지 않는다.
+**P01–P04 구현과 단위별 검증·리뷰·커밋, 13개 실제 native CI 및 gate 부분 재실행을 완료했다.** [구현 검증 기록](evidence/release-validation-implementation/P05-review.md)과 [CI attempt2](https://github.com/jinyongp/loki/actions/runs/40003099710/attempts/2)가 최종 근거다. 새 공개 릴리스/Pages 배포는 수행하지 않았고, matched 비교가 없어 배포 시간 단축률은 판정하지 않는다. 이후 사용자 추가 요청으로 Releaseway v0.8.0·standard 노트 전환과 기존 74개 릴리스 제목/본문 개선도 완료했다. v0.1.0 immutable flag 변화는 [별도 기록](evidence/release-validation-implementation/P07-release-metadata-review.md)에 명시했다. devtools의 최초 미착수 문구는 당시 계획 이력이며 현재 결과는 각 task validation과 이 문서를 따른다.
 
 ## 확정된 선택
 
@@ -26,7 +26,7 @@
 
 ## 구현 단위와 완료 조건
 
-각 단위는 구현 → 영향받는 검사 → 리뷰루프 → 관련 파일만 커밋 순서로 마친다. 현재 문서는 후속 작업의 초안이며 아직 이 구현 태스크들을 실행하거나 등록하지 않았다.
+각 단위는 구현 → 영향받는 검사 → 리뷰루프 → 관련 파일만 커밋 순서로 마쳤다. 구현 workstream은 `fa56f1a5-d777-4bcb-8e43-2bb923be0cc0`이며 P01–P05와 사용자 추가 요청 P06–P07의 근거를 연결했다. 아래 설계는 완료 조건과 향후 회귀 기준으로 유지한다.
 
 ### P01: 소비자별 artifact 수신
 
@@ -104,6 +104,18 @@ P01–P04 중 적용한 작업의 결과를 소비한다. 공통 입력·workflo
 | R02 | 실패 탐지 비교·실제 함수 경계·실험 6개, 대표 browser 결함 9개 | 538f36d |
 | R03 | 기존 선택 회귀 9개·추가 5개, 입력 소유권과 보류 판단 | f0831d8 |
 | R04 | pinned 계약/라이선스 확인·봉인 모형 4개·권한/복구 비교 | 1e73918 |
-| R05 | 요구사항→최종 설계→후속 구현→회귀/성능/복구 대응 확인 | 이 문서를 포함한 별도 커밋 |
+| R05 | 요구사항→최종 설계→후속 구현→회귀/성능/복구 대응 확인 | 37ade1b |
 
-R05 리뷰에서는 exact-name 조회의 missing/reuse 차이, publish=false의 실제 byte 확인, 조립 전/최종 lock 및 checksum의 순환 없는 inventory, 같은 버전 복구, 공통 fingerprint 변경의 첫 실행 비용, 모형/실제 CI 구분을 재검토했다. 필요한 동작을 추가로 생략하지 않았다. 위 문서의 제품 구현·CI·공개 전환 미실행 한계는 유지한다.
+R05 리뷰에서는 exact-name 조회의 missing/reuse 차이, publish=false의 실제 byte 확인, 조립 전/최종 lock 및 checksum의 순환 없는 inventory, 같은 버전 복구, 공통 fingerprint 변경의 첫 실행 비용, 모형/실제 CI 구분을 재검토했다. 필요한 동작을 추가로 생략하지 않았다. 이후 구현 결과는 아래와 같다.
+
+| 구현 | 결과 | 커밋 |
+| --- | --- | --- |
+| P01 | native 소비 family만 수신, 신규 누락의 공개 fallback 거부 | 6a3b840 |
+| P02 | capabilities의 같은 기본 callback으로 통합, installer 연결 유지 | f368307 |
+| P03 | source 대기 제거, 필수 결과를 전송 전에 공통 규칙으로 판정 | 6c33db1 |
+| P04 | 조립 inventory·읽기 전용 봉인·공통 byte verifier·원본 복구 | d415de9 |
+| P05 | 검증 전용 branch 경계, 전체 source/race/Python60, native13 및 gate retry | 962ee87 및 이 완료 기록 |
+| P06 | Releaseway v0.8.0·standard, upstream54·실제 preview, issue #3 조사 | f3b65dc |
+| P07 | 전체 74개 기존 title/body 개선, asset1,841개·tag 동일, 예외 기록 | 179858a |
+
+실제 CI 소스는 `962ee87a86f35786b67bc1742e2f8e767486b7ee`이며 이후 커밋은 근거 문서만 바꾼다. 실제 force plan의 39개 unit과 CLI6/browser5/full2가 통과했고, 의도적 gate 중단 후 attempt1 증거 39개를 attempt2에서 수용해 전체 bytes를 검증했다. 같은 실행의 artifact 크기와 소비 경로 계산은 native 전송 10,400,043,733→3,782,037,652 bytes(63.63% 감소)다. publish=true에서만 gate의 추가 약3.735GB 수신을 생략하며, 검증 전용 실행에는 유지한다. 공개 게시/복구 관측과 matched 시간 비교는 별도로 남는다.
