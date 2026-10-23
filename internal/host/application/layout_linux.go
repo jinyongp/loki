@@ -279,6 +279,13 @@ func loadIdentity(options PrepareOptions) (Identity, error) {
 	if !errors.Is(err, os.ErrNotExist) {
 		return Identity{}, invalid
 	}
+	// A missing selector in an existing store is lost deployment metadata,
+	// not a new installation. Allocating another identity would silently
+	// detach retained values and request history from the current authority.
+	entries, err := os.ReadDir(filepath.Join(options.StateRoot, "generations"))
+	if err != nil || len(entries) != 0 {
+		return Identity{}, invalid
+	}
 	deployment, err := newID()
 	if err != nil {
 		return Identity{}, err

@@ -152,6 +152,23 @@ func TestHostApplicationGenerationPreparation(t *testing.T) {
 	if json.Unmarshal(identityBytes, &identity) != nil || identity != first.Identity {
 		t.Fatal("failed identity change rewrote the selector")
 	}
+	t.Run("lost selector never allocates a replacement identity", func(t *testing.T) {
+		saved := options.IdentityFile + ".retained"
+		if err := os.Rename(options.IdentityFile, saved); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := os.Rename(saved, options.IdentityFile); err != nil {
+				t.Error(err)
+			}
+		}()
+		if _, err := PrepareState(options); err == nil {
+			t.Fatal("lost selector manufactured a new deployment over retained state")
+		}
+		if _, err := os.Lstat(options.IdentityFile); !os.IsNotExist(err) {
+			t.Fatal("failed recovery published a replacement selector", err)
+		}
+	})
 	t.Run("inactive candidate and atomic policy selection", func(t *testing.T) {
 		t.Cleanup(func() {
 			// Restore this public-only fixture even if a negative assertion

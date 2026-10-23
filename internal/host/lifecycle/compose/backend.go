@@ -779,6 +779,11 @@ func (b *Backend) restoreSnapshot(ctx context.Context, ref string, logicalRestor
 		return loadErr
 	} else if found {
 		currentRuntime = &current
+		if manifest.ApplicationBackup == nil {
+			if operation, owner, err := lifecycle.CurrentHostOperation(ctx); err == nil && owner.HoldsOperationRoot(b.root) && operation.ApplicationBackup != nil {
+				return errors.New("pre-cutover application data requires an explicit paired restore plan; current values and request history are retained")
+			}
+		}
 		if manifest.ApplicationBackup != nil && !logicalRestore {
 			if err := b.validateApplicationSafetyRestore(ctx, current, manifest.ApplicationBackup); err != nil {
 				return err
