@@ -6,7 +6,6 @@ import (
 
 	"loki/internal/config"
 	controlpolicy "loki/internal/control/policy"
-	"loki/internal/daemon"
 	"loki/internal/execution"
 )
 
@@ -27,7 +26,7 @@ func LoadApplications(path string) ([]controlpolicy.ApplicationResource, error) 
 	var document struct {
 		Resources []controlpolicy.ApplicationResource `json:"resources"`
 	}
-	if err := daemon.ReadJSON(path, &document); err != nil {
+	if err := readApplicationCatalog(path, &document); err != nil {
 		return nil, err
 	}
 	if document.Resources == nil {

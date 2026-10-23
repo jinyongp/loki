@@ -44,6 +44,9 @@ func TestRecoveryCipherCopyRejectsAliasesAndChangedInput(t *testing.T) {
 
 func TestInterruptedRecoveryCopyCleansOnlyItsDeclaredCipherArtifacts(t *testing.T) {
 	stage := t.TempDir()
+	if err := os.Chmod(stage, 0700); err != nil {
+		t.Fatal(err)
+	}
 	apps := filepath.Join(stage, "applications")
 	if err := os.Mkdir(apps, 0700); err != nil {
 		t.Fatal(err)
