@@ -84,7 +84,7 @@ jobs:
           PUBLISH_REQUEST: ${{ inputs.publish }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
-          test "$GITHUB_REF" = refs/heads/main
+          if test "$PUBLISH_REQUEST" = true; then test "$GITHUB_REF" = refs/heads/main; fi
           args=()
           if test -n "$REQUEST_VERSION"; then args+=(--version "$REQUEST_VERSION"); fi
           if test "$FORCE_REBUILD" = true; then args+=(--force); fi
@@ -257,7 +257,7 @@ jobs:
           LOKI_INPUT_CACHE: ${{ github.workspace }}/.release-input-cache
           LOKI_REGISTRY_TOKEN: ${{ github.token }}
           LOKI_BUILD_CACHE: registry
-          LOKI_CACHE_WRITE: '1'
+          LOKI_CACHE_WRITE: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
         run: python3 scripts/maintainer/tools/release_pipeline.py full --plan plan/plan.json --output candidate
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
