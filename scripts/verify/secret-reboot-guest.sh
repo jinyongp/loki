@@ -130,6 +130,12 @@ d=json.load(open(p)); d['Tools']=['coordination']
 with open(p,'w') as f: json.dump(d,f)
 os.chown(p,0,21001); os.chmod(p,0o640)
 PY
+  if test "$(cat /mnt/loki-payload/scenario)" = migration; then
+    install -m 0555 /mnt/loki-payload/loki-executor /mnt/loki-payload/native-migration-peer /opt/loki/bin/
+    install -m 0700 /mnt/loki-payload/migration-guest "$state/migration-guest"
+    touch "$state/migration-mode"
+    exec "$state/migration-guest" first
+  fi
   /opt/loki/bin/native-reboot-peer configure
   install -d -m 0755 /run/loki-go /var/lib/loki-go/secrets-root
   /opt/loki/bin/loki host prepare-secrets --uid 21006 --gid 21006 --agent-uid 21000 --metadata-gid 21001
@@ -182,6 +188,9 @@ PY
   echo LOKI_SECRET_REBOOT_FIRST_BOOT_PASS
   systemctl reboot --no-block
 else
+  if test -f "$state/migration-mode"; then
+    exec "$state/migration-guest" second
+  fi
   test "$(cat /proc/sys/kernel/random/boot_id)" != "$(cat "$state/boot-id")"
   test ! -e /run/loki-fixture.pass
   start_docker

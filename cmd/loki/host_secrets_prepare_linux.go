@@ -41,6 +41,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	interrupt := flags.Bool("interrupt-jobs", false, "persist the original explicit host interruption choice")
 	stateOnly := flags.Bool("state-only", false, "prepare persistent generation metadata without runtime files")
 	inspectIdentity := flags.Bool("inspect-identity", false, "inspect existing public selector metadata without preparing state")
+	metadataOnly := flags.Bool("metadata-only", false, "validate existing identity and public policy without preparing files or protection")
 	requireEmpty := flags.Bool("require-empty-generation", false, "require no existing app values/replay history before legacy migration; inspection only")
 	identity := flags.String("identity", "/etc/loki-go/secrets-deployment.json", "protected host deployment metadata")
 	state := flags.String("state", "/var/lib/loki-go/secrets", "host app-generation store")
@@ -65,7 +66,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *inspectIdentity {
-		if *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *initialMaintenance != "" || *interrupt {
+		if *metadataOnly || *stateOnly || *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate || *candidatePolicy != "" || *maintenance != "" || *initialMaintenance != "" || *interrupt {
 			return 2
 		}
 		existing, err := hostapplication.ReadIdentity(*identity)
@@ -84,7 +85,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if *requireEmpty {
+	if *requireEmpty && !*metadataOnly {
 		return 2
 	}
 	if *maintenance == "" {
@@ -101,6 +102,9 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	isCandidate := *candidateGeneration != "" || *candidateBefore != "" || *candidateOperation != "" || *commitCandidate
+	if *metadataOnly && (isCandidate || *stateOnly || *maintenance != "" || *initialMaintenance != "" || *interrupt || *jobDeployment != "") {
+		return 2
+	}
 	var before hostapplication.Identity
 	if isCandidate {
 		if *candidateGeneration == "" || *candidateBefore == "" || *candidateOperation == "" || *stateOnly || *unitDirectory != "" || *overlayDirectory != "" || *maintenance != "" || *initialMaintenance != "" || json.Unmarshal([]byte(*candidateBefore), &before) != nil {
@@ -166,6 +170,25 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 	}
 	options := hostapplication.PrepareOptions{UID: uint32(*uid), GID: uint32(*gid), AgentUID: uint32(*agent), MetadataGID: uint32(*metadataGroup), JobDeploymentID: *jobDeployment, IdentityFile: *identity, StateRoot: *state, ServiceStateRoot: *serviceState, RuntimeRoot: *runtimeRoot, Binary: *binary, Principal: "agent", Configuration: c, Contract: contract, Resources: resources}
 	options.InitialMaintenanceOperation = *initialMaintenance
+	if *metadataOnly {
+		before, err := hostapplication.ReadIdentity(*identity)
+		if err != nil || before.UID != options.UID || before.GID != options.GID || before.AgentUID != options.AgentUID || before.MetadataGID != options.MetadataGID || hostapplication.ValidateMetadata(options) != nil || hostapplication.RequireExistingGeneration(*state, before) != nil {
+			fmt.Fprintln(stderr, "existing application identity or public policy is invalid")
+			return 1
+		}
+		if *requireEmpty && hostapplication.RequireEmptyGeneration(*state, before) != nil {
+			fmt.Fprintln(stderr, "existing application generation must be preserved through application backup/restore")
+			return 1
+		}
+		policy, err := hostapplication.PolicyDigest(options)
+		if err != nil {
+			return 1
+		}
+		if json.NewEncoder(stdout).Encode(map[string]any{"identity": before, "policy": policy, "base_environment": contract.Environment}) != nil {
+			return 1
+		}
+		return 0
+	}
 	if *commitCandidate {
 		policy, err := hostpolicy.CompileApplications(c, contract, resources)
 		if err != nil || policy.Digest() != *candidatePolicy {

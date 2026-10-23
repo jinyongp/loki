@@ -63,6 +63,7 @@ def copy_native_runtime(payload):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devtools", required=True, type=Path)
+    parser.add_argument("--scenario", choices=["protected", "migration"], default="protected")
     args = parser.parse_args()
     arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
     if arch not in IMAGES or platform.system() != "Linux":
@@ -77,6 +78,13 @@ def main():
         env = dict(os.environ, CGO_ENABLED="0")
         for package, name in [("./cmd/loki", "loki"), ("./cmd/secret-broker", "loki-secret-broker"), ("./cmd/launcher", "loki-launcher"), ("./internal/host/lifecycle/testdata/native-reboot", "native-reboot-peer")]:
             subprocess.run(["go", "build", "-trimpath", "-o", str(payload / name), package], cwd=ROOT, env=env, check=True)
+        (payload / "scenario").write_text(args.scenario + "\n")
+        if args.scenario == "migration":
+            for package, name in [("./cmd/executor", "loki-executor"), ("./internal/host/lifecycle/testdata/native-migration", "native-migration-peer")]:
+                subprocess.run(["go", "build", "-trimpath", "-o", str(payload / name), package], cwd=ROOT, env=env, check=True)
+            for name in ["mcp.service", "executor.service", "host.target"]:
+                shutil.copyfile(ROOT / "packaging/native/systemd" / name, payload / name)
+            shutil.copyfile(ROOT / "scripts/verify/secret-native-migration-guest.sh", payload / "migration-guest")
         shutil.copyfile(args.devtools, payload / "devtools")
         for name in ["secrets.service", "secrets-prepare.service", "launcher.service", "runtime.service"]:
             shutil.copyfile(ROOT / "packaging/native/systemd" / name, payload / name)

@@ -81,6 +81,43 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 			t.Fatal("repeated preparation changed deployment identity or policy")
 		}
 	}
+	t.Run("metadata inspection has no preparation effects", func(t *testing.T) {
+		var probeArgs []string
+		for index, arg := range args {
+			if arg == "--role-source" {
+				probeArgs = append(probeArgs, args[:index]...)
+				break
+			}
+		}
+		unpreparedRuntime := filepath.Join(filepath.Dir(runtimeRoot), "loki-metadata-only-"+filepath.Base(root))
+		probeArgs = append(probeArgs, "--metadata-only", "--require-empty-generation", "--runtime", unpreparedRuntime)
+		before, err := os.ReadFile(identity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var output, diagnostic bytes.Buffer
+		if code := runHostPrepareSecrets(probeArgs, &output, &diagnostic); code != 0 {
+			t.Fatalf("metadata inspection exit %d: %s", code, diagnostic.String())
+		}
+		var metadata struct {
+			Identity        hostapplication.Identity `json:"identity"`
+			Policy          string                   `json:"policy"`
+			BaseEnvironment map[string]string        `json:"base_environment"`
+		}
+		if json.Unmarshal(output.Bytes(), &metadata) != nil || metadata.Identity.UID != 10006 || len(metadata.Policy) != 64 || metadata.BaseEnvironment == nil {
+			t.Fatal("incomplete public metadata inspection")
+		}
+		after, err := os.ReadFile(identity)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatal("metadata inspection changed the selected generation", err)
+		}
+		if _, err := os.Lstat(unpreparedRuntime); !os.IsNotExist(err) {
+			t.Fatal("metadata inspection prepared runtime files", err)
+		}
+		if code := runHostPrepareSecrets(append(probeArgs, "--uid", "10007"), &output, &diagnostic); code == 0 {
+			t.Fatal("metadata inspection accepted a different installed identity")
+		}
+	})
 	for _, role := range []string{"launcher", "runtime", "mcp"} {
 		path := filepath.Join(roles, role+".json")
 		raw, err := os.ReadFile(path)
