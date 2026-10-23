@@ -49,7 +49,7 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 	}
 	// Image COPY installs these public templates as root. Reproduce that
 	// ownership instead of trusting the checkout owner's role files as root.
-	for _, role := range []string{"launcher", "runtime", "mcp"} {
+	for _, role := range []string{"launcher", "runtime", "mcp", "executor"} {
 		raw, err := os.ReadFile(filepath.Join("../../packaging/images/config", role+".json"))
 		if err != nil {
 			t.Fatal(err)
@@ -118,7 +118,7 @@ func TestHostPrepareSecretsFrozenRoles(t *testing.T) {
 			t.Fatal("metadata inspection accepted a different installed identity")
 		}
 	})
-	for _, role := range []string{"launcher", "runtime", "mcp"} {
+	for _, role := range []string{"launcher", "runtime", "mcp", "executor"} {
 		path := filepath.Join(roles, role+".json")
 		raw, err := os.ReadFile(path)
 		if err != nil {

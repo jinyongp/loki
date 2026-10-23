@@ -330,6 +330,7 @@ func runHostPrepareSecrets(args []string, stdout, stderr io.Writer) int {
 		}
 		common := map[string]any{"ApplicationCatalog": *serviceCatalog}
 		changes := map[string]map[string]any{
+			"executor.json": {"ApplicationCatalog": common["ApplicationCatalog"]},
 			"mcp.json":      {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationSocket": prepared.Layout.MetadataSocket, "ApplicationUID": prepared.Identity.UID},
 			"runtime.json":  {"ApplicationCatalog": common["ApplicationCatalog"], "ApplicationValuesExternal": true},
 			"launcher.json": {"ApplicationCatalog": common["ApplicationCatalog"], "SecretSocket": prepared.Layout.Socket, "SecretBrokerUID": prepared.Identity.UID, "SecretPrincipal": "agent", "DeploymentID": jobDeployment, "DeploymentOwner": ownerName, "InitialMaintenanceOperation": *maintenance, "InitialMaintenanceInterrupt": *interrupt},

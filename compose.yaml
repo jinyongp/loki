@@ -201,6 +201,16 @@ services:
     volumes:
       - launcher-socket:/run/loki/launcher
       - executor-socket:/run/loki/executor
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/executor.json
+        target: /etc/loki/executor.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${LOKI_APP_RUNTIME_ROOT:-/dev/shm/loki-app-unprepared}/roles/application-resources.json
+        target: /etc/loki/application-resources.json
+        read_only: true
+        bind: {create_host_path: false}
     configs:
       - source: github_config
         target: /etc/loki/github.toml

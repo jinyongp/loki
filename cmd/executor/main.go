@@ -22,14 +22,15 @@ import (
 const maxExecutorRunTimeoutSeconds = 24 * 60 * 60
 
 type executorLayout struct {
-	Socket            string
-	SocketGID         int
-	AgentUID          uint32
-	ExecutorUID       uint32
-	LauncherSocket    string
-	LauncherUID       uint32
-	PolicySHA256      string
-	RunTimeoutSeconds int
+	Socket             string
+	SocketGID          int
+	AgentUID           uint32
+	ExecutorUID        uint32
+	LauncherSocket     string
+	LauncherUID        uint32
+	PolicySHA256       string
+	ApplicationCatalog string
+	RunTimeoutSeconds  int
 }
 
 func buildExecutor(layout executorLayout) (appexecutor.Options, error) {
@@ -82,7 +83,7 @@ func requireExecutorIdentity(euid int, configured uint32) error {
 }
 
 func resolveExecutorPolicy(layout *executorLayout, configPath, githubConfigPath, executionContractPath string) error {
-	generation, _, err := hostpolicy.CompileFiles(configPath, githubConfigPath, executionContractPath)
+	generation, _, _, err := hostpolicy.CompileFilesWithApplications(configPath, githubConfigPath, executionContractPath, layout.ApplicationCatalog)
 	if err != nil {
 		return err
 	}

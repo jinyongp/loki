@@ -9,6 +9,7 @@ import (
 
 	"loki/internal/app/executor"
 	"loki/internal/daemon"
+	hostpolicy "loki/internal/host/policy"
 	"loki/modules/execution/jobs"
 )
 
@@ -94,5 +95,40 @@ func TestRequireExecutorIdentity(t *testing.T) {
 	}
 	if err := requireExecutorIdentity(1001, 1002); err == nil {
 		t.Fatal("wrong executor UID was accepted")
+	}
+}
+
+func TestExecutorBindsSameApplicationPolicyAsLauncher(t *testing.T) {
+	root := t.TempDir()
+	configuration := filepath.Join(root, "loki.toml")
+	if err := os.WriteFile(configuration, []byte("root = \"/workspace\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog := filepath.Join(root, "applications.json")
+	body := []byte(`{"resources":[{"id":"9af6c2e6-c1d4-41a3-a6e9-9fb3c07c67d2","alias":"fixture","repository":"repo:fixture","principals":[{"principal":"agent","execute":true}],"environments":["common"],"keys":{"TOKEN":"secret"},"network":"none","destinations":[]}]}`)
+	if err := os.WriteFile(catalog, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	contract, err := filepath.Abs("../../packaging/images/config/execution-contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, _, _, err := hostpolicy.CompileFilesWithApplications(configuration, "", contract, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, _, err := hostpolicy.CompileFiles(configuration, "", contract)
+	if err != nil || legacy.Digest() == expected.Digest() {
+		t.Fatal("fixture does not distinguish missing application policy", err)
+	}
+	layout := executorLayout{ApplicationCatalog: catalog}
+	if err := resolveExecutorPolicy(&layout, configuration, "", contract); err != nil || layout.PolicySHA256 != expected.Digest() {
+		t.Fatal("executor did not bind the selected application grants", err)
+	}
+	if err := os.Remove(catalog); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolveExecutorPolicy(&layout, configuration, "", contract); err == nil {
+		t.Fatal("missing selected application policy silently fell back")
 	}
 }

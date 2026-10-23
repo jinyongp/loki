@@ -126,6 +126,9 @@ func (r FullResources) Layouts() (FullLayouts, error) {
 	if services["executor"] {
 		result.MCP["ExecutorSocket"], result.MCP["ExecutorUID"] = "/run/loki/executor/control.sock", 10004
 		result.Executor = map[string]any{"Socket": "/run/loki/executor/control.sock", "SocketGID": 10001, "AgentUID": 10000, "ExecutorUID": 10004, "LauncherSocket": "/run/loki/launcher/control.sock", "LauncherUID": 0, "RunTimeoutSeconds": 86400}
+		if services["secrets"] {
+			result.Executor["ApplicationCatalog"] = "/etc/loki/layout/application-resources.json"
+		}
 		image, err := r.Image("execution", "workload")
 		if err != nil {
 			return result, err
