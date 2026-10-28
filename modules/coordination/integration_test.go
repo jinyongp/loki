@@ -12,6 +12,19 @@ import (
 // TestRealCoordinationCandidate verifies the installed contract in an isolated
 // workspace, then proves process execution is rejected before any command runs.
 func TestRealCoordinationCandidate(t *testing.T) {
+	testRealCoordinationCandidate(t, os.Getenv("LOKI_DEVTOOLS_BINARY"))
+}
+
+func TestRealCoordinationPreviousState(t *testing.T) {
+	previous := os.Getenv("LOKI_DEVTOOLS_PREVIOUS_BINARY")
+	if previous == "" {
+		t.Skip("previous provider is supplied by the native values Actions suite")
+	}
+	testRealCoordinationCandidate(t, previous)
+}
+
+func testRealCoordinationCandidate(t *testing.T, seedBinary string) {
+	t.Helper()
 	binary := os.Getenv("LOKI_DEVTOOLS_BINARY")
 	if binary == "" {
 		t.Skip("LOKI_DEVTOOLS_BINARY is not configured")
@@ -39,8 +52,11 @@ func TestRealCoordinationCandidate(t *testing.T) {
 	}
 	// Fixture creation is outside the adapter's runtime authority and uses only
 	// this test's private HOME. Normal reads and mutations use the typed client.
-	seed := exec.CommandContext(t.Context(), binary, "--format", "json", "task", "add",
-		"--title", "synthetic protocol upgrade", "--request-id", "123e4567-e89b-42d3-a456-426614174401")
+	seedArgs := []string{"task", "add", "--title", "synthetic protocol upgrade", "--request-id", "123e4567-e89b-42d3-a456-426614174401"}
+	if seedBinary == binary {
+		seedArgs = append([]string{"--format", "json"}, seedArgs...)
+	}
+	seed := exec.CommandContext(t.Context(), seedBinary, seedArgs...)
 	seed.Dir, seed.Env = dir, client.Env
 	raw, err := seed.Output()
 	if err != nil {
