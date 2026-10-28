@@ -68,7 +68,7 @@ case "$(uname -m)" in
   aarch64|arm64) native_devtools=$devtools_arm64; native_ripgrep=$ripgrep_arm64; native_gh=$gh_arm64 ;;
   *) echo "OCI contract checks require a native Linux amd64 or arm64 host" >&2; exit 1 ;;
 esac
-devtools_version_json=$("$native_devtools" version)
+devtools_version_json=$("$native_devtools" --format json version)
 devtools_version=$(printf '%s\n' "$devtools_version_json" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 test -n "$devtools_version" || { echo "invalid devtools version response" >&2; exit 1; }
 

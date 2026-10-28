@@ -82,7 +82,8 @@ func (p *Provider) invokeFiles(ctx context.Context, args []string, input []byte,
 	case <-ctx.Done():
 		return ErrUnavailable
 	}
-	cmd := exec.CommandContext(ctx, p.binary, append(args, "--isolated-root", p.root)...)
+	argv := append([]string{"--format", "json", "--isolated-root", p.root}, args...)
+	cmd := exec.CommandContext(ctx, p.binary, argv...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "GOMAXPROCS=2"}
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.ExtraFiles = files

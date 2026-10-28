@@ -190,7 +190,7 @@ func (c *Client) Verify(ctx context.Context) (Candidate, error) {
 		return c.candidate, nil
 	}
 	result, err := process.Run(ctx, process.Spec{
-		Argv: []string{c.Binary, "version"}, CWD: c.CWD, Env: c.Env,
+		Argv: []string{c.Binary, "--format", "json", "version"}, CWD: c.CWD, Env: c.Env,
 		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: 64 << 10,
 	})
 	if err != nil {
@@ -207,7 +207,7 @@ func (c *Client) Verify(ctx context.Context) (Candidate, error) {
 		return Candidate{}, err
 	}
 	result, err = process.Run(ctx, process.Spec{
-		Argv: []string{c.Binary, "schema", "--all"}, CWD: c.CWD, Env: c.Env,
+		Argv: []string{c.Binary, "--format", "json", "schema", "--all"}, CWD: c.CWD, Env: c.Env,
 		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: c.maxOutput(),
 	})
 	if err != nil {
@@ -313,7 +313,7 @@ func (c *Client) call(ctx context.Context, name string, raw json.RawMessage, env
 		return nil, err
 	}
 	result, err := process.Run(ctx, process.Spec{
-		Argv: append([]string{c.Binary}, argv...), CWD: c.CWD, Env: environment,
+		Argv: append([]string{c.Binary, "--format", "json"}, argv...), CWD: c.CWD, Env: environment,
 		Identity: c.Identity, Timeout: c.timeout(), MaxOutput: c.maxOutput(),
 	})
 	if err != nil {

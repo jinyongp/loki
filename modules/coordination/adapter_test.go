@@ -21,6 +21,7 @@ func fakeClient(t *testing.T) (*Client, string) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
+		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
 		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.10.0\",\"commit\":\"test\",\"protocol_version\":19}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + catalog + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + log + "\"\n" +
@@ -89,6 +90,7 @@ func TestClientVerifyCachesAcceptedCandidate(t *testing.T) {
 	calls := filepath.Join(dir, "calls.log")
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
+		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
 		"printf '%s %s\\n' \"$1\" \"$2\" >> \"" + calls + "\"\n" +
 		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"candidate-test\",\"protocol_version\":19}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalog + "\"; exit 0; fi\n" +
@@ -193,6 +195,7 @@ func TestClientVerifyRejectsApprovedContractDrift(t *testing.T) {
 	}
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
+		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
 		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"drift-test\",\"protocol_version\":19}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then /bin/cat \"" + catalogPath + "\"; exit 0; fi\n" +
 		"exit 2\n"

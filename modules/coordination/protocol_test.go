@@ -178,6 +178,7 @@ func TestClientChecksFailureEnvelopeBeforeCLIError(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := "#!/bin/sh\n" +
+				"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
 				"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":19}}'; exit 0; fi\n" +
 				"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + filepath.Join(client.CWD, "catalog.json") + "\"; exit 0; fi\n"
 			redirect := ""

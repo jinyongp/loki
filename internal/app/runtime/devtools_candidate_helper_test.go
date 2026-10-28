@@ -20,6 +20,9 @@ func emitDevtoolsTestFixture(name string) {
 }
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 2 && os.Args[1] == "--format" && os.Args[2] == "json" {
+		os.Args = append(os.Args[:1], os.Args[3:]...)
+	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version":

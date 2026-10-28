@@ -39,14 +39,14 @@ func GenerateCatalog(ctx context.Context, binary string) ([]byte, error) {
 	if binary == "" {
 		return nil, errors.New("devtools binary path is required")
 	}
-	version, err := exec.CommandContext(ctx, binary, "version").Output()
+	version, err := exec.CommandContext(ctx, binary, "--format", "json", "version").Output()
 	if err != nil {
 		return nil, fmt.Errorf("run devtools version: %w", err)
 	}
 	if _, err = ParseVersion(version); err != nil {
 		return nil, err
 	}
-	raw, err := exec.CommandContext(ctx, binary, "schema", "--all").Output()
+	raw, err := exec.CommandContext(ctx, binary, "--format", "json", "schema", "--all").Output()
 	if err != nil {
 		return nil, fmt.Errorf("run devtools schema --all: %w", err)
 	}

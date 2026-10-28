@@ -34,7 +34,7 @@ func TestGenerateCatalogChecksVersionAndNormalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := filepath.Join(dir, "devtools")
-	body := "#!/bin/sh\ncase \"$1 $2\" in\n  \"version \" ) cat \"" + version + "\" ;;\n  \"schema --all\" ) cat \"" + catalog + "\" ;;\n  * ) exit 2 ;;\nesac\n"
+	body := "#!/bin/sh\ntest \"$1 $2\" = \"--format json\" || exit 2\nshift 2\ncase \"$1 $2\" in\n  \"version \" ) cat \"" + version + "\" ;;\n  \"schema --all\" ) cat \"" + catalog + "\" ;;\n  * ) exit 2 ;;\nesac\n"
 	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
 		t.Fatal(err)
 	}

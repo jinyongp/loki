@@ -28,7 +28,7 @@ def build(inputs, tag, loki_version="0.49.0-dev"):
     paths = {"devtools": inputs / "devtools" / arch / "devtools",
              "ripgrep": inputs / "ripgrep" / arch / "rg",
              "gh": inputs / "gh" / arch / "gh"}
-    version = json.loads(output(str(paths["devtools"]), "version"))
+    version = json.loads(output(str(paths["devtools"]), "--format", "json", "version"))
     # The public version response is an envelope, not the buildinfo object.
     provider = version.get("data", {})
     if not version.get("ok") or provider.get("protocol_version") != 19 or provider.get("version") != "0.37.0" or provider.get("commit") != "f8c22ac3674a14c8d57ed919e866fc104d6d7b5f":

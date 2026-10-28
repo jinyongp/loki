@@ -3,6 +3,9 @@ package devtools
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,7 +17,7 @@ func TestRealCoordinationCandidate(t *testing.T) {
 		t.Skip("LOKI_DEVTOOLS_BINARY is not configured")
 	}
 	dir := t.TempDir()
-	client, err := NewClient(binary, dir, []string{"PATH=/usr/bin:/bin", "HOME=" + dir})
+	client, err := NewClient(binary, dir, []string{"PATH=/usr/bin:/bin", "HOME=" + dir, "DEVTOOLS_FORMAT=text"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,5 +33,64 @@ func TestRealCoordinationCandidate(t *testing.T) {
 		if _, err := client.call(t.Context(), name, json.RawMessage(`{}`), nil); err == nil {
 			t.Fatalf("accepted %s", name)
 		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "devtools.toml"), []byte("profile = 'fixture'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Fixture creation is outside the adapter's runtime authority and uses only
+	// this test's private HOME. Normal reads and mutations use the typed client.
+	seed := exec.CommandContext(t.Context(), binary, "--format", "json", "task", "add",
+		"--title", "synthetic protocol upgrade", "--request-id", "123e4567-e89b-42d3-a456-426614174401")
+	seed.Dir, seed.Env = dir, client.Env
+	raw, err := seed.Output()
+	if err != nil {
+		t.Fatal("create synthetic task:", err)
+	}
+	var created struct {
+		Data struct {
+			Item struct {
+				ID string `json:"id"`
+			} `json:"item"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &created); err != nil || created.Data.Item.ID == "" {
+		t.Fatal("synthetic task ID missing")
+	}
+	claimRequest := CoordinationMutationRequest{
+		Target: created.Data.Item.ID, RequestID: "123e4567-e89b-42d3-a456-426614174402",
+	}
+	claim, err := client.MutateCoordination(t.Context(), ".", CoordinationClaim, claimRequest)
+	if err != nil || !claim.ContextValid || claim.Context == "" || claim.RunID == "" {
+		t.Fatal("claim did not return a valid private run:", err)
+	}
+	replay, err := client.MutateCoordination(t.Context(), ".", CoordinationClaim, claimRequest)
+	if err != nil || replay.RunID != claim.RunID {
+		t.Fatal("claim retry did not preserve the run:", err)
+	}
+	if strings.Contains(string(claim.Public), claim.Context) {
+		t.Fatal("private claim context leaked into public output")
+	}
+	for index, action := range []CoordinationMutation{CoordinationCheckpoint, CoordinationResume, CoordinationDone} {
+		target := claim.RunID
+		if action == CoordinationResume || action == CoordinationDone {
+			target = created.Data.Item.ID
+		}
+		_, err := client.MutateCoordination(t.Context(), ".", action, CoordinationMutationRequest{
+			Target: target, Context: claim.Context, Summary: "synthetic upgrade verification",
+			RequestID: []string{"123e4567-e89b-42d3-a456-426614174403", "123e4567-e89b-42d3-a456-426614174404", "123e4567-e89b-42d3-a456-426614174405"}[index],
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", action, err)
+		}
+	}
+	state, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskShow, CoordinationRequest{Target: created.Data.Item.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var item struct {
+		State string `json:"state"`
+	}
+	if json.Unmarshal(state.Item, &item) != nil || item.State != "done" {
+		t.Fatal("synthetic task did not finish")
 	}
 }
