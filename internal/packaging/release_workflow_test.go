@@ -277,7 +277,7 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 		"apk add --no-cache git build-base pcre2-dev perl",
 		"PCRE2_SYS_STATIC=1",
 		"cargo build --locked --profile release-lto --features pcre2",
-		"/out/devtools version",
+		"/out/devtools --format json version",
 		"/out/gh version",
 		"/src/ripgrep/target/release-lto/rg --version",
 		"/src/ripgrep/target/release-lto/rg",
