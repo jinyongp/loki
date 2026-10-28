@@ -2,7 +2,7 @@
   "schema_version": 1,
   "ok": true,
   "data": {
-    "protocol_version": 14,
+    "protocol_version": 19,
     "commands": [
       {
         "name": "command inspect",
@@ -41,6 +41,16 @@
               "default": ".",
               "description": "Project directory.",
               "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -525,6 +535,16 @@
               "minLength": 1,
               "type": "string"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -657,6 +677,16 @@
               "default": ".",
               "description": "Directory to search from.",
               "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -802,6 +832,251 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "decisions"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "decisions"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "remaining"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "remaining"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "next-action"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "next-action"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "blockers"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "blockers"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -840,6 +1115,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -1293,6 +1579,16 @@
               "description": "Continue a previous paginated query.",
               "type": "string"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -1648,6 +1944,50 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "args": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "args"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "workstream"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -1669,6 +2009,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -2090,6 +2441,16 @@
               ],
               "type": "array"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -2446,6 +2807,16 @@
             },
             "dir": {
               "description": "Execution directory used by current-run queries; defaults to the current directory.",
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -2805,6 +3176,103 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -2825,6 +3293,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -3270,6 +3749,16 @@
               "description": "Continue a previous paginated query.",
               "type": "string"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -3612,6 +4101,16 @@
               "maxItems": 0,
               "minItems": 0,
               "type": "array"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
             },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
@@ -3990,6 +4489,251 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "decisions"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "decisions"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "validation-record-ids"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "remaining"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "remaining"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "next-action"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "next-action"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "blockers"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "blockers"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -4028,6 +4772,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -4473,6 +5228,29 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -4493,6 +5271,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -4909,6 +5698,16 @@
               ],
               "type": "array"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -5264,6 +6063,29 @@
         ],
         "input_schema": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "not": {
+                "allOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "stdin": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "stdin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
           "properties": {
             "args": {
               "maxItems": 1,
@@ -5290,6 +6112,17 @@
             },
             "file": {
               "description": "JSON request file.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -5703,6 +6536,16 @@
               ],
               "type": "array"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -6053,6 +6896,16 @@
             },
             "cursor": {
               "description": "Continue a previous paginated query.",
+              "type": "string"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
               "type": "string"
             },
             "isolated-root": {
@@ -6423,6 +7276,16 @@
               "description": "Continue a previous paginated query.",
               "type": "string"
             },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
+            },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",
               "minLength": 1,
@@ -6775,6 +7638,16 @@
                 }
               ],
               "type": "array"
+            },
+            "format": {
+              "default": "auto",
+              "description": "Root-prefix output format; precedes the command. Native stdout is preserved.",
+              "enum": [
+                "auto",
+                "text",
+                "json"
+              ],
+              "type": "string"
             },
             "isolated-root": {
               "description": "Use independent config/data/cache/runtime; shared OS mutations are prohibited.",

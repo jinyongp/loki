@@ -1,6 +1,6 @@
 # 애플리케이션 값 이관과 복구
 
-이 문서는 devtools 0.34.0 / CLI protocol 14를 고정한 현재 후보의 절차다.
+이 문서는 devtools 0.37.0 / CLI protocol 19를 고정한 현재 후보의 절차다.
 값은 전용 secrets 서비스가 관리한다. coordination의 task/workstream root는
 값 이관·복원 대상에 포함하지 않는다. 운영 적용 전에 같은 후보의 필수
 amd64·arm64 acceptance 결과를 확인한다.
