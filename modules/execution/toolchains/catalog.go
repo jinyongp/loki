@@ -232,13 +232,13 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 	}
 
 	pnpmProvider := PnpmProvider{Store: store}
-	for _, release := range catalog.Pnpm {
+	for i, release := range catalog.Pnpm {
 		plan, resolveErr := pnpmProvider.Resolve("pnpm@"+release.Version, catalog.Pnpm, false)
 		if resolveErr != nil {
 			return resolveErr
 		}
 		if plan.Resolution.Acquire {
-			source := filepath.Join(artifacts, release.Filename())
+			source := filepath.Join(artifacts, catalogArchiveName(release.Filename(), release.Version, i == len(catalog.Pnpm)-1))
 			if _, err = pnpmProvider.Provision(ctx, plan, source); err != nil {
 				return err
 			}
@@ -260,13 +260,13 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 	}
 
 	uvProvider := UVProvider{Store: store}
-	for _, release := range catalog.UV {
+	for i, release := range catalog.UV {
 		plan, resolveErr := uvProvider.Resolve(release.Version, catalog.UV, false)
 		if resolveErr != nil {
 			return resolveErr
 		}
 		if plan.Resolution.Acquire {
-			source := filepath.Join(artifacts, release.Filename())
+			source := filepath.Join(artifacts, catalogArchiveName(release.Filename(), release.Version, i == len(catalog.UV)-1))
 			if _, err = uvProvider.Provision(ctx, plan, source); err != nil {
 				return err
 			}
@@ -293,7 +293,7 @@ func ProvisionCatalog(ctx context.Context, catalog Catalog, bundle string, store
 	for _, release := range catalog.Go {
 		plan, resolveErr := goProvider.Resolve(GoProjectRequest{
 			Minimum: release.Version, Toolchain: "go" + release.Version,
-		}, catalog.Go, false)
+		}, []GoRelease{release}, false)
 		if resolveErr != nil {
 			return resolveErr
 		}

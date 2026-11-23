@@ -155,3 +155,58 @@ func TestFetchBundleWithCatalogRejectsConflictingDuplicateIdentity(t *testing.T)
 		t.Fatalf("conflicting bundle was published: %v", err)
 	}
 }
+
+func TestFetchAndProvisionCatalogWithMultiplePnpmAndUVReleases(t *testing.T) {
+	previousPnpmArchive, previousPnpmSHA := writePnpmArchive(t)
+	currentPnpmArchive, currentPnpmSHA := writePnpmArchive(t)
+	previousUVArchive, previousUVSHA := writeUVArchive(t, "0.12.17")
+	currentUVArchive, currentUVSHA := writeUVArchive(t, "0.13.9")
+	previousPnpm := pnpmRelease("12.5.1", previousPnpmSHA)
+	currentPnpm := pnpmRelease("12.21.0", currentPnpmSHA)
+	previousUV := uvRelease("0.12.17", previousUVSHA)
+	currentUV := uvRelease("0.13.9", currentUVSHA)
+	catalog := Catalog{
+		Version: CatalogVersion,
+		Pnpm:    []PnpmRelease{previousPnpm, currentPnpm},
+		UV:      []UVRelease{previousUV, currentUV},
+	}
+	catalogRaw, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestRaw := []byte(fmt.Sprintf(
+		`{"version":1,"platform":{"id":"ubuntu","version":"24.04","arch":"amd64"},"apt_packages":[{"name":"git","version":"1"}],"artifacts":[{"name":"pnpm","version":"12.21.0","filename":"pnpm-linux-x64.tar.gz","url":%q,"sha256":%q,"format":"tar.gz","install_path":"/opt/loki/toolchain/pnpm/12.21.0","strip_components":0,"links":{"pnpm":"pnpm"}}]}`,
+		currentPnpm.URL, currentPnpm.SHA256,
+	))
+	transport := &bundleRoundTripper{payloads: map[string][]byte{}, hits: map[string]int{}}
+	for url, path := range map[string]string{
+		previousPnpm.URL: previousPnpmArchive,
+		currentPnpm.URL:  currentPnpmArchive,
+		previousUV.URL:   previousUVArchive,
+		currentUV.URL:    currentUVArchive,
+	} {
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		transport.payloads[url] = payload
+	}
+	output := filepath.Join(t.TempDir(), "bundle")
+	if err := FetchBundleWithCatalog(t.Context(), &http.Client{Transport: transport}, manifestRaw, catalogRaw, output); err != nil {
+		t.Fatal(err)
+	}
+	store := generationStoreFixture(t)
+	if err := ProvisionCatalog(t.Context(), catalog, output, store); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range catalogGenerationIDs(catalog) {
+		if _, err := store.Lookup(id); err != nil {
+			t.Fatalf("missing catalog generation %s: %v", id, err)
+		}
+	}
+	for url := range transport.payloads {
+		if transport.hits[url] != 1 {
+			t.Fatalf("artifact %s fetched %d times", url, transport.hits[url])
+		}
+	}
+}

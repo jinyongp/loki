@@ -2,6 +2,8 @@ package toolchain
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +26,8 @@ func TestRepositoryManagedGoCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Go) != 1 || catalog.Go[0].Version != "1.27.1" ||
-		catalog.Go[0].SHA256 != "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445" {
+	if len(catalog.Go) != 2 || catalog.Go[0].Version != "1.27.1" || catalog.Go[1].Version != "1.27.4" ||
+		catalog.Go[1].SHA256 != "7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840" {
 		t.Fatalf("Go catalog = %#v", catalog.Go)
 	}
 }
@@ -56,6 +58,37 @@ func TestProvisionCatalogReusesInstalledGoGeneration(t *testing.T) {
 		Go:      []GoRelease{release},
 	}, bundle, store); err != nil {
 		t.Fatalf("reuse installed Go generation: %v", err)
+	}
+}
+
+func TestProvisionCatalogInstallsEveryGoRelease(t *testing.T) {
+	store := generationStoreFixture(t)
+	bundle := t.TempDir()
+	artifacts := filepath.Join(bundle, "artifacts")
+	if err := os.Mkdir(artifacts, 0755); err != nil {
+		t.Fatal(err)
+	}
+	catalog := Catalog{Version: CatalogVersion}
+	for _, version := range []string{"1.27.1", "1.27.4"} {
+		source := filepath.Join(artifacts, "go"+version+".linux-amd64.tar.gz")
+		writeTarGzip(t, source, []tarEntry{
+			{name: "go/bin/go", data: []byte("#!/bin/sh\n"), mode: 0755},
+			{name: "go/bin/gofmt", data: []byte("#!/bin/sh\n"), mode: 0755},
+			{name: "go/VERSION", data: []byte("go" + version + "\n"), mode: 0644},
+		})
+		payload, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		catalog.Go = append(catalog.Go, goRelease(version, fmt.Sprintf("%x", sha256.Sum256(payload))))
+	}
+	if err := ProvisionCatalog(t.Context(), catalog, bundle, store); err != nil {
+		t.Fatal(err)
+	}
+	for _, release := range catalog.Go {
+		if _, err := store.Lookup(release.GenerationID()); err != nil {
+			t.Fatalf("missing Go %s generation: %v", release.Version, err)
+		}
 	}
 }
 

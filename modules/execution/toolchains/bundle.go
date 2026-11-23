@@ -132,9 +132,10 @@ func catalogBundleArtifacts(catalog Catalog) []bundleArtifact {
 			Name: "managed-node-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
 		})
 	}
-	for _, release := range catalog.Pnpm {
+	for i, release := range catalog.Pnpm {
 		result = append(result, bundleArtifact{
-			Name: "managed-pnpm-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
+			Name: "managed-pnpm-" + release.Version, Filename: catalogArchiveName(release.Filename(), release.Version, i == len(catalog.Pnpm)-1),
+			URL: release.URL, SHA256: release.SHA256,
 		})
 	}
 	for _, release := range catalog.Python {
@@ -142,9 +143,10 @@ func catalogBundleArtifacts(catalog Catalog) []bundleArtifact {
 			Name: "managed-python-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
 		})
 	}
-	for _, release := range catalog.UV {
+	for i, release := range catalog.UV {
 		result = append(result, bundleArtifact{
-			Name: "managed-uv-" + release.Version, Filename: release.Filename(), URL: release.URL, SHA256: release.SHA256,
+			Name: "managed-uv-" + release.Version, Filename: catalogArchiveName(release.Filename(), release.Version, i == len(catalog.UV)-1),
+			URL: release.URL, SHA256: release.SHA256,
 		})
 	}
 	for _, release := range catalog.Rust {
@@ -164,6 +166,15 @@ func catalogBundleArtifacts(catalog Catalog) []bundleArtifact {
 		})
 	}
 	return result
+}
+
+// The newest release keeps the upstream name used by single-version bundles
+// and the base manifest. Earlier releases share that upstream name across versions.
+func catalogArchiveName(filename, version string, newest bool) string {
+	if newest {
+		return filename
+	}
+	return version + "-" + filename
 }
 
 func mergeBundleArtifacts(base, added []bundleArtifact) ([]bundleArtifact, error) {

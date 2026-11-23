@@ -18,20 +18,23 @@ func TestRepositoryManagedToolchainCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Node) != 1 || catalog.Node[0].Version != "26.9.0" {
+	if len(catalog.Node) != 2 || catalog.Node[0].Version != "26.9.0" || catalog.Node[1].Version != "26.13.1" {
 		t.Fatalf("Node.js catalog = %#v", catalog.Node)
 	}
-	if len(catalog.Pnpm) != 1 || catalog.Pnpm[0].Version != "12.5.1" {
+	if len(catalog.Pnpm) != 2 || catalog.Pnpm[0].Version != "12.5.1" || catalog.Pnpm[1].Version != "12.21.0" {
 		t.Fatalf("pnpm catalog = %#v", catalog.Pnpm)
 	}
-	if len(catalog.Python) != 1 || catalog.Python[0].Version != "3.14.7" ||
-		catalog.Python[0].Build != "20260901" ||
-		catalog.Python[0].SHA256 != "3959f92825141e04adf44982d3a83ee57af0877e893b0796e04c1468749d9b04" {
+	if len(catalog.Python) != 2 || catalog.Python[0].Version != "3.14.7" || catalog.Python[1].Version != "3.14.10" ||
+		catalog.Python[1].Build != "20261110" ||
+		catalog.Python[1].SHA256 != "c2ff2e97422f5d3896a16e0317fd212ba977bbf2688d93a6f7a03d817506bd30" {
 		t.Fatalf("Python catalog = %#v", catalog.Python)
 	}
-	if len(catalog.UV) != 1 || catalog.UV[0].Version != "0.12.17" ||
-		catalog.UV[0].SHA256 != "fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63" {
+	if len(catalog.UV) != 2 || catalog.UV[0].Version != "0.12.17" || catalog.UV[1].Version != "0.13.9" ||
+		catalog.UV[1].SHA256 != "a7fbaff2b9a271d85c1bdb540941090fd1ce011797b4abeb48e4dcd39c2471d5" {
 		t.Fatalf("uv catalog = %#v", catalog.UV)
+	}
+	if len(catalog.Rust) != 2 || catalog.Rust[0].Version != "1.98.1" || catalog.Rust[1].Version != "1.100.0" {
+		t.Fatalf("Rust catalog = %#v", catalog.Rust)
 	}
 }
 

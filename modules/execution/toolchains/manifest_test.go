@@ -24,9 +24,9 @@ func TestRepositoryManifest(t *testing.T) {
 	}
 	for name, version := range map[string]string{
 		"gh":   "2.105.0",
-		"go":   "1.27.1",
-		"node": "26.9.0",
-		"pnpm": "12.5.1",
+		"go":   "1.27.4",
+		"node": "26.13.1",
+		"pnpm": "12.21.0",
 	} {
 		if got := artifacts[name].Version; got != version {
 			t.Errorf("%s version = %q, want %q", name, got, version)
