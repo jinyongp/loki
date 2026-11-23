@@ -276,7 +276,7 @@ func TestReleaseInputBuilderUsesPinnedUpstreamSource(t *testing.T) {
 	for _, required := range []string{
 		"apk add --no-cache git build-base pcre2-dev perl",
 		"PCRE2_SYS_STATIC=1",
-		"cargo build --locked --profile release-lto --features pcre2",
+		"cargo rustc --locked --profile release-lto --features pcre2 -- -C target-feature=+crt-static",
 		"/out/devtools --format json version",
 		"/out/gh version",
 		"/src/ripgrep/target/release-lto/rg --version",

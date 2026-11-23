@@ -5,9 +5,9 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG DEVTOOLS_VERSION=0.50.0
 ARG DEVTOOLS_COMMIT=237f87813c06cd86a8ae89d1f4f6526c8ff50aff
-ARG GH_VERSION=2.102.0
-ARG GH_COMMIT=fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd
-ARG GH_DATE=2026-09-30
+ARG GH_VERSION=2.105.0
+ARG GH_COMMIT=e1219499a578b69e3437adaa31cd60614e23c802
+ARG GH_DATE=2026-11-18
 
 RUN git clone --depth 1 --branch "v$DEVTOOLS_VERSION" https://github.com/jinyongp/devtools.git /src/devtools \
  && test "$(git -C /src/devtools rev-parse HEAD)" = "$DEVTOOLS_COMMIT"
@@ -25,18 +25,19 @@ RUN cd /src/gh \
     go build -trimpath -buildvcs=false \
       -ldflags "-s -w -X github.com/cli/cli/v2/internal/build.Version=$GH_VERSION -X github.com/cli/cli/v2/internal/build.Date=$GH_DATE" \
       -o /out/gh ./cmd/gh \
- && /out/gh version | grep -q '^gh version 2\.102\.0 '
+ && /out/gh version | grep -q '^gh version 2\.105\.0 '
 
-FROM --platform=$TARGETPLATFORM rust:1.98.1-alpine3.24@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f AS ripgrep
-ARG RIPGREP_VERSION=15.2.0
-ARG RIPGREP_COMMIT=e89fff89ac9af12e8d4ce9d5fd07beb408ca730f
+FROM --platform=$TARGETPLATFORM rust:1.100.0-alpine3.24@sha256:8d0e82abfdf9a38071e07cabc5afba4ddbe077631a80e4e742a760c38beadc33 AS ripgrep
+ARG RIPGREP_VERSION=16.0.0
+ARG RIPGREP_COMMIT=669cb4c755db20b26c3af3d923c042ae224c7496
 RUN apk add --no-cache git build-base pcre2-dev perl
 ENV PCRE2_SYS_STATIC=1
 RUN git clone --depth 1 --branch "$RIPGREP_VERSION" https://github.com/BurntSushi/ripgrep.git /src/ripgrep \
  && test "$(git -C /src/ripgrep rev-parse HEAD)" = "$RIPGREP_COMMIT"
 RUN cd /src/ripgrep \
- && cargo build --locked --profile release-lto --features pcre2 \
- && /src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 15\.2\.0 '
+ && RUSTFLAGS="-C target-feature=-crt-static" \
+      cargo rustc --locked --profile release-lto --features pcre2 -- -C target-feature=+crt-static \
+ && /src/ripgrep/target/release-lto/rg --version | grep -q '^ripgrep 16\.0\.0 '
 
 FROM scratch AS go-export
 COPY --from=go-tools /out/devtools /devtools

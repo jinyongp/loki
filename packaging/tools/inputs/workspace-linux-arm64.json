@@ -7,18 +7,18 @@
     "mode": "full"
   },
   "programs": {
-    "rg": "vendor/ripgrep-15.2.0-aarch64-unknown-linux-gnu/rg"
+    "rg": "vendor/ripgrep-16.0.0-aarch64-unknown-linux-gnu/rg"
   },
   "assets": {},
   "images": {},
   "inputs": [
     {
-      "version": "15.2.0",
-      "url": "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-aarch64-unknown-linux-gnu.tar.gz",
-      "bytes": 1854661,
-      "sha256": "a740b91c82eaf9914cfedd353572f2791cbe0162c84101ee0951058f4dcbc90d",
-      "root": "ripgrep-15.2.0-aarch64-unknown-linux-gnu",
-      "destination": "vendor/ripgrep-15.2.0-aarch64-unknown-linux-gnu",
+      "version": "16.0.0",
+      "url": "https://github.com/BurntSushi/ripgrep/releases/download/16.0.0/ripgrep-16.0.0-aarch64-unknown-linux-gnu.tar.gz",
+      "bytes": 1857628,
+      "sha256": "0b0bddcfaf42be1f3c56bf929d70defd1a2d96f2577aecbd7029a3734ddb4740",
+      "root": "ripgrep-16.0.0-aarch64-unknown-linux-gnu",
+      "destination": "vendor/ripgrep-16.0.0-aarch64-unknown-linux-gnu",
       "notices": [
         "COPYING",
         "LICENSE-MIT",
