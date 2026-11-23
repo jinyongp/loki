@@ -31,6 +31,8 @@ type CommandCatalog struct {
 }
 
 type CommandBinding struct {
+	Proxy    string  `json:"proxy,omitempty"`
+	Format   string  `json:"format,omitempty"`
 	Port     string  `json:"port,omitempty"`
 	Profile  string  `json:"profile,omitempty"`
 	Instance string  `json:"instance,omitempty"`
@@ -71,7 +73,7 @@ type CommandDetail struct {
 }
 
 func (c *Client) InspectProject(ctx context.Context, directory string) (ProjectMetadata, error) {
-	raw, err := c.metadataCall(ctx, "project inspect", directory, "")
+	raw, err := c.metadataCall(ctx, "project inspect", directory, map[string]any{})
 	if err != nil {
 		return ProjectMetadata{}, err
 	}
@@ -106,46 +108,78 @@ func (c *Client) InspectProject(ctx context.Context, directory string) (ProjectM
 }
 
 func (c *Client) ListCommands(ctx context.Context, directory string) (CommandCatalog, error) {
-	raw, err := c.metadataCall(ctx, "command list", directory, "")
-	if err != nil {
-		return CommandCatalog{}, err
+	result := CommandCatalog{Items: []CommandSummary{}}
+	input := map[string]any{}
+	seen := map[string]bool{}
+	for {
+		raw, err := c.metadataCall(ctx, "command list", directory, input)
+		if err != nil {
+			return CommandCatalog{}, err
+		}
+		var page struct {
+			Profile     string            `json:"profile"`
+			Items       []json.RawMessage `json:"items"`
+			NextCursor  string            `json:"next_cursor"`
+			NextActions json.RawMessage   `json:"next_actions"`
+			Page        json.RawMessage   `json:"page"`
+			Selection   json.RawMessage   `json:"selection"`
+		}
+		if err := decodeObject(raw, &page); err != nil || page.Profile == "" || page.Items == nil ||
+			(result.Profile != "" && result.Profile != page.Profile) {
+			return CommandCatalog{}, errors.New("devtools returned invalid command catalog")
+		}
+		result.Profile = page.Profile
+		for _, item := range page.Items {
+			var summary CommandSummary
+			if err := json.Unmarshal(item, &summary); err != nil {
+				return CommandCatalog{}, errors.New("devtools returned invalid command metadata")
+			}
+			result.Items = append(result.Items, summary)
+		}
+		if page.NextCursor == "" {
+			return result, nil
+		}
+		if seen[page.NextCursor] {
+			return CommandCatalog{}, errors.New("devtools repeated a command catalog cursor")
+		}
+		seen[page.NextCursor] = true
+		input["cursor"] = page.NextCursor
 	}
-	var result CommandCatalog
-	if err := decodeObject(raw, &result); err != nil || result.Profile == "" || result.Items == nil {
-		return CommandCatalog{}, errors.New("devtools returned invalid command catalog")
-	}
-	return result, nil
 }
 
 func (c *Client) InspectCommand(ctx context.Context, directory, name string) (CommandDetail, error) {
 	if name == "" {
 		return CommandDetail{}, errors.New("devtools command name is required")
 	}
-	raw, err := c.metadataCall(ctx, "command inspect", directory, name)
+	raw, err := c.metadataCall(ctx, "command inspect", directory, map[string]any{"args": []string{name}})
 	if err != nil {
 		return CommandDetail{}, err
 	}
 	var result CommandDetail
-	if err := decodeObject(raw, &result); err != nil || result.Profile == "" || result.Item.Name == "" {
+	var wire struct {
+		Profile string          `json:"profile"`
+		Item    json.RawMessage `json:"item"`
+		Values  json.RawMessage `json:"values"`
+	}
+	if err := decodeObject(raw, &wire); err != nil || wire.Profile == "" ||
+		json.Unmarshal(wire.Item, &result.Item) != nil || result.Item.Name == "" {
 		return CommandDetail{}, errors.New("devtools returned invalid command metadata")
 	}
+	result.Profile = wire.Profile
 	if result.Item.Name != name {
 		return CommandDetail{}, errors.New("devtools returned metadata for a different command")
 	}
 	return result, nil
 }
 
-func (c *Client) metadataCall(ctx context.Context, command, directory, name string) (json.RawMessage, error) {
+func (c *Client) metadataCall(ctx context.Context, command, directory string, input map[string]any) (json.RawMessage, error) {
 	if directory == "" {
 		directory = "."
 	}
 	if err := c.requireWorkspaceProject(directory); err != nil {
 		return nil, err
 	}
-	input := map[string]any{"dir": directory}
-	if name != "" {
-		input["args"] = []string{name}
-	}
+	input["dir"] = directory
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return nil, errors.New("encode devtools metadata request")

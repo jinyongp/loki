@@ -52,9 +52,15 @@ func metadataClient(t *testing.T) (*Client, map[string]string) {
 	}
 	list := map[string]any{
 		"schema_version": 1, "ok": true,
-		"data": map[string]any{"profile": "fixture", "items": []any{
-			map[string]any{"name": "web", "exec": []string{"npm", "run", "dev"}, "inject": true, "env": "local", "serve": []string{"http"}},
-		}},
+		"data": map[string]any{
+			"profile": "fixture",
+			"items": []any{
+				map[string]any{"name": "web", "exec": []string{"npm", "run", "dev"}, "inject": true, "env": "local", "serve": []string{"http"}},
+			},
+			"next_cursor": nil,
+			"selection":   map[string]any{},
+			"page":        map[string]any{"limit": 50, "count": 1, "has_more": false},
+		},
 	}
 	inspect := map[string]any{
 		"schema_version": 1, "ok": true,
@@ -80,7 +86,7 @@ func metadataClient(t *testing.T) (*Client, map[string]string) {
 	script := filepath.Join(dir, "devtools")
 	body := "#!/bin/sh\n" +
 		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":19}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":26}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + files["catalog"] + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + files["log"] + "\"\n" +
 		"case \"$1 $2\" in\n" +

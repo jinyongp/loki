@@ -121,12 +121,32 @@ func (p *Provider) Metadata(ctx context.Context, app, env, kind string) (Metadat
 	} else if kind != "secret" {
 		return Metadata{}, ErrUnavailable
 	}
-	var result Metadata
-	err = p.invoke(ctx, append([]string{command, "list"}, args...), nil, &result)
-	if err == nil && result.Profile != app {
-		return Metadata{}, ErrUnavailable
+	args = append([]string{command, "list"}, args...)
+	result := Metadata{Profile: app, IntegrityVerified: true}
+	pageArgs := args
+	seen := map[string]bool{}
+	for {
+		var page struct {
+			Metadata
+			NextCursor string `json:"next_cursor"`
+		}
+		if err := p.invoke(ctx, pageArgs, nil, &page); err != nil {
+			return Metadata{}, err
+		}
+		if page.Profile != app {
+			return Metadata{}, ErrUnavailable
+		}
+		result.Items = append(result.Items, page.Items...)
+		result.IntegrityVerified = result.IntegrityVerified && page.IntegrityVerified
+		if page.NextCursor == "" {
+			return result, nil
+		}
+		if seen[page.NextCursor] {
+			return Metadata{}, ErrUnavailable
+		}
+		seen[page.NextCursor] = true
+		pageArgs = append(args, "--cursor", page.NextCursor)
 	}
-	return result, err
 }
 
 func (p *Provider) InspectInput(ctx context.Context, app, env, bundle string) (InputInspection, error) {

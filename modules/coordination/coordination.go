@@ -55,6 +55,10 @@ type coordinationWire struct {
 	Item        json.RawMessage   `json:"item"`
 	Items       []json.RawMessage `json:"items"`
 	NextCursor  *string           `json:"next_cursor"`
+	NextActions json.RawMessage   `json:"next_actions"`
+	Page        json.RawMessage   `json:"page"`
+	Selection   json.RawMessage   `json:"selection"`
+	Title       string            `json:"title"`
 	Reason      string            `json:"reason"`
 	Truncated   bool              `json:"truncated"`
 	Documents   json.RawMessage   `json:"documents"`

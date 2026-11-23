@@ -1,6 +1,6 @@
 # 애플리케이션 값 이관과 복구
 
-이 문서는 devtools 0.37.0 / CLI protocol 19를 고정한 현재 후보의 절차다.
+이 문서는 devtools 0.50.0 / CLI protocol 26를 고정한 현재 후보의 절차다.
 값은 전용 secrets 서비스가 관리한다. coordination의 task/workstream root는
 값 이관·복원 대상에 포함하지 않는다. 운영 적용 전에 같은 후보의 필수
 amd64·arm64 acceptance 결과를 확인한다.
@@ -112,7 +112,9 @@ policy와 새 generation이 함께 들어 있다. 호환되는 이전 프로그�
 백업 데이터를 한 transaction으로 선택하는 paired rollback도 이 경로다.
 프로그램 파일만 과거 버전으로 바꾸지 않는다.
 
-apply가 수동 protection을 기다리면 다음처럼 같은 operation을 재개한다.
+암호화된 앱 값의 복원 미리보기와 가져오기는 candidate protection이
+unlock된 상태에서 진행된다. apply가 수동 protection을 기다리면 다음처럼
+같은 operation을 재개한다.
 아래는 새 candidate의 초기화 예시다. candidate가 이미 초기화되어 locked이면
 `init` 대신 `unlock`을 사용한다.
 

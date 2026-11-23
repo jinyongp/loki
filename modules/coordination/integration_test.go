@@ -2,6 +2,7 @@ package devtools
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +40,7 @@ func testRealCoordinationCandidate(t *testing.T, seedBinary string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candidate.ProtocolVersion != 19 || candidate.ApprovedCommands != 19 {
+	if candidate.ProtocolVersion != ProtocolVersion || candidate.ApprovedCommands != 19 {
 		t.Fatalf("candidate: %#v", candidate)
 	}
 	for _, name := range []string{"process start", "process restart", "run"} {
@@ -47,8 +48,21 @@ func testRealCoordinationCandidate(t *testing.T, seedBinary string) {
 			t.Fatalf("accepted %s", name)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "devtools.toml"), []byte("profile = 'fixture'\n"), 0600); err != nil {
+	var config strings.Builder
+	config.WriteString("profile = 'fixture'\n")
+	for i := range 60 {
+		fmt.Fprintf(&config, "\n[commands.fixture-%02d]\nexec = ['true']\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "devtools.toml"), []byte(config.String()), 0600); err != nil {
 		t.Fatal(err)
+	}
+	commands, err := client.ListCommands(t.Context(), ".")
+	if err != nil || commands.Profile != "fixture" || len(commands.Items) != 60 || commands.Items[59].Name != "fixture-59" {
+		t.Fatalf("project command catalog returned %d commands: %v", len(commands.Items), err)
+	}
+	detail, err := client.InspectCommand(t.Context(), ".", "fixture-59")
+	if err != nil || detail.Item.Name != "fixture-59" {
+		t.Fatalf("project command detail = %#v, %v", detail, err)
 	}
 	// Fixture creation is outside the adapter's runtime authority and uses only
 	// this test's private HOME. Normal reads and mutations use the typed client.
@@ -57,7 +71,8 @@ func testRealCoordinationCandidate(t *testing.T, seedBinary string) {
 		seedArgs = append([]string{"--format", "json"}, seedArgs...)
 	}
 	seed := exec.CommandContext(t.Context(), seedBinary, seedArgs...)
-	seed.Dir, seed.Env = dir, client.Env
+	seed.Dir = dir
+	seed.Env = append(append([]string(nil), client.Env...), "DEVTOOLS_FORMAT=json")
 	raw, err := seed.Output()
 	if err != nil {
 		t.Fatal("create synthetic task:", err)

@@ -26,7 +26,7 @@ func setCoordinationResponse(t *testing.T, client *Client, files map[string]stri
 	}
 	body := "#!/bin/sh\n" +
 		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":19}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":26}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + files["catalog"] + "\"; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"project inspect\" ]; then cat \"" + files["project"] + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + files["log"] + "\"\n" +
@@ -104,6 +104,8 @@ func TestCoordinationRejectsPrivateContextAndOutsideDirectory(t *testing.T) {
 		"profile": "fixture", "revision": 3,
 		"items":       []any{map[string]any{"id": fixtureRunID, "directory": "/tmp/outside"}},
 		"next_cursor": nil,
+		"selection":   map[string]any{},
+		"page":        map[string]any{"limit": 50, "count": 1, "has_more": false},
 	})
 	if _, err := client.QueryCoordination(t.Context(), ".", CoordinationTaskCurrent, CoordinationRequest{}); err == nil || !strings.Contains(err.Error(), "outside the workspace") {
 		t.Fatalf("outside directory error = %v", err)
@@ -127,6 +129,8 @@ func TestCoordinationUsesTypedQueriesAndPagination(t *testing.T) {
 		"profile": "fixture", "revision": 4,
 		"items":       []any{map[string]any{"id": fixtureWorkstreamID, "kind": "workstream"}},
 		"next_cursor": next,
+		"selection":   map[string]any{},
+		"page":        map[string]any{"limit": 25, "count": 1, "has_more": true},
 	})
 	got, err := client.QueryCoordination(t.Context(), ".", CoordinationWorkstreamList, CoordinationRequest{Limit: 25, Cursor: next})
 	if err != nil {
@@ -153,6 +157,8 @@ func TestCoordinationCurrentConfinesRequestedDirectory(t *testing.T) {
 	}
 	setCoordinationResponse(t, client, files, map[string]any{
 		"profile": "fixture", "revision": 5, "items": []any{}, "next_cursor": nil,
+		"selection": map[string]any{},
+		"page":      map[string]any{"limit": 50, "count": 0, "has_more": false},
 	})
 	if _, err := client.QueryCoordination(t.Context(), "pkg", CoordinationTaskCurrent, CoordinationRequest{}); err != nil {
 		t.Fatal(err)

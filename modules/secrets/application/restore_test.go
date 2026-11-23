@@ -58,12 +58,11 @@ func verifyApplicationRestore(t *testing.T, ctx context.Context, binary string, 
 	if _, err := s.Admin(ctx, seal, nil); err == nil {
 		t.Fatal("candidate sealed missing logical imports")
 	}
-	beforeInit, err := s.Admin(ctx, q, body)
-	if err != nil {
-		t.Fatal("read-only restore preview before initialization", err)
+	if _, err := s.Admin(ctx, q, body); err == nil {
+		t.Fatal("encrypted restore preview succeeded before initialization")
 	}
 	applyBeforeInit := q
-	applyBeforeInit.Action, applyBeforeInit.Revision = "backup_import", beforeInit["digest"].(string)
+	applyBeforeInit.Action, applyBeforeInit.Revision = "backup_import", strings.Repeat("c", 64)
 	if _, err := s.Admin(ctx, applyBeforeInit, body); err == nil {
 		t.Fatal("restore applied without manual initialization")
 	}

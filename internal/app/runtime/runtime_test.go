@@ -67,7 +67,7 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	contract.Environment["GOMODCACHE"] = directories["runner-go-mod-cache"]
 	contract.Environment["PIP_CACHE_DIR"] = directories["runner-pip-cache"]
 	contract.Environment["TMPDIR"] = runnerTemp
-	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "modules", "coordination", "testdata", "catalog-protocol-v19.json"))
+	catalogRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "modules", "coordination", "testdata", "catalog-protocol-v26.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,8 +89,11 @@ func TestRuntimeRoleSocketLifecycle(t *testing.T) {
 	}
 	responses := map[string]any{
 		".loki-test-devtools-project.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"item": map[string]any{"profile": "fixture", "source": "file", "config_path": projectConfig, "root": workspace}, "paths": map[string]any{"config": "/private/config", "data": "/private/data", "cache": "/private/cache"}}},
-		".loki-test-devtools-current.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"profile": "fixture", "revision": 1, "items": []any{}}},
-		".loki-test-devtools-next.json":    map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"profile": "fixture", "revision": 1}},
+		".loki-test-devtools-current.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{
+			"profile": "fixture", "revision": 1, "items": []any{}, "next_cursor": nil,
+			"selection": map[string]any{}, "page": map[string]any{"limit": 50, "count": 0, "has_more": false},
+		}},
+		".loki-test-devtools-next.json": map[string]any{"schema_version": 1, "ok": true, "data": map[string]any{"profile": "fixture", "revision": 1}},
 	}
 	for name, value := range responses {
 		raw, err := json.Marshal(value)

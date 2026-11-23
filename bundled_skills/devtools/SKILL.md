@@ -14,7 +14,9 @@ Command examples here name operations; obtain required flags from their help.
 
 Resolve the profile from tracked `devtools.toml` or explicit `--profile`.
 Worktrees with the same profile share values and task history.
-Data commands return JSON: check the exit code, then `data` or `error.code`.
+Use `devtools --format json` before a data command for structured output. Check
+the exit code, then `data` or `error.code`. Follow `next_cursor` with the same
+selection when a list returns multiple pages.
 Help and `skill` return text; `run` forwards the child's output and exit code.
 
 ## Prepare and run
@@ -33,6 +35,8 @@ Use `run NAME` for foreground work and `process start NAME` for a persistent ser
 Save the returned execution ID. `process status` reports lifetime; a configured
 `process wait EXECUTION_ID` establishes readiness before dependent work. `process check`
 can exit successfully with `readiness.ready: false`.
+Use `project status NAME` to distinguish TCP listeners from executions under
+verified devtools control. Inspect execution, control and cleanup separately.
 Restart applies current config and values.
 
 Project execution inside Loki uses the unified `job` tool. For protected
@@ -56,8 +60,9 @@ port, then inspect `proxy list` before starting the user-global daemon. Do not
 start one daemon per project or worktree; route, alias, and assignment changes
 are picked up on the next request.
 
-`proxy start` and `proxy stop` require a request UUID. Reuse a UUID with identical
-input only after an uncertain response. The listener port remains reserved after
+`proxy start` and `proxy stop` accept a request UUID. Keep the returned ID if
+devtools generates it. Reuse a UUID with identical input after an uncertain
+response. The listener port remains reserved after
 stop; changing it requires starting the stopped daemon with an explicit new port.
 Treat non-`ready` list entries as diagnostics to resolve, not fallback targets.
 The proxy accepts only loopback HTTP traffic and routes only `.localhost` hosts
@@ -99,9 +104,10 @@ and does not create passing evidence. Checkpoint and release remain available.
 
 ## Retry and finish
 
-Each task mutation needs a request UUID. Reuse the UUID and identical input after
-an uncertain response; changed input gets a new UUID. For revision-guarded edits,
-use the latest query revision. On conflict, refresh and reassess before resubmitting.
+Loki's task mutation tools take an explicit request UUID. The devtools CLI can
+generate one and return it with the result. Reuse the UUID and identical input
+after an uncertain response. Use a new UUID for changed input. For revision-guarded
+edits, use the latest query revision. On conflict, refresh and reassess before resubmitting.
 
 Create a code basis for the observed definition, perform validation, record its
 evidence, then complete the task. Task basis requires the current execution

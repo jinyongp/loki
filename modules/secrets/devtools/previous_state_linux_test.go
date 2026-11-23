@@ -29,7 +29,7 @@ func TestRealPreviousProviderState(t *testing.T) {
 	legacy := func(input string, args ...string) json.RawMessage {
 		t.Helper()
 		cmd := exec.CommandContext(ctx, previous, append(args, "--isolated-root", root)...)
-		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "GOMAXPROCS=2"}
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "GOMAXPROCS=2", "DEVTOOLS_FORMAT=json"}
 		cmd.Stdin = strings.NewReader(input)
 		raw, err := cmd.Output()
 		if err != nil {

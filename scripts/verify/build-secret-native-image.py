@@ -31,7 +31,7 @@ def build(inputs, tag, loki_version="0.49.0-dev"):
     version = json.loads(output(str(paths["devtools"]), "--format", "json", "version"))
     # The public version response is an envelope, not the buildinfo object.
     provider = version.get("data", {})
-    if not version.get("ok") or provider.get("protocol_version") != 19 or provider.get("version") != "0.37.0" or provider.get("commit") != "f8c22ac3674a14c8d57ed919e866fc104d6d7b5f":
+    if not version.get("ok") or provider.get("protocol_version") != 26 or provider.get("version") != "0.50.0" or provider.get("commit") != "237f87813c06cd86a8ae89d1f4f6526c8ff50aff":
         raise ValueError("provider identity does not match the reviewed source")
     if not output(str(paths["ripgrep"]), "--version").startswith("ripgrep 15.2.0 ") or not output(str(paths["gh"]), "version").startswith("gh version 2.102.0 "):
         raise ValueError("search or GitHub input differs from the pinned release contract")
@@ -56,7 +56,7 @@ def build(inputs, tag, loki_version="0.49.0-dev"):
                 "--platform", "linux/" + arch, "--build-context", "artifacts=" + str(artifacts),
                 "--tag", tag, "--load", "--provenance=false"]
         values = {"LOKI_VERSION": loki_version, "LOKI_REVISION": revision, "LOKI_DATE": date,
-                  "DEVTOOLS_VERSION": "0.37.0", "RIPGREP_VERSION": "15.2.0", "GH_VERSION": "2.102.0"}
+                  "DEVTOOLS_VERSION": "0.50.0", "RIPGREP_VERSION": "15.2.0", "GH_VERSION": "2.102.0"}
         for name, digest in digests.items():
             values[name.upper() + "_" + arch.upper() + "_SHA256"] = digest
         for name, value in values.items():

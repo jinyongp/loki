@@ -22,7 +22,7 @@ func setMutationResponse(t *testing.T, client *Client, files map[string]string, 
 	}
 	body := "#!/bin/sh\n" +
 		"test \"$1 $2\" = \"--format json\" || exit 2\nshift 2\n" +
-		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":19}}'; exit 0; fi\n" +
+		"if [ \"$1\" = version ]; then printf '%s\\n' '{\"schema_version\":1,\"ok\":true,\"data\":{\"version\":\"0.17.0\",\"commit\":\"test\",\"protocol_version\":26}}'; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"schema --all\" ]; then cat \"" + files["catalog"] + "\"; exit 0; fi\n" +
 		"if [ \"$1 $2\" = \"project inspect\" ]; then cat \"" + files["project"] + "\"; exit 0; fi\n" +
 		"printf '%s\\n' \"$@\" > \"" + files["log"] + "\"\n" +
