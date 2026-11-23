@@ -67,8 +67,8 @@ class PinContracts(unittest.TestCase):
         self.assertIn('ffmpeg', items)
         self.assertIn('gomod:github.com/modelcontextprotocol/go-sdk', items)
         action = items['action:actions/download-artifact']
-        self.assertGreater(len(action['current']), 1)
         self.assertIn('.github/workflows/browser-final-inspection.yml', action['paths'])
+        self.assertIn('.github/workflows/release.yml', action['paths'])
         self.assertEqual(items['node']['current'], [inventory.read(inventory.ROOT/'package.json')['engines']['node']])
 
 
