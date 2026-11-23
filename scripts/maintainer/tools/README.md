@@ -231,14 +231,14 @@ absolute), `url`, `bytes`, `sha256`, `root` (inside the vendor archive), and
 `native_requirements` records the target's reviewed host library requirements;
 assembly does not install host libraries.
 
-Pinned inputs are Node 26.11.1, Chrome for Testing 155.0.8059.79, FFmpeg revision
-1011, and the repository's npm lockfile. Platform acquisition recipes retain
+Pinned inputs are Node 26.13.1, Chrome for Testing 158.0.8127.36, FFmpeg revision
+1013, and the repository's npm lockfile. Platform acquisition recipes retain
 primary-source vendor receipts. Availability and successful
 assembly remain distinct from native product support.
 
 The five native source recipes are under `packaging/tools/inputs`. Node's hash
 comes from the official SHASUMS256 document; Chrome's pinned archive bytes/hash
-come from the independently retained prerequisite dossier; FFmpeg's archive
+come from the pinned Chrome for Testing download endpoint; FFmpeg's archive
 receipt was captured from its pinned primary HTTPS endpoint. Their retained
 `digest_provenance` distinguishes published checksums from measured archive
 digests. Detached signature, complete notices and native product acceptance

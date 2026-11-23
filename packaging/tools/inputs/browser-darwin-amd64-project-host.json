@@ -10,12 +10,12 @@
   ],
   "assets": {
     "node": {
-      "version": "26.11.1",
-      "url": "https://nodejs.org/dist/v26.11.1/node-v26.11.1-darwin-x64.tar.gz",
-      "bytes": 59713543,
-      "sha256": "9a8129bd9ab08039793dd1143a7aedee6b5d60ac06592ad938d8bddf36142f3a",
+      "version": "26.13.1",
+      "url": "https://nodejs.org/dist/v26.13.1/node-v26.13.1-darwin-x64.tar.gz",
+      "bytes": 59799324,
+      "sha256": "82bb96078a24ca50b9c9a38f2379e6be6d87171fcd400fc14c8934b3bce96e2f",
       "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
-      "root": "node-v26.11.1-darwin-x64",
+      "root": "node-v26.13.1-darwin-x64",
       "notices": [
         "LICENSE"
       ],
@@ -23,23 +23,23 @@
       "npm": "lib/node_modules/npm/bin/npm-cli.js"
     },
     "chrome": {
-      "version": "155.0.8059.79",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.79/mac-x64/chrome-mac-x64.zip",
-      "bytes": 203545619,
-      "sha256": "11c407e24d7d98cacaec055a4d9ab2f33023db2478d30544c24e829d81022096",
+      "version": "158.0.8127.36",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/158.0.8127.36/mac-x64/chrome-mac-x64.zip",
+      "bytes": 213549680,
+      "sha256": "1390e9b1386a1fd8ec2c4940b9ff59cbbda71b896b85182d7efbd73c58213802",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": "chrome-mac-x64",
       "notices": [
         "ABOUT",
-        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/155.0.8059.79/Libraries/WidevineCdm/LICENSE"
+        "Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/Versions/158.0.8127.36/Libraries/WidevineCdm/LICENSE"
       ],
       "executable": "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
     },
     "ffmpeg": {
-      "version": "1011",
-      "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-mac.zip",
-      "bytes": 1353430,
-      "sha256": "17ed15a2fa60d3c74181befcb2bdf7c9bb288d19b2a3b9893b94b63f2ce260e4",
+      "version": "1013",
+      "url": "https://cdn.playwright.dev/builds/ffmpeg/1013/ffmpeg-mac.zip",
+      "bytes": 1549708,
+      "sha256": "ffdf08ab13def2b63e81ed9782e39debc5bd498220e8e134f9a36e984db6d9db",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": ".",
       "notices": [

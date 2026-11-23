@@ -11,12 +11,12 @@
       "version": "14.2.0-4ubuntu2~24.04.1"
     },
     {
-      "archive": "libc6_2.39-0ubuntu8.9_arm64.deb",
-      "bytes": 2776414,
+      "archive": "libc6_2.39-0ubuntu8.12_arm64.deb",
+      "bytes": 2774244,
       "name": "libc6",
-      "sha256": "ad109797c5f78a5eeb6d4c296bfbaae68b239111a0c9ac0eb97b8d430284ac45",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.39-0ubuntu8.9_arm64.deb",
-      "version": "2.39-0ubuntu8.9"
+      "sha256": "2578bc27d4e077f5e93c283d2502bc693c516d9590a20a27840b548a4d436820",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/libc6_2.39-0ubuntu8.12_arm64.deb",
+      "version": "2.39-0ubuntu8.12"
     },
     {
       "archive": "libgcc-s1_14.2.0-4ubuntu2~24.04.1_arm64.deb",
@@ -107,12 +107,12 @@
       "version": "1.5.3-5ubuntu5.7"
     },
     {
-      "archive": "libpcre2-8-0_10.42-4ubuntu2.1_arm64.deb",
-      "bytes": 211856,
+      "archive": "libpcre2-8-0_10.42-4ubuntu2.2_arm64.deb",
+      "bytes": 213218,
       "name": "libpcre2-8-0",
-      "sha256": "7581764969752953aa1f991ce143bea594d2c5d0c36c2cc98c3c614c172aba93",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2.1_arm64.deb",
-      "version": "10.42-4ubuntu2.1"
+      "sha256": "3209171ab2f528843351af0cb51fced4eab5b5f3456f3f2b025c40bec70bf7a0",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2.2_arm64.deb",
+      "version": "10.42-4ubuntu2.2"
     },
     {
       "archive": "libselinux1_3.5-2ubuntu2.1_arm64.deb",
@@ -155,12 +155,12 @@
       "version": "1.9.4-1build1.1"
     },
     {
-      "archive": "liblzma5_5.6.1+really5.4.5-1ubuntu0.3_arm64.deb",
-      "bytes": 125976,
+      "archive": "liblzma5_5.6.1+really5.4.5-1ubuntu0.4_arm64.deb",
+      "bytes": 126254,
       "name": "liblzma5",
-      "sha256": "2f58fd7de725efd0dbebe9d4442049fdacd7c2e8242f4288a13a688d50507245",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xz-utils/liblzma5_5.6.1%2breally5.4.5-1ubuntu0.3_arm64.deb",
-      "version": "5.6.1+really5.4.5-1ubuntu0.3"
+      "sha256": "a1b42103a0fcf3264c3a124cf20ed89d593b8e27dfb6e05e71a0fe7504da827b",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xz-utils/liblzma5_5.6.1%2breally5.4.5-1ubuntu0.4_arm64.deb",
+      "version": "5.6.1+really5.4.5-1ubuntu0.4"
     },
     {
       "archive": "libzstd1_1.5.5+dfsg2-2build1.1_arm64.deb",
@@ -171,12 +171,12 @@
       "version": "1.5.5+dfsg2-2build1.1"
     },
     {
-      "archive": "libsystemd0_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 427526,
+      "archive": "libsystemd0_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 428314,
       "name": "libsystemd0",
-      "sha256": "7d05888a58f8c0fab22e0e66ab76791c0037df2135835b7589e74cfbef082932",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libsystemd0_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "e31335e465b7663df4f50c1b639bfff01a704ab2a030a25169be9ba2f05f4780",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libsystemd0_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libpam-modules-bin_1.5.3-5ubuntu5.7_arm64.deb",
@@ -247,27 +247,6 @@
       "bytes": 51926,
       "name": "libapparmor1",
       "sha256": "4af41833a547112a434bf5f9f83ca9607f8b1cd981197e5b2b14e5bf4c58b820",
-      "signed_index": {
-        "indices": [
-          {
-            "bytes": 126127,
-            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-security_InRelease",
-            "sha256": "16af1ca8aa09572ae6d4ad55a083c69defb84961b3f9fe7a4b4f297cc690afa5"
-          },
-          {
-            "bytes": 126125,
-            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-updates_InRelease",
-            "sha256": "e1cc62b7aa9a5ab3eb01359e28a7bfa402891bcb5e01507523ac20a01ef7e6f9"
-          },
-          {
-            "bytes": 255850,
-            "name": "ports.ubuntu.com_ubuntu-ports_dists_noble_InRelease",
-            "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"
-          }
-        ],
-        "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
-        "verification": "APT authenticated InRelease and package index"
-      },
       "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_arm64.deb",
       "version": "4.0.1really4.0.1-0ubuntu0.24.04.9"
     },
@@ -280,12 +259,12 @@
       "version": "0~20190702+dfsg-4build1"
     },
     {
-      "archive": "libudev1_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 176082,
+      "archive": "libudev1_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 176704,
       "name": "libudev1",
-      "sha256": "7d8fe738721ffa1fe389209819cafe136157e818ac275ab0c6f17d16da150bf5",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libudev1_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "538a9a233ac8b6355d9c4fa103e4dc5d00da08a96c61a5705f16e8ca4ac02410",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libudev1_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libdevmapper1.02.1_2%3a1.02.185-3ubuntu3.2_arm64.deb",
@@ -344,36 +323,36 @@
       "version": "2.5.5-1ubuntu3.1"
     },
     {
-      "archive": "libsystemd-shared_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 2021424,
+      "archive": "libsystemd-shared_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 2021722,
       "name": "libsystemd-shared",
-      "sha256": "91fdb621beca8029679bb88c8488176b8bd7de910088171fca625bf5346d9fd5",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libsystemd-shared_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "92cd24909f28d7351b43a6dc82cdb79f4aafa100f9f18a70dc6ec1a1cf242b3f",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libsystemd-shared_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd-dev_255.4-1ubuntu8.17_all.deb",
-      "bytes": 106892,
+      "archive": "systemd-dev_255.4-1ubuntu8.19_all.deb",
+      "bytes": 107504,
       "name": "systemd-dev",
-      "sha256": "70b863bd1188f49a3ba0ccde5355abd6611a8a5dcd8b92addf25c8036f22556d",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd-dev_255.4-1ubuntu8.17_all.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "f476e942684b1dc5a17ddfc5f375047bcdfe50f9ef57a43dcd74a18c93906622",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd-dev_255.4-1ubuntu8.19_all.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 3407332,
+      "archive": "systemd_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 3408242,
       "name": "systemd",
-      "sha256": "154488f0c0846f4e8c82afe3aa2e2e9d2ca117acf7db45bb778f81186c795139",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "b4ef745720b1612e20d9f9a80548605bca248383f33dc5a86a8a9326f4e33fdd",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd-sysv_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 11890,
+      "archive": "systemd-sysv_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 11882,
       "name": "systemd-sysv",
-      "sha256": "95608db52ce006671cbfdc73de759d03e18c8cf695e19169feb2b5ac700900da",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd-sysv_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "7b0d3aa177273c482aa1f3fa7b04c46cd37e825265feb0b62df8eb130b9947b5",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/systemd-sysv_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libbz2-1.0_1.0.8-5.1ubuntu0.1_arm64.deb",
@@ -480,12 +459,12 @@
       "version": "2:4.0.4-4ubuntu3.3"
     },
     {
-      "archive": "zlib1g_1%3a1.3.dfsg-3.1ubuntu2.2_arm64.deb",
-      "bytes": 61898,
+      "archive": "zlib1g_1%3a1.3.dfsg-3.1ubuntu2.3_arm64.deb",
+      "bytes": 62084,
       "name": "zlib1g",
-      "sha256": "e55ab3b4fb7b6edc4a628e28ec13f8780b08abe427d33ae148f030d8586d0e9a",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2.2_arm64.deb",
-      "version": "1:1.3.dfsg-3.1ubuntu2.2"
+      "sha256": "84536bcf440cf0f988899b24b6c7df32cb9ff9f0dfa97d5e7efcc2dc088d15dc",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2.3_arm64.deb",
+      "version": "1:1.3.dfsg-3.1ubuntu2.3"
     },
     {
       "archive": "adduser_3.137ubuntu1_all.deb",
@@ -552,12 +531,12 @@
       "version": "1.14.10-4ubuntu4.1"
     },
     {
-      "archive": "libpam-systemd_255.4-1ubuntu8.17_arm64.deb",
-      "bytes": 231986,
+      "archive": "libpam-systemd_255.4-1ubuntu8.19_arm64.deb",
+      "bytes": 232006,
       "name": "libpam-systemd",
-      "sha256": "e8c9c4b8a0e9f28fa63346e02fefb643531de1a81f1db81a9fc561be4ebe05ee",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libpam-systemd_255.4-1ubuntu8.17_arm64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "a70647c0db2ed19af3db266d181f13bb1afe9d514c9488e98d0b8a95864037e3",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libpam-systemd_255.4-1ubuntu8.19_arm64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "dbus-user-session_1.14.10-4ubuntu4.1_arm64.deb",
@@ -600,12 +579,12 @@
       "version": "1.0.13-3build1"
     },
     {
-      "archive": "libglib2.0-0t64_2.80.0-6ubuntu3.9_arm64.deb",
-      "bytes": 1533246,
+      "archive": "libglib2.0-0t64_2.80.0-6ubuntu3.10_arm64.deb",
+      "bytes": 1533346,
       "name": "libglib2.0-0t64",
-      "sha256": "e8ed0414ac46a406c7b8c18b28572075dcc6807b1cfc48fa88198c0db0a7dcf9",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glib2.0/libglib2.0-0t64_2.80.0-6ubuntu3.9_arm64.deb",
-      "version": "2.80.0-6ubuntu3.9"
+      "sha256": "2bfe91a671013e938cdf228f87ea98123a93b328c0ab7654388c04a285e438b5",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glib2.0/libglib2.0-0t64_2.80.0-6ubuntu3.10_arm64.deb",
+      "version": "2.80.0-6ubuntu3.10"
     },
     {
       "archive": "libnettle8t64_3.9.1-2.2build1.1_arm64.deb",
@@ -720,12 +699,12 @@
       "version": "74.2-1ubuntu3.1"
     },
     {
-      "archive": "libsqlite3-0_3.45.1-1ubuntu2.8_arm64.deb",
-      "bytes": 690864,
+      "archive": "libsqlite3-0_3.45.1-1ubuntu2.9_arm64.deb",
+      "bytes": 705378,
       "name": "libsqlite3-0",
-      "sha256": "85925089ef6820a5b6ed80bb490d187465e49687c388333895680fda54e3ee06",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2.8_arm64.deb",
-      "version": "3.45.1-1ubuntu2.8"
+      "sha256": "01aec95ea34b87819bd0f6befec869d85c7d2979ef031bcdc19ac72cdc87ca7e",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2.9_arm64.deb",
+      "version": "3.45.1-1ubuntu2.9"
     },
     {
       "archive": "libxml2_2.9.14+dfsg-1.3ubuntu3.10_arm64.deb",
@@ -1008,12 +987,12 @@
       "version": "0.40.0-4ubuntu0.1"
     },
     {
-      "archive": "libbrotli1_1.1.0-2build2_arm64.deb",
-      "bytes": 339424,
+      "archive": "libbrotli1_1.1.0-2ubuntu0.1_arm64.deb",
+      "bytes": 339950,
       "name": "libbrotli1",
-      "sha256": "cabf3462d908e72f2e594f19ae87c581c4614f099947e38fbd865bf8eae27014",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/libbrotli1_1.1.0-2build2_arm64.deb",
-      "version": "1.1.0-2build2"
+      "sha256": "911411fb6fdfb4ab91dd4242f5a0a5e1f47b38e003a25c8dc7730238cb323e18",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/b/brotli/libbrotli1_1.1.0-2ubuntu0.1_arm64.deb",
+      "version": "1.1.0-2ubuntu0.1"
     },
     {
       "archive": "libfreetype6_2.13.2+dfsg-1ubuntu0.2_arm64.deb",
@@ -1288,20 +1267,20 @@
       "version": "1.3-1build5"
     },
     {
-      "archive": "mesa-libgallium_25.2.8-0ubuntu0.24.04.4_arm64.deb",
-      "bytes": 12104580,
+      "archive": "mesa-libgallium_25.2.8-0ubuntu0.24.04.5_arm64.deb",
+      "bytes": 12106024,
       "name": "mesa-libgallium",
-      "sha256": "97bfd3fa3f12a6dbb36dacab7fb3c6fc514187fbe8c371106bea625e1b9a1c07",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/mesa-libgallium_25.2.8-0ubuntu0.24.04.4_arm64.deb",
-      "version": "25.2.8-0ubuntu0.24.04.4"
+      "sha256": "8b7fd785eec5116b3e15bda0abc190c047873c45565eb93e00cd0b7bcf3fe9fc",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/mesa-libgallium_25.2.8-0ubuntu0.24.04.5_arm64.deb",
+      "version": "25.2.8-0ubuntu0.24.04.5"
     },
     {
-      "archive": "libgbm1_25.2.8-0ubuntu0.24.04.4_arm64.deb",
-      "bytes": 35020,
+      "archive": "libgbm1_25.2.8-0ubuntu0.24.04.5_arm64.deb",
+      "bytes": 35024,
       "name": "libgbm1",
-      "sha256": "30b5fdfde03881869e6816865e5f718ab5a158bafdfcec2ef7dc67b369e1954c",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/libgbm1_25.2.8-0ubuntu0.24.04.4_arm64.deb",
-      "version": "25.2.8-0ubuntu0.24.04.4"
+      "sha256": "40e1967e56bcc69bcb0443bb0f4e0fae9991a272b566c78364c712dcd9be0a26",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/libgbm1_25.2.8-0ubuntu0.24.04.5_arm64.deb",
+      "version": "25.2.8-0ubuntu0.24.04.5"
     },
     {
       "archive": "libgraphite2-3_1.3.14-2ubuntu0.24.04.1_arm64.deb",
@@ -1456,12 +1435,12 @@
       "version": "2:4.35-1.1build1"
     },
     {
-      "archive": "libnss3_2%3a3.98-1ubuntu0.2_arm64.deb",
-      "bytes": 1405988,
+      "archive": "libnss3_2%3a3.98-1ubuntu0.3_arm64.deb",
+      "bytes": 1407408,
       "name": "libnss3",
-      "sha256": "daf32de5e12139aa84fde7a3e2784d5d7277259e22f14affcd82d81545b5312e",
-      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/nss/libnss3_3.98-1ubuntu0.2_arm64.deb",
-      "version": "2:3.98-1ubuntu0.2"
+      "sha256": "dbdcb63bf349baea2c8dcbd28166ca2b659bed428e5712dbd667dfc068abfe1a",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/nss/libnss3_3.98-1ubuntu0.3_arm64.deb",
+      "version": "2:3.98-1ubuntu0.3"
     },
     {
       "archive": "libvulkan1_1.3.275.0-1build1_arm64.deb",
@@ -1515,12 +1494,12 @@
       {
         "bytes": 126127,
         "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-security_InRelease",
-        "sha256": "c2aa7bfe79dac1e0ec87deb03251f1d61bc6d7f660f22d368b38511f30ecec50"
+        "sha256": "93c9d1d7a1898aafb79c5729e4805f857c194dcc939eb913ea76684d2f6230de"
       },
       {
         "bytes": 126125,
         "name": "ports.ubuntu.com_ubuntu-ports_dists_noble-updates_InRelease",
-        "sha256": "1f45ee8a4aecc4ba8427e1c10a35f680e1dcfaa3597ae6d10cfa7bfe87b7948e"
+        "sha256": "42f3c1180ad0e1c0cb8ccfa2edfdb6eb631a2d3680cc5015ee0b93d6b68dbad1"
       },
       {
         "bytes": 255850,

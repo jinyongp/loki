@@ -10,12 +10,12 @@
   ],
   "assets": {
     "node": {
-      "version": "26.11.1",
-      "url": "https://nodejs.org/dist/v26.11.1/node-v26.11.1-win-x64.zip",
-      "bytes": 41809787,
-      "sha256": "97f36a8a9684ff0d3e35758b4610fef5b628a5880e96f2ccc11240e5daf9934e",
+      "version": "26.13.1",
+      "url": "https://nodejs.org/dist/v26.13.1/node-v26.13.1-win-x64.zip",
+      "bytes": 41166246,
+      "sha256": "e2edda75bfb089654705cf65a13b58933bfd5f57148e8ebda916f58a2474f1f7",
       "digest_provenance": "Published official Node SHASUMS256.txt over primary HTTPS; detached signature acceptance remains final.",
-      "root": "node-v26.11.1-win-x64",
+      "root": "node-v26.13.1-win-x64",
       "notices": [
         "LICENSE"
       ],
@@ -23,10 +23,10 @@
       "npm": "node_modules/npm/bin/npm-cli.js"
     },
     "chrome": {
-      "version": "155.0.8059.79",
-      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.79/win64/chrome-win64.zip",
-      "bytes": 207516446,
-      "sha256": "4966d9df2c8ed9be606ff0fc8877b2e800def164fbad63fed6a1d93222ad9dbf",
+      "version": "158.0.8127.36",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/158.0.8127.36/win64/chrome-win64.zip",
+      "bytes": 214927656,
+      "sha256": "6a8ad290952cc612c7777ffb3eb62f345539a2a1a8d440cfac190c6d36b34d2c",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": "chrome-win64",
       "notices": [
@@ -35,10 +35,10 @@
       "executable": "chrome.exe"
     },
     "ffmpeg": {
-      "version": "1011",
-      "url": "https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-win64.zip",
-      "bytes": 1411741,
-      "sha256": "8d08827c019ad36e7b9d49d3648447d884534cb2acf200e71c715f6dd834cc50",
+      "version": "1013",
+      "url": "https://cdn.playwright.dev/builds/ffmpeg/1013/ffmpeg-win64.zip",
+      "bytes": 1663577,
+      "sha256": "0c4ee6c694e9bffea27128ab543ae573466c5245d7d16c054e40115d7d743874",
       "digest_provenance": "Maintainer measured exact-version primary HTTPS archive; no upstream detached signature claimed.",
       "root": ".",
       "notices": [

@@ -11,12 +11,12 @@
       "version": "14.2.0-4ubuntu2~24.04.1"
     },
     {
-      "archive": "libc6_2.39-0ubuntu8.9_amd64.deb",
-      "bytes": 3264314,
+      "archive": "libc6_2.39-0ubuntu8.12_amd64.deb",
+      "bytes": 3264258,
       "name": "libc6",
-      "sha256": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.9_amd64.deb",
-      "version": "2.39-0ubuntu8.9"
+      "sha256": "d821b41fc59cb4978ecd53bc83e5c964ac15d305c8d2ac4c8a35aebe55010fb9",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.12_amd64.deb",
+      "version": "2.39-0ubuntu8.12"
     },
     {
       "archive": "libgcc-s1_14.2.0-4ubuntu2~24.04.1_amd64.deb",
@@ -107,12 +107,12 @@
       "version": "1.5.3-5ubuntu5.7"
     },
     {
-      "archive": "libpcre2-8-0_10.42-4ubuntu2.1_amd64.deb",
-      "bytes": 226662,
+      "archive": "libpcre2-8-0_10.42-4ubuntu2.2_amd64.deb",
+      "bytes": 228546,
       "name": "libpcre2-8-0",
-      "sha256": "110a797a57673d3ee497a141cf988199258058c57525799c63194d81822529a0",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2.1_amd64.deb",
-      "version": "10.42-4ubuntu2.1"
+      "sha256": "f41da7cb7e979d6b037ea92650c72ec8ec532ec3c93aa8d5b997207de56695ea",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/pcre2/libpcre2-8-0_10.42-4ubuntu2.2_amd64.deb",
+      "version": "10.42-4ubuntu2.2"
     },
     {
       "archive": "libselinux1_3.5-2ubuntu2.1_amd64.deb",
@@ -155,12 +155,12 @@
       "version": "1.9.4-1build1.1"
     },
     {
-      "archive": "liblzma5_5.6.1+really5.4.5-1ubuntu0.3_amd64.deb",
-      "bytes": 127352,
+      "archive": "liblzma5_5.6.1+really5.4.5-1ubuntu0.4_amd64.deb",
+      "bytes": 127704,
       "name": "liblzma5",
-      "sha256": "d2eabd41ca77d2c2dd9d5d4ef478cccb64ffde6279c47cf4699a857d46785a52",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xz-utils/liblzma5_5.6.1%2breally5.4.5-1ubuntu0.3_amd64.deb",
-      "version": "5.6.1+really5.4.5-1ubuntu0.3"
+      "sha256": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xz-utils/liblzma5_5.6.1%2breally5.4.5-1ubuntu0.4_amd64.deb",
+      "version": "5.6.1+really5.4.5-1ubuntu0.4"
     },
     {
       "archive": "libzstd1_1.5.5+dfsg2-2build1.1_amd64.deb",
@@ -171,12 +171,12 @@
       "version": "1.5.5+dfsg2-2build1.1"
     },
     {
-      "archive": "libsystemd0_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 431784,
+      "archive": "libsystemd0_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 436534,
       "name": "libsystemd0",
-      "sha256": "4776d2ac7e21efe2ae31f3f7955a7ccd97277225eecf36910a26faf4544979ae",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libsystemd0_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "341983d7034366a9c2f34c2288805404802f2011032ffcdbcadb3194edbf161e",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libsystemd0_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libpam-modules-bin_1.5.3-5ubuntu5.7_amd64.deb",
@@ -247,27 +247,6 @@
       "bytes": 51476,
       "name": "libapparmor1",
       "sha256": "75b570d7517e24c3693c4503b4691ac1fd82934d93faa91460309f22104c5617",
-      "signed_index": {
-        "indices": [
-          {
-            "bytes": 126127,
-            "name": "archive.ubuntu.com_ubuntu_dists_noble-security_InRelease",
-            "sha256": "16af1ca8aa09572ae6d4ad55a083c69defb84961b3f9fe7a4b4f297cc690afa5"
-          },
-          {
-            "bytes": 126125,
-            "name": "archive.ubuntu.com_ubuntu_dists_noble-updates_InRelease",
-            "sha256": "e1cc62b7aa9a5ab3eb01359e28a7bfa402891bcb5e01507523ac20a01ef7e6f9"
-          },
-          {
-            "bytes": 255850,
-            "name": "archive.ubuntu.com_ubuntu_dists_noble_InRelease",
-            "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0"
-          }
-        ],
-        "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
-        "verification": "APT authenticated InRelease and package index"
-      },
       "url": "https://archive.ubuntu.com/ubuntu/pool/main/a/apparmor/libapparmor1_4.0.1really4.0.1-0ubuntu0.24.04.9_amd64.deb",
       "version": "4.0.1really4.0.1-0ubuntu0.24.04.9"
     },
@@ -280,12 +259,12 @@
       "version": "0~20190702+dfsg-4build1"
     },
     {
-      "archive": "libudev1_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 177608,
+      "archive": "libudev1_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 178270,
       "name": "libudev1",
-      "sha256": "6efea3770f738db2fd43ebdaed3d91ef0cde8aa8387b4803080af473326ebdb0",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libudev1_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "bab9dc308d71f6a5d7b91a50503ff3de70d49bcdad5e3aacfcbf951c88bb9260",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libudev1_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libdevmapper1.02.1_2%3a1.02.185-3ubuntu3.2_amd64.deb",
@@ -344,36 +323,36 @@
       "version": "2.5.5-1ubuntu3.1"
     },
     {
-      "archive": "libsystemd-shared_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 2077458,
+      "archive": "libsystemd-shared_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 2078218,
       "name": "libsystemd-shared",
-      "sha256": "8722a69d99c1a7e6f72c5389e9c6d8053d95d2f5f4fede5dc83118f735812518",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libsystemd-shared_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "f1da40ee32321000740cabe5cb4fe339350b8e83f2e98d0568695011fd4ec3eb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libsystemd-shared_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd-dev_255.4-1ubuntu8.17_all.deb",
-      "bytes": 106892,
+      "archive": "systemd-dev_255.4-1ubuntu8.19_all.deb",
+      "bytes": 107504,
       "name": "systemd-dev",
-      "sha256": "70b863bd1188f49a3ba0ccde5355abd6611a8a5dcd8b92addf25c8036f22556d",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd-dev_255.4-1ubuntu8.17_all.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "f476e942684b1dc5a17ddfc5f375047bcdfe50f9ef57a43dcd74a18c93906622",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd-dev_255.4-1ubuntu8.19_all.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 3475000,
+      "archive": "systemd_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 3475692,
       "name": "systemd",
-      "sha256": "250345b73e42a97ee71cae7c1e470897dfad3c639eb0a7aafe4f9a3a29871cb2",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "40d77b8e62d3d2524ca1c4a9dbcfcd946c11ee730d859207d290b988952bcce7",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
-      "archive": "systemd-sysv_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 11890,
+      "archive": "systemd-sysv_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 11880,
       "name": "systemd-sysv",
-      "sha256": "000c90facb7f0f33a3c771ac8cf58221f80239184fb9e24fe78086ffea6e2cf9",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd-sysv_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "c6da1bf58ab2999ffd3d244204c85bdbc0f996e5a2fa4c2b03147d6641c5aac4",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd-sysv_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "libbz2-1.0_1.0.8-5.1ubuntu0.1_amd64.deb",
@@ -480,12 +459,12 @@
       "version": "2:4.0.4-4ubuntu3.3"
     },
     {
-      "archive": "zlib1g_1%3a1.3.dfsg-3.1ubuntu2.2_amd64.deb",
-      "bytes": 62988,
+      "archive": "zlib1g_1%3a1.3.dfsg-3.1ubuntu2.3_amd64.deb",
+      "bytes": 63158,
       "name": "zlib1g",
-      "sha256": "84b9cf5752b29c9f92c27cd4c4ba9bbcc70b5ccf9b1b515421a28ae23212e273",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2.2_amd64.deb",
-      "version": "1:1.3.dfsg-3.1ubuntu2.2"
+      "sha256": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/z/zlib/zlib1g_1.3.dfsg-3.1ubuntu2.3_amd64.deb",
+      "version": "1:1.3.dfsg-3.1ubuntu2.3"
     },
     {
       "archive": "adduser_3.137ubuntu1_all.deb",
@@ -552,12 +531,12 @@
       "version": "1.14.10-4ubuntu4.1"
     },
     {
-      "archive": "libpam-systemd_255.4-1ubuntu8.17_amd64.deb",
-      "bytes": 235340,
+      "archive": "libpam-systemd_255.4-1ubuntu8.19_amd64.deb",
+      "bytes": 235460,
       "name": "libpam-systemd",
-      "sha256": "60b50012e97f815686fcd5ff2055c13396d354bbac9974a77e8557346ccebe4e",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libpam-systemd_255.4-1ubuntu8.17_amd64.deb",
-      "version": "255.4-1ubuntu8.17"
+      "sha256": "13502b9312806056236adc9dee09be60f2d4cb47582a8f48d9389ad0848f551e",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/libpam-systemd_255.4-1ubuntu8.19_amd64.deb",
+      "version": "255.4-1ubuntu8.19"
     },
     {
       "archive": "dbus-user-session_1.14.10-4ubuntu4.1_amd64.deb",
@@ -600,12 +579,12 @@
       "version": "1.0.13-3build1"
     },
     {
-      "archive": "libglib2.0-0t64_2.80.0-6ubuntu3.9_amd64.deb",
-      "bytes": 1547468,
+      "archive": "libglib2.0-0t64_2.80.0-6ubuntu3.10_amd64.deb",
+      "bytes": 1547558,
       "name": "libglib2.0-0t64",
-      "sha256": "a66ef54888a18e20b55dd3988177f6029caa81dc16198c043a715500b62cf06f",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glib2.0/libglib2.0-0t64_2.80.0-6ubuntu3.9_amd64.deb",
-      "version": "2.80.0-6ubuntu3.9"
+      "sha256": "ff1b650f655b36dfe202fdbae6bb02b363c7257b6dd23e4f95ab61f716190df3",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glib2.0/libglib2.0-0t64_2.80.0-6ubuntu3.10_amd64.deb",
+      "version": "2.80.0-6ubuntu3.10"
     },
     {
       "archive": "libnettle8t64_3.9.1-2.2build1.1_amd64.deb",
@@ -720,12 +699,12 @@
       "version": "74.2-1ubuntu3.1"
     },
     {
-      "archive": "libsqlite3-0_3.45.1-1ubuntu2.8_amd64.deb",
-      "bytes": 701602,
+      "archive": "libsqlite3-0_3.45.1-1ubuntu2.9_amd64.deb",
+      "bytes": 701804,
       "name": "libsqlite3-0",
-      "sha256": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2.8_amd64.deb",
-      "version": "3.45.1-1ubuntu2.8"
+      "sha256": "e04c9d3cf7d0fc4d63332bea2395280550a0b5daef35d19c3c079fc2e96a92e5",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1ubuntu2.9_amd64.deb",
+      "version": "3.45.1-1ubuntu2.9"
     },
     {
       "archive": "libxml2_2.9.14+dfsg-1.3ubuntu3.10_amd64.deb",
@@ -1008,12 +987,12 @@
       "version": "0.40.0-4ubuntu0.1"
     },
     {
-      "archive": "libbrotli1_1.1.0-2build2_amd64.deb",
-      "bytes": 330730,
+      "archive": "libbrotli1_1.1.0-2ubuntu0.1_amd64.deb",
+      "bytes": 330968,
       "name": "libbrotli1",
-      "sha256": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/b/brotli/libbrotli1_1.1.0-2build2_amd64.deb",
-      "version": "1.1.0-2build2"
+      "sha256": "70b188a86d81f30d7510aab30e25d638ed5037dded6691af1533952b71ac61de",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/b/brotli/libbrotli1_1.1.0-2ubuntu0.1_amd64.deb",
+      "version": "1.1.0-2ubuntu0.1"
     },
     {
       "archive": "libfreetype6_2.13.2+dfsg-1ubuntu0.2_amd64.deb",
@@ -1304,20 +1283,20 @@
       "version": "1.3-1build5"
     },
     {
-      "archive": "mesa-libgallium_25.2.8-0ubuntu0.24.04.4_amd64.deb",
-      "bytes": 10783312,
+      "archive": "mesa-libgallium_25.2.8-0ubuntu0.24.04.5_amd64.deb",
+      "bytes": 10788850,
       "name": "mesa-libgallium",
-      "sha256": "0c50c3c18c1b3f3ac4243bbf1533c9202f9d7b4f646807e9ef0df4c801414256",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/m/mesa/mesa-libgallium_25.2.8-0ubuntu0.24.04.4_amd64.deb",
-      "version": "25.2.8-0ubuntu0.24.04.4"
+      "sha256": "36a2813f4dc26c713a716a776fab407e49e831706960b19fd7007ef907da38eb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/m/mesa/mesa-libgallium_25.2.8-0ubuntu0.24.04.5_amd64.deb",
+      "version": "25.2.8-0ubuntu0.24.04.5"
     },
     {
-      "archive": "libgbm1_25.2.8-0ubuntu0.24.04.4_amd64.deb",
-      "bytes": 34172,
+      "archive": "libgbm1_25.2.8-0ubuntu0.24.04.5_amd64.deb",
+      "bytes": 34204,
       "name": "libgbm1",
-      "sha256": "4bfe348b456db5b445a80e0a3ffb9e9a01b91499bb86e0e568ca3634b134da7e",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libgbm1_25.2.8-0ubuntu0.24.04.4_amd64.deb",
-      "version": "25.2.8-0ubuntu0.24.04.4"
+      "sha256": "e841e7d681bec57ffff70df1a9950e5ff42b0f6def7d1a98d7e8671b180bbbe8",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libgbm1_25.2.8-0ubuntu0.24.04.5_amd64.deb",
+      "version": "25.2.8-0ubuntu0.24.04.5"
     },
     {
       "archive": "libgraphite2-3_1.3.14-2ubuntu0.24.04.1_amd64.deb",
@@ -1472,12 +1451,12 @@
       "version": "2:4.35-1.1build1"
     },
     {
-      "archive": "libnss3_2%3a3.98-1ubuntu0.2_amd64.deb",
-      "bytes": 1445132,
+      "archive": "libnss3_2%3a3.98-1ubuntu0.3_amd64.deb",
+      "bytes": 1444912,
       "name": "libnss3",
-      "sha256": "4254f11d782dfb970e78113519a59d440112ed43c4b56f709da0aef81da8651a",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/n/nss/libnss3_3.98-1ubuntu0.2_amd64.deb",
-      "version": "2:3.98-1ubuntu0.2"
+      "sha256": "e11fdf8c09a068d0f0c3fd90ed971253dfed7227cc20d3d487fd615d4771f1bb",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/n/nss/libnss3_3.98-1ubuntu0.3_amd64.deb",
+      "version": "2:3.98-1ubuntu0.3"
     },
     {
       "archive": "libvulkan1_1.3.275.0-1build1_amd64.deb",
@@ -1531,12 +1510,12 @@
       {
         "bytes": 126127,
         "name": "archive.ubuntu.com_ubuntu_dists_noble-security_InRelease",
-        "sha256": "c2aa7bfe79dac1e0ec87deb03251f1d61bc6d7f660f22d368b38511f30ecec50"
+        "sha256": "93c9d1d7a1898aafb79c5729e4805f857c194dcc939eb913ea76684d2f6230de"
       },
       {
         "bytes": 126125,
         "name": "archive.ubuntu.com_ubuntu_dists_noble-updates_InRelease",
-        "sha256": "1f45ee8a4aecc4ba8427e1c10a35f680e1dcfaa3597ae6d10cfa7bfe87b7948e"
+        "sha256": "42f3c1180ad0e1c0cb8ccfa2edfdb6eb631a2d3680cc5015ee0b93d6b68dbad1"
       },
       {
         "bytes": 255850,

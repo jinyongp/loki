@@ -19,11 +19,11 @@ import (
 	"strings"
 )
 
-const PlaywrightVersion = "0.0.83"
-const DevToolsVersion = "1.10.1"
-const NodeVersion = "26.11.1"
-const ChromeVersion = "155.0.8059.79"
-const PlaywrightCoreVersion = "1.64.0-alpha-1790635538000"
+const PlaywrightVersion = "0.0.86"
+const DevToolsVersion = "1.13.0"
+const NodeVersion = "26.13.1"
+const ChromeVersion = "158.0.8127.36"
+const PlaywrightCoreVersion = "1.66.0-alpha-2026-11-18"
 
 var Capabilities = []string{"unsafe-code", "vision", "pdf", "devtools", "network", "storage", "testing", "tracing", "config", "extensions", "pwa", "webmcp", "third-party", "memory"}
 
@@ -234,7 +234,7 @@ func Prepare(ctx context.Context, o Options) (Launch, error) {
 			args = append([]string{adapter, args[0], core}, args[1:]...)
 		}
 	} else {
-		args = []string{filepath.Join(o.Bundle, "node_modules", "chrome-devtools-mcp", "build", "src", "bin", "chrome-devtools-mcp.js"), "--headless", "--executablePath", chrome, "--userDataDir", profile, "--filesystemRoot", output, "--no-usage-statistics", "--no-performance-crux"}
+		args = []string{filepath.Join(o.Bundle, "node_modules", "chrome-devtools-mcp", "out", "Default", "gen", "src", "bin", "chrome-devtools-mcp.js"), "--headless", "--executablePath", chrome, "--userDataDir", profile, "--filesystemRoot", output, "--no-usage-statistics", "--no-performance-crux"}
 		adapter, err := writeEngineAdapter(profile, "loki-devtools.mjs", devtoolsAdapter)
 		if err != nil {
 			cleanup()
@@ -267,6 +267,11 @@ func Prepare(ctx context.Context, o Options) (Launch, error) {
 	command.Dir = workspace
 	command.Stderr = o.Stderr
 	command.Env = runtimeEnvironment(os.Environ(), browsers)
+	if o.Engine == "playwright" {
+		// The pinned Playwright server registers its endpoint even for stdio
+		// sessions. Keep that descriptor with the leased browser profile.
+		command.Env = append(command.Env, "PWTEST_SERVER_REGISTRY="+filepath.Join(profile, "playwright-registry"))
+	}
 	u := url.URL{Scheme: "file", Path: filepath.ToSlash(workspace)}
 	if !strings.HasPrefix(u.Path, "/") {
 		u.Path = "/" + u.Path

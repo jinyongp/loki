@@ -212,7 +212,8 @@ func runtimeEnvironment(environment []string, browsers string) []string {
 	for _, variable := range environment {
 		key, _, _ := strings.Cut(variable, "=")
 		upper := strings.ToUpper(key)
-		if upper == "NODE_OPTIONS" || upper == "NODE_PATH" || upper == "PLAYWRIGHT_BROWSERS_PATH" || strings.HasPrefix(upper, "PLAYWRIGHT_MCP_") {
+		if upper == "NODE_OPTIONS" || upper == "NODE_PATH" || upper == "PLAYWRIGHT_BROWSERS_PATH" ||
+			upper == "PWTEST_SERVER_REGISTRY" || strings.HasPrefix(upper, "PLAYWRIGHT_MCP_") {
 			continue
 		}
 		result = append(result, variable)

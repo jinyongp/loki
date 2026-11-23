@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 ARG LOKI_VERSION
 ARG LOKI_REVISION
-ARG CHROMIUM_VERSION=152.0.7977.82-r0
+ARG CHROMIUM_VERSION=158.0.8127.36-r0
 LABEL org.opencontainers.image.title="Loki Browser" \
       org.opencontainers.image.source="https://github.com/jinyongp/loki" \
       org.opencontainers.image.licenses="Apache-2.0" \

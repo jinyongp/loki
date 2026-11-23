@@ -23,7 +23,7 @@ import tempfile
 from urllib.parse import urlsplit
 import zipfile
 
-VERSIONS = {"node": "26.11.1", "chrome": "155.0.8059.79", "ffmpeg": "1011"}
+VERSIONS = {"node": "26.13.1", "chrome": "158.0.8127.36", "ffmpeg": "1013"}
 CAPABILITIES = ["unsafe-code", "vision", "pdf", "devtools", "network", "storage", "testing", "tracing", "config", "extensions", "pwa", "webmcp", "third-party", "memory"]
 
 
@@ -268,7 +268,7 @@ def assemble(recipe_path, output, release_url):
             normalized = key.upper()
             if normalized in ("NODE_OPTIONS", "NODE_PATH", "PLAYWRIGHT_BROWSERS_PATH") or normalized.startswith(("NPM_CONFIG_", "PLAYWRIGHT_MCP_")):
                 del env[key]
-        subprocess.run([str(node), str(npm), "ci", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"], cwd=npm_workspace, env=env, check=True)
+        subprocess.run([str(node), str(npm), "ci", "--cache", str(scratch / "npm-cache"), "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"], cwd=npm_workspace, env=env, check=True)
         # Workspace links and npm command shims are build inputs, not runtime
         # dependencies. All actual dependency trees and notices are preserved.
         dependencies = npm_workspace / "node_modules"
@@ -286,7 +286,7 @@ def assemble(recipe_path, output, release_url):
         shutil.copyfile(repo / "package-lock.json", bundle / "package-lock.json")
         browsers = bundle / "browsers"
         browsers.mkdir()
-        (bundle / "ffmpeg").rename(browsers / "ffmpeg-1011")
+        (bundle / "ffmpeg").rename(browsers / "ffmpeg-1013")
         module = {"schema": 1, "contract": CONTRACT, "id": "browser", "release": release, "targets": [target], "tools": ["loki_browser_files"], "capabilities": CAPABILITIES}
         if mode == "full":
             module = json.loads((repo / "modules" / "browser" / "module.full.json").read_text(encoding="utf-8"))

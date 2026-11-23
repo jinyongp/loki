@@ -10,6 +10,7 @@ const {McpContext} = await import(pathToFileURL(path.resolve(path.dirname(entry)
 const {McpPage} = await import(pathToFileURL(path.resolve(path.dirname(entry), '..', 'McpPage.js')));
 const initPage = McpPage.prototype.init;
 const emulatePage = McpPage.prototype.emulate;
+const adaptedPages = new WeakSet();
 McpPage.prototype.emulate = function(options) {
   // Keep the page size chosen by resize_page when changing other emulation
   // features, including Lighthouse's restoration of its temporary viewport.
@@ -18,8 +19,11 @@ McpPage.prototype.emulate = function(options) {
     viewport: options.viewport ?? this.emulationSettings.viewport,
   });
 };
-McpPage.prototype.init = async function() {
+McpPage.prototype.init = async function(options) {
+  await initPage.call(this, options);
   const page = this.pptrPage;
+  if (adaptedPages.has(page)) return;
+  adaptedPages.add(page);
   const resize = page.resize.bind(page);
   page.resize = async dimensions => {
     await resize(dimensions);
@@ -42,7 +46,6 @@ McpPage.prototype.init = async function() {
     await page.bringToFront();
     return screenshot(options);
   };
-  return initPage.call(this);
 };
 const triggerAction = McpContext.prototype.triggerExtensionAction;
 McpContext.prototype.triggerExtensionAction = async function(id) {

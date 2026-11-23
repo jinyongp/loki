@@ -149,12 +149,7 @@ console.log(JSON.stringify(await page.evaluate(()=>({name:document.querySelector
             # then use the public MCP resume tool to unblock its pending click.
             listing = json.loads(text(await call('loki_browser_files', {'engine': 'browser/playwright', 'action': 'list'})))
             profile = Path(listing['directory'].replace(os.sep + 'results' + os.sep, os.sep + 'profiles' + os.sep)).resolve()
-            cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache')))
-            if sys.platform == 'darwin':
-                cache = Path.home() / 'Library' / 'Caches'
-            elif sys.platform == 'win32':
-                cache = Path(os.environ['LOCALAPPDATA'])
-            registry = Path(os.environ.get('PWTEST_SERVER_REGISTRY', str(cache / 'ms-playwright' / 'b')))
+            registry = profile / 'playwright-registry'
             descriptor = None
             newest = -1
             for candidate in registry.iterdir():

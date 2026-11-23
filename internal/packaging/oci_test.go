@@ -94,7 +94,7 @@ func TestOptionalBrowserImageIsPortableAndPinned(t *testing.T) {
 		"ARG TARGETARCH",
 		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
 		"chromium=$CHROMIUM_VERSION",
-		"CHROMIUM_VERSION=152.0.7977.82-r0",
+		"CHROMIUM_VERSION=158.0.8127.36-r0",
 		"golang:1.27.4-bookworm@sha256:",
 		"alpine:3.24.2@sha256:",
 		"COPY packaging/images/config/loki.toml /etc/loki/loki.toml",
