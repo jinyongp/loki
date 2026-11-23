@@ -11,12 +11,12 @@
       "version": "14.2.0-4ubuntu2~24.04.1"
     },
     {
-      "archive": "libc6_2.39-0ubuntu8.9_amd64.deb",
-      "bytes": 3264314,
+      "archive": "libc6_2.39-0ubuntu8.12_amd64.deb",
+      "bytes": 3264258,
       "name": "libc6",
-      "sha256": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.9_amd64.deb",
-      "version": "2.39-0ubuntu8.9"
+      "sha256": "d821b41fc59cb4978ecd53bc83e5c964ac15d305c8d2ac4c8a35aebe55010fb9",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.12_amd64.deb",
+      "version": "2.39-0ubuntu8.12"
     },
     {
       "archive": "libgcc-s1_14.2.0-4ubuntu2~24.04.1_amd64.deb",
@@ -75,12 +75,12 @@
       "version": "3.0.13-0ubuntu3.16"
     },
     {
-      "archive": "ca-certificates_20260601~24.04.1_all.deb",
-      "bytes": 139430,
+      "archive": "ca-certificates_20260816ubuntu0.24.04.2_all.deb",
+      "bytes": 140064,
       "name": "ca-certificates",
-      "sha256": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
-      "url": "https://archive.ubuntu.com/ubuntu/pool/main/c/ca-certificates/ca-certificates_20260601%7e24.04.1_all.deb",
-      "version": "20260601~24.04.1"
+      "sha256": "f9fbacd417b515450b831032cc39d18059e9874e67525679a43c16071dabf9a0",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/c/ca-certificates/ca-certificates_20260816ubuntu0.24.04.2_all.deb",
+      "version": "20260816ubuntu0.24.04.2"
     }
   ],
   "requested_packages": [
@@ -93,12 +93,12 @@
       {
         "bytes": 126127,
         "name": "archive.ubuntu.com_ubuntu_dists_noble-security_InRelease",
-        "sha256": "f3bbb0f9316ad9d93082d032a97057a1b4a3161c3df462f464772c297b6be425"
+        "sha256": "93c9d1d7a1898aafb79c5729e4805f857c194dcc939eb913ea76684d2f6230de"
       },
       {
         "bytes": 126125,
         "name": "archive.ubuntu.com_ubuntu_dists_noble-updates_InRelease",
-        "sha256": "21bcb1b5331f49cd85ee4f37a59fac1fb4c1961776a7e03fc5bb388fd3584f26"
+        "sha256": "42f3c1180ad0e1c0cb8ccfa2edfdb6eb631a2d3680cc5015ee0b93d6b68dbad1"
       },
       {
         "bytes": 255850,

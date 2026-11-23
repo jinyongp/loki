@@ -21,11 +21,11 @@ func TestWSLApplianceContract(t *testing.T) {
 	dockerfile := read("packaging/wsl/Dockerfile")
 	for _, required := range []string{
 		"# syntax=docker/dockerfile:1@sha256:",
-		"ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3",
+		"ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289",
 		"ARG SOURCE_DATE_EPOCH=0",
 		"UBUNTU_ACL_VERSION=2.3.2-1build1.1",
-		"UBUNTU_CA_CERTIFICATES_VERSION=20260601~24.04.1",
-		"UBUNTU_CURL_VERSION=8.5.0-2ubuntu10.15",
+		"UBUNTU_CA_CERTIFICATES_VERSION=20260816ubuntu0.24.04.2",
+		"UBUNTU_CURL_VERSION=8.5.0-2ubuntu10.16",
 		"UBUNTU_IPTABLES_VERSION=1.8.10-3ubuntu2",
 		"UBUNTU_PASSWD_VERSION=1:4.13+dfsg1-4ubuntu3.2",
 		`"acl=$UBUNTU_ACL_VERSION"`,
@@ -35,10 +35,10 @@ func TestWSLApplianceContract(t *testing.T) {
 		`"passwd=$UBUNTU_PASSWD_VERSION"`,
 		"COPY --chmod=0444 internal/host/appliance/requirements.tsv /usr/lib/loki-appliance/requirements.tsv",
 		`$(awk -F '\t' '!/^#/ && NF { print $1 "=" $2 }' /usr/lib/loki-appliance/requirements.tsv | LC_ALL=C sort -u)`,
-		"DOCKER_CE_VERSION=5:29.8.1-1~ubuntu.24.04~noble",
-		"CONTAINERD_VERSION=2.3.6-1~ubuntu.24.04~noble",
-		"DOCKER_BUILDX_VERSION=0.37.1-1~ubuntu.24.04~noble",
-		"DOCKER_COMPOSE_VERSION=5.5.1-1~ubuntu.24.04~noble",
+		"DOCKER_CE_VERSION=5:29.10.0-1~ubuntu.24.04~noble",
+		"CONTAINERD_VERSION=2.4.2-4~ubuntu.24.04~noble",
+		"DOCKER_BUILDX_VERSION=0.39.1-1~ubuntu.24.04~noble",
+		"DOCKER_COMPOSE_VERSION=5.8.0-1~ubuntu.24.04~noble",
 		"COPY --chmod=0444 packaging/wsl/apt-delta.lock /tmp/loki-wsl-apt-delta.lock",
 		"loki-wsl-base-packages",
 		"comm -13 /tmp/loki-wsl-base-packages /tmp/loki-wsl-final-packages",
@@ -99,11 +99,11 @@ func TestWSLApplianceContract(t *testing.T) {
 	}
 	for _, required := range []string{
 		"acl=2.3.2-1build1.1",
-		"containerd.io=2.3.6-1~ubuntu.24.04~noble",
-		"docker-ce=5:29.8.1-1~ubuntu.24.04~noble",
-		"systemd=255.4-1ubuntu8.17",
+		"containerd.io=2.4.2-4~ubuntu.24.04~noble",
+		"docker-ce=5:29.10.0-1~ubuntu.24.04~noble",
+		"systemd=255.4-1ubuntu8.19",
 		"kmod=31+20240202-2ubuntu7.2",
-		"libpam-systemd:amd64=255.4-1ubuntu8.17",
+		"libpam-systemd:amd64=255.4-1ubuntu8.19",
 	} {
 		if !strings.Contains("\n"+aptLock+"\n", "\n"+required+"\n") {
 			t.Errorf("WSL apt transaction lock lacks %q", required)

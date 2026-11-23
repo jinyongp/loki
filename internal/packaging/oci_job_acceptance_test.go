@@ -258,7 +258,7 @@ func TestOCIJobFixtureImageContainsGatewayAssets(t *testing.T) {
 		"GOOS=\"$TARGETOS\" GOARCH=\"$TARGETARCH\"",
 		"go build -trimpath",
 		"-o /out/loki ./cmd/loki",
-		"FROM alpine/git:2.54.0@sha256:",
+		"FROM alpine/git:2.54.1@sha256:",
 		"COPY --from=git-root / /",
 		"FROM alpine:3.24.2@sha256:",
 		"COPY --from=build /out/loki /opt/loki/bin/loki",

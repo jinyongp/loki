@@ -45,7 +45,7 @@ func TestOCIImageDefinesPortableRuntime(t *testing.T) {
 		"dockerfile:1@sha256:",
 		"golang:1.27.4-bookworm@sha256:",
 		"alpine:3.24.2@sha256:",
-		"alpine/git:2.54.0@sha256:",
+		"alpine/git:2.54.1@sha256:",
 		"org.opencontainers.image.source=\"https://github.com/jinyongp/loki\"",
 		"org.opencontainers.image.licenses=\"Apache-2.0\"",
 		"ENTRYPOINT [\"/opt/loki/bin/loki\"]",

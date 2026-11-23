@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
     go build -trimpath -ldflags="-s -w" -o /out/loki-job-bootstrap ./cmd/loki-job-bootstrap
 
-FROM alpine/git:2.54.0@sha256:832b1cd1a271509f3d5272a1a62d4cb2ab1a53426ebde1f6c2cb7349f907dc6f AS git-root
+FROM alpine/git:2.54.1@sha256:29cff25811f790b9f72fc266bf8009a5a911714c0e03c31c47339c50909d9aef AS git-root
 
 # The reboot fixture exercises native broker/launcher units and shell Jobs.
 # Keeping Git and the management CLI out of this workload avoids cloning their
